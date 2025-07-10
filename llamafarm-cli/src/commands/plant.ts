@@ -24,6 +24,28 @@ interface PlantOptions {
   config?: string;
   gpu?: boolean;
   quantize: string;
+  mock?: boolean;  // Add mock mode option
+}
+
+// Check if Ollama is installed
+async function checkOllamaInstalled(): Promise<boolean> {
+  try {
+    await execAsync('which ollama');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Check if Ollama service is running
+async function checkOllamaRunning(): Promise<boolean> {
+  try {
+    const ollama = new Ollama();
+    await ollama.list();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function plantCommand(model: string, options: PlantOptions) {
@@ -45,23 +67,75 @@ export async function plantCommand(model: string, options: PlantOptions) {
     await fs.ensureDir(workDir);
     spinner.succeed('Field prepared');
 
-    // Step 2: Pull and configure model
+    // Step 2: Handle model setup
     spinner.start(`Planting model ${model}...`);
-    const ollama = new Ollama();
     
-    // Check if model exists locally, if not pull it
-    try {
-      await ollama.show({ model });
-    } catch {
-      spinner.text = `Downloading ${model} seeds...`;
-      await ollama.pull({ model });
+    // Check if we're in mock mode
+    if (config.mock || process.env.LLAMAFARM_MOCK === 'true') {
+      spinner.succeed(`Model ${model} planted (mock mode)`);
+      console.log(chalk.yellow('🧪 Running in mock mode - no actual model will be downloaded'));
+      
+      // Create mock model file
+      const modelPath = path.join(workDir, 'model.gguf');
+      await fs.writeFile(modelPath, 'MOCK_MODEL_PLACEHOLDER', 'utf-8');
+    } else {
+      // Check if Ollama is available
+      const ollamaInstalled = await checkOllamaInstalled();
+      if (!ollamaInstalled) {
+        spinner.fail('Ollama not found');
+        console.error(chalk.red('\n❌ Ollama is not installed on your system'));
+        console.log(chalk.yellow('\n💡 To install Ollama:'));
+        console.log(chalk.gray('   • macOS/Linux: curl -fsSL https://ollama.ai/install.sh | sh'));
+        console.log(chalk.gray('   • Windows: Download from https://ollama.ai/download'));
+        console.log(chalk.yellow('\n💡 Or run in mock mode:'));
+        console.log(chalk.gray('   • llamafarm plant ' + model + ' --mock'));
+        console.log(chalk.gray('   • export LLAMAFARM_MOCK=true'));
+        process.exit(1);
+      }
+
+      // Check if Ollama service is running
+      const ollamaRunning = await checkOllamaRunning();
+      if (!ollamaRunning) {
+        spinner.fail('Ollama service not running');
+        console.error(chalk.red('\n❌ Ollama is installed but not running'));
+        console.log(chalk.yellow('\n💡 Start Ollama service:'));
+        console.log(chalk.gray('   • Run: ollama serve'));
+        console.log(chalk.gray('   • Or start the Ollama app'));
+        console.log(chalk.yellow('\n💡 Or run in mock mode:'));
+        console.log(chalk.gray('   • llamafarm plant ' + model + ' --mock'));
+        process.exit(1);
+      }
+
+      // Try to use Ollama
+      const ollama = new Ollama();
+      
+      try {
+        // Check if model exists locally
+        await ollama.show({ model });
+        spinner.succeed(`Model ${model} found locally`);
+      } catch {
+        // Model doesn't exist, try to pull it
+        spinner.text = `Downloading ${model} seeds...`;
+        try {
+          await ollama.pull({ model });
+          spinner.succeed(`Model ${model} downloaded`);
+        } catch (pullError: any) {
+          spinner.fail(`Failed to download model ${model}`);
+          console.error(chalk.red(`\n❌ Error: ${pullError.message || pullError}`));
+          console.log(chalk.yellow('\n💡 Possible solutions:'));
+          console.log(chalk.gray(`   • Check if '${model}' is a valid Ollama model name`));
+          console.log(chalk.gray('   • Try a known model like: llama2, mistral, or phi'));
+          console.log(chalk.gray('   • Check your internet connection'));
+          console.log(chalk.gray('   • Run with --mock for development'));
+          process.exit(1);
+        }
+      }
+      
+      // Export model to file (placeholder for now)
+      const modelPath = path.join(workDir, 'model.gguf');
+      await fs.writeFile(modelPath, 'MODEL_PLACEHOLDER', 'utf-8');
+      spinner.succeed(`Model ${model} planted`);
     }
-    
-    // Export model to file
-    const modelPath = path.join(workDir, 'model.gguf');
-    // Note: In real implementation, we'd export the actual model file
-    await fs.writeFile(modelPath, 'MODEL_PLACEHOLDER', 'utf-8');
-    spinner.succeed(`Model ${model} planted`);
 
     // Step 3: Setup agent
     spinner.start(`Planting agent ${config.agent}...`);

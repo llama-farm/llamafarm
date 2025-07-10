@@ -22,6 +22,9 @@ import { fieldCommand } from './commands/field';
 import { compostCommand } from './commands/compost';
 import { almanacCommand } from './commands/almanac';
 import { weatherCommand } from './commands/weather';
+import { baleCommand } from './commands/bale';
+
+
 
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
 
@@ -49,6 +52,7 @@ program
   .option('-c, --config <file>', 'load configuration from YAML file')
   .option('--gpu', 'enable GPU acceleration')
   .option('--quantize <level>', 'quantization level (q4_0, q4_1, q5_0, q5_1, q8_0)', 'q4_0')
+  .option('--mock', 'run in mock mode without downloading models (for development)')
   .action(plantCommand);
 
 program
@@ -148,6 +152,16 @@ program
   .option('--days <days>', 'archive deployments older than N days', '30')
   .option('--keep <count>', 'keep last N deployments', '5')
   .action(compostCommand);
+
+program
+  .command('bale <project-dir>')
+  .description('🎯 Compile project into a single deployable binary')
+  .option('-d, --device <device>', 'target device', 'linux')
+  .option('-o, --output <path>', 'output binary path')
+  .option('--optimize <level>', 'optimization level (none, standard, max)', 'standard')
+  .option('--sign', 'sign the binary')
+  .option('--compress', 'enable compression')
+  .action(baleCommand);
 
 program
   .command('almanac')

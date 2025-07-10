@@ -1,0 +1,27 @@
+{
+  "name": "@llamafarm/plugins",
+  "version": "0.1.0",
+  "description": "🔌 Plugin ecosystem for LlamaFarm - Easy AI deployment",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "build": "tsc",
+    "create": "ts-node scripts/create-plugin.ts"
+  },
+  "keywords": [
+    "llamafarm",
+    "plugins",
+    "ai",
+    "deployment"
+  ],
+  "author": "LlamaFarm Community",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.11",
+    "ts-jest": "^29.1.1"
+  }
+}
