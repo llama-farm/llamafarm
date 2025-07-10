@@ -2,6 +2,8 @@
 
 Deploy AI models, agents, and databases into single deployable binaries - no cloud required.
 
+> **🚧 Early Preview**: We're building the architecture for single-binary AI deployment. Some features are working 🐣, others are still incubating 🥚. Join us!
+
 ## Installation
 
 ```bash
@@ -48,15 +50,25 @@ llamafarm harvest llama3-8b-mac-arm-v1.0.0.bin --run
 
 ## Features
 
-- 🎯 **One-Line Deployment** - Deploy complex AI models with a single command
-- 📦 **Zero Dependencies** - Compiled binaries run anywhere
-- 🔒 **100% Private** - Your data never leaves your device
-- ⚡ **Lightning Fast** - 10x faster than traditional deployments
-- 💾 **90% Smaller** - Optimized models use fraction of original size
+### 🐣 Working Now
+- ✅ CLI structure and all commands (with friendly placeholders)
+- ✅ Plugin architecture for extensibility
+- ✅ Mac platform detection
+- ✅ Demo web UI
+- ✅ Mock mode for testing
+
+### 🥚 Coming Soon
+- ⏳ Actual binary compilation
+- ⏳ Model quantization and embedding
+- ⏳ Vector database integration
+- ⏳ GPU acceleration
+- ⏳ Cross-platform binaries
 
 ## Commands
 
-### `plant`
+> **Note:** All commands are implemented but some features show placeholder messages while we build the core functionality.
+
+### `plant` 🐣
 Deploy a model to create a standalone binary.
 
 ```bash
@@ -86,8 +98,8 @@ llamafarm plant llama3-8b --target raspberry-pi --optimize
 llamafarm plant llama3-8b --agent customer-service
 ```
 
-### `bale`
-🎯 **The Baler** - Compile your deployment into a single executable binary.
+### `bale` 🥚
+🎯 **The Baler** - Compile your deployment into a single executable binary. *(Currently shows placeholder - actual compilation coming soon!)*
 
 ```bash
 llamafarm bale <project-dir> [options]
@@ -133,8 +145,8 @@ llamafarm bale ./.llamafarm/llama3-8b --device raspberry-pi --optimize max --com
 llamafarm bale ./.llamafarm/mixtral --device linux --sign --output production.bin
 ```
 
-### `harvest`
-Deploy and run a compiled binary.
+### `harvest` 🥚
+Deploy and run a compiled binary. *(Placeholder - will work once baler is complete!)*
 
 ```bash
 llamafarm harvest <binary-or-url> [options]
