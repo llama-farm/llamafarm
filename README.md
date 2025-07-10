@@ -243,6 +243,7 @@ make test
 <a href="https://github.com/user3"><img src="https://github.com/user3.png" width="50px" alt=""/></a>
 <a href="https://github.com/user4"><img src="https://github.com/user4.png" width="50px" alt=""/></a>
 <a href="https://github.com/user5"><img src="https://github.com/user5.png" width="50px" alt=""/></a>
+<a href="https://github.com/mhamann"><img src="https://github.com/mhamann.png" width="50px" alt=""/></a>
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ---
