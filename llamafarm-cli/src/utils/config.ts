@@ -14,12 +14,14 @@ export async function loadConfig(): Promise<any> {
     return await fs.readJSON(configPath);
   }
   
-  // Return default config
+  // Return default config if none exists
   return {
     version: '1.0.0',
-    farmer: {
-      name: 'farmer',
-      created: new Date().toISOString()
+    paths: {
+      harvest: './harvests',
+      models: './harvests/models',
+      agents: './harvests/agents',
+      data: './harvests/data'
     },
     defaults: {
       device: 'mac',
@@ -27,12 +29,6 @@ export async function loadConfig(): Promise<any> {
       gpu: false,
       vectorDb: 'chroma',
       agentFramework: 'langchain'
-    },
-    paths: {
-      harvest: './harvests',
-      models: './harvests/models',
-      agents: './harvests/agents',
-      data: './harvests/data'
     }
   };
 }

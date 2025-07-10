@@ -3,7 +3,7 @@
 import { program } from 'commander';
 import chalk from 'chalk';
 import figlet from 'figlet';
-import updateNotifier from 'update-notifier';
+const updateNotifier = require('update-notifier');
 import { readFileSync } from 'fs';
 import { join } from 'path';
 

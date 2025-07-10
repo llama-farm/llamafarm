@@ -9,9 +9,13 @@ export async function getPort(startPort: number = 8080): Promise<number> {
       server.close(() => resolve(port));
     });
     
-    server.on('error', () => {
-      // Port in use, try next one
-      getPort(startPort + 1).then(resolve).catch(reject);
+    server.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        // Port is in use, try the next one
+        resolve(getPort(startPort + 1));
+      } else {
+        reject(err);
+      }
     });
   });
 }

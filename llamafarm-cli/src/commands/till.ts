@@ -151,7 +151,7 @@ export async function tillCommand(options: TillOptions) {
       default: false
     }]);
     
-    let advancedConfig = {};
+    let advancedConfig: any = {};
     if (advanced) {
       advancedConfig = await inquirer.prompt([
         {
@@ -287,7 +287,7 @@ data_sources:
     
   } catch (error) {
     spinner.fail('Tilling failed');
-    console.error(chalk.red(`Error: ${error.message}`));
+    console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
     process.exit(1);
   }
 }

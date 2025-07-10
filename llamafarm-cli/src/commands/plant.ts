@@ -118,7 +118,7 @@ export async function plantCommand(model: string, options: PlantOptions) {
 
     // Step 6: Create chat UI
     spinner.start('Growing UI...');
-    const port = config.port || await getPort();
+    const port = typeof config.port === 'string' ? parseInt(config.port) : (config.port || await getPort());
     const uiHtml = createChatUI(model, config.agent, port);
     await fs.writeFile(path.join(workDir, 'index.html'), uiHtml);
     spinner.succeed('UI grown');
@@ -237,8 +237,8 @@ echo "📦 Package size: $SIZE"
     archive.pipe(output);
     archive.directory(workDir, false);
     
-    await new Promise((resolve, reject) => {
-      output.on('close', resolve);
+    await new Promise<void>((resolve, reject) => {
+      output.on('close', () => resolve());
       archive.on('error', reject);
       archive.finalize();
     });
@@ -269,7 +269,7 @@ echo "📦 Package size: $SIZE"
     
   } catch (error) {
     spinner.fail('Planting failed');
-    console.error(chalk.red(`Error: ${error.message}`));
+    console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
     process.exit(1);
   }
 }

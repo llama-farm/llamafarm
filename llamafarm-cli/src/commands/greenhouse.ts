@@ -127,7 +127,7 @@ export async function greenhouseCommand(options: GreenhouseOptions) {
     
   } catch (error) {
     spinner.fail('Greenhouse test failed');
-    console.error(chalk.red(`Error: ${error.message}`));
+    console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
     process.exit(1);
   }
 }

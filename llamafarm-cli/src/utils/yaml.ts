@@ -1,18 +1,18 @@
-import * as yaml from 'js-yaml';
 import * as fs from 'fs-extra';
+import * as yaml from 'js-yaml';
 
-export async function loadYamlConfig(filePath: string): Promise<any> {
-  const content = await fs.readFile(filePath, 'utf-8');
-  const config = yaml.load(content) as any;
+export async function loadYamlConfig(filepath: string): Promise<any> {
+  const content = await fs.readFile(filepath, 'utf-8');
+  const parsed = yaml.load(content) as any;
   
-  // Transform YAML structure to match command options
+  // Flatten the config structure for easier access
   return {
-    device: config.deployment?.device,
-    agent: config.agent?.name,
-    rag: config.rag?.enabled ? 'enabled' : 'disabled',
-    database: config.database?.type,
-    port: config.deployment?.port,
-    gpu: config.deployment?.gpu,
-    quantize: config.model?.quantization
+    device: parsed.deployment?.device || 'mac',
+    agent: parsed.agent?.name || 'chat-basic',
+    rag: parsed.rag?.enabled ? 'enabled' : 'disabled',
+    database: parsed.database?.type || 'vector',
+    gpu: parsed.deployment?.gpu || false,
+    quantize: parsed.model?.quantization || 'q4_0',
+    ...parsed
   };
 }

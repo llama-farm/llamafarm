@@ -1,4 +1,3 @@
-
 // src/__tests__/commands.test.ts
 import { validateModelName, validateDevice, validateQuantization } from '../utils/validators';
 import { getModelInfo, validateModelRequirements } from '../models/registry';
@@ -60,37 +59,4 @@ describe('Model Registry', () => {
     expect(result.valid).toBe(false);
     expect(result.warnings[0]).toContain('Insufficient RAM');
   });
-});
-
-// src/config/defaults.ts
-export const DEFAULT_CONFIG = {
-  version: '1.0.0',
-  defaults: {
-    device: 'mac',
-    quantization: 'q4_0',
-    gpu: false,
-    vectorDb: 'chroma',
-    agentFramework: 'langchain',
-    port: 8080
-  },
-  paths: {
-    harvest: './harvests',
-    models: './harvests/models',
-    agents: './harvests/agents',
-    data: './harvests/data',
-    logs: './logs'
-  },
-  advanced: {
-    chunkSize: 512,
-    chunkOverlap: 50,
-    embeddingModel: 'all-MiniLM-L6-v2',
-    contextWindow: 2048,
-    autoUpdate: true,
-    telemetry: true
-  },
-  limits: {
-    maxConcurrentModels: 2,
-    maxMemoryUsage: '80%',
-    maxDiskUsage: '90%'
-  }
-};
+}); 

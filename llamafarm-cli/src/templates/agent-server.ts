@@ -2,85 +2,84 @@
   // src/templates/agent-server.ts
   export function createAgentServer(config: any): string {
     return `const express = require('express');
-  const WebSocket = require('ws');
-  const { Ollama } = require('ollama');
-  
-  const app = express();
-  const port = process.env.PORT || ${config.port || 3000};
-  
-  // Initialize Ollama
-  const ollama = new Ollama({
-    host: 'http://localhost:11434'
+const WebSocket = require('ws');
+const { Ollama } = require('ollama');
+const path = require('path');
+
+const app = express();
+const port = ${config.port || 8080};
+
+// Initialize Ollama client
+const ollama = new Ollama();
+
+// Middleware
+app.use(express.json());
+app.use(express.static(path.join(__dirname)));
+
+// Chat API endpoint
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    
+    const response = await ollama.generate({
+      model: '${config.model}',
+      prompt: message,
+      system: '${config.systemPrompt || 'You are a helpful AI assistant.'}',
+      stream: false
+    });
+    
+    res.json({ response: response.response });
+  } catch (error) {
+    console.error('Chat error:', error);
+    res.status(500).json({ error: 'Failed to generate response' });
+  }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    model: '${config.model}',
+    agent: '${config.name}'
   });
+});
+
+// Start server
+const server = app.listen(port, () => {
+  console.log(\`🌾 LlamaFarm agent server running on port \${port}\`);
+});
+
+// WebSocket support
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', (ws) => {
+  console.log('New WebSocket connection');
   
-  // Agent configuration
-  const agentConfig = ${JSON.stringify(config, null, 2)};
-  
-  // WebSocket server
-  const wss = new WebSocket.Server({ port: port + 1 });
-  
-  wss.on('connection', (ws) => {
-    console.log('🤝 New client connected');
-  
-    ws.on('message', async (message) => {
-      try {
-        const data = JSON.parse(message);
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      if (data.type === 'message') {
+        const response = await ollama.generate({
+          model: '${config.model}',
+          prompt: data.content,
+          stream: false
+        });
         
-        if (data.type === 'message') {
-          console.log('📨 Received:', data.content);
-          
-          // Generate response using Ollama
-          const response = await ollama.chat({
-            model: agentConfig.model,
-            messages: [
-              {
-                role: 'system',
-                content: agentConfig.systemPrompt
-              },
-              {
-                role: 'user',
-                content: data.content
-              }
-            ],
-            stream: false
-          });
-  
-          // Send response back
-          ws.send(JSON.stringify({
-            type: 'response',
-            content: response.message.content
-          }));
-        }
-      } catch (error) {
-        console.error('❌ Error:', error);
         ws.send(JSON.stringify({
-          type: 'error',
-          content: 'Sorry, I encountered an error processing your request.'
+          type: 'response',
+          content: response.response
         }));
       }
-    });
-  
-    ws.on('close', () => {
-      console.log('👋 Client disconnected');
-    });
+    } catch (error) {
+      console.error('WebSocket error:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        content: 'Failed to process message'
+      }));
+    }
   });
-  
-  // HTTP endpoints
-  app.get('/health', (req, res) => {
-    res.json({ status: 'healthy', agent: agentConfig.name });
-  });
-  
-  app.get('/config', (req, res) => {
-    res.json(agentConfig);
-  });
-  
-  // Start server
-  app.listen(port, () => {
-    console.log(\`🌾 LlamaFarm Agent Server running on port \${port}\`);
-    console.log(\`🔌 WebSocket server on port \${port + 1}\`);
-    console.log(\`🤖 Agent: \${agentConfig.name}\`);
-    console.log(\`📦 Model: \${agentConfig.model}\`);
-  });`;
+});`;
   }
   
  

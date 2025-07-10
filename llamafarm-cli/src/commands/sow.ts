@@ -100,7 +100,7 @@ export async function sowCommand(seeds: string, options: SowOptions) {
     
   } catch (error) {
     spinner.fail('Sowing failed');
-    console.error(chalk.red(`Error: ${error.message}`));
+    console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
     process.exit(1);
   }
 }

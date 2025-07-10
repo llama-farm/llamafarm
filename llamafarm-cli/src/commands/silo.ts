@@ -26,9 +26,9 @@ export async function siloCommand(options: SiloOptions) {
         type: options.init,
         embedding: {
           model: options.embed,
-          dimension: parseInt(options.dimension)
+          dimension: options.dimension ? parseInt(options.dimension) : 384
         },
-        indices: [],
+        indices: [] as string[],
         created: new Date().toISOString()
       };
       
@@ -114,7 +114,7 @@ export async function siloCommand(options: SiloOptions) {
     
   } catch (error) {
     spinner.fail('Silo operation failed');
-    console.error(chalk.red(`Error: ${error.message}`));
+    console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
     process.exit(1);
   }
 }
