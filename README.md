@@ -1,25 +1,67 @@
 # 🌾 LLaMA Farm
 
-### Deploy any AI model, agents, database, and RAG pipeline  to any device in 30 seconds. No cloud required.
+<div align="center">
+  <img src="./llamafarm-cli/llama-images/llamasrolldeep.png" alt="LLaMA Farm - Llamas working together" width="500">
+  
+  <h3>Deploy any AI model, agents, database, and RAG pipeline to any device in 30 seconds. No cloud required.</h3>
 
-[![GitHub stars](https://img.shields.io/github/stars/llama-farm/llamafarm?style=social)](https://github.com/llama-farm/llamafarm)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-Join our discord channel! [Join](https://discord.gg/X9xdhTskjN) 
+  <h4>🚧 Early Preview - This is being built in the open! Some features are still incubating 🥚</h4>
+  <p><em>We're working on single-binary AI deployment. The architecture is ready, but some core features are still placeholders. Join us in building the future of local AI!</em></p>
+  
+  <p>
+    <a href="https://github.com/llama-farm/llamafarm"><img src="https://img.shields.io/github/stars/llama-farm/llamafarm?style=social" alt="GitHub stars"></a>
+    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+    <a href="https://discord.gg/X9xdhTskjN"><img src="https://img.shields.io/badge/Discord-Join%20us-7289da?logo=discord&logoColor=white" alt="Discord"></a>
+  </p>
+  
+  <p>
+    <strong>Turn AI models and associated agents, databases, and pipelines into single executables that run anywhere.<br/>It's like Docker, but for AI.</strong>
+  </p>
+  
+  <br/>
+  
+  <img src="https://raw.githubusercontent.com/llamafarm-ai/llamafarm/main/demo.gif" alt="llamafarm Demo" width="700">
+  
+</div>
 
+## 📖 Table of Contents
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/llamafarm-ai/llamafarm/main/demo.gif" alt="llamafarm Demo" width="600">
-</p>
-
-<p align="center">
-  <strong>Turn AI models and associated agents, databases, and pipelines into single executables that run anywhere. It's like Docker, but for AI.</strong>
-</p>
+- [What is LLaMA Farm](#-what-is-llama-farm)
+- [Quick Start](#-quick-start)
+- [Features](#-features)
+- [Project Structure](#-project-structure)
+- [Real-World Examples](#-real-world-examples)
+- [Advanced Usage](#-advanced-usage)
+- [Contributing](#-contributing)
+- [Development Setup](#-development-setup)
+- [License](#-license)
 
 ---
 
 ## 🚀 What is LLaMA Farm
 
 Llama Farm packages your AI models, vector databases, and data pipelines into standalone binaries that run on any device - from Raspberry Pis to enterprise servers. **No Python. No CUDA hassles. No cloud bills.**
+
+This repository contains:
+- **[llamafarm-cli](./llamafarm-cli/)** - The core CLI tool (`npm install -g @llamafarm/llamafarm`)
+- **[plugins](./plugins/)** - Community plugins for platforms, databases, and integrations
+
+### 🐣 What's Working Now
+- ✅ Full CLI structure with farming metaphor
+- ✅ Plugin architecture for platforms/databases/communication  
+- ✅ Mac platform detection with Metal support
+- ✅ Demo web UI showing the vision
+- ✅ Project scaffolding and configuration
+- ✅ Mock mode for development (`--mock` flag)
+
+### 🥚 What's Still Incubating
+- ⏳ Actual model compilation (shows friendly placeholder messages)
+- ⏳ Real vector DB embedding 
+- ⏳ Binary generation (planned via pkg + native modules)
+- ⏳ GPU acceleration
+- ⏳ Production deployments
+
+**We're building in public!** All commands work but some show placeholder messages. Perfect for contributors who want to help shape the future of local AI deployment.
 
 ## Why LLaMA Farm?
 The current cloud AI model makes us digital serfs, paying rent to use tools we don't own, feeding data to systems we don't control. The farm model makes us owners—of our models, our data, our future. But ownership requires responsibility. You must tend your farm.
@@ -61,6 +103,17 @@ llamafarm plant mixtral-8x7b --target raspberry-pi --agent chat123 --rag --datab
 - **💾 90% Smaller** - Optimized models use fraction of original size
 - **🔄 Hot Swappable** - Update models without downtime
 - **🌍 Universal** - Mac, Linux, Windows, ARM - we support them all
+- **🎯 Single Binary** - The Baler compiles everything into one executable file
+
+### 🏗️ Architecture
+
+LlamaFarm uses a plugin-based architecture that makes it easy to add support for new platforms, databases, and features:
+
+- **[CLI Core](./llamafarm-cli/)** - The main command interface and deployment engine
+- **[Plugin System](./plugins/)** - Extensible plugins for platforms, tools, and protocols
+  - **Fields** (Platforms) - Mac, Linux, Windows, Raspberry Pi, and more
+  - **Equipment** (Tools) - Vector databases, RAG pipelines, model runtimes
+  - **Pipes** (Protocols) - WebSocket, WebRTC, SSE for real-time communication
 
 ---
 
@@ -84,14 +137,67 @@ llamafarm plant llama3-8b --optimize
 
 # Deploy to specific device
 llamafarm plant mistral-7b --target raspberry-pi
+
+# 🐣 Try mock mode (no model download needed)
+llamafarm plant llama3-8b --mock
 ```
 
 ### That's it! 🎉
 Your AI is now running locally. No cloud. No subscriptions. Just pure, private AI.
 
+> **🥚 Note:** Model compilation is still incubating! Commands work but show friendly placeholder messages. Join us in building this!
+
+### 🎯 The Complete Workflow: Plant → Bale → Harvest
+
+LlamaFarm uses a simple agricultural metaphor for AI deployment:
+
+1. **🌱 Plant** - Configure your deployment
+```bash
+llamafarm plant llama3-8b --device mac-arm --agent chat --rag --database vector
+```
+
+2. **📦 Bale** - Compile everything into a single binary
+```bash
+llamafarm bale ./.llamafarm/llama3-8b --device mac-arm --optimize
+# Creates: llama3-8b-mac-arm-v1.0.0.bin (4-8GB)
+```
+
+3. **🌾 Harvest** - Deploy anywhere without dependencies
+```bash
+# Copy to any machine and run - no installation needed!
+./llama3-8b-mac-arm-v1.0.0.bin
+```
+
+The **Baler** is the magic that packages your model, vector database, agents, and web UI into a single executable file that runs anywhere!
+
+### 🌾 Available Commands
+
+**Status Legend:** 🐣 = Working | 🥚 = Still incubating
+
+```bash
+# Core Commands
+llamafarm plant <model>     # 🐣 Deploy a model (shows demo UI)
+llamafarm bale <dir>        # 🥚 Compile to single binary (placeholder)
+llamafarm harvest <url>     # 🥚 Download and run a deployment (placeholder)
+llamafarm till              # 🐣 Initialize configuration
+
+# Management Commands
+llamafarm silo              # 🥚 Manage vector databases
+llamafarm barn              # 🥚 Manage model storage
+llamafarm field             # 🥚 Manage deployment environments
+
+# Development Commands
+llamafarm greenhouse        # 🥚 Test in sandbox environment
+llamafarm demo              # 🐣 Run interactive demo
+```
+
+See the [CLI documentation](./llamafarm-cli/README.md) for all commands and options, including detailed information about the **Baler** and binary compilation.
+
 ---
 
 ## 🌟 Real-World Examples
+
+> **🥚 Future State**: These examples show what will be possible once all features are hatched!
 
 ### Deploy ChatGPT-level AI to a Raspberry Pi
 ```bash
@@ -114,6 +220,18 @@ llamafarm plant med-llama \
   --compliance hipaa \
   --audit-log enabled
 # 🏥 Patient data never leaves the hospital
+```
+
+### Deploy to 100 Edge Devices
+```bash
+# Compile once
+llamafarm plant llama3-8b --device raspberry-pi --optimize
+llamafarm bale ./.llamafarm/llama3-8b --device raspberry-pi --compress
+
+# Deploy everywhere - just copy the binary!
+scp llama3-8b-raspberry-pi.bin pi@device1:/home/pi/
+scp llama3-8b-raspberry-pi.bin pi@device2:/home/pi/
+# ... no installation needed on devices
 ```
 
 ---
@@ -218,22 +336,86 @@ Need compliance, support, and SLAs?
 
 ---
 
-## 🤝 Contributing
+## 📦 Project Structure
 
-We love contributions! Check out our [Contributing Guide](CONTRIBUTING.md) to get started.
+LlamaFarm consists of multiple components working together:
+
+### [🦙 LlamaFarm CLI](./llamafarm-cli/README.md)
+The main command-line interface for deploying AI models. This is what you install with `npm install -g @llamafarm/llamafarm`.
 
 ```bash
-# Clone the repo
-git clone https://github.com/llama-farm/llamafarm
-
-# Install dependencies
-make install
-
-# Run tests
-make test
-
-# Submit your PR! 
+cd llamafarm-cli
+npm install
+npm run build
 ```
+
+### [🔌 Plugin System](./plugins/README.md)
+Community-driven plugins for platform support, integrations, and features.
+
+- **Fields** - Platform-specific optimizations (Mac, Linux, Raspberry Pi)
+- **Equipment** - Tools and integrations (databases, RAG pipelines, model runtimes)
+- **Pipes** - Communication protocols (WebSocket, WebRTC, SSE)
+
+Browse the [plugins directory](./plugins/) to see available plugins or contribute your own!
+
+---
+
+## 🤝 Contributing
+
+**🎯 This is the perfect time to contribute!** We're in early preview with a solid architecture but many core features still need implementation. Your code can shape how millions deploy AI locally.
+
+### 🥚 → 🐣 Help Us Hatch These Features
+
+**High Priority (Make a Real Impact!):**
+1. **Binary Compilation** - Implement actual model packaging in `bale.ts`
+2. **Vector DB Embedding** - Real ChromaDB integration 
+3. **Model Quantization** - GGUF format handling
+4. **GPU Support** - CUDA/Metal acceleration
+5. **Platform Binaries** - Windows/Linux compilation
+
+We love contributions! LlamaFarm is designed to be easily extensible:
+
+### Quick Start for Contributors
+
+1. **Core CLI Development**
+   ```bash
+   git clone https://github.com/llama-farm/llamafarm
+   cd llamafarm/llamafarm-cli
+   npm install
+   npm run dev
+   ```
+
+2. **Plugin Development**
+   ```bash
+   cd plugins
+   npm run create  # Interactive plugin creator
+   ```
+   See the [Plugin Development Guide](./plugins/README.md) for details.
+
+3. **Submit Your Changes**
+   ```bash
+   npm test        # Run tests
+   npm run lint    # Check code style
+   git push        # Submit PR
+   ```
+
+### 🎯 Most Wanted Contributions
+
+#### High Priority Plugins
+- **Linux Field** - CUDA optimization for NVIDIA GPUs
+- **Windows Field** - Windows-specific optimizations  
+- **ChromaDB Equipment** - Production vector database
+- **Ollama Runtime** - Official Ollama integration
+- **WebRTC Pipe** - Peer-to-peer streaming
+
+#### Community Wishlist
+- Raspberry Pi 5 optimizations
+- NVIDIA Jetson support
+- Qdrant vector database
+- LlamaIndex RAG pipeline
+- Android/Termux support
+
+See our [Plugin System](./plugins/README.md) for more ideas and how to contribute!
 
 ### 🌟 Contributors
 
@@ -256,17 +438,82 @@ make test
 
 ---
 
+## 🔧 Development Setup
+
+Want to contribute or run from source? Here's how:
+
+```bash
+# Clone the repository
+git clone https://github.com/llama-farm/llamafarm
+cd llamafarm
+
+# Set up the CLI
+cd llamafarm-cli
+npm install
+npm run build
+npm link  # Makes 'llamafarm' command available globally
+
+# Run tests
+npm test
+
+# Development mode
+npm run dev
+```
+
+### 📚 Documentation
+
+- [CLI Documentation](./llamafarm-cli/README.md) - Detailed CLI usage and options
+- [Plugin Development](./plugins/README.md) - How to create plugins
+- [API Reference](./docs/api.md) - Coming soon
+
+### 🧪 Mock Mode (For Development)
+
+LlamaFarm now includes a mock mode that allows you to test without installing Ollama or downloading models:
+
+```bash
+# Use --mock flag
+llamafarm plant llama3-8b --mock
+
+# Or set environment variable
+export LLAMAFARM_MOCK=true
+llamafarm plant llama3-8b
+```
+
+This is perfect for:
+- Contributing to the project
+- Testing the CLI functionality
+- CI/CD pipelines
+- Development on limited bandwidth
+
+---
+
 ## 🎯 Getting Help
 
 - 💬 [Discord Community](https://discord.gg/X9xdhTskjN)
 - 🐛 [Issue Tracker](https://github.com/llama-farm/llamafarm/issues)
 - 📧 [Email Support](mailto:support@llamafarm.dev)
+- 📖 [CLI Documentation](./llamafarm-cli/README.md)
+- 🔌 [Plugin Guide](./plugins/README.md)
 
 ---
 
 ## 📜 License
 
 llamafarm is MIT licensed. See [LICENSE](LICENSE) for details.
+
+---
+
+## 🌟 Why Join Now?
+
+This is the **ground floor** of local AI deployment. While others debate, we're building. The architecture is solid, the vision is clear, and the farming metaphors are delightful. 
+
+**What early contributors get:**
+- Shape the future of AI deployment
+- Core contributor status
+- Direct impact on millions of developers
+- Be part of the "I was there when it was just llamas in the pasture" crew
+
+Ready to help AI escape the cloud? Let's build this together! 🦙
 
 ---
 

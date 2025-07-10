@@ -1,6 +1,6 @@
 {
   "name": "@llamafarm/llamafarm",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "🌾 Plant and harvest AI models, agents, and databases into single deployable binaries",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,13 +20,16 @@
     "test": "jest",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "demo": "node scripts/demo.js",
-    "postinstall": "node scripts/postinstall.js || true",
-    "system-check": "node dist/utils/system-check.js",
     "package:mac": "pkg . -t node18-macos-arm64 -o binaries/llamafarm-mac",
     "package:linux": "pkg . -t node18-linux-x64 -o binaries/llamafarm-linux",
     "package:win": "pkg . -t node18-win-x64 -o binaries/llamafarm.exe",
-    "package:all": "npm run package:mac && npm run package:linux && npm run package:win"
+    "package:all": "npm run package:mac && npm run package:linux && npm run package:win",
+    "demo": "node scripts/demo.js",
+    "postinstall": "node scripts/postinstall.js",
+    "system-check": "node dist/utils/system-check.js",
+    "plugins:list": "ts-node src/plugins/loader.ts",
+    "plugins:test": "jest src/plugins --coverage",
+    "plugin:create": "ts-node scripts/create-plugin.ts"
   },
   "keywords": [
     "ai",
@@ -58,6 +61,7 @@
     "chalk": "^4.1.2",
     "chromadb": "^1.7.3",
     "commander": "^11.1.0",
+    "conf": "^10.2.0",
     "express": "^4.18.2",
     "extract-zip": "^2.0.1",
     "figlet": "^1.7.0",
@@ -67,6 +71,7 @@
     "node-fetch": "^2.7.0",
     "ollama": "^0.5.0",
     "ora": "^5.4.1",
+    "portfinder": "^1.0.32",
     "update-notifier": "^5.1.0",
     "ws": "^8.16.0"
   },
@@ -76,11 +81,10 @@
     "@types/figlet": "^1.5.8",
     "@types/fs-extra": "^11.0.4",
     "@types/inquirer": "^8.2.10",
-    "@types/jest": "^29.5.11",
+    "@types/jest": "^29.5.14",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.0",
     "@types/node-fetch": "^2.6.11",
-    "@types/update-notifier": "^6.0.8",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
@@ -95,16 +99,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "roots": [
-      "<rootDir>/src"
-    ],
-    "testMatch": [
-      "**/__tests__/**/*.ts",
-      "**/?(*.)+(spec|test).ts"
-    ]
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "pkg": {
     "scripts": "dist/**/*.js",
@@ -119,5 +116,16 @@
       "node18-win-x64"
     ],
     "outputPath": "binaries"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/src"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.ts",
+      "**/?(*.)+(spec|test).ts"
+    ]
   }
 }

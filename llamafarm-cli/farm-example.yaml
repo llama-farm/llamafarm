@@ -1,0 +1,166 @@
+# LlamaFarm Configuration Example
+# This file demonstrates all available configuration options
+
+# Model Configuration
+model:
+  name: llama3-8b          # Model name from Ollama registry
+  quantization: q4_0       # Quantization level: q4_0, q4_1, q5_0, q5_1, q8_0
+  context_length: 4096     # Maximum context window
+  gpu_layers: 35          # Number of layers to offload to GPU (0 = CPU only)
+
+# Agent Configuration  
+agent:
+  name: farm-assistant     # Your agent's name
+  framework: langchain     # Framework: langchain, autogen, crewai, llamaindex
+  description: |
+    A helpful AI assistant specialized in sustainable farming,
+    crop management, and agricultural best practices.
+  
+  # System prompt for the agent
+  systemPrompt: |
+    You are an expert agricultural AI assistant. You help farmers with:
+    - Crop selection and rotation planning
+    - Pest and disease identification
+    - Sustainable farming practices
+    - Weather-based recommendations
+    - Soil health management
+    
+  # Available tools for the agent
+  tools:
+    - web_search          # Search the internet
+    - calculator          # Perform calculations
+    - weather_api         # Get weather data
+    - image_recognition   # Identify plants/pests from images
+    
+  # Memory configuration
+  memory:
+    type: vector          # Memory type: buffer, summary, vector
+    max_tokens: 1000      # Maximum tokens to store
+    
+  # Conversation settings
+  conversation:
+    temperature: 0.7      # Creativity level (0.0-1.0)
+    max_tokens: 500       # Maximum response length
+    
+# Database Configuration
+database:
+  type: vector            # Database type: vector, sqlite, postgres
+  provider: chroma        # Vector DB provider: chroma, qdrant, pinecone, weaviate
+  
+  # Embedding configuration
+  embedding:
+    model: all-MiniLM-L6-v2    # Embedding model
+    dimension: 384             # Vector dimension
+    
+  # Connection settings
+  connection:
+    persist_directory: ./chroma_db
+    collection_name: farm_knowledge
+    
+# RAG (Retrieval Augmented Generation) Configuration
+rag:
+  enabled: true           # Enable RAG pipeline
+  
+  # Document processing
+  processing:
+    chunk_size: 512       # Size of text chunks
+    chunk_overlap: 50     # Overlap between chunks
+    
+  # Retrieval settings
+  retrieval:
+    k: 4                  # Number of chunks to retrieve
+    score_threshold: 0.7  # Minimum similarity score
+    
+  # Context injection
+  context:
+    max_tokens: 2048      # Maximum context size
+    format: markdown      # Context format: markdown, plain, json
+
+# Deployment Configuration
+deployment:
+  device: mac             # Target device: mac, windows, linux, raspberry-pi, jetson
+  architecture: arm64     # CPU architecture: x64, arm64
+  port: 8080             # Web UI port (auto = automatic assignment)
+  
+  # Hardware settings
+  hardware:
+    gpu: true            # Enable GPU acceleration
+    gpu_type: metal      # GPU type: cuda, metal, rocm
+    ram_limit: 8GB       # Maximum RAM usage
+    
+  # Network settings
+  network:
+    host: 0.0.0.0       # Bind address
+    cors: true          # Enable CORS
+    ssl: false          # Enable SSL/TLS
+    
+# Data Sources Configuration
+data_sources:
+  # PDF documents
+  - type: pdf
+    path: ./documents/farming-guides
+    recursive: true
+    patterns:
+      - "*.pdf"
+      - "*.PDF"
+      
+  # CSV data files
+  - type: csv
+    path: ./data/crop-yields.csv
+    has_header: true
+    delimiter: ","
+    
+  # Web scraping
+  - type: web
+    urls:
+      - https://extension.edu/farming
+      - https://usda.gov/crops
+    depth: 2
+    respect_robots: true
+    
+  # API endpoints
+  - type: api
+    name: weather_data
+    endpoint: https://api.weather.gov
+    auth_type: none
+    poll_interval: 3600
+    
+# Advanced Configuration
+advanced:
+  # Update settings
+  updates:
+    auto_update: true
+    check_interval: daily
+    
+  # Logging
+  logging:
+    level: info          # Log level: debug, info, warn, error
+    file: ./logs/llamafarm.log
+    max_size: 10MB
+    
+  # Performance tuning
+  performance:
+    batch_size: 32
+    num_threads: 4
+    use_mmap: true
+    use_mlock: false
+    
+  # Security
+  security:
+    api_key: optional    # API key for remote access
+    allowed_origins:
+      - http://localhost:3000
+      - https://myapp.com
+      
+# Telemetry Configuration
+telemetry:
+  enabled: true          # Share anonymous usage data
+  include_performance: true
+  include_errors: true
+
+# Export Configuration
+export:
+  format: tar.gz         # Package format: tar.gz, zip
+  compression: zstd      # Compression: zstd, lz4, gzip, none
+  include_sources: false # Include source data files
+  sign_package: false    # Digitally sign the package

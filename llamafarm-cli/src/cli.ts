@@ -3,26 +3,28 @@
 import { program } from 'commander';
 import chalk from 'chalk';
 import figlet from 'figlet';
-import updateNotifier from 'update-notifier';
+const updateNotifier = require('update-notifier');
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Commands
 import { plantCommand } from './commands/plant';
-// TODO: Implement remaining commands
-// import { harvestCommand } from './commands/harvest';
-// import { tillCommand } from './commands/till';
-// import { sowCommand } from './commands/sow';
-// import { irrigateCommand } from './commands/irrigate';
-// import { fertilizeCommand } from './commands/fertilize';
-// import { pruneCommand } from './commands/prune';
-// import { greenhouseCommand } from './commands/greenhouse';
-// import { siloCommand } from './commands/silo';
-// import { barnCommand } from './commands/barn';
-// import { fieldCommand } from './commands/field';
-// import { compostCommand } from './commands/compost';
-// import { almanacCommand } from './commands/almanac';
-// import { weatherCommand } from './commands/weather';
+import { harvestCommand } from './commands/harvest';
+import { tillCommand } from './commands/till';
+import { sowCommand } from './commands/sow';
+import { irrigateCommand } from './commands/irrigate';
+import { fertilizeCommand } from './commands/fertilize';
+import { pruneCommand } from './commands/prune';
+import { greenhouseCommand } from './commands/greenhouse';
+import { siloCommand } from './commands/silo';
+import { barnCommand } from './commands/barn';
+import { fieldCommand } from './commands/field';
+import { compostCommand } from './commands/compost';
+import { almanacCommand } from './commands/almanac';
+import { weatherCommand } from './commands/weather';
+import { baleCommand } from './commands/bale';
+
+
 
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
 
@@ -50,10 +52,9 @@ program
   .option('-c, --config <file>', 'load configuration from YAML file')
   .option('--gpu', 'enable GPU acceleration')
   .option('--quantize <level>', 'quantization level (q4_0, q4_1, q5_0, q5_1, q8_0)', 'q4_0')
+  .option('--mock', 'run in mock mode without downloading models (for development)')
   .action(plantCommand);
 
-// TODO: Implement remaining commands
-/*
 program
   .command('harvest <url>')
   .description('🌾 Harvest a planted binary from URL or local path')
@@ -153,6 +154,16 @@ program
   .action(compostCommand);
 
 program
+  .command('bale <project-dir>')
+  .description('🎯 Compile project into a single deployable binary')
+  .option('-d, --device <device>', 'target device', 'linux')
+  .option('-o, --output <path>', 'output binary path')
+  .option('--optimize <level>', 'optimization level (none, standard, max)', 'standard')
+  .option('--sign', 'sign the binary')
+  .option('--compress', 'enable compression')
+  .action(baleCommand);
+
+program
   .command('almanac')
   .description('📚 View the almanac (documentation and guides)')
   .option('--recipe <name>', 'show specific recipe')
@@ -166,7 +177,18 @@ program
   .option('--detailed', 'show detailed metrics')
   .option('--history <days>', 'show history for N days', '7')
   .action(weatherCommand);
-*/
+
+// Hidden/Advanced commands
+program
+  .command('baler', { hidden: true })
+  .description('🎯 Advanced binary compilation options')
+  .option('--custom-runtime', 'use custom runtime')
+  .option('--strip-debug', 'strip debug symbols')
+  .option('--compress <algo>', 'compression algorithm (zstd, lz4, none)', 'zstd')
+  .action(() => {
+    console.log(chalk.yellow('🎯 The Baler - Advanced compilation mode activated!'));
+    console.log(chalk.gray('This feature is experimental. Use with caution.'));
+  });
 
 // Parse command line arguments
 program.parse(process.argv);
