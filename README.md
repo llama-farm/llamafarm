@@ -21,7 +21,7 @@ Join our discord channel! [Join](https://discord.gg/X9xdhTskjN)
 
 Llama Farm packages your AI models, vector databases, and data pipelines into standalone binaries that run on any device - from Raspberry Pis to enterprise servers. **No Python. No CUDA hassles. No cloud bills.**
 
-## Why LLaMA Farm
+## Why LLaMA Farm?
 The current cloud AI model makes us digital serfs, paying rent to use tools we don't own, feeding data to systems we don't control. The farm model makes us owners—of our models, our data, our future. But ownership requires responsibility. You must tend your farm.
 
 When you own your model and your data, you own your future.  Let's make the AI revolution for EVERYONE. 
