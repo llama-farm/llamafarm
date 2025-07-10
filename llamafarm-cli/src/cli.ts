@@ -9,20 +9,19 @@ import { join } from 'path';
 
 // Commands
 import { plantCommand } from './commands/plant';
-// TODO: Implement remaining commands
-// import { harvestCommand } from './commands/harvest';
-// import { tillCommand } from './commands/till';
-// import { sowCommand } from './commands/sow';
-// import { irrigateCommand } from './commands/irrigate';
-// import { fertilizeCommand } from './commands/fertilize';
-// import { pruneCommand } from './commands/prune';
-// import { greenhouseCommand } from './commands/greenhouse';
-// import { siloCommand } from './commands/silo';
-// import { barnCommand } from './commands/barn';
-// import { fieldCommand } from './commands/field';
-// import { compostCommand } from './commands/compost';
-// import { almanacCommand } from './commands/almanac';
-// import { weatherCommand } from './commands/weather';
+import { harvestCommand } from './commands/harvest';
+import { tillCommand } from './commands/till';
+import { sowCommand } from './commands/sow';
+import { irrigateCommand } from './commands/irrigate';
+import { fertilizeCommand } from './commands/fertilize';
+import { pruneCommand } from './commands/prune';
+import { greenhouseCommand } from './commands/greenhouse';
+import { siloCommand } from './commands/silo';
+import { barnCommand } from './commands/barn';
+import { fieldCommand } from './commands/field';
+import { compostCommand } from './commands/compost';
+import { almanacCommand } from './commands/almanac';
+import { weatherCommand } from './commands/weather';
 
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
 
@@ -52,8 +51,6 @@ program
   .option('--quantize <level>', 'quantization level (q4_0, q4_1, q5_0, q5_1, q8_0)', 'q4_0')
   .action(plantCommand);
 
-// TODO: Implement remaining commands
-/*
 program
   .command('harvest <url>')
   .description('🌾 Harvest a planted binary from URL or local path')
@@ -166,7 +163,18 @@ program
   .option('--detailed', 'show detailed metrics')
   .option('--history <days>', 'show history for N days', '7')
   .action(weatherCommand);
-*/
+
+// Hidden/Advanced commands
+program
+  .command('baler', { hidden: true })
+  .description('🎯 Advanced binary compilation options')
+  .option('--custom-runtime', 'use custom runtime')
+  .option('--strip-debug', 'strip debug symbols')
+  .option('--compress <algo>', 'compression algorithm (zstd, lz4, none)', 'zstd')
+  .action(() => {
+    console.log(chalk.yellow('🎯 The Baler - Advanced compilation mode activated!'));
+    console.log(chalk.gray('This feature is experimental. Use with caution.'));
+  });
 
 // Parse command line arguments
 program.parse(process.argv);
