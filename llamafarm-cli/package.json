@@ -1,6 +1,6 @@
 {
   "name": "@llamafarm/llamafarm",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "🌾 Plant and harvest AI models, agents, and databases into single deployable binaries",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
