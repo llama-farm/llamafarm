@@ -45,26 +45,32 @@ class TestConfigLoader:
 
         # Verify RAG configuration
         rag = config["rag"]
-        assert rag["parser"]["type"] == "CustomerSupportCSVParser"
-        assert rag["embedder"]["type"] == "OllamaEmbedder"
-        assert rag["vector_store"]["type"] == "ChromaStore"
+        assert rag["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
+        assert rag["embedders"]["default"]["type"] == "OllamaEmbedder"
+        assert rag["vector_stores"]["default"]["type"] == "ChromaStore"
 
         # Verify parser config
-        parser_config = rag["parser"]["config"]
+        parser_config = rag["parsers"]["csv"]["config"]
         assert "question" in parser_config["content_fields"]
         assert "answer" in parser_config["content_fields"]
         assert "category" in parser_config["metadata_fields"]
         assert "timestamp" in parser_config["metadata_fields"]
 
         # Verify embedder config
-        embedder_config = rag["embedder"]["config"]
+        embedder_config = rag["embedders"]["default"]["config"]
         assert embedder_config["model"] == "mxbai-embed-large"
         assert embedder_config["batch_size"] == 32
 
         # Verify vector store config
-        vector_config = rag["vector_store"]["config"]
+        vector_config = rag["vector_stores"]["default"]["config"]
         assert vector_config["collection_name"] == "customer_support_knowledge_base"
         assert vector_config["persist_directory"] == "./data/vector_store/chroma"
+
+        # Verify defaults section
+        assert rag["defaults"]["parser"] == "auto"
+        assert rag["defaults"]["embedder"] == "default"
+        assert rag["defaults"]["vector_store"] == "default"
+        assert rag["defaults"]["retrieval_strategy"] == "default"
 
         # Verify models
         assert len(config["models"]) == 8
@@ -93,8 +99,8 @@ class TestConfigLoader:
         assert len(config["models"]) == 8
 
         # Verify TOML-specific parsing worked correctly
-        assert config["rag"]["embedder"]["config"]["batch_size"] == 32
-        assert isinstance(config["rag"]["parser"]["config"]["content_fields"], list)
+        assert config["rag"]["embedders"]["default"]["config"]["batch_size"] == 32
+        assert isinstance(config["rag"]["parsers"]["csv"]["config"]["content_fields"], list)
         assert isinstance(config["models"], list)
 
     def test_load_minimal_config(self, test_data_dir):
@@ -111,8 +117,8 @@ class TestConfigLoader:
         assert config.get("prompts") is None
 
         # RAG should be properly configured
-        assert config["rag"]["parser"]["config"]["content_fields"] == ["question"]
-        assert config["rag"]["embedder"]["config"]["model"] == "nomic-embed-text"
+        assert config["rag"]["parsers"]["csv"]["config"]["content_fields"] == ["question"]
+        assert config["rag"]["embedders"]["default"]["config"]["model"] == "nomic-embed-text"
 
     def test_validation_with_invalid_config(self, test_data_dir):
         """Test that validation catches invalid configurations."""
@@ -218,8 +224,8 @@ models:
             assert isinstance(model["model"], str)
 
         # Test RAG structure
-        assert isinstance(rag["parser"]["config"]["content_fields"], list)
-        assert isinstance(rag["embedder"]["config"]["batch_size"], int)
+        assert isinstance(rag["parsers"]["csv"]["config"]["content_fields"], list)
+        assert isinstance(rag["embedders"]["default"]["config"]["batch_size"], int)
 
     def test_config_with_no_prompts(self, test_data_dir):
         """Test configuration loading when prompts section is missing."""
@@ -271,9 +277,9 @@ def test_integration_usage():
     assert config["version"] == "v1"
 
     # Test accessing RAG configuration (common use case)
-    parser_type = config["rag"]["parser"]["type"]
-    embedder_model = config["rag"]["embedder"]["config"]["model"]
-    collection_name = config["rag"]["vector_store"]["config"]["collection_name"]
+    parser_type = config["rag"]["parsers"]["csv"]["type"]
+    embedder_model = config["rag"]["embedders"]["default"]["config"]["model"]
+    collection_name = config["rag"]["vector_stores"]["default"]["config"]["collection_name"]
 
     assert parser_type == "CustomerSupportCSVParser"
     assert embedder_model == "mxbai-embed-large"

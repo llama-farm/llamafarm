@@ -29,74 +29,201 @@ properties:
   rag:
     type: object
     description: RAG (Retrieval-Augmented Generation) configuration
+    required:
+      - parsers
+      - embedders
+      - vector_stores
+      - retrieval_strategies
+      - defaults
     properties:
-      parser:
+      description:
+        type: string
+        description: Configuration description
+      parsers:
         type: object
-        required:
-          - type
-          - config
-        properties:
-          type:
-            type: string
-            enum: ["CustomerSupportCSVParser"]
-          config:
+        description: Parser configurations for different file types
+        patternProperties:
+          "^[a-zA-Z_][a-zA-Z0-9_]*$":
             type: object
             required:
-              - content_fields
-              - metadata_fields
+              - type
+              - config
+              - file_extensions
+              - mime_types
             properties:
-              content_fields:
-                type: array
-                items:
-                  type: string
-                description: List of content field names
-              metadata_fields:
-                type: array
-                items:
-                  type: string
-                description: List of metadata field names
-      embedder:
-        type: object
-        required:
-          - type
-          - config
-        properties:
-          type:
-            type: string
-            enum: ["OllamaEmbedder"]
-          config:
-            type: object
-            required:
-              - model
-              - batch_size
-            properties:
-              model:
+              type:
                 type: string
-                description: Name of the embedding model
-              batch_size:
+                description: Parser class name
+              config:
+                type: object
+                description: Parser-specific configuration
+                properties:
+                  chunk_metadata:
+                    type: object
+                    properties:
+                      generate_summary:
+                        type: boolean
+                      extract_keywords:
+                        type: boolean
+                      include_statistics:
+                        type: boolean
+                      custom_fields:
+                        type: object
+                        additionalProperties: true
+                    additionalProperties: true
+                additionalProperties: true
+              file_extensions:
+                type: array
+                items:
+                  type: string
+                description: Supported file extensions
+              mime_types:
+                type: array
+                items:
+                  type: string
+                description: Supported MIME types
+              priority:
                 type: integer
-                description: Batch size for embedding
-      vector_store:
+                description: Parser priority (higher numbers = higher priority)
+        additionalProperties: false
+      embedders:
         type: object
-        required:
-          - type
-          - config
-        properties:
-          type:
-            type: string
-            enum: ["ChromaStore"]
-          config:
+        description: Embedder configurations
+        patternProperties:
+          "^[a-zA-Z_][a-zA-Z0-9_]*$":
             type: object
             required:
-              - collection_name
-              - persist_directory
+              - type
+              - config
             properties:
-              collection_name:
+              type:
                 type: string
-                description: Name of the vector store collection
-              persist_directory:
+                description: Embedder class name
+              config:
+                type: object
+                description: Embedder-specific configuration
+                additionalProperties: true
+        additionalProperties: false
+      vector_stores:
+        type: object
+        description: Vector store configurations
+        patternProperties:
+          "^[a-zA-Z_][a-zA-Z0-9_]*$":
+            type: object
+            required:
+              - type
+              - config
+            properties:
+              type:
                 type: string
-                description: Directory path for persistence
+                description: Vector store class name
+              config:
+                type: object
+                description: Store-specific configuration
+                properties:
+                  collection_name:
+                    type: string
+                  persist_directory:
+                    type: string
+                  metadata_config:
+                    type: object
+                    properties:
+                      enable_versioning:
+                        type: boolean
+                      enable_soft_delete:
+                        type: boolean
+                      hash_algorithm:
+                        type: string
+                        enum: ["md5", "sha1", "sha256", "sha512"]
+                      retention_policy:
+                        type: object
+                        properties:
+                          default_ttl_days:
+                            type: integer
+                            minimum: 1
+                          max_versions:
+                            type: integer
+                            minimum: 1
+                          cleanup_schedule:
+                            type: string
+                            enum: ["daily", "weekly", "monthly"]
+                          archive_before_delete:
+                            type: boolean
+                          archive_location:
+                            type: string
+                        additionalProperties: true
+                      required_metadata:
+                        type: array
+                        items:
+                          type: string
+                      indexed_metadata:
+                        type: array
+                        items:
+                          type: string
+                      audit_config:
+                        type: object
+                        properties:
+                          enable_audit_log:
+                            type: boolean
+                          audit_retention_days:
+                            type: integer
+                            minimum: 1
+                          track_access:
+                            type: boolean
+                          track_modifications:
+                            type: boolean
+                        additionalProperties: true
+                    additionalProperties: true
+                additionalProperties: true
+        additionalProperties: false
+      retrieval_strategies:
+        type: object
+        description: Retrieval strategy configurations
+        patternProperties:
+          "^[a-zA-Z_][a-zA-Z0-9_]*$":
+            type: object
+            required:
+              - type
+              - config
+            properties:
+              type:
+                type: string
+                description: Strategy class name
+              config:
+                type: object
+                description: Strategy-specific configuration
+                additionalProperties: true
+              description:
+                type: string
+                description: Strategy description
+        additionalProperties: false
+      defaults:
+        type: object
+        description: Default component selections
+        required:
+          - parser
+          - embedder
+          - vector_store
+          - retrieval_strategy
+        properties:
+          parser:
+            type: string
+            description: Default parser to use
+            default: auto
+          embedder:
+            type: string
+            description: Default embedder to use
+            default: default
+          vector_store:
+            type: string
+            description: Default vector store to use
+            default: default
+          retrieval_strategy:
+            type: string
+            description: Default retrieval strategy to use
+            default: default
+        additionalProperties: false
+
   models:
     type: array
     description: List of model configurations

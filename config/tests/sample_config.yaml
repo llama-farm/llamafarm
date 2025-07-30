@@ -14,23 +14,70 @@ prompts:
     description: "Prompt for conducting code reviews and providing feedback"
 
 rag:
-  parser:
-    type: CustomerSupportCSVParser
-    config:
-      content_fields: ["question", "answer", "solution", "explanation"]
-      metadata_fields: ["category", "timestamp", "priority", "tags", "author"]
+  description: "Customer support RAG configuration for testing"
 
-  embedder:
-    type: OllamaEmbedder
-    config:
-      model: "mxbai-embed-large"
-      batch_size: 32
+  parsers:
+    csv:
+      type: "CustomerSupportCSVParser"
+      config:
+        content_fields: ["question", "answer", "solution", "explanation"]
+        metadata_fields: ["category", "timestamp", "priority", "tags", "author"]
+        id_field: "id"
+        combine_content: true
+        content_separator: "\n\n"
+        chunk_metadata:
+          generate_summary: true
+          extract_keywords: true
+          include_statistics: true
+      file_extensions: [".csv"]
+      mime_types: ["text/csv", "application/csv"]
 
-  vector_store:
-    type: ChromaStore
-    config:
-      collection_name: "customer_support_knowledge_base"
-      persist_directory: "./data/vector_store/chroma"
+  embedders:
+    default:
+      type: "OllamaEmbedder"
+      config:
+        model: "mxbai-embed-large"
+        base_url: "http://localhost:11434"
+        batch_size: 32
+        timeout: 60
+
+  vector_stores:
+    default:
+      type: "ChromaStore"
+      config:
+        collection_name: "customer_support_knowledge_base"
+        persist_directory: "./data/vector_store/chroma"
+        metadata_config:
+          enable_versioning: true
+          enable_soft_delete: true
+          hash_algorithm: "sha256"
+          retention_policy:
+            default_ttl_days: 365
+            max_versions: 10
+            cleanup_schedule: "weekly"
+          required_metadata:
+            - "doc_id"
+            - "chunk_id"
+            - "filename"
+            - "created_at"
+            - "updated_at"
+          indexed_metadata:
+            - "doc_id"
+            - "filename"
+            - "created_at"
+
+  retrieval_strategies:
+    default:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+      description: "Basic similarity search"
+
+  defaults:
+    parser: "auto"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
 
 models:
   - provider: "local"
