@@ -1,0 +1,115 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+title: LlamaFarm Config
+type: object
+required:
+  - version
+  - rag
+  - models
+properties:
+  version:
+    type: string
+    enum: ["v1"]
+    default: v1
+    description: Config version, must be "v1"
+  prompts:
+    type: array
+    items:
+      type: object
+      required:
+        - prompt
+      properties:
+        name:
+          type: string
+          description: Prompt name
+        prompt:
+          type: string
+          description: Prompt text
+        description:
+          type: string
+  rag:
+    type: object
+    description: RAG (Retrieval-Augmented Generation) configuration
+    properties:
+      parser:
+        type: object
+        required:
+          - type
+          - config
+        properties:
+          type:
+            type: string
+            enum: ["CustomerSupportCSVParser"]
+          config:
+            type: object
+            required:
+              - content_fields
+              - metadata_fields
+            properties:
+              content_fields:
+                type: array
+                items:
+                  type: string
+                description: List of content field names
+              metadata_fields:
+                type: array
+                items:
+                  type: string
+                description: List of metadata field names
+      embedder:
+        type: object
+        required:
+          - type
+          - config
+        properties:
+          type:
+            type: string
+            enum: ["OllamaEmbedder"]
+          config:
+            type: object
+            required:
+              - model
+              - batch_size
+            properties:
+              model:
+                type: string
+                description: Name of the embedding model
+              batch_size:
+                type: integer
+                description: Batch size for embedding
+      vector_store:
+        type: object
+        required:
+          - type
+          - config
+        properties:
+          type:
+            type: string
+            enum: ["ChromaStore"]
+          config:
+            type: object
+            required:
+              - collection_name
+              - persist_directory
+            properties:
+              collection_name:
+                type: string
+                description: Name of the vector store collection
+              persist_directory:
+                type: string
+                description: Directory path for persistence
+  models:
+    type: array
+    description: List of model configurations
+    items:
+      type: object
+      required:
+        - provider
+        - model
+      properties:
+        provider:
+          type: string
+          enum: ["openai", "anthropic", "google", "local", "custom"]
+          default: local
+        model:
+          type: string
+          description: Model name or ID

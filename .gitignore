@@ -1,3 +1,10 @@
+.venv/
+.ruff_cache/
+node_modules/
+llamafarm-cli
+
+# Generated files
+cli/cmd/config/schema.yaml
 # ==============================================================================
 # RAG System - Comprehensive .gitignore (No Negative Patterns)
 # ==============================================================================

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["config"]
+
+[project]
+name = "llamafarm-config"
+version = "0.1.0"
+description = "Configuration loader for LlamaFarm with JSON schema validation"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "PyYAML>=6.0",
+    "jsonschema>=4.0.0",
+    "tomli>=2.0.0; python_version<'3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.3.0",
+    "isort>=5.10.0",
+]
+
+[project.scripts]
+generate-types = "config.generate_types:main"
+
+[dependency-groups]
+dev = [
+    "jsonschema-gentypes>=2.3.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+# Enable auto-fixes
+fix = true
+
+# Select rulesets (examples: E for pycodestyle, F for pyflakes, I for isort, B for bugbear)
+lint.select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# Exclude some files
+exclude = ["migrations", ".venv", "venv", "build", "dist"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

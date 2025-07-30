@@ -1,0 +1,24 @@
+version: v2  # Invalid version
+
+rag:
+  parser:
+    type: InvalidParserType  # Invalid parser type
+    config:
+      content_fields: ["question"]
+      metadata_fields: ["category"]
+
+  embedder:
+    type: OllamaEmbedder
+    config:
+      model: "test-model"
+      batch_size: "invalid"  # Should be integer
+
+  vector_store:
+    type: ChromaStore
+    config:
+      collection_name: "test"
+      persist_directory: "./test_data"
+
+models:
+  - provider: "invalid_provider"  # Invalid provider
+    model: "test-model"

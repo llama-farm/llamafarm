@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"llamafarm-cli/cmd/config"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -26,15 +27,18 @@ var initCmd = &cobra.Command{
 			os.MkdirAll(projectDir, 0755)
 		}
 
-		// INSERT_YOUR_CODE
-		// Create a default llamafarm.yaml file in the project directory
 		configPath := projectDir + "/llamafarm.yaml"
-		configContent := []byte("project:\n  name: \"MyLlamaFarmProject\"\n  description: \"A new LlamaFarm project.\"\n")
 
 		if _, err := os.Stat(configPath); err == nil {
 			fmt.Printf("llamafarm.yaml already exists at %s\n", configPath)
 		} else {
-			err := os.WriteFile(configPath, configContent, 0644)
+			configContent, err := config.Generate()
+			if err != nil {
+				fmt.Printf("Failed to generate llamafarm.yaml: %v\n", err)
+				return
+			}
+
+			err = os.WriteFile(configPath, []byte(configContent), 0644)
 			if err != nil {
 				fmt.Printf("Failed to create llamafarm.yaml: %v\n", err)
 			} else {
