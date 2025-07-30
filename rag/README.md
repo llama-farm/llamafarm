@@ -105,6 +105,73 @@ If you prefer traditional pip/venv:
    uv run python cli.py info
    ```
 
+## 🛤️ Flexible Path Resolution
+
+The RAG system supports flexible path resolution for both configuration files and data sources, making it easy to work with different project structures and deployment scenarios.
+
+### Configuration File Paths
+
+Config files are searched in multiple locations (in order of preference):
+
+```bash
+# 1. Relative to current/base directory
+uv run python cli.py --config my_config.json
+
+# 2. Relative to user config directory
+uv run python cli.py --config config.json  # Searches ~/.config/rag/config.json
+
+# 3. Absolute path
+uv run python cli.py --config /etc/rag/production.json
+
+# 4. From subdirectory
+uv run python cli.py --config config_examples/flexible_paths_config.json
+```
+
+### Data Source Paths
+
+Data sources support various path formats:
+
+```bash
+# Relative paths (resolved from current or base directory)
+uv run python cli.py ingest samples/small_sample.csv
+uv run python cli.py ingest data/tickets.csv
+
+# Absolute paths
+uv run python cli.py ingest /path/to/data/tickets.csv
+
+# Home directory expansion
+uv run python cli.py ingest ~/Documents/support_data.csv
+
+# With custom base directory
+uv run python cli.py --base-dir /project/root ingest data/tickets.csv
+```
+
+### Base Directory Override
+
+Use `--base-dir` to change the reference point for relative paths:
+
+```bash
+# Set custom base directory for all relative paths
+uv run python cli.py --base-dir /my/project/root \
+  --config configs/prod.json \
+  ingest data/latest_tickets.csv
+```
+
+### Path Resolution in Config Files
+
+Paths within configuration files are automatically resolved:
+
+```json
+{
+  "vector_store": {
+    "type": "ChromaStore",
+    "config": {
+      "persist_directory": "./data/chroma_db"  // Auto-resolved and created
+    }
+  }
+}
+```
+
 ### Alternative: Run the Example Script
 
 ```bash
@@ -166,7 +233,18 @@ Chains components together for end-to-end processing.
 
 ## Configuration
 
-Configuration is JSON-based and includes three main sections:
+Configuration is JSON-based and includes three main sections. The system supports flexible configuration file placement and automatic path resolution.
+
+### CLI Configuration Options
+
+```bash
+# Global options (available for all commands)
+--config, -c     Configuration file path (default: rag_config.json)
+--base-dir, -b   Base directory for relative path resolution
+--log-level      Logging level (DEBUG, INFO, WARNING, ERROR)
+```
+
+### Configuration File Structure
 
 ```json
 {

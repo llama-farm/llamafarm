@@ -1,3 +1,635 @@
-.venv/
-.ruff_cache/
-node_modules/
+# ==============================================================================
+# RAG System - Comprehensive .gitignore
+# ==============================================================================
+
+# ==============================================================================
+# Python
+# ==============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/#use-with-ide
+.pdm.toml
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+rag_env/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
+#  project, it is recommended to ignore these files in the global gitignore:
+#
+.idea/
+
+# ==============================================================================
+# Vector Databases & AI Models
+# ==============================================================================
+
+# ChromaDB
+chroma_db/
+*.chroma
+chroma.sqlite3
+*.chromadb
+
+# Alternative ChromaDB directories
+example_chroma_db/
+custom_chroma_db/
+test_chroma_db/
+.chroma/
+
+# Pinecone
+pinecone_data/
+.pinecone/
+
+# Weaviate
+weaviate_data/
+.weaviate/
+
+# Qdrant
+qdrant_data/
+.qdrant/
+
+# Milvus
+milvus_data/
+.milvus/
+
+# FAISS indexes
+*.faiss
+*.index
+faiss_indexes/
+
+# LanceDB
+*.lance
+lancedb_data/
+
+# ==============================================================================
+# Large Language Models & Embeddings
+# ==============================================================================
+
+# Ollama models and cache
+.ollama/
+ollama_models/
+
+# Hugging Face cache
+.cache/huggingface/
+.cache/transformers/
+transformers_cache/
+
+# Model files (usually too large for git)
+*.bin
+*.safetensors
+*.gguf
+*.ggml
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.h5
+*.pkl
+*.joblib
+
+# Embedding cache files
+embeddings_cache/
+.embeddings/
+*.embeddings
+
+# Tokenizer files (if cached locally)
+tokenizer_cache/
+
+# ==============================================================================
+# Data Files
+# ==============================================================================
+
+# Large datasets
+*.csv
+*.json
+*.jsonl
+*.parquet
+*.xlsx
+*.xls
+*.tsv
+*.txt
+*.pdf
+*.docx
+*.doc
+
+# Compressed archives
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.rar
+*.7z
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration with secrets (keep template versions)
+*_config.json
+*_secrets.json
+secrets.yaml
+config/secrets/
+.secrets/
+
+# Temporary data files
+temp_data/
+tmp/
+temporary/
+scratch/
+
+# Processed data outputs
+output/
+results/
+processed/
+exports/
+
+# ==============================================================================
+# Logs & Monitoring
+# ==============================================================================
+
+# Log files
+*.log
+logs/
+*.log.*
+log_*.txt
+
+# Monitoring and metrics
+metrics/
+monitoring/
+*.metrics
+telemetry/
+
+# Crash dumps
+*.dmp
+core.*
+crash_*.txt
+
+# ==============================================================================
+# System & Editor Files
+# ==============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ==============================================================================
+# Testing & Development
+# ==============================================================================
+
+# Test outputs
+test_output/
+test_results/
+test_data/
+test_*.csv
+sample_*.csv
+mock_data/
+
+# Temporary test files
+temp_test_*
+test_temp_*
+*.test
+testing/
+
+# Benchmarking
+benchmark_results/
+performance_tests/
+*.benchmark
+
+# Development scripts
+dev_scripts/
+experimental/
+playground/
+sandbox/
+
+# ==============================================================================
+# Docker & Containers
+# ==============================================================================
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+.dockerignore
+
+# Container volumes
+docker_volumes/
+container_data/
+
+# ==============================================================================
+# Cloud & Deployment
+# ==============================================================================
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.json
+
+# AWS
+.aws/
+aws_credentials
+*.pem
+
+# Google Cloud
+gcloud_credentials.json
+service_account.json
+.gcp/
+
+# Azure
+.azure/
+
+# Kubernetes
+*.kubeconfig
+k8s_secrets/
+
+# ==============================================================================
+# API Keys & Secrets
+# ==============================================================================
+
+# Environment files with secrets
+.env.local
+.env.production
+.env.development
+.env.staging
+.env.secrets
+
+# API keys and tokens
+api_keys.txt
+*.key
+*.token
+*.secret
+credentials.json
+auth_config.json
+
+# OAuth and certificates
+*.crt
+*.csr
+*.pem
+*.p12
+*.pfx
+
+# ==============================================================================
+# Backup & Archive Files
+# ==============================================================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*~
+*.orig
+
+# Archive files
+backup_*/
+archives/
+*.archive
+
+# ==============================================================================
+# Documentation Build Files
+# ==============================================================================
+
+# Sphinx
+_build/
+_static/
+_templates/
+
+# MkDocs
+site/
+
+# GitBook
+_book/
+
+# ==============================================================================
+# Performance & Profiling
+# ==============================================================================
+
+# Profiling files
+*.prof
+*.profile
+profiling_results/
+
+# Memory profiling
+*.mprof
+memory_profiler_*/
+
+# ==============================================================================
+# Custom RAG System Specific
+# ==============================================================================
+
+# Generated configuration files (keep templates)
+!rag_config.template.json
+!config_examples/
+
+# Custom model downloads
+custom_models/
+downloaded_models/
+
+# Vector index backups
+vector_backups/
+index_snapshots/
+
+# Processing queues and temp files
+processing_queue/
+temp_embeddings/
+batch_processing/
+
+# User data directories
+user_data/
+uploads/
+ingestion_staging/
+
+# ==============================================================================
+# IDE and Tool Specific
+# ==============================================================================
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+.project
+.metadata
+.classpath
+.settings/
+
+# NetBeans
+nbproject/
+build.xml
+
+# ==============================================================================
+# OS Generated Files
+# ==============================================================================
+
+# Thumbnails
+*.thumb
+
+# Icon files
+Icon?
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# ==============================================================================
+# Keep These Files (Negative Patterns)
+# ==============================================================================
+
+# Keep example configurations
+!config_examples/
+!config_examples/basic_config.json
+!config_examples/custom_cvs_config.json
+!config_examples/custom_cvs_config.json
+!config_examples/*
+!*_example.json
+!*_template.json
+!sample_configs/
+
+# Keep small sample data files for testing
+!small_sample.csv
+!test_sample.csv
+!example_data.csv
+!basic_config.json
+
+
+# Keep documentation files
+!*.md
+!docs/
+
+# Keep requirement files
+!requirements.txt
+!requirements-*.txt
+!Pipfile
+!pyproject.toml
+!setup.py
+!setup.cfg
+
+# Keep configuration templates
+!.env.example
+!.env.template

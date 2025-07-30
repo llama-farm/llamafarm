@@ -23,6 +23,7 @@ from core.factories import (
     VectorStoreFactory,
 )
 from utils.progress import LlamaProgressTracker, create_enhanced_progress_bar
+from utils.path_resolver import PathResolver, resolve_paths_in_config
 
 
 def setup_logging(level: str = "INFO"):
@@ -36,16 +37,28 @@ def setup_logging(level: str = "INFO"):
     )
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
-    """Load configuration from JSON file.
+def load_config(config_path: str, base_dir: str = None) -> Dict[str, Any]:
+    """Load configuration from JSON file with flexible path resolution.
+
+    Args:
+        config_path: Path to configuration file (can be relative or absolute)
+        base_dir: Base directory for relative path resolution
 
     TODO: Replace with top-level config lib when available.
     """
+    resolver = PathResolver(base_dir)
+
     try:
-        with open(config_path, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"Config file not found: {config_path}")
+        resolved_config_path = resolver.resolve_config_path(config_path)
+        with open(resolved_config_path, "r") as f:
+            config = json.load(f)
+
+        # Resolve any paths within the configuration
+        config = resolve_paths_in_config(config, resolver)
+
+        return config
+    except FileNotFoundError as e:
+        print(f"Config file error: {e}")
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Invalid JSON in config file: {e}")
@@ -53,9 +66,15 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
 
 def create_pipeline_from_config(
-    config: Dict[str, Any], enhanced: bool = False
+    config: Dict[str, Any], enhanced: bool = False, base_dir: str = None
 ) -> Pipeline:
-    """Create pipeline from configuration using factories."""
+    """Create pipeline from configuration using factories.
+
+    Args:
+        config: Configuration dictionary
+        enhanced: Whether to use enhanced pipeline with progress tracking
+        base_dir: Base directory for resolving relative paths in config
+    """
     # Create components using factories
     parser = create_parser_from_config(config.get("parser", {}))
     embedder = create_embedder_from_config(config.get("embedder", {}))
@@ -79,16 +98,31 @@ def ingest_command(args):
     setup_logging(args.log_level)
     tracker = LlamaProgressTracker()
 
+    # Resolve data source path
+    resolver = PathResolver(args.base_dir if hasattr(args, "base_dir") else None)
+    try:
+        source_path = resolver.resolve_data_source(args.source)
+        tracker.print_info(f"📂 Data source resolved to: {source_path}")
+    except FileNotFoundError as e:
+        tracker.print_error(f"Data source error: {e}")
+        sys.exit(1)
+
     # Load configuration
     try:
-        config = load_config(args.config)
+        config = load_config(
+            args.config, args.base_dir if hasattr(args, "base_dir") else None
+        )
     except Exception as e:
         tracker.print_error(f"Failed to load configuration: {e}")
         sys.exit(1)
 
     # Create enhanced pipeline
     try:
-        pipeline = create_pipeline_from_config(config, enhanced=True)
+        pipeline = create_pipeline_from_config(
+            config,
+            enhanced=True,
+            base_dir=args.base_dir if hasattr(args, "base_dir") else None,
+        )
     except Exception as e:
         tracker.print_error(f"Failed to create pipeline: {e}")
         sys.exit(1)
@@ -96,11 +130,11 @@ def ingest_command(args):
     # Run ingestion with enhanced progress tracking
     try:
         if hasattr(pipeline, "run_with_progress"):
-            result = pipeline.run_with_progress(source=args.source)
+            result = pipeline.run_with_progress(source=str(source_path))
         else:
             # Fallback to regular pipeline
-            tracker.print_info(f"📂 Processing documents from: {args.source}")
-            result = pipeline.run(source=args.source)
+            tracker.print_info(f"📂 Processing documents from: {source_path}")
+            result = pipeline.run(source=str(source_path))
             tracker.print_success("Processing completed!")
 
         # Show final summary
@@ -132,7 +166,8 @@ def search_command(args):
     tracker = LlamaProgressTracker()
 
     # Load configuration
-    config = load_config(args.config)
+    base_dir = getattr(args, "base_dir", None)
+    config = load_config(args.config, base_dir)
 
     # Create embedder and vector store using factories
     try:
@@ -207,7 +242,8 @@ def info_command(args):
     setup_logging(args.log_level)
 
     # Load configuration
-    config = load_config(args.config)
+    base_dir = getattr(args, "base_dir", None)
+    config = load_config(args.config, base_dir)
 
     # Create vector store using factory
     try:
@@ -265,21 +301,47 @@ def test_command(args):
     except Exception as e:
         print(f"   ✗ ChromaDB test failed: {e}")
 
-    # Test CSV parsing
-    print("\n3. Testing CSV parsing...")
+    # Test file parsing
+    print("\n3. Testing file parsing...")
     try:
         if args.test_file:
             from core.factories import ParserFactory
 
-            parser = ParserFactory.create("CustomerSupportCSVParser")
-            result = parser.parse(args.test_file)
+            # Resolve test file path
+            resolver = PathResolver(
+                args.base_dir if hasattr(args, "base_dir") else None
+            )
+            try:
+                test_file_path = resolver.resolve_data_source(args.test_file)
+                print(f"   📁 Test file resolved to: {test_file_path}")
+            except FileNotFoundError as e:
+                print(f"   ✗ Test file not found: {e}")
+                return
+
+            # Detect file type and use appropriate parser
+            file_extension = test_file_path.suffix.lower()
+            if file_extension == '.csv':
+                parser = ParserFactory.create("CustomerSupportCSVParser")
+                test_type = "CSV"
+            elif file_extension == '.pdf':
+                parser = ParserFactory.create("PDFParser")
+                test_type = "PDF"
+            else:
+                print(f"   ⚠ Unsupported file type: {file_extension}")
+                return
+            
+            print(f"   🔍 Testing {test_type} parsing...")
+            result = parser.parse(str(test_file_path))
             print(f"   ✓ Parsed {len(result.documents)} documents")
             if result.errors:
                 print(f"   ⚠ {len(result.errors)} parsing errors")
+                # Show first error for debugging
+                if result.errors:
+                    print(f"      First error: {result.errors[0].get('error', 'Unknown error')}")
         else:
             print("   ⚠ No test file provided (use --test-file)")
     except Exception as e:
-        print(f"   ✗ CSV parsing test failed: {e}")
+        print(f"   ✗ File parsing test failed: {e}")
 
     print("\nTest completed!")
 
@@ -288,7 +350,15 @@ def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="Simple RAG System CLI")
     parser.add_argument(
-        "--config", "-c", default="rag_config.json", help="Configuration file path"
+        "--config",
+        "-c",
+        default="rag_config.json",
+        help="Configuration file path (supports relative and absolute paths)",
+    )
+    parser.add_argument(
+        "--base-dir",
+        "-b",
+        help="Base directory for resolving relative paths (defaults to current directory)",
     )
     parser.add_argument(
         "--log-level",
@@ -301,7 +371,9 @@ def main():
 
     # Ingest command
     ingest_parser = subparsers.add_parser("ingest", help="Ingest documents")
-    ingest_parser.add_argument("source", help="Source file or directory")
+    ingest_parser.add_argument(
+        "source", help="Source file or directory (supports relative and absolute paths)"
+    )
 
     # Search command
     search_parser = subparsers.add_parser("search", help="Search documents")
@@ -315,7 +387,10 @@ def main():
 
     # Test command
     test_parser = subparsers.add_parser("test", help="Test system components")
-    test_parser.add_argument("--test-file", help="CSV file to test parsing")
+    test_parser.add_argument(
+        "--test-file",
+        help="CSV file to test parsing (supports relative and absolute paths)",
+    )
 
     args = parser.parse_args()
 
