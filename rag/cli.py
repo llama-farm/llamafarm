@@ -84,7 +84,7 @@ def detect_file_type(file_path: Path) -> str:
 
 
 def is_unified_config(config: Dict[str, Any]) -> bool:
-    """Check if config is the new unified format (v2.0+).
+    """Check if config is the new unified format (v1+ schema).
     
     Args:
         config: Configuration dictionary
@@ -92,6 +92,18 @@ def is_unified_config(config: Dict[str, Any]) -> bool:
     Returns:
         True if unified config format
     """
+    # Check for Matt's v1 schema format
+    if (config.get("version") == "v1" and 
+        "rag" in config and 
+        isinstance(config["rag"], dict)):
+        rag_config = config["rag"]
+        return (
+            "parsers" in rag_config and
+            "embedders" in rag_config and
+            "vector_stores" in rag_config and
+            "defaults" in rag_config
+        )
+    # Check for legacy v2.0+ format
     return (
         config.get("version", "1.0").startswith("2.") and
         "parsers" in config and
@@ -114,7 +126,15 @@ def select_parser_config(config: Dict[str, Any], file_type: str, parser_override
         # Legacy config format
         return config.get("parser", {})
     
-    parsers = config.get("parsers", {})
+    # Handle Matt's v1 schema format with nested rag structure
+    if config.get("version") == "v1" and "rag" in config:
+        rag_config = config["rag"]
+        parsers = rag_config.get("parsers", {})
+        defaults = rag_config.get("defaults", {})
+    else:
+        # Handle v2.0+ format
+        parsers = config.get("parsers", {})
+        defaults = config.get("defaults", {})
     
     if parser_override and parser_override in parsers:
         return parsers[parser_override]
@@ -132,7 +152,6 @@ def select_parser_config(config: Dict[str, Any], file_type: str, parser_override
         # This could be used for more sophisticated detection
     
     # Fallback to default or first available
-    defaults = config.get("defaults", {})
     default_parser = defaults.get("parser", "auto")
     
     if default_parser != "auto" and default_parser in parsers:
@@ -165,13 +184,20 @@ def select_component_config(config: Dict[str, Any], component_type: str, overrid
         }
         return config.get(legacy_map.get(component_type, component_type), {})
     
-    components = config.get(component_type, {})
+    # Handle Matt's v1 schema format with nested rag structure
+    if config.get("version") == "v1" and "rag" in config:
+        rag_config = config["rag"]
+        components = rag_config.get(component_type, {})
+        defaults = rag_config.get("defaults", {})
+    else:
+        # Handle v2.0+ format
+        components = config.get(component_type, {})
+        defaults = config.get("defaults", {})
     
     if override and override in components:
         return components[override]
     
     # Use default from config
-    defaults = config.get("defaults", {})
     default_key = component_type.rstrip('s')  # 'embedders' -> 'embedder'
     if default_key.endswith('ie'):
         default_key = default_key[:-2] + 'y'  # 'strategies' -> 'strategy'
@@ -189,7 +215,7 @@ def select_component_config(config: Dict[str, Any], component_type: str, overrid
 
 
 def load_config(config_path: str, base_dir: str = None) -> Dict[str, Any]:
-    """Load configuration from JSON file with flexible path resolution.
+    """Load configuration from JSON or YAML file with flexible path resolution.
 
     Args:
         config_path: Path to configuration file (can be relative or absolute)
@@ -201,8 +227,28 @@ def load_config(config_path: str, base_dir: str = None) -> Dict[str, Any]:
 
     try:
         resolved_config_path = resolver.resolve_config_path(config_path)
+        
         with open(resolved_config_path, "r") as f:
-            config = json.load(f)
+            file_content = f.read()
+        
+        # Try to determine file type and parse accordingly
+        if resolved_config_path.suffix.lower() in ['.yaml', '.yml']:
+            try:
+                import yaml
+                config = yaml.safe_load(file_content)
+            except ImportError:
+                print("PyYAML not installed. Install with: pip install PyYAML")
+                sys.exit(1)
+            except yaml.YAMLError as e:
+                print(f"Invalid YAML in config file: {e}")
+                sys.exit(1)
+        else:
+            # Default to JSON
+            try:
+                config = json.loads(file_content)
+            except json.JSONDecodeError as e:
+                print(f"Invalid JSON in config file: {e}")
+                sys.exit(1)
 
         # Resolve any paths within the configuration
         config = resolve_paths_in_config(config, resolver)
@@ -210,9 +256,6 @@ def load_config(config_path: str, base_dir: str = None) -> Dict[str, Any]:
         return config
     except FileNotFoundError as e:
         print(f"Config file error: {e}")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"Invalid JSON in config file: {e}")
         sys.exit(1)
 
 
@@ -224,7 +267,7 @@ def create_pipeline_from_config(
     parser_override: Optional[str] = None,
     embedder_override: Optional[str] = None,
     vector_store_override: Optional[str] = None
-) -> Pipeline:
+) -> tuple[Pipeline, Optional[Dict[str, Any]]]:
     """Create pipeline from configuration using factories with CLI overrides.
 
     Args:
@@ -235,6 +278,10 @@ def create_pipeline_from_config(
         parser_override: CLI override for parser selection
         embedder_override: CLI override for embedder selection
         vector_store_override: CLI override for vector store selection
+        
+    Returns:
+        Tuple of (pipeline, extractor_config) where extractor_config is extracted 
+        from parser's chunk_metadata.extractors if available
     """
     # Detect file type if file path provided
     file_type = None
@@ -245,6 +292,13 @@ def create_pipeline_from_config(
     parser_config = select_parser_config(config, file_type or "unknown", parser_override)
     embedder_config = select_component_config(config, "embedders", embedder_override)
     store_config = select_component_config(config, "vector_stores", vector_store_override)
+    
+    # Extract extractor config from parser config's chunk_metadata
+    extractor_config = None
+    if parser_config and "config" in parser_config:
+        chunk_metadata = parser_config["config"].get("chunk_metadata", {})
+        if "extractors" in chunk_metadata:
+            extractor_config = chunk_metadata["extractors"]
     
     # Create components using factories
     parser = create_parser_from_config(parser_config)
@@ -261,7 +315,7 @@ def create_pipeline_from_config(
     pipeline.add_component(embedder)
     pipeline.add_component(store)
 
-    return pipeline
+    return pipeline, extractor_config
 
 
 def ingest_command(args):
@@ -302,7 +356,7 @@ def ingest_command(args):
 
     # Create enhanced pipeline with overrides
     try:
-        pipeline = create_pipeline_from_config(
+        pipeline, config_extractors = create_pipeline_from_config(
             config,
             enhanced=True,
             base_dir=args.base_dir if hasattr(args, "base_dir") else None,
@@ -325,27 +379,49 @@ def ingest_command(args):
             result = pipeline.run(source=str(source_path))
             tracker.print_success("Processing completed!")
 
-        # Apply CLI extractors if specified
+        # Apply extractors from both config and CLI
+        config_extractor_names = []
+        cli_extractor_names = []
+        
+        # Collect config-based extractors
+        if config_extractors:
+            config_extractor_names = list(config_extractors.keys())
+            tracker.print_info(f"🔧 Config-based extractors found: {', '.join(config_extractor_names)}")
+        
+        # Collect CLI extractors
         if hasattr(args, 'extractors') and args.extractors:
+            cli_extractor_names = args.extractors
+            tracker.print_info(f"🔧 CLI extractors specified: {', '.join(cli_extractor_names)}")
+        
+        # Apply extractors if any are specified
+        if config_extractor_names or cli_extractor_names:
             try:
-                tracker.print_info(f"🔧 Applying CLI extractors: {', '.join(args.extractors)}")
-                
-                # Parse extractor config if provided
-                extractor_configs = {}
+                # Parse CLI extractor config if provided
+                cli_extractor_configs = {}
                 if hasattr(args, 'extractor_config') and args.extractor_config:
                     try:
-                        extractor_configs = json.loads(args.extractor_config)
+                        cli_extractor_configs = json.loads(args.extractor_config)
                     except json.JSONDecodeError as e:
-                        tracker.print_warning(f"Invalid extractor config JSON, using defaults: {e}")
+                        tracker.print_warning(f"Invalid CLI extractor config JSON, using defaults: {e}")
                 
-                # Apply extractors
-                enhanced_documents = apply_extractors_from_cli_args(
-                    result.documents, 
-                    args.extractors,
-                    extractor_configs
-                )
-                result.documents = enhanced_documents
-                tracker.print_success(f"Applied {len(args.extractors)} extractors")
+                # Combine config and CLI extractors with CLI taking precedence
+                final_extractor_configs = config_extractors.copy() if config_extractors else {}
+                final_extractor_configs.update(cli_extractor_configs)
+                
+                # Get all unique extractor names (CLI overrides config)
+                all_extractor_names = list(set(config_extractor_names + cli_extractor_names))
+                
+                if all_extractor_names:
+                    tracker.print_info(f"🔧 Applying {len(all_extractor_names)} extractors: {', '.join(all_extractor_names)}")
+                    
+                    # Apply extractors
+                    enhanced_documents = apply_extractors_from_cli_args(
+                        result.documents, 
+                        all_extractor_names,
+                        final_extractor_configs
+                    )
+                    result.documents = enhanced_documents
+                    tracker.print_success(f"Successfully applied {len(all_extractor_names)} extractors")
                 
             except Exception as e:
                 tracker.print_warning(f"Extractor application failed: {e}")
