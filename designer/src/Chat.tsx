@@ -3,7 +3,7 @@ import BuildArea from './components/BuildArea'
 
 function Chat() {
   return (
-    <div className="h-screen w-full flex flex-row">
+    <div className="w-full h-full flex flex-row pt-10 bg-[#000B1B]">
       <Chatbox />
       <BuildArea />
     </div>

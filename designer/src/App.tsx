@@ -5,15 +5,15 @@ import Chat from './Chat'
 
 function App() {
   return (
-    <div className="min-h-screen">
+    <main className="h-screen w-full">
       <Header />
-      <div className="pt-10">
+      <div className="h-full w-full">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chat" element={<Chat />} />
         </Routes>
       </div>
-    </div>
+    </main>
   )
 }
 

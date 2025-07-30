@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Header from './components/Header'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
@@ -23,105 +22,101 @@ function Home() {
 
   return (
     <div
-      className="min-h-screen relative overflow-hidden"
+      className="h-full flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-8 pt-10"
       style={{
         background:
           'radial-gradient(88.43% 88.43% at 49.96% 88.43%, #007FFF 0%, #000D3E 100%)',
       }}
     >
-      <div className="absolute inset-0 bg-black/10" />
-
-      <main className="relative z-10 flex flex-col items-center justify-center min-h-[calc(100vh-3rem)] px-4 sm:px-6 lg:px-8 py-8">
-        <div className="max-w-4xl w-full text-center space-y-8">
-          <div className="space-y-4">
-            <p className="text-white/80 text-sm font-medium tracking-wide">
-              Welcome to LlaMaFarm 🦙
-            </p>
-
-            <h1 className="font-serif text-white text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight">
-              What are you building?
-            </h1>
-          </div>
-
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-black/10 backdrop-blur-sm rounded-lg border border-blue-400/50 p-1 relative">
-              <textarea
-                value={inputValue}
-                onChange={e => setInputValue(e.target.value)}
-                className="w-full h-24 sm:h-28 bg-transparent border-none resize-none p-4 pr-12 text-white placeholder-white/60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed"
-                placeholder="I'm building an agent that will work with my app..."
-              />
-              <button
-                onClick={handleSendClick}
-                className="absolute bottom-2 right-2 w-8 h-8 bg-blue-600 hover:bg-blue-500 rounded-md flex items-center justify-center text-white transition-colors duration-200 shadow-sm hover:shadow-md"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <p className="max-w-2xl mx-auto text-white/90 text-sm sm:text-base leading-relaxed">
-            We'll help you bring your AI project dreams to life, all while
-            showing you how we're doing it.
+      <div className="max-w-4xl w-full text-center space-y-8">
+        <div className="space-y-4">
+          <p className="text-white/80 text-sm font-medium tracking-wide">
+            Welcome to LlaMaFarm 🦙
           </p>
 
-          {/* Project option buttons */}
-          <div className="max-w-4xl mx-auto space-y-4">
-            {/* First row - stacks on mobile */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-              <button
-                onClick={() => handleOptionClick(projectOptions[0])}
-                className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
-              >
-                {projectOptions[0].text}
-              </button>
+          <h1 className="font-serif text-white text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight">
+            What are you building?
+          </h1>
+        </div>
 
-              <button
-                onClick={() => handleOptionClick(projectOptions[1])}
-                className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-black/10 backdrop-blur-sm rounded-lg border border-blue-400/50 p-1 relative">
+            <textarea
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              className="w-full h-24 sm:h-28 bg-transparent border-none resize-none p-4 pr-12 text-white placeholder-white/60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed"
+              placeholder="I'm building an agent that will work with my app..."
+            />
+            <button
+              onClick={handleSendClick}
+              className="absolute bottom-2 right-2 w-8 h-8 bg-blue-600 hover:bg-blue-500 rounded-md flex items-center justify-center text-white transition-colors duration-200 shadow-sm hover:shadow-md"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                {projectOptions[1].text}
-              </button>
-            </div>
-
-            {/* Second row */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-              <button
-                onClick={() => handleOptionClick(projectOptions[2])}
-                className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
-              >
-                {projectOptions[2].text}
-              </button>
-
-              <button
-                onClick={() => handleOptionClick(projectOptions[3])}
-                className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
-              >
-                {projectOptions[3].text}
-              </button>
-            </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+            </button>
           </div>
         </div>
 
-        {/* Decorative llama mascot - hidden on mobile for better UX */}
-        <div className="hidden lg:block absolute bottom-8 right-8 opacity-60">
-          <div className="w-32 h-40 rounded-2xl flex items-center justify-center text-6xl shadow-2xl">
-            🦙
+        <p className="max-w-2xl mx-auto text-white/90 text-sm sm:text-base leading-relaxed">
+          We'll help you bring your AI project dreams to life, all while showing
+          you how we're doing it.
+        </p>
+
+        {/* Project option buttons */}
+        <div className="max-w-4xl mx-auto space-y-4">
+          {/* First row - stacks on mobile */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+            <button
+              onClick={() => handleOptionClick(projectOptions[0])}
+              className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
+            >
+              {projectOptions[0].text}
+            </button>
+
+            <button
+              onClick={() => handleOptionClick(projectOptions[1])}
+              className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
+            >
+              {projectOptions[1].text}
+            </button>
+          </div>
+
+          {/* Second row */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+            <button
+              onClick={() => handleOptionClick(projectOptions[2])}
+              className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
+            >
+              {projectOptions[2].text}
+            </button>
+
+            <button
+              onClick={() => handleOptionClick(projectOptions[3])}
+              className="px-4 py-2 bg-slate-800/20 backdrop-blur-sm rounded-full border border-blue-300/40 font-serif text-white text-sm sm:text-base hover:bg-slate-700/30 hover:border-blue-300/60 transition-all duration-200 whitespace-nowrap"
+            >
+              {projectOptions[3].text}
+            </button>
           </div>
         </div>
-      </main>
+      </div>
+
+      {/* Decorative llama mascot - hidden on mobile for better UX */}
+      <div className="hidden lg:block absolute bottom-8 right-8 opacity-60">
+        <div className="w-32 h-40 rounded-2xl flex items-center justify-center text-6xl shadow-2xl">
+          🦙
+        </div>
+      </div>
     </div>
   )
 }

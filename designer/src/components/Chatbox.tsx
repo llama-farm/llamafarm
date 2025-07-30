@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Message from './Message'
+import FontIcon from '../common/FontIcon'
 
 export interface Message {
   type: 'user' | 'assistant' | 'system' | 'error'
@@ -48,24 +49,17 @@ function Chatbox() {
           //   className="w-full h-[78px] bg-transparent border-none resize-none p-4 pr-12 text-white placeholder-white/60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed"
           placeholder="Type here..."
         />
-        <button
+        {/* <button
           onClick={handleSendClick}
           className="w-8 h-8 bg-blue-600 hover:bg-blue-500 rounded-full flex items-center justify-center text-[#040D1D] transition-colors duration-200 shadow-sm hover:shadow-md self-end"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-            />
-          </svg>
-        </button>
+        > */}
+        <FontIcon
+          isButton
+          type="arrow-filled"
+          className="w-8 h-8 text-[#85B1FF] self-end"
+          handleOnClick={handleSendClick}
+        />
+        {/* </button> */}
       </div>
     </div>
   )
