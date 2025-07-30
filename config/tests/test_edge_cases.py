@@ -3,16 +3,17 @@
 Edge case and error condition tests for the configuration loader.
 """
 
-import sys
 import os
+import sys
 import tempfile
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from loader import load_config, find_config_file, ConfigError
+from loader import ConfigError, find_config_file, load_config
 
 
 class TestEdgeCases:
@@ -63,9 +64,10 @@ invalid toml syntax
 
     def test_directory_as_config_file(self):
         """Test passing a directory path as config file."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with pytest.raises(ConfigError, match="Configuration file not found"):
-                load_config(config_path=temp_dir)
+        with tempfile.TemporaryDirectory() as temp_dir, pytest.raises(
+            ConfigError, match="Configuration file not found"
+        ):
+            load_config(config_path=temp_dir)
 
     def test_permission_denied(self):
         """Test handling permission denied errors."""
@@ -169,7 +171,10 @@ models:
         config = load_config(config_path=temp_path)
         assert "你好" in config["prompts"][0]["prompt"]
         assert "café" in config["prompts"][0]["description"]
-        assert config["rag"]["vector_store"]["config"]["collection_name"] == "test_unicode_™"
+        assert (
+            config["rag"]["vector_store"]["config"]["collection_name"]
+            == "test_unicode_™"
+        )
 
     def test_deeply_nested_paths(self, temp_config_file):
         """Test configuration with deeply nested file paths."""
@@ -201,7 +206,10 @@ models:
 
         config = load_config(config_path=temp_path)
         persist_dir = config["rag"]["vector_store"]["config"]["persist_directory"]
-        assert persist_dir == "./very/deeply/nested/directory/structure/that/goes/many/levels/deep"
+        assert (
+            persist_dir
+            == "./very/deeply/nested/directory/structure/that/goes/many/levels/deep"
+        )
 
     def test_config_with_special_characters(self, temp_config_file):
         """Test configuration with special characters in values."""
@@ -239,9 +247,13 @@ models:
         config = load_config(config_path=temp_path)
         assert "@#$%^&*" in config["prompts"][0]["prompt"]
         assert config["rag"]["embedder"]["config"]["model"] == "model@version:1.0"
-        assert "spaces and" in config["rag"]["vector_store"]["config"]["persist_directory"]
+        assert (
+            "spaces and" in config["rag"]["vector_store"]["config"]["persist_directory"]
+        )
 
-    @pytest.mark.skip(reason="Dependency simulation test is complex and not critical for core functionality")
+    @pytest.mark.skip(
+        reason="Dependency simulation test is complex and not critical for core functionality"
+    )
     def test_missing_dependencies_simulation(self, monkeypatch):
         """Test behavior when dependencies are missing."""
         # This test is skipped as it's complex to simulate missing dependencies
@@ -257,8 +269,12 @@ models:
 
             # Create multiple config files
             (temp_path / "llamafarm.yml").write_text("version: v1\nmodels: []\nrag: {}")
-            (temp_path / "llamafarm.toml").write_text('version = "v1"\nmodels = []\n[rag]')
-            (temp_path / "llamafarm.yaml").write_text("version: v1\nmodels: []\nrag: {}")
+            (temp_path / "llamafarm.toml").write_text(
+                'version = "v1"\nmodels = []\n[rag]'
+            )
+            (temp_path / "llamafarm.yaml").write_text(
+                "version: v1\nmodels: []\nrag: {}"
+            )
 
             # Should find .yaml first (highest priority)
             found_file = find_config_file(temp_path)

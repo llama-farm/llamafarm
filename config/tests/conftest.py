@@ -2,8 +2,10 @@
 Pytest configuration and shared fixtures for config tests.
 """
 
+import contextlib
 import sys
 from pathlib import Path
+
 import pytest
 
 # Add the config module to Python path for testing
@@ -26,15 +28,15 @@ def sample_configs_dir():
 @pytest.fixture
 def temp_config_file():
     """Fixture for creating temporary config files in tests."""
-    import tempfile
     import os
+    import tempfile
 
     temp_files = []
 
     def _create_temp_config(content: str, suffix: str = ".yaml"):
         """Create a temporary config file with given content."""
         fd, path = tempfile.mkstemp(suffix=suffix, text=True)
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, "w") as f:
             f.write(content)
         temp_files.append(path)
         return path
@@ -46,7 +48,7 @@ def temp_config_file():
         try:
             os.unlink(path)
         except OSError:
-            pass
+            contextlib.suppress(OSError)
 
 
 @pytest.fixture(autouse=True)
@@ -55,8 +57,11 @@ def reset_imports():
     import sys
 
     # Remove any previously imported config modules
-    modules_to_remove = [name for name in sys.modules.keys()
-                        if name.startswith(('loader', 'config_types', 'config.'))]
+    modules_to_remove = [
+        name
+        for name in sys.modules
+        if name.startswith(("loader", "config_types", "config."))
+    ]
 
     for module_name in modules_to_remove:
         if module_name in sys.modules:
@@ -65,8 +70,11 @@ def reset_imports():
     yield
 
     # Clean up again after test
-    modules_to_remove = [name for name in sys.modules.keys()
-                        if name.startswith(('loader', 'config_types', 'config.'))]
+    modules_to_remove = [
+        name
+        for name in sys.modules
+        if name.startswith(("loader", "config_types", "config."))
+    ]
 
     for module_name in modules_to_remove:
         if module_name in sys.modules:

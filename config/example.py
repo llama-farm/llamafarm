@@ -9,8 +9,8 @@ from pathlib import Path
 # Add the config module to the path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from loader import load_config, find_config_file, ConfigError
 from config_types import LlamaFarmConfig
+from loader import ConfigError, find_config_file, load_config
 
 
 def main():
@@ -34,21 +34,23 @@ def main():
 
             # Display model information
             print("\nModels:")
-            for i, model in enumerate(config['models'], 1):
+            for i, model in enumerate(config["models"], 1):
                 print(f"  {i}. {model['provider']}: {model['model']}")
 
             # Display RAG configuration
             print("\nRAG Configuration:")
-            rag = config['rag']
+            rag = config["rag"]
             print(f"  Parser: {rag['parser']['type']}")
-            print(f"  Embedder: {rag['embedder']['type']} ({rag['embedder']['config']['model']})")
+            print(
+                f"  Embedder: {rag['embedder']['type']} ({rag['embedder']['config']['model']})"
+            )
             print(f"  Vector Store: {rag['vector_store']['type']}")
 
             # Display prompts if available
-            if 'prompts' in config and config['prompts']:
+            if "prompts" in config and config["prompts"]:
                 print(f"\nPrompts: {len(config['prompts'])} defined")
-                for prompt in config['prompts']:
-                    name = prompt.get('name', 'Unnamed')
+                for prompt in config["prompts"]:
+                    name = prompt.get("name", "Unnamed")
                     print(f"  - {name}")
             else:
                 print("\nNo prompts defined")

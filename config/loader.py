@@ -3,11 +3,8 @@ Configuration loader for LlamaFarm that supports YAML and TOML formats
 with JSON schema validation.
 """
 
-import os
 import sys
-import json
 from pathlib import Path
-from typing import Union, Optional
 
 try:
     import yaml
@@ -29,7 +26,7 @@ except ImportError:
 
 # Handle both relative and absolute imports
 try:
-    from .config_types import LlamaFarmConfig, ConfigDict
+    from .config_types import ConfigDict, LlamaFarmConfig
 except ImportError:
     # If relative import fails, try absolute import (when run directly)
     import sys
@@ -41,16 +38,18 @@ except ImportError:
         sys.path.insert(0, str(current_dir))
 
     try:
-        from config_types import LlamaFarmConfig, ConfigDict
+        from config_types import ConfigDict, LlamaFarmConfig
     except ImportError:
         # If all fails, define minimal types
-        from typing import Dict, Any
-        LlamaFarmConfig = Dict[str, Any]
-        ConfigDict = Dict[str, Any]
+        from typing import Any
+
+        LlamaFarmConfig = dict[str, Any]
+        ConfigDict = dict[str, Any]
 
 
 class ConfigError(Exception):
     """Raised when there's an error loading or validating configuration."""
+
     pass
 
 
@@ -65,10 +64,10 @@ def _load_schema() -> dict:
         raise ConfigError("PyYAML is required to load the schema.")
 
     try:
-        with open(schema_path, 'r') as f:
+        with open(schema_path) as f:
             return yaml.safe_load(f)
     except Exception as e:
-        raise ConfigError(f"Error loading schema: {e}")
+        raise ConfigError(f"Error loading schema: {e}") from e
 
 
 def _validate_config(config: dict, schema: dict) -> None:
@@ -81,9 +80,9 @@ def _validate_config(config: dict, schema: dict) -> None:
     try:
         jsonschema.validate(config, schema)
     except jsonschema.ValidationError as e:
-        raise ConfigError(f"Configuration validation error: {e.message}")
+        raise ConfigError(f"Configuration validation error: {e.message}") from e
     except Exception as e:
-        raise ConfigError(f"Error during validation: {e}")
+        raise ConfigError(f"Error during validation: {e}") from e
 
 
 def _load_yaml_file(file_path: Path) -> dict:
@@ -92,10 +91,10 @@ def _load_yaml_file(file_path: Path) -> dict:
         raise ConfigError("PyYAML is required to load YAML files.")
 
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             return yaml.safe_load(f) or {}
     except Exception as e:
-        raise ConfigError(f"Error loading YAML file {file_path}: {e}")
+        raise ConfigError(f"Error loading YAML file {file_path}: {e}") from e
 
 
 def _load_toml_file(file_path: Path) -> dict:
@@ -107,13 +106,13 @@ def _load_toml_file(file_path: Path) -> dict:
             raise ConfigError("tomli is required to load TOML files.")
 
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             return tomllib.load(f)
     except Exception as e:
-        raise ConfigError(f"Error loading TOML file {file_path}: {e}")
+        raise ConfigError(f"Error loading TOML file {file_path}: {e}") from e
 
 
-def find_config_file(directory: Optional[Union[str, Path]] = None) -> Optional[Path]:
+def find_config_file(directory: str | Path | None = None) -> Path | None:
     """
     Find a LlamaFarm configuration file in the specified directory.
 
@@ -128,10 +127,7 @@ def find_config_file(directory: Optional[Union[str, Path]] = None) -> Optional[P
     2. llamafarm.yml
     3. llamafarm.toml
     """
-    if directory is None:
-        directory = Path.cwd()
-    else:
-        directory = Path(directory)
+    directory = Path.cwd() if directory is None else Path(directory)
 
     if not directory.is_dir():
         raise ConfigError(f"Directory does not exist: {directory}")
@@ -146,16 +142,16 @@ def find_config_file(directory: Optional[Union[str, Path]] = None) -> Optional[P
 
 
 def load_config(
-    config_path: Optional[Union[str, Path]] = None,
-    directory: Optional[Union[str, Path]] = None,
-    validate: bool = True
+    config_path: str | Path | None = None,
+    directory: str | Path | None = None,
+    validate: bool = True,
 ) -> LlamaFarmConfig:
     """
     Load and validate a LlamaFarm configuration file.
 
     Args:
         config_path: Explicit path to configuration file. If provided, directory is ignored.
-        directory: Directory to search for configuration file. Defaults to current working directory.
+        directory: Directory to search for configuration file. Defaults to current working dir.
         validate: Whether to validate against JSON schema. Defaults to True.
 
     Returns:
@@ -177,12 +173,14 @@ def load_config(
 
     # Load configuration based on file extension
     suffix = config_file.suffix.lower()
-    if suffix in ['.yaml', '.yml']:
+    if suffix in [".yaml", ".yml"]:
         config = _load_yaml_file(config_file)
-    elif suffix == '.toml':
+    elif suffix == ".toml":
         config = _load_toml_file(config_file)
     else:
-        raise ConfigError(f"Unsupported file format: {suffix}. Supported formats: .yaml, .yml, .toml")
+        raise ConfigError(
+            f"Unsupported file format: {suffix}. Supported formats: .yaml, .yml, .toml"
+        )
 
     # Validate against schema if requested
     if validate:
@@ -193,12 +191,13 @@ def load_config(
 
 
 def load_config_dict(
-    config_path: Optional[Union[str, Path]] = None,
-    directory: Optional[Union[str, Path]] = None,
-    validate: bool = True
+    config_path: str | Path | None = None,
+    directory: str | Path | None = None,
+    validate: bool = True,
 ) -> ConfigDict:
     """
-    Load configuration as a regular dictionary (same as load_config but with different return type annotation).
+    Load configuration as a regular dictionary
+    (same as load_config but with different return type annotation).
 
     This is useful when you don't need strict typing or are working with dynamic configurations.
     """

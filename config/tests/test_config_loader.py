@@ -6,15 +6,15 @@ Comprehensive test suite for the LlamaFarm configuration loader.
 import os
 import sys
 import tempfile
-import pytest
 from pathlib import Path
-from typing import Dict, Any
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from loader import load_config, find_config_file, ConfigError
 from config_types import LlamaFarmConfig
+from loader import ConfigError, find_config_file, load_config
 
 
 class TestConfigLoader:
@@ -132,8 +132,8 @@ class TestConfigLoader:
     def test_find_config_file(self, test_data_dir):
         """Test configuration file discovery."""
         # Create a temporary directory with proper llamafarm config files
-        import tempfile
         import shutil
+        import tempfile
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -150,9 +150,10 @@ class TestConfigLoader:
 
     def test_missing_config_file(self):
         """Test behavior when no config file is found."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with pytest.raises(ConfigError, match="No configuration file found"):
-                load_config(directory=temp_dir)
+        with tempfile.TemporaryDirectory() as temp_dir, pytest.raises(
+            ConfigError, match="No configuration file found"
+        ):
+            load_config(directory=temp_dir)
 
     def test_unsupported_file_format(self):
         """Test error handling for unsupported file formats."""
@@ -193,7 +194,9 @@ models:
         providers = {m["provider"] for m in config["models"]}
         expected_providers = {"openai", "anthropic", "google", "local", "custom"}
 
-        assert providers == expected_providers, f"Missing providers: {expected_providers - providers}"
+        assert providers == expected_providers, (
+            f"Missing providers: {expected_providers - providers}"
+        )
 
     def test_type_safety(self, test_data_dir):
         """Test that loaded config matches expected types."""
@@ -228,8 +231,8 @@ models:
 
     def test_directory_vs_file_loading(self, test_data_dir):
         """Test loading by directory vs explicit file path."""
-        import tempfile
         import shutil
+        import tempfile
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -256,7 +259,7 @@ def test_integration_usage():
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
     # Test package-style import
-    from config import load_config, LlamaFarmConfig
+    from config import LlamaFarmConfig, load_config
 
     test_dir = Path(__file__).parent
     config_path = test_dir / "sample_config.yaml"
@@ -286,8 +289,7 @@ def test_integration_usage():
     # Test accessing prompts (common use case)
     if config.get("prompts"):
         customer_support_prompt = next(
-            (p for p in config["prompts"] if p["name"] == "customer_support"),
-            None
+            (p for p in config["prompts"] if p["name"] == "customer_support"), None
         )
         assert customer_support_prompt is not None
         assert "assistant" in customer_support_prompt["prompt"].lower()

@@ -4,16 +4,15 @@ Integration tests demonstrating how other modules in the project would use the c
 """
 
 import sys
-import tempfile
-import pytest
 from pathlib import Path
-from typing import List, Dict, Any
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from loader import load_config, find_config_file, ConfigError
-from config_types import LlamaFarmConfig, ModelConfig, RAGConfig, PromptConfig
+from config_types import LlamaFarmConfig, ModelConfig, PromptConfig, RAGConfig
+from loader import load_config
 
 
 class TestModuleIntegration:
@@ -73,10 +72,10 @@ class TestModuleIntegration:
         config: LlamaFarmConfig = load_config(config_path=config_path)
 
         # Simulate model manager extracting model configurations
-        models: List[ModelConfig] = config["models"]
+        models: list[ModelConfig] = config["models"]
 
         # Group models by provider (common pattern)
-        models_by_provider: Dict[str, List[ModelConfig]] = {}
+        models_by_provider: dict[str, list[ModelConfig]] = {}
         for model in models:
             provider = model["provider"]
             if provider not in models_by_provider:
@@ -91,7 +90,9 @@ class TestModuleIntegration:
 
         # Test model filtering (common use case)
         local_models = [m for m in models if m["provider"] == "local"]
-        cloud_models = [m for m in models if m["provider"] in ["openai", "anthropic", "google"]]
+        cloud_models = [
+            m for m in models if m["provider"] in ["openai", "anthropic", "google"]
+        ]
 
         assert len(local_models) >= 1
         assert len(cloud_models) >= 1
@@ -113,7 +114,7 @@ class TestModuleIntegration:
         prompts = config.get("prompts", [])
         if prompts:
             # Simulate prompt manager creating a lookup dictionary
-            prompt_lookup: Dict[str, PromptConfig] = {}
+            prompt_lookup: dict[str, PromptConfig] = {}
             for prompt in prompts:
                 if "name" in prompt:
                     prompt_lookup[prompt["name"]] = prompt
@@ -130,8 +131,9 @@ class TestModuleIntegration:
                     assert isinstance(cs_prompt["description"], str)
 
             # Test prompt filtering by name pattern
-            support_prompts = [p for p in prompts if "support" in p.get("name", "").lower()]
-            tech_prompts = [p for p in prompts if "tech" in p.get("name", "").lower()]
+            support_prompts = [
+                p for p in prompts if "support" in p.get("name", "").lower()
+            ]
 
             # Should have at least one support prompt in our sample
             assert len(support_prompts) >= 1
@@ -142,7 +144,7 @@ class TestModuleIntegration:
         configs_to_test = [
             "sample_config.yaml",
             "sample_config.toml",
-            "minimal_config.yaml"
+            "minimal_config.yaml",
         ]
 
         for config_file in configs_to_test:
@@ -166,12 +168,18 @@ class TestModuleIntegration:
 
                 # Check models structure
                 models = config["models"]
-                assert isinstance(models, list), f"Models should be a list in {config_file}"
+                assert isinstance(models, list), (
+                    f"Models should be a list in {config_file}"
+                )
                 assert len(models) > 0, f"No models defined in {config_file}"
 
                 for i, model in enumerate(models):
-                    assert "provider" in model, f"Model {i} missing provider in {config_file}"
-                    assert "model" in model, f"Model {i} missing model name in {config_file}"
+                    assert "provider" in model, (
+                        f"Model {i} missing provider in {config_file}"
+                    )
+                    assert "model" in model, (
+                        f"Model {i} missing model name in {config_file}"
+                    )
 
     def test_runtime_config_reload(self, sample_config_dir):
         """Test configuration reloading during runtime (common pattern)."""
@@ -250,13 +258,19 @@ models:
         # Load development config
         dev_cfg = load_config(config_path=dev_path)
         assert dev_cfg["rag"]["embedder"]["config"]["batch_size"] == 8
-        assert dev_cfg["rag"]["vector_store"]["config"]["collection_name"] == "dev_collection"
+        assert (
+            dev_cfg["rag"]["vector_store"]["config"]["collection_name"]
+            == "dev_collection"
+        )
         assert len(dev_cfg["models"]) == 1
 
         # Load production config
         prod_cfg = load_config(config_path=prod_path)
         assert prod_cfg["rag"]["embedder"]["config"]["batch_size"] == 64
-        assert prod_cfg["rag"]["vector_store"]["config"]["collection_name"] == "production_collection"
+        assert (
+            prod_cfg["rag"]["vector_store"]["config"]["collection_name"]
+            == "production_collection"
+        )
         assert len(prod_cfg["models"]) == 2
 
     def test_config_driven_component_initialization(self, sample_config_dir):
@@ -274,7 +288,7 @@ models:
                 return {
                     "type": parser_type,
                     "content_fields": parser_config["content_fields"],
-                    "metadata_fields": parser_config["metadata_fields"]
+                    "metadata_fields": parser_config["metadata_fields"],
                 }
             else:
                 raise ValueError(f"Unknown parser type: {parser_type}")
@@ -288,7 +302,7 @@ models:
                 return {
                     "type": embedder_type,
                     "model": embedder_config["model"],
-                    "batch_size": embedder_config["batch_size"]
+                    "batch_size": embedder_config["batch_size"],
                 }
             else:
                 raise ValueError(f"Unknown embedder type: {embedder_type}")
@@ -312,7 +326,7 @@ models:
             model_instance = {
                 "provider": model_config["provider"],
                 "model_name": model_config["model"],
-                "initialized": True
+                "initialized": True,
             }
             initialized_models.append(model_instance)
 
@@ -334,7 +348,9 @@ def test_cross_module_config_sharing():
         def __init__(self, config: LlamaFarmConfig):
             self.parser_type = config["rag"]["parser"]["type"]
             self.embedder_model = config["rag"]["embedder"]["config"]["model"]
-            self.collection_name = config["rag"]["vector_store"]["config"]["collection_name"]
+            self.collection_name = config["rag"]["vector_store"]["config"][
+                "collection_name"
+            ]
 
     # Module 2: Model Manager
     class ModelManager:

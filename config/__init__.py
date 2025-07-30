@@ -5,7 +5,7 @@ This module provides functionality to load and validate LlamaFarm configuration 
 from YAML or TOML formats with automatic type checking based on the JSON schema.
 """
 
-from .loader import load_config, ConfigDict
 from .config_types import LlamaFarmConfig
+from .loader import ConfigDict, load_config
 
 __all__ = ["load_config", "ConfigDict", "LlamaFarmConfig"]

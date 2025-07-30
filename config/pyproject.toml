@@ -22,7 +22,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "mypy>=1.0.0",
-    "black>=22.0.0",
+    "ruff>=0.3.0",
     "isort>=5.10.0",
 ]
 
@@ -34,13 +34,18 @@ dev = [
     "jsonschema-gentypes>=2.3.0",
 ]
 
-[tool.black]
+[tool.ruff]
 line-length = 100
-target-version = ['py38']
+target-version = "py311"
 
-[tool.isort]
-profile = "black"
-line_length = 100
+# Enable auto-fixes
+fix = true
+
+# Select rulesets (examples: E for pycodestyle, F for pyflakes, I for isort, B for bugbear)
+lint.select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# Exclude some files
+exclude = ["migrations", ".venv", "venv", "build", "dist"]
 
 [tool.mypy]
 python_version = "3.8"

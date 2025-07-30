@@ -3,14 +3,14 @@ Type definitions for LlamaFarm configuration based on the JSON schema.
 This file is auto-generated from schema.yaml - DO NOT EDIT MANUALLY.
 """
 
-from typing import TypedDict, List, Literal, Optional, Union
+from typing import Literal, TypedDict, Union
 
 
 class PromptConfig(TypedDict):
     """Configuration for a single prompt."""
-    name: Optional[str]
+    name: str | None
     prompt: str
-    description: Optional[str]
+    description: str | None
 
 class ModelConfig(TypedDict):
     """Configuration for a single model."""
@@ -19,8 +19,8 @@ class ModelConfig(TypedDict):
 
 class ParserConfig(TypedDict):
     """Parser configuration within RAG."""
-    content_fields: List[str]
-    metadata_fields: List[str]
+    content_fields: list[str]
+    metadata_fields: list[str]
 
 class EmbedderConfig(TypedDict):
     """Embedder configuration within RAG."""
@@ -49,16 +49,16 @@ class VectorStore(TypedDict):
 
 class RAGConfig(TypedDict):
     """RAG (Retrieval-Augmented Generation) configuration."""
-    parser: Optional[Parser]
-    embedder: Optional[Embedder]
-    vector_store: Optional[VectorStore]
+    parser: Parser | None
+    embedder: Embedder | None
+    vector_store: VectorStore | None
 
 class LlamaFarmConfig(TypedDict):
     """Complete LlamaFarm configuration."""
     version: Literal["v1"]
-    prompts: Optional[List[PromptConfig]]
+    prompts: list[PromptConfig] | None
     rag: RAGConfig
-    models: List[ModelConfig]
+    models: list[ModelConfig]
 
 # Type alias for the configuration dictionary
 

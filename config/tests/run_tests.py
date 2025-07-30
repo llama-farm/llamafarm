@@ -4,7 +4,6 @@ Test runner for the LlamaFarm configuration module.
 """
 
 import sys
-import subprocess
 from pathlib import Path
 
 

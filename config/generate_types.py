@@ -4,10 +4,9 @@ Script to generate TypedDict classes from the JSON schema.
 This ensures the type definitions stay in sync with the schema.
 """
 
-import json
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Set
+from typing import Any
 
 
 class TypeGenerator:
@@ -16,20 +15,20 @@ class TypeGenerator:
     def __init__(self, schema_path: Path):
         self.schema_path = schema_path
         self.schema = self._load_schema()
-        self.generated_types: List[str] = []
-        self.imports: Set[str] = set()
+        self.generated_types: list[str] = []
+        self.imports: set[str] = set()
 
-    def _load_schema(self) -> Dict[str, Any]:
+    def _load_schema(self) -> dict[str, Any]:
         """Load the JSON schema from file."""
         import yaml
 
         if not self.schema_path.exists():
             raise FileNotFoundError(f"Schema file not found: {self.schema_path}")
 
-        with open(self.schema_path, 'r') as f:
+        with open(self.schema_path) as f:
             return yaml.safe_load(f)
 
-    def _get_python_type(self, schema_type: str, format_type: Optional[str] = None) -> str:
+    def _get_python_type(self, schema_type: str, format_type: str | None = None) -> str:
         """Convert JSON schema type to Python type."""
         type_mapping = {
             "string": "str",
@@ -37,11 +36,11 @@ class TypeGenerator:
             "number": "float",
             "boolean": "bool",
             "array": "List",
-            "object": "Dict[str, Any]"
+            "object": "Dict[str, Any]",
         }
         return type_mapping.get(schema_type, "Any")
 
-    def _get_literal_type(self, enum_values: List[Any]) -> str:
+    def _get_literal_type(self, enum_values: list[Any]) -> str:
         """Generate Literal type from enum values."""
         if not enum_values:
             return "str"
@@ -56,7 +55,9 @@ class TypeGenerator:
 
         return f"Literal[{', '.join(literal_values)}]"
 
-    def _generate_field_type(self, property_schema: Dict[str, Any], field_name: str, parent_context: str = "") -> str:
+    def _generate_field_type(
+        self, property_schema: dict[str, Any], field_name: str, parent_context: str = ""
+    ) -> str:
         """Generate type annotation for a single field."""
         schema_type = property_schema.get("type")
 
@@ -128,9 +129,15 @@ class TypeGenerator:
         else:
             return f"{field_name.capitalize()}Config"
 
-    def _generate_typeddict_class(self, class_name: str, properties: Dict[str, Any], required_fields: List[str], parent_context: str = "") -> str:
+    def _generate_typeddict_class(
+        self,
+        class_name: str,
+        properties: dict[str, Any],
+        required_fields: list[str],
+        parent_context: str = "",
+    ) -> str:
         """Generate a TypedDict class definition."""
-        lines = [f'class {class_name}(TypedDict):']
+        lines = [f"class {class_name}(TypedDict):"]
 
         # Add docstring based on class name
         if class_name == "PromptConfig":
@@ -138,7 +145,9 @@ class TypeGenerator:
         elif class_name == "ModelConfig":
             lines.append('    """Configuration for a single model."""')
         elif class_name == "RAGConfig":
-            lines.append('    """RAG (Retrieval-Augmented Generation) configuration."""')
+            lines.append(
+                '    """RAG (Retrieval-Augmented Generation) configuration."""'
+            )
         elif class_name == "ParserConfig":
             lines.append('    """Parser configuration within RAG."""')
         elif class_name == "EmbedderConfig":
@@ -156,15 +165,17 @@ class TypeGenerator:
 
         # Generate field definitions
         for field_name, field_schema in properties.items():
-            field_type = self._generate_field_type(field_schema, field_name, parent_context)
+            field_type = self._generate_field_type(
+                field_schema, field_name, parent_context
+            )
 
             # Check if field is required
             if field_name in required_fields:
-                lines.append(f'    {field_name}: {field_type}')
+                lines.append(f"    {field_name}: {field_type}")
             else:
-                lines.append(f'    {field_name}: Optional[{field_type}]')
+                lines.append(f"    {field_name}: Optional[{field_type}]")
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def generate_types(self) -> str:
         """Generate all TypedDict classes from the schema."""
@@ -180,7 +191,9 @@ class TypeGenerator:
             if "items" in prompts_schema and "properties" in prompts_schema["items"]:
                 prompt_props = prompts_schema["items"]["properties"]
                 prompt_required = prompts_schema["items"].get("required", [])
-                prompt_class = self._generate_typeddict_class("PromptConfig", prompt_props, prompt_required)
+                prompt_class = self._generate_typeddict_class(
+                    "PromptConfig", prompt_props, prompt_required
+                )
                 types.append(prompt_class)
 
         # 2. Generate ModelConfig (no dependencies)
@@ -189,7 +202,9 @@ class TypeGenerator:
             if "items" in models_schema and "properties" in models_schema["items"]:
                 model_props = models_schema["items"]["properties"]
                 model_required = models_schema["items"].get("required", [])
-                model_class = self._generate_typeddict_class("ModelConfig", model_props, model_required)
+                model_class = self._generate_typeddict_class(
+                    "ModelConfig", model_props, model_required
+                )
                 types.append(model_class)
 
         # 3. Generate RAG component config types (no dependencies)
@@ -200,7 +215,10 @@ class TypeGenerator:
                 for component_name in ["parser", "embedder", "vector_store"]:
                     if component_name in rag_schema["properties"]:
                         component_schema = rag_schema["properties"][component_name]
-                        if "properties" in component_schema and "config" in component_schema["properties"]:
+                        if (
+                            "properties" in component_schema
+                            and "config" in component_schema["properties"]
+                        ):
                             config_schema = component_schema["properties"]["config"]
                             if "properties" in config_schema:
                                 config_props = config_schema["properties"]
@@ -210,9 +228,16 @@ class TypeGenerator:
                                 if component_name == "vector_store":
                                     config_class_name = "VectorStoreConfig"
                                 else:
-                                    config_class_name = f"{component_name.capitalize()}Config"
+                                    config_class_name = (
+                                        f"{component_name.capitalize()}Config"
+                                    )
 
-                                config_class = self._generate_typeddict_class(config_class_name, config_props, config_required, component_name)
+                                config_class = self._generate_typeddict_class(
+                                    config_class_name,
+                                    config_props,
+                                    config_required,
+                                    component_name,
+                                )
                                 types.append(config_class)
 
         # 4. Generate RAG component types (depend on config types)
@@ -232,7 +257,12 @@ class TypeGenerator:
                             else:
                                 component_class_name = component_name.capitalize()
 
-                            component_class = self._generate_typeddict_class(component_class_name, component_props, component_required, component_name)
+                            component_class = self._generate_typeddict_class(
+                                component_class_name,
+                                component_props,
+                                component_required,
+                                component_name,
+                            )
                             types.append(component_class)
 
         # 5. Generate RAGConfig (depends on component types)
@@ -241,13 +271,17 @@ class TypeGenerator:
             if "properties" in rag_schema:
                 rag_props = rag_schema["properties"]
                 rag_required = rag_schema.get("required", [])
-                rag_class = self._generate_typeddict_class("RAGConfig", rag_props, rag_required)
+                rag_class = self._generate_typeddict_class(
+                    "RAGConfig", rag_props, rag_required
+                )
                 types.append(rag_class)
 
         # 6. Generate main LlamaFarmConfig (depends on all other types)
         main_props = self.schema.get("properties", {})
         main_required = self.schema.get("required", [])
-        main_class = self._generate_typeddict_class("LlamaFarmConfig", main_props, main_required)
+        main_class = self._generate_typeddict_class(
+            "LlamaFarmConfig", main_props, main_required
+        )
         types.append(main_class)
 
         # Add ConfigDict alias
@@ -255,8 +289,8 @@ class TypeGenerator:
         types.append("ConfigDict = Union[LlamaFarmConfig, dict]")
 
         # Combine all generated code
-        imports_code = '\n'.join(sorted(self.imports))
-        types_code = '\n\n'.join(types)
+        imports_code = "\n".join(sorted(self.imports))
+        types_code = "\n\n".join(types)
 
         return f'''"""
 Type definitions for LlamaFarm configuration based on the JSON schema.
@@ -273,7 +307,7 @@ This file is auto-generated from schema.yaml - DO NOT EDIT MANUALLY.
         """Write the generated types to a file."""
         content = self.generate_types()
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(content)
 
         print(f"✅ Generated types file: {output_path}")
@@ -300,7 +334,10 @@ def main():
         sys.path.insert(0, str(script_dir))
 
         try:
-            from config_types import LlamaFarmConfig, ConfigDict
+            import importlib.util
+            if importlib.util.find_spec("config_types") is None:
+                raise ImportError("config_types module not found")
+
             print("✅ Generated types can be imported successfully!")
         except ImportError as e:
             print(f"❌ Error importing generated types: {e}")
