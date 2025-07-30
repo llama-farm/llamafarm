@@ -92,7 +92,7 @@ jobs:
         working-directory: ${{ matrix.component }}
         run: |
           if [ -f "uv.lock" ]; then
-            uv sync
+            uv sync --all-extras
           else
             echo "No uv.lock found, attempting to install from pyproject.toml"
             uv pip install -e .
