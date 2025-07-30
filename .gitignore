@@ -1,5 +1,5 @@
 # ==============================================================================
-# RAG System - Comprehensive .gitignore
+# RAG System - Comprehensive .gitignore (No Negative Patterns)
 # ==============================================================================
 
 # ==============================================================================
@@ -244,21 +244,26 @@ embeddings_cache/
 tokenizer_cache/
 
 # ==============================================================================
-# Data Files
+# Data Files (excluding samples and examples)
 # ==============================================================================
 
-# Large datasets
-*.csv
-*.json
-*.jsonl
-*.parquet
-*.xlsx
-*.xls
-*.tsv
-*.txt
-*.pdf
-*.docx
-*.doc
+# Large datasets in data directories
+data/*.csv
+data/*.json
+data/*.jsonl
+data/*.parquet
+data/*.xlsx
+data/*.xls
+data/*.tsv
+data/*.txt
+data/*.pdf
+data/*.docx
+data/*.doc
+
+# User uploads and ingestion staging
+uploads/
+ingestion_staging/
+user_data/
 
 # Compressed archives
 *.zip
@@ -275,7 +280,6 @@ tokenizer_cache/
 *.sqlite3
 
 # Configuration with secrets (keep template versions)
-*_config.json
 *_secrets.json
 secrets.yaml
 config/secrets/
@@ -298,7 +302,6 @@ exports/
 # ==============================================================================
 
 # Log files
-*.log
 logs/
 *.log.*
 log_*.txt
@@ -391,9 +394,6 @@ tramp
 # Test outputs
 test_output/
 test_results/
-test_data/
-test_*.csv
-sample_*.csv
 mock_data/
 
 # Temporary test files
@@ -529,10 +529,6 @@ memory_profiler_*/
 # Custom RAG System Specific
 # ==============================================================================
 
-# Generated configuration files (keep templates)
-!rag_config.template.json
-!config_examples/
-
 # Custom model downloads
 custom_models/
 downloaded_models/
@@ -545,11 +541,6 @@ index_snapshots/
 processing_queue/
 temp_embeddings/
 batch_processing/
-
-# User data directories
-user_data/
-uploads/
-ingestion_staging/
 
 # ==============================================================================
 # IDE and Tool Specific
@@ -596,40 +587,3 @@ Icon?
 Network Trash Folder
 Temporary Items
 .apdisk
-
-# ==============================================================================
-# Keep These Files (Negative Patterns)
-# ==============================================================================
-
-# Keep example configurations
-!config_examples/
-!config_examples/basic_config.json
-!config_examples/custom_cvs_config.json
-!config_examples/custom_cvs_config.json
-!config_examples/*
-!*_example.json
-!*_template.json
-!sample_configs/
-
-# Keep small sample data files for testing
-!small_sample.csv
-!test_sample.csv
-!example_data.csv
-!basic_config.json
-
-
-# Keep documentation files
-!*.md
-!docs/
-
-# Keep requirement files
-!requirements.txt
-!requirements-*.txt
-!Pipfile
-!pyproject.toml
-!setup.py
-!setup.cfg
-
-# Keep configuration templates
-!.env.example
-!.env.template
