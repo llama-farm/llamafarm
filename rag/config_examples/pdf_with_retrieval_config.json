@@ -28,12 +28,13 @@
     }
   },
   "retrieval_strategy": {
-    "type": "ChromaMetadataFilterStrategy",
+    "type": "MetadataFilteredStrategy",
     "config": {
       "distance_metric": "cosine",
       "default_filters": {
         "parser_type": "PDFParser"
-      }
+      },
+      "fallback_multiplier": 3
     }
   }
 }
