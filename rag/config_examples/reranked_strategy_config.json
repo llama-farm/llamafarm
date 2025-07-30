@@ -1,0 +1,41 @@
+{
+  "parser": {
+    "type": "CustomerSupportCSVParser",
+    "config": {
+      "content_fields": ["subject", "body", "answer"],
+      "metadata_fields": ["type", "priority", "language", "tags", "timestamp"],
+      "id_field": "id",
+      "combine_content": true,
+      "content_separator": "\n\n"
+    }
+  },
+  "embedder": {
+    "type": "OllamaEmbedder",
+    "config": {
+      "model": "nomic-embed-text",
+      "base_url": "http://localhost:11434",
+      "batch_size": 12,
+      "timeout": 60
+    }
+  },
+  "vector_store": {
+    "type": "ChromaStore",
+    "config": {
+      "collection_name": "reranked_support",
+      "persist_directory": "./data/reranked_chroma_db"
+    }
+  },
+  "retrieval_strategy": {
+    "type": "RerankedStrategy",
+    "config": {
+      "initial_k": 30,
+      "distance_metric": "cosine",
+      "length_normalization": 1200,
+      "rerank_factors": {
+        "recency": 0.2,
+        "length": 0.1,
+        "metadata_boost": 0.3
+      }
+    }
+  }
+}
