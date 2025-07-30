@@ -35,6 +35,11 @@ jobs:
         working-directory: cli
         run: go mod download
 
+      - name: Copy schema.yaml to CLI config
+        run: |
+          mkdir -p cli/cmd/config
+          cp config/schema.yaml cli/cmd/config/
+
       - name: Build CLI
         working-directory: cli
         run: go build -v ./...
@@ -110,6 +115,11 @@ jobs:
             echo "Ruff not available, skipping linting"
           fi
         continue-on-error: true
+
+      - name: Set up Ollama
+        uses: pydantic/ollama-action@v3
+        with:
+          model: nomic-embed-text
 
       - name: Run tests
         if: steps.check-tests.outputs.has_tests == 'true'
