@@ -133,7 +133,6 @@ packages = [
 
 # Include data files
 [tool.hatch.build.targets.wheel.force-include]
-"config_examples" = "llama_rag/config_examples"
 "README.md" = "llama_rag/README.md"
 
 [tool.black]

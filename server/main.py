@@ -1,10 +1,12 @@
 import uvicorn
 from fastapi import FastAPI
 from api.routers.projects import router as projects_router
+from api.routers.inference import router as inference_router
 
 app = FastAPI()
 
 app.include_router(projects_router, prefix="/v1")
+app.include_router(inference_router, prefix="/v1")
 
 @app.get("/")
 def read_root():
