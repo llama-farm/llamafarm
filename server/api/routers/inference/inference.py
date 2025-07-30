@@ -31,12 +31,6 @@ def create_agent() -> BaseAgent:
     # Initialize memory with an initial message from the assistant
     initial_message = BaseAgentOutputSchema(chat_message="Hello! How can I assist you today?")
     memory.add_message("assistant", initial_message)
-
-    # Ollama client setup using the Instructor library
-    # Ollama typically runs on localhost:11434 by default
-    # ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-
-    # # Ollama Configuration
     
     # Create OpenAI-compatible client pointing to Ollama
     ollama_client = OpenAI(
