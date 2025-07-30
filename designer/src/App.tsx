@@ -7,10 +7,12 @@ function App() {
   return (
     <div className="min-h-screen">
       <Header />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/chat" element={<Chat />} />
-      </Routes>
+      <div className="pt-10">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/chat" element={<Chat />} />
+        </Routes>
+      </div>
     </div>
   )
 }
