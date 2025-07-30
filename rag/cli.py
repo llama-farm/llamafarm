@@ -28,6 +28,8 @@ from retrieval.factory import create_retrieval_strategy_from_config
 from utils.progress import LlamaProgressTracker, create_enhanced_progress_bar
 from utils.path_resolver import PathResolver, resolve_paths_in_config
 from core.document_manager import DocumentManager, DeletionStrategy, UpdateStrategy
+from core.extractor_integration import ExtractorIntegrator, apply_extractors_from_cli_args
+from extractors import registry
 
 
 def setup_logging(level: str = "INFO"):
@@ -322,6 +324,31 @@ def ingest_command(args):
             tracker.print_info(f"📂 Processing documents from: {source_path}")
             result = pipeline.run(source=str(source_path))
             tracker.print_success("Processing completed!")
+
+        # Apply CLI extractors if specified
+        if hasattr(args, 'extractors') and args.extractors:
+            try:
+                tracker.print_info(f"🔧 Applying CLI extractors: {', '.join(args.extractors)}")
+                
+                # Parse extractor config if provided
+                extractor_configs = {}
+                if hasattr(args, 'extractor_config') and args.extractor_config:
+                    try:
+                        extractor_configs = json.loads(args.extractor_config)
+                    except json.JSONDecodeError as e:
+                        tracker.print_warning(f"Invalid extractor config JSON, using defaults: {e}")
+                
+                # Apply extractors
+                enhanced_documents = apply_extractors_from_cli_args(
+                    result.documents, 
+                    args.extractors,
+                    extractor_configs
+                )
+                result.documents = enhanced_documents
+                tracker.print_success(f"Applied {len(args.extractors)} extractors")
+                
+            except Exception as e:
+                tracker.print_warning(f"Extractor application failed: {e}")
 
         # Show final summary
         print(f"\n📊 Final Results:")
@@ -1127,6 +1154,196 @@ def handle_hash_command(args, doc_manager: DocumentManager, tracker: LlamaProgre
         tracker.print_error(f"Hash operation failed: {e}")
 
 
+def extractor_command(args):
+    """Handle extractor commands."""
+    setup_logging(args.log_level)
+    
+    if args.extractor_command == "list":
+        list_extractors_command(args)
+    elif args.extractor_command == "test":
+        test_extractor_command(args)
+    else:
+        print("Unknown extractor command")
+
+
+def list_extractors_command(args):
+    """List available extractors."""
+    tracker = LlamaProgressTracker()
+    tracker.print_header("🔍 Available Extractors 🔍")
+    
+    extractors = registry.list_extractors()
+    
+    if not extractors:
+        print("❌ No extractors registered")
+        return
+    
+    print(f"📋 Found {len(extractors)} extractors:")
+    print()
+    
+    if args.detailed:
+        # Show detailed information
+        extractor_info = registry.get_all_info()
+        
+        for name in sorted(extractors):
+            info = extractor_info.get(name, {})
+            print(f"🔧 {Fore.CYAN}{name}{Style.RESET_ALL}")
+            
+            if "error" in info:
+                print(f"   ❌ Error: {info['error']}")
+            else:
+                description = info.get("description", "No description")
+                dependencies = info.get("dependencies", [])
+                
+                print(f"   📄 Description: {description}")
+                if dependencies:
+                    print(f"   📦 Dependencies: {', '.join(dependencies)}")
+                else:
+                    print(f"   📦 Dependencies: None (pure Python)")
+                
+                # Test if dependencies are available
+                try:
+                    extractor = registry.create(name)
+                    if extractor:
+                        print(f"   ✅ Status: Available")
+                    else:
+                        print(f"   ❌ Status: Failed to create")
+                except Exception as e:
+                    print(f"   ❌ Status: Error - {e}")
+            print()
+    else:
+        # Simple list
+        for name in sorted(extractors):
+            # Quick availability check
+            try:
+                extractor = registry.create(name)
+                status = "✅" if extractor else "❌"
+            except:
+                status = "❌"
+            
+            print(f"  {status} {name}")
+    
+    print()
+    print("💡 Use --detailed for more information")
+    print("💡 Test extractors with: uv run python cli.py extractors test --extractor <name>")
+
+
+def test_extractor_command(args):
+    """Test an extractor on sample text or file."""
+    from core.base import Document
+    
+    tracker = LlamaProgressTracker()
+    tracker.print_header(f"🧪 Testing Extractor: {args.extractor} 🧪")
+    
+    # Parse config if provided
+    extractor_config = {}
+    if args.config:
+        try:
+            extractor_config = json.loads(args.config)
+        except json.JSONDecodeError as e:
+            print(f"❌ Invalid JSON config: {e}")
+            return
+    
+    # Create extractor
+    try:
+        extractor = registry.create(args.extractor, extractor_config)
+        if not extractor:
+            print(f"❌ Failed to create extractor: {args.extractor}")
+            print(f"Available extractors: {', '.join(registry.list_extractors())}")
+            return
+    except Exception as e:
+        print(f"❌ Error creating extractor: {e}")
+        return
+    
+    # Get text to process
+    if args.file:
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print(f"❌ File not found: {args.file}")
+            return
+        
+        try:
+            text = file_path.read_text(encoding='utf-8')
+            print(f"📖 Processing file: {args.file}")
+        except Exception as e:
+            print(f"❌ Error reading file: {e}")
+            return
+    elif args.text:
+        text = args.text
+        print(f"📖 Processing text: {text[:100]}{'...' if len(text) > 100 else ''}")
+    else:
+        # Use sample text
+        text = """
+        Machine learning and artificial intelligence are transforming modern technology. 
+        Companies like OpenAI, Google, and Microsoft are leading innovations in natural language processing.
+        The deadline for the project is January 15, 2024, and we need to complete the analysis by then.
+        Contact john.doe@company.com for more information or call (555) 123-4567.
+        The quarterly revenue increased by 25% to $2.5 million, which exceeded our expectations.
+        """
+        print("📖 Using sample text for testing")
+    
+    # Create test document
+    doc = Document(
+        id="test_document",
+        content=text,
+        metadata={"source": "test"}
+    )
+    
+    # Run extractor
+    try:
+        print(f"🔄 Running {args.extractor} extractor...")
+        
+        start_time = time.time()
+        enhanced_docs = extractor.extract([doc])
+        processing_time = time.time() - start_time
+        
+        if not enhanced_docs:
+            print("❌ No documents returned from extractor")
+            return
+        
+        enhanced_doc = enhanced_docs[0]
+        
+        print(f"✅ Processing completed in {processing_time:.3f}s")
+        print()
+        
+        # Display results
+        print(f"📊 {Fore.GREEN}Extraction Results:{Style.RESET_ALL}")
+        print("=" * 50)
+        
+        # Show extractor-specific metadata
+        if "extractors" in enhanced_doc.metadata:
+            extractor_data = enhanced_doc.metadata["extractors"]
+            
+            if args.extractor in extractor_data or f"{args.extractor}_keywords" in extractor_data:
+                # Handle different extractor data structures
+                extractor_results = (extractor_data.get(args.extractor) or 
+                                   extractor_data.get(f"{args.extractor}_keywords") or
+                                   extractor_data.get(f"{args.extractor}_entities") or
+                                   extractor_data)
+                
+                print(json.dumps(extractor_results, indent=2, ensure_ascii=False))
+            else:
+                print("No specific extractor results found in metadata")
+                print("Available keys:", list(extractor_data.keys()))
+        
+        # Show simplified metadata
+        print(f"\n📋 {Fore.BLUE}Simplified Access:{Style.RESET_ALL}")
+        simplified_keys = [k for k in enhanced_doc.metadata.keys() 
+                          if not k.startswith('_') and k != 'extractors']
+        
+        for key in sorted(simplified_keys):
+            value = enhanced_doc.metadata[key]
+            if isinstance(value, list) and len(value) > 5:
+                display_value = value[:5] + [f"... ({len(value)-5} more)"]
+            else:
+                display_value = value
+            print(f"  {key}: {display_value}")
+        
+    except Exception as e:
+        print(f"❌ Extractor failed: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="Simple RAG System CLI with Unified Configuration Support")
@@ -1246,6 +1463,32 @@ def main():
     hash_parser.add_argument("--rehash", action="store_true",
                             help="Regenerate all document hashes")
 
+    # Extractor commands
+    extractor_parser = subparsers.add_parser("extractors", help="Extractor operations")
+    extractor_subparsers = extractor_parser.add_subparsers(dest="extractor_command", help="Extractor commands")
+    
+    # List extractors
+    list_extractors_parser = extractor_subparsers.add_parser("list", help="List available extractors")
+    list_extractors_parser.add_argument("--detailed", action="store_true",
+                                       help="Show detailed extractor information")
+    
+    # Test extractor
+    test_extractor_parser = extractor_subparsers.add_parser("test", help="Test extractor on text/file")
+    test_extractor_parser.add_argument("--extractor", required=True,
+                                      help="Extractor name to test")
+    test_extractor_parser.add_argument("--file", 
+                                      help="File to extract from")
+    test_extractor_parser.add_argument("--text",
+                                      help="Text to extract from")
+    test_extractor_parser.add_argument("--config", 
+                                      help="JSON config for extractor")
+
+    # Add extractor arguments to ingest command
+    ingest_parser.add_argument("--extractors", nargs="+", 
+                              help="Extractors to apply (e.g., rake yake entities)")
+    ingest_parser.add_argument("--extractor-config", 
+                              help="JSON config for extractors (e.g., '{\"yake\": {\"max_keywords\": 15}}')")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1271,6 +1514,8 @@ def main():
         test_command(args)
     elif args.command == "manage":
         manage_command(args)
+    elif args.command == "extractors":
+        extractor_command(args)
 
 
 if __name__ == "__main__":

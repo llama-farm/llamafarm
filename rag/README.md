@@ -14,12 +14,41 @@ A lightweight, extensible RAG (Retrieval-Augmented Generation) system designed f
 
 ## Quick Start
 
-### Prerequisites
+### 🚀 Automated Setup (Recommended)
+
+**For macOS users**, we provide automated setup scripts:
+
+```bash
+# Full setup and demo (recommended for first-time users)
+./setup_and_demo.sh
+
+# Quick extractor testing only (no full system setup)
+./quick_extractor_demo.sh
+
+# Automated setup without prompts
+./setup_and_demo.sh --skip-prompts
+
+# Run tests only
+./setup_and_demo.sh --tests-only
+```
+
+The setup script will:
+- ✅ Install dependencies (uv, Ollama, Python packages)
+- ✅ Set up virtual environment
+- ✅ Download embedding models
+- ✅ Run comprehensive demos of all features
+- ✅ Show usage examples
+
+### 📋 Manual Setup
+
+If you prefer manual setup or are not on macOS:
+
+#### Prerequisites
 
 1. **Python 3.8+**
 2. **Ollama** (for embeddings)
 
-### macOS Installation with UV (Recommended)
+#### macOS Installation with UV (Recommended)
 
 1. **Install UV (the fast Python package manager)**:
    ```bash
@@ -88,6 +117,63 @@ If you prefer traditional pip/venv:
    # Test PDF parsing (if you have a PDF file)
    uv run python cli.py test --test-file samples/test_document.pdf
    ```
+
+## 🔧 Local-Only Extractors
+
+The RAG system includes 5 local-only extractors that enhance documents with metadata **without requiring external LLMs**:
+
+### Available Extractors
+
+- **YAKE**: Advanced keyword extraction considering position and context
+- **RAKE**: Fast phrase extraction using stop words as delimiters  
+- **TF-IDF**: Term frequency analysis for finding unique terms
+- **Entities**: Person, organization, date, email, phone extraction (spaCy + regex fallbacks)
+- **DateTime**: Date, time, and relative date extraction
+- **Statistics**: Readability metrics, vocabulary analysis, content statistics
+
+### Extractor Commands
+
+```bash
+# List all available extractors
+uv run python cli.py extractors list --detailed
+
+# Test an extractor on sample text
+uv run python cli.py extractors test --extractor yake
+
+# Test with your own text
+uv run python cli.py extractors test --extractor entities --text "Contact John Doe at john@company.com"
+
+# Test with a file
+uv run python cli.py extractors test --extractor statistics --file samples/document.txt
+```
+
+### Using Extractors During Ingestion
+
+```bash
+# Apply extractors during CSV ingestion
+uv run python cli.py ingest samples/small_sample.csv --extractors yake entities statistics
+
+# Apply with custom configuration
+uv run python cli.py ingest document.pdf --extractors rake entities \
+  --extractor-config '{"rake": {"max_keywords": 20}, "entities": {"entity_types": ["PERSON", "ORG"]}}'
+
+# Use configuration-based extractors (see config_examples/extractors_demo_config.json)
+uv run python cli.py --config config_examples/extractors_demo_config.json ingest samples/document.pdf
+```
+
+### Extractor Output Example
+
+```json
+{
+  "yake_keywords": ["machine learning", "artificial intelligence", "data analysis"],
+  "entities_person": ["John Smith", "Sarah Johnson"],
+  "entities_email": ["contact@company.com"],
+  "word_count": 1250,
+  "reading_time_minutes": 6.25,
+  "sentiment_classification": "positive",
+  "flesch_reading_ease": 65.2
+}
+```
 
 ## 📊 CSV Processing
 
