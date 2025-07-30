@@ -1,0 +1,24 @@
+version: v1
+
+rag:
+  parser:
+    type: CustomerSupportCSVParser
+    config:
+      content_fields: ["question"]
+      metadata_fields: ["category"]
+
+  embedder:
+    type: OllamaEmbedder
+    config:
+      model: "nomic-embed-text"
+      batch_size: 16
+
+  vector_store:
+    type: ChromaStore
+    config:
+      collection_name: "minimal_collection"
+      persist_directory: "./data/minimal"
+
+models:
+  - provider: "local"
+    model: "llama3.1:8b"

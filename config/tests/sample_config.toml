@@ -1,0 +1,69 @@
+version = "v1"
+
+[[prompts]]
+name = "customer_support"
+prompt = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
+description = "Default customer support prompt for handling user inquiries"
+
+[[prompts]]
+name = "technical_documentation"
+prompt = "You are a technical documentation assistant. Provide clear, accurate, and detailed explanations of technical concepts."
+description = "Prompt for generating technical documentation and explanations"
+
+[[prompts]]
+name = "code_review"
+prompt = "You are a code review assistant. Analyze code for best practices, potential bugs, and improvements."
+description = "Prompt for conducting code reviews and providing feedback"
+
+[rag.parser]
+type = "CustomerSupportCSVParser"
+
+[rag.parser.config]
+content_fields = ["question", "answer", "solution", "explanation"]
+metadata_fields = ["category", "timestamp", "priority", "tags", "author"]
+
+[rag.embedder]
+type = "OllamaEmbedder"
+
+[rag.embedder.config]
+model = "mxbai-embed-large"
+batch_size = 32
+
+[rag.vector_store]
+type = "ChromaStore"
+
+[rag.vector_store.config]
+collection_name = "customer_support_knowledge_base"
+persist_directory = "./data/vector_store/chroma"
+
+[[models]]
+provider = "local"
+model = "llama3.1:8b"
+
+[[models]]
+provider = "local"
+model = "llama3.1:70b"
+
+[[models]]
+provider = "openai"
+model = "gpt-4"
+
+[[models]]
+provider = "openai"
+model = "gpt-3.5-turbo"
+
+[[models]]
+provider = "anthropic"
+model = "claude-3-sonnet-20240229"
+
+[[models]]
+provider = "anthropic"
+model = "claude-3-haiku-20240307"
+
+[[models]]
+provider = "google"
+model = "gemini-pro"
+
+[[models]]
+provider = "custom"
+model = "custom-fine-tuned-model-v1"
