@@ -32,8 +32,8 @@ class TestModuleIntegration:
         rag_config: RAGConfig = config["rag"]
 
         # Parser configuration extraction
-        parser_type = rag_config["parser"]["type"]
-        parser_config = rag_config["parser"]["config"]
+        parser_type = rag_config["parsers"]["csv"]["type"]
+        parser_config = rag_config["parsers"]["csv"]["config"]
         content_fields = parser_config["content_fields"]
         metadata_fields = parser_config["metadata_fields"]
 
@@ -44,8 +44,8 @@ class TestModuleIntegration:
         assert len(metadata_fields) >= 1
 
         # Embedder configuration extraction
-        embedder_type = rag_config["embedder"]["type"]
-        embedder_config = rag_config["embedder"]["config"]
+        embedder_type = rag_config["embedders"]["default"]["type"]
+        embedder_config = rag_config["embedders"]["default"]["config"]
         embedding_model = embedder_config["model"]
         batch_size = embedder_config["batch_size"]
 
@@ -55,8 +55,8 @@ class TestModuleIntegration:
         assert batch_size > 0
 
         # Vector store configuration extraction
-        vector_store_type = rag_config["vector_store"]["type"]
-        vector_store_config = rag_config["vector_store"]["config"]
+        vector_store_type = rag_config["vector_stores"]["default"]["type"]
+        vector_store_config = rag_config["vector_stores"]["default"]["config"]
         collection_name = vector_store_config["collection_name"]
         persist_directory = vector_store_config["persist_directory"]
 
@@ -162,7 +162,7 @@ class TestModuleIntegration:
 
                 # Check RAG structure
                 rag = config["rag"]
-                required_rag_keys = ["parser", "embedder", "vector_store"]
+                required_rag_keys = ["parsers", "embedders", "vector_stores", "retrieval_strategies", "defaults"]
                 for key in required_rag_keys:
                     assert key in rag, f"Missing {key} in RAG config in {config_file}"
 
@@ -196,7 +196,7 @@ class TestModuleIntegration:
         # Should be identical
         assert initial_model_count == reloaded_model_count
         assert config1["version"] == config2["version"]
-        assert config1["rag"]["parser"]["type"] == config2["rag"]["parser"]["type"]
+        assert config1["rag"]["parsers"]["csv"]["type"] == config2["rag"]["parsers"]["csv"]["type"]
 
     def test_environment_specific_configs(self, temp_config_file):
         """Test loading different configurations for different environments."""
@@ -204,21 +204,40 @@ class TestModuleIntegration:
         dev_config = """version: v1
 
 rag:
-  parser:
-    type: CustomerSupportCSVParser
-    config:
-      content_fields: ["question"]
-      metadata_fields: ["category"]
-  embedder:
-    type: OllamaEmbedder
-    config:
-      model: "nomic-embed-text"  # Smaller model for dev
-      batch_size: 8  # Smaller batch for dev
-  vector_store:
-    type: ChromaStore
-    config:
-      collection_name: "dev_collection"
-      persist_directory: "./data/dev"
+  parsers:
+    csv:
+      type: "CustomerSupportCSVParser"
+      config:
+        content_fields: ["question"]
+        metadata_fields: ["category"]
+        id_field: "id"
+        combine_content: true
+      file_extensions: [".csv"]
+      mime_types: ["text/csv"]
+  embedders:
+    default:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"  # Smaller model for dev
+        base_url: "http://localhost:11434"
+        batch_size: 8  # Smaller batch for dev
+        timeout: 30
+  vector_stores:
+    default:
+      type: "ChromaStore"
+      config:
+        collection_name: "dev_collection"
+        persist_directory: "./data/dev"
+  retrieval_strategies:
+    default:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+  defaults:
+    parser: "auto"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
 
 models:
   - provider: "local"
@@ -229,21 +248,40 @@ models:
         prod_config = """version: v1
 
 rag:
-  parser:
-    type: CustomerSupportCSVParser
-    config:
-      content_fields: ["question", "answer", "solution"]
-      metadata_fields: ["category", "priority", "timestamp"]
-  embedder:
-    type: OllamaEmbedder
-    config:
-      model: "mxbai-embed-large"  # Better model for prod
-      batch_size: 64  # Larger batch for prod
-  vector_store:
-    type: ChromaStore
-    config:
-      collection_name: "production_collection"
-      persist_directory: "./data/production"
+  parsers:
+    csv:
+      type: "CustomerSupportCSVParser"
+      config:
+        content_fields: ["question", "answer", "solution"]
+        metadata_fields: ["category", "priority", "timestamp"]
+        id_field: "id"
+        combine_content: true
+      file_extensions: [".csv"]
+      mime_types: ["text/csv"]
+  embedders:
+    default:
+      type: "OllamaEmbedder"
+      config:
+        model: "mxbai-embed-large"  # Better model for prod
+        base_url: "http://localhost:11434"
+        batch_size: 64  # Larger batch for prod
+        timeout: 60
+  vector_stores:
+    default:
+      type: "ChromaStore"
+      config:
+        collection_name: "production_collection"
+        persist_directory: "./data/production"
+  retrieval_strategies:
+    default:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+  defaults:
+    parser: "auto"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
 
 models:
   - provider: "local"
@@ -257,18 +295,18 @@ models:
 
         # Load development config
         dev_cfg = load_config(config_path=dev_path)
-        assert dev_cfg["rag"]["embedder"]["config"]["batch_size"] == 8
+        assert dev_cfg["rag"]["embedders"]["default"]["config"]["batch_size"] == 8
         assert (
-            dev_cfg["rag"]["vector_store"]["config"]["collection_name"]
+            dev_cfg["rag"]["vector_stores"]["default"]["config"]["collection_name"]
             == "dev_collection"
         )
         assert len(dev_cfg["models"]) == 1
 
         # Load production config
         prod_cfg = load_config(config_path=prod_path)
-        assert prod_cfg["rag"]["embedder"]["config"]["batch_size"] == 64
+        assert prod_cfg["rag"]["embedders"]["default"]["config"]["batch_size"] == 64
         assert (
-            prod_cfg["rag"]["vector_store"]["config"]["collection_name"]
+            prod_cfg["rag"]["vector_stores"]["default"]["config"]["collection_name"]
             == "production_collection"
         )
         assert len(prod_cfg["models"]) == 2
@@ -281,8 +319,8 @@ models:
         # Simulate component factory pattern based on config
         def create_parser_from_config(rag_config: RAGConfig):
             """Simulate parser factory."""
-            parser_type = rag_config["parser"]["type"]
-            parser_config = rag_config["parser"]["config"]
+            parser_type = rag_config["parsers"]["csv"]["type"]
+            parser_config = rag_config["parsers"]["csv"]["config"]
 
             if parser_type == "CustomerSupportCSVParser":
                 return {
@@ -295,8 +333,8 @@ models:
 
         def create_embedder_from_config(rag_config: RAGConfig):
             """Simulate embedder factory."""
-            embedder_type = rag_config["embedder"]["type"]
-            embedder_config = rag_config["embedder"]["config"]
+            embedder_type = rag_config["embedders"]["default"]["type"]
+            embedder_config = rag_config["embedders"]["default"]["config"]
 
             if embedder_type == "OllamaEmbedder":
                 return {
@@ -346,9 +384,9 @@ def test_cross_module_config_sharing():
     # Module 1: RAG Service
     class RAGService:
         def __init__(self, config: LlamaFarmConfig):
-            self.parser_type = config["rag"]["parser"]["type"]
-            self.embedder_model = config["rag"]["embedder"]["config"]["model"]
-            self.collection_name = config["rag"]["vector_store"]["config"][
+            self.parser_type = config["rag"]["parsers"]["csv"]["type"]
+            self.embedder_model = config["rag"]["embedders"]["default"]["config"]["model"]
+            self.collection_name = config["rag"]["vector_stores"]["default"]["config"][
                 "collection_name"
             ]
 

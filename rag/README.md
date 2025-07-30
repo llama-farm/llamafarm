@@ -14,12 +14,41 @@ A lightweight, extensible RAG (Retrieval-Augmented Generation) system designed f
 
 ## Quick Start
 
-### Prerequisites
+### 🚀 Automated Setup (Recommended)
+
+**For macOS users**, we provide automated setup scripts:
+
+```bash
+# Full setup and demo (recommended for first-time users)
+./setup_and_demo.sh
+
+# Quick extractor testing only (no full system setup)
+./quick_extractor_demo.sh
+
+# Automated setup without prompts
+./setup_and_demo.sh --skip-prompts
+
+# Run tests only
+./setup_and_demo.sh --tests-only
+```
+
+The setup script will:
+- ✅ Install dependencies (uv, Ollama, Python packages)
+- ✅ Set up virtual environment
+- ✅ Download embedding models
+- ✅ Run comprehensive demos of all features
+- ✅ Show usage examples
+
+### 📋 Manual Setup
+
+If you prefer manual setup or are not on macOS:
+
+#### Prerequisites
 
 1. **Python 3.8+**
 2. **Ollama** (for embeddings)
 
-### macOS Installation with UV (Recommended)
+#### macOS Installation with UV (Recommended)
 
 1. **Install UV (the fast Python package manager)**:
    ```bash
@@ -80,30 +109,274 @@ If you prefer traditional pip/venv:
 
 ### Basic Usage
 
-1. **Create configuration file:**
-   Create a `rag_config.json` file with your settings (see Configuration section below).
-
-2. **Test the system:**
+1. **Test the system:**
    ```bash
-   uv run python cli.py test --test-file filtered-english-incident-tickets.csv
+   # Test CSV parsing
+   uv run python cli.py test --test-file samples/small_sample.csv 
+   
+   # Test PDF parsing (if you have a PDF file)
+   uv run python cli.py test --test-file samples/test_document.pdf
    ```
 
-3. **Ingest your CSV data:**
-   ```bash
-   uv run python cli.py ingest filtered-english-incident-tickets.csv
-   ```
+## 🔧 Local-Only Extractors
 
-4. **Search the data:**
-   ```bash
-   uv run python cli.py search "data breach security issue"
-   uv run python cli.py search "login problems"
-   uv run python cli.py search "password reset"
-   ```
+The RAG system includes 5 local-only extractors that enhance documents with metadata **without requiring external LLMs**:
 
-5. **Get collection info:**
-   ```bash
-   uv run python cli.py info
-   ```
+### Available Extractors
+
+- **YAKE**: Advanced keyword extraction considering position and context
+- **RAKE**: Fast phrase extraction using stop words as delimiters  
+- **TF-IDF**: Term frequency analysis for finding unique terms
+- **Entities**: Person, organization, date, email, phone extraction (spaCy + regex fallbacks)
+- **DateTime**: Date, time, and relative date extraction
+- **Statistics**: Readability metrics, vocabulary analysis, content statistics
+
+### Extractor Commands
+
+```bash
+# List all available extractors
+uv run python cli.py extractors list --detailed
+
+# Test an extractor on sample text
+uv run python cli.py extractors test --extractor yake
+
+# Test with your own text
+uv run python cli.py extractors test --extractor entities --text "Contact John Doe at john@company.com"
+
+# Test with a file
+uv run python cli.py extractors test --extractor statistics --file samples/document.txt
+```
+
+### Using Extractors During Ingestion
+
+```bash
+# Apply extractors during CSV ingestion
+uv run python cli.py ingest samples/small_sample.csv --extractors yake entities statistics
+
+# Apply with custom configuration
+uv run python cli.py ingest document.pdf --extractors rake entities \
+  --extractor-config '{"rake": {"max_keywords": 20}, "entities": {"entity_types": ["PERSON", "ORG"]}}'
+
+# Use configuration-based extractors (see config_examples/extractors_demo_config.json)
+uv run python cli.py --config config_examples/extractors_demo_config.json ingest samples/document.pdf
+```
+
+### Extractor Output Example
+
+```json
+{
+  "yake_keywords": ["machine learning", "artificial intelligence", "data analysis"],
+  "entities_person": ["John Smith", "Sarah Johnson"],
+  "entities_email": ["contact@company.com"],
+  "word_count": 1250,
+  "reading_time_minutes": 6.25,
+  "sentiment_classification": "positive",
+  "flesch_reading_ease": 65.2
+}
+```
+
+## 📊 CSV Processing
+
+### CSV Commands with Sample Data
+
+```bash
+# 1. Test CSV parsing with sample data
+uv run python cli.py --config config_examples/basic_config.json \
+  test --test-file samples/small_sample.csv
+
+# 2. Ingest CSV data using specific configuration
+uv run python cli.py --config config_examples/basic_config.json \
+  ingest samples/small_sample.csv
+
+# 3. Search the ingested CSV data
+uv run python cli.py --config config_examples/basic_config.json \
+  search "login problems"
+
+# 4. Check collection info
+uv run python cli.py --config config_examples/basic_config.json info
+```
+
+### Custom CSV Configuration
+
+```bash
+# Use custom CSV configuration for different CSV formats
+uv run python cli.py --config config_examples/custom_csv_config.json \
+  ingest your_custom_data.csv
+```
+
+## 📄 PDF Processing
+
+### Single PDF Document
+
+```bash
+# 1. Test PDF parsing with sample document
+uv run python cli.py --config config_examples/pdf_config.json \
+  test --test-file samples/test_document.pdf
+
+# 2. Ingest single PDF (combined pages mode)
+uv run python cli.py --config config_examples/pdf_config.json \
+  ingest samples/test_document.pdf
+
+# 3. Search PDF content
+uv run python cli.py --config config_examples/pdf_config.json \
+  search "specific topic from PDF"
+```
+
+### Multiple PDF Files
+
+```bash
+# Process multiple PDFs by running command for each file
+uv run python cli.py --config config_examples/pdf_config.json \
+  ingest samples/document1.pdf
+
+uv run python cli.py --config config_examples/pdf_config.json \
+  ingest samples/document2.pdf
+
+uv run python cli.py --config config_examples/pdf_config.json \
+  ingest samples/document3.pdf
+```
+
+### PDF Directory Processing
+
+```bash
+# Process all PDFs in a directory using a script
+# First, create a simple script to process multiple files:
+for pdf in samples/pdfs/*.pdf; do
+  echo "Processing: $pdf"
+  uv run python cli.py --config config_examples/pdf_config.json ingest "$pdf"
+done
+
+# Or use find to process PDFs recursively
+find samples/ -name "*.pdf" -exec uv run python cli.py \
+  --config config_examples/pdf_config.json ingest {} \;
+```
+
+### PDF Page-by-Page Processing
+
+```bash
+# Use separate pages configuration for page-level search
+uv run python cli.py --config config_examples/pdf_separate_pages_config.json \
+  ingest samples/multi_page_document.pdf
+
+# Search will return individual pages as separate results
+uv run python cli.py --config config_examples/pdf_separate_pages_config.json \
+  search "chapter introduction"
+```
+
+### Advanced PDF Processing Examples
+
+```bash
+# Process PDFs with custom base directory
+uv run python cli.py --base-dir /path/to/project \
+  --config config_examples/pdf_config.json \
+  ingest data/documents/report.pdf
+
+# Process from different directory
+cd /different/directory
+uv run python /path/to/rag/cli.py \
+  --config /path/to/rag/config_examples/pdf_config.json \
+  ingest ~/Documents/important_document.pdf
+```
+
+## 🔍 Search Examples
+
+```bash
+# Search CSV data with basic retrieval strategy
+uv run python cli.py --config config_examples/basic_with_retrieval_config.json \
+  search "password reset" --top-k 3
+
+# Search with advanced hybrid retrieval strategy
+uv run python cli.py --config config_examples/advanced_retrieval_config.json \
+  search "login authentication" --top-k 5
+
+# Search PDF data with metadata filtering
+uv run python cli.py --config config_examples/pdf_with_retrieval_config.json \
+  search "methodology" --top-k 5
+
+# Compare different retrieval strategies
+uv run python cli.py --config config_examples/basic_with_retrieval_config.json search "security issue"
+uv run python cli.py --config config_examples/advanced_retrieval_config.json search "security issue"
+```
+
+### 🧪 Testing and Examples
+
+```bash
+# Test the entire retrieval system
+uv run python test_retrieval_system.py
+
+# Explore retrieval strategies with examples
+uv run python example_retrieval_usage.py
+
+# Basic API usage examples
+uv run python example_api_usage.py
+```
+
+## 🛤️ Flexible Path Resolution
+
+The RAG system supports flexible path resolution for both configuration files and data sources, making it easy to work with different project structures and deployment scenarios.
+
+### Configuration File Paths
+
+Config files are searched in multiple locations (in order of preference):
+
+```bash
+# 1. Relative to current/base directory
+uv run python cli.py --config my_config.json
+
+# 2. Relative to user config directory
+uv run python cli.py --config config.json  # Searches ~/.config/rag/config.json
+
+# 3. Absolute path
+uv run python cli.py --config /etc/rag/production.json
+
+# 4. From subdirectory
+uv run python cli.py --config config_examples/flexible_paths_config.json
+```
+
+### Data Source Paths
+
+Data sources support various path formats:
+
+```bash
+# Relative paths (resolved from current or base directory)
+uv run python cli.py ingest samples/small_sample.csv
+uv run python cli.py ingest data/tickets.csv
+
+# Absolute paths
+uv run python cli.py ingest /path/to/data/tickets.csv
+
+# Home directory expansion
+uv run python cli.py ingest ~/Documents/support_data.csv
+
+# With custom base directory
+uv run python cli.py --base-dir /project/root ingest data/tickets.csv
+```
+
+### Base Directory Override
+
+Use `--base-dir` to change the reference point for relative paths:
+
+```bash
+# Set custom base directory for all relative paths
+uv run python cli.py --base-dir /my/project/root \
+  --config configs/prod.json \
+  ingest data/latest_tickets.csv
+```
+
+### Path Resolution in Config Files
+
+Paths within configuration files are automatically resolved:
+
+```json
+{
+  "vector_store": {
+    "type": "ChromaStore",
+    "config": {
+      "persist_directory": "./data/chroma_db"  // Auto-resolved and created
+    }
+  }
+}
+```
 
 ### Alternative: Run the Example Script
 
@@ -150,6 +423,7 @@ Convert various data formats into the universal `Document` format.
 
 - `CSVParser`: Generic CSV parser with configurable fields
 - `CustomerSupportCSVParser`: Specialized for support ticket data
+- `PDFParser`: Extract text, metadata, and structure from PDF documents
 
 ### 2. Embedders
 Generate vector embeddings from text content.
@@ -161,12 +435,145 @@ Store and search document embeddings.
 
 - `ChromaStore`: ChromaDB integration with persistence
 
-### 4. Pipeline
+### 4. Universal Retrieval Strategies
+Advanced, database-agnostic retrieval strategies that automatically optimize for your vector database.
+
+- `BasicSimilarityStrategy`: Simple vector similarity search (great for getting started)
+- `MetadataFilteredStrategy`: Intelligent metadata filtering with native/fallback support
+- `MultiQueryStrategy`: Uses multiple query variations to improve recall  
+- `RerankedStrategy`: Multi-factor re-ranking for sophisticated relevance scoring
+- `HybridUniversalStrategy`: Combines multiple strategies with configurable weights
+
+### 5. Pipeline
 Chains components together for end-to-end processing.
+
+## 🎯 Universal Retrieval Strategies
+
+The system features a powerful **database-agnostic retrieval system** that automatically optimizes strategies based on your vector database capabilities. All strategies work with any vector database while automatically using database-specific optimizations when available.
+
+### Available Strategies
+
+#### **BasicSimilarityStrategy** - Getting Started
+```json
+{
+  "retrieval_strategy": {
+    "type": "BasicSimilarityStrategy",
+    "config": {
+      "distance_metric": "cosine"
+    }
+  }
+}
+```
+- **Use Cases**: Getting started, simple semantic search, baseline testing
+- **Performance**: Fast | **Complexity**: Low
+
+#### **MetadataFilteredStrategy** - Smart Filtering  
+```json
+{
+  "retrieval_strategy": {
+    "type": "MetadataFilteredStrategy",
+    "config": {
+      "distance_metric": "cosine",
+      "default_filters": {
+        "priority": ["high", "medium"],
+        "type": "documentation"
+      },
+      "fallback_multiplier": 3
+    }
+  }
+}
+```
+- **Features**: Native filtering when supported, automatic fallback, complex operators (`$ne`, `$in`, `$gt`, etc.)
+- **Use Cases**: Domain-specific searches, multi-tenant applications, content categorization
+- **Performance**: Medium | **Complexity**: Medium
+
+#### **MultiQueryStrategy** - Enhanced Recall
+```json
+{
+  "retrieval_strategy": {
+    "type": "MultiQueryStrategy", 
+    "config": {
+      "num_queries": 3,
+      "aggregation_method": "weighted",
+      "search_multiplier": 2
+    }
+  }
+}
+```
+- **Aggregation Methods**: `max` (best score), `mean` (average), `weighted` (decreasing weights)
+- **Use Cases**: Ambiguous queries, query expansion, improving recall for complex questions
+- **Performance**: Medium | **Complexity**: Medium
+
+#### **RerankedStrategy** - Sophisticated Ranking
+```json
+{
+  "retrieval_strategy": {
+    "type": "RerankedStrategy",
+    "config": {
+      "initial_k": 20,
+      "length_normalization": 1000,
+      "rerank_factors": {
+        "recency": 0.1,
+        "length": 0.05, 
+        "metadata_boost": 0.2
+      }
+    }
+  }
+}
+```
+- **Reranking Factors**: Recency boost, content length preference, metadata-based boosts (priority, type, quality indicators)
+- **Use Cases**: Production systems, time-sensitive content, multi-factor relevance
+- **Performance**: Slower | **Complexity**: High
+
+#### **HybridUniversalStrategy** - Best of All Worlds
+```json
+{
+  "retrieval_strategy": {
+    "type": "HybridUniversalStrategy",
+    "config": {
+      "combination_method": "weighted_average",
+      "normalize_scores": true,
+      "diversity_boost": 0.1,
+      "strategies": [
+        {"type": "BasicSimilarityStrategy", "weight": 0.4},
+        {"type": "MetadataFilteredStrategy", "weight": 0.3},
+        {"type": "RerankedStrategy", "weight": 0.2},
+        {"type": "MultiQueryStrategy", "weight": 0.1}
+      ]
+    }
+  }
+}
+```
+- **Combination Methods**: `weighted_average` (score-based), `rank_fusion` (position-based)
+- **Features**: Strategy aliases (`basic`, `filtered`, `multi_query`, `reranked`)
+- **Use Cases**: Production systems, balanced precision/recall, complex requirements  
+- **Performance**: Variable | **Complexity**: High
+
+### Strategy Selection Guide
+
+| Use Case | Recommended Strategy | Why |
+|----------|---------------------|-----|
+| **Getting Started** | `BasicSimilarityStrategy` | Simple, fast, reliable baseline |
+| **Production General** | `HybridUniversalStrategy` | Balanced performance across use cases |
+| **High Precision** | `RerankedStrategy` | Multi-factor ranking for nuanced results |
+| **Filtered Content** | `MetadataFilteredStrategy` | Efficient domain-specific searches |
+| **Complex Queries** | `MultiQueryStrategy` | Better recall for ambiguous questions |
+| **High Performance** | `BasicSimilarityStrategy` | Minimal overhead, maximum speed |
 
 ## Configuration
 
-Configuration is JSON-based and includes three main sections:
+Configuration is JSON-based and includes three main sections. The system supports flexible configuration file placement and automatic path resolution.
+
+### CLI Configuration Options
+
+```bash
+# Global options (available for all commands)
+--config, -c     Configuration file path (default: rag_config.json)
+--base-dir, -b   Base directory for relative path resolution
+--log-level      Logging level (DEBUG, INFO, WARNING, ERROR)
+```
+
+### Configuration File Structure
 
 ```json
 {
@@ -196,9 +603,26 @@ Configuration is JSON-based and includes three main sections:
 
 ### Sample Configurations
 
-- `config_examples/basic_config.json`: Basic local setup
-- `config_examples/production_config.json`: Production deployment
-- `config_examples/custom_csv_config.json`: Custom CSV format
+#### Basic Configurations
+- `config_examples/basic_config.json`: Simple setup without retrieval strategies
+- `config_examples/custom_csv_config.json`: Custom CSV format configuration
+- `config_examples/flexible_paths_config.json`: Demonstrates flexible path resolution
+
+#### PDF Processing
+- `config_examples/pdf_config.json`: PDF processing with combined pages
+- `config_examples/pdf_separate_pages_config.json`: PDF processing with separate page documents  
+- `config_examples/pdf_with_retrieval_config.json`: PDF processing with retrieval strategies
+
+#### Retrieval Strategy Examples
+- `config_examples/universal_retrieval_config.json`: Basic similarity strategy
+- `config_examples/metadata_filtered_config.json`: Smart metadata filtering
+- `config_examples/multi_query_retrieval_config.json`: Enhanced recall with multiple queries
+- `config_examples/reranked_strategy_config.json`: Sophisticated multi-factor ranking
+- `config_examples/hybrid_universal_config.json`: Weighted strategy combination
+- `config_examples/rank_fusion_hybrid_config.json`: Rank fusion combination method
+- `config_examples/advanced_retrieval_config.json`: Complex 4-strategy hybrid
+- `config_examples/strategy_aliases_config.json`: Using strategy aliases (`basic`, `filtered`, etc.)
+- `config_examples/production_config.json`: Production-ready configuration
 
 ## Adding New Components
 
@@ -279,6 +703,118 @@ pipeline.add_component(ChromaStore())
 result = pipeline.run(source="my_data.csv")
 ```
 
+### 🔍 Using the Internal Search API
+
+The RAG system includes an internal Python API for programmatic search access:
+
+```python
+from api import SearchAPI, search
+
+# Quick search using convenience function
+results = search("password reset", top_k=3)
+for result in results:
+    print(f"Score: {result.score:.3f} - {result.content[:100]}...")
+
+# Advanced usage with API class
+api = SearchAPI(config_path="config_examples/basic_config.json")
+
+# Search with filters
+results = api.search(
+    query="security issue",
+    top_k=5,
+    min_score=-500.0,  # Only high-confidence results
+    metadata_filter={"priority": "high"}  # Only high priority items
+)
+
+# Get raw Document objects
+documents = api.search("network error", return_raw_documents=True)
+
+# Get collection info
+info = api.get_collection_info()
+```
+
+#### API Features:
+- **Configurable search parameters**: `top_k`, `min_score`, `metadata_filter`
+- **Multiple return formats**: `SearchResult` objects or raw `Document` objects
+- **Metadata filtering**: Filter by any metadata field (priority, tags, etc.)
+- **Collection information**: Get stats about the vector store
+- **Multiple configurations**: Use different configs for different data types
+
+Run the example script to see all features:
+```bash
+uv run python example_api_usage.py
+```
+
+### 🔍 Advanced Retrieval Strategies
+
+The RAG system now supports configurable retrieval strategies for fine-tuned search behavior:
+
+```python
+from api import SearchAPI
+
+# Use different retrieval strategies via configuration
+basic_api = SearchAPI("config_examples/basic_with_retrieval_config.json")
+advanced_api = SearchAPI("config_examples/advanced_retrieval_config.json")
+
+# Basic strategy - simple vector similarity
+basic_results = basic_api.search("password reset", top_k=3)
+
+# Advanced hybrid strategy - combines multiple approaches  
+advanced_results = advanced_api.search("login authentication", top_k=5)
+
+# Compare strategy effectiveness
+print(f"Basic strategy found {len(basic_results)} results")
+print(f"Advanced strategy found {len(advanced_results)} results")
+```
+
+#### Available Retrieval Strategies:
+
+1. **ChromaBasicStrategy** - Simple vector similarity search
+   ```json
+   {
+     "retrieval_strategy": {
+       "type": "ChromaBasicStrategy",
+       "config": {"distance_metric": "cosine"}
+     }
+   }
+   ```
+
+2. **ChromaHybridStrategy** - Combines multiple strategies with weights
+   ```json
+   {
+     "retrieval_strategy": {
+       "type": "ChromaHybridStrategy", 
+       "config": {
+         "strategies": [
+           {"type": "ChromaBasicStrategy", "weight": 0.5},
+           {"type": "ChromaRerankedStrategy", "weight": 0.3},
+           {"type": "ChromaMetadataFilterStrategy", "weight": 0.2}
+         ]
+       }
+     }
+   }
+   ```
+
+3. **ChromaMetadataFilterStrategy** - Vector search with metadata filtering
+4. **ChromaMultiQueryStrategy** - Uses multiple query variations  
+5. **ChromaRerankedStrategy** - Re-ranks results with multiple factors
+
+#### Testing Retrieval Strategies:
+
+```bash
+# Test the retrieval system
+uv run python test_retrieval_system.py
+
+# Run retrieval examples  
+uv run python example_retrieval_usage.py
+
+# Compare strategies side-by-side
+uv run python cli.py --config config_examples/basic_with_retrieval_config.json search "security issue"
+uv run python cli.py --config config_examples/advanced_retrieval_config.json search "security issue"
+```
+
+See `retrieval/README.md` for detailed documentation on all available strategies and configuration options.
+
 ### Custom CSV Format
 
 For custom CSV formats, configure field mappings:
@@ -318,21 +854,36 @@ This tests:
 rag/
 ├── core/
 │   ├── __init__.py
-│   └── base.py              # Base classes
+│   ├── base.py              # Base classes
+│   ├── enhanced_pipeline.py # Enhanced pipeline with progress tracking  
+│   └── factories.py         # Factory pattern for component creation
 ├── parsers/
 │   ├── __init__.py
-│   └── csv_parser.py        # CSV parsers
+│   ├── csv_parser.py        # CSV parsers
+│   └── pdf_parser.py        # PDF parser with PyPDF2
 ├── embedders/
 │   ├── __init__.py
 │   └── ollama_embedder.py   # Ollama integration
 ├── stores/
 │   ├── __init__.py
 │   └── chroma_store.py      # ChromaDB integration
+├── utils/
+│   ├── __init__.py
+│   ├── progress.py          # Progress tracking with llama puns
+│   └── path_resolver.py     # Flexible path resolution
+├── tests/                   # Comprehensive test suite
+│   ├── test_csv_parser.py
+│   ├── test_pdf_parser.py
+│   └── ...
 ├── config_examples/         # Sample configurations
+│   ├── basic_config.json
+│   ├── custom_csv_config.json
+│   ├── pdf_config.json
+│   └── pdf_separate_pages_config.json
+├── samples/                 # Sample data files
+│   └── small_sample.csv
 ├── cli.py                   # Command-line interface
-├── example.py              # Usage example
-├── test_system.py          # Test suite
-├── requirements.txt        # Dependencies
+├── pyproject.toml          # UV project configuration
 └── README.md              # This file
 ```
 
@@ -434,7 +985,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 📄 New Parser Support
 
 #### Document Format Expansion
-- **PDF Parser**: Extract text, metadata, and structure from PDF documents
+- ✅ **PDF Parser**: Extract text, metadata, and structure from PDF documents (COMPLETED)
 - **Word Document Parser**: Support for .docx files with rich formatting
 - **JSON Parser**: Handle nested JSON structures and arrays
 - **XML Parser**: Parse structured XML data with schema validation

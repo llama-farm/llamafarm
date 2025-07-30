@@ -5,8 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "appdirs>=1.4.4",
+    "dotenv>=0.9.9",
     "fastapi>=0.116.1",
     "pre-commit>=4.2.0",
+    "pydantic-settings>=2.10.1",
     "ruff>=0.12.7",
     "uvicorn>=0.35.0",
     "atomic-agents>=0.1.0",

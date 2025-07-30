@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Test Go CLI component
+  test-cli:
+    name: Test CLI (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+          cache-dependency-path: cli/go.sum
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        working-directory: cli
+        run: go mod download
+
+      - name: Copy schema.yaml to CLI config
+        run: |
+          mkdir -p cli/cmd/config
+          cp config/schema.yaml cli/cmd/config/
+
+      - name: Build CLI
+        working-directory: cli
+        run: go build -v ./...
+
+      - name: Run Go tests
+        working-directory: cli
+        run: go test -v ./...
+
+  # Test Python components
+  test-python:
+    name: Test Python Components
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+        component: ['config', 'rag', 'server', 'runtime']
+        exclude:
+          # Server and runtime require Python 3.12+
+          - component: server
+            python-version: '3.11'
+          - component: runtime
+            python-version: '3.11'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Check if component has tests
+        id: check-tests
+        working-directory: ${{ matrix.component }}
+        run: |
+          if [ -d "tests" ] || [ -f "test_*.py" ] || [ -f "*_test.py" ]; then
+            echo "has_tests=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_tests=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.component }}
+        run: |
+          if [ -f "uv.lock" ]; then
+            uv sync --all-extras
+          else
+            echo "No uv.lock found, attempting to install from pyproject.toml"
+            uv pip install -e .
+          fi
+
+      - name: Install test dependencies
+        if: steps.check-tests.outputs.has_tests == 'true'
+        working-directory: ${{ matrix.component }}
+        run: |
+          # Install pytest if not already in dependencies
+          uv add --dev pytest pytest-cov || true
+
+      - name: Run linting
+        working-directory: ${{ matrix.component }}
+        run: |
+          # Run ruff if available in project
+          if uv run ruff --version 2>/dev/null; then
+            uv run ruff check .
+          else
+            echo "Ruff not available, skipping linting"
+          fi
+        continue-on-error: true
+
+      - name: Set up Ollama
+        uses: pydantic/ollama-action@v3
+        with:
+          model: nomic-embed-text
+
+      - name: Run tests
+        if: steps.check-tests.outputs.has_tests == 'true'
+        working-directory: ${{ matrix.component }}
+        run: |
+          uv run pytest -v --cov=. --cov-report=term-missing
+
+      - name: Skip tests (no tests found)
+        if: steps.check-tests.outputs.has_tests == 'false'
+        run: |
+          echo "No tests found for ${{ matrix.component }}, skipping test execution"
+
+  # Build verification job
+  build-verification:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: [test-cli, test-python]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Verify all Python components can be built
+        run: |
+          for component in config rag server runtime; do
+            echo "Building $component..."
+            cd $component
+            if [ -f "uv.lock" ]; then
+              uv sync
+            else
+              uv pip install -e .
+            fi
+            cd ..
+          done
+
+      - name: Integration test placeholder
+        run: |
+          echo "All components built successfully!"
+          echo "Future: Add integration tests here"

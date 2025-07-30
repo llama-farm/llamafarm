@@ -15,26 +15,66 @@ name = "code_review"
 prompt = "You are a code review assistant. Analyze code for best practices, potential bugs, and improvements."
 description = "Prompt for conducting code reviews and providing feedback"
 
-[rag.parser]
-type = "CustomerSupportCSVParser"
+[rag]
+description = "Customer support RAG configuration for testing"
 
-[rag.parser.config]
+[rag.parsers.csv]
+type = "CustomerSupportCSVParser"
+file_extensions = [".csv"]
+mime_types = ["text/csv", "application/csv"]
+
+[rag.parsers.csv.config]
 content_fields = ["question", "answer", "solution", "explanation"]
 metadata_fields = ["category", "timestamp", "priority", "tags", "author"]
+id_field = "id"
+combine_content = true
+content_separator = "\n\n"
 
-[rag.embedder]
+[rag.parsers.csv.config.chunk_metadata]
+generate_summary = true
+extract_keywords = true
+include_statistics = true
+
+[rag.embedders.default]
 type = "OllamaEmbedder"
 
-[rag.embedder.config]
+[rag.embedders.default.config]
 model = "mxbai-embed-large"
+base_url = "http://localhost:11434"
 batch_size = 32
+timeout = 60
 
-[rag.vector_store]
+[rag.vector_stores.default]
 type = "ChromaStore"
 
-[rag.vector_store.config]
+[rag.vector_stores.default.config]
 collection_name = "customer_support_knowledge_base"
 persist_directory = "./data/vector_store/chroma"
+
+[rag.vector_stores.default.config.metadata_config]
+enable_versioning = true
+enable_soft_delete = true
+hash_algorithm = "sha256"
+required_metadata = ["doc_id", "chunk_id", "filename", "created_at", "updated_at"]
+indexed_metadata = ["doc_id", "filename", "created_at"]
+
+[rag.vector_stores.default.config.metadata_config.retention_policy]
+default_ttl_days = 365
+max_versions = 10
+cleanup_schedule = "weekly"
+
+[rag.retrieval_strategies.default]
+type = "BasicSimilarityStrategy"
+description = "Basic similarity search"
+
+[rag.retrieval_strategies.default.config]
+distance_metric = "cosine"
+
+[rag.defaults]
+parser = "auto"
+embedder = "default"
+vector_store = "default"
+retrieval_strategy = "default"
 
 [[models]]
 provider = "local"

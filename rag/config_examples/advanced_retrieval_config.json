@@ -1,0 +1,80 @@
+{
+  "parser": {
+    "type": "CustomerSupportCSVParser",
+    "config": {
+      "content_fields": ["subject", "body", "answer"],
+      "metadata_fields": ["type", "priority", "language", "tags"],
+      "id_field": "id",
+      "combine_content": true,
+      "content_separator": "\n\n"
+    }
+  },
+  "embedder": {
+    "type": "OllamaEmbedder",
+    "config": {
+      "model": "nomic-embed-text",
+      "base_url": "http://localhost:11434",
+      "batch_size": 16,
+      "timeout": 60
+    }
+  },
+  "vector_store": {
+    "type": "ChromaStore",
+    "config": {
+      "collection_name": "support_tickets_advanced",
+      "persist_directory": "./data/advanced_chroma_db"
+    }
+  },
+  "retrieval_strategy": {
+    "type": "HybridUniversalStrategy",
+    "config": {
+      "combination_method": "weighted_average",
+      "normalize_scores": true,
+      "diversity_boost": 0.1,
+      "strategies": [
+        {
+          "type": "BasicSimilarityStrategy",
+          "weight": 0.4,
+          "config": {
+            "distance_metric": "cosine"
+          }
+        },
+        {
+          "type": "MetadataFilteredStrategy", 
+          "weight": 0.3,
+          "config": {
+            "distance_metric": "cosine",
+            "default_filters": {
+              "priority": ["high", "medium"]
+            },
+            "fallback_multiplier": 3
+          }
+        },
+        {
+          "type": "RerankedStrategy",
+          "weight": 0.2,
+          "config": {
+            "initial_k": 25,
+            "distance_metric": "cosine",
+            "rerank_factors": {
+              "recency": 0.15,
+              "length": 0.05,
+              "metadata_boost": 0.25
+            },
+            "length_normalization": 1000
+          }
+        },
+        {
+          "type": "MultiQueryStrategy",
+          "weight": 0.1,
+          "config": {
+            "num_queries": 3,
+            "aggregation_method": "weighted",
+            "distance_metric": "cosine",
+            "search_multiplier": 2
+          }
+        }
+      ]
+    }
+  }
+}
