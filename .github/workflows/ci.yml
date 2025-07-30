@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
   # Test Go CLI component
@@ -49,16 +49,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.11', '3.12']
+        python-version: ['3.11', '3.12']
         component: ['config', 'rag', 'server', 'runtime']
         exclude:
           # Server and runtime require Python 3.12+
           - component: server
-            python-version: '3.9'
-          - component: server
             python-version: '3.11'
-          - component: runtime
-            python-version: '3.9'
           - component: runtime
             python-version: '3.11'
 
