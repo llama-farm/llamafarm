@@ -1,0 +1,34 @@
+{
+  "parser": {
+    "type": "CustomerSupportCSVParser",
+    "config": {
+      "content_fields": ["subject", "body", "answer"],
+      "metadata_fields": ["type", "priority", "language", "tags"],
+      "id_field": "id",
+      "combine_content": true,
+      "content_separator": "\n\n"
+    }
+  },
+  "embedder": {
+    "type": "OllamaEmbedder",
+    "config": {
+      "model": "nomic-embed-text",
+      "base_url": "http://localhost:11434",
+      "batch_size": 8,
+      "timeout": 60
+    }
+  },
+  "vector_store": {
+    "type": "ChromaStore",
+    "config": {
+      "collection_name": "universal_retrieval",
+      "persist_directory": "./data/universal_chroma_db"
+    }
+  },
+  "retrieval_strategy": {
+    "type": "BasicSimilarityStrategy",
+    "config": {
+      "distance_metric": "cosine"
+    }
+  }
+}

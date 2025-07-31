@@ -49,6 +49,7 @@ If you prefer manual setup or are not on macOS:
 2. **Ollama** (for embeddings)
 
 #### macOS Installation with UV (Recommended)
+#### macOS Installation with UV (Recommended)
 
 1. **Install UV (the fast Python package manager)**:
    ```bash
@@ -109,6 +110,7 @@ If you prefer traditional pip/venv:
 
 ### Basic Usage
 
+1. **Test the system:**
 1. **Test the system:**
    ```bash
    # Test CSV parsing
@@ -424,6 +426,7 @@ Convert various data formats into the universal `Document` format.
 - `CSVParser`: Generic CSV parser with configurable fields
 - `CustomerSupportCSVParser`: Specialized for support ticket data
 - `PDFParser`: Extract text, metadata, and structure from PDF documents
+- `PDFParser`: Extract text, metadata, and structure from PDF documents
 
 ### 2. Embedders
 Generate vector embeddings from text content.
@@ -435,6 +438,16 @@ Store and search document embeddings.
 
 - `ChromaStore`: ChromaDB integration with persistence
 
+### 4. Universal Retrieval Strategies
+Advanced, database-agnostic retrieval strategies that automatically optimize for your vector database.
+
+- `BasicSimilarityStrategy`: Simple vector similarity search (great for getting started)
+- `MetadataFilteredStrategy`: Intelligent metadata filtering with native/fallback support
+- `MultiQueryStrategy`: Uses multiple query variations to improve recall  
+- `RerankedStrategy`: Multi-factor re-ranking for sophisticated relevance scoring
+- `HybridUniversalStrategy`: Combines multiple strategies with configurable weights
+
+### 5. Pipeline
 ### 4. Universal Retrieval Strategies
 Advanced, database-agnostic retrieval strategies that automatically optimize for your vector database.
 
@@ -560,8 +573,133 @@ The system features a powerful **database-agnostic retrieval system** that autom
 | **Complex Queries** | `MultiQueryStrategy` | Better recall for ambiguous questions |
 | **High Performance** | `BasicSimilarityStrategy` | Minimal overhead, maximum speed |
 
+## 🎯 Universal Retrieval Strategies
+
+The system features a powerful **database-agnostic retrieval system** that automatically optimizes strategies based on your vector database capabilities. All strategies work with any vector database while automatically using database-specific optimizations when available.
+
+### Available Strategies
+
+#### **BasicSimilarityStrategy** - Getting Started
+```json
+{
+  "retrieval_strategy": {
+    "type": "BasicSimilarityStrategy",
+    "config": {
+      "distance_metric": "cosine"
+    }
+  }
+}
+```
+- **Use Cases**: Getting started, simple semantic search, baseline testing
+- **Performance**: Fast | **Complexity**: Low
+
+#### **MetadataFilteredStrategy** - Smart Filtering  
+```json
+{
+  "retrieval_strategy": {
+    "type": "MetadataFilteredStrategy",
+    "config": {
+      "distance_metric": "cosine",
+      "default_filters": {
+        "priority": ["high", "medium"],
+        "type": "documentation"
+      },
+      "fallback_multiplier": 3
+    }
+  }
+}
+```
+- **Features**: Native filtering when supported, automatic fallback, complex operators (`$ne`, `$in`, `$gt`, etc.)
+- **Use Cases**: Domain-specific searches, multi-tenant applications, content categorization
+- **Performance**: Medium | **Complexity**: Medium
+
+#### **MultiQueryStrategy** - Enhanced Recall
+```json
+{
+  "retrieval_strategy": {
+    "type": "MultiQueryStrategy", 
+    "config": {
+      "num_queries": 3,
+      "aggregation_method": "weighted",
+      "search_multiplier": 2
+    }
+  }
+}
+```
+- **Aggregation Methods**: `max` (best score), `mean` (average), `weighted` (decreasing weights)
+- **Use Cases**: Ambiguous queries, query expansion, improving recall for complex questions
+- **Performance**: Medium | **Complexity**: Medium
+
+#### **RerankedStrategy** - Sophisticated Ranking
+```json
+{
+  "retrieval_strategy": {
+    "type": "RerankedStrategy",
+    "config": {
+      "initial_k": 20,
+      "length_normalization": 1000,
+      "rerank_factors": {
+        "recency": 0.1,
+        "length": 0.05, 
+        "metadata_boost": 0.2
+      }
+    }
+  }
+}
+```
+- **Reranking Factors**: Recency boost, content length preference, metadata-based boosts (priority, type, quality indicators)
+- **Use Cases**: Production systems, time-sensitive content, multi-factor relevance
+- **Performance**: Slower | **Complexity**: High
+
+#### **HybridUniversalStrategy** - Best of All Worlds
+```json
+{
+  "retrieval_strategy": {
+    "type": "HybridUniversalStrategy",
+    "config": {
+      "combination_method": "weighted_average",
+      "normalize_scores": true,
+      "diversity_boost": 0.1,
+      "strategies": [
+        {"type": "BasicSimilarityStrategy", "weight": 0.4},
+        {"type": "MetadataFilteredStrategy", "weight": 0.3},
+        {"type": "RerankedStrategy", "weight": 0.2},
+        {"type": "MultiQueryStrategy", "weight": 0.1}
+      ]
+    }
+  }
+}
+```
+- **Combination Methods**: `weighted_average` (score-based), `rank_fusion` (position-based)
+- **Features**: Strategy aliases (`basic`, `filtered`, `multi_query`, `reranked`)
+- **Use Cases**: Production systems, balanced precision/recall, complex requirements  
+- **Performance**: Variable | **Complexity**: High
+
+### Strategy Selection Guide
+
+| Use Case | Recommended Strategy | Why |
+|----------|---------------------|-----|
+| **Getting Started** | `BasicSimilarityStrategy` | Simple, fast, reliable baseline |
+| **Production General** | `HybridUniversalStrategy` | Balanced performance across use cases |
+| **High Precision** | `RerankedStrategy` | Multi-factor ranking for nuanced results |
+| **Filtered Content** | `MetadataFilteredStrategy` | Efficient domain-specific searches |
+| **Complex Queries** | `MultiQueryStrategy` | Better recall for ambiguous questions |
+| **High Performance** | `BasicSimilarityStrategy` | Minimal overhead, maximum speed |
+
 ## Configuration
 
+Configuration is JSON-based and includes three main sections. The system supports flexible configuration file placement and automatic path resolution.
+
+### CLI Configuration Options
+
+```bash
+# Global options (available for all commands)
+--config, -c     Configuration file path (default: rag_config.json)
+--base-dir, -b   Base directory for relative path resolution
+--log-level      Logging level (DEBUG, INFO, WARNING, ERROR)
+```
+
+### Configuration File Structure
 Configuration is JSON-based and includes three main sections. The system supports flexible configuration file placement and automatic path resolution.
 
 ### CLI Configuration Options
@@ -857,8 +995,13 @@ rag/
 │   ├── base.py              # Base classes
 │   ├── enhanced_pipeline.py # Enhanced pipeline with progress tracking  
 │   └── factories.py         # Factory pattern for component creation
+│   ├── base.py              # Base classes
+│   ├── enhanced_pipeline.py # Enhanced pipeline with progress tracking  
+│   └── factories.py         # Factory pattern for component creation
 ├── parsers/
 │   ├── __init__.py
+│   ├── csv_parser.py        # CSV parsers
+│   └── pdf_parser.py        # PDF parser with PyPDF2
 │   ├── csv_parser.py        # CSV parsers
 │   └── pdf_parser.py        # PDF parser with PyPDF2
 ├── embedders/
@@ -875,6 +1018,14 @@ rag/
 │   ├── test_csv_parser.py
 │   ├── test_pdf_parser.py
 │   └── ...
+├── utils/
+│   ├── __init__.py
+│   ├── progress.py          # Progress tracking with llama puns
+│   └── path_resolver.py     # Flexible path resolution
+├── tests/                   # Comprehensive test suite
+│   ├── test_csv_parser.py
+│   ├── test_pdf_parser.py
+│   └── ...
 ├── config_examples/         # Sample configurations
 │   ├── basic_config.json
 │   ├── custom_csv_config.json
@@ -882,7 +1033,14 @@ rag/
 │   └── pdf_separate_pages_config.json
 ├── samples/                 # Sample data files
 │   └── small_sample.csv
+│   ├── basic_config.json
+│   ├── custom_csv_config.json
+│   ├── pdf_config.json
+│   └── pdf_separate_pages_config.json
+├── samples/                 # Sample data files
+│   └── small_sample.csv
 ├── cli.py                   # Command-line interface
+├── pyproject.toml          # UV project configuration
 ├── pyproject.toml          # UV project configuration
 └── README.md              # This file
 ```
@@ -985,6 +1143,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 📄 New Parser Support
 
 #### Document Format Expansion
+- ✅ **PDF Parser**: Extract text, metadata, and structure from PDF documents (COMPLETED)
 - ✅ **PDF Parser**: Extract text, metadata, and structure from PDF documents (COMPLETED)
 - **Word Document Parser**: Support for .docx files with rich formatting
 - **JSON Parser**: Handle nested JSON structures and arrays

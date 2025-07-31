@@ -3,7 +3,10 @@ title: LlamaFarm Config
 type: object
 required:
   - version
+  - name
+  - prompts
   - rag
+  - datasets
   - models
 properties:
   version:
@@ -11,6 +14,10 @@ properties:
     enum: ["v1"]
     default: v1
     description: Config version, must be "v1"
+  name:
+    type: string
+    description: Project name
+    example: my-namespace/my-project
   prompts:
     type: array
     items:
@@ -223,6 +230,29 @@ properties:
             description: Default retrieval strategy to use
             default: default
         additionalProperties: false
+
+  datasets:
+    type: array
+    description: List of dataset configurations
+    items:
+      type: object
+      required:
+        - name
+        - files
+      properties:
+        name:
+          type: string
+          description: Dataset name
+        parser:
+          type: string
+          description: Parser to use for the dataset
+          default: auto
+        files:
+          type: array
+          description: List of file paths (e.g., "data/mydoc.pdf")
+          items:
+            type: string
+            description: File path (e.g., "data/mydoc.pdf")
 
   models:
     type: array

@@ -163,8 +163,8 @@ class TestConfigLoader:
 
     def test_unsupported_file_format(self):
         """Test error handling for unsupported file formats."""
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
-            f.write('{"version": "v1"}')
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write('<?xml version="1.0"?><config><version>v1</version></config>')
             temp_path = f.name
 
         try:

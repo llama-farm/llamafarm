@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from services.project_service import ProjectService
+from config import LlamaFarmConfig
 
 class Project(BaseModel):
-    id: int
-    name: str
-    description: str
-    namespace: str
+    namespace: str;
+    name: str;
+    config: LlamaFarmConfig;
 
 class ListProjectsResponse(BaseModel):
     total: int
@@ -13,7 +14,6 @@ class ListProjectsResponse(BaseModel):
 
 class CreateProjectRequest(BaseModel):
     name: str
-    description: str
 
 class CreateProjectResponse(BaseModel):
     project: Project
@@ -31,37 +31,41 @@ router = APIRouter(
 
 @router.get("/{namespace}", response_model=ListProjectsResponse)
 async def list_projects(namespace: str):
+    projects = ProjectService.list_projects(namespace)
+    print(f"Projects: {projects}")
     return ListProjectsResponse(
-      total=0,
-      projects=[],
+      total=len(projects),
+      projects=[Project(
+        namespace=namespace,
+        name=project.name,
+        config=project.config,
+      ) for project in projects],
     )
 
 @router.post("/{namespace}", response_model=CreateProjectResponse)
 async def create_project(namespace: str, request: CreateProjectRequest):
-    project = Project(
-        id=1,
-        name=request.name,
-        description=request.description,
-        namespace=namespace,
-    )
+    project = ProjectService.create_project(namespace, request.name)
     return CreateProjectResponse(
-      project=project,
+      project=Project(
+        namespace=namespace,
+        name=request.name,
+        config=project,
+      ),
     )
 
 @router.get("/{namespace}/{project_id}", response_model=GetProjectResponse)
-async def get_project(namespace: str, project_id: int):
-    project = Project(
-        id=project_id,
-        name="test",
-        description="test",
-        namespace=namespace,
-    )
+async def get_project(namespace: str, project_id: str):
+    project = ProjectService.get_project(namespace, project_id)
     return GetProjectResponse(
-      project=project,
+      project=Project(
+        namespace=project.namespace,
+        name=project.name,
+        config=project.config,
+      ),
     )
 
 @router.delete("/{namespace}/{project_id}", response_model=DeleteProjectResponse)
-async def delete_project(namespace: str, project_id: int):
+async def delete_project(namespace: str, project_id: str):
     project = Project(
         id=project_id,
         name="test",

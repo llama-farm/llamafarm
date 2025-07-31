@@ -102,6 +102,8 @@ class TypeGenerator:
             return "PromptConfig"
         elif field_name == "models":
             return "ModelConfig"
+        elif field_name == "datasets":
+            return "DatasetsConfig"
         else:
             return f"{field_name.capitalize()}Config"
 
@@ -110,22 +112,14 @@ class TypeGenerator:
         # Convert field name to PascalCase for type name
         if field_name == "rag":
             return "RAGConfig"
-        elif field_name == "parser":
-            return "Parser"
-        elif field_name == "embedder":
-            return "Embedder"
-        elif field_name == "vector_store":
-            return "VectorStore"
+        elif field_name == "defaults":
+            return "DefaultsConfig"
+        elif field_name == "parsers" or field_name == "embedders" or field_name == "vector_stores" or field_name == "retrieval_strategies":
+            # These use patternProperties in schema, so they're Dict[str, Any]
+            return "Dict[str, Any]"
         elif field_name == "config":
-            # Use specific config type based on parent context
-            if parent_context == "parser":
-                return "ParserConfig"
-            elif parent_context == "embedder":
-                return "EmbedderConfig"
-            elif parent_context == "vector_store":
-                return "VectorStoreConfig"
-            else:
-                return "Dict[str, Any]"  # Fallback to generic type
+            # Generic config objects are Dict[str, Any]
+            return "Dict[str, Any]"
         else:
             return f"{field_name.capitalize()}Config"
 
@@ -148,18 +142,10 @@ class TypeGenerator:
             lines.append(
                 '    """RAG (Retrieval-Augmented Generation) configuration."""'
             )
-        elif class_name == "ParserConfig":
-            lines.append('    """Parser configuration within RAG."""')
-        elif class_name == "EmbedderConfig":
-            lines.append('    """Embedder configuration within RAG."""')
-        elif class_name == "VectorStoreConfig":
-            lines.append('    """Vector store configuration within RAG."""')
-        elif class_name == "Parser":
-            lines.append('    """Parser definition in RAG configuration."""')
-        elif class_name == "Embedder":
-            lines.append('    """Embedder definition in RAG configuration."""')
-        elif class_name == "VectorStore":
-            lines.append('    """Vector store definition in RAG configuration."""')
+        elif class_name == "DefaultsConfig":
+            lines.append('    """Default component selections for RAG."""')
+        elif class_name == "DatasetsConfig":
+            lines.append('    """Configuration for a single dataset."""')
         elif class_name == "LlamaFarmConfig":
             lines.append('    """Complete LlamaFarm configuration."""')
 
@@ -179,7 +165,7 @@ class TypeGenerator:
 
     def generate_types(self) -> str:
         """Generate all TypedDict classes from the schema."""
-        self.imports.add("from typing import TypedDict, List, Literal, Optional, Union")
+        self.imports.add("from typing import TypedDict, List, Literal, Optional, Union, Dict, Any")
 
         # Generate types in the correct order to avoid forward references
         # This is based on the known structure of the LlamaFarm schema
@@ -207,65 +193,31 @@ class TypeGenerator:
                 )
                 types.append(model_class)
 
-        # 3. Generate RAG component config types (no dependencies)
+        # 3. Generate DefaultsConfig (no dependencies)
         if "rag" in self.schema.get("properties", {}):
             rag_schema = self.schema["properties"]["rag"]
-            if "properties" in rag_schema:
-                # Generate config types first
-                for component_name in ["parser", "embedder", "vector_store"]:
-                    if component_name in rag_schema["properties"]:
-                        component_schema = rag_schema["properties"][component_name]
-                        if (
-                            "properties" in component_schema
-                            and "config" in component_schema["properties"]
-                        ):
-                            config_schema = component_schema["properties"]["config"]
-                            if "properties" in config_schema:
-                                config_props = config_schema["properties"]
-                                config_required = config_schema.get("required", [])
+            if "properties" in rag_schema and "defaults" in rag_schema["properties"]:
+                defaults_schema = rag_schema["properties"]["defaults"]
+                if "properties" in defaults_schema:
+                    defaults_props = defaults_schema["properties"]
+                    defaults_required = defaults_schema.get("required", [])
+                    defaults_class = self._generate_typeddict_class(
+                        "DefaultsConfig", defaults_props, defaults_required
+                    )
+                    types.append(defaults_class)
 
-                                # Generate proper config class name
-                                if component_name == "vector_store":
-                                    config_class_name = "VectorStoreConfig"
-                                else:
-                                    config_class_name = (
-                                        f"{component_name.capitalize()}Config"
-                                    )
+        # 4. Generate DatasetsConfig (no dependencies)
+        if "datasets" in self.schema.get("properties", {}):
+            datasets_schema = self.schema["properties"]["datasets"]
+            if "items" in datasets_schema and "properties" in datasets_schema["items"]:
+                datasets_props = datasets_schema["items"]["properties"]
+                datasets_required = datasets_schema["items"].get("required", [])
+                datasets_class = self._generate_typeddict_class(
+                    "DatasetsConfig", datasets_props, datasets_required
+                )
+                types.append(datasets_class)
 
-                                config_class = self._generate_typeddict_class(
-                                    config_class_name,
-                                    config_props,
-                                    config_required,
-                                    component_name,
-                                )
-                                types.append(config_class)
-
-        # 4. Generate RAG component types (depend on config types)
-        if "rag" in self.schema.get("properties", {}):
-            rag_schema = self.schema["properties"]["rag"]
-            if "properties" in rag_schema:
-                for component_name in ["parser", "embedder", "vector_store"]:
-                    if component_name in rag_schema["properties"]:
-                        component_schema = rag_schema["properties"][component_name]
-                        if "properties" in component_schema:
-                            component_props = component_schema["properties"]
-                            component_required = component_schema.get("required", [])
-
-                            # Generate proper component class name
-                            if component_name == "vector_store":
-                                component_class_name = "VectorStore"
-                            else:
-                                component_class_name = component_name.capitalize()
-
-                            component_class = self._generate_typeddict_class(
-                                component_class_name,
-                                component_props,
-                                component_required,
-                                component_name,
-                            )
-                            types.append(component_class)
-
-        # 5. Generate RAGConfig (depends on component types)
+        # 5. Generate RAGConfig (depends on DefaultsConfig)
         if "rag" in self.schema.get("properties", {}):
             rag_schema = self.schema["properties"]["rag"]
             if "properties" in rag_schema:

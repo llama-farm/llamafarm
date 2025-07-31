@@ -225,20 +225,20 @@ print(f"Valid: {validation['valid']}")
 ### Quick Start (Universal)
 ```bash
 # Use universal strategies with any database
-uv run python cli.py --config config_examples/universal_retrieval_config.yaml \
+uv run python cli.py --config config_examples/universal_retrieval_config.json \
   ingest samples/csv/small_sample.csv
 
-uv run python cli.py --config config_examples/universal_retrieval_config.yaml \
+uv run python cli.py --config config_examples/universal_retrieval_config.json \
   search "password reset"
 ```
 
 ### Advanced Hybrid
 ```bash
 # Multi-strategy approach
-uv run python cli.py --config config_examples/hybrid_universal_config.yaml \
+uv run python cli.py --config config_examples/hybrid_universal_config.json \
   ingest samples/csv/small_sample.csv
 
-uv run python cli.py --config config_examples/hybrid_universal_config.yaml \
+uv run python cli.py --config config_examples/hybrid_universal_config.json \
   search "login authentication"
 ```
 
@@ -247,7 +247,7 @@ uv run python cli.py --config config_examples/hybrid_universal_config.yaml \
 from api import SearchAPI
 
 # System automatically chooses ChromaDB-optimized strategies if available
-api = SearchAPI("config_examples/universal_retrieval_config.yaml")
+api = SearchAPI("config_examples/universal_retrieval_config.json")
 results = api.search("security issue", top_k=5)
 ```
 
@@ -429,8 +429,8 @@ assert validation["valid"]
 ### Integration Test
 ```bash
 # Test with your new components
-uv run python examples/test_retrieval_system.py
-uv run python examples/example_retrieval_usage.py
+uv run python test_retrieval_system.py
+uv run python example_retrieval_usage.py
 ```
 
 ## 🔍 Debugging and Monitoring

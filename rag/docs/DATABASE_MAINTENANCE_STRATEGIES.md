@@ -399,7 +399,7 @@ Document Change Detected
 ### Configuration Setup
 ```bash
 # 1. Update your configuration file
-cat config_examples/unified_multi_strategy_config.yaml
+cat config_examples/unified_multi_strategy_config.json
 
 # 2. Test the configuration
 uv run python cli.py test --test-file samples/small_sample.csv

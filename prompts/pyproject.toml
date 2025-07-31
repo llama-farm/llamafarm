@@ -1,22 +1,39 @@
 [project]
 name = "llamafarm-prompts"
-version = "1.0.0"
-description = "Configuration-driven prompt management system for LlamaFarm"
-authors = [
-    {name = "LlamaFarm Team"}
-]
+version = "0.1.0"
+description = "LlamaFarm Prompts Management System"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
-    "pyyaml>=6.0.2",
+    "click>=8.1.0",
+    "pydantic>=2.0.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0",
+    "jsonschema>=4.0.0",
+    "rich>=13.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "python-multipart>=0.0.6",
+    "openai>=1.98.0",
+    "python-dotenv>=1.1.1",
+    "requests>=2.32.4",
 ]
 
 [project.optional-dependencies]
-dev = [
+langgraph = [
+    "langgraph>=0.0.50",
+    "langchain>=0.1.0",
+    "langchain-core>=0.1.0",
+]
+test = [
     "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+]
+dev = [
     "black>=23.0.0",
-    "isort>=5.12.0",
+    "isort>=5.0.0",
+    "flake8>=6.0.0",
     "mypy>=1.0.0",
 ]
 
@@ -29,14 +46,20 @@ packages = ["prompts"]
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ['py39']
 
 [tool.isort]
 profile = "black"
 line_length = 88
 
-[tool.mypy]
-python_version = "3.11"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=prompts --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[project.scripts]
+llamafarm-prompts = "prompts.cli:cli"
