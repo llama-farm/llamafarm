@@ -6,6 +6,7 @@ from atomic_agents.lib.components.agent_memory import AgentMemory
 from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgentInputSchema, BaseAgentOutputSchema
 import instructor
 from openai import OpenAI
+from core.config import settings
 
 router = APIRouter(
     prefix="/inference",
@@ -34,7 +35,7 @@ def create_agent() -> BaseAgent:
     
     # Create OpenAI-compatible client pointing to Ollama
     ollama_client = OpenAI(
-        base_url="http://localhost:11434/v1",
+        base_url=settings.ollama_host,
         api_key="ollama",  # Ollama doesn't require a real API key, but instructor needs something
     )
     
@@ -44,7 +45,7 @@ def create_agent() -> BaseAgent:
     agent = BaseAgent(
         config=BaseAgentConfig(
             client=client,
-            model="llama3.1:8b",  # Using Ollama model name (make sure this model is installed)
+            model=settings.ollama_model,  # Using Ollama model name (make sure this model is installed)
             memory=memory,
         )
     )
