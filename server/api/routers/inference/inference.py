@@ -36,7 +36,7 @@ def create_agent() -> BaseAgent:
     # Create OpenAI-compatible client pointing to Ollama
     ollama_client = OpenAI(
         base_url=settings.ollama_host,
-        api_key="ollama",  # Ollama doesn't require a real API key, but instructor needs something
+        api_key=settings.ollama_api_key,  # Ollama doesn't require a real API key, but instructor needs something
     )
     
     client = instructor.from_openai(ollama_client)
