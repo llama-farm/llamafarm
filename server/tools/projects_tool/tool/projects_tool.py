@@ -5,6 +5,9 @@ from typing import List, Dict, Any, Optional, Literal
 import os
 from pathlib import Path
 
+# Import the project service
+from server.services.project_service import ProjectService
+
 # Input Schema
 class ProjectsToolInput(BaseIOSchema):
     """Input schema for projects tool."""
@@ -29,59 +32,49 @@ class ProjectsTool(BaseTool):
         super().__init__()
 
     def list_projects(self, namespace: str) -> List[Dict[str, Any]]:
-        """List all projects in a namespace."""
-        projects = []
-        
-        # Get the data directory from environment or use default
-        data_dir = os.environ.get('LF_DATA_DIR', os.path.expanduser('~/Library/Application Support/LlamaFarm/LlamaFarm'))
-        namespace_dir = os.path.join(data_dir, "projects", namespace)
-        
-        if not os.path.exists(namespace_dir):
-            return projects
-        
-        for project_id in os.listdir(namespace_dir):
-            project_path = os.path.join(namespace_dir, project_id)
-            if os.path.isdir(project_path):
-                projects.append({
-                    "namespace": namespace,
-                    "project_id": project_id,
-                    "path": project_path
-                })
-        
-        return projects
+        """List all projects in a namespace using the project service."""
+        try:
+            projects = ProjectService.list_projects(namespace)
+            return [
+                {
+                    "namespace": project.namespace,
+                    "project_id": project.name,
+                    "path": ProjectService.get_project_dir(project.namespace, project.name)
+                }
+                for project in projects
+            ]
+        except Exception as e:
+            # If the namespace directory doesn't exist, return empty list
+            return []
 
     def create_project(self, namespace: str, project_id: str) -> Dict[str, Any]:
-        """Create a new project in the specified namespace."""
-        data_dir = os.environ.get('LF_DATA_DIR', os.path.expanduser('~/Library/Application Support/LlamaFarm/LlamaFarm'))
-        project_dir = os.path.join(data_dir, "projects", namespace, project_id)
-        
-        if os.path.exists(project_dir):
+        """Create a new project in the specified namespace using the project service."""
+        try:
+            # Check if project already exists
+            project_dir = ProjectService.get_project_dir(namespace, project_id)
+            if os.path.exists(project_dir):
+                return {
+                    "success": False,
+                    "message": f"Project '{project_id}' already exists in namespace '{namespace}'"
+                }
+            
+            # Create the project using the project service
+            config = ProjectService.create_project(namespace, project_id)
+            
+            return {
+                "success": True,
+                "message": f"Project '{project_id}' created successfully in namespace '{namespace}'",
+                "project": {
+                    "namespace": namespace,
+                    "project_id": project_id,
+                    "path": project_dir
+                }
+            }
+        except Exception as e:
             return {
                 "success": False,
-                "message": f"Project '{project_id}' already exists in namespace '{namespace}'"
+                "message": f"Error creating project: {str(e)}"
             }
-        
-        # Create the project directory
-        os.makedirs(project_dir, exist_ok=True)
-        
-        # Create a basic config file
-        config_content = f"""name: {project_id}
-description: Project created via projects tool
-version: 1.0.0
-"""
-        config_file = os.path.join(project_dir, "config.yaml")
-        with open(config_file, 'w') as f:
-            f.write(config_content)
-        
-        return {
-            "success": True,
-            "message": f"Project '{project_id}' created successfully in namespace '{namespace}'",
-            "project": {
-                "namespace": namespace,
-                "project_id": project_id,
-                "path": project_dir
-            }
-        }
 
     def run(self, input: ProjectsToolInput) -> ProjectsToolOutput:
         """Execute the projects tool based on the specified action."""
