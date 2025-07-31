@@ -15,6 +15,7 @@ const RecentlyViewed = lazy(() => import('../assets/icons/RecentlyViewed'))
 const Code = lazy(() => import('../assets/icons/Code'))
 const Edit = lazy(() => import('../assets/icons/Edit'))
 const Add = lazy(() => import('../assets/icons/Add'))
+const Upload = lazy(() => import('../assets/icons/Upload'))
 
 type FontIconTypes =
   | 'sun'
@@ -32,6 +33,7 @@ type FontIconTypes =
   | 'code'
   | 'edit'
   | 'add'
+  | 'upload'
 
 export interface FontIconProps {
   className?: string
@@ -80,6 +82,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Edit />
       case 'add':
         return <Add />
+      case 'upload':
+        return <Upload />
     }
   }, [type])
 
