@@ -260,7 +260,7 @@ class TemplateRegistry:
             # Check if required variables are used in template
             template_content = template.template.lower()
             for var in template.input_variables:
-                # Check for variable usage: {{ var }} or {{ var | filter }} or {{ var.attr }}
+                # Check for variable usage: {{ var }}, {% for x in var %}, {% if var %}, etc.
                 var_patterns = [
                     f"{{{{{var.lower()}}}}}",       # {{var}}
                     f"{{{{ {var.lower()} }}}}",     # {{ var }}
@@ -270,6 +270,10 @@ class TemplateRegistry:
                     f"{{{{ {var.lower()}.",         # {{ var.
                     f"{{{{{var.lower()} ",          # {{var 
                     f"{{{{ {var.lower()} ",         # {{ var 
+                    f"in {var.lower()}",            # {% for x in var %}
+                    f"in {var.lower()} ",           # {% for x in var %}
+                    f"{{% if {var.lower()}",        # {% if var %}
+                    f"{{% if {var.lower()} ",       # {% if var %}
                 ]
                 if not any(pattern in template_content for pattern in var_patterns):
                     errors.append(f"Required variable '{var}' not found in template")

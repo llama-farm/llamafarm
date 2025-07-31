@@ -82,8 +82,8 @@
           "overview"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.799445",
-        "updated_at": "2025-07-30 23:11:50.799452",
+        "created_at": "2025-07-31 10:06:57.350757",
+        "updated_at": "2025-07-31 10:06:57.350762",
         "version": "1.0.0",
         "description": "General document summarization template",
         "examples": [
@@ -135,8 +135,8 @@
           "comprehensive"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.799571",
-        "updated_at": "2025-07-30 23:11:50.799572",
+        "created_at": "2025-07-31 10:06:57.350929",
+        "updated_at": "2025-07-31 10:06:57.350930",
         "version": "1.0.0",
         "description": "Detailed question answering with comprehensive responses",
         "examples": [
@@ -195,8 +195,8 @@
           "general"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.799686",
-        "updated_at": "2025-07-30 23:11:50.799687",
+        "created_at": "2025-07-31 10:06:57.351053",
+        "updated_at": "2025-07-31 10:06:57.351053",
         "version": "1.0.0",
         "description": "Simple question answering template for general queries",
         "examples": [
@@ -256,8 +256,8 @@
           "conversation"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.800036",
-        "updated_at": "2025-07-30 23:11:50.800037",
+        "created_at": "2025-07-31 10:06:57.351468",
+        "updated_at": "2025-07-31 10:06:57.351471",
         "version": "1.0.0",
         "description": "Conversational assistant template",
         "examples": [
@@ -317,8 +317,8 @@
           "categorization"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.800385",
-        "updated_at": "2025-07-30 23:11:50.800386",
+        "created_at": "2025-07-31 10:06:57.351856",
+        "updated_at": "2025-07-31 10:06:57.351857",
         "version": "1.0.0",
         "description": "Few-shot learning classification template",
         "examples": [
@@ -380,8 +380,8 @@
           "statistics"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.800787",
-        "updated_at": "2025-07-30 23:11:50.800788",
+        "created_at": "2025-07-31 10:06:57.352329",
+        "updated_at": "2025-07-31 10:06:57.352330",
         "version": "1.0.0",
         "description": "Comprehensive A/B testing comparison template for evaluating different AI configurations",
         "examples": [
@@ -480,8 +480,8 @@
           "complex"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.800893",
-        "updated_at": "2025-07-30 23:11:50.800894",
+        "created_at": "2025-07-31 10:06:57.352449",
+        "updated_at": "2025-07-31 10:06:57.352449",
         "version": "1.0.0",
         "description": "Chain of thought reasoning for complex questions",
         "examples": [
@@ -541,8 +541,8 @@
           "insights"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.801005",
-        "updated_at": "2025-07-30 23:11:50.801006",
+        "created_at": "2025-07-31 10:06:57.352576",
+        "updated_at": "2025-07-31 10:06:57.352576",
         "version": "1.0.0",
         "description": "Compare and contrast multiple documents or concepts",
         "examples": [
@@ -608,8 +608,8 @@
           "effectiveness"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.801413",
-        "updated_at": "2025-07-30 23:11:50.801415",
+        "created_at": "2025-07-31 10:06:57.352993",
+        "updated_at": "2025-07-31 10:06:57.352997",
         "version": "1.0.0",
         "description": "Comprehensive evaluation template for prompt effectiveness and optimization",
         "examples": [
@@ -677,8 +677,8 @@
           "benchmarking"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.801533",
-        "updated_at": "2025-07-30 23:11:50.801533",
+        "created_at": "2025-07-31 10:06:57.353124",
+        "updated_at": "2025-07-31 10:06:57.353124",
         "version": "1.0.0",
         "description": "Comprehensive scoring template for AI response quality assessment",
         "examples": [
@@ -756,8 +756,8 @@
           "quality_assessment"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.801651",
-        "updated_at": "2025-07-30 23:11:50.801652",
+        "created_at": "2025-07-31 10:06:57.353313",
+        "updated_at": "2025-07-31 10:06:57.353314",
         "version": "1.0.0",
         "description": "Comprehensive evaluation template for RAG system performance",
         "examples": [
@@ -833,8 +833,8 @@
           "analysis"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.801772",
-        "updated_at": "2025-07-30 23:11:50.801773",
+        "created_at": "2025-07-31 10:06:57.353452",
+        "updated_at": "2025-07-31 10:06:57.353457",
         "version": "1.0.0",
         "description": "Code analysis and review template",
         "examples": [
@@ -889,8 +889,8 @@
           "analysis"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.801881",
-        "updated_at": "2025-07-30 23:11:50.801882",
+        "created_at": "2025-07-31 10:06:57.353641",
+        "updated_at": "2025-07-31 10:06:57.353642",
         "version": "1.0.0",
         "description": "Medical document analysis and question answering",
         "examples": [
@@ -953,8 +953,8 @@
           "llm_testing"
         ],
         "author": "LlamaFarm Team",
-        "created_at": "2025-07-30 23:11:50.802006",
-        "updated_at": "2025-07-30 23:11:50.802006",
+        "created_at": "2025-07-31 10:06:57.353811",
+        "updated_at": "2025-07-31 10:06:57.353813",
         "version": "1.0.0",
         "description": "LLM as Judge template for evaluating AI response quality",
         "examples": [
@@ -1001,6 +1001,536 @@
         "context": {
           "type": "list",
           "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "tool_execution": {
+      "template_id": "tool_execution",
+      "name": "Structured Tool Execution",
+      "type": "agentic",
+      "template": "# \ud83d\udd27 Tool Execution Framework\n\n## Current Task\n**Action**: {{action}}\n**Tool**: {{tool_name}}\n**Step**: {{current_step}} of {{total_steps}}\n\n## \ud83d\udccb Execution Context\n\n### Previous Steps Completed:\n{% if previous_results %}\n{% for result in previous_results %}\n- **Step {{result.step}}**: {{result.action}} \u2192 {{result.outcome}}\n{% endfor %}\n{% else %}\n- This is the first step\n{% endif %}\n\n### Current Tool Information:\n- **Tool Name**: {{tool_name}}\n- **Purpose**: {{tool_purpose}}\n- **Input Format**: {{input_format}}\n- **Expected Output**: {{expected_output}}\n\n## \ud83c\udfaf Execution Protocol\n\n### 1\ufe0f\u20e3 **Pre-Execution Validation**\n- \u2705 Confirm tool is appropriate for this task\n- \u2705 Validate input parameters are correctly formatted\n- \u2705 Check dependencies from previous steps are satisfied\n- \u2705 Verify expected output will serve the next step\n\n### 2\ufe0f\u20e3 **Tool Invocation**\n```\nTool: {{tool_name}}\nInput: {{tool_input}}\nParameters: {{tool_parameters | default('None')}}\nMode: {{execution_mode | default('standard')}}\n```\n\n### 3\ufe0f\u20e3 **Output Processing**\n- **Capture**: Record the tool's raw output\n- **Validate**: Ensure output meets expected format\n- **Transform**: Convert output for next step if needed\n- **Store**: Save results for future reference\n\n### 4\ufe0f\u20e3 **Error Handling**\n{% if error_handling %}\n{{error_handling}}\n{% else %}\n- If tool fails: Log error, attempt retry with modified parameters\n- If output invalid: Validate format, request correction\n- If unexpected result: Analyze cause, adjust approach\n- If critical failure: Escalate to human oversight\n{% endif %}\n\n## \ud83d\udcca Quality Checks\n\n### Output Validation:\n- **Format Check**: Does output match expected structure?\n- **Content Check**: Is the information relevant and accurate?\n- **Completeness Check**: Are all required fields populated?\n- **Consistency Check**: Does output align with previous steps?\n\n### Next Step Preparation:\n{% if next_step %}\n- **Next Action**: {{next_step.action}}\n- **Required Data**: {{next_step.required_data}}\n- **Handoff Format**: {{next_step.input_format}}\n{% else %}\n- This is the final step - prepare summary\n{% endif %}\n\n## \ud83d\udd04 **Execute Tool and Process Result**\n\n**Step {{current_step}} Result**:\n[Tool execution output will be processed here]\n\n**Status**: [Success/Failure/Retry Needed]\n**Next Action**: [What to do next based on result]\n\n---\n\n{% if current_step < total_steps %}\n**Ready for Step {{current_step + 1}}**: {{next_step.action if next_step else 'Final processing'}}\n{% else %}\n**Workflow Complete**: All {{total_steps}} steps executed successfully\n{% endif %}",
+      "input_variables": [
+        "action",
+        "tool_name",
+        "current_step",
+        "total_steps"
+      ],
+      "optional_variables": [
+        "previous_results",
+        "tool_purpose",
+        "input_format",
+        "expected_output",
+        "tool_input",
+        "tool_parameters",
+        "execution_mode",
+        "error_handling",
+        "next_step"
+      ],
+      "metadata": {
+        "use_case": "Structured execution of individual tools within multi-step workflows",
+        "complexity": "medium",
+        "domain": "agentic",
+        "tags": [
+          "tool-execution",
+          "workflow",
+          "validation",
+          "error-handling",
+          "structured"
+        ],
+        "author": null,
+        "created_at": "2025-07-31 10:06:57.354300",
+        "updated_at": "2025-07-31 10:06:57.354301",
+        "version": "1.0.0",
+        "description": "Template for executing individual tools with proper validation and error handling",
+        "examples": [
+          {
+            "action": "Search for recent AI research papers",
+            "tool_name": "academic_search",
+            "current_step": 2,
+            "total_steps": 5,
+            "tool_purpose": "Find relevant academic papers on specified topic"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "action": {
+          "type": "str"
+        },
+        "tool_name": {
+          "type": "str"
+        },
+        "current_step": {
+          "type": "int"
+        },
+        "total_steps": {
+          "type": "int"
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "tool_selection": {
+      "template_id": "tool_selection",
+      "name": "Intelligent Tool Selection",
+      "type": "agentic",
+      "template": "# \ud83d\udd27 Intelligent Tool Selection System\n\n## Task Context\n**Objective**: {{objective}}\n**Domain**: {{domain | default('general')}}\n**Complexity Level**: {{complexity_level | default('medium')}}\n**Available Resources**: {{available_resources | default('standard')}}\n**Time Constraints**: {{time_constraints | default('normal')}}\n\n## \ud83d\udee0\ufe0f Available Tools Inventory\n\n{% for tool in available_tools %}\n### {{tool.name}}\n- **Category**: {{tool.category}}\n- **Capabilities**: {{tool.capabilities | join(', ')}}\n- **Best For**: {{tool.best_for}}\n- **Limitations**: {{tool.limitations}}\n- **Resource Cost**: {{tool.cost | default('medium')}}\n- **Execution Time**: {{tool.execution_time | default('varies')}}\n- **Reliability**: {{tool.reliability | default('high')}}\n- **Prerequisites**: {{tool.prerequisites | default('none')}}\n\n{% endfor %}\n\n## \ud83c\udfaf Tool Selection Framework\n\n### Step 1: Requirement Analysis\n**Primary Requirements**:\n{% if primary_requirements %}\n{% for req in primary_requirements %}\n- {{req.type}}: {{req.description}} (Priority: {{req.priority}})\n{% endfor %}\n{% else %}\n- Analyze what the task specifically needs\n- Identify input/output format requirements\n- Determine quality vs speed tradeoffs\n- Consider integration complexity\n{% endif %}\n\n**Secondary Requirements**:\n{% if secondary_requirements %}\n{% for req in secondary_requirements %}\n- {{req.type}}: {{req.description}} (Nice-to-have: {{req.importance}})\n{% endfor %}\n{% else %}\n- Performance optimization needs\n- User experience considerations\n- Maintainability requirements\n- Scalability factors\n{% endif %}\n\n### Step 2: Tool Compatibility Matrix\n\n| Tool | Capability Match | Resource Fit | Time Fit | Integration Ease | Overall Score |\n|------|------------------|--------------|----------|------------------|---------------|\n{% for tool in available_tools %}\n| {{tool.name}} | {{tool.capability_match | default('TBD')}} | {{tool.resource_fit | default('TBD')}} | {{tool.time_fit | default('TBD')}} | {{tool.integration_ease | default('TBD')}} | {{tool.overall_score | default('TBD')}} |\n{% endfor %}\n\n### Step 3: Selection Criteria Weighting\n\n**Criteria Weights** (Total = 100%):\n- **Capability Match**: {{capability_weight | default('40%')}}\n- **Resource Efficiency**: {{resource_weight | default('20%')}}\n- **Execution Speed**: {{speed_weight | default('15%')}}\n- **Reliability**: {{reliability_weight | default('15%')}}\n- **Integration Ease**: {{integration_weight | default('10%')}}\n\n### Step 4: Decision Logic\n\n```\nIF task_type == \"{{task_type | default('analysis')}}\":\n    PREFER tools with: {{preferred_capabilities | join(', ') if preferred_capabilities else 'analytical capabilities'}}\n    \nIF time_constraints == \"tight\":\n    WEIGHT execution_speed *= 2\n    \nIF resource_constraints == \"limited\":\n    FILTER OUT high_cost_tools\n    \nIF integration_complexity == \"high\":\n    PREFER tools with: good_apis, documentation, support\n```\n\n## \ud83d\ude80 Recommended Tool Selection\n\n### Primary Tool Choice: {{primary_tool | default('[To be determined]')}}\n**Justification**:\n{% if primary_justification %}\n{{primary_justification}}\n{% else %}\n- Best match for core requirements\n- Optimal resource/performance balance\n- Proven reliability for this use case\n- Good integration characteristics\n{% endif %}\n\n**Configuration**:\n- **Parameters**: {{primary_config | default('Default settings recommended')}}\n- **Resource Allocation**: {{primary_resources | default('Standard allocation')}}\n- **Expected Performance**: {{primary_performance | default('High quality results expected')}}\n\n### Backup Tool Choice: {{backup_tool | default('[Fallback if needed]')}}\n**Fallback Scenario**: {{fallback_scenario | default('If primary tool fails or is unavailable')}}\n**Differences**: {{backup_differences | default('May have different performance characteristics')}}\n\n### Tool Combination Strategy\n{% if tool_combination %}\n**Multi-Tool Approach**: {{tool_combination.strategy}}\n**Workflow**:\n{% for step in tool_combination.steps %}\n{{loop.index}}. **{{step.tool}}**: {{step.purpose}}\n   - Input: {{step.input}}\n   - Output: {{step.output}}\n{% endfor %}\n{% else %}\n**Single Tool Approach**: Use primary tool for entire task\n**Rationale**: Task complexity doesn't warrant multiple tools\n{% endif %}\n\n## \u26a0\ufe0f Risk Assessment & Mitigation\n\n### Potential Issues:\n{% if potential_issues %}\n{% for issue in potential_issues %}\n- **{{issue.type}}**: {{issue.description}}\n  - **Probability**: {{issue.probability}}\n  - **Impact**: {{issue.impact}}\n  - **Mitigation**: {{issue.mitigation}}\n{% endfor %}\n{% else %}\n- Tool availability issues\n- Performance degradation under load\n- Integration compatibility problems\n- Unexpected output format changes\n{% endif %}\n\n### Monitoring Strategy:\n- **Success Metrics**: {{success_metrics | default('Output quality, execution time, error rate')}}\n- **Warning Thresholds**: {{warning_thresholds | default('Performance 20% below expected')}}\n- **Failover Triggers**: {{failover_triggers | default('3 consecutive failures or 50% performance drop')}}\n\n## \ud83d\udcca Expected Outcomes\n\n### Performance Predictions:\n- **Execution Time**: {{predicted_time | default('Based on tool specifications')}}\n- **Resource Usage**: {{predicted_resources | default('Within allocated limits')}}\n- **Output Quality**: {{predicted_quality | default('High quality expected')}}\n- **Success Probability**: {{success_probability | default('85-95% based on tool reliability')}}\n\n### Quality Gates:\n1. **Input Validation**: Ensure input meets tool requirements\n2. **Process Monitoring**: Track execution progress and performance\n3. **Output Verification**: Validate output format and content\n4. **Integration Testing**: Confirm compatibility with downstream processes\n\n## \ud83c\udfaf **Final Tool Selection Decision**\n\n**Selected Tool(s)**: {{final_selection | default('[Decision pending analysis]')}}\n**Confidence Level**: {{confidence_level | default('High')}}\n**Implementation Priority**: {{implementation_priority | default('Immediate')}}\n\n**Next Steps**:\n1. {{next_step_1 | default('Validate tool availability and configuration')}}\n2. {{next_step_2 | default('Set up monitoring and error handling')}}\n3. {{next_step_3 | default('Execute initial test run')}}\n4. {{next_step_4 | default('Deploy to production workflow')}}\n\n---\n\n**Selection Rationale Summary**: {{selection_summary | default('Comprehensive analysis of requirements, capabilities, and constraints led to optimal tool choice for this specific task context.')}}",
+      "input_variables": [
+        "objective",
+        "available_tools"
+      ],
+      "optional_variables": [
+        "domain",
+        "complexity_level",
+        "available_resources",
+        "time_constraints",
+        "primary_requirements",
+        "secondary_requirements",
+        "task_type",
+        "preferred_capabilities",
+        "capability_weight",
+        "resource_weight",
+        "speed_weight",
+        "reliability_weight",
+        "integration_weight",
+        "primary_tool",
+        "primary_justification",
+        "primary_config",
+        "primary_resources",
+        "primary_performance",
+        "backup_tool",
+        "fallback_scenario",
+        "backup_differences",
+        "tool_combination",
+        "potential_issues",
+        "success_metrics",
+        "warning_thresholds",
+        "failover_triggers",
+        "predicted_time",
+        "predicted_resources",
+        "predicted_quality",
+        "success_probability",
+        "final_selection",
+        "confidence_level",
+        "implementation_priority",
+        "next_step_1",
+        "next_step_2",
+        "next_step_3",
+        "next_step_4",
+        "selection_summary"
+      ],
+      "metadata": {
+        "use_case": "Intelligently selecting the best tools for specific tasks based on requirements and constraints",
+        "complexity": "high",
+        "domain": "agentic",
+        "tags": [
+          "tool-selection",
+          "decision-making",
+          "optimization",
+          "analysis",
+          "strategy"
+        ],
+        "author": null,
+        "created_at": "2025-07-31 10:06:57.354535",
+        "updated_at": "2025-07-31 10:06:57.354536",
+        "version": "1.0.0",
+        "description": "Template for systematic tool selection based on task requirements, constraints, and available options",
+        "examples": [
+          {
+            "objective": "Generate comprehensive market research report",
+            "available_tools": [
+              {
+                "name": "web_scraper",
+                "category": "data_collection",
+                "capabilities": [
+                  "web_scraping",
+                  "data_extraction"
+                ],
+                "best_for": "gathering online information"
+              },
+              {
+                "name": "data_analyzer",
+                "category": "analysis",
+                "capabilities": [
+                  "statistical_analysis",
+                  "visualization"
+                ],
+                "best_for": "processing large datasets"
+              }
+            ]
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "objective": {
+          "type": "str"
+        },
+        "available_tools": {
+          "type": "list"
+        },
+        "complexity_level": {
+          "type": "str",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "very_high"
+          ]
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "tool_planning": {
+      "template_id": "tool_planning",
+      "name": "Multi-Step Tool Planning",
+      "type": "agentic",
+      "template": "# \ud83e\udd16 Agent Tool Planning System\n\n## Task Overview\n**Goal**: {{goal}}\n**Available Tools**: {{available_tools}}\n{% if context %}**Context**: {{context}}{% endif %}\n\n## \ud83d\udccb Planning Framework\n\n### 1\ufe0f\u20e3 **Task Analysis**\n- Break down the goal into actionable steps\n- Identify dependencies between steps\n- Determine required tools for each step\n\n### 2\ufe0f\u20e3 **Tool Selection Strategy**\n{% for tool in available_tools %}\n- **{{tool.name}}**: {{tool.description}}\n  - Use when: {{tool.use_case}}\n  - Input requirements: {{tool.inputs}}\n{% endfor %}\n\n### 3\ufe0f\u20e3 **Execution Plan**\nCreate a step-by-step plan in this format:\n\n**Step X**: [Action description]\n- Tool: [tool_name]\n- Input: [specific inputs needed]\n- Expected output: [what this step will produce]\n- Dependencies: [what must be completed first]\n\n### 4\ufe0f\u20e3 **Contingency Planning**\n- What could go wrong at each step?\n- Alternative approaches if primary plan fails\n- Recovery strategies\n\n## \ud83c\udfaf **Execution Plan**\n[Your detailed step-by-step plan here]",
+      "input_variables": [
+        "goal",
+        "available_tools"
+      ],
+      "optional_variables": [
+        "context",
+        "constraints",
+        "success_criteria"
+      ],
+      "metadata": {
+        "use_case": "Planning multi-step tool usage for AI agents",
+        "complexity": "high",
+        "domain": "agentic",
+        "tags": [
+          "agents",
+          "planning",
+          "tools",
+          "multi-step",
+          "workflow"
+        ],
+        "author": null,
+        "created_at": "2025-07-31 10:06:57.354688",
+        "updated_at": "2025-07-31 10:06:57.354689",
+        "version": "1.0.0",
+        "description": "Template for planning complex multi-step workflows with tool usage",
+        "examples": [
+          {
+            "goal": "Research and create a market analysis report",
+            "available_tools": [
+              {
+                "name": "web_search",
+                "description": "Search web for information",
+                "use_case": "gathering market data",
+                "inputs": "search query"
+              },
+              {
+                "name": "data_analyzer",
+                "description": "Analyze datasets",
+                "use_case": "statistical analysis",
+                "inputs": "data file"
+              }
+            ]
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "goal": {
+          "type": "str"
+        },
+        "available_tools": {
+          "type": "list"
+        },
+        "context": {
+          "type": "str"
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "workflow_orchestration": {
+      "template_id": "workflow_orchestration",
+      "name": "Complex Workflow Orchestration",
+      "type": "agentic",
+      "template": "# \ud83c\udfbc Workflow Orchestration Engine\n\n## Workflow Overview\n**Workflow Name**: {{workflow_name}}\n**Total Steps**: {{total_steps}}\n**Current Status**: {{current_status | default('Initializing')}}\n**Priority Level**: {{priority | default('Medium')}}\n\n## \ud83d\udccb Workflow Definition\n\n### Input Requirements:\n{% for input in inputs %}\n- **{{input.name}}**: {{input.description}} (Type: {{input.type}}, Required: {{input.required | default('Yes')}})\n{% endfor %}\n\n### Expected Outputs:\n{% for output in expected_outputs %}\n- **{{output.name}}**: {{output.description}} (Format: {{output.format}})\n{% endfor %}\n\n## \ud83d\udd04 Step-by-Step Orchestration\n\n{% for step in workflow_steps %}\n### Step {{step.id}}: {{step.name}}\n**Type**: {{step.type}}\n**Agent/Tool**: {{step.executor}}\n**Dependencies**: {{step.dependencies | join(', ') if step.dependencies else 'None'}}\n**Estimated Duration**: {{step.duration | default('Unknown')}}\n\n**Inputs**:\n{% for input in step.inputs %}\n- {{input.name}}: {{input.source}} ({{input.type}})\n{% endfor %}\n\n**Processing Logic**:\n{{step.logic}}\n\n**Success Criteria**:\n{% for criteria in step.success_criteria %}\n- {{criteria}}\n{% endfor %}\n\n**Error Handling**:\n- **Retry Logic**: {{step.retry_logic | default('Exponential backoff, max 3 attempts')}}\n- **Fallback**: {{step.fallback | default('Skip step and continue with degraded functionality')}}\n- **Escalation**: {{step.escalation | default('Alert supervisor after 2 failures')}}\n\n**Output Specification**:\n{% for output in step.outputs %}\n- {{output.name}}: {{output.description}} \u2192 Goes to: {{output.destination}}\n{% endfor %}\n\n---\n{% endfor %}\n\n## \ud83d\udd00 Orchestration Control Flow\n\n### Parallel Execution Opportunities:\n{% if parallel_groups %}\n{% for group in parallel_groups %}\n- **Group {{group.id}}**: Steps {{group.steps | join(', ')}} can run simultaneously\n  - Resource requirements: {{group.resources}}\n  - Synchronization point: Step {{group.sync_point}}\n{% endfor %}\n{% else %}\n- Analyze steps for parallelization opportunities\n- Identify resource conflicts and dependencies\n- Optimize execution order for minimum total time\n{% endif %}\n\n### Critical Path Analysis:\n- **Longest sequence**: {{critical_path | join(' \u2192 ') if critical_path else 'To be determined'}}\n- **Total estimated time**: {{total_estimated_time | default('Sum of critical path')}}\n- **Bottleneck steps**: {{bottlenecks | join(', ') if bottlenecks else 'To be identified'}}\n\n### Decision Points:\n{% if decision_points %}\n{% for decision in decision_points %}\n- **After Step {{decision.after_step}}**: {{decision.condition}}\n  - If True: Continue to Step {{decision.if_true}}\n  - If False: {{decision.if_false}}\n{% endfor %}\n{% else %}\n- No conditional branching in this workflow\n{% endif %}\n\n## \ud83d\udcca Monitoring & Control\n\n### Progress Tracking:\n- **Completion Percentage**: {{completion_percentage | default('0%')}}\n- **Steps Completed**: {{completed_steps | default('None')}} / {{total_steps}}\n- **Current Bottlenecks**: {{current_bottlenecks | default('None identified')}}\n- **Resource Utilization**: {{resource_utilization | default('Normal')}}\n\n### Quality Gates:\n{% if quality_gates %}\n{% for gate in quality_gates %}\n- **After Step {{gate.step}}**: {{gate.check}}\n  - Pass Criteria: {{gate.criteria}}\n  - Fail Action: {{gate.fail_action}}\n{% endfor %}\n{% else %}\n- Quality validation after each major milestone\n- Output format verification before handoffs\n- Final quality check before workflow completion\n{% endif %}\n\n### Error Recovery Strategies:\n1. **Step-Level Recovery**: Individual step retry with modified parameters\n2. **Workflow-Level Recovery**: Restart from last successful checkpoint\n3. **Human Intervention**: Escalate complex errors to human operators\n4. **Graceful Degradation**: Complete workflow with reduced functionality\n\n## \ud83c\udfaf Execution Commands\n\n### Start Workflow:\n```\nSTART_WORKFLOW: {{workflow_name}}\nMODE: {{execution_mode | default('automatic')}}\nPRIORITY: {{priority}}\nINPUTS: [Validated input parameters]\n```\n\n### Monitor Progress:\n```\nGET_STATUS: {{workflow_name}}\nDETAIL_LEVEL: {{detail_level | default('summary')}}\nINCLUDE_METRICS: {{include_metrics | default('true')}}\n```\n\n### Handle Interventions:\n```\nPAUSE_WORKFLOW: [At decision points or errors]\nRESUME_WORKFLOW: [After manual intervention]\nMODIFY_STEP: [Adjust parameters mid-execution]\nSKIP_STEP: [Continue without problematic step]\n```\n\n## \ud83d\ude80 **Initialize Workflow Execution**\n\n**Pre-flight Checklist**:\n- \u2705 All required inputs validated\n- \u2705 Agent/tool availability confirmed\n- \u2705 Resource allocation verified\n- \u2705 Error handling procedures activated\n- \u2705 Monitoring systems engaged\n\n**Execution Status**: {{execution_status | default('Ready to Start')}}\n**Next Action**: {{next_action | default('Begin Step 1')}}\n\n---\n\n{% if current_status == 'Running' %}\n**Currently Executing**: Step {{current_step}} - {{current_step_name}}\n**Progress**: {{step_progress | default('In progress...')}}\n**ETA**: {{estimated_completion | default('Calculating...')}}\n{% elif current_status == 'Completed' %}\n**Workflow Completed Successfully** \u2705\n**Total Duration**: {{actual_duration}}\n**Final Outputs**: {{final_outputs | join(', ')}}\n{% elif current_status == 'Error' %}\n**Workflow Paused Due to Error** \u26a0\ufe0f\n**Error Location**: Step {{error_step}}\n**Error Details**: {{error_details}}\n**Recovery Options**: {{recovery_options | join(', ')}}\n{% endif %}",
+      "input_variables": [
+        "workflow_name",
+        "total_steps",
+        "inputs",
+        "expected_outputs",
+        "workflow_steps"
+      ],
+      "optional_variables": [
+        "current_status",
+        "priority",
+        "parallel_groups",
+        "critical_path",
+        "total_estimated_time",
+        "bottlenecks",
+        "decision_points",
+        "completion_percentage",
+        "completed_steps",
+        "current_bottlenecks",
+        "resource_utilization",
+        "quality_gates",
+        "execution_mode",
+        "detail_level",
+        "include_metrics",
+        "execution_status",
+        "next_action",
+        "current_step",
+        "current_step_name",
+        "step_progress",
+        "estimated_completion",
+        "actual_duration",
+        "final_outputs",
+        "error_step",
+        "error_details",
+        "recovery_options"
+      ],
+      "metadata": {
+        "use_case": "Orchestrating complex multi-step workflows with multiple agents and tools",
+        "complexity": "high",
+        "domain": "agentic",
+        "tags": [
+          "orchestration",
+          "workflow",
+          "multi-step",
+          "coordination",
+          "monitoring",
+          "error-handling"
+        ],
+        "author": null,
+        "created_at": "2025-07-31 10:06:57.354840",
+        "updated_at": "2025-07-31 10:06:57.354841",
+        "version": "1.0.0",
+        "description": "Template for managing complex workflows with multiple agents, tools, and decision points",
+        "examples": [
+          {
+            "workflow_name": "Automated Content Creation Pipeline",
+            "total_steps": 6,
+            "inputs": [
+              {
+                "name": "topic",
+                "description": "Content topic",
+                "type": "string",
+                "required": true
+              },
+              {
+                "name": "target_audience",
+                "description": "Intended audience",
+                "type": "string",
+                "required": true
+              }
+            ],
+            "expected_outputs": [
+              {
+                "name": "final_article",
+                "description": "Complete article with images",
+                "format": "markdown"
+              }
+            ]
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "workflow_name": {
+          "type": "str"
+        },
+        "total_steps": {
+          "type": "int"
+        },
+        "inputs": {
+          "type": "list"
+        },
+        "expected_outputs": {
+          "type": "list"
+        },
+        "workflow_steps": {
+          "type": "list"
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "agent_reflection": {
+      "template_id": "agent_reflection",
+      "name": "Agent Self-Reflection and Learning",
+      "type": "agentic",
+      "template": "# \ud83e\udde0 Agent Reflection & Learning System\n\n## Task Performance Review\n**Completed Task**: {{task_description}}\n**Execution Duration**: {{duration | default('Not specified')}}\n**Final Outcome**: {{outcome}}\n**Success Level**: {{success_level | default('Partial Success')}}\n\n## \ud83d\udcca Performance Analysis\n\n### What Went Well? \u2705\n{% if successes %}\n{% for success in successes %}\n- **{{success.category}}**: {{success.description}}\n  - Impact: {{success.impact}}\n  - Why it worked: {{success.reason}}\n{% endfor %}\n{% else %}\n[Analyze successful aspects of the task execution]\n- Tool usage effectiveness\n- Problem-solving approach\n- Resource utilization\n- Communication clarity\n{% endif %}\n\n### What Could Be Improved? \ud83d\udd04\n{% if improvements %}\n{% for improvement in improvements %}\n- **{{improvement.area}}**: {{improvement.issue}}\n  - Root cause: {{improvement.cause}}\n  - Suggested fix: {{improvement.solution}}\n  - Priority: {{improvement.priority}}\n{% endfor %}\n{% else %}\n[Identify areas for improvement]\n- Efficiency bottlenecks\n- Decision-making quality\n- Tool selection accuracy\n- Error handling effectiveness\n{% endif %}\n\n### Challenges Encountered \ud83d\udea7\n{% if challenges %}\n{% for challenge in challenges %}\n- **Challenge**: {{challenge.description}}\n  - How handled: {{challenge.response}}\n  - Effectiveness: {{challenge.effectiveness}}\n  - Alternative approaches: {{challenge.alternatives}}\n{% endfor %}\n{% else %}\n[Document significant challenges faced]\n- Unexpected obstacles\n- Resource limitations\n- Tool failures or limitations\n- Coordination difficulties\n{% endif %}\n\n## \ud83c\udfaf Strategy Effectiveness Assessment\n\n### Tool Selection & Usage\n{% if tools_used %}\n{% for tool in tools_used %}\n- **{{tool.name}}**\n  - Appropriateness: {{tool.appropriateness}}/10\n  - Efficiency: {{tool.efficiency}}/10\n  - Result Quality: {{tool.quality}}/10\n  - Would use again: {{tool.reuse | default('Yes')}}\n{% endfor %}\n{% else %}\n[Evaluate tool choices and their effectiveness]\n- Were the right tools selected for each task?\n- How efficiently were tools utilized?\n- Did tools produce expected quality results?\n{% endif %}\n\n### Decision-Making Process\n- **Speed**: How quickly were decisions made?\n- **Accuracy**: Were decisions well-informed and correct?\n- **Adaptability**: How well did the agent adapt when plans changed?\n- **Risk Assessment**: Were potential risks properly evaluated?\n\n## \ud83d\udcda Learning Extraction\n\n### Key Insights Gained \ud83d\udca1\n{% if insights %}\n{% for insight in insights %}\n- **{{insight.topic}}**: {{insight.learning}}\n  - Application: {{insight.application}}\n  - Confidence: {{insight.confidence}}\n{% endfor %}\n{% else %}\n[Extract actionable insights for future tasks]\n- Pattern recognition improvements\n- Strategy refinements\n- Tool usage optimizations\n- Error prevention methods\n{% endif %}\n\n### Updated Mental Models \ud83e\udde9\n- What assumptions were challenged?\n- How has understanding of the problem domain evolved?\n- What new patterns or relationships were discovered?\n- How should approach be modified for similar future tasks?\n\n## \ud83d\ude80 Optimization Recommendations\n\n### For Similar Future Tasks:\n1. **Planning Phase**:\n   - {{planning_recommendations | default('Apply learnings to improve initial planning')}}\n   \n2. **Execution Phase**:\n   - {{execution_recommendations | default('Implement identified efficiency improvements')}}\n   \n3. **Monitoring Phase**:\n   - {{monitoring_recommendations | default('Enhance progress tracking and early warning systems')}}\n\n### Skill Development Priorities:\n{% if skill_priorities %}\n{% for skill in skill_priorities %}\n- **{{skill.name}}**: {{skill.description}} (Priority: {{skill.priority}})\n{% endfor %}\n{% else %}\n- [Identify specific skills to develop based on performance gaps]\n- Tool mastery improvements\n- Problem decomposition techniques\n- Error recovery strategies\n{% endif %}\n\n## \ud83d\udcc8 Success Metrics for Next Time\n\n{% if future_metrics %}\n{% for metric in future_metrics %}\n- **{{metric.name}}**: {{metric.description}} (Target: {{metric.target}})\n{% endfor %}\n{% else %}\n- **Efficiency**: Complete similar tasks X% faster\n- **Accuracy**: Achieve higher success rate on first attempt\n- **Resource Usage**: Optimize tool usage for better resource efficiency\n- **Quality**: Improve output quality metrics\n{% endif %}\n\n## \ud83c\udfaf **Action Items for Continuous Improvement**\n\n**Immediate Actions** (Next 1-3 tasks):\n- [List 2-3 specific improvements to implement immediately]\n\n**Medium-term Development** (Next 5-10 tasks):\n- [List strategic improvements requiring more practice]\n\n**Long-term Learning Goals** (Ongoing development):\n- [List fundamental skill areas for continued growth]\n\n---\n\n**Reflection Confidence**: {{reflection_confidence | default('80%')}}\n**Ready for Next Challenge**: {{readiness_level | default('Yes, with improvements implemented')}}",
+      "input_variables": [
+        "task_description",
+        "outcome"
+      ],
+      "optional_variables": [
+        "duration",
+        "success_level",
+        "successes",
+        "improvements",
+        "challenges",
+        "tools_used",
+        "insights",
+        "planning_recommendations",
+        "execution_recommendations",
+        "monitoring_recommendations",
+        "skill_priorities",
+        "future_metrics",
+        "reflection_confidence",
+        "readiness_level"
+      ],
+      "metadata": {
+        "use_case": "Post-task reflection and learning for AI agents to improve future performance",
+        "complexity": "high",
+        "domain": "agentic",
+        "tags": [
+          "reflection",
+          "learning",
+          "self-improvement",
+          "performance-analysis",
+          "optimization"
+        ],
+        "author": null,
+        "created_at": "2025-07-31 10:06:57.354960",
+        "updated_at": "2025-07-31 10:06:57.354961",
+        "version": "1.0.0",
+        "description": "Template for agents to analyze their performance and extract learning for future improvement",
+        "examples": [
+          {
+            "task_description": "Research and create market analysis report for new product launch",
+            "outcome": "Completed comprehensive 15-page report with market size, competition analysis, and recommendations",
+            "success_level": "Partial Success"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "task_description": {
+          "type": "str"
+        },
+        "outcome": {
+          "type": "str"
+        },
+        "success_level": {
+          "type": "str",
+          "enum": [
+            "Complete Success",
+            "Partial Success",
+            "Mixed Results",
+            "Needs Improvement"
+          ]
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "agent_coordinator": {
+      "template_id": "agent_coordinator",
+      "name": "Multi-Agent Coordination",
+      "type": "agentic",
+      "template": "# \ud83c\udfad Multi-Agent Coordination System\n\n## Mission Brief\n**Primary Objective**: {{objective}}\n**Available Agents**: {{agents}}\n**Coordination Mode**: {{coordination_mode | default('collaborative')}}\n\n## \ud83e\udd1d Agent Roles & Responsibilities\n\n{% for agent in agents %}\n### {{agent.name}} Agent\n- **Specialty**: {{agent.specialty}}\n- **Capabilities**: {{agent.capabilities | join(', ')}}\n- **Role in Mission**: {{agent.role}}\n- **Communication Protocol**: {{agent.communication | default('standard')}}\n{% endfor %}\n\n## \ud83d\udcca Coordination Strategy\n\n### Phase 1: Task Distribution\n1. **Analyze** the objective and break into sub-tasks\n2. **Assign** tasks based on agent specialties\n3. **Define** handoff points between agents\n4. **Establish** success criteria for each task\n\n### Phase 2: Execution Coordination\n- **Parallel Tasks**: Tasks that can run simultaneously\n- **Sequential Dependencies**: Tasks that must wait for others\n- **Critical Path**: The longest sequence of dependent tasks\n- **Resource Conflicts**: Shared resources that need coordination\n\n### Phase 3: Integration & Quality Control\n- **Output Integration**: How agent outputs combine\n- **Quality Checkpoints**: Validation at each stage\n- **Error Handling**: Recovery from agent failures\n- **Final Assembly**: Consolidating results\n\n## \ud83d\udd04 Execution Protocol\n\n{% if coordination_mode == 'hierarchical' %}\n**Hierarchical Mode**: Central coordinator assigns and manages tasks\n1. Coordinator analyzes objective\n2. Delegates specific tasks to specialized agents\n3. Monitors progress and adjusts assignments\n4. Integrates outputs into final result\n{% elif coordination_mode == 'collaborative' %}\n**Collaborative Mode**: Agents negotiate and self-organize\n1. All agents review the objective together\n2. Agents negotiate task assignments based on capabilities\n3. Establish peer-to-peer communication channels\n4. Collaborate on integration and quality control\n{% else %}\n**Sequential Mode**: Agents work in defined sequence\n1. Define the processing pipeline\n2. Each agent processes and passes to next\n3. Maintain state and context through handoffs\n4. Final agent produces integrated result\n{% endif %}\n\n## \ud83d\udcdd Communication Protocol\n\n**Status Updates**: {{status_frequency | default('After each major task')}}\n**Conflict Resolution**: {{conflict_resolution | default('Escalate to coordinator')}}\n**Progress Tracking**: {{progress_tracking | default('Shared status board')}}\n\n## \ud83c\udfaf Success Metrics\n\n{% if success_metrics %}\n{% for metric in success_metrics %}\n- **{{metric.name}}**: {{metric.description}} (Target: {{metric.target}})\n{% endfor %}\n{% else %}\n- **Completeness**: All sub-tasks completed successfully\n- **Quality**: Output meets specified criteria\n- **Efficiency**: Completed within time/resource constraints\n- **Coordination**: Smooth handoffs between agents\n{% endif %}\n\n## \ud83d\ude80 **Execute Coordination Plan**\n[Your specific coordination strategy and task assignments here]",
+      "input_variables": [
+        "objective",
+        "agents"
+      ],
+      "optional_variables": [
+        "coordination_mode",
+        "success_metrics",
+        "status_frequency",
+        "conflict_resolution",
+        "progress_tracking"
+      ],
+      "metadata": {
+        "use_case": "Coordinating multiple AI agents working together on complex tasks",
+        "complexity": "high",
+        "domain": "agentic",
+        "tags": [
+          "multi-agent",
+          "coordination",
+          "collaboration",
+          "workflow",
+          "delegation"
+        ],
+        "author": null,
+        "created_at": "2025-07-31 10:06:57.355060",
+        "updated_at": "2025-07-31 10:06:57.355061",
+        "version": "1.0.0",
+        "description": "Template for coordinating multiple AI agents with different specialties",
+        "examples": [
+          {
+            "objective": "Create comprehensive business plan",
+            "agents": [
+              {
+                "name": "Researcher",
+                "specialty": "Market Research",
+                "capabilities": [
+                  "web_search",
+                  "data_analysis"
+                ],
+                "role": "Gather market intelligence"
+              },
+              {
+                "name": "Analyst",
+                "specialty": "Financial Analysis",
+                "capabilities": [
+                  "financial_modeling",
+                  "projections"
+                ],
+                "role": "Create financial projections"
+              },
+              {
+                "name": "Writer",
+                "specialty": "Document Creation",
+                "capabilities": [
+                  "writing",
+                  "formatting"
+                ],
+                "role": "Compile final business plan"
+              }
+            ]
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "objective": {
+          "type": "str"
+        },
+        "agents": {
+          "type": "list"
+        },
+        "coordination_mode": {
+          "type": "str",
+          "enum": [
+            "hierarchical",
+            "collaborative",
+            "sequential"
+          ]
         }
       },
       "langgraph_config": null,

@@ -13,6 +13,7 @@ class TemplateType(str, Enum):
     FEW_SHOT = "few_shot"
     ADVANCED = "advanced"
     DOMAIN_SPECIFIC = "domain_specific"
+    AGENTIC = "agentic"
     LANGGRAPH_WORKFLOW = "langgraph_workflow"
 
 

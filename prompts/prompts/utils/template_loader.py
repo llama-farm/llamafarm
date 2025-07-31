@@ -47,7 +47,8 @@ class TemplateLoader:
             "chat", 
             "few_shot",
             "advanced",
-            "domain_specific"
+            "domain_specific",
+            "agentic"
         ]
         
         for category in category_dirs:

@@ -2,6 +2,16 @@
 
 # LlamaFarm Prompts Management System - Complete Setup and Demo
 # This script sets up the environment and runs comprehensive demonstrations
+#
+# UPDATED: Now includes 6 comprehensive agentic templates:
+# - tool_planning: Multi-step workflow planning with tool selection
+# - agent_coordinator: Multi-agent coordination for complex tasks  
+# - tool_execution: Structured tool execution with validation
+# - workflow_orchestration: Complex workflow management with decision points
+# - agent_reflection: Agent self-reflection and learning capabilities
+# - tool_selection: Intelligent tool selection based on requirements
+#
+# Features live LLM integration (OpenAI + Ollama) for real agentic demonstrations
 
 set -e  # Exit on any error
 
@@ -20,7 +30,7 @@ print_banner() {
     echo -e "${BLUE}║                    🚀 LlamaFarm Prompts System                     ║${NC}"
     echo -e "${BLUE}║                   Complete Setup and Demo Script                   ║${NC}"
     echo -e "${BLUE}║                                                                    ║${NC}"
-    echo -e "${BLUE}║  • 14 Templates across 5 categories                               ║${NC}"
+    echo -e "${BLUE}║  • 20 Templates across 6 categories (including 6 agentic)        ║${NC}"
     echo -e "${BLUE}║  • 3 Intelligent selection strategies                             ║${NC}"
     echo -e "${BLUE}║  • 5 Comprehensive evaluation templates                           ║${NC}"
     echo -e "${BLUE}║  • Live LLM integration (OpenAI + Ollama)                         ║${NC}"
@@ -158,7 +168,7 @@ demo_template_categories() {
     echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
     echo
     
-    echo -e "${CYAN}Displaying all 14 templates across 5 categories:${NC}"
+    echo -e "${CYAN}Displaying all 20 templates across 6 categories:${NC}"
     uv run python -m prompts.cli template list
     echo
 }
@@ -291,6 +301,88 @@ demo_evaluation_templates() {
             "variant_b_responses": "Long, thorough explanations",
             "evaluation_metrics": "Accuracy, completeness, user satisfaction"
         }' 2>/dev/null | head -15
+    echo
+}
+
+# Demo: Agentic Templates
+demo_agentic_templates() {
+    echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${PURPLE}🤖 AGENTIC TEMPLATES SHOWCASE${NC}"
+    echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo
+    
+    echo -e "${CYAN}Demonstrating 6 comprehensive agentic templates for multi-agent workflows...${NC}"
+    echo
+    
+    # Tool Planning Template
+    echo -e "${YELLOW}🔧 Tool Planning Template:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Plans multi-step workflows with intelligent tool selection"
+    uv run python -m prompts.cli execute "Plan a multi-step market research workflow" \
+        --template tool_planning \
+        --variables '{
+            "goal": "Research and create comprehensive market analysis report",
+            "available_tools": [
+                {"name": "web_search", "description": "Search web for information", "use_case": "gathering market data", "inputs": "search query"},
+                {"name": "data_analyzer", "description": "Analyze datasets", "use_case": "statistical analysis", "inputs": "data file"},
+                {"name": "report_generator", "description": "Generate formatted reports", "use_case": "document creation", "inputs": "structured data"}
+            ]
+        }' 2>/dev/null | head -20
+    echo
+    
+    # Agent Coordinator Template
+    echo -e "${YELLOW}🎭 Agent Coordinator Template:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Coordinates multiple agents for complex business tasks"
+    uv run python -m prompts.cli execute "Coordinate agents for business plan creation" \
+        --template agent_coordinator \
+        --variables '{
+            "objective": "Create comprehensive business plan for tech startup",
+            "agents": [
+                {"name": "Researcher", "specialty": "Market Research", "capabilities": ["web_search", "data_analysis"], "role": "Gather market intelligence"},
+                {"name": "Analyst", "specialty": "Financial Analysis", "capabilities": ["financial_modeling", "projections"], "role": "Create financial projections"},
+                {"name": "Writer", "specialty": "Document Creation", "capabilities": ["writing", "formatting"], "role": "Compile final business plan"}
+            ]
+        }' 2>/dev/null | head -20
+    echo
+    
+    # Tool Execution Template
+    echo -e "${YELLOW}⚙️ Tool Execution Template:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Structured framework for executing individual tools with validation"
+    uv run python -m prompts.cli execute "Execute web search tool with validation" \
+        --template tool_execution \
+        --variables '{
+            "action": "Search for AI market trends",
+            "tool_name": "web_search",
+            "current_step": 2,
+            "total_steps": 5,
+            "tool_purpose": "Gather market intelligence on AI adoption trends",
+            "expected_output": "List of recent AI market reports and statistics"
+        }' 2>/dev/null | head -20
+    echo
+    
+    # Workflow Orchestration Template
+    echo -e "${YELLOW}🎼 Workflow Orchestration Template:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Manages complex workflows with multiple agents and decision points"
+    uv run python -m prompts.cli execute "Orchestrate content creation pipeline" \
+        --template workflow_orchestration \
+        --variables '{
+            "workflow_name": "Automated Content Creation Pipeline",
+            "total_steps": 4,
+            "inputs": [
+                {"name": "topic", "description": "Content topic", "type": "string", "required": true},
+                {"name": "target_audience", "description": "Intended audience", "type": "string", "required": true}
+            ],
+            "expected_outputs": [
+                {"name": "final_article", "description": "Complete article with images", "format": "markdown"}
+            ],
+            "workflow_steps": [
+                {"id": 1, "name": "Research Phase", "type": "data_collection", "executor": "research_agent"},
+                {"id": 2, "name": "Content Generation", "type": "content_creation", "executor": "writer_agent"}
+            ]
+        }' 2>/dev/null | head -20
     echo
 }
 
@@ -438,18 +530,82 @@ async def main():
     print("─" * 80)
     print()
     
-    # Example 2: LLM Judge
+    # Example 2: Agent Tool Planning (AGENTIC)
     print("═" * 80)
-    print("⚖️ Example 2: LLM Judge Evaluation")
+    print("🤖 Example 2: Agent Tool Planning Template (AGENTIC)")
+    print("═" * 80)
+    
+    planning_result = system.execute_prompt(
+        query="Plan a multi-step workflow for creating a market analysis report",
+        variables={
+            "goal": "Research and create comprehensive market analysis report for AI healthcare sector",
+            "available_tools": [
+                {"name": "web_search", "description": "Search web for current information", "use_case": "gathering market data and trends", "inputs": "search query"},
+                {"name": "data_analyzer", "description": "Analyze datasets and generate insights", "use_case": "statistical analysis and visualization", "inputs": "structured data file"},
+                {"name": "report_generator", "description": "Create formatted professional reports", "use_case": "document generation and formatting", "inputs": "structured content and data"}
+            ],
+            "context": "Healthcare AI market research project for Q4 2024"
+        },
+        template_override="tool_planning"
+    )
+    
+    print("\n📝 AGENTIC PLANNING PROMPT:")
+    print("─" * 80)
+    print(planning_result.rendered_prompt)
+    print("─" * 80)
+    
+    # Get planning response
+    planning_response, planning_provider = await call_llm(planning_result.rendered_prompt)
+    print(f"\n🎯 TOOL PLANNING RESPONSE (via {planning_provider}):")
+    print("─" * 80)
+    print(planning_response)
+    print("─" * 80)
+    print()
+    
+    # Example 3: Multi-Agent Coordination (AGENTIC)
+    print("═" * 80)
+    print("🎭 Example 3: Multi-Agent Coordination Template (AGENTIC)")
+    print("═" * 80)
+    
+    coord_result = system.execute_prompt(
+        query="Coordinate multiple AI agents for business plan development",
+        variables={
+            "objective": "Create comprehensive business plan for AI-powered healthcare startup",
+            "agents": [
+                {"name": "MarketResearcher", "specialty": "Market Analysis", "capabilities": ["web_search", "data_analysis", "trend_identification"], "role": "Research healthcare AI market, competitors, and opportunities"},
+                {"name": "FinancialAnalyst", "specialty": "Financial Planning", "capabilities": ["financial_modeling", "projections", "risk_assessment"], "role": "Develop financial projections and funding requirements"},
+                {"name": "TechnicalWriter", "specialty": "Document Creation", "capabilities": ["writing", "formatting", "presentation"], "role": "Compile and format the final business plan document"}
+            ],
+            "coordination_mode": "collaborative"
+        },
+        template_override="agent_coordinator"
+    )
+    
+    print("\n📝 AGENT COORDINATION PROMPT:")
+    print("─" * 80)
+    print(coord_result.rendered_prompt)
+    print("─" * 80)
+    
+    # Get coordination response
+    coord_response, coord_provider = await call_llm(coord_result.rendered_prompt)
+    print(f"\n🤝 COORDINATION STRATEGY (via {coord_provider}):")
+    print("─" * 80)
+    print(coord_response)
+    print("─" * 80)
+    print()
+    
+    # Example 4: LLM Judge Evaluation
+    print("═" * 80)
+    print("⚖️ Example 4: LLM Judge Evaluation")
     print("═" * 80)
     
     judge_result = system.execute_prompt(
-        query="Evaluate response",
+        query="Evaluate the agent coordination response",
         variables={
-            "original_query": "What are the main benefits of machine learning in healthcare?",
-            "response_to_evaluate": response,
-            "evaluation_criteria": "Medical accuracy, completeness, and clarity",
-            "context": [{"title": "Healthcare AI", "content": "ML improves diagnostics and treatment accuracy"}]
+            "original_query": "How should we coordinate multiple AI agents for business plan development?",
+            "response_to_evaluate": coord_response[:500] + "..." if len(coord_response) > 500 else coord_response,
+            "evaluation_criteria": "Clarity of coordination strategy, completeness of agent roles, and practical feasibility",
+            "context": [{"title": "Multi-Agent Systems", "content": "Effective coordination requires clear roles, communication protocols, and success metrics"}]
         },
         template_override="llm_judge"
     )
@@ -464,30 +620,6 @@ async def main():
     print(f"\n🎯 EVALUATION RESULT (via {eval_provider}):")
     print("─" * 80)
     print(evaluation)
-    print("─" * 80)
-    print()
-    
-    # Example 3: Chain of Thought
-    print("═" * 80)
-    print("🔍 Example 3: Chain of Thought Template")
-    print("═" * 80)
-    
-    cot_result = system.execute_prompt(
-        query="How does machine learning improve medical diagnosis accuracy?",
-        variables={"context": [{"title": "ML in Medicine", "content": "Pattern recognition in medical imaging, predictive analytics for disease progression, and integration with electronic health records"}]},
-        template_override="chain_of_thought"
-    )
-    
-    print("\n📝 CHAIN OF THOUGHT PROMPT:")
-    print("─" * 80)
-    print(cot_result.rendered_prompt)
-    print("─" * 80)
-    
-    # Get CoT response
-    cot_response, cot_provider = await call_llm(cot_result.rendered_prompt)
-    print(f"\n🧠 REASONING RESPONSE (via {cot_provider}):")
-    print("─" * 80)
-    print(cot_response)
     print("─" * 80)
 
 if __name__ == "__main__":
@@ -550,6 +682,15 @@ show_cli_examples() {
         --variables '{"domain": "medical", "context": [{"title": "Medical Guide", "content": "Diabetes symptoms include increased thirst"}]}' 2>/dev/null | head -20
     echo
     
+    # Agentic template example
+    echo -e "${YELLOW}🤖 Command: Agentic workflow planning${NC}"
+    echo -e "${BLUE}$ uv run python -m prompts.cli execute 'Plan workflow' --template tool_planning --variables '{...}'${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    uv run python -m prompts.cli execute 'Plan a multi-step data processing workflow' \
+        --template tool_planning \
+        --variables '{"goal": "Process customer data and generate insights", "available_tools": [{"name": "data_cleaner", "description": "Clean raw data", "use_case": "data preprocessing", "inputs": "raw dataset"}]}' 2>/dev/null | head -15
+    echo
+    
     # System statistics
     echo -e "${YELLOW}📊 Command: System statistics${NC}"
     echo -e "${BLUE}$ uv run python -m prompts.cli stats${NC}"
@@ -569,7 +710,7 @@ run_benchmark() {
     echo
     
     # Test different templates with timing
-    TEMPLATES=("qa_basic" "qa_detailed" "chain_of_thought" "medical_qa" "llm_judge")
+    TEMPLATES=("qa_basic" "qa_detailed" "chain_of_thought" "medical_qa" "llm_judge" "tool_planning" "agent_coordinator")
     
     for template in "${TEMPLATES[@]}"; do
         echo -e "${YELLOW}🔄 Testing $template template...${NC}"
@@ -581,6 +722,12 @@ run_benchmark() {
                 ;;
             "medical_qa")
                 VARS='{"domain": "medical", "context": [{"title": "Medical", "content": "Health info"}]}'
+                ;;
+            "tool_planning")
+                VARS='{"goal": "Test workflow", "available_tools": [{"name": "test_tool", "description": "Test", "use_case": "testing", "inputs": "test"}]}'
+                ;;
+            "agent_coordinator")
+                VARS='{"objective": "Test coordination", "agents": [{"name": "TestAgent", "specialty": "Testing", "capabilities": ["test"], "role": "Test role"}]}'
                 ;;
             *)
                 VARS='{"context": [{"title": "Test", "content": "Sample content"}]}'
@@ -609,7 +756,8 @@ show_summary() {
     echo
     
     echo -e "${GREEN}🎯 Key Achievements:${NC}"
-    echo -e "   ${CYAN}• 14 templates across 5 categories working perfectly${NC}"
+    echo -e "   ${CYAN}• 20 templates across 6 categories working perfectly${NC}"
+    echo -e "   ${CYAN}• 6 comprehensive agentic templates for multi-agent workflows${NC}"
     echo -e "   ${CYAN}• 3 intelligent selection strategies demonstrated${NC}"
     echo -e "   ${CYAN}• 5 evaluation templates for comprehensive assessment${NC}"
     echo -e "   ${CYAN}• CLI interface with 25+ commands ready for use${NC}"
@@ -651,6 +799,7 @@ main() {
     demo_strategy_selection
     demo_template_showcase
     demo_evaluation_templates
+    demo_agentic_templates
     demo_live_llm
     show_cli_examples
     run_benchmark
