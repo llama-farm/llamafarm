@@ -10,6 +10,11 @@ const Dashboard = lazy(() => import('../assets/icons/Dashboard'))
 const Data = lazy(() => import('../assets/icons/Data'))
 const Prompt = lazy(() => import('../assets/icons/Prompt'))
 const Test = lazy(() => import('../assets/icons/Test'))
+const Integration = lazy(() => import('../assets/icons/Integration'))
+const RecentlyViewed = lazy(() => import('../assets/icons/RecentlyViewed'))
+const Code = lazy(() => import('../assets/icons/Code'))
+const Edit = lazy(() => import('../assets/icons/Edit'))
+const Add = lazy(() => import('../assets/icons/Add'))
 
 type FontIconTypes =
   | 'sun'
@@ -22,6 +27,11 @@ type FontIconTypes =
   | 'data'
   | 'prompt'
   | 'test'
+  | 'integration'
+  | 'recently-viewed'
+  | 'code'
+  | 'edit'
+  | 'add'
 
 export interface FontIconProps {
   className?: string
@@ -60,6 +70,16 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Prompt />
       case 'test':
         return <Test />
+      case 'integration':
+        return <Integration />
+      case 'recently-viewed':
+        return <RecentlyViewed />
+      case 'code':
+        return <Code />
+      case 'edit':
+        return <Edit />
+      case 'add':
+        return <Add />
     }
   }, [type])
 

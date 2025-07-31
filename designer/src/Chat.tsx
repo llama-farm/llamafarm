@@ -7,7 +7,7 @@ function Chat() {
       <div className="w-1/4 h-full">
         <Chatbox />
       </div>
-      <div className="flex-1 h-full">
+      <div className="w-3/4 h-full">
         <BuildArea />
       </div>
     </div>
