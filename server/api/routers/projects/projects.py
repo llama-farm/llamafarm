@@ -31,9 +31,15 @@ router = APIRouter(
 
 @router.get("/{namespace}", response_model=ListProjectsResponse)
 async def list_projects(namespace: str):
+    projects = ProjectService.list_projects(namespace)
+    print(f"Projects: {projects}")
     return ListProjectsResponse(
-      total=0,
-      projects=[],
+      total=len(projects),
+      projects=[Project(
+        namespace=namespace,
+        name=project.name,
+        config=project.config,
+      ) for project in projects],
     )
 
 @router.post("/{namespace}", response_model=CreateProjectResponse)
@@ -48,19 +54,18 @@ async def create_project(namespace: str, request: CreateProjectRequest):
     )
 
 @router.get("/{namespace}/{project_id}", response_model=GetProjectResponse)
-async def get_project(namespace: str, project_id: int):
-    project = Project(
-        id=project_id,
-        name="test",
-        description="test",
-        namespace=namespace,
-    )
+async def get_project(namespace: str, project_id: str):
+    project = ProjectService.get_project(namespace, project_id)
     return GetProjectResponse(
-      project=project,
+      project=Project(
+        namespace=project.namespace,
+        name=project.name,
+        config=project.config,
+      ),
     )
 
 @router.delete("/{namespace}/{project_id}", response_model=DeleteProjectResponse)
-async def delete_project(namespace: str, project_id: int):
+async def delete_project(namespace: str, project_id: str):
     project = Project(
         id=project_id,
         name="test",
