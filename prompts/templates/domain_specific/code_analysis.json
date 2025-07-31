@@ -1,0 +1,38 @@
+{
+  "template_id": "code_analysis",
+  "name": "Code Analysis",
+  "type": "domain_specific",
+  "template": "Code to analyze:\n```\n{{ context }}\n```\n\nAnalysis request: {{ query }}\n\n💻 **CODE ANALYSIS REPORT**\n\n🏗️ **Structure & Organization**\n• How is the code structured and organized?\n• Is it readable and well-formatted?\n• Are naming conventions consistent?\n\n⚙️ **Logic & Functionality**\n• Does the code accomplish its intended purpose?\n• Is the logic clear and efficient?\n• Are there any logical errors or edge cases missed?\n\n⚠️ **Potential Issues**\n• Are there any bugs, security vulnerabilities, or performance problems?\n• What improvements could be made?\n• Are there any code smells or anti-patterns?\n\n📋 **Recommendations**\n• What specific changes would improve this code?\n• Are there better approaches or design patterns to consider?\n• What would make this code more maintainable?\n\n📊 **Overall Assessment**\nSummary of the code quality and key takeaways:\n\n**Final Rating:** [Rate the code quality and provide reasoning]",
+  "input_variables": ["context", "query"],
+  "optional_variables": [],
+  "metadata": {
+    "use_case": "code_review",
+    "complexity": "medium",
+    "domain": "software",
+    "description": "Code analysis and review template",
+    "tags": ["code", "programming", "review", "analysis"],
+    "author": "LlamaFarm Team",
+    "examples": [
+      {
+        "description": "Python function review",
+        "input": {
+          "query": "Review this function for potential improvements",
+          "context": "def fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)"
+        },
+        "expected_output": "## Code Analysis:\n\n**Structure & Organization:**\nThe function is clearly structured with a simple recursive approach...\n\n**Potential Issues:**\nThis recursive implementation has exponential time complexity..."
+      }
+    ]
+  },
+  "validation_rules": {
+    "query": {
+      "type": "str",
+      "min_length": 5,
+      "max_length": 1000,
+      "required": true
+    },
+    "context": {
+      "type": "str",
+      "required": true
+    }
+  }
+}

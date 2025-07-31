@@ -1,0 +1,82 @@
+{
+  "template_id": "ab_testing",
+  "name": "A/B Testing Comparison",
+  "type": "advanced",
+  "template": "# A/B Testing Analysis\n\n## Test Overview\n{{ test_description }}\n\n## Variant A Details\n**Name**: {{ variant_a_name }}\n**Configuration**: {{ variant_a_config }}\n**Sample Responses**:\n{{ variant_a_responses }}\n\n## Variant B Details\n**Name**: {{ variant_b_name }}\n**Configuration**: {{ variant_b_config }}\n**Sample Responses**:\n{{ variant_b_responses }}\n\n## Evaluation Metrics\n{{ evaluation_metrics }}\n\n🧪 **A/B TESTING COMPARATIVE ANALYSIS**\n\n📊 **Performance Comparison**\n\n**Response Quality Metrics**\n• **Accuracy**: Which variant provides more accurate information?\n• **Completeness**: Which variant gives more comprehensive answers?\n• **Relevance**: Which variant better addresses the user queries?\n• **Consistency**: Which variant shows more consistent performance?\n\n**User Experience Metrics**\n• **Clarity**: Which variant communicates more clearly?\n• **Usefulness**: Which variant provides more actionable insights?\n• **Engagement**: Which variant better engages users?\n• **Satisfaction**: Which variant would users prefer?\n\n**Technical Performance**\n• **Response Time**: How do processing speeds compare?\n• **Resource Usage**: What are the computational requirements?\n• **Reliability**: Which variant fails less often?\n• **Scalability**: Which variant handles load better?\n\n⚖️ **Side-by-Side Evaluation**\n\n**Variant A Strengths:**\n• [List specific advantages of Variant A]\n• [Examples of superior performance]\n• [Unique capabilities or features]\n\n**Variant A Weaknesses:**\n• [List specific limitations of Variant A]\n• [Examples of inferior performance]\n• [Missing features or capabilities]\n\n**Variant B Strengths:**\n• [List specific advantages of Variant B]\n• [Examples of superior performance]\n• [Unique capabilities or features]\n\n**Variant B Weaknesses:**\n• [List specific limitations of Variant B]\n• [Examples of inferior performance]\n• [Missing features or capabilities]\n\n📈 **Quantitative Comparison**\n\n**Scoring Matrix** (1-10 scale):\n\n| Metric | Variant A | Variant B | Winner |\n|--------|-----------|-----------|--------|\n| Accuracy | [Score] | [Score] | [A/B/Tie] |\n| Completeness | [Score] | [Score] | [A/B/Tie] |\n| Relevance | [Score] | [Score] | [A/B/Tie] |\n| Clarity | [Score] | [Score] | [A/B/Tie] |\n| Usefulness | [Score] | [Score] | [A/B/Tie] |\n| Consistency | [Score] | [Score] | [A/B/Tie] |\n| Engagement | [Score] | [Score] | [A/B/Tie] |\n| Performance | [Score] | [Score] | [A/B/Tie] |\n\n**Total Scores:**\n• Variant A: [Total]/80 ([Percentage]%)\n• Variant B: [Total]/80 ([Percentage]%)\n\n🏆 **Test Results & Recommendation**\n\n**Statistical Significance:**\n• Sample size: [Number of test cases]\n• Confidence level: [Percentage]%\n• Effect size: [Small/Medium/Large]\n\n**Winner**: [Variant A / Variant B / No Clear Winner]\n**Confidence**: [High/Medium/Low]\n\n**Key Findings:**\n• [Most important discovery from the test]\n• [Surprising or unexpected results]\n• [Patterns observed across test cases]\n\n**Contextual Considerations:**\n• **Use Case Fit**: Which variant is better for specific scenarios?\n• **User Segments**: Do different user types prefer different variants?\n• **Trade-offs**: What are the key trade-offs between variants?\n• **Edge Cases**: How do variants handle unusual or challenging inputs?\n\n💡 **Strategic Recommendations**\n\n**Immediate Actions:**\n• [What should be implemented right away]\n\n**Long-term Strategy:**\n• [How to evolve based on these findings]\n\n**Future Testing:**\n• [What should be tested next]\n• [Additional variants to consider]\n• [Metrics to add or refine]\n\n**Implementation Plan:**\n• [Steps to roll out the winning variant]\n• [Monitoring and measurement plan]\n• [Rollback strategy if needed]\n\n🔍 **Additional Insights**\n\n**Unexpected Behaviors:**\n• [Any surprising findings or edge cases]\n\n**User Feedback Themes:**\n• [Common patterns in user responses]\n\n**Technical Observations:**\n• [Performance or implementation insights]\n\n**Bias Considerations:**\n• [Potential biases in the test setup or evaluation]\n\n**Next Steps:**\n• [Specific actions to take based on results]",
+  "input_variables": ["test_description", "variant_a_name", "variant_a_config", "variant_a_responses", "variant_b_name", "variant_b_config", "variant_b_responses", "evaluation_metrics"],
+  "optional_variables": [],
+  "metadata": {
+    "use_case": "ab_testing",
+    "complexity": "high",
+    "domain": "evaluation",
+    "description": "Comprehensive A/B testing comparison template for evaluating different AI configurations",
+    "tags": ["ab_testing", "comparison", "evaluation", "optimization", "statistics"],
+    "author": "LlamaFarm Team",
+    "examples": [
+      {
+        "description": "Comparing two prompt strategies",
+        "input": {
+          "test_description": "Testing chain-of-thought vs direct answer prompts for math problems",
+          "variant_a_name": "Chain of Thought",
+          "variant_a_config": "Prompts include step-by-step reasoning instructions",
+          "variant_a_responses": "Response 1: Shows detailed work, correct answer\nResponse 2: Clear steps, correct answer\nResponse 3: Verbose but accurate",
+          "variant_b_name": "Direct Answer",
+          "variant_b_config": "Prompts ask for immediate answers without showing work",
+          "variant_b_responses": "Response 1: Quick answer, correct\nResponse 2: Fast response, minor error\nResponse 3: Concise, correct",
+          "evaluation_metrics": "Accuracy, response time, user preference for explanation detail"
+        },
+        "expected_output": "**Winner**: Chain of Thought\n**Key Finding**: Higher accuracy (95% vs 87%) despite longer response time\n**Recommendation**: Use Chain of Thought for complex problems, Direct Answer for simple queries"
+      }
+    ]
+  },
+  "validation_rules": {
+    "test_description": {
+      "type": "str",
+      "min_length": 10,
+      "max_length": 1000,
+      "required": true
+    },
+    "variant_a_name": {
+      "type": "str",
+      "min_length": 1,
+      "max_length": 100,
+      "required": true
+    },
+    "variant_a_config": {
+      "type": "str",
+      "min_length": 10,
+      "max_length": 1000,
+      "required": true
+    },
+    "variant_a_responses": {
+      "type": "str",
+      "min_length": 20,
+      "max_length": 5000,
+      "required": true
+    },
+    "variant_b_name": {
+      "type": "str",
+      "min_length": 1,
+      "max_length": 100,
+      "required": true
+    },
+    "variant_b_config": {
+      "type": "str",
+      "min_length": 10,
+      "max_length": 1000,
+      "required": true
+    },
+    "variant_b_responses": {
+      "type": "str",
+      "min_length": 20,
+      "max_length": 5000,
+      "required": true
+    },
+    "evaluation_metrics": {
+      "type": "str",
+      "min_length": 10,
+      "max_length": 1000,
+      "required": true
+    }
+  }
+}

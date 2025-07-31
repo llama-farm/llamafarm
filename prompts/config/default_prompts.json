@@ -1,0 +1,1195 @@
+{
+  "name": "LlamaFarm Default Prompts Configuration",
+  "version": "1.0.0",
+  "description": "Default configuration with comprehensive prompt templates and strategies",
+  "enabled": true,
+  "default_strategy": "context_aware_strategy",
+  "global_prompts": [
+    {
+      "global_id": "system_context",
+      "name": "System Context",
+      "description": "Provides general system context for all prompts",
+      "system_prompt": "You are a helpful AI assistant integrated with LlamaFarm, a comprehensive document processing and RAG system. You have access to retrieved documents and should provide accurate, helpful responses based on the available information.",
+      "prefix_prompt": null,
+      "suffix_prompt": null,
+      "applies_to": [
+        "*"
+      ],
+      "excludes": [],
+      "conditions": {},
+      "priority": 10,
+      "enabled": true,
+      "tags": [],
+      "created_by": null
+    },
+    {
+      "global_id": "quality_guidelines",
+      "name": "Quality Guidelines",
+      "description": "Ensures high-quality responses",
+      "system_prompt": null,
+      "prefix_prompt": "Please provide a clear, accurate, and helpful response. If you're uncertain about something, acknowledge the uncertainty.",
+      "suffix_prompt": null,
+      "applies_to": [
+        "*"
+      ],
+      "excludes": [
+        "debug_*",
+        "test_*"
+      ],
+      "conditions": {},
+      "priority": 20,
+      "enabled": true,
+      "tags": [],
+      "created_by": null
+    },
+    {
+      "global_id": "domain_medical",
+      "name": "Medical Domain Context",
+      "description": "Medical domain expertise context",
+      "system_prompt": "You are analyzing medical documents and should be precise, cite sources when available, and note any limitations in the provided information. Always recommend consulting healthcare professionals for medical decisions.",
+      "prefix_prompt": null,
+      "suffix_prompt": null,
+      "applies_to": [
+        "medical_*"
+      ],
+      "excludes": [],
+      "conditions": {
+        "domain": "medical"
+      },
+      "priority": 30,
+      "enabled": true,
+      "tags": [],
+      "created_by": null
+    }
+  ],
+  "templates": {
+    "summarization": {
+      "template_id": "summarization",
+      "name": "Document Summarization",
+      "type": "basic",
+      "template": "Please summarize the following document(s):\n\n{{ context | format_documents }}\n\nProvide a concise summary highlighting the key points:\n\nSummary:",
+      "input_variables": [
+        "context"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "summarization",
+        "complexity": "low",
+        "domain": "general",
+        "tags": [
+          "summary",
+          "document",
+          "overview"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.799445",
+        "updated_at": "2025-07-30 23:11:50.799452",
+        "version": "1.0.0",
+        "description": "General document summarization template",
+        "examples": [
+          {
+            "description": "Summarizing a research article",
+            "input": {
+              "context": [
+                {
+                  "title": "AI Research Paper",
+                  "content": "This paper presents a novel approach to neural network optimization using gradient descent variations. The proposed method shows 15% improvement in training speed and 8% better accuracy on benchmark datasets."
+                }
+              ]
+            },
+            "expected_output": "The research paper introduces a new neural network optimization method that improves training speed by 15% and accuracy by 8% compared to standard approaches."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "context": {
+          "type": "list",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "qa_detailed": {
+      "template_id": "qa_detailed",
+      "name": "Detailed Question Answering",
+      "type": "basic",
+      "template": "Context Information:\n{{ context | format_documents(max_length=2000) }}\n\nQuestion: {{ query }}\n\nPlease provide a comprehensive answer based on the context above. If the context doesn't contain sufficient information to answer the question completely, please indicate what information is missing.\n\nAnswer:",
+      "input_variables": [
+        "context",
+        "query"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "detailed_qa",
+        "complexity": "medium",
+        "domain": "general",
+        "tags": [
+          "qa",
+          "detailed",
+          "comprehensive"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.799571",
+        "updated_at": "2025-07-30 23:11:50.799572",
+        "version": "1.0.0",
+        "description": "Detailed question answering with comprehensive responses",
+        "examples": [
+          {
+            "description": "Complex question requiring detailed analysis",
+            "input": {
+              "query": "How does machine learning impact modern healthcare?",
+              "context": [
+                {
+                  "title": "ML in Healthcare",
+                  "content": "Machine learning applications in healthcare include diagnostic imaging, drug discovery, personalized treatment plans, and predictive analytics for patient outcomes."
+                }
+              ]
+            },
+            "expected_output": "Based on the context, machine learning significantly impacts modern healthcare through multiple applications..."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 1,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "list",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "qa_basic": {
+      "template_id": "qa_basic",
+      "name": "Basic Question Answering",
+      "type": "basic",
+      "template": "Based on the following context:\n\n{{ context | format_documents }}\n\nQuestion: {{ query }}\n\nAnswer:",
+      "input_variables": [
+        "context",
+        "query"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "general_qa",
+        "complexity": "low",
+        "domain": "general",
+        "tags": [
+          "qa",
+          "basic",
+          "general"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.799686",
+        "updated_at": "2025-07-30 23:11:50.799687",
+        "version": "1.0.0",
+        "description": "Simple question answering template for general queries",
+        "examples": [
+          {
+            "description": "Basic factual question",
+            "input": {
+              "query": "What is machine learning?",
+              "context": [
+                {
+                  "title": "ML Introduction",
+                  "content": "Machine learning is a subset of AI that enables computers to learn from data."
+                }
+              ]
+            },
+            "expected_output": "Based on the context, machine learning is a subset of AI that enables computers to learn from data."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 1,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "list",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "chat_assistant": {
+      "template_id": "chat_assistant",
+      "name": "Chat Assistant",
+      "type": "chat",
+      "template": "{% if context %}Available Information:\n{{ context | format_documents(max_length=1000) }}\n\n{% endif %}User: {{ query }}\n\nAssistant: I'll help you with that. {% if context %}Based on the information available, {% endif %}",
+      "input_variables": [
+        "query"
+      ],
+      "optional_variables": [
+        "context"
+      ],
+      "metadata": {
+        "use_case": "conversational",
+        "complexity": "low",
+        "domain": "general",
+        "tags": [
+          "chat",
+          "assistant",
+          "conversation"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.800036",
+        "updated_at": "2025-07-30 23:11:50.800037",
+        "version": "1.0.0",
+        "description": "Conversational assistant template",
+        "examples": [
+          {
+            "description": "Basic chat interaction",
+            "input": {
+              "query": "Hello! Can you help me understand what machine learning is?",
+              "context": [
+                {
+                  "title": "ML Basics",
+                  "content": "Machine learning is a method of data analysis that automates analytical model building."
+                }
+              ]
+            },
+            "expected_output": "User: Hello! Can you help me understand what machine learning is?\n\nAssistant: I'll help you with that. Based on the information available, machine learning is a method of data analysis that automates analytical model building..."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 1,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "list",
+          "required": false
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "few_shot_classification": {
+      "template_id": "few_shot_classification",
+      "name": "Few-Shot Classification",
+      "type": "few_shot",
+      "template": "Classify the following text based on these examples:\n\nExamples:\n{{ examples }}\n\nText to classify: {{ query }}\n\nCategory:",
+      "input_variables": [
+        "examples",
+        "query"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "classification",
+        "complexity": "medium",
+        "domain": "general",
+        "tags": [
+          "classification",
+          "few-shot",
+          "examples",
+          "categorization"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.800385",
+        "updated_at": "2025-07-30 23:11:50.800386",
+        "version": "1.0.0",
+        "description": "Few-shot learning classification template",
+        "examples": [
+          {
+            "description": "Email classification",
+            "input": {
+              "query": "Meeting scheduled for next Tuesday at 2 PM",
+              "examples": "\u2022 'Please review the attached document' \u2192 Business\n\u2022 'Happy birthday! Hope you have a great day!' \u2192 Personal\n\u2022 'Your order has been shipped' \u2192 Notification"
+            },
+            "expected_output": "Business"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 1,
+          "max_length": 2000,
+          "required": true
+        },
+        "examples": {
+          "type": "str",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "ab_testing": {
+      "template_id": "ab_testing",
+      "name": "A/B Testing Comparison",
+      "type": "advanced",
+      "template": "# A/B Testing Analysis\n\n## Test Overview\n{{ test_description }}\n\n## Variant A Details\n**Name**: {{ variant_a_name }}\n**Configuration**: {{ variant_a_config }}\n**Sample Responses**:\n{{ variant_a_responses }}\n\n## Variant B Details\n**Name**: {{ variant_b_name }}\n**Configuration**: {{ variant_b_config }}\n**Sample Responses**:\n{{ variant_b_responses }}\n\n## Evaluation Metrics\n{{ evaluation_metrics }}\n\n\ud83e\uddea **A/B TESTING COMPARATIVE ANALYSIS**\n\n\ud83d\udcca **Performance Comparison**\n\n**Response Quality Metrics**\n\u2022 **Accuracy**: Which variant provides more accurate information?\n\u2022 **Completeness**: Which variant gives more comprehensive answers?\n\u2022 **Relevance**: Which variant better addresses the user queries?\n\u2022 **Consistency**: Which variant shows more consistent performance?\n\n**User Experience Metrics**\n\u2022 **Clarity**: Which variant communicates more clearly?\n\u2022 **Usefulness**: Which variant provides more actionable insights?\n\u2022 **Engagement**: Which variant better engages users?\n\u2022 **Satisfaction**: Which variant would users prefer?\n\n**Technical Performance**\n\u2022 **Response Time**: How do processing speeds compare?\n\u2022 **Resource Usage**: What are the computational requirements?\n\u2022 **Reliability**: Which variant fails less often?\n\u2022 **Scalability**: Which variant handles load better?\n\n\u2696\ufe0f **Side-by-Side Evaluation**\n\n**Variant A Strengths:**\n\u2022 [List specific advantages of Variant A]\n\u2022 [Examples of superior performance]\n\u2022 [Unique capabilities or features]\n\n**Variant A Weaknesses:**\n\u2022 [List specific limitations of Variant A]\n\u2022 [Examples of inferior performance]\n\u2022 [Missing features or capabilities]\n\n**Variant B Strengths:**\n\u2022 [List specific advantages of Variant B]\n\u2022 [Examples of superior performance]\n\u2022 [Unique capabilities or features]\n\n**Variant B Weaknesses:**\n\u2022 [List specific limitations of Variant B]\n\u2022 [Examples of inferior performance]\n\u2022 [Missing features or capabilities]\n\n\ud83d\udcc8 **Quantitative Comparison**\n\n**Scoring Matrix** (1-10 scale):\n\n| Metric | Variant A | Variant B | Winner |\n|--------|-----------|-----------|--------|\n| Accuracy | [Score] | [Score] | [A/B/Tie] |\n| Completeness | [Score] | [Score] | [A/B/Tie] |\n| Relevance | [Score] | [Score] | [A/B/Tie] |\n| Clarity | [Score] | [Score] | [A/B/Tie] |\n| Usefulness | [Score] | [Score] | [A/B/Tie] |\n| Consistency | [Score] | [Score] | [A/B/Tie] |\n| Engagement | [Score] | [Score] | [A/B/Tie] |\n| Performance | [Score] | [Score] | [A/B/Tie] |\n\n**Total Scores:**\n\u2022 Variant A: [Total]/80 ([Percentage]%)\n\u2022 Variant B: [Total]/80 ([Percentage]%)\n\n\ud83c\udfc6 **Test Results & Recommendation**\n\n**Statistical Significance:**\n\u2022 Sample size: [Number of test cases]\n\u2022 Confidence level: [Percentage]%\n\u2022 Effect size: [Small/Medium/Large]\n\n**Winner**: [Variant A / Variant B / No Clear Winner]\n**Confidence**: [High/Medium/Low]\n\n**Key Findings:**\n\u2022 [Most important discovery from the test]\n\u2022 [Surprising or unexpected results]\n\u2022 [Patterns observed across test cases]\n\n**Contextual Considerations:**\n\u2022 **Use Case Fit**: Which variant is better for specific scenarios?\n\u2022 **User Segments**: Do different user types prefer different variants?\n\u2022 **Trade-offs**: What are the key trade-offs between variants?\n\u2022 **Edge Cases**: How do variants handle unusual or challenging inputs?\n\n\ud83d\udca1 **Strategic Recommendations**\n\n**Immediate Actions:**\n\u2022 [What should be implemented right away]\n\n**Long-term Strategy:**\n\u2022 [How to evolve based on these findings]\n\n**Future Testing:**\n\u2022 [What should be tested next]\n\u2022 [Additional variants to consider]\n\u2022 [Metrics to add or refine]\n\n**Implementation Plan:**\n\u2022 [Steps to roll out the winning variant]\n\u2022 [Monitoring and measurement plan]\n\u2022 [Rollback strategy if needed]\n\n\ud83d\udd0d **Additional Insights**\n\n**Unexpected Behaviors:**\n\u2022 [Any surprising findings or edge cases]\n\n**User Feedback Themes:**\n\u2022 [Common patterns in user responses]\n\n**Technical Observations:**\n\u2022 [Performance or implementation insights]\n\n**Bias Considerations:**\n\u2022 [Potential biases in the test setup or evaluation]\n\n**Next Steps:**\n\u2022 [Specific actions to take based on results]",
+      "input_variables": [
+        "test_description",
+        "variant_a_name",
+        "variant_a_config",
+        "variant_a_responses",
+        "variant_b_name",
+        "variant_b_config",
+        "variant_b_responses",
+        "evaluation_metrics"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "ab_testing",
+        "complexity": "high",
+        "domain": "evaluation",
+        "tags": [
+          "ab_testing",
+          "comparison",
+          "evaluation",
+          "optimization",
+          "statistics"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.800787",
+        "updated_at": "2025-07-30 23:11:50.800788",
+        "version": "1.0.0",
+        "description": "Comprehensive A/B testing comparison template for evaluating different AI configurations",
+        "examples": [
+          {
+            "description": "Comparing two prompt strategies",
+            "input": {
+              "test_description": "Testing chain-of-thought vs direct answer prompts for math problems",
+              "variant_a_name": "Chain of Thought",
+              "variant_a_config": "Prompts include step-by-step reasoning instructions",
+              "variant_a_responses": "Response 1: Shows detailed work, correct answer\nResponse 2: Clear steps, correct answer\nResponse 3: Verbose but accurate",
+              "variant_b_name": "Direct Answer",
+              "variant_b_config": "Prompts ask for immediate answers without showing work",
+              "variant_b_responses": "Response 1: Quick answer, correct\nResponse 2: Fast response, minor error\nResponse 3: Concise, correct",
+              "evaluation_metrics": "Accuracy, response time, user preference for explanation detail"
+            },
+            "expected_output": "**Winner**: Chain of Thought\n**Key Finding**: Higher accuracy (95% vs 87%) despite longer response time\n**Recommendation**: Use Chain of Thought for complex problems, Direct Answer for simple queries"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "test_description": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        },
+        "variant_a_name": {
+          "type": "str",
+          "min_length": 1,
+          "max_length": 100,
+          "required": true
+        },
+        "variant_a_config": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        },
+        "variant_a_responses": {
+          "type": "str",
+          "min_length": 20,
+          "max_length": 5000,
+          "required": true
+        },
+        "variant_b_name": {
+          "type": "str",
+          "min_length": 1,
+          "max_length": 100,
+          "required": true
+        },
+        "variant_b_config": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        },
+        "variant_b_responses": {
+          "type": "str",
+          "min_length": 20,
+          "max_length": 5000,
+          "required": true
+        },
+        "evaluation_metrics": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "chain_of_thought": {
+      "template_id": "chain_of_thought",
+      "name": "Chain of Thought Reasoning",
+      "type": "advanced",
+      "template": "Context: {{ context | format_documents }}\n\nQuestion: {{ query }}\n\nLet me work through this step by step:\n\n1\ufe0f\u20e3 **Understanding the Question**\nWhat exactly is being asked and what kind of analysis is needed?\n\n2\ufe0f\u20e3 **Key Information from Context**  \nWhat relevant facts and data can I extract from the provided context?\n\n3\ufe0f\u20e3 **Step-by-Step Reasoning**\nHow do these pieces of information connect to answer the question?\n\n4\ufe0f\u20e3 **Final Conclusion**\nBased on my analysis, here is my reasoned answer:\n\n**Answer:**",
+      "input_variables": [
+        "context",
+        "query"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "analytical_reasoning",
+        "complexity": "high",
+        "domain": "general",
+        "tags": [
+          "reasoning",
+          "analysis",
+          "step-by-step",
+          "complex"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.800893",
+        "updated_at": "2025-07-30 23:11:50.800894",
+        "version": "1.0.0",
+        "description": "Chain of thought reasoning for complex questions",
+        "examples": [
+          {
+            "description": "Complex analytical question",
+            "input": {
+              "query": "Why might renewable energy adoption vary between countries?",
+              "context": [
+                {
+                  "title": "Energy Policy",
+                  "content": "Countries have different energy policies, economic conditions, natural resources, and technological capabilities that influence renewable energy adoption."
+                }
+              ]
+            },
+            "expected_output": "Let me work through this step by step: 1. Understanding the question: We need to analyze factors affecting renewable energy adoption across different countries..."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "list",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "comparative_analysis": {
+      "template_id": "comparative_analysis",
+      "name": "Comparative Analysis",
+      "type": "advanced",
+      "template": "Documents to compare:\n{{ context | format_documents }}\n\nAnalysis request: {{ query }}\n\n\ud83d\udcca **COMPARATIVE ANALYSIS**\n\n\ud83e\udd1d **Similarities**\n\u2022 What common themes, approaches, or characteristics do these items share?\n\u2022 Where do they align or agree?\n\n\u26a1 **Key Differences**  \n\u2022 What are the main contrasts and distinctions?\n\u2022 How do their approaches, outcomes, or features differ?\n\n\ud83d\udd0d **Analysis & Insights**\n\u2022 What patterns emerge from this comparison?\n\u2022 What are the implications of these similarities and differences?\n\n**Conclusion:**",
+      "input_variables": [
+        "context",
+        "query"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "comparative_analysis",
+        "complexity": "high",
+        "domain": "general",
+        "tags": [
+          "comparison",
+          "analysis",
+          "contrast",
+          "insights"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.801005",
+        "updated_at": "2025-07-30 23:11:50.801006",
+        "version": "1.0.0",
+        "description": "Compare and contrast multiple documents or concepts",
+        "examples": [
+          {
+            "description": "Technology comparison",
+            "input": {
+              "query": "Compare the advantages and disadvantages of cloud vs on-premises infrastructure",
+              "context": [
+                {
+                  "title": "Cloud Computing",
+                  "content": "Cloud computing offers scalability, cost-effectiveness, and automatic updates, but may have security concerns and dependency on internet connectivity."
+                },
+                {
+                  "title": "On-Premises Infrastructure",
+                  "content": "On-premises infrastructure provides complete control and security but requires significant upfront investment and ongoing maintenance."
+                }
+              ]
+            },
+            "expected_output": "## Similarities:\nBoth cloud and on-premises solutions provide computing infrastructure for business needs...\n\n## Differences:\nCloud offers scalability and lower upfront costs, while on-premises provides more control..."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "list",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "prompt_evaluation": {
+      "template_id": "prompt_evaluation",
+      "name": "Prompt Effectiveness Evaluation",
+      "type": "domain_specific",
+      "template": "# Prompt Effectiveness Evaluation\n\n## Prompt Being Evaluated\n```\n{{ prompt_template }}\n```\n\n## Test Cases and Responses\n{{ test_cases }}\n\n## Evaluation Context\n{{ evaluation_context }}\n\n\ud83d\udcdd **PROMPT EVALUATION FRAMEWORK**\n\n\ud83c\udfaf **Clarity & Instructions**\n\u2022 **Instruction Clarity**: Are the instructions clear and unambiguous?\n\u2022 **Task Definition**: Is the desired task/output clearly defined?\n\u2022 **Format Specification**: Are output format requirements clearly stated?\n\u2022 **Role Definition**: Is the AI's role or persona clearly established?\n\n\ud83e\udde0 **Cognitive Load & Complexity**\n\u2022 **Cognitive Demand**: How much reasoning does the prompt require?\n\u2022 **Context Length**: Is the prompt appropriately concise yet comprehensive?\n\u2022 **Step Breakdown**: Are complex tasks broken into manageable steps?\n\u2022 **Mental Model**: Does the prompt help establish the right mental framework?\n\n\u26a1 **Performance Effectiveness**\n\u2022 **Consistency**: Does the prompt produce consistent outputs across similar inputs?\n\u2022 **Accuracy**: How accurate are the responses generated by this prompt?\n\u2022 **Completeness**: Do responses fully address the intended requirements?\n\u2022 **Reliability**: How reliably does the prompt work across different scenarios?\n\n\ud83c\udfa8 **Design Quality**\n\u2022 **Structure**: Is the prompt well-organized and logically structured?\n\u2022 **Examples**: Are examples provided where helpful?\n\u2022 **Constraints**: Are appropriate constraints and boundaries set?\n\u2022 **Flexibility**: Can the prompt handle variations in input?\n\n\ud83d\udcca **Evaluation Scores**\n\n**Clarity Metrics:**\n\u2022 Instruction Clarity: [Score 1-5] - [Justification]\n\u2022 Task Definition: [Score 1-5] - [Justification]\n\u2022 Format Specification: [Score 1-5] - [Justification]\n\u2022 Role Definition: [Score 1-5] - [Justification]\n\n**Effectiveness Metrics:**\n\u2022 Consistency: [Score 1-5] - [Justification]\n\u2022 Accuracy: [Score 1-5] - [Justification]\n\u2022 Completeness: [Score 1-5] - [Justification]\n\u2022 Reliability: [Score 1-5] - [Justification]\n\n**Design Metrics:**\n\u2022 Structure: [Score 1-5] - [Justification]\n\u2022 Examples Usage: [Score 1-5] - [Justification]\n\u2022 Constraint Setting: [Score 1-5] - [Justification]\n\u2022 Flexibility: [Score 1-5] - [Justification]\n\n**Overall Prompt Score**: [Total]/60\n**Grade**: [Excellent (50-60) / Good (40-49) / Fair (30-39) / Poor (20-29) / Very Poor (0-19)]\n\n\ud83d\udd0d **Detailed Analysis**\n\n**What Works Well:**\n\u2022 [Specific strengths of the prompt]\n\n**Areas for Improvement:**\n\u2022 [Specific weaknesses and issues]\n\n**Common Response Patterns:**\n\u2022 [Patterns observed in AI responses]\n\n**Edge Cases & Failure Modes:**\n\u2022 [Scenarios where the prompt fails or underperforms]\n\n\ud83d\udca1 **Optimization Recommendations**\n\n**High Priority:**\n\u2022 [Most critical improvements needed]\n\n**Medium Priority:**\n\u2022 [Secondary improvements that would help]\n\n**Optimization Techniques:**\n\u2022 [Specific prompt engineering techniques to apply]\n\n**Revised Prompt Suggestion:**\n```\n[Provide an improved version of the prompt if significant changes are recommended]\n```",
+      "input_variables": [
+        "prompt_template",
+        "test_cases",
+        "evaluation_context"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "prompt_optimization",
+        "complexity": "high",
+        "domain": "evaluation",
+        "tags": [
+          "prompt_engineering",
+          "evaluation",
+          "optimization",
+          "testing",
+          "effectiveness"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.801413",
+        "updated_at": "2025-07-30 23:11:50.801415",
+        "version": "1.0.0",
+        "description": "Comprehensive evaluation template for prompt effectiveness and optimization",
+        "examples": [
+          {
+            "description": "Evaluating a summarization prompt",
+            "input": {
+              "prompt_template": "Summarize the following text in 3 sentences: {{ text }}",
+              "test_cases": "Test 1: Long research paper -> Generated a 2-sentence summary missing key points\nTest 2: News article -> Generated a 4-sentence summary with good coverage\nTest 3: Technical documentation -> Generated unclear summary with jargon",
+              "evaluation_context": "Testing for general document summarization across different text types"
+            },
+            "expected_output": "**Overall Prompt Score**: 35/60 - Fair\n**Key Issues**: Inconsistent length adherence, lacks domain adaptation\n**Recommendations**: Add length constraints, specify clarity requirements, include examples"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "prompt_template": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 5000,
+          "required": true
+        },
+        "test_cases": {
+          "type": "str",
+          "min_length": 20,
+          "max_length": 10000,
+          "required": true
+        },
+        "evaluation_context": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "response_scoring": {
+      "template_id": "response_scoring",
+      "name": "Response Quality Scoring",
+      "type": "domain_specific",
+      "template": "# Response Quality Scoring\n\n## Original Query\n{{ query }}\n\n## AI Response to Score\n{{ response }}\n\n## Reference Materials (if available)\n{{ reference_materials | format_documents }}\n\n## Scoring Criteria\n{{ scoring_criteria }}\n\n\ud83c\udfc6 **RESPONSE QUALITY SCORING**\n\n\ud83d\udccb **Core Quality Dimensions**\n\n**1. Content Quality**\n\u2022 **Accuracy**: Is the information factually correct and reliable?\n\u2022 **Relevance**: Does the response directly address the query?\n\u2022 **Depth**: How thorough and comprehensive is the response?\n\u2022 **Currency**: Is the information up-to-date and current?\n\n**2. Communication Quality** \n\u2022 **Clarity**: Is the response clear and easy to understand?\n\u2022 **Structure**: Is the response well-organized and logical?\n\u2022 **Conciseness**: Is the response appropriately concise without losing important information?\n\u2022 **Tone**: Is the tone appropriate for the context and audience?\n\n**3. Technical Quality**\n\u2022 **Coherence**: Does the response flow logically from point to point?\n\u2022 **Completeness**: Are all aspects of the query addressed?\n\u2022 **Citations**: Are sources properly referenced when applicable?\n\u2022 **Formatting**: Is the response well-formatted and readable?\n\n**4. Utility & Actionability**\n\u2022 **Usefulness**: How helpful is the response to the user?\n\u2022 **Actionability**: Does the response provide actionable insights or next steps?\n\u2022 **Practical Value**: Can the user apply this information effectively?\n\u2022 **Follow-up Guidance**: Does it help the user understand next steps?\n\n\ud83d\udcca **Detailed Scoring Matrix**\n\n**Content Quality Scores:**\n\u2022 Accuracy: [Score 1-10] - [Specific reasoning]\n\u2022 Relevance: [Score 1-10] - [Specific reasoning]\n\u2022 Depth: [Score 1-10] - [Specific reasoning]\n\u2022 Currency: [Score 1-10] - [Specific reasoning]\n\n**Communication Quality Scores:**\n\u2022 Clarity: [Score 1-10] - [Specific reasoning]\n\u2022 Structure: [Score 1-10] - [Specific reasoning]\n\u2022 Conciseness: [Score 1-10] - [Specific reasoning]\n\u2022 Tone: [Score 1-10] - [Specific reasoning]\n\n**Technical Quality Scores:**\n\u2022 Coherence: [Score 1-10] - [Specific reasoning]\n\u2022 Completeness: [Score 1-10] - [Specific reasoning]\n\u2022 Citations: [Score 1-10] - [Specific reasoning]\n\u2022 Formatting: [Score 1-10] - [Specific reasoning]\n\n**Utility & Actionability Scores:**\n\u2022 Usefulness: [Score 1-10] - [Specific reasoning]\n\u2022 Actionability: [Score 1-10] - [Specific reasoning]\n\u2022 Practical Value: [Score 1-10] - [Specific reasoning]\n\u2022 Follow-up Guidance: [Score 1-10] - [Specific reasoning]\n\n\ud83d\udcc8 **Summary Scores**\n\u2022 **Content Quality**: [Total]/40 ([Percentage]%)\n\u2022 **Communication Quality**: [Total]/40 ([Percentage]%)\n\u2022 **Technical Quality**: [Total]/40 ([Percentage]%)\n\u2022 **Utility & Actionability**: [Total]/40 ([Percentage]%)\n\n**OVERALL RESPONSE SCORE**: [Total]/160 ([Percentage]%)\n\n**Quality Grade**: \n\u2022 90-100%: Exceptional \u2b50\u2b50\u2b50\u2b50\u2b50\n\u2022 80-89%: Excellent \u2b50\u2b50\u2b50\u2b50\n\u2022 70-79%: Good \u2b50\u2b50\u2b50\n\u2022 60-69%: Fair \u2b50\u2b50\n\u2022 Below 60%: Needs Improvement \u2b50\n\n\ud83d\udca1 **Qualitative Assessment**\n\n**Key Strengths:**\n\u2022 [What the response does exceptionally well]\n\n**Areas for Improvement:**\n\u2022 [Specific areas that need enhancement]\n\n**Missing Elements:**\n\u2022 [Important information or aspects not addressed]\n\n**Standout Features:**\n\u2022 [Particularly impressive or noteworthy aspects]\n\n\ud83c\udfaf **Improvement Recommendations**\n\n**High Priority:**\n\u2022 [Most critical improvements needed]\n\n**Medium Priority:**\n\u2022 [Secondary improvements that would enhance quality]\n\n**Enhancement Suggestions:**\n\u2022 [Specific ways to make the response even better]\n\n**Comparative Analysis:**\n\u2022 How does this response compare to typical responses for similar queries?\n\u2022 What would make this response exemplary?",
+      "input_variables": [
+        "query",
+        "response",
+        "scoring_criteria"
+      ],
+      "optional_variables": [
+        "reference_materials"
+      ],
+      "metadata": {
+        "use_case": "response_evaluation",
+        "complexity": "medium",
+        "domain": "evaluation",
+        "tags": [
+          "scoring",
+          "quality_assessment",
+          "response_evaluation",
+          "metrics",
+          "benchmarking"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.801533",
+        "updated_at": "2025-07-30 23:11:50.801533",
+        "version": "1.0.0",
+        "description": "Comprehensive scoring template for AI response quality assessment",
+        "examples": [
+          {
+            "description": "Scoring a technical explanation response",
+            "input": {
+              "query": "How does machine learning work?",
+              "response": "Machine learning is a type of AI where computers learn patterns from data without being explicitly programmed. It works by training algorithms on large datasets to recognize patterns and make predictions.",
+              "scoring_criteria": "Technical accuracy, clarity for general audience, completeness of explanation",
+              "reference_materials": [
+                {
+                  "title": "ML Fundamentals",
+                  "content": "Machine learning involves training algorithms on data to make predictions or decisions without explicit programming."
+                }
+              ]
+            },
+            "expected_output": "**OVERALL RESPONSE SCORE**: 112/160 (70%)\n**Quality Grade**: Good \u2b50\u2b50\u2b50\n**Key Strengths**: Clear explanation, accurate basics\n**Areas for Improvement**: Could include examples, more depth on algorithm types"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 5,
+          "max_length": 1000,
+          "required": true
+        },
+        "response": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 10000,
+          "required": true
+        },
+        "scoring_criteria": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        },
+        "reference_materials": {
+          "type": "list",
+          "required": false
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "rag_evaluation": {
+      "template_id": "rag_evaluation",
+      "name": "RAG System Evaluation",
+      "type": "domain_specific",
+      "template": "# RAG System Evaluation\n\n## Query\n{{ query }}\n\n## Retrieved Documents\n{{ retrieved_docs | format_documents }}\n\n## Generated Response\n{{ generated_response }}\n\n## Ground Truth (if available)\n{{ ground_truth }}\n\n\ud83d\udd0d **RAG SYSTEM EVALUATION**\n\n\ud83d\udcda **Retrieval Quality Assessment**\n\u2022 **Relevance**: Are the retrieved documents relevant to the query?\n\u2022 **Coverage**: Do the documents contain information needed to answer the query?\n\u2022 **Diversity**: Do the documents provide diverse perspectives or complementary information?\n\u2022 **Ranking**: Are the most relevant documents ranked highest?\n\n\ud83c\udfaf **Answer Quality Assessment**\n\u2022 **Accuracy**: Is the generated response factually correct?\n\u2022 **Completeness**: Does the response fully address the query?\n\u2022 **Coherence**: Is the response well-structured and coherent?\n\u2022 **Citation**: Does the response appropriately reference the source documents?\n\n\ud83d\udd17 **Retrieval-Generation Alignment**\n\u2022 **Grounding**: Is the response properly grounded in the retrieved documents?\n\u2022 **Hallucination Check**: Does the response contain information not present in the retrieved docs?\n\u2022 **Consistency**: Is the response consistent with the retrieved information?\n\u2022 **Source Attribution**: Are claims properly attributed to sources?\n\n\ud83d\udcca **Scoring Matrix**\n\n**Retrieval Metrics:**\n\u2022 Relevance: [Score 1-5] - [Justification]\n\u2022 Coverage: [Score 1-5] - [Justification]\n\u2022 Diversity: [Score 1-5] - [Justification]\n\u2022 Ranking Quality: [Score 1-5] - [Justification]\n\n**Generation Metrics:**\n\u2022 Accuracy: [Score 1-5] - [Justification]\n\u2022 Completeness: [Score 1-5] - [Justification]\n\u2022 Coherence: [Score 1-5] - [Justification]\n\u2022 Citation Quality: [Score 1-5] - [Justification]\n\n**Alignment Metrics:**\n\u2022 Grounding: [Score 1-5] - [Justification]\n\u2022 Hallucination: [Score 1-5] - [Lower = more hallucination]\n\u2022 Consistency: [Score 1-5] - [Justification]\n\n**Overall RAG Score**: [Total]/55\n**Grade**: [Excellent/Good/Fair/Poor]\n\n\u26a0\ufe0f **Key Issues Identified**\n\u2022 [List major problems or concerns]\n\n\u2705 **Strengths**\n\u2022 [List what worked well]\n\n\ud83d\udd27 **Recommendations**\n\u2022 [Specific suggestions for improvement]",
+      "input_variables": [
+        "query",
+        "retrieved_docs",
+        "generated_response"
+      ],
+      "optional_variables": [
+        "ground_truth"
+      ],
+      "metadata": {
+        "use_case": "rag_evaluation",
+        "complexity": "high",
+        "domain": "evaluation",
+        "tags": [
+          "rag",
+          "evaluation",
+          "retrieval",
+          "generation",
+          "quality_assessment"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.801651",
+        "updated_at": "2025-07-30 23:11:50.801652",
+        "version": "1.0.0",
+        "description": "Comprehensive evaluation template for RAG system performance",
+        "examples": [
+          {
+            "description": "Evaluating RAG response quality",
+            "input": {
+              "query": "What are the benefits of renewable energy?",
+              "retrieved_docs": [
+                {
+                  "title": "Solar Energy Benefits",
+                  "content": "Solar energy reduces carbon emissions and provides long-term cost savings."
+                },
+                {
+                  "title": "Wind Power Advantages",
+                  "content": "Wind power is sustainable and creates jobs in rural communities."
+                }
+              ],
+              "generated_response": "Renewable energy offers multiple benefits including reduced carbon emissions from solar power, long-term cost savings, job creation in rural areas through wind power, and overall sustainability.",
+              "ground_truth": "Benefits include environmental protection, economic advantages, and energy independence."
+            },
+            "expected_output": "**Retrieval Quality**: 4/5 - Documents are relevant and provide good coverage\n**Generation Quality**: 4/5 - Response is accurate and well-grounded\n**Overall RAG Score**: 44/55"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 5,
+          "max_length": 1000,
+          "required": true
+        },
+        "retrieved_docs": {
+          "type": "list",
+          "required": true
+        },
+        "generated_response": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 5000,
+          "required": true
+        },
+        "ground_truth": {
+          "type": "str",
+          "required": false
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "code_analysis": {
+      "template_id": "code_analysis",
+      "name": "Code Analysis",
+      "type": "domain_specific",
+      "template": "Code to analyze:\n```\n{{ context }}\n```\n\nAnalysis request: {{ query }}\n\n\ud83d\udcbb **CODE ANALYSIS REPORT**\n\n\ud83c\udfd7\ufe0f **Structure & Organization**\n\u2022 How is the code structured and organized?\n\u2022 Is it readable and well-formatted?\n\u2022 Are naming conventions consistent?\n\n\u2699\ufe0f **Logic & Functionality**\n\u2022 Does the code accomplish its intended purpose?\n\u2022 Is the logic clear and efficient?\n\u2022 Are there any logical errors or edge cases missed?\n\n\u26a0\ufe0f **Potential Issues**\n\u2022 Are there any bugs, security vulnerabilities, or performance problems?\n\u2022 What improvements could be made?\n\u2022 Are there any code smells or anti-patterns?\n\n\ud83d\udccb **Recommendations**\n\u2022 What specific changes would improve this code?\n\u2022 Are there better approaches or design patterns to consider?\n\u2022 What would make this code more maintainable?\n\n\ud83d\udcca **Overall Assessment**\nSummary of the code quality and key takeaways:\n\n**Final Rating:** [Rate the code quality and provide reasoning]",
+      "input_variables": [
+        "context",
+        "query"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "code_review",
+        "complexity": "medium",
+        "domain": "software",
+        "tags": [
+          "code",
+          "programming",
+          "review",
+          "analysis"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.801772",
+        "updated_at": "2025-07-30 23:11:50.801773",
+        "version": "1.0.0",
+        "description": "Code analysis and review template",
+        "examples": [
+          {
+            "description": "Python function review",
+            "input": {
+              "query": "Review this function for potential improvements",
+              "context": "def fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)"
+            },
+            "expected_output": "## Code Analysis:\n\n**Structure & Organization:**\nThe function is clearly structured with a simple recursive approach...\n\n**Potential Issues:**\nThis recursive implementation has exponential time complexity..."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 5,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "str",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "medical_qa": {
+      "template_id": "medical_qa",
+      "name": "Medical Question Answering",
+      "type": "domain_specific",
+      "template": "Medical Information:\n{{ context | format_documents }}\n\nMedical Question: {{ query }}\n\n\ud83c\udfe5 **MEDICAL ANALYSIS**\n\n\ud83d\udccb **Clinical Findings**\n\u2022 What relevant medical information can be extracted from the sources?\n\u2022 What symptoms, conditions, or treatments are mentioned?\n\u2022 Are there any diagnostic criteria or clinical indicators noted?\n\n\ud83d\udd2c **Medical Analysis**\n\u2022 Based on the available information, what can be determined?\n\u2022 How do the findings relate to the specific medical question?\n\u2022 What are the key medical concepts or mechanisms involved?\n\n\ud83d\udcda **Evidence-Based Response**\nBased on the provided medical information:\n\n\u26a0\ufe0f **IMPORTANT MEDICAL DISCLAIMER**\n\u2022 This analysis is based solely on the provided documents\n\u2022 This information is for educational purposes only\n\u2022 Always consult qualified healthcare professionals for medical advice\n\u2022 Individual cases may vary significantly and require personalized assessment\n\u2022 Do not use this information for self-diagnosis or treatment decisions\n\n**Clinical Response:**",
+      "input_variables": [
+        "context",
+        "query"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "medical_qa",
+        "complexity": "high",
+        "domain": "medical",
+        "tags": [
+          "medical",
+          "healthcare",
+          "clinical",
+          "analysis"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.801881",
+        "updated_at": "2025-07-30 23:11:50.801882",
+        "version": "1.0.0",
+        "description": "Medical document analysis and question answering",
+        "examples": [
+          {
+            "description": "Medical symptom inquiry",
+            "input": {
+              "query": "What are the common symptoms of hypertension?",
+              "context": [
+                {
+                  "title": "Hypertension Overview",
+                  "content": "Hypertension often presents with headaches, dizziness, chest pain, and shortness of breath, though many cases are asymptomatic."
+                }
+              ]
+            },
+            "expected_output": "Based on the medical information provided, here is my analysis: **Clinical Findings:** Hypertension commonly presents with headaches, dizziness, chest pain, and shortness of breath..."
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "query": {
+          "type": "str",
+          "min_length": 5,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "list",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    },
+    "llm_judge": {
+      "template_id": "llm_judge",
+      "name": "LLM as Judge Evaluation",
+      "type": "domain_specific",
+      "template": "# LLM Judge Evaluation\n\n## Task\nEvaluate the quality of an AI response according to the specified criteria.\n\n## Original Query\n{{ original_query }}\n\n## Context Information\n{{ context | format_documents }}\n\n## AI Response to Evaluate\n{{ response_to_evaluate }}\n\n## Evaluation Criteria\n{{ evaluation_criteria }}\n\n\u2696\ufe0f **EVALUATION FRAMEWORK**\n\n\ud83d\udcca **Scoring Dimensions**\n\u2022 **Relevance** (1-5): How well does the response address the original query?\n\u2022 **Accuracy** (1-5): How factually correct is the information provided?\n\u2022 **Completeness** (1-5): Does the response fully answer the question?\n\u2022 **Clarity** (1-5): How clear and well-structured is the response?\n\u2022 **Context Usage** (1-5): How effectively does the response use the provided context?\n\n\ud83d\udd0d **Detailed Analysis**\n\u2022 What are the response's main strengths?\n\u2022 What are the key weaknesses or areas for improvement?\n\u2022 Are there any factual errors or misleading statements?\n\u2022 Does the response appropriately cite or reference the context?\n\u2022 Is the tone and style appropriate for the query?\n\n\ud83d\udcc8 **Scoring Summary**\n\u2022 Relevance: [Score]/5 - [Brief justification]\n\u2022 Accuracy: [Score]/5 - [Brief justification]\n\u2022 Completeness: [Score]/5 - [Brief justification]\n\u2022 Clarity: [Score]/5 - [Brief justification]\n\u2022 Context Usage: [Score]/5 - [Brief justification]\n\n**Overall Score**: [Total]/25\n**Grade**: [A/B/C/D/F]\n\n**Key Recommendation**: [One actionable improvement suggestion]",
+      "input_variables": [
+        "original_query",
+        "context",
+        "response_to_evaluate",
+        "evaluation_criteria"
+      ],
+      "optional_variables": [],
+      "metadata": {
+        "use_case": "llm_evaluation",
+        "complexity": "high",
+        "domain": "evaluation",
+        "tags": [
+          "evaluation",
+          "judge",
+          "scoring",
+          "quality_assessment",
+          "llm_testing"
+        ],
+        "author": "LlamaFarm Team",
+        "created_at": "2025-07-30 23:11:50.802006",
+        "updated_at": "2025-07-30 23:11:50.802006",
+        "version": "1.0.0",
+        "description": "LLM as Judge template for evaluating AI response quality",
+        "examples": [
+          {
+            "description": "Evaluating a medical Q&A response",
+            "input": {
+              "original_query": "What are the symptoms of diabetes?",
+              "context": [
+                {
+                  "title": "Diabetes Overview",
+                  "content": "Diabetes symptoms include frequent urination, excessive thirst, unexplained weight loss, and fatigue."
+                }
+              ],
+              "response_to_evaluate": "Diabetes symptoms include feeling thirsty and urinating frequently. You might also lose weight without trying.",
+              "evaluation_criteria": "Medical accuracy, completeness, and appropriate medical disclaimers"
+            },
+            "expected_output": "## Evaluation:\n**Relevance**: 5/5 - Directly addresses the query\n**Accuracy**: 4/5 - Information is correct but incomplete\n**Completeness**: 3/5 - Missing fatigue and other symptoms\n**Overall Score**: 18/25"
+          }
+        ],
+        "performance_notes": null
+      },
+      "global_prompts": [],
+      "preprocessing_steps": [],
+      "postprocessing_steps": [],
+      "validation_rules": {
+        "original_query": {
+          "type": "str",
+          "min_length": 5,
+          "max_length": 1000,
+          "required": true
+        },
+        "response_to_evaluate": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 5000,
+          "required": true
+        },
+        "evaluation_criteria": {
+          "type": "str",
+          "min_length": 10,
+          "max_length": 1000,
+          "required": true
+        },
+        "context": {
+          "type": "list",
+          "required": true
+        }
+      },
+      "langgraph_config": null,
+      "conditions": {},
+      "fallback_templates": []
+    }
+  },
+  "strategies": {
+    "static_strategy": {
+      "strategy_id": "static_strategy",
+      "name": "Static Template Selection",
+      "type": "static",
+      "description": "Always uses the same template",
+      "config": {
+        "default_template": "qa_basic"
+      },
+      "rules": [],
+      "fallback_template": null,
+      "fallback_chain": [],
+      "variants": [],
+      "traffic_split": {},
+      "performance_metrics": [],
+      "langgraph_workflow": null,
+      "enabled": true,
+      "priority": 100,
+      "tags": [],
+      "created_by": null
+    },
+    "rule_based_strategy": {
+      "strategy_id": "rule_based_strategy",
+      "name": "Rule-Based Selection",
+      "type": "rule_based",
+      "description": "Select templates based on explicit rules",
+      "config": {},
+      "rules": [
+        {
+          "rule_id": "medical_domain_rule",
+          "name": "Medical Domain Rule",
+          "description": null,
+          "field": "domain",
+          "operator": "==",
+          "value": "medical",
+          "template_id": "medical_qa",
+          "priority": 10,
+          "enabled": true,
+          "additional_conditions": [],
+          "or_conditions": [],
+          "tags": [],
+          "created_by": null
+        },
+        {
+          "rule_id": "summary_rule",
+          "name": "Summary Request Rule",
+          "description": null,
+          "field": "query_type",
+          "operator": "==",
+          "value": "summary",
+          "template_id": "summarization",
+          "priority": 30,
+          "enabled": true,
+          "additional_conditions": [],
+          "or_conditions": [],
+          "tags": [],
+          "created_by": null
+        },
+        {
+          "rule_id": "complex_analysis_rule",
+          "name": "Complex Analysis Rule",
+          "description": null,
+          "field": "complexity_level",
+          "operator": "==",
+          "value": "high",
+          "template_id": "chain_of_thought",
+          "priority": 40,
+          "enabled": true,
+          "additional_conditions": [],
+          "or_conditions": [],
+          "tags": [],
+          "created_by": null
+        }
+      ],
+      "fallback_template": "qa_basic",
+      "fallback_chain": [],
+      "variants": [],
+      "traffic_split": {},
+      "performance_metrics": [],
+      "langgraph_workflow": null,
+      "enabled": true,
+      "priority": 100,
+      "tags": [],
+      "created_by": null
+    },
+    "context_aware_strategy": {
+      "strategy_id": "context_aware_strategy",
+      "name": "Context-Aware Selection",
+      "type": "context_aware",
+      "description": "Intelligent selection based on multiple context factors",
+      "config": {
+        "domain_templates": {
+          "medical": "medical_qa",
+          "software": "code_analysis"
+        },
+        "complexity_templates": {
+          "high": "chain_of_thought",
+          "medium": "qa_detailed",
+          "low": "qa_basic"
+        },
+        "intent_templates": {
+          "summarize": "summarization",
+          "chat": "chat_assistant"
+        }
+      },
+      "rules": [],
+      "fallback_template": "qa_basic",
+      "fallback_chain": [],
+      "variants": [],
+      "traffic_split": {},
+      "performance_metrics": [],
+      "langgraph_workflow": null,
+      "enabled": true,
+      "priority": 100,
+      "tags": [],
+      "created_by": null
+    }
+  },
+  "fallback_behavior": {
+    "strategy_fallback_chain": [
+      "context_aware_strategy",
+      "rule_based_strategy",
+      "static_strategy"
+    ],
+    "template_fallback_chain": [
+      "qa_basic",
+      "chat_assistant"
+    ],
+    "error_handling": {
+      "log_errors": true,
+      "return_error_details": false
+    }
+  },
+  "integrations": {
+    "rag_system": {
+      "enabled": true,
+      "context_mapping": {
+        "documents": "context",
+        "query": "query",
+        "domain": "domain"
+      }
+    },
+    "langgraph": {
+      "enabled": false,
+      "workflow_endpoint": "http://localhost:8000/workflows"
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics": [
+      "execution_time",
+      "template_usage",
+      "error_rate",
+      "fallback_rate"
+    ],
+    "logging_level": "INFO"
+  },
+  "environments": {
+    "development": {
+      "monitoring": {
+        "logging_level": "DEBUG"
+      },
+      "fallback_behavior": {
+        "return_error_details": true
+      }
+    },
+    "production": {
+      "monitoring": {
+        "logging_level": "WARNING"
+      },
+      "global_prompts": [
+        {
+          "global_id": "production_disclaimer",
+          "name": "Production Disclaimer",
+          "suffix_prompt": "\n\n---\nNote: This response was generated by an AI system. Please verify important information independently.",
+          "applies_to": [
+            "*"
+          ],
+          "priority": 200,
+          "enabled": true
+        }
+      ]
+    }
+  }
+}

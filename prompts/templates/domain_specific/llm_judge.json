@@ -1,0 +1,57 @@
+{
+  "template_id": "llm_judge",
+  "name": "LLM as Judge Evaluation",
+  "type": "domain_specific",
+  "template": "# LLM Judge Evaluation\n\n## Task\nEvaluate the quality of an AI response according to the specified criteria.\n\n## Original Query\n{{ original_query }}\n\n## Context Information\n{{ context | format_documents }}\n\n## AI Response to Evaluate\n{{ response_to_evaluate }}\n\n## Evaluation Criteria\n{{ evaluation_criteria }}\n\n⚖️ **EVALUATION FRAMEWORK**\n\n📊 **Scoring Dimensions**\n• **Relevance** (1-5): How well does the response address the original query?\n• **Accuracy** (1-5): How factually correct is the information provided?\n• **Completeness** (1-5): Does the response fully answer the question?\n• **Clarity** (1-5): How clear and well-structured is the response?\n• **Context Usage** (1-5): How effectively does the response use the provided context?\n\n🔍 **Detailed Analysis**\n• What are the response's main strengths?\n• What are the key weaknesses or areas for improvement?\n• Are there any factual errors or misleading statements?\n• Does the response appropriately cite or reference the context?\n• Is the tone and style appropriate for the query?\n\n📈 **Scoring Summary**\n• Relevance: [Score]/5 - [Brief justification]\n• Accuracy: [Score]/5 - [Brief justification]\n• Completeness: [Score]/5 - [Brief justification]\n• Clarity: [Score]/5 - [Brief justification]\n• Context Usage: [Score]/5 - [Brief justification]\n\n**Overall Score**: [Total]/25\n**Grade**: [A/B/C/D/F]\n\n**Key Recommendation**: [One actionable improvement suggestion]",
+  "input_variables": ["original_query", "context", "response_to_evaluate", "evaluation_criteria"],
+  "optional_variables": [],
+  "metadata": {
+    "use_case": "llm_evaluation",
+    "complexity": "high",
+    "domain": "evaluation",
+    "description": "LLM as Judge template for evaluating AI response quality",
+    "tags": ["evaluation", "judge", "scoring", "quality_assessment", "llm_testing"],
+    "author": "LlamaFarm Team",
+    "examples": [
+      {
+        "description": "Evaluating a medical Q&A response",
+        "input": {
+          "original_query": "What are the symptoms of diabetes?",
+          "context": [
+            {
+              "title": "Diabetes Overview",
+              "content": "Diabetes symptoms include frequent urination, excessive thirst, unexplained weight loss, and fatigue."
+            }
+          ],
+          "response_to_evaluate": "Diabetes symptoms include feeling thirsty and urinating frequently. You might also lose weight without trying.",
+          "evaluation_criteria": "Medical accuracy, completeness, and appropriate medical disclaimers"
+        },
+        "expected_output": "## Evaluation:\n**Relevance**: 5/5 - Directly addresses the query\n**Accuracy**: 4/5 - Information is correct but incomplete\n**Completeness**: 3/5 - Missing fatigue and other symptoms\n**Overall Score**: 18/25"
+      }
+    ]
+  },
+  "validation_rules": {
+    "original_query": {
+      "type": "str",
+      "min_length": 5,
+      "max_length": 1000,
+      "required": true
+    },
+    "response_to_evaluate": {
+      "type": "str",
+      "min_length": 10,
+      "max_length": 5000,
+      "required": true
+    },
+    "evaluation_criteria": {
+      "type": "str",
+      "min_length": 10,
+      "max_length": 1000,
+      "required": true
+    },
+    "context": {
+      "type": "list",
+      "required": true
+    }
+  }
+}
