@@ -4,6 +4,8 @@
 
 This directory contains example configurations demonstrating how to integrate the prompts system with the LlamaFarm RAG framework. Following the project's configuration-driven philosophy, these examples show how to set up prompts for various use cases and domains.
 
+**🔄 Configuration Format**: All examples are now provided in **YAML format** to match the RAG system's configuration approach, offering better readability and maintainability than JSON.
+
 ## 🎯 Configuration Philosophy
 
 The prompts system extends the existing RAG configuration format with:
@@ -11,6 +13,7 @@ The prompts system extends the existing RAG configuration format with:
 - **Environment Specificity**: Different prompts for dev/staging/production
 - **A/B Testing Support**: Multiple prompt variants in single configuration
 - **Strategy Selection**: Intelligent prompt routing based on context
+- **YAML Support**: Clean, readable configuration files with multi-line templates
 
 ## 📁 Configuration Categories
 
@@ -27,82 +30,84 @@ config_examples/
 ## 🔧 Basic Configuration Examples
 
 ### **Simple Q&A Configuration**
-*File: `basic/simple_qa_config.json`*
+*File: `basic/simple_qa_config.yaml`*
 
-```json
-{
-  "name": "Simple Q&A Pipeline with Prompts",
-  "version": "1.0",
+```yaml
+name: "Simple Q&A Pipeline with Prompts"
+version: "1.0"
+
+rag_pipeline:
+  retrieval_strategy: "basic_similarity"
+  retrieval_config:
+    top_k: 5
+    similarity_threshold: 0.7
+
+prompts:
+  enabled: true
+  strategy: "static_selection"
+  config:
+    default_template: "qa_basic"
+    fallback_template: "qa_simple"
   
-  "rag_pipeline": {
-    "retrieval_strategy": "basic_similarity",
-    "retrieval_config": {
-      "top_k": 5,
-      "similarity_threshold": 0.7
-    }
-  },
-  
-  "prompts": {
-    "enabled": true,
-    "strategy": "static_selection",
-    "config": {
-      "default_template": "qa_basic",
-      "fallback_template": "qa_simple"
-    },
-    
-    "templates": {
-      "qa_basic": {
-        "type": "basic",
-        "template": "Based on the following context:\\n{context}\\n\\nAnswer this question: {question}\\n\\nProvide a clear and concise answer:",
-        "input_variables": ["context", "question"],
-        "metadata": {
-          "use_case": "general_qa",
-          "complexity": "low"
-        }
-      }
-    }
-  }
-}
+  templates:
+    qa_basic:
+      type: "basic"
+      template: |
+        Based on the following context:
+        {context}
+        
+        Answer this question: {question}
+        
+        Provide a clear and concise answer:
+      input_variables:
+        - "context"
+        - "question"
+      metadata:
+        use_case: "general_qa"
+        complexity: "low"
 ```
 
 ### **Multi-Template Configuration**
-*File: `basic/multi_template_config.json`*
+*File: `basic/multi_template_config.yaml`*
 
-```json
-{
-  "name": "Multi-Template Prompt System",
+```yaml
+name: "Multi-Template Prompt System"
+
+prompts:
+  strategy: "rule_based"
+  config:
+    rules:
+      - condition: "query_type == 'summary'"
+        template: "document_summary"
+      - condition: "query_type == 'analysis'"
+        template: "detailed_analysis"
+    fallback: "qa_basic"
   
-  "prompts": {
-    "strategy": "rule_based",
-    "config": {
-      "rules": [
-        {
-          "condition": "query_type == 'summary'",
-          "template": "document_summary"
-        },
-        {
-          "condition": "query_type == 'analysis'", 
-          "template": "detailed_analysis"
-        }
-      ],
-      "fallback": "qa_basic"
-    },
+  templates:
+    document_summary:
+      template: |
+        Summarize the following document:
+        {context}
+        
+        Provide a concise summary highlighting the key points:
+      input_variables:
+        - "context"
+      metadata:
+        use_case: "summarization"
     
-    "templates": {
-      "document_summary": {
-        "template": "Summarize the following document:\\n{context}\\n\\nProvide a concise summary highlighting the key points:",
-        "input_variables": ["context"],
-        "metadata": {"use_case": "summarization"}
-      },
-      
-      "detailed_analysis": {
-        "template": "Analyze the following content:\\n{context}\\n\\nProvide a detailed analysis considering:\\n1. Key themes\\n2. Important insights\\n3. Actionable conclusions",
-        "input_variables": ["context"],
-        "metadata": {"use_case": "analysis"}
-      }
-    }
-  }
-}
+    detailed_analysis:
+      template: |
+        Analyze the following content:
+        {context}
+        
+        Provide a detailed analysis considering:
+        1. Key themes
+        2. Important insights
+        3. Actionable conclusions
+      input_variables:
+        - "context"
+      metadata:
+        use_case: "analysis"
 ```
 
 ## 🏗️ Advanced Configuration Examples
@@ -496,16 +501,18 @@ All configuration files follow JSON Schema validation:
 - Strategy schemas: `prompts/schemas/strategies/`
 - Template schemas: `prompts/schemas/templates/`
 
-### **Validation Commands** (Future)
+### **Validation Commands**
 ```bash
-# Validate configuration
-llamafarm prompts validate config_examples/basic/simple_qa_config.json
+# Test YAML configuration loading
+python test_yaml_configs.py
 
-# Test configuration
-llamafarm prompts test config_examples/basic/simple_qa_config.json
+# Validate specific configuration
+python -c "from prompts.utils.config_loader import load_and_validate_config; print('✅ Valid:', load_and_validate_config('config_examples/basic/simple_qa_config.yaml')['name'])"
 
-# Deploy configuration
-llamafarm prompts deploy config_examples/production/enterprise_config.json
+# Future CLI commands (planned)
+llamafarm prompts validate config_examples/basic/simple_qa_config.yaml
+llamafarm prompts test config_examples/basic/simple_qa_config.yaml
+llamafarm prompts deploy config_examples/production/enterprise_config.yaml
 ```
 
 ## 🔄 Configuration Evolution

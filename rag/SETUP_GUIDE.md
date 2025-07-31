@@ -22,7 +22,7 @@ This RAG system includes several setup and demo scripts for easy deployment and 
 
 ### 2. Quick Extractor Demo
 ```bash
-./quick_extractor_demo.sh
+./scripts/quick_extractor_demo.sh
 ```
 **What it does:**
 - Tests all 5 local-only extractors
@@ -32,7 +32,7 @@ This RAG system includes several setup and demo scripts for easy deployment and 
 
 ### 3. Simple Extractor Test
 ```bash
-./test_extractors.sh
+./scripts/test_extractors.sh
 ```
 **What it does:**
 - Quick non-interactive test of all extractors
@@ -212,7 +212,7 @@ After running the setup:
 
 - Check the logs: Most CLI commands show detailed error messages
 - Run with debug logging: Add `--log-level DEBUG` to commands
-- Verify dependencies: Use `./test_extractors.sh` for quick verification
+- Verify dependencies: Use `./scripts/test_extractors.sh` for quick verification
 - Check configurations: Ensure JSON files are valid
 
 ## 🦙 Success!

@@ -23,7 +23,7 @@ A lightweight, extensible RAG (Retrieval-Augmented Generation) system designed f
 ./setup_and_demo.sh
 
 # Quick extractor testing only (no full system setup)
-./quick_extractor_demo.sh
+./scripts/quick_extractor_demo.sh
 
 # Automated setup without prompts
 ./setup_and_demo.sh --skip-prompts
@@ -157,8 +157,8 @@ uv run python cli.py ingest samples/small_sample.csv --extractors yake entities 
 uv run python cli.py ingest document.pdf --extractors rake entities \
   --extractor-config '{"rake": {"max_keywords": 20}, "entities": {"entity_types": ["PERSON", "ORG"]}}'
 
-# Use configuration-based extractors (see config_examples/extractors_demo_config.json)
-uv run python cli.py --config config_examples/extractors_demo_config.json ingest samples/document.pdf
+# Use configuration-based extractors (see config_examples/extractors_demo_config.yaml)
+uv run python cli.py --config config_examples/extractors_demo_config.yaml ingest samples/document.pdf
 ```
 
 ### Extractor Output Example
@@ -181,26 +181,26 @@ uv run python cli.py --config config_examples/extractors_demo_config.json ingest
 
 ```bash
 # 1. Test CSV parsing with sample data
-uv run python cli.py --config config_examples/basic_config.json \
+uv run python cli.py --config config_examples/basic_config.yaml \
   test --test-file samples/small_sample.csv
 
 # 2. Ingest CSV data using specific configuration
-uv run python cli.py --config config_examples/basic_config.json \
+uv run python cli.py --config config_examples/basic_config.yaml \
   ingest samples/small_sample.csv
 
 # 3. Search the ingested CSV data
-uv run python cli.py --config config_examples/basic_config.json \
+uv run python cli.py --config config_examples/basic_config.yaml \
   search "login problems"
 
 # 4. Check collection info
-uv run python cli.py --config config_examples/basic_config.json info
+uv run python cli.py --config config_examples/basic_config.yaml info
 ```
 
 ### Custom CSV Configuration
 
 ```bash
 # Use custom CSV configuration for different CSV formats
-uv run python cli.py --config config_examples/custom_csv_config.json \
+uv run python cli.py --config config_examples/custom_csv_config.yaml \
   ingest your_custom_data.csv
 ```
 
@@ -210,15 +210,15 @@ uv run python cli.py --config config_examples/custom_csv_config.json \
 
 ```bash
 # 1. Test PDF parsing with sample document
-uv run python cli.py --config config_examples/pdf_config.json \
+uv run python cli.py --config config_examples/pdf_config.yaml \
   test --test-file samples/test_document.pdf
 
 # 2. Ingest single PDF (combined pages mode)
-uv run python cli.py --config config_examples/pdf_config.json \
+uv run python cli.py --config config_examples/pdf_config.yaml \
   ingest samples/test_document.pdf
 
 # 3. Search PDF content
-uv run python cli.py --config config_examples/pdf_config.json \
+uv run python cli.py --config config_examples/pdf_config.yaml \
   search "specific topic from PDF"
 ```
 
@@ -226,13 +226,13 @@ uv run python cli.py --config config_examples/pdf_config.json \
 
 ```bash
 # Process multiple PDFs by running command for each file
-uv run python cli.py --config config_examples/pdf_config.json \
+uv run python cli.py --config config_examples/pdf_config.yaml \
   ingest samples/document1.pdf
 
-uv run python cli.py --config config_examples/pdf_config.json \
+uv run python cli.py --config config_examples/pdf_config.yaml \
   ingest samples/document2.pdf
 
-uv run python cli.py --config config_examples/pdf_config.json \
+uv run python cli.py --config config_examples/pdf_config.yaml \
   ingest samples/document3.pdf
 ```
 
@@ -243,23 +243,23 @@ uv run python cli.py --config config_examples/pdf_config.json \
 # First, create a simple script to process multiple files:
 for pdf in samples/pdfs/*.pdf; do
   echo "Processing: $pdf"
-  uv run python cli.py --config config_examples/pdf_config.json ingest "$pdf"
+  uv run python cli.py --config config_examples/pdf_config.yaml ingest "$pdf"
 done
 
 # Or use find to process PDFs recursively
 find samples/ -name "*.pdf" -exec uv run python cli.py \
-  --config config_examples/pdf_config.json ingest {} \;
+  --config config_examples/pdf_config.yaml ingest {} \;
 ```
 
 ### PDF Page-by-Page Processing
 
 ```bash
 # Use separate pages configuration for page-level search
-uv run python cli.py --config config_examples/pdf_separate_pages_config.json \
+uv run python cli.py --config config_examples/pdf_separate_pages_config.yaml \
   ingest samples/multi_page_document.pdf
 
 # Search will return individual pages as separate results
-uv run python cli.py --config config_examples/pdf_separate_pages_config.json \
+uv run python cli.py --config config_examples/pdf_separate_pages_config.yaml \
   search "chapter introduction"
 ```
 
@@ -268,13 +268,13 @@ uv run python cli.py --config config_examples/pdf_separate_pages_config.json \
 ```bash
 # Process PDFs with custom base directory
 uv run python cli.py --base-dir /path/to/project \
-  --config config_examples/pdf_config.json \
+  --config config_examples/pdf_config.yaml \
   ingest data/documents/report.pdf
 
 # Process from different directory
 cd /different/directory
 uv run python /path/to/rag/cli.py \
-  --config /path/to/rag/config_examples/pdf_config.json \
+  --config /path/to/rag/config_examples/pdf_config.yaml \
   ingest ~/Documents/important_document.pdf
 ```
 
@@ -282,11 +282,11 @@ uv run python /path/to/rag/cli.py \
 
 ```bash
 # Search CSV data with basic retrieval strategy
-uv run python cli.py --config config_examples/basic_with_retrieval_config.json \
+uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml \
   search "password reset" --top-k 3
 
 # Search with advanced hybrid retrieval strategy
-uv run python cli.py --config config_examples/advanced_retrieval_config.json \
+uv run python cli.py --config config_examples/advanced_retrieval_config.yaml \
   search "login authentication" --top-k 5
 
 # Search PDF data with metadata filtering
@@ -294,21 +294,21 @@ uv run python cli.py --config config_examples/pdf_with_retrieval_config.json \
   search "methodology" --top-k 5
 
 # Compare different retrieval strategies
-uv run python cli.py --config config_examples/basic_with_retrieval_config.json search "security issue"
-uv run python cli.py --config config_examples/advanced_retrieval_config.json search "security issue"
+uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml search "security issue"
+uv run python cli.py --config config_examples/advanced_retrieval_config.yaml search "security issue"
 ```
 
 ### 🧪 Testing and Examples
 
 ```bash
 # Test the entire retrieval system
-uv run python test_retrieval_system.py
+uv run python examples/test_retrieval_system.py
 
 # Explore retrieval strategies with examples
-uv run python example_retrieval_usage.py
+uv run python examples/example_retrieval_usage.py
 
 # Basic API usage examples
-uv run python example_api_usage.py
+uv run python examples/example_api_usage.py
 ```
 
 ## 🛤️ Flexible Path Resolution
@@ -382,10 +382,10 @@ Paths within configuration files are automatically resolved:
 
 ```bash
 # With UV
-uv run python example.py
+uv run python examples/example.py
 
 # Or with activated environment
-python example.py
+python examples/example.py
 ```
 
 ### Development Commands
@@ -604,13 +604,13 @@ Configuration is JSON-based and includes three main sections. The system support
 ### Sample Configurations
 
 #### Basic Configurations
-- `config_examples/basic_config.json`: Simple setup without retrieval strategies
-- `config_examples/custom_csv_config.json`: Custom CSV format configuration
+- `config_examples/basic_config.yaml`: Simple setup without retrieval strategies
+- `config_examples/custom_csv_config.yaml`: Custom CSV format configuration
 - `config_examples/flexible_paths_config.json`: Demonstrates flexible path resolution
 
 #### PDF Processing
-- `config_examples/pdf_config.json`: PDF processing with combined pages
-- `config_examples/pdf_separate_pages_config.json`: PDF processing with separate page documents  
+- `config_examples/pdf_config.yaml`: PDF processing with combined pages
+- `config_examples/pdf_separate_pages_config.yaml`: PDF processing with separate page documents  
 - `config_examples/pdf_with_retrieval_config.json`: PDF processing with retrieval strategies
 
 #### Retrieval Strategy Examples
@@ -620,7 +620,7 @@ Configuration is JSON-based and includes three main sections. The system support
 - `config_examples/reranked_strategy_config.json`: Sophisticated multi-factor ranking
 - `config_examples/hybrid_universal_config.json`: Weighted strategy combination
 - `config_examples/rank_fusion_hybrid_config.json`: Rank fusion combination method
-- `config_examples/advanced_retrieval_config.json`: Complex 4-strategy hybrid
+- `config_examples/advanced_retrieval_config.yaml`: Complex 4-strategy hybrid
 - `config_examples/strategy_aliases_config.json`: Using strategy aliases (`basic`, `filtered`, etc.)
 - `config_examples/production_config.json`: Production-ready configuration
 
@@ -716,7 +716,7 @@ for result in results:
     print(f"Score: {result.score:.3f} - {result.content[:100]}...")
 
 # Advanced usage with API class
-api = SearchAPI(config_path="config_examples/basic_config.json")
+api = SearchAPI(config_path="config_examples/basic_config.yaml")
 
 # Search with filters
 results = api.search(
@@ -742,7 +742,7 @@ info = api.get_collection_info()
 
 Run the example script to see all features:
 ```bash
-uv run python example_api_usage.py
+uv run python examples/example_api_usage.py
 ```
 
 ### 🔍 Advanced Retrieval Strategies
@@ -753,8 +753,8 @@ The RAG system now supports configurable retrieval strategies for fine-tuned sea
 from api import SearchAPI
 
 # Use different retrieval strategies via configuration
-basic_api = SearchAPI("config_examples/basic_with_retrieval_config.json")
-advanced_api = SearchAPI("config_examples/advanced_retrieval_config.json")
+basic_api = SearchAPI("config_examples/basic_with_retrieval_config.yaml")
+advanced_api = SearchAPI("config_examples/advanced_retrieval_config.yaml")
 
 # Basic strategy - simple vector similarity
 basic_results = basic_api.search("password reset", top_k=3)
@@ -809,8 +809,8 @@ uv run python test_retrieval_system.py
 uv run python example_retrieval_usage.py
 
 # Compare strategies side-by-side
-uv run python cli.py --config config_examples/basic_with_retrieval_config.json search "security issue"
-uv run python cli.py --config config_examples/advanced_retrieval_config.json search "security issue"
+uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml search "security issue"
+uv run python cli.py --config config_examples/advanced_retrieval_config.yaml search "security issue"
 ```
 
 See `retrieval/README.md` for detailed documentation on all available strategies and configuration options.
@@ -839,7 +839,7 @@ For custom CSV formats, configure field mappings:
 Run the comprehensive test suite:
 
 ```bash
-python test_system.py
+python examples/test_system.py
 ```
 
 This tests:
@@ -935,7 +935,7 @@ pip install -r requirements.txt
 curl http://localhost:11434/api/tags
 
 # Run comprehensive system tests with UV
-uv run python test_system.py
+uv run python examples/test_system.py
 
 # Or run pytest
 uv run pytest

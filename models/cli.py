@@ -93,7 +93,7 @@ def print_warning(message: str):
         print(f"⚠  {message}")
 
 def load_config(config_path: str) -> Dict[str, Any]:
-    """Load configuration from JSON file with environment variable substitution."""
+    """Load configuration from JSON or YAML file with environment variable substitution."""
     config_file = Path(config_path)
     models_dir = Path(__file__).parent
     
@@ -116,6 +116,10 @@ def load_config(config_path: str) -> Dict[str, Any]:
         if config_dir.exists():
             for f in config_dir.glob("*.json"):
                 print_info(f"  - config/{f.name}")
+            for f in config_dir.glob("*.yaml"):
+                print_info(f"  - config/{f.name}")
+            for f in config_dir.glob("*.yml"):
+                print_info(f"  - config/{f.name}")
         sys.exit(1)
     
     try:
@@ -127,7 +131,21 @@ def load_config(config_path: str) -> Dict[str, Any]:
             if value:  # Only substitute non-empty values
                 config_text = config_text.replace(f"${{{key}}}", value)
         
-        return json.loads(config_text)
+        # Determine file type and parse accordingly
+        if config_file.suffix.lower() in ['.yaml', '.yml']:
+            try:
+                import yaml
+                return yaml.safe_load(config_text)
+            except ImportError:
+                print_error("PyYAML not installed. Install with: pip install PyYAML")
+                sys.exit(1)
+            except yaml.YAMLError as e:
+                print_error(f"Invalid YAML in configuration file: {e}")
+                sys.exit(1)
+        else:
+            # Default to JSON
+            return json.loads(config_text)
+            
     except json.JSONDecodeError as e:
         print_error(f"Invalid JSON in configuration file: {e}")
         sys.exit(1)
@@ -1997,8 +2015,8 @@ Examples:
     )
     
     # Global options
-    parser.add_argument("--config", "-c", default="config/default.json",
-                       help="Configuration file path")
+    parser.add_argument("--config", "-c", default="config/default.yaml",
+                       help="Configuration file path (supports .yaml, .yml, and .json)")
     parser.add_argument("--log-level", default="INFO",
                        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                        help="Logging level")

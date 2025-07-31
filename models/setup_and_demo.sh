@@ -294,17 +294,17 @@ run_system_tests() {
     print_step "Testing CLI help system..."
     run_command "uv run python cli.py --help" "CLI help test"
     
-    print_step "Testing cloud model configuration..."
-    run_command "uv run python cli.py generate-config --type basic" "Basic config generation"
+    print_step "Testing YAML configuration loading..."
+    run_command "uv run python cli.py --config config/default.yaml validate-config" "Default YAML config validation"
     
-    print_step "Testing Ollama configuration..."
-    run_command "uv run python cli.py generate-ollama-config" "Ollama config generation"
+    print_step "Testing development configuration..."
+    run_command "uv run python cli.py --config config/development.yaml list" "Development config test"
     
-    print_step "Testing Hugging Face configuration..."
-    run_command "uv run python cli.py generate-hf-config" "HF config generation"
+    print_step "Testing production configuration..."
+    run_command "uv run python cli.py --config config/production.yaml validate-config" "Production config validation"
     
-    print_step "Testing local engines configuration..."
-    run_command "uv run python cli.py generate-engines-config" "Local engines config generation"
+    print_step "Testing Ollama local configuration..."
+    run_command "uv run python cli.py --config config/ollama_local.yaml validate-config" "Ollama local config validation"
     
     # Test end-to-end integration if environment allows
     if [[ -f "$PARENT_ENV_FILE" ]] && grep -q "OPENAI_API_KEY=" "$PARENT_ENV_FILE" && ! grep -q "OPENAI_API_KEY=$" "$PARENT_ENV_FILE"; then
@@ -326,43 +326,43 @@ run_configuration_demos() {
     
     print_step "Demo 1: Generate cloud model configurations"
     print_info "Creating basic cloud model configuration..."
-    run_command "uv run python cli.py generate-config --type basic --output demo_basic_config.json" "Basic config generation"
+    run_command "uv run python cli.py generate-config --type basic --output demo_basic_config.yaml" "Basic config generation"
     
     wait_for_user
     
     print_step "Demo 2: Generate multi-provider configuration"
     print_info "Creating a multi-provider configuration with fallback chains..."
-    run_command "uv run python cli.py generate-config --type multi --output demo_multi_config.json" "Multi-provider config generation"
+    run_command "uv run python cli.py generate-config --type multi --output demo_multi_config.yaml" "Multi-provider config generation"
     
     wait_for_user
     
     print_step "Demo 3: Generate Ollama local model configuration"
     print_info "Creating configuration for local Ollama models..."
-    run_command "uv run python cli.py generate-ollama-config --output demo_ollama_config.json" "Ollama config generation"
+    run_command "uv run python cli.py generate-ollama-config --output demo_ollama_config.yaml" "Ollama config generation"
     
     wait_for_user
     
     print_step "Demo 4: Generate Hugging Face model configuration"
     print_info "Creating configuration for Hugging Face models..."
-    run_command "uv run python cli.py generate-hf-config --output demo_hf_config.json --models 'gpt2,distilgpt2'" "HF config generation"
+    run_command "uv run python cli.py generate-hf-config --output demo_hf_config.yaml --models 'gpt2,distilgpt2'" "HF config generation"
     
     wait_for_user
     
     print_step "Demo 5: Generate local inference engines configuration"
     print_info "Creating configuration for vLLM, TGI, and other local engines..."
-    run_command "uv run python cli.py generate-engines-config --output demo_engines_config.json --include-unavailable" "Local engines config generation"
+    run_command "uv run python cli.py generate-engines-config --output demo_engines_config.yaml --include-unavailable" "Local engines config generation"
     
     wait_for_user
     
     print_step "Demo 6: Generate production configuration"
     print_info "Creating a production-ready configuration with monitoring..."
-    run_command "uv run python cli.py generate-config --type production --output demo_production_config.json" "Production config generation"
+    run_command "uv run python cli.py generate-config --type production --output demo_production_config.yaml" "Production config generation"
     
     wait_for_user
     
     print_step "Demo 7: Validate all configurations"
     print_info "Validating all generated configurations..."
-    for config in demo_basic_config.json demo_multi_config.json demo_ollama_config.json demo_hf_config.json demo_engines_config.json demo_production_config.json; do
+    for config in demo_basic_config.yaml demo_multi_config.yaml demo_ollama_config.yaml demo_hf_config.yaml demo_engines_config.yaml demo_production_config.yaml; do
         if [[ -f "$config" ]]; then
             run_command "uv run python cli.py --config $config validate-config" "Validating $config"
         fi
@@ -380,7 +380,7 @@ run_provider_demos() {
     
     print_step "Demo 1: List cloud model providers"
     print_info "Listing all configured cloud model providers..."
-    run_command "uv run python cli.py --config demo_multi_config.json list --detailed" "Cloud provider listing"
+    run_command "uv run python cli.py --config demo_multi_config.yaml list --detailed" "Cloud provider listing"
     
     wait_for_user
     
@@ -409,7 +409,7 @@ run_provider_demos() {
     
     print_step "Demo 5: Health check all providers"
     print_info "Checking health status of all providers..."
-    run_command "uv run python cli.py --config demo_multi_config.json health-check" "Health check"
+    run_command "uv run python cli.py --config demo_multi_config.yaml health-check" "Health check"
     
     wait_for_user
     
@@ -417,13 +417,13 @@ run_provider_demos() {
     if [[ -f "$PARENT_ENV_FILE" ]] && grep -q "OPENAI_API_KEY=" "$PARENT_ENV_FILE" && ! grep -q "OPENAI_API_KEY=$" "$PARENT_ENV_FILE"; then
         print_step "Demo 6: Test OpenAI provider"
         print_info "Testing OpenAI provider with a simple query..."
-        run_command "uv run python cli.py --config config/test_config.json test openai_test --query 'Hello, LlamaFarm! Please respond with exactly: Test successful.'" "OpenAI provider test"
+        run_command "uv run python cli.py --config config/default.yaml test openai_gpt4o_mini --query 'Hello, LlamaFarm! Please respond with exactly: Test successful.'" "OpenAI provider test"
         
         wait_for_user
         
         print_step "Demo 7: Compare cloud providers"
         print_info "Comparing responses from multiple cloud providers..."
-        run_command "uv run python cli.py --config config/test_config.json compare --providers openai_test,openai_fast --query 'What is machine learning in one sentence?'" "Provider comparison"
+        run_command "uv run python cli.py --config config/default.yaml compare --providers openai_gpt4o_mini,anthropic_claude_3_haiku --query 'What is machine learning in one sentence?'" "Provider comparison"
     else
         print_info "Skipping OpenAI tests (API key not configured)"
     fi
@@ -578,15 +578,15 @@ show_usage_examples() {
     
     echo -e "${YELLOW}🔧 Configuration Management:${NC}"
     echo "  # Cloud models configuration"
-    echo "  uv run python cli.py generate-config --type basic --output my_config.json"
-    echo "  uv run python cli.py generate-config --type production --output prod_config.json"
-    echo "  uv run python cli.py validate-config --config my_config.json"
-    echo "  uv run python cli.py --config my_config.json list --detailed"
+    echo "  uv run python cli.py generate-config --type basic --output my_config.yaml"
+    echo "  uv run python cli.py generate-config --type production --output prod_config.yaml"
+    echo "  uv run python cli.py validate-config --config my_config.yaml"
+    echo "  uv run python cli.py --config my_config.yaml list --detailed"
     echo ""
     echo "  # Local models configuration"
-    echo "  uv run python cli.py generate-ollama-config --output ollama_config.json"
-    echo "  uv run python cli.py generate-hf-config --output hf_config.json"
-    echo "  uv run python cli.py generate-engines-config --output engines_config.json"
+    echo "  uv run python cli.py generate-ollama-config --output ollama_config.yaml"
+    echo "  uv run python cli.py generate-hf-config --output hf_config.yaml"
+    echo "  uv run python cli.py generate-engines-config --output engines_config.yaml"
     echo ""
     
     echo -e "${YELLOW}🏥 Provider Health & Testing:${NC}"
@@ -643,8 +643,9 @@ show_usage_examples() {
 cleanup_demo_files() {
     if [[ "$CLEANUP_ON_EXIT" == "true" ]]; then
         print_info "Cleaning up demo files..."
-        rm -f demo_*.json
-        rm -f ollama_config.json hf_config.json engines_config.json 2>/dev/null || true
+        rm -f demo_*.yaml
+        rm -f test_*.yaml
+        rm -f ollama_config.yaml hf_config.yaml engines_config.yaml 2>/dev/null || true
         print_success "Demo files cleaned up"
     fi
 }

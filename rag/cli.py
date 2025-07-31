@@ -938,7 +938,7 @@ def run_enterprise_tests(args, tracker: LlamaProgressTracker) -> Dict[str, Any]:
     
     try:
         # Test enterprise config loading
-        enterprise_config_path = "config_examples/enterprise_document_management_config.json"
+        enterprise_config_path = "config_examples/enterprise_document_management_config.yaml"
         resolver = PathResolver(args.base_dir if hasattr(args, "base_dir") else None)
         
         try:
@@ -1571,10 +1571,10 @@ def main():
         parser.print_help()
         print("\n💡 Examples:")
         print("  # Auto-detect file type and ingest")
-        print("  uv run python cli.py --config config_examples/unified_multi_strategy_config.json ingest samples/small_sample.csv")
+        print("  uv run python cli.py --config config_examples/unified_multi_strategy_config.yaml ingest samples/small_sample.csv")
         print("")
         print("  # Search with specific strategy")
-        print("  uv run python cli.py --config config_examples/unified_multi_strategy_config.json search --retrieval hybrid-balanced \"login problems\"")
+        print("  uv run python cli.py --config config_examples/unified_multi_strategy_config.yaml search --retrieval hybrid-balanced \"login problems\"")
         print("")
         print("  # Override components")
         print("  uv run python cli.py ingest --parser pdf_chunked --embedder fast samples/document.pdf")
