@@ -6,6 +6,10 @@ const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
 const ArrowFilled = lazy(() => import('../assets/icons/ArrowFilled'))
 const ClosePanel = lazy(() => import('../assets/icons/ClosePanel'))
 const OpenPanel = lazy(() => import('../assets/icons/OpenPanel'))
+const Dashboard = lazy(() => import('../assets/icons/Dashboard'))
+const Data = lazy(() => import('../assets/icons/Data'))
+const Prompt = lazy(() => import('../assets/icons/Prompt'))
+const Test = lazy(() => import('../assets/icons/Test'))
 
 type FontIconTypes =
   | 'sun'
@@ -14,6 +18,10 @@ type FontIconTypes =
   | 'arrow-filled'
   | 'close-panel'
   | 'open-panel'
+  | 'dashboard'
+  | 'data'
+  | 'prompt'
+  | 'test'
 
 export interface FontIconProps {
   className?: string
@@ -44,6 +52,14 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <ClosePanel />
       case 'open-panel':
         return <OpenPanel />
+      case 'dashboard':
+        return <Dashboard />
+      case 'data':
+        return <Data />
+      case 'prompt':
+        return <Prompt />
+      case 'test':
+        return <Test />
     }
   }, [type])
 
