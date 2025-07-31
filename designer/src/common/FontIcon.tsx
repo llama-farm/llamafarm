@@ -4,8 +4,16 @@ const Sun = lazy(() => import('../assets/icons/Sun'))
 const MoonFilled = lazy(() => import('../assets/icons/MoonFilled'))
 const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
 const ArrowFilled = lazy(() => import('../assets/icons/ArrowFilled'))
+const ClosePanel = lazy(() => import('../assets/icons/ClosePanel'))
+const OpenPanel = lazy(() => import('../assets/icons/OpenPanel'))
 
-type FontIconTypes = 'sun' | 'moon-filled' | 'user-avatar' | 'arrow-filled'
+type FontIconTypes =
+  | 'sun'
+  | 'moon-filled'
+  | 'user-avatar'
+  | 'arrow-filled'
+  | 'close-panel'
+  | 'open-panel'
 
 export interface FontIconProps {
   className?: string
@@ -32,6 +40,10 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <UserAvatar />
       case 'arrow-filled':
         return <ArrowFilled />
+      case 'close-panel':
+        return <ClosePanel />
+      case 'open-panel':
+        return <OpenPanel />
     }
   }, [type])
 
@@ -45,7 +57,7 @@ const FontIcon: React.FC<FontIconProps> = ({
           }
           handleOnClick()
         }}
-        className={`${className} cursor-pointer hover:bg-blue-400/20 rounded-full`}
+        className={`${className} cursor-pointer hover:bg-blue-400/20 rounded-sm`}
       >
         <Suspense fallback={<></>}>{renderIcon()}</Suspense>
       </button>

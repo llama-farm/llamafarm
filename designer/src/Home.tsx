@@ -22,7 +22,7 @@ function Home() {
 
   return (
     <div
-      className="h-full flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-8 pt-10"
+      className="flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-8 "
       style={{
         background:
           'radial-gradient(88.43% 88.43% at 49.96% 88.43%, #007FFF 0%, #000D3E 100%)',

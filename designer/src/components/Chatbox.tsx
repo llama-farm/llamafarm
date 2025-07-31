@@ -11,6 +11,7 @@ export interface Message {
   isLoading?: boolean
 }
 function Chatbox() {
+  const [isPanelOpen, setIsPanelOpen] = useState<boolean>(true)
   const [messages, setMessages] = useState<Message[]>([
     {
       type: 'user',
@@ -35,31 +36,55 @@ function Chatbox() {
   }
 
   return (
-    <div className="bg-[#131E45] w-1/4 h-full p-4 text-white flex flex-col justify-between">
-      <div className="flex flex-col gap-4">
-        {messages.map((message, index) => (
-          <Message key={index} message={message} />
-        ))}
-      </div>
-      <div className="bg-[#040D1D] flex flex-col gap-2 p-2 rounded-lg">
-        <textarea
-          value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
-          className="w-full h-8 resize-none bg-transparent border-none text-white placeholder-white focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden"
-          //   className="w-full h-[78px] bg-transparent border-none resize-none p-4 pr-12 text-white placeholder-white/60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed"
-          placeholder="Type here..."
+    <div
+      className={`bg-[#131E45] w-full h-full flex flex-col  text-white ${
+        isPanelOpen ? 'w-1/4' : 'w-[48px]'
+      }`}
+    >
+      <div
+        className={`flex  ${
+          isPanelOpen ? 'justify-end mr-1 mt-1' : 'justify-center mt-3'
+        }`}
+      >
+        <FontIcon
+          isButton
+          type={isPanelOpen ? 'close-panel' : 'open-panel'}
+          className={`w-6 h-6 text-[#007FFF] ${
+            isPanelOpen ? 'text-[#007FFF]' : 'text-[#85B1FF]'
+          }`}
+          handleOnClick={() => setIsPanelOpen(!isPanelOpen)}
         />
-        {/* <button
+      </div>
+      <div
+        className={`flex flex-col justify-between h-full p-4 ${
+          isPanelOpen ? 'flex' : 'hidden'
+        }`}
+      >
+        <div className="flex flex-col gap-4">
+          {messages.map((message, index) => (
+            <Message key={index} message={message} />
+          ))}
+        </div>
+        <div className="bg-[#040D1D] flex flex-col gap-2 p-2 rounded-lg">
+          <textarea
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            className="w-full h-8 resize-none bg-transparent border-none text-white placeholder-white focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden"
+            //   className="w-full h-[78px] bg-transparent border-none resize-none p-4 pr-12 text-white placeholder-white/60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed"
+            placeholder="Type here..."
+          />
+          {/* <button
           onClick={handleSendClick}
           className="w-8 h-8 bg-blue-600 hover:bg-blue-500 rounded-full flex items-center justify-center text-[#040D1D] transition-colors duration-200 shadow-sm hover:shadow-md self-end"
         > */}
-        <FontIcon
-          isButton
-          type="arrow-filled"
-          className="w-8 h-8 text-[#85B1FF] self-end"
-          handleOnClick={handleSendClick}
-        />
-        {/* </button> */}
+          <FontIcon
+            isButton
+            type="arrow-filled"
+            className="w-8 h-8 text-[#85B1FF] self-end"
+            handleOnClick={handleSendClick}
+          />
+          {/* </button> */}
+        </div>
       </div>
     </div>
   )
