@@ -49,7 +49,7 @@ def load_prompt_system(config_file: str) -> PromptSystem:
 @click.group()
 @click.option(
     '--config', 
-    default='config/default_prompts.json',
+    default='config/default_prompts.yaml',
     help='Path to prompts configuration file',
     show_default=True
 )

@@ -263,7 +263,7 @@ class TemplateLoader:
         category_path.mkdir(parents=True, exist_ok=True)
         
         # Generate filename
-        filename = f"{template.template_id}.json"
+        filename = f"{template.template_id}.yaml"
         file_path = category_path / filename
         
         # Check if file exists
@@ -274,7 +274,7 @@ class TemplateLoader:
         template_data = template.dict()
         
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(template_data, f, indent=2, default=str)
+            yaml.dump(template_data, f, default_flow_style=False, sort_keys=False)
         
         logger.info(f"Created template file: {file_path}")
         return str(file_path)

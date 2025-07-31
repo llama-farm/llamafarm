@@ -71,7 +71,7 @@ setup_environment() {
     echo -e "${GREEN}✅ Dependencies installed${NC}"
     
     # Generate configuration if needed
-    if [ ! -f "config/default_prompts.json" ]; then
+    if [ ! -f "config/default_prompts.yaml" ]; then
         echo "🔄 Generating prompt configuration..."
         uv run python generate_config.py
         echo -e "${GREEN}✅ Configuration generated${NC}"
@@ -503,7 +503,7 @@ async def call_llm(prompt: str, provider_name: str = "LLM") -> tuple[str, str]:
     return "[No LLM available - showing template only]", "Template Only"
 
 async def main():
-    config = PromptConfig.from_file('config/default_prompts.json')
+    config = PromptConfig.from_file('config/default_prompts.yaml')
     system = PromptSystem(config)
     
     print("═" * 80)

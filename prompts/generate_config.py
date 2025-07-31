@@ -22,13 +22,13 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="config/default_prompts.json",
+        default="config/default_prompts.yaml",
         help="Output configuration file"
     )
     parser.add_argument(
         "--format",
         choices=["json", "yaml"],
-        default="json",
+        default="yaml",
         help="Output format"
     )
     parser.add_argument(

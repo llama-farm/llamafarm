@@ -279,7 +279,7 @@ class TestPromptSystemIntegration:
     def test_real_config_loading(self):
         """Test loading a real configuration file."""
         # This would test with the actual config file
-        config_path = Path(__file__).parent.parent / "config" / "default_prompts.json"
+        config_path = Path(__file__).parent.parent / "config" / "default_prompts.yaml"
         
         if config_path.exists():
             config = PromptConfig.from_file(str(config_path))
@@ -298,7 +298,7 @@ class TestPromptSystemIntegration:
     
     def test_configuration_validation(self):
         """Test configuration validation."""
-        config_path = Path(__file__).parent.parent / "config" / "default_prompts.json"
+        config_path = Path(__file__).parent.parent / "config" / "default_prompts.yaml"
         
         if config_path.exists():
             config = PromptConfig.from_file(str(config_path))
