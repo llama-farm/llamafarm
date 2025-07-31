@@ -42,6 +42,7 @@ class RAGConfig(TypedDict):
 class LlamaFarmConfig(TypedDict):
     """Complete LlamaFarm configuration."""
     version: Literal["v1"]
+    name: str
     prompts: List[PromptConfig]
     rag: RAGConfig
     datasets: List[DatasetsConfig]
