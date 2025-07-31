@@ -1,4 +1,6 @@
 import uuid
+import json
+import re
 from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
@@ -7,6 +9,7 @@ from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgen
 import instructor
 from openai import OpenAI
 from core.config import settings
+from services.tool_service import ToolService
 
 router = APIRouter(
     prefix="/inference",
@@ -19,6 +22,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     session_id: str
+    tool_results: Optional[Dict] = None
 
 # Store agent instances to maintain conversation context
 # In production, use Redis, database, or other persistent storage
@@ -30,7 +34,7 @@ def create_agent() -> BaseAgent:
     memory = AgentMemory()
     
     # Initialize memory with an initial message from the assistant
-    initial_message = BaseAgentOutputSchema(chat_message="Hello! How can I assist you today?")
+    initial_message = BaseAgentOutputSchema(chat_message="Hello! How can I assist you today? I can help you manage your LlamaFarm configurations, including updating config names.")
     memory.add_message("assistant", initial_message)
     
     # Create OpenAI-compatible client pointing to Ollama
@@ -52,12 +56,60 @@ def create_agent() -> BaseAgent:
     
     return agent
 
+def extract_tool_calls(message: str) -> list:
+    """
+    Extract tool calls from the agent's response message.
+    Looks for patterns like:
+    - [TOOL_CALL:update_config_name:{"project_id": "test", "config_type": "prompts", "old_name": "old", "new_name": "new"}]
+    """
+    tool_calls = []
+    pattern = r'\[TOOL_CALL:([^:]+):(\{[^}]+\})\]'
+    
+    matches = re.findall(pattern, message)
+    for tool_name, params_str in matches:
+        try:
+            params = json.loads(params_str)
+            tool_calls.append({
+                "tool_name": tool_name,
+                "parameters": params
+            })
+        except json.JSONDecodeError:
+            # Skip malformed tool calls
+            continue
+    
+    return tool_calls
+
+def execute_tool_calls(tool_calls: list) -> list:
+    """
+    Execute tool calls and return results.
+    """
+    results = []
+    for tool_call in tool_calls:
+        tool_name = tool_call["tool_name"]
+        parameters = tool_call["parameters"]
+        
+        result = ToolService.execute_tool(tool_name, **parameters)
+        results.append({
+            "tool_name": tool_name,
+            "parameters": parameters,
+            "result": result
+        })
+    
+    return results
+
+def remove_tool_calls_from_message(message: str) -> str:
+    """
+    Remove tool call patterns from the message to get clean text.
+    """
+    pattern = r'\[TOOL_CALL:[^:]+:\{[^}]+\}\]'
+    return re.sub(pattern, '', message).strip()
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest, 
     session_id: Optional[str] = Header(None, alias="X-Session-ID")
 ):
-    """Send a message to the chat agent"""
+    """Send a message to the chat agent with tool calling capabilities"""
     try:
         # If no session ID provided, create a new one
         if not session_id or session_id not in agent_sessions:
@@ -80,7 +132,34 @@ async def chat(
             # Fallback if the response structure is different
             response_message = str(response)
         
-        return ChatResponse(message=response_message, session_id=session_id)
+        # Check for tool calls in the response
+        tool_calls = extract_tool_calls(response_message)
+        tool_results = None
+        
+        if tool_calls:
+            # Execute the tool calls
+            tool_results = execute_tool_calls(tool_calls)
+            
+            # Remove tool call patterns from the message
+            response_message = remove_tool_calls_from_message(response_message)
+            
+            # Add tool results to the response message
+            if tool_results:
+                result_summary = []
+                for result in tool_results:
+                    if result["result"]["success"]:
+                        result_summary.append(f"✅ {result['result']['message']}")
+                    else:
+                        result_summary.append(f"❌ {result['result']['message']}")
+                
+                if result_summary:
+                    response_message += "\n\n" + "\n".join(result_summary)
+        
+        return ChatResponse(
+            message=response_message, 
+            session_id=session_id,
+            tool_results=tool_results
+        )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
@@ -93,3 +172,8 @@ async def delete_chat_session(session_id: str):
         return {"message": f"Session {session_id} deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="Session not found")
+
+@router.get("/tools")
+async def get_available_tools():
+    """Get information about available tools"""
+    return ToolService.get_available_tools()
