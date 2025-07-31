@@ -78,7 +78,10 @@ check_llm_providers() {
     
     # Load environment variables if .env exists
     if [ -f "../.env" ]; then
-        export $(grep -v '^#' ../.env | xargs)
+        # Source only valid environment variables, filtering out comments and empty lines
+        set -a  # Automatically export all variables
+        source <(grep -E '^[A-Z_]+=.*' ../.env | grep -v '^#' | head -20)
+        set +a  # Turn off automatic export
         echo -e "${GREEN}✅ Loaded environment variables from ../.env${NC}"
     fi
     
