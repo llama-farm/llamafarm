@@ -1,0 +1,36 @@
+{
+  "name": "Test Model Configuration",
+  "version": "1.0.0",
+  "default_provider": "openai_test",
+  "providers": {
+    "openai_test": {
+      "type": "cloud",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "max_tokens": 1000,
+      "temperature": 0.7,
+      "cost_per_1k_tokens": 0.00015
+    },
+    "openai_fast": {
+      "type": "cloud", 
+      "provider": "openai",
+      "model": "gpt-3.5-turbo",
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "max_tokens": 1000,
+      "temperature": 0.3,
+      "cost_per_1k_tokens": 0.002
+    }
+  },
+  "fallback_chain": ["openai_test", "openai_fast"],
+  "selection_strategy": {
+    "type": "cost_optimized",
+    "factors": {
+      "cost": 0.5,
+      "quality": 0.3,
+      "speed": 0.2
+    }
+  }
+}
