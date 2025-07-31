@@ -216,7 +216,7 @@ llamafarm models deploy --model fine_tuned_model --adapter lora_adapter
         "qa_generation": {
           "enabled": true,
           "questions_per_doc": 3,
-          "model": "gpt-3.5-turbo"
+          "model": "gpt-4o-mini-turbo"
         }
       },
       "validation": {

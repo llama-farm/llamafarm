@@ -361,7 +361,7 @@ llamafarm models create-rag-dataset \
   --rag-config ./rag/rag_config.json \
   --output ./datasets/rag_qa_dataset.json \
   --questions-per-doc 3 \
-  --generation-model gpt-3.5-turbo
+  --generation-model gpt-4o-mini-turbo
 
 # Deploy enhanced RAG pipeline
 llamafarm deploy \

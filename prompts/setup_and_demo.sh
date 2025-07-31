@@ -82,6 +82,8 @@ check_llm_providers() {
         set -a  # Automatically export all variables
         source <(grep -E '^[A-Z_]+=.*' ../.env | grep -v '^#' | head -20)
         set +a  # Turn off automatic export
+        # Unset organization to avoid header mismatch
+        unset OPENAI_ORG_ID
         echo -e "${GREEN}✅ Loaded environment variables from ../.env${NC}"
     fi
     
@@ -313,10 +315,13 @@ demo_live_llm() {
     cat > temp_live_demo.py << 'EOF'
 import asyncio
 import os
+import sys
 import requests
 import json
+import time
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv(dotenv_path="../.env")
 
 try:
@@ -328,67 +333,162 @@ except ImportError:
 from prompts.core.prompt_system import PromptSystem
 from prompts.models.config import PromptConfig
 
-async def call_llm(prompt: str) -> str:
-    """Call available LLM provider."""
+def print_progress(message):
+    """Print progress with spinner effect."""
+    print(f"\r{message}...", end="", flush=True)
+
+async def call_llm(prompt: str, provider_name: str = "LLM") -> tuple[str, str]:
+    """Call available LLM provider and return response with provider info."""
     # Try OpenAI first
     openai_key = os.getenv('OPENAI_API_KEY')
-    if OPENAI_AVAILABLE and openai_key:
+    if OPENAI_AVAILABLE and openai_key and openai_key.startswith('sk-'):
         try:
+            print_progress(f"   🔄 Calling OpenAI API")
+            # Clean environment
+            os.environ.pop('OPENAI_ORG_ID', None)
+            os.environ.pop('OPENAI_ORGANIZATION', None)
+            
             client = OpenAI(api_key=openai_key)
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
-                temperature=0.7
-            )
-            return response.choices[0].message.content
+            
+            # Check for preferred model from environment, otherwise use modern model priority
+            preferred_model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+            
+            # Try preferred model first, then fallback to others
+            if preferred_model != 'gpt-4o-mini':
+                models_to_try = [(preferred_model, f"OpenAI {preferred_model}")]
+            else:
+                models_to_try = []
+                
+            # Add fallback models in order of preference
+            fallback_models = [
+                ("gpt-4o-mini", "OpenAI GPT-4o Mini"),
+                ("gpt-4o", "OpenAI GPT-4o"), 
+                ("gpt-4-turbo", "OpenAI GPT-4 Turbo"),
+                ("gpt-4", "OpenAI GPT-4"),
+                ("gpt-3.5-turbo", "OpenAI GPT-3.5 Turbo")
+            ]
+            
+            # Add fallback models, avoiding duplicates
+            for model, display in fallback_models:
+                if not models_to_try or model != models_to_try[0][0]:
+                    models_to_try.append((model, display))
+            
+            last_error = None
+            for model_name, display_name in models_to_try:
+                try:
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1000,
+                        temperature=0.7
+                    )
+                    print("\r" + " " * 50 + "\r", end="")  # Clear progress line
+                    return response.choices[0].message.content, display_name
+                except Exception as e:
+                    last_error = str(e)
+                    if "does not exist" not in str(e).lower() and "model" not in str(e).lower():
+                        # If it's not a model availability error, break and show the error
+                        break
+                    continue
+            
+            # If we get here, all models failed
+            raise Exception(last_error or "All OpenAI models failed")
         except Exception as e:
-            print(f"OpenAI failed: {str(e)[:100]}")
+            print(f"\r   ⚠️  OpenAI error: {str(e)[:60]}...")
     
     # Try Ollama
     try:
-        data = {"model": "llama3.1:8b", "prompt": prompt[:1500], "stream": False}
-        response = requests.post("http://localhost:11434/api/generate", json=data, timeout=45)
+        print_progress("   🔄 Calling Ollama (llama3.1:8b)")
+        data = {"model": "llama3.1:8b", "prompt": prompt, "stream": False}
+        response = requests.post("http://localhost:11434/api/generate", json=data, timeout=60)
         if response.status_code == 200:
-            return response.json().get('response', 'No response')
+            print("\r" + " " * 50 + "\r", end="")  # Clear progress line
+            return response.json().get('response', 'No response'), "Ollama llama3.1:8b"
     except Exception as e:
-        print(f"Ollama failed: {str(e)[:100]}")
+        print(f"\r   ⚠️  Ollama error: {str(e)[:60]}...")
     
-    return "[LLM not available]"
+    print("\r" + " " * 50 + "\r", end="")  # Clear progress line
+    return "[No LLM available - showing template only]", "Template Only"
 
 async def main():
     config = PromptConfig.from_file('config/default_prompts.json')
     system = PromptSystem(config)
     
-    print("🔄 Generating response with qa_basic template...")
+    print("═" * 80)
+    print("🔄 Example 1: Basic Q&A Template")
+    print("═" * 80)
+    
+    # Generate prompt
     result = system.execute_prompt(
         query="What are the main benefits of machine learning in healthcare?",
-        variables={"context": [{"title": "Healthcare AI", "content": "ML improves diagnostics and treatment"}]},
+        variables={"context": [{"title": "Healthcare AI", "content": "ML improves diagnostics and treatment accuracy by analyzing medical images, predicting patient outcomes, and personalizing treatments"}]},
         template_override="qa_basic"
     )
     
-    print("🤖 Getting LLM response...")
-    response = await call_llm(result.rendered_prompt)
-    print(f"📤 Response ({len(response)} chars):")
-    print(f"   {response[:150]}...")
+    print("\n📝 FULL GENERATED PROMPT:")
+    print("─" * 80)
+    print(result.rendered_prompt)
+    print("─" * 80)
+    
+    # Get LLM response
+    response, provider = await call_llm(result.rendered_prompt)
+    print(f"\n🤖 LLM RESPONSE (via {provider}):")
+    print("─" * 80)
+    print(response)
+    print("─" * 80)
     print()
     
-    print("⚖️ Evaluating response with LLM Judge...")
+    # Example 2: LLM Judge
+    print("═" * 80)
+    print("⚖️ Example 2: LLM Judge Evaluation")
+    print("═" * 80)
+    
     judge_result = system.execute_prompt(
         query="Evaluate response",
         variables={
             "original_query": "What are the main benefits of machine learning in healthcare?",
             "response_to_evaluate": response,
-            "evaluation_criteria": "Medical accuracy and clarity",
-            "context": [{"title": "Healthcare AI", "content": "ML improves diagnostics"}]
+            "evaluation_criteria": "Medical accuracy, completeness, and clarity",
+            "context": [{"title": "Healthcare AI", "content": "ML improves diagnostics and treatment accuracy"}]
         },
         template_override="llm_judge"
     )
     
-    evaluation = await call_llm(judge_result.rendered_prompt)
-    print("🎯 Evaluation Result:")
-    print("=" * 50)
-    print(evaluation[:800] + "..." if len(evaluation) > 800 else evaluation)
+    print("\n📝 EVALUATION PROMPT (truncated to 1000 chars):")
+    print("─" * 80)
+    print(judge_result.rendered_prompt[:1000] + "...\n[TRUNCATED FOR DISPLAY]")
+    print("─" * 80)
+    
+    # Get evaluation
+    evaluation, eval_provider = await call_llm(judge_result.rendered_prompt)
+    print(f"\n🎯 EVALUATION RESULT (via {eval_provider}):")
+    print("─" * 80)
+    print(evaluation)
+    print("─" * 80)
+    print()
+    
+    # Example 3: Chain of Thought
+    print("═" * 80)
+    print("🔍 Example 3: Chain of Thought Template")
+    print("═" * 80)
+    
+    cot_result = system.execute_prompt(
+        query="How does machine learning improve medical diagnosis accuracy?",
+        variables={"context": [{"title": "ML in Medicine", "content": "Pattern recognition in medical imaging, predictive analytics for disease progression, and integration with electronic health records"}]},
+        template_override="chain_of_thought"
+    )
+    
+    print("\n📝 CHAIN OF THOUGHT PROMPT:")
+    print("─" * 80)
+    print(cot_result.rendered_prompt)
+    print("─" * 80)
+    
+    # Get CoT response
+    cot_response, cot_provider = await call_llm(cot_result.rendered_prompt)
+    print(f"\n🧠 REASONING RESPONSE (via {cot_provider}):")
+    print("─" * 80)
+    print(cot_response)
+    print("─" * 80)
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -405,40 +505,56 @@ EOF
 # Show CLI examples
 show_cli_examples() {
     echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${PURPLE}🔧 CLI USAGE EXAMPLES${NC}"
+    echo -e "${PURPLE}🔧 CLI USAGE EXAMPLES WITH OUTPUTS${NC}"
     echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
     echo
     
-    echo -e "${CYAN}Common CLI commands for daily use:${NC}"
+    echo -e "${CYAN}Running actual CLI commands to show their outputs...${NC}"
     echo
     
-    echo -e "${YELLOW}📋 List all templates:${NC}"
-    echo "   uv run python -m prompts.cli template list"
+    # List templates
+    echo -e "${YELLOW}📋 Command: List all templates${NC}"
+    echo -e "${BLUE}$ uv run python -m prompts.cli template list${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    uv run python -m prompts.cli template list
     echo
     
-    echo -e "${YELLOW}🔍 Get template details:${NC}"
-    echo "   uv run python -m prompts.cli template show medical_qa"
+    # Show template details
+    echo -e "${YELLOW}🔍 Command: Get template details${NC}"
+    echo -e "${BLUE}$ uv run python -m prompts.cli template show medical_qa${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    uv run python -m prompts.cli template show medical_qa
     echo
     
-    echo -e "${YELLOW}💬 Execute basic query:${NC}"
-    echo "   uv run python -m prompts.cli execute 'What is artificial intelligence?'"
+    # Execute basic query
+    echo -e "${YELLOW}💬 Command: Execute basic query${NC}"
+    echo -e "${BLUE}$ uv run python -m prompts.cli execute 'What is artificial intelligence?'${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    uv run python -m prompts.cli execute 'What is artificial intelligence?' 2>/dev/null | head -20
     echo
     
-    echo -e "${YELLOW}🎯 Use specific template:${NC}"
-    echo "   uv run python -m prompts.cli execute 'Compare solar vs wind' --template comparative_analysis"
+    # Use specific template
+    echo -e "${YELLOW}🎯 Command: Use specific template${NC}"
+    echo -e "${BLUE}$ uv run python -m prompts.cli execute 'Compare solar vs wind' --template comparative_analysis${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    uv run python -m prompts.cli execute 'Compare solar vs wind energy' \
+        --template comparative_analysis \
+        --variables '{"context": [{"title": "Energy Report", "content": "Solar and wind are renewable energy sources"}]}' 2>/dev/null | head -25
     echo
     
-    echo -e "${YELLOW}🏥 Medical domain query:${NC}"
-    echo "   uv run python -m prompts.cli execute 'Diabetes symptoms' --variables '{\"domain\": \"medical\"}'"
+    # Medical domain query
+    echo -e "${YELLOW}🏥 Command: Medical domain query${NC}"
+    echo -e "${BLUE}$ uv run python -m prompts.cli execute 'Diabetes symptoms' --variables '{\"domain\": \"medical\"}'${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    uv run python -m prompts.cli execute 'What are the symptoms of diabetes?' \
+        --variables '{"domain": "medical", "context": [{"title": "Medical Guide", "content": "Diabetes symptoms include increased thirst"}]}' 2>/dev/null | head -20
     echo
     
-    echo -e "${YELLOW}⚖️ Evaluate a response:${NC}"
-    echo '   uv run python -m prompts.cli execute "Judge this" --template llm_judge \'
-    echo '     --variables '"'"'{"original_query": "What is AI?", "response_to_evaluate": "AI is smart computers", "evaluation_criteria": "Accuracy", "context": [{"title": "AI", "content": "Info"}]}'"'"
-    echo
-    
-    echo -e "${YELLOW}📊 System statistics:${NC}"
-    echo "   uv run python -m prompts.cli stats"
+    # System statistics
+    echo -e "${YELLOW}📊 Command: System statistics${NC}"
+    echo -e "${BLUE}$ uv run python -m prompts.cli stats${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    uv run python -m prompts.cli stats
     echo
 }
 
@@ -471,15 +587,16 @@ run_benchmark() {
                 ;;
         esac
         
-        # Time the execution
-        START_TIME=$(date +%s%3N)
+        # Time the execution (use seconds and calculate milliseconds)
+        START_TIME=$(date +%s)
         uv run python -m prompts.cli execute "Test query for $template" \
             --template "$template" \
             --variables "$VARS" > /dev/null 2>&1
-        END_TIME=$(date +%s%3N)
+        END_TIME=$(date +%s)
         
         DURATION=$((END_TIME - START_TIME))
-        echo -e "   ${GREEN}✅ $template: ${DURATION}ms${NC}"
+        DURATION_MS=$((DURATION * 1000))
+        echo -e "   ${GREEN}✅ $template: ${DURATION_MS}ms${NC}"
     done
     echo
 }

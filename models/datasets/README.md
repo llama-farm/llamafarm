@@ -77,7 +77,7 @@ graph TD
     
     "generation": {
       "method": "synthetic_qa",
-      "model": "gpt-3.5-turbo",
+      "model": "gpt-4o-mini-turbo",
       "questions_per_document": 3,
       "question_types": ["factual", "analytical", "summarization"],
       "context_window": 2048,
@@ -184,7 +184,7 @@ graph TD
 {
   "synthetic_generation": {
     "base_examples": "./seed_data/base_examples.json",
-    "generation_model": "gpt-3.5-turbo",
+    "generation_model": "gpt-4o-mini-turbo",
     "diversity_settings": {
       "temperature": 0.9,
       "top_p": 0.95,
@@ -488,7 +488,7 @@ class DatasetQualityMetrics:
         "name": "context_substitution",
         "description": "Replace context while keeping question structure",
         "ratio": 0.3,
-        "model": "gpt-3.5-turbo"
+        "model": "gpt-4o-mini-turbo"
       },
       {
         "name": "difficulty_scaling",

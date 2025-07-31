@@ -66,6 +66,283 @@ uv run python -m prompts.cli template test qa_basic \
   --variables '{"query":"What is AI?", "context":[{"title":"AI Guide", "content":"AI is..."}]}'
 ```
 
+## 🎯 Practical Examples & Customization Guide
+
+### Real-World Scenarios
+
+#### 1. Building a Customer Support Bot
+
+```bash
+# Scenario: Need friendly, helpful responses with context awareness
+
+# First, explore available templates
+uv run python -m prompts.cli template list --domain general
+
+# Use the chat assistant template for conversational responses
+uv run python -m prompts.cli execute "How do I reset my password?" \
+  --template chat_assistant \
+  --variables '{"tone": "friendly", "company": "TechCorp"}'
+
+# Create a custom support template
+cat > templates/domain_specific/customer_support.json << 'EOF'
+{
+  "template_id": "customer_support",
+  "name": "Customer Support Assistant",
+  "type": "chat",
+  "template": "You are a helpful customer support agent for {{company}}.\n\nCustomer Query: {{query}}\n\nContext:\n{{context}}\n\nProvide a clear, empathetic response that:\n1. Acknowledges the customer's issue\n2. Provides step-by-step help\n3. Offers additional resources\n\nResponse:",
+  "input_variables": ["query", "company"],
+  "optional_variables": ["context", "customer_history"],
+  "metadata": {
+    "use_case": "Customer support interactions",
+    "domain": "support",
+    "complexity": "medium",
+    "tags": ["support", "customer-service", "help"]
+  }
+}
+EOF
+
+# Test your new template
+uv run python -m prompts.cli template test customer_support \
+  --variables '{"query": "I cant login", "company": "TechCorp"}'
+```
+
+#### 2. Medical Information System
+
+```bash
+# Scenario: Need accurate, cautious medical information with disclaimers
+
+# Use the medical Q&A template with appropriate context
+uv run python -m prompts.cli execute "What are symptoms of diabetes?" \
+  --template medical_qa \
+  --variables '{"domain": "medical", "disclaimer": true}'
+
+# For complex medical queries, use chain of thought
+uv run python -m prompts.cli execute "Analyze drug interactions between aspirin and warfarin" \
+  --template chain_of_thought \
+  --variables '{"domain": "medical", "context": [{"title": "Drug Database", "content": "..."}]}'
+```
+
+#### 3. Code Review Assistant
+
+```bash
+# Scenario: Automated code review with specific focus areas
+
+# Basic code analysis
+uv run python -m prompts.cli execute "Review this Python function for security issues" \
+  --template code_analysis \
+  --variables '{"code": "def login(username, password):\n    query = f\"SELECT * FROM users WHERE name={username}\"", "focus": "security"}'
+
+# Comparative code analysis
+uv run python -m prompts.cli execute "Compare these two implementations" \
+  --template comparative_analysis \
+  --variables '{"option_a": "iterative_solution.py", "option_b": "recursive_solution.py"}'
+```
+
+### Strategy Customization
+
+#### Understanding Strategy Selection
+
+```bash
+# View current strategies
+uv run python -m prompts.cli strategy list
+
+# Test how strategies select templates
+uv run python -m prompts.cli strategy test rule_based_strategy \
+  --test-file tests/data/strategy_test_cases.json
+```
+
+#### Creating Custom Strategies
+
+```python
+# Create a custom strategy for your domain
+# File: strategies/custom_strategy.json
+{
+  "strategy_id": "domain_expert_strategy",
+  "name": "Domain Expert Strategy",
+  "type": "rule_based",
+  "rules": [
+    {
+      "conditions": {
+        "domain": "legal",
+        "query_type": "contract"
+      },
+      "template_id": "legal_contract_analysis",
+      "priority": 100
+    },
+    {
+      "conditions": {
+        "domain": "legal",
+        "complexity": "high"
+      },
+      "template_id": "legal_reasoning",
+      "priority": 90
+    }
+  ],
+  "fallback_template": "qa_detailed",
+  "enabled": true
+}
+```
+
+#### Strategy Hierarchy Example
+
+```bash
+# Implement a multi-tier strategy system
+# 1. Domain-specific routing
+# 2. Complexity-based selection
+# 3. Context-aware fallbacks
+
+# Test your strategy hierarchy
+uv run python -m prompts.cli execute "Explain GDPR compliance requirements" \
+  --strategy domain_expert_strategy \
+  --variables '{"domain": "legal", "region": "EU"}' \
+  --show-details
+```
+
+### Template Modification Patterns
+
+#### 1. Adding Context-Aware Behavior
+
+```python
+# Original template (basic)
+{
+  "template": "Answer the question: {{query}}\n\nAnswer:"
+}
+
+# Enhanced with context awareness
+{
+  "template": "{% if context %}Based on the following context:\n{% for doc in context %}[{{doc.title}}]: {{doc.content}}\n{% endfor %}{% endif %}\n\nQuestion: {{query}}\n\nProvide a detailed answer{% if context %} using the provided context{% endif %}:"
+}
+```
+
+#### 2. Multi-Language Support
+
+```bash
+# Create language-specific template variants
+cp templates/basic/qa_basic.json templates/basic/qa_basic_es.json
+
+# Edit for Spanish
+# Modify the template content to Spanish prompts
+# Add language detection in your strategy
+```
+
+#### 3. Dynamic Template Selection
+
+```python
+# Create templates for different user expertise levels
+# beginner_explanation.json
+{
+  "template": "Explain {{topic}} in simple terms, as if explaining to someone new to the field:\n\n"
+}
+
+# expert_analysis.json  
+{
+  "template": "Provide an in-depth technical analysis of {{topic}}, including:\n- Advanced concepts\n- Current research\n- Technical implications\n\n"
+}
+
+# Use with dynamic selection
+uv run python -m prompts.cli execute "Explain quantum computing" \
+  --template beginner_explanation \
+  --variables '{"topic": "quantum computing", "user_level": "beginner"}'
+```
+
+### Global Prompt Customization
+
+#### Company-Wide Standards
+
+```bash
+# Add your organization's standards
+uv run python -m prompts.cli global-prompt create \
+  --id company_guidelines \
+  --name "Company AI Guidelines" \
+  --system "Always follow ACME Corp guidelines: Be professional, accurate, and helpful. Never disclose proprietary information." \
+  --applies-to "*" \
+  --priority 50
+
+# Add domain-specific overrides
+uv run python -m prompts.cli global-prompt create \
+  --id legal_compliance \
+  --name "Legal Compliance" \
+  --prefix "LEGAL NOTICE: This is not legal advice. Consult qualified counsel.\n\n" \
+  --applies-to "legal_*" \
+  --priority 10
+```
+
+### Integration Examples
+
+#### 1. RAG Pipeline Integration
+
+```python
+# Example: Integrate with your RAG system
+import asyncio
+from prompts.core.prompt_system import PromptSystem
+from prompts.models.config import PromptConfig
+
+async def rag_query(question: str, retrieved_docs: list):
+    # Load prompt system
+    config = PromptConfig.from_file('config/default_prompts.json')
+    prompt_system = PromptSystem(config)
+    
+    # Execute with context
+    result = prompt_system.execute_prompt(
+        query=question,
+        variables={
+            "context": retrieved_docs,
+            "source_citations": True
+        },
+        template_override="qa_detailed"  # or let strategy decide
+    )
+    
+    return result.rendered_prompt
+
+# Use in your RAG pipeline
+docs = retrieve_documents("What is quantum entanglement?")
+prompt = await rag_query("What is quantum entanglement?", docs)
+# Send to LLM...
+```
+
+#### 2. A/B Testing Templates
+
+```bash
+# Test which template performs better
+# Create variant templates
+cp templates/basic/qa_basic.json templates/basic/qa_basic_v2.json
+# Edit qa_basic_v2.json with improvements
+
+# Run A/B test
+uv run python -m prompts.cli execute "Explain machine learning" \
+  --template qa_basic > response_a.txt
+
+uv run python -m prompts.cli execute "Explain machine learning" \
+  --template qa_basic_v2 > response_b.txt
+
+# Evaluate both
+uv run python -m prompts.cli evaluate "$(cat response_a.txt)" \
+  --query "Explain machine learning" \
+  --criteria "clarity,completeness" \
+  --output-format score > score_a.txt
+
+uv run python -m prompts.cli evaluate "$(cat response_b.txt)" \
+  --query "Explain machine learning" \
+  --criteria "clarity,completeness" \
+  --output-format score > score_b.txt
+```
+
+### Best Practices for Customization
+
+1. **Start with existing templates**: Copy and modify rather than starting from scratch
+2. **Test incrementally**: Use the CLI test commands after each change
+3. **Document your templates**: Add clear metadata and use cases
+4. **Version control**: Track template changes in git
+5. **Benchmark performance**: Use the benchmark command to ensure changes don't degrade performance
+
+```bash
+# Before and after benchmarking
+uv run python -m prompts.cli benchmark --templates --iterations 20 > before.json
+# Make your changes...
+uv run python -m prompts.cli benchmark --templates --iterations 20 > after.json
+# Compare results
+```
+
 ## 📝 Template Types & When to Use Them
 
 Based on LangChain's prompt template patterns, our system provides specialized templates for different use cases:
@@ -765,11 +1042,154 @@ system.on_execution_error(lambda ctx, error: monitor.record_error(ctx, error))
 
 ### CLI Commands
 
-Full command reference available via:
+The system provides comprehensive CLI tools for all operations:
+
+#### Core Commands
+```bash
+# Execute prompts
+uv run python -m prompts.cli execute "What is AI?" --template qa_basic
+uv run python -m prompts.cli execute "Compare solar vs wind" --template comparative_analysis
+
+# System information
+uv run python -m prompts.cli stats
+```
+
+#### Template Management
+```bash
+uv run python -m prompts.cli template list
+uv run python -m prompts.cli template show medical_qa
+uv run python -m prompts.cli template search "medical"
+uv run python -m prompts.cli template create --interactive
+uv run python -m prompts.cli template test qa_basic --variables '{"context": [{"title": "Test", "content": "Data"}]}'
+uv run python -m prompts.cli template validate llm_judge
+```
+
+#### Strategy Management  
+```bash
+uv run python -m prompts.cli strategy list
+uv run python -m prompts.cli strategy test context_aware_strategy
+```
+
+#### System Validation & Testing
+```bash
+# Validate entire system
+uv run python -m prompts.cli validate --all
+
+# Validate specific components
+uv run python -m prompts.cli validate --templates
+uv run python -m prompts.cli validate --strategies --config
+
+# Test components
+uv run python -m prompts.cli test --all-templates
+uv run python -m prompts.cli test --template qa_basic --sample-size 3
+uv run python -m prompts.cli test --all-strategies
+```
+
+#### Response Evaluation
+```bash
+# Evaluate AI responses
+uv run python -m prompts.cli evaluate "AI is machine learning" \
+  --query "What is AI?" \
+  --criteria "accuracy,clarity,completeness" \
+  --output-format detailed
+
+# Use different evaluation templates
+uv run python -m prompts.cli evaluate "Response text" \
+  --query "Original query" \
+  --template rag_evaluation \
+  --context '[{"title": "Doc", "content": "Context"}]'
+```
+
+#### Performance Benchmarking
+```bash
+# Benchmark system performance
+uv run python -m prompts.cli benchmark --system --iterations 10
+
+# Benchmark specific components
+uv run python -m prompts.cli benchmark --templates --iterations 5
+uv run python -m prompts.cli benchmark --strategies --output json
+
+# Get CSV output for analysis
+uv run python -m prompts.cli benchmark --system --output csv
+```
+
+#### Global Prompts
+```bash
+uv run python -m prompts.cli global-prompt list
+uv run python -m prompts.cli global-prompt create \
+  --id custom_behavior \
+  --name "Custom System Behavior" \
+  --system "You are a helpful assistant" \
+  --applies-to "*" \
+  --priority 50
+```
+
+#### Full Command Reference
 ```bash
 uv run python -m prompts.cli --help
 uv run python -m prompts.cli template --help
 uv run python -m prompts.cli strategy --help
+uv run python -m prompts.cli validate --help
+uv run python -m prompts.cli test --help
+uv run python -m prompts.cli evaluate --help
+uv run python -m prompts.cli benchmark --help
+```
+
+## 🧪 Testing & Validation
+
+### Template Testing
+
+```bash
+# Validate template syntax
+uv run python -m prompts.cli template validate qa_basic
+
+# Test with sample data
+uv run python -m prompts.cli template test qa_basic \
+  --variables-file tests/data/qa_samples.json
+
+# Performance testing
+uv run python -m prompts.cli benchmark --templates --iterations 100
+```
+
+### Strategy Testing
+
+```bash
+# Test strategy logic
+uv run python -m prompts.cli strategy test context_aware_strategy \
+  --test-file tests/data/sample_contexts.json
+
+# Validate all strategies
+uv run python -m prompts.cli validate --strategies
+```
+
+### System Testing
+
+```bash
+# Run comprehensive system tests
+uv run python -m prompts.cli test --all-templates
+uv run python -m prompts.cli test --all-strategies
+
+# Validate entire system
+uv run python -m prompts.cli validate --all
+
+# Benchmark system performance
+uv run python -m prompts.cli benchmark --system --iterations 50 --output csv
+```
+
+### Response Evaluation
+
+```bash
+# Evaluate AI responses
+uv run python -m prompts.cli evaluate "AI response text here" \
+  --query "What is machine learning?" \
+  --criteria "accuracy,completeness,clarity" \
+  --template llm_judge
+
+# Use RAG evaluation template
+uv run python -m prompts.cli evaluate "Generated answer" \
+  --query "Original question" \
+  --template rag_evaluation \
+  --context '[{"title": "Doc1", "content": "Retrieved content"}]'
 ```
 
 ## 🤝 Contributing
