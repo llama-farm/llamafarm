@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 Llama Brain Test Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+        }
+        
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            background: white;
+            margin: 20px;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 2px solid #f0f0f0;
+        }
+        
+        .debug-panel {
+            width: 400px;
+            background: #1a1a1a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .status-bar {
+            background: #f8f9fa;
+            padding: 10px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+        
+        .status-dot.connected {
+            background: #28a745;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+        
+        .message.user {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .message.assistant {
+            background: white;
+            border: 1px solid #e0e0e0;
+            white-space: pre-wrap;
+        }
+        
+        .message.error {
+            background: #ffe6e6;
+            border: 1px solid #ff9999;
+            color: #d63384;
+        }
+        
+        .message-meta {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-top: 8px;
+        }
+        
+        .actions {
+            margin-top: 10px;
+        }
+        
+        .action-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin-right: 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .action-button:hover {
+            background: #218838;
+        }
+        
+        .suggestions {
+            margin-top: 10px;
+        }
+        
+        .suggestion {
+            background: #e9ecef;
+            padding: 5px 10px;
+            border-radius: 15px;
+            display: inline-block;
+            margin: 2px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .suggestion:hover {
+            background: #dee2e6;
+        }
+        
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .message-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+        }
+        
+        .message-input:focus {
+            border-color: #667eea;
+        }
+        
+        .send-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        
+        .send-button:hover {
+            background: #5a6fd8;
+        }
+        
+        .send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .debug-header {
+            background: #333;
+            color: #fff;
+            padding: 15px;
+            border-bottom: 1px solid #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .debug-logs {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 4px;
+            border-left: 3px solid #00ff00;
+            padding-left: 8px;
+        }
+        
+        .log-entry.error {
+            border-left-color: #ff0000;
+            color: #ff9999;
+        }
+        
+        .log-timestamp {
+            color: #888;
+            font-size: 10px;
+        }
+        
+        .log-data {
+            color: #88ff88;
+            margin-left: 20px;
+            font-size: 10px;
+        }
+        
+        .config-files {
+            background: #2a2a2a;
+            border-top: 1px solid #555;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .config-file {
+            background: #333;
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .config-file:hover {
+            background: #444;
+        }
+        
+        .config-file.selected {
+            background: #667eea;
+        }
+        
+        .config-content {
+            background: #1a1a1a;
+            color: #f8f8f2;
+            padding: 10px;
+            border-top: 1px solid #555;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            white-space: pre-wrap;
+        }
+        
+        .loading {
+            opacity: 0.7;
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .control-button {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .control-button:hover {
+            background: #5a6268;
+        }
+        
+        .quick-actions {
+            background: #f8f9fa;
+            padding: 10px 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .quick-action {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin-right: 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .quick-action:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Chat Panel -->
+        <div class="chat-panel">
+            <div class="chat-header">
+                <h1>🧠 Llama Brain Test Chat</h1>
+                <p>AI-powered LlamaFarm configuration assistant</p>
+            </div>
+            
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connecting...</span>
+                </div>
+                <div>
+                    <span id="sessionInfo">No session</span>
+                </div>
+            </div>
+            
+            <div class="quick-actions">
+                <button class="quick-action" onclick="sendQuickMessage('Help me create a model config for development')">🤖 Model Config</button>
+                <button class="quick-action" onclick="sendQuickMessage('I need a RAG system for PDF documents')">📄 RAG Config</button>
+                <button class="quick-action" onclick="sendQuickMessage('Show me how to create prompt templates')">📝 Prompt Config</button>
+                <button class="quick-action" onclick="resetSession()">🔄 Reset</button>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    <div>👋 Hi! I'm Llama Brain, your AI assistant for creating LlamaFarm configurations.</div>
+                    <div class="message-meta">Ask me about Models, RAG systems, or Prompts!</div>
+                </div>
+            </div>
+            
+            <div class="chat-input">
+                <div class="input-group">
+                    <input type="text" class="message-input" id="messageInput" 
+                           placeholder="Ask me about LlamaFarm configurations..." 
+                           onkeypress="handleKeyPress(event)">
+                    <button class="send-button" id="sendButton" onclick="sendMessage()">Send</button>
+                </div>
+                <div class="control-buttons">
+                    <button class="control-button" onclick="loadChatHistory()">📜 History</button>
+                    <button class="control-button" onclick="refreshConfigs()">📁 Refresh Configs</button>
+                    <button class="control-button" onclick="clearDebugLogs()">🧹 Clear Logs</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Debug Panel -->
+        <div class="debug-panel">
+            <div class="debug-header">
+                <span>🔍 Debug Console</span>
+                <button onclick="toggleAutoScroll()" id="autoScrollBtn" style="background:#555;border:none;color:white;padding:4px 8px;border-radius:3px;cursor:pointer;">Auto-scroll: ON</button>
+            </div>
+            
+            <div class="debug-logs" id="debugLogs">
+                <div class="log-entry">
+                    <div class="log-timestamp">Ready</div>
+                    <div>Debug console initialized</div>
+                </div>
+            </div>
+            
+            <div class="config-files">
+                <div style="color: #fff; font-weight: bold; margin-bottom: 10px;">📁 Generated Configs</div>
+                <div id="configFilesList">
+                    <div style="color: #888; font-size: 10px;">No configs generated yet</div>
+                </div>
+            </div>
+            
+            <div class="config-content" id="configContent">
+                <div style="color: #888;">Select a config file to view its content...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let autoScroll = true;
+        let selectedConfigFile = null;
+        
+        // Check API status on load
+        window.onload = function() {
+            checkStatus();
+            refreshConfigs();
+            setInterval(checkStatus, 10000); // Check every 10 seconds
+            setInterval(refreshDebugLogs, 2000); // Refresh logs every 2 seconds
+            setInterval(refreshConfigs, 5000); // Refresh configs every 5 seconds
+        };
+        
+        function checkStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusDot = document.getElementById('statusDot');
+                    const statusText = document.getElementById('statusText');
+                    
+                    if (data.llama_brain_status === 'connected') {
+                        statusDot.classList.add('connected');
+                        statusText.textContent = 'Connected to Llama Brain';
+                        
+                        const details = data.details;
+                        if (details && details.ollama_available) {
+                            statusText.textContent += ` (${details.available_models?.length || 0} models)`;
+                        }
+                    } else {
+                        statusDot.classList.remove('connected');
+                        statusText.textContent = 'Disconnected - ' + (data.error || 'Unknown error');
+                    }
+                })
+                .catch(error => {
+                    const statusDot = document.getElementById('statusDot');
+                    const statusText = document.getElementById('statusText');
+                    statusDot.classList.remove('connected');
+                    statusText.textContent = 'Connection failed';
+                    console.error('Status check failed:', error);
+                });
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        function sendQuickMessage(message) {
+            document.getElementById('messageInput').value = message;
+            sendMessage();
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            const sendButton = document.getElementById('sendButton');
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+            
+            // Add user message to chat
+            addMessage(message, 'user');
+            input.value = '';
+            
+            // Add debug log
+            addDebugLog('Sending message', { message: message });
+            
+            // Send to API
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => {
+                addDebugLog('API Response', { 
+                    status: response.status, 
+                    headers: Object.fromEntries(response.headers.entries()) 
+                });
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    addMessage(data.response, 'assistant', {
+                        actions: data.actions,
+                        suggestions: data.suggestions,
+                        confidence: data.confidence,
+                        session_id: data.session_id
+                    });
+                    
+                    // Update session info
+                    document.getElementById('sessionInfo').textContent = 
+                        `Session: ${data.session_id.substring(0, 8)}...`;
+                    
+                    addDebugLog('Message processed', {
+                        actions: data.actions?.length || 0,
+                        suggestions: data.suggestions?.length || 0,
+                        confidence: data.confidence
+                    });
+                } else {
+                    addMessage(`Error: ${data.error}`, 'error');
+                    addDebugLog('API Error', { error: data.error });
+                }
+            })
+            .catch(error => {
+                addMessage(`Connection error: ${error.message}`, 'error');
+                addDebugLog('Connection Error', { error: error.message });
+            })
+            .finally(() => {
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
+            });
+        }
+        
+        function addMessage(content, type, meta = {}) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            let html = `<div>${content}</div>`;
+            
+            if (meta.session_id) {
+                html += `<div class="message-meta">Session: ${meta.session_id.substring(0, 8)}... | Confidence: ${Math.round(meta.confidence * 100)}%</div>`;
+            }
+            
+            if (meta.actions && meta.actions.length > 0) {
+                html += '<div class="actions">';
+                meta.actions.forEach((action, index) => {
+                    html += `<button class="action-button" data-action-index="${index}">
+                        ${action.agent_type}: ${action.action}
+                    </button>`;
+                });
+                html += '</div>';
+            }
+            
+            if (meta.suggestions && meta.suggestions.length > 0) {
+                html += '<div class="suggestions">';
+                meta.suggestions.forEach(suggestion => {
+                    const safeSuggestion = suggestion.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                    html += `<span class="suggestion" onclick="sendQuickMessage('${safeSuggestion}')">${suggestion}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            messageDiv.innerHTML = html;
+            
+            // Add event listeners for action buttons
+            if (meta.actions && meta.actions.length > 0) {
+                const actionButtons = messageDiv.querySelectorAll('.action-button');
+                actionButtons.forEach((button, index) => {
+                    button.addEventListener('click', () => {
+                        const action = meta.actions[index];
+                        executeAction(action.agent_type, action.action, action.parameters);
+                    });
+                });
+            }
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function executeAction(agentType, action, parameters) {
+            // Parameters is already an object, no need to parse
+            if (typeof parameters === 'string') {
+                try {
+                    parameters = JSON.parse(parameters);
+                } catch (e) {
+                    console.error('Failed to parse parameters:', parameters);
+                    parameters = {};
+                }
+            }
+            
+            addDebugLog('Executing action', { agentType, action, parameters });
+            
+            const payload = {
+                agent_type: agentType,
+                action: action,
+                requirements: parameters
+            };
+            
+            fetch('/api/generate-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage(`✅ Configuration created successfully!\nFile: ${data.file_path}`, 'assistant');
+                    addDebugLog('Config generated', { file_path: data.file_path });
+                    refreshConfigs(); // Refresh the config files list
+                } else {
+                    addMessage(`❌ Configuration generation failed: ${data.message}`, 'error');
+                    addDebugLog('Config generation failed', { error: data.message });
+                }
+            })
+            .catch(error => {
+                addMessage(`❌ Action failed: ${error.message}`, 'error');
+                addDebugLog('Action failed', { error: error.message });
+            });
+        }
+        
+        function addDebugLog(message, data = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            const debugLogs = document.getElementById('debugLogs');
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            
+            let html = `<div class="log-timestamp">[${timestamp}]</div><div>${message}</div>`;
+            
+            if (data) {
+                html += `<div class="log-data">${JSON.stringify(data, null, 2)}</div>`;
+            }
+            
+            logEntry.innerHTML = html;
+            debugLogs.appendChild(logEntry);
+            
+            // Auto-scroll if enabled
+            if (autoScroll) {
+                debugLogs.scrollTop = debugLogs.scrollHeight;
+            }
+            
+            // Keep only last 100 log entries
+            while (debugLogs.children.length > 100) {
+                debugLogs.removeChild(debugLogs.firstChild);
+            }
+        }
+        
+        function refreshDebugLogs() {
+            fetch('/api/debug-logs')
+                .then(response => response.json())
+                .then(data => {
+                    // This would update from server logs, but we're using client-side logs for now
+                })
+                .catch(error => {
+                    console.error('Failed to refresh debug logs:', error);
+                });
+        }
+        
+        function refreshConfigs() {
+            fetch('/api/generated-configs')
+                .then(response => response.json())
+                .then(data => {
+                    const configsList = document.getElementById('configFilesList');
+                    
+                    if (data.configs && data.configs.length > 0) {
+                        configsList.innerHTML = '';
+                        data.configs.forEach(config => {
+                            const configDiv = document.createElement('div');
+                            configDiv.className = 'config-file';
+                            configDiv.onclick = () => selectConfigFile(config);
+                            
+                            configDiv.innerHTML = `
+                                <div style="font-weight: bold;">${config.name}</div>
+                                <div style="color: #888; font-size: 10px;">${config.type} • ${config.size} bytes</div>
+                                <div style="color: #666; font-size: 9px;">${new Date(config.modified).toLocaleString()}</div>
+                            `;
+                            
+                            configsList.appendChild(configDiv);
+                        });
+                    } else {
+                        configsList.innerHTML = '<div style="color: #888; font-size: 10px;">No configs generated yet</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to refresh configs:', error);
+                });
+        }
+        
+        function selectConfigFile(config) {
+            // Update selected state
+            document.querySelectorAll('.config-file.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            event.target.closest('.config-file').classList.add('selected');
+            
+            selectedConfigFile = config;
+            
+            // Load config content
+            fetch(`/api/config-content/${encodeURIComponent(config.path)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const configContent = document.getElementById('configContent');
+                    if (data.content) {
+                        configContent.textContent = data.content;
+                    } else {
+                        configContent.textContent = `Error: ${data.error}`;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('configContent').textContent = `Error loading config: ${error.message}`;
+                });
+        }
+        
+        function loadChatHistory() {
+            fetch('/api/chat-history')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.messages && data.messages.length > 0) {
+                        addDebugLog('Chat history loaded', { count: data.messages.length });
+                        // Optionally display history in chat
+                    } else {
+                        addDebugLog('No chat history available');
+                    }
+                })
+                .catch(error => {
+                    addDebugLog('Failed to load chat history', { error: error.message });
+                });
+        }
+        
+        function resetSession() {
+            fetch('/api/reset-session', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('sessionInfo').textContent = 'No session';
+                        addDebugLog('Session reset');
+                        addMessage('🔄 Session reset. Starting fresh!', 'assistant');
+                    }
+                })
+                .catch(error => {
+                    addDebugLog('Failed to reset session', { error: error.message });
+                });
+        }
+        
+        function clearDebugLogs() {
+            document.getElementById('debugLogs').innerHTML = '';
+            fetch('/api/clear-logs', { method: 'POST' })
+                .then(() => {
+                    addDebugLog('Debug logs cleared');
+                })
+                .catch(error => {
+                    addDebugLog('Failed to clear server logs', { error: error.message });
+                });
+        }
+        
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.getElementById('autoScrollBtn');
+            btn.textContent = `Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`;
+        }
+    </script>
+</body>
+</html>

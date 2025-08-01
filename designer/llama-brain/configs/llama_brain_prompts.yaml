@@ -1,0 +1,231 @@
+name: "Llama Brain Prompt Configuration"
+version: "1.0.0"
+description: "Prompt configuration for Llama Brain AI assistant specialized in LlamaFarm configuration"
+enabled: true
+default_strategy: "context_aware_strategy"
+
+# Model configuration for prompt system
+model:
+  provider: "ollama"
+  model_name: "llama3.2:3b"
+  temperature: 0.7
+  max_tokens: 2000
+  timeout: 60
+  endpoint: "http://localhost:11434"
+  options:
+    num_predict: 2000
+    top_k: 40
+    top_p: 0.9
+
+global_prompts:
+  - global_id: "system_identity"
+    name: "System Identity"
+    description: "Defines Llama Brain's role and expertise"
+    system_prompt: "You are Llama Brain, an AI assistant specialized in helping users create and configure LlamaFarm components. You have deep knowledge of Models, RAG systems, and Prompts configuration. You are practical, helpful, and always reference official documentation."
+    applies_to: 
+      - "*"
+    priority: 10
+    enabled: true
+    
+  - global_id: "config_expertise"
+    name: "Configuration Expertise"
+    description: "Guidelines for configuration assistance"
+    prefix_prompt: |
+      When helping with configurations, always:
+      1. Ask clarifying questions about use case and requirements
+      2. Explain the reasoning behind configuration choices  
+      3. Suggest best practices and optimizations
+      4. Warn about common pitfalls
+      5. Reference specific examples from the documentation
+    applies_to: 
+      - "config_*"
+      - "*_config_*"
+    priority: 20
+    enabled: true
+    
+  - global_id: "llamafarm_knowledge"
+    name: "LlamaFarm Knowledge Base"
+    description: "Use official documentation and context"
+    prefix_prompt: "Base your responses on the official LlamaFarm documentation and examples. Reference specific configuration files and CLI commands when appropriate. Use the RAG context provided to give accurate, up-to-date information."
+    applies_to: 
+      - "*"
+    priority: 30
+    enabled: true
+    
+  - global_id: "response_format"
+    name: "Response Formatting"
+    description: "Structure responses clearly"
+    suffix_prompt: |
+      
+      Structure your responses clearly:
+      - Use headers and bullet points for readability
+      - Include code examples when relevant
+      - Provide step-by-step instructions
+      - Suggest next steps or follow-up actions
+    applies_to: 
+      - "*"
+    priority: 40
+    enabled: true
+
+templates:
+  config_assistant:
+    template_id: "config_assistant"
+    name: "LlamaFarm Configuration Assistant"
+    type: "basic"
+    template: |
+      Based on the following documentation context:
+      
+      {{ context | format_documents }}
+      
+      User Question: {{ query }}
+      
+      As Llama Brain, I'll help you configure your LlamaFarm components. Let me analyze your request and provide specific guidance:
+      
+    input_variables: 
+      - "context"
+      - "query"
+    optional_variables: []
+    metadata:
+      use_case: "configuration_assistance"
+      complexity: "medium"
+      domain: "llamafarm"
+      tags:
+        - "configuration"
+        - "llamafarm"
+        - "assistance"
+      author: "Llama Brain Team"
+      description: "Primary template for LlamaFarm configuration assistance"
+
+  qa_basic:
+    template_id: "qa_basic"
+    name: "Basic Question Answering"
+    type: "basic"
+    template: |
+      Based on the following context:
+      
+      {{ context | format_documents }}
+      
+      Question: {{ query }}
+      
+      Answer:
+      
+    input_variables:
+      - "context"
+      - "query"
+    metadata:
+      use_case: "general_qa"
+      complexity: "low"
+      domain: "general"
+      tags:
+        - "qa"
+        - "basic"
+      description: "Simple question answering template"
+
+  qa_simple:
+    template_id: "qa_simple"
+    name: "Simple Question Only"
+    type: "basic"
+    template: |
+      Question: {{ query }}
+      
+      Answer:
+    input_variables:
+      - "query"
+    metadata:
+      use_case: "simple_qa"
+      complexity: "low"
+      domain: "general"
+      tags:
+        - "qa"
+        - "simple"
+      description: "Minimal question answering without context"
+
+  model_config_assistant:
+    template_id: "model_config_assistant"
+    name: "Model Configuration Helper"
+    type: "domain_specific"
+    template: |
+      As a LlamaFarm model configuration expert, help the user with their model setup.
+      
+      Context: {{ context | format_documents }}
+      
+      User Request: {{ query }}
+      
+      Provide specific model configuration guidance including:
+      - Provider recommendations
+      - Model selection advice
+      - Configuration parameters
+      - Best practices
+      
+    input_variables:
+      - "context"
+      - "query"
+    metadata:
+      use_case: "model_configuration"
+      complexity: "medium"
+      domain: "llamafarm_models"
+      tags:
+        - "models"
+        - "configuration"
+        - "specialized"
+      description: "Specialized template for model configuration assistance"
+
+  rag_config_assistant:
+    template_id: "rag_config_assistant"
+    name: "RAG Configuration Helper"
+    type: "domain_specific"
+    template: |
+      As a LlamaFarm RAG configuration expert, help the user set up their retrieval system.
+      
+      Context: {{ context | format_documents }}
+      
+      User Request: {{ query }}
+      
+      Provide comprehensive RAG setup guidance including:
+      - Document parser selection
+      - Vector store configuration
+      - Embedding model recommendations
+      - Retrieval strategy optimization
+      
+    input_variables:
+      - "context"
+      - "query"
+    metadata:
+      use_case: "rag_configuration"
+      complexity: "high"
+      domain: "llamafarm_rag"
+      tags:
+        - "rag"
+        - "configuration" 
+        - "retrieval"
+        - "specialized"
+      description: "Specialized template for RAG system configuration"
+
+
+
+
+strategies:
+  context_aware_strategy:
+    strategy_id: "context_aware_strategy"
+    name: "Context-Aware Template Selection"
+    description: "Selects templates based on query analysis and context"
+    type: "context_aware"
+    enabled: true
+    fallback_template: "config_assistant"
+  
+  static_selection:
+    strategy_id: "static_selection"
+    name: "Static Template Selection"
+    description: "Uses a fixed template for all queries"
+    type: "static"
+    enabled: true
+    template_id: "qa_basic"
+  
+  default_static:
+    strategy_id: "default_static"
+    name: "Default Static Strategy"
+    description: "Always returns the same template"
+    type: "static"
+    enabled: true
+    template_id: "config_assistant"
+

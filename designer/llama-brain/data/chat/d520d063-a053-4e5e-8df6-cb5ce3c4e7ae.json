@@ -1,0 +1,26 @@
+{
+  "session_id": "d520d063-a053-4e5e-8df6-cb5ce3c4e7ae",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are Llama Brain, an AI assistant specialized in helping users create and configure LlamaFarm components.\n\nYou have access to comprehensive documentation about:\n- Models: Multi-provider LLM management (OpenAI, Anthropic, Ollama, etc.)\n- RAG: Document processing and retrieval systems\n- Prompts: Template management and prompt engineering\n\nWhen users ask for help:\n1. Provide clear, actionable guidance\n2. Reference specific configuration examples when available\n3. Suggest next steps or alternatives\n4. If asked to create configs, explain what you would generate\n\nYou are helpful, concise, and focused on practical solutions. Always ask for clarification if the user's request is ambiguous.\n\nAvailable actions you can suggest:\n- create config: Generate a new configuration file\n- edit config: Modify an existing configuration\n- validate config: Check configuration validity\n\nBe conversational but professional. Use emojis sparingly and only when they add clarity.",
+      "timestamp": "2025-08-01 04:18:16.137474",
+      "metadata": {}
+    },
+    {
+      "role": "user",
+      "content": "Hello, can you help me create a model config?",
+      "timestamp": "2025-08-01 04:18:16.137786",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "I encountered an error: 'str' object has no attribute 'value'. Please try again or rephrase your question.",
+      "timestamp": "2025-08-01 04:18:16.177845",
+      "metadata": {}
+    }
+  ],
+  "created_at": "2025-08-01 04:18:16.137463",
+  "updated_at": "2025-08-01 04:18:16.177857",
+  "metadata": {}
+}

@@ -1,0 +1,40 @@
+{
+  "name": "Markdown Documentation with Section Chunking",
+  "version": "1.0",
+  "description": "Configuration for processing markdown documentation by splitting into sections",
+  "parser": {
+    "type": "MarkdownParser",
+    "config": {
+      "preserve_structure": true,
+      "extract_frontmatter": true,
+      "extract_headers": true,
+      "extract_links": true,
+      "extract_code_blocks": true,
+      "chunk_by_sections": true,
+      "min_section_length": 50,
+      "include_code_in_content": true
+    }
+  },
+  "embedder": {
+    "type": "OllamaEmbedder",
+    "config": {
+      "model": "nomic-embed-text",
+      "timeout": 30,
+      "batch_size": 10
+    }
+  },
+  "vector_store": {
+    "type": "ChromaStore",
+    "config": {
+      "collection_name": "markdown_sections",
+      "persist_directory": "./chroma_db_markdown_sections"
+    }
+  },
+  "retrieval": {
+    "strategy": "metadata_filtered",
+    "top_k": 5,
+    "metadata_filters": {
+      "file_type": "markdown"
+    }
+  }
+}

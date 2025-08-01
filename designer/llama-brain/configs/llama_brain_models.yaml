@@ -1,0 +1,99 @@
+name: "Llama Brain Model Configuration"
+version: "1.0.0"
+description: "Model configuration for Llama Brain AI assistant specialized in LlamaFarm configuration"
+
+# Default provider to use when no specific provider is requested
+default_provider: "llama_brain_chat"
+
+# Fallback chain - providers to try in order if primary fails
+fallback_chain: 
+  - "llama_brain_chat"
+  - "llama_brain_fallback"
+
+# Global settings that apply to all providers
+global_settings:
+  timeout: 120
+  max_retries: 3
+  default_temperature: 0.7
+  default_max_tokens: 2000
+
+# Provider configurations
+providers:
+  llama_brain_chat:
+    type: "local"
+    provider: "ollama"
+    model: "llama3.2:3b"
+    host: "localhost"
+    port: 11434
+    timeout: 60
+    temperature: 0.7
+    max_tokens: 2000
+    description: "Primary Llama Brain chat model"
+    # System prompt for this model
+    options:
+      system: "You are Llama Brain, an AI assistant specialized in helping users create and configure LlamaFarm components (Models, RAG, Prompts). You provide practical, accurate guidance based on official documentation."
+
+  llama_brain_fallback:
+    type: "local"
+    provider: "ollama"
+    model: "mistral:7b"
+    host: "localhost"
+    port: 11434
+    timeout: 90
+    temperature: 0.7
+    max_tokens: 2000
+    description: "Fallback model if primary is unavailable"
+    options:
+      system: "You are Llama Brain assistant. Help users configure LlamaFarm components based on documentation."
+
+  llama_brain_embeddings:
+    type: "local"
+    provider: "ollama"
+    model: "nomic-embed-text"
+    host: "localhost"
+    port: 11434
+    timeout: 30
+    description: "Embedding model for RAG operations"
+
+# Model selection rules for automatic provider selection
+model_selection:
+  rules:
+    - condition: "task_type == 'embedding'"
+      preferred_providers:
+        - "llama_brain_embeddings"
+        
+    - condition: "task_type == 'chat'"
+      preferred_providers:
+        - "llama_brain_chat"
+        - "llama_brain_fallback"
+        
+    - condition: "task_type == 'reasoning'"
+      preferred_providers:
+        - "llama_brain_chat"
+        - "llama_brain_fallback"
+
+# Monitoring configuration
+monitoring:
+  track_usage: true
+  log_requests: true
+  log_responses: false
+  alert_on_errors: true
+  log_level: "INFO"
+
+# Caching configuration
+caching:
+  enabled: true
+  backend: "memory"
+  ttl_seconds: 1800  # 30 minutes
+  max_size: "100MB"
+
+# Security settings
+security:
+  validate_api_keys: false  # Local models don't need API keys
+  mask_api_keys_in_logs: true
+
+# Development settings
+development:
+  mock_mode: false
+  debug_mode: false
+  verbose_logging: false

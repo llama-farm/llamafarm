@@ -1,0 +1,37 @@
+{
+  "name": "Markdown Documentation Processing",
+  "version": "1.0",
+  "description": "Configuration for processing markdown documentation with structure preservation",
+  "parser": {
+    "type": "MarkdownParser",
+    "config": {
+      "preserve_structure": true,
+      "extract_frontmatter": true,
+      "extract_headers": true,
+      "extract_links": true,
+      "extract_code_blocks": true,
+      "chunk_by_sections": false,
+      "min_section_length": 100,
+      "include_code_in_content": true
+    }
+  },
+  "embedder": {
+    "type": "OllamaEmbedder",
+    "config": {
+      "model": "nomic-embed-text",
+      "timeout": 30,
+      "batch_size": 10
+    }
+  },
+  "vector_store": {
+    "type": "ChromaStore",
+    "config": {
+      "collection_name": "markdown_docs",
+      "persist_directory": "./chroma_db_markdown"
+    }
+  },
+  "retrieval": {
+    "strategy": "basic_similarity",
+    "top_k": 5
+  }
+}

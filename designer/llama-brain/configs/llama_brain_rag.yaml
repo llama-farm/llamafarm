@@ -1,0 +1,135 @@
+version: v1
+
+# Global prompts for RAG responses
+prompts:
+  - name: "llama_brain_assistant"
+    prompt: "You are Llama Brain, an expert AI assistant specializing in LlamaFarm system configuration (Models, RAG, Prompts). Answer questions accurately based on the provided documentation context. When providing configuration examples, use actual working syntax from the documentation."
+    description: "Primary prompt for Llama Brain RAG responses"
+
+# RAG pipeline configuration
+rag:
+  description: "Llama Brain knowledge base for LlamaFarm documentation"
+  
+  # Document parsers
+  parsers:
+    markdown:
+      type: "MarkdownParser"
+      config:
+        chunk_size: 1000
+        chunk_overlap: 200
+        preserve_structure: true
+        extract_headers: true
+        extract_code_blocks: true
+      file_extensions: [".txt", ".md", ".rst"]
+      mime_types: ["text/plain", "text/markdown"]
+    
+    pdf:
+      type: "PDFParser"
+      config:
+        extract_metadata: true
+        extract_tables: true
+        chunk_size: 1000
+        chunk_overlap: 200
+      file_extensions: [".pdf"]
+      mime_types: ["application/pdf"]
+
+  # Embedding models
+  embedders:
+    default:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://localhost:11434"
+        batch_size: 16
+        timeout: 60
+
+  # Vector stores
+  vector_stores:
+    default:
+      type: "ChromaStore"
+      config:
+        collection_name: "llamafarm_docs"
+        persist_directory: "./data/rag/chroma_db"
+        metadata_config:
+          enable_versioning: true
+          enable_soft_delete: false
+          required_metadata:
+            - "doc_id"
+            - "chunk_id"
+            - "filename"
+            - "created_at"
+
+  # Retrieval strategies
+  retrieval_strategies:
+    default:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+      description: "Basic similarity search using embeddings"
+    
+    reranked:
+      type: "RerankedStrategy"
+      config:
+        base_strategy: "basic_similarity"
+        rerank_factors:
+          recency_weight: 0.1
+          popularity_weight: 0.05
+          authority_weight: 0.1
+      description: "Re-rank results using multiple factors"
+    
+    metadata_filtered:
+      type: "MetadataFilteredStrategy"
+      config:
+        distance_metric: "cosine"
+        default_filters:
+          source_type: ["documentation", "config", "readme"]
+      description: "Similarity search with metadata filtering"
+
+  # Configuration defaults
+  defaults:
+    parser: "auto"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "reranked"
+    top_k: 5
+    score_threshold: 0.0
+    include_metadata: true
+    include_scores: true
+
+# Model integration (for response generation)
+models:
+  - provider: "local"
+    model: "llama3.2:3b"
+    description: "Primary local model for RAG responses"
+
+# Processing configuration
+processing:
+  batch_size: 50
+  max_workers: 2
+  continue_on_error: true
+  max_errors_per_batch: 5
+  show_progress: true
+  progress_update_interval: 10
+
+# Search optimization
+search:
+  enable_search_cache: true
+  cache_ttl_seconds: 300
+  max_search_time_ms: 5000
+  enable_parallel_search: false
+
+# Monitoring and logging
+monitoring:
+  enable_metrics: true
+  metrics_interval_seconds: 60
+  log_level: "INFO"
+  log_queries: true
+  log_results: false
+  track_latency: true
+  track_popular_queries: true
+  track_failed_queries: true
+
+# Security settings
+security:
+  validate_api_keys: false  # Local setup
+  mask_api_keys_in_logs: true

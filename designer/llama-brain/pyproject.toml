@@ -1,0 +1,39 @@
+[project]
+name = "llama-brain"
+version = "0.1.0"
+description = "AI-powered config generation assistant using agentic workflows"
+authors = [
+    {name = "LlamaFarm Team", email = "team@llamafarm.dev"}
+]
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.0.0",
+    "requests>=2.31.0",
+    "aiofiles>=23.2.1",
+    "pyyaml>=6.0.0",
+    "flask>=3.1.1",
+]
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+llama-brain = "llama_brain.main:main"

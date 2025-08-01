@@ -1,0 +1,86 @@
+name: "Simple Q&A Pipeline with Prompts"
+version: "1.0"
+
+# Model configuration
+model:
+  provider: "ollama"
+  model_name: "llama3.2:3b"
+  temperature: 0.7
+  max_tokens: 1000
+  timeout: 60
+  endpoint: "http://localhost:11434"
+  options:
+    num_predict: 1000
+    top_k: 40
+    top_p: 0.9
+
+# Prompts configuration (following LlamaFarm prompts CLI format)
+enabled: true
+default_strategy: "static_selection"
+
+templates:
+  qa_basic:
+    template_id: "qa_basic"
+    name: "Basic Context-Aware Q&A"
+    type: "basic"
+    template: |
+      Based on the following context:
+      {{ context }}
+
+      Answer this question: {{ question }}
+
+      Provide a clear and concise answer:
+    input_variables:
+      - "context"
+      - "question"
+    metadata:
+      complexity: "low"
+      use_case: "general_qa"
+      domain: "general"
+      tags:
+        - "qa"
+        - "basic"
+      description: "Basic question answering with context"
+
+  qa_simple:
+    template_id: "qa_simple"
+    name: "Simple Q&A Without Context"
+    type: "basic"
+    template: |
+      Question: {{ question }}
+      
+      Answer:
+    input_variables:
+      - "question"
+    metadata:
+      complexity: "low"
+      use_case: "simple_qa"
+      domain: "general"
+      tags:
+        - "qa"
+        - "simple"
+      description: "Simple question answering without context"
+
+strategies:
+  static_selection:
+    strategy_id: "static_selection"
+    name: "Static Template Selection"
+    description: "Uses qa_basic template for all queries"
+    type: "static"
+    enabled: true
+    template_id: "qa_basic"
+
+# RAG pipeline configuration
+rag_pipeline:
+  retrieval_config:
+    similarity_threshold: 0.7
+    top_k: 5
+  retrieval_strategy: basic_similarity
+  vector_store:
+    type: "chromadb"
+    collection_name: "llamafarm_docs"
+    persist_directory: "./data/rag/chroma_db"
+  embedder:
+    model: "nomic-embed-text"
+    provider: "ollama"
+    endpoint: "http://localhost:11434"
