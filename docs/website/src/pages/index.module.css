@@ -1,0 +1,142 @@
+/**
+ * CSS files with the .module.css suffix will be treated as CSS modules
+ * and scoped locally.
+ */
+
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.heroContent {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.heroLogo {
+  width: 120px;
+  height: 120px;
+  margin-bottom: 2rem;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+.heroDescription {
+  font-size: 1.2rem;
+  margin: 1.5rem auto;
+  max-width: 600px;
+  color: #ffffff;
+  opacity: 0.95;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+  
+  .heroLogo {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .heroDescription {
+    font-size: 1rem;
+  }
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.buttons a {
+  text-decoration: none;
+}
+
+/* Why Section */
+.whySection {
+  padding: 4rem 0;
+  background-color: var(--ifm-background-surface-color);
+}
+
+.sectionTitle {
+  text-align: center;
+  margin-bottom: 3rem;
+  font-size: 2.5rem;
+}
+
+.whyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.whyCard {
+  padding: 2rem;
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.whyCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.whyCard h3 {
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+}
+
+.whyCard p {
+  margin: 0;
+  color: var(--ifm-color-secondary-darkest);
+}
+
+/* Example Section */
+.exampleSection {
+  padding: 4rem 0;
+  background-color: var(--ifm-background-color);
+}
+
+.codeExample {
+  max-width: 800px;
+  margin: 0 auto;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.codeExample pre {
+  margin: 0;
+  padding: 2rem;
+  background-color: #1e1e1e;
+  overflow-x: auto;
+}
+
+.codeExample code {
+  color: #d4d4d4;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .whyCard {
+  background: var(--ifm-background-surface-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .whyCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='dark'] .codeExample {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}

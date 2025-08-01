@@ -1,0 +1,69 @@
+# Blog tags for LlamaFarm documentation
+
+# AI and Technology
+ai:
+  label: 'AI'
+  permalink: /ai
+  description: 'Artificial Intelligence topics and discussions'
+
+decentralization:
+  label: 'Decentralization'
+  permalink: /decentralization
+  description: 'Decentralized AI and local-first approaches'
+
+privacy:
+  label: 'Privacy'
+  permalink: /privacy
+  description: 'Data privacy and security in AI'
+
+local-first:
+  label: 'Local First'
+  permalink: /local-first
+  description: 'Local-first AI deployment and processing'
+
+# Project and Development
+llamafarm:
+  label: 'LlamaFarm'
+  permalink: /llamafarm
+  description: 'LlamaFarm framework and features'
+
+announcement:
+  label: 'Announcement'
+  permalink: /announcement
+  description: 'Project announcements and updates'
+
+release:
+  label: 'Release'
+  permalink: /release
+  description: 'Software releases and version updates'
+
+open-source:
+  label: 'Open Source'
+  permalink: /open-source
+  description: 'Open source development and community'
+
+# Development and Usage
+accessibility:
+  label: 'Accessibility'
+  permalink: /accessibility
+  description: 'Making AI accessible to everyone'
+
+developers:
+  label: 'Developers'
+  permalink: /developers
+  description: 'Developer experience and tools'
+
+no-code:
+  label: 'No Code'
+  permalink: /no-code
+  description: 'No-code and low-code solutions'
+
+configuration:
+  label: 'Configuration'
+  permalink: /configuration
+  description: 'Configuration and setup guides'
+
+deployment:
+  label: 'Deployment'
+  permalink: /deployment
+  description: 'Deployment strategies and guides'

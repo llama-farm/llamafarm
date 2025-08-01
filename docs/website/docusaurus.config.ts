@@ -5,8 +5,8 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: '🦙 LlamaFarm',
-  tagline: 'Build Powerful AI Locally, Deploy Anywhere',
+  title: 'LlamaFarm',
+  tagline: 'Config-Based AI • Local First • Deploy Anywhere',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -45,7 +45,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+            'https://github.com/llama-farm/llamafarm/tree/main/docs/website/',
         },
         blog: {
           showReadingTime: true,
@@ -56,7 +56,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+            'https://github.com/llama-farm/llamafarm/tree/main/docs/website/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -71,12 +71,12 @@ const config: Config = {
 
   themeConfig: {
     // Replace with your project's social card
-    image: 'img/docusaurus-social-card.jpg',
+    image: 'img/llamafarm-social-card.jpg',
     navbar: {
-      title: '🦙 LlamaFarm',
+      title: 'LlamaFarm',
       logo: {
         alt: 'LlamaFarm Logo',
-        src: 'img/logo.svg',
+        src: 'img/rocket-llama.png',
       },
       items: [
         {
@@ -97,11 +97,23 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Docs',
+          title: 'Documentation',
           items: [
             {
-              label: 'Tutorial',
+              label: 'Getting Started',
               to: '/docs/intro',
+            },
+            {
+              label: 'Configuration',
+              to: '/docs/configuration',
+            },
+            {
+              label: 'Models',
+              to: '/docs/models',
+            },
+            {
+              label: 'Deployment',
+              to: '/docs/deployment',
             },
           ],
         },
@@ -109,21 +121,21 @@ const config: Config = {
           title: 'Community',
           items: [
             {
-              label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
+              label: 'GitHub Discussions',
+              href: 'https://github.com/llama-farm/llamafarm/discussions',
             },
             {
               label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
+              href: 'https://discord.gg/llamafarm',
             },
             {
-              label: 'X',
-              href: 'https://x.com/docusaurus',
+              label: 'Twitter',
+              href: 'https://twitter.com/llamafarm',
             },
           ],
         },
         {
-          title: 'More',
+          title: 'Resources',
           items: [
             {
               label: 'Blog',
@@ -131,12 +143,16 @@ const config: Config = {
             },
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/llama-farm/llamafarm',
+            },
+            {
+              label: 'Roadmap',
+              href: 'https://github.com/llama-farm/llamafarm/projects',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} LlamaFarm. Built with ❤️ for the AI community.`,
     },
     prism: {
       theme: prismThemes.github,
