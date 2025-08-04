@@ -41,3 +41,6 @@ dist/
 # Docker
 Dockerfile
 .dockerignore
+
+# Node.js
+node_modules/
