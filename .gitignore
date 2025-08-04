@@ -427,7 +427,6 @@ sandbox/
 # Docker
 Dockerfile.local
 docker-compose.override.yml
-.dockerignore
 
 # Container volumes
 docker_volumes/

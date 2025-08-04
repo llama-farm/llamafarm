@@ -27,7 +27,7 @@ jobs:
             dockerfile: ./designer/Dockerfile
             description: "LlamaFarm Designer - React frontend with nginx"
           - service: server
-            context: ./server
+            context: ./
             dockerfile: ./server/Dockerfile
             description: "LlamaFarm Server - FastAPI backend"
           - service: runtime
