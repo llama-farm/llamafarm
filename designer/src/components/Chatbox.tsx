@@ -38,7 +38,7 @@ function Chatbox() {
   return (
     <div
       className={`bg-[#131E45] w-full h-full flex flex-col  text-white ${
-        isPanelOpen ? 'w-1/4' : 'w-[48px]'
+        isPanelOpen ? 'w-1/4' : 'w-[47px]'
       }`}
     >
       <div

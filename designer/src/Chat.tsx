@@ -1,5 +1,5 @@
 import Chatbox from './components/Chatbox'
-import BuildArea from './components/BuildArea'
+import { Outlet } from 'react-router-dom'
 
 function Chat() {
   return (
@@ -7,8 +7,8 @@ function Chat() {
       <div className="w-1/4 h-full">
         <Chatbox />
       </div>
-      <div className="w-3/4 h-full">
-        <BuildArea />
+      <div className="w-3/4 h-full text-white">
+        <Outlet />
       </div>
     </div>
   )

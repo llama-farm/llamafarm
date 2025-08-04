@@ -2,6 +2,10 @@ import { Routes, Route } from 'react-router-dom'
 import Header from './components/Header'
 import Home from './Home'
 import Chat from './Chat'
+import Data from './components/Data'
+import Prompt from './components/Prompt'
+import Dashboard from './components/Dashboard'
+import Test from './components/Test'
 
 function App() {
   return (
@@ -10,7 +14,12 @@ function App() {
       <div className="h-full w-full">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat" element={<Chat />}>
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="data" element={<Data />} />
+            <Route path="prompt" element={<Prompt />} />
+            <Route path="test" element={<Test />} />
+          </Route>
         </Routes>
       </div>
     </main>

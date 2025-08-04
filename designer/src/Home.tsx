@@ -18,7 +18,7 @@ function Home() {
   }
 
   const handleSendClick = () => {
-    navigate('/chat')
+    navigate('/chat/data')
   }
 
   return (

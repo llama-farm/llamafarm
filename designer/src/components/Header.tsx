@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import FontIcon from '../common/FontIcon'
 import useHeader from '../hooks/useHeader.tsx'
+import { useNavigate } from 'react-router-dom'
 
 function Header() {
   const [isBuilding, setIsBuilding] = useState(true)
   const { setBuildType } = useHeader()
+  const navigate = useNavigate()
 
   return (
     <header className="fixed top-0 left-0 z-50 w-full bg-[#040C1D] border-b border-blue-400/30">
@@ -22,28 +24,28 @@ function Header() {
             <div className="flex items-center gap-4">
               <button
                 className="flex items-center gap-2 hover:bg-[#263052] transition-colors rounded-lg p-2"
-                onClick={() => setBuildType('dashboard')}
+                onClick={() => navigate('/chat/dashboard')}
               >
                 <FontIcon type="dashboard" className="w-6 h-6 text-white" />
                 <span className="text-white">Dashboard</span>
               </button>
               <button
                 className="flex items-center gap-2 hover:bg-[#263052] transition-colors rounded-lg p-2"
-                onClick={() => setBuildType('data')}
+                onClick={() => navigate('/chat/data')}
               >
                 <FontIcon type="data" className="w-6 h-6 text-white" />
                 <span className="text-white">Data</span>
               </button>
               <button
                 className="flex items-center gap-2 hover:bg-[#263052] transition-colors rounded-lg p-2"
-                onClick={() => setBuildType('prompt')}
+                onClick={() => navigate('/chat/prompt')}
               >
                 <FontIcon type="prompt" className="w-6 h-6 text-white" />
                 <span className="text-white">Prompt</span>
               </button>
               <button
                 className="flex items-center gap-2 hover:bg-[#263052] transition-colors rounded-lg p-2"
-                onClick={() => setBuildType('test')}
+                onClick={() => navigate('/chat/test')}
               >
                 <FontIcon type="test" className="w-6 h-6 text-white" />
                 <span className="text-white">Test</span>
