@@ -31,7 +31,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
       case 'error':
         return `${baseStyles} bg-red-500 text-white rounded-2xl rounded-bl-sm border-red-500`
       default:
-        return `${baseStyles} bg-gray-50 text-gray-800 rounded-2xl`
+        return `${baseStyles} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-2xl`
     }
   }
 

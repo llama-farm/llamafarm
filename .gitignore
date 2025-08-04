@@ -332,7 +332,7 @@ crash_*.txt
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon?
+
 ._*
 .DocumentRevisions-V100
 .fseventsd
@@ -575,9 +575,6 @@ build.xml
 
 # Thumbnails
 *.thumb
-
-# Icon files
-Icon?
 
 # Files that might appear in the root of a volume
 .DocumentRevisions-V100

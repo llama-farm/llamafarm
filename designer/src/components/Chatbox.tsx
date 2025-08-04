@@ -41,7 +41,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
   }
 
   return (
-    <div className="bg-blue-500 w-full h-full flex flex-col text-white">
+    <div className="w-full h-full flex flex-col transition-colors bg-gray-100 text-gray-900 dark:bg-blue-500 dark:text-white">
       <div
         className={`flex  ${
           isPanelOpen ? 'justify-end mr-1 mt-1' : 'justify-center mt-3'
@@ -50,9 +50,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
         <FontIcon
           isButton
           type={isPanelOpen ? 'close-panel' : 'open-panel'}
-          className={`w-6 h-6 text-blue-300 ${
-            isPanelOpen ? 'text-blue-300' : 'text-blue-100'
-          }`}
+          className="w-6 h-6 text-gray-600 hover:text-gray-800 dark:text-blue-300 dark:hover:text-blue-100"
           handleOnClick={() => setIsPanelOpen(!isPanelOpen)}
         />
       </div>
@@ -66,25 +64,19 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
             <Message key={index} message={message} />
           ))}
         </div>
-        <div className="bg-blue-700 flex flex-col gap-2 p-2 rounded-lg">
+        <div className="flex flex-col gap-2 p-2 rounded-lg bg-white shadow-md dark:bg-blue-700">
           <textarea
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
-            className="w-full h-8 resize-none bg-transparent border-none text-white placeholder-white focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden"
-            //   className="w-full h-[78px] bg-transparent border-none resize-none p-4 pr-12 text-white placeholder-white/60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed"
+            className="w-full h-8 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-gray-900 placeholder-gray-500 dark:text-white dark:placeholder-white"
             placeholder="Type here..."
           />
-          {/* <button
-          onClick={handleSendClick}
-          className="w-8 h-8 bg-blue-600 hover:bg-blue-500 rounded-full flex items-center justify-center text-[#040D1D] transition-colors duration-200 shadow-sm hover:shadow-md self-end"
-        > */}
           <FontIcon
             isButton
             type="arrow-filled"
-            className="w-8 h-8 text-blue-100 self-end"
+            className="w-8 h-8 self-end text-gray-600 dark:text-blue-100"
             handleOnClick={handleSendClick}
           />
-          {/* </button> */}
         </div>
       </div>
     </div>
