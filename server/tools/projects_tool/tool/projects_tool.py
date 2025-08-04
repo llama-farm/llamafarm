@@ -1,6 +1,5 @@
-# Imports
-from atomic_agents.base import BaseIOSchema
-from atomic_agents.base import BaseTool, BaseToolConfig
+# Imports - Fixed for v2.0
+from atomic_agents import BaseIOSchema, BaseTool, BaseToolConfig
 from typing import List, Dict, Any, Optional, Literal
 import os
 from pathlib import Path
@@ -24,10 +23,9 @@ class ProjectsToolOutput(BaseIOSchema):
     total: Optional[int] = None
 
 # Main Tool & Logic
-class ProjectsTool(BaseTool):
-    input_schema = ProjectsToolInput
-    output_schema = ProjectsToolOutput
-
+class ProjectsTool(BaseTool[ProjectsToolInput, ProjectsToolOutput]):
+    """Tool for managing projects - list and create operations."""
+    
     def __init__(self):
         super().__init__()
 
@@ -130,4 +128,4 @@ if __name__ == "__main__":
     
     # Example: Create project
     result = tool.run(ProjectsToolInput(action="create", namespace="test", project_id="new_project"))
-    print(f"Create result: {result.message}") 
+    print(f"Create result: {result.message}")
