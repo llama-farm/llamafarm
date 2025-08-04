@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import llamaLogo from './assets/logos/llamafarm-logo.svg'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
@@ -112,10 +113,8 @@ function Home() {
       </div>
 
       {/* Decorative llama mascot - hidden on mobile for better UX */}
-      <div className="hidden lg:block absolute bottom-8 right-8 opacity-60">
-        <div className="w-32 h-40 rounded-2xl flex items-center justify-center text-6xl shadow-2xl">
-          🦙
-        </div>
+      <div className=" lg:block absolute bottom-0 right-0">
+        <img src={llamaLogo} alt="llama" className="w-40 h-40" />
       </div>
     </div>
   )

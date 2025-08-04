@@ -16,6 +16,10 @@ const Code = lazy(() => import('../assets/icons/Code'))
 const Edit = lazy(() => import('../assets/icons/Edit'))
 const Add = lazy(() => import('../assets/icons/Add'))
 const Upload = lazy(() => import('../assets/icons/Upload'))
+const CheckmarkFilled = lazy(() => import('../assets/icons/CheckmarkFilled'))
+const Trashcan = lazy(() => import('../assets/icons/Trashcan'))
+const Fade = lazy(() => import('../assets/icons/Fade'))
+const ChevronDown = lazy(() => import('../assets/icons/ChevronDown'))
 
 type FontIconTypes =
   | 'sun'
@@ -34,6 +38,10 @@ type FontIconTypes =
   | 'edit'
   | 'add'
   | 'upload'
+  | 'checkmark-filled'
+  | 'trashcan'
+  | 'fade'
+  | 'chevron-down'
 
 export interface FontIconProps {
   className?: string
@@ -84,6 +92,14 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Add />
       case 'upload':
         return <Upload />
+      case 'checkmark-filled':
+        return <CheckmarkFilled />
+      case 'trashcan':
+        return <Trashcan />
+      case 'fade':
+        return <Fade />
+      case 'chevron-down':
+        return <ChevronDown />
     }
   }, [type])
 

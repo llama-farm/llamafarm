@@ -7,8 +7,8 @@ function Header() {
   const { setBuildType } = useHeader()
 
   return (
-    <header className="fixed top-0 left-0 z-50 w-full bg-[#040C1D] border-b border-blue-400/30 max-w-7xl">
-      <div className="flex items-center h-12">
+    <header className="fixed top-0 left-0 z-50 w-full bg-[#040C1D] border-b border-blue-400/30">
+      <div className="w-full flex items-center h-12">
         <div className="w-1/4 pl-4 font-serif text-white text-base font-medium ">
           🦙 LlaMaFarm
         </div>
