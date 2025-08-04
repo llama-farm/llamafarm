@@ -6,7 +6,7 @@ function Chat() {
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(true)
 
   return (
-    <div className="w-full h-full flex pt-12 bg-[#000B1B]">
+    <div className="w-full h-full flex pt-12 bg-blue-800">
       <div
         className={`h-full transition-all duration-300 ${isPanelOpen ? 'w-1/4' : 'w-[47px]'}`}
       >

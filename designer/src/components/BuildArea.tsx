@@ -8,7 +8,7 @@ function BuildArea() {
   const { buildType } = useHeader()
 
   return (
-    <div className="bg-[#000B1B] h-full text-white">
+    <div className="bg-blue-800 h-full text-white">
       {buildType === 'dashboard' && <Dashboard />}
       {buildType === 'data' && <Data />}
       {buildType === 'prompt' && <Prompt />}

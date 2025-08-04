@@ -31,7 +31,7 @@ function Home() {
     >
       <div className="max-w-4xl w-full text-center space-y-8">
         <div className="space-y-4">
-          <p className="text-white/80 text-sm font-medium tracking-wide">
+          <p className="text-white text-sm font-medium tracking-wide">
             Welcome to LlaMaFarm 🦙
           </p>
 

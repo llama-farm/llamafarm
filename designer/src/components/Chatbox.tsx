@@ -41,7 +41,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
   }
 
   return (
-    <div className="bg-[#131E45] w-full h-full flex flex-col text-white">
+    <div className="bg-blue-500 w-full h-full flex flex-col text-white">
       <div
         className={`flex  ${
           isPanelOpen ? 'justify-end mr-1 mt-1' : 'justify-center mt-3'
@@ -50,8 +50,8 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
         <FontIcon
           isButton
           type={isPanelOpen ? 'close-panel' : 'open-panel'}
-          className={`w-6 h-6 text-[#007FFF] ${
-            isPanelOpen ? 'text-[#007FFF]' : 'text-[#85B1FF]'
+          className={`w-6 h-6 text-blue-300 ${
+            isPanelOpen ? 'text-blue-300' : 'text-blue-100'
           }`}
           handleOnClick={() => setIsPanelOpen(!isPanelOpen)}
         />
@@ -66,7 +66,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
             <Message key={index} message={message} />
           ))}
         </div>
-        <div className="bg-[#040D1D] flex flex-col gap-2 p-2 rounded-lg">
+        <div className="bg-blue-700 flex flex-col gap-2 p-2 rounded-lg">
           <textarea
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
@@ -81,7 +81,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
           <FontIcon
             isButton
             type="arrow-filled"
-            className="w-8 h-8 text-[#85B1FF] self-end"
+            className="w-8 h-8 text-blue-100 self-end"
             handleOnClick={handleSendClick}
           />
           {/* </button> */}

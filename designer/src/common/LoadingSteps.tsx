@@ -10,7 +10,7 @@ export default function ScrollingLoadingLog() {
   const loopedSteps = [...steps, '', ...steps]
 
   return (
-    <div className="relative w-full max-w-md h-16 overflow-hidden rounded-lg px-4 py-2 text-sm text-[#85B1FF]">
+    <div className="relative w-full max-w-md h-16 overflow-hidden rounded-lg px-4 py-2 text-sm text-blue-100">
       <div className="animate-[scroll-up_10s_linear_infinite] flex flex-col gap-3">
         {loopedSteps.map((step, i) => (
           <div key={i} className="flex items-center gap-2 h-5">

@@ -23,7 +23,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
 
     switch (type) {
       case 'user':
-        return `${baseStyles} bg-[#263052] text-white rounded-lg`
+        return `${baseStyles} bg-blue-600 text-white rounded-lg`
       case 'assistant':
         return `bg-transparent`
       case 'system':
