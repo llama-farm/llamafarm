@@ -31,9 +31,9 @@ function Header() {
           }`}
         >
           {isBuilding && (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 w-2/3">
               <button
-                className={`flex items-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
+                className={`w-full flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
                   isSelected === 'dashboard' ? 'bg-blue-600' : ''
                 }`}
                 onClick={() => navigate('/chat/dashboard')}
@@ -42,7 +42,7 @@ function Header() {
                 <span className="text-white">Dashboard</span>
               </button>
               <button
-                className={`flex items-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
+                className={`w-full flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
                   isSelected === 'data' ? 'bg-blue-600' : ''
                 }`}
                 onClick={() => navigate('/chat/data')}
@@ -51,7 +51,7 @@ function Header() {
                 <span className="text-white">Data</span>
               </button>
               <button
-                className={`flex items-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
+                className={`w-full flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
                   isSelected === 'prompt' ? 'bg-blue-600' : ''
                 }`}
                 onClick={() => navigate('/chat/prompt')}
@@ -60,7 +60,7 @@ function Header() {
                 <span className="text-white">Prompt</span>
               </button>
               <button
-                className={`flex items-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
+                className={`w-full flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors rounded-lg p-2 ${
                   isSelected === 'test' ? 'bg-blue-600' : ''
                 }`}
                 onClick={() => navigate('/chat/test')}

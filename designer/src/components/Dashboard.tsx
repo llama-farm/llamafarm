@@ -171,7 +171,7 @@ const Dashboard = () => {
             <div className="flex flex-col gap-2 h-[400px] overflow-y-auto">
               <div className="text-xs text-blue-100">Today</div>
               {Array.from({ length: 4 }).map((_, index) => (
-                <div className="flex flex-col mb-2">
+                <div key={index} className="flex flex-col mb-2">
                   <div className="flex flex-row gap-2 items-center justify-between">
                     <div>Version 1.0.0 </div>
                     <div className="text-blue-100">7:45PM</div>
@@ -183,7 +183,7 @@ const Dashboard = () => {
               ))}
               <div className="text-xs text-blue-100">July 30</div>
               {Array.from({ length: 2 }).map((_, index) => (
-                <div className="flex flex-col">
+                <div key={index} className="flex flex-col">
                   <div className="flex flex-row gap-2 items-center justify-between">
                     <div>Version 1.0.0 </div>
                     <div className="text-blue-100">7:45PM</div>
