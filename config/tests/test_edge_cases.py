@@ -65,7 +65,7 @@ invalid toml syntax
     def test_directory_as_config_file(self):
         """Test passing a directory path as config file."""
         with tempfile.TemporaryDirectory() as temp_dir, pytest.raises(
-            ConfigError, match="Configuration file not found"
+            ConfigError, match="No configuration file found in"
         ):
             load_config(config_path=temp_dir)
 
@@ -91,6 +91,9 @@ invalid toml syntax
         """Test loading a very large configuration file."""
         # Create a config with many models and prompts
         large_config = """version: v1
+
+name: very_large_config
+namespace: test
 
 rag:
   parsers:
@@ -128,6 +131,14 @@ rag:
     vector_store: "default"
     retrieval_strategy: "default"
 
+datasets:
+  - name: "very_large_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
+
 prompts:
 """
 
@@ -157,6 +168,9 @@ prompts:
     def test_unicode_content(self, temp_config_file):
         """Test loading configuration with Unicode content."""
         unicode_config = """version: v1
+
+name: unicode_config
+namespace: test
 
 prompts:
   - name: "multilingual_support"
@@ -202,6 +216,14 @@ rag:
 models:
   - provider: "local"
     model: "test-model"
+
+datasets:
+  - name: "unicode_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
 """
 
         temp_path = temp_config_file(unicode_config, ".yaml")
@@ -217,6 +239,9 @@ models:
     def test_deeply_nested_paths(self, temp_config_file):
         """Test configuration with deeply nested file paths."""
         deep_path_config = """version: v1
+
+name: unicode_config
+namespace: test
 
 rag:
   parsers:
@@ -257,6 +282,19 @@ rag:
 models:
   - provider: "local"
     model: "test-model"
+
+datasets:
+  - name: "deep_path_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
+
+prompts:
+  - name: "deep_path_prompt"
+    prompt: "This is a prompt with a deep path."
+    description: "This is a description of the deep path prompt."
 """
 
         temp_path = temp_config_file(deep_path_config, ".yaml")
@@ -271,6 +309,9 @@ models:
     def test_config_with_special_characters(self, temp_config_file):
         """Test configuration with special characters in values."""
         special_chars_config = """version: v1
+
+name: special_chars_config
+namespace: test
 
 prompts:
   - name: "special_chars"
@@ -316,6 +357,14 @@ rag:
 models:
   - provider: "local"
     model: "model:tag@version"
+
+datasets:
+  - name: "special_chars_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
 """
 
         temp_path = temp_config_file(special_chars_config, ".yaml")

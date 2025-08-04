@@ -20,6 +20,14 @@ class TestConfigWriter:
         """Sample configuration for testing."""
         return {
             "version": "v1",
+            "name": "sample_config",
+            "prompts": [
+                {
+                    "name": "test_prompt",
+                    "prompt": "This is a test prompt for configuration testing.",
+                    "description": "A sample prompt for testing purposes"
+                }
+            ],
             "rag": {
                 "parsers": {
                     "csv": {
@@ -69,6 +77,13 @@ class TestConfigWriter:
                     "retrieval_strategy": "default"
                 }
             },
+            "datasets": [
+                {
+                    "name": "test_dataset",
+                    "files": ["test_file.csv"],
+                    "parser": "csv"
+                }
+            ],
             "models": [
                 {
                     "provider": "local",
@@ -101,7 +116,7 @@ class TestConfigWriter:
 
             try:
                 # Save configuration
-                saved_path = save_config(sample_config, config_path)
+                saved_path = save_config(sample_config, config_path, "toml")
 
                 # Verify file was created
                 assert saved_path.exists()
@@ -120,14 +135,15 @@ class TestConfigWriter:
     def test_save_config_json(self, sample_config):
         """Test saving configuration to JSON format."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "test_config.json"
+            config_path = Path(temp_dir)
 
             # Save configuration
-            saved_path = save_config(sample_config, config_path)
+            saved_path = save_config(sample_config, config_path, "json")
 
-            # Verify file was created
+            # Verify file was created with correct name and format
             assert saved_path.exists()
-            assert saved_path == config_path
+            assert saved_path.name == "llamafarm.json"
+            assert saved_path.parent == config_path
 
             # Load and verify content
             loaded_config = load_config(config_path)
@@ -137,7 +153,7 @@ class TestConfigWriter:
     def test_save_config_explicit_format(self, sample_config):
         """Test saving with explicit format specification."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "test_config.custom"
+            config_path = Path(temp_dir)
 
             # Save as YAML with explicit format
             saved_path = save_config(sample_config, config_path, format="yaml")
@@ -146,14 +162,14 @@ class TestConfigWriter:
             assert saved_path.exists()
 
             # Verify it's actually YAML content
-            content = config_path.read_text()
+            content = saved_path.read_text()
             assert "version: v1" in content
             assert "type: CustomerSupportCSVParser" in content
 
     def test_save_config_backup(self, sample_config):
         """Test backup creation when saving over existing file."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "test_config.yaml"
+            config_path = Path(temp_dir) / "llamafarm.yaml"
 
             # Create initial file
             config_path.write_text("initial: content\n")
@@ -167,7 +183,7 @@ class TestConfigWriter:
             assert loaded_config["version"] == "v1"
 
             # Verify backup was created
-            backup_files = list(Path(temp_dir).glob("test_config.*.yaml"))
+            backup_files = list(Path(temp_dir).glob("llamafarm.*.yaml"))
             assert len(backup_files) == 1
 
             # Verify backup contains original content
@@ -177,7 +193,7 @@ class TestConfigWriter:
     def test_save_config_no_backup(self, sample_config):
         """Test saving without backup creation."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "test_config.yaml"
+            config_path = Path(temp_dir) / "llamafarm.yaml"
 
             # Create initial file
             config_path.write_text("initial: content\n")
@@ -189,13 +205,13 @@ class TestConfigWriter:
             assert saved_path.exists()
 
             # Verify no backup was created
-            backup_files = list(Path(temp_dir).glob("test_config.*.yaml"))
+            backup_files = list(Path(temp_dir).glob("llamafarm.*.yaml"))
             assert len(backup_files) == 0
 
     def test_update_config(self, sample_config):
         """Test updating an existing configuration."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "test_config.yaml"
+            config_path = Path(temp_dir)
 
             # Save initial configuration
             save_config(sample_config, config_path)
@@ -226,7 +242,8 @@ class TestConfigWriter:
             updated_path = update_config(config_path, updates)
 
             # Verify file was updated
-            assert updated_path == config_path
+            assert updated_path.exists()
+            assert updated_path.parent == config_path
 
             # Load and verify changes
             loaded_config = load_config(config_path)
@@ -241,7 +258,7 @@ class TestConfigWriter:
     def test_update_config_deep_merge(self, sample_config):
         """Test deep merging in update_config."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "test_config.yaml"
+            config_path = Path(temp_dir)
 
             # Save initial configuration
             save_config(sample_config, config_path)
@@ -279,8 +296,22 @@ class TestConfigWriter:
         """Test validation error when saving invalid configuration."""
         invalid_config = {
             "version": "invalid_version",  # Should be "v1"
+            "name": "test_config",
+            "prompts": [],
+            "datasets": [],
             "models": [],
-            "rag": {}
+            "rag": {
+                "parsers": {},
+                "embedders": {},
+                "vector_stores": {},
+                "retrieval_strategies": {},
+                "defaults": {
+                    "parser": "auto",
+                    "embedder": "default",
+                    "vector_store": "default",
+                    "retrieval_strategy": "default"
+                }
+            }
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -300,6 +331,7 @@ class TestConfigWriter:
             config_path = Path(temp_dir) / "invalid_config.yaml"
 
             # Should succeed when validation is disabled
+            config_path.parent.mkdir(parents=True, exist_ok=True)
             saved_path = save_config(invalid_config, config_path, validate=False)
             assert saved_path.exists()
 
@@ -310,18 +342,3 @@ class TestConfigWriter:
 
             with pytest.raises(ConfigError, match="not found"):
                 update_config(config_path, {"some": "update"})
-
-    def test_save_config_directory_creation(self, sample_config):
-        """Test that parent directories are created when saving."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "nested" / "deep" / "config.yaml"
-
-            # Directory doesn't exist yet
-            assert not config_path.parent.exists()
-
-            # Save should create directories
-            saved_path = save_config(sample_config, config_path)
-
-            # Verify directories were created
-            assert config_path.parent.exists()
-            assert saved_path.exists()

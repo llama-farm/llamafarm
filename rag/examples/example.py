@@ -2,7 +2,11 @@
 """Example usage of the RAG system."""
 
 import logging
+import sys
 from pathlib import Path
+
+# Add parent directory to path so we can import modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.base import Pipeline
 from parsers.csv_parser import CustomerSupportCSVParser

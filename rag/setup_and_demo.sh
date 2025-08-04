@@ -201,7 +201,7 @@ run_system_tests() {
     run_command "uv run python cli.py extractors test --extractor yake --text 'Machine learning and artificial intelligence are transforming technology'" "YAKE extractor test"
     
     print_step "Testing configuration loading..."
-    run_command "uv run python cli.py --config config_examples/unified_multi_strategy_config.json info" "Configuration test"
+    run_command "uv run python cli.py --config config_examples/unified_multi_strategy_config.yaml info" "Configuration test"
     
     print_success "System tests completed"
 }
@@ -215,19 +215,19 @@ run_ingestion_demo() {
     
     print_step "Demo 1: CSV ingestion with extractors"
     print_info "Ingesting customer support tickets with YAKE and statistics extractors..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json ingest samples/csv/small_sample.csv --extractors yake statistics" "CSV ingestion with extractors"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml ingest samples/csv/small_sample.csv --extractors yake statistics" "CSV ingestion with extractors"
     
     wait_for_user
     
     print_step "Demo 2: PDF ingestion"
     print_info "Ingesting PDF documents with entity extraction..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json ingest samples/pdfs/llama.pdf --extractors entities datetime" "PDF ingestion with extractors"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml ingest samples/pdfs/llama.pdf --extractors entities datetime" "PDF ingestion with extractors"
     
     wait_for_user
     
     print_step "Demo 3: Batch PDF ingestion with configuration-based extractors"
     print_info "Ingesting multiple PDFs using parser-configured extractors..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json ingest samples/pdfs/" "Batch PDF ingestion"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml ingest samples/pdfs/" "Batch PDF ingestion"
     
     print_success "Ingestion demos completed"
 }
@@ -241,19 +241,19 @@ run_search_demos() {
     
     print_step "Demo 1: Basic similarity search"
     print_info "Searching for 'login problems'..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json search 'login problems'" "Basic search"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml search 'login problems'" "Basic search"
     
     wait_for_user
     
     print_step "Demo 2: Search with different strategy"
     print_info "Searching with metadata-enhanced strategy..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json search --retrieval metadata_enhanced 'password reset'" "Enhanced search"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml search --retrieval metadata_enhanced 'password reset'" "Enhanced search"
     
     wait_for_user
     
     print_step "Demo 3: Technical search"
     print_info "Searching for technical issues..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json search 'website malfunction server error'" "Technical search"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml search 'website malfunction server error'" "Technical search"
     
     print_success "Search demos completed"
 }
@@ -267,19 +267,19 @@ run_management_demos() {
     
     print_step "Demo 1: Document statistics"
     print_info "Getting document statistics..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json manage stats --detailed" "Document statistics"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml manage stats --detailed" "Document statistics"
     
     wait_for_user
     
     print_step "Demo 2: Hash-based operations"
     print_info "Finding duplicate documents..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json manage hash --find-duplicates" "Duplicate detection"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml manage hash --find-duplicates" "Duplicate detection"
     
     wait_for_user
     
     print_step "Demo 3: Soft deletion (dry run)"
     print_info "Simulating deletion of old documents..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json manage delete --older-than 365 --dry-run" "Soft deletion dry run"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml manage delete --older-than 365 --dry-run" "Soft deletion dry run"
     
     print_success "Management demos completed"
 }
@@ -293,7 +293,7 @@ run_cleanup_demo() {
     
     print_step "Demo: Cleanup operations"
     print_info "Running cleanup to remove old documents..."
-    run_command "uv run python cli.py --config config_examples/extractors_demo_config.json manage cleanup --expired" "Cleanup expired documents"
+    run_command "uv run python cli.py --config config_examples/extractors_demo_config.yaml manage cleanup --expired" "Cleanup expired documents"
     
     print_info "Note: In a real scenario, you might want to:"
     echo "  - Set up automated cleanup schedules"
@@ -317,7 +317,7 @@ show_usage_examples() {
     
     echo -e "${YELLOW}📂 Ingest documents:${NC}"
     echo "  uv run python cli.py ingest samples/csv/large_sample.csv --extractors yake entities statistics"
-    echo "  uv run python cli.py --config config_examples/enterprise_document_management_config.json ingest samples/pdfs/"
+    echo "  uv run python cli.py --config config_examples/enterprise_document_management_config.yaml ingest samples/pdfs/"
     echo ""
     
     echo -e "${YELLOW}🔍 Search documents:${NC}"
@@ -332,7 +332,7 @@ show_usage_examples() {
     echo ""
     
     echo -e "${YELLOW}⚙️  Advanced configuration:${NC}"
-    echo "  - Edit config_examples/*.json to customize behavior"
+    echo "  - Edit config_examples/*.yaml to customize behavior"
     echo "  - Add custom extractors in extractors/ directory"
     echo "  - Create custom retrieval strategies"
     echo "  - Set up automated maintenance schedules"

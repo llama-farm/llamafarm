@@ -203,6 +203,9 @@ class TestModuleIntegration:
         # Development config
         dev_config = """version: v1
 
+name: dev_config
+namespace: test
+
 rag:
   parsers:
     csv:
@@ -242,10 +245,26 @@ rag:
 models:
   - provider: "local"
     model: "llama3.1:8b"  # Smaller model for dev
+
+datasets:
+  - name: "dev_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
+
+prompts:
+  - name: "dev_prompt"
+    prompt: "This is a dev prompt."
+    description: "This is a description of the dev prompt."
 """
 
         # Production config
         prod_config = """version: v1
+
+name: prod_config
+namespace: test
 
 rag:
   parsers:
@@ -288,6 +307,19 @@ models:
     model: "llama3.1:70b"  # Larger model for prod
   - provider: "openai"
     model: "gpt-4"  # Backup cloud model
+
+datasets:
+  - name: "prod_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
+
+prompts:
+  - name: "prod_prompt"
+    prompt: "This is a prod prompt."
+    description: "This is a description of the prod prompt."
 """
 
         dev_path = temp_config_file(dev_config, ".yaml")

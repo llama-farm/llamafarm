@@ -1,0 +1,48 @@
+{
+  "name": "Hugging Face Models Configuration",
+  "version": "1.0.0",
+  "default_provider": "hf_gpt2",
+  "providers": {
+    "hf_gpt2": {
+      "type": "local",
+      "provider": "huggingface",
+      "model": "gpt2",
+      "cache_dir": "${HF_CACHE_DIR:-~/.cache/huggingface/hub}",
+      "device": "auto",
+      "torch_dtype": "auto",
+      "trust_remote_code": false,
+      "token": "${HF_TOKEN}",
+      "max_tokens": 100,
+      "temperature": 0.7,
+      "description": "Hugging Face gpt2 model"
+    },
+    "hf_distilgpt2": {
+      "type": "local",
+      "provider": "huggingface",
+      "model": "distilgpt2",
+      "cache_dir": "${HF_CACHE_DIR:-~/.cache/huggingface/hub}",
+      "device": "auto",
+      "torch_dtype": "auto",
+      "trust_remote_code": false,
+      "token": "${HF_TOKEN}",
+      "max_tokens": 100,
+      "temperature": 0.7,
+      "description": "Hugging Face distilgpt2 model"
+    }
+  },
+  "hf_settings": {
+    "cache_dir": "~/.cache/huggingface/hub",
+    "trust_remote_code": false,
+    "use_auth_token": true,
+    "device_map": "auto",
+    "torch_dtype": "auto"
+  },
+  "selection_strategy": {
+    "type": "size_optimized",
+    "factors": {
+      "model_size": 0.4,
+      "quality": 0.3,
+      "speed": 0.3
+    }
+  }
+}

@@ -113,8 +113,11 @@ class TestConfigLoader:
         assert config["models"][0]["provider"] == "local"
         assert config["models"][0]["model"] == "llama3.1:8b"
 
-        # Prompts should be None or not present since it's optional
-        assert config.get("prompts") is None
+        # Prompts should be present since it's a required field
+        assert "prompts" in config
+        assert isinstance(config["prompts"], list)
+        assert len(config["prompts"]) == 1
+        assert config["prompts"][0]["name"] == "minimal_prompt"
 
         # RAG should be properly configured
         assert config["rag"]["parsers"]["csv"]["config"]["content_fields"] == ["question"]
@@ -228,12 +231,15 @@ models:
         assert isinstance(rag["embedders"]["default"]["config"]["batch_size"], int)
 
     def test_config_with_no_prompts(self, test_data_dir):
-        """Test configuration loading when prompts section is missing."""
+        """Test configuration loading with minimal prompts section."""
         config_path = test_data_dir / "minimal_config.yaml"
         config = load_config(config_path=config_path)
 
-        # Should load successfully even without prompts (optional field)
-        assert "prompts" not in config or config["prompts"] is None
+        # Should load successfully with minimal prompts (required field)
+        assert "prompts" in config
+        assert isinstance(config["prompts"], list)
+        # The minimal config has at least one prompt
+        assert len(config["prompts"]) >= 1
 
     def test_directory_vs_file_loading(self, test_data_dir):
         """Test loading by directory vs explicit file path."""

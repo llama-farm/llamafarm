@@ -1,5 +1,8 @@
 version = "v1"
 
+name = "sample_config"
+namespace = "test"
+
 [[prompts]]
 name = "customer_support"
 prompt = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
@@ -107,3 +110,11 @@ model = "gemini-pro"
 [[models]]
 provider = "custom"
 model = "custom-fine-tuned-model-v1"
+
+[[datasets]]
+name = "sample_dataset"
+files = ["test_file.csv"]
+parser = "csv"
+embedder = "default"
+vector_store = "default"
+retrieval_strategy = "default"

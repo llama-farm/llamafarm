@@ -1,0 +1,40 @@
+llamafarm-team:
+  name: LlamaFarm Team
+  title: Building the future of decentralized AI
+  url: https://github.com/llama-farm/llamafarm
+  image_url: https://github.com/llama-farm.png
+  socials:
+    github: llama-farm
+    x: llamafarm
+
+BobbyRadford:
+  name: Bobby Radford
+  title: Contributor
+  url: https://github.com/BobbyRadford
+  image_url: https://avatars.githubusercontent.com/u/6943982?v=4
+  socials:
+    github: BobbyRadford
+
+mhamann:
+  name: mhamann
+  title: Contributor
+  url: https://github.com/mhamann
+  image_url: https://avatars.githubusercontent.com/u/130131?v=4
+  socials:
+    github: mhamann
+
+rgthelen:
+  name: rgthelen
+  title: Contributor
+  url: https://github.com/rgthelen
+  image_url: https://avatars.githubusercontent.com/u/10455926?v=4
+  socials:
+    github: rgthelen
+
+rachmlenig:
+  name: rachmlenig
+  title: Contributor
+  url: https://github.com/rachmlenig
+  image_url: https://avatars.githubusercontent.com/u/106166434?v=4
+  socials:
+    github: rachmlenig

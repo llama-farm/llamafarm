@@ -57,5 +57,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --cov=prompts --cov-report=term-missing"
 
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
 [project.scripts]
 llamafarm-prompts = "prompts.cli:cli"

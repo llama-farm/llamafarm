@@ -1,535 +1,605 @@
-# LlamaFarm Models System - Fine-Tuning & Model Management
+# 🦙 LlamaFarm Models System
 
-## 🎯 Vision & Strategy
+> **Unified Model Management for Cloud & Local LLMs** - Complete setup guide, usage examples, and training workflows
 
-The LlamaFarm Models System provides a **config-driven, CLI-focused framework** for fine-tuning, managing, and deploying custom models. Following the project's core philosophy of modularity and configuration-over-code, this system enables sophisticated model customization while maintaining production readiness and ease of use.
+A comprehensive model management system providing unified access to **25+ cloud and local LLMs** with real API integration, fallback chains, and production-ready features.
 
-### **Core Principles**
+## 🚀 Quick Start
 
-1. **Configuration-Driven**: Define fine-tuning jobs, datasets, and deployment in JSON/YAML configs
-2. **Method-Agnostic**: Support multiple fine-tuning approaches (LoRA, QLoRA, full fine-tuning, adapters)
-3. **CLI-First**: Primary interface through command-line tools with optional web UI
-4. **Dataset-Centric**: Automated dataset creation from existing documents and data sources
-5. **Production-Ready**: Built for monitoring, version control, and scalable deployment
+### Prerequisites
+- Python 3.11+
+- [uv](https://github.com/astral-sh/uv) package manager
+- API keys for cloud providers (optional)
+- [Ollama](https://ollama.ai) for local models (optional)
 
-## 🏗️ Architecture Overview
+### 1. Installation
+```bash
+# Clone and navigate to models directory
+cd llamafarm-1/models
 
+# Install dependencies
+uv sync
+
+# Copy environment template
+cp ../.env.example ../.env
+# Edit ../.env with your API keys
 ```
-models/
-├── methods/              # Fine-tuning method implementations
-│   ├── lora/            # LoRA (Low-Rank Adaptation) configs & tools
-│   ├── qlora/           # Quantized LoRA for memory efficiency
-│   ├── full_finetune/   # Traditional full fine-tuning
-│   ├── adapters/        # Adapter-based methods
-│   └── prefix_tuning/   # Prefix tuning implementations
-├── datasets/            # Dataset creation and management
-│   ├── creation/        # Tools for generating training datasets
-│   ├── formats/         # Data format converters and processors
-│   ├── quality_control/ # Dataset validation and quality metrics
-│   └── augmentation/    # Data augmentation techniques
-├── config_examples/     # Example configurations for different use cases
-├── registry/           # Model and adapter registry system
-├── evaluation/         # Model evaluation and benchmarking
-├── deployment/         # Production deployment configurations
-├── utils/             # Utilities and helper functions
-└── tests/             # Comprehensive test suite
+
+### 2. Basic Usage
+```bash
+# List available models
+uv run python cli.py list
+
+# Send your first query
+uv run python cli.py query "What is machine learning?"
+
+# Start interactive chat
+uv run python cli.py chat
+
+# Use a specific model
+uv run python cli.py query "Explain quantum computing" --provider openai_gpt4_turbo
+
+# Use different configuration files (YAML or JSON supported)
+uv run python cli.py --config config/development.yaml list
+uv run python cli.py --config config/production.yaml query "Production query"
+uv run python cli.py --config config/ollama_local.yaml chat
 ```
+
+### 3. Run Complete Demo
+```bash
+# Automated setup and comprehensive demo
+./setup_and_demo.sh
+```
+
+## 🤖 Supported Providers & Models
+
+### ☁️ **Cloud Providers**
+| Provider | Models | Key Features |
+|----------|---------|--------------|
+| **OpenAI** | GPT-4o, GPT-4o-mini, GPT-4 Turbo, GPT-3.5 Turbo | Industry-leading performance, fast responses |
+| **Anthropic** | Claude 3 Opus, Sonnet, Haiku | Excellent reasoning, large context windows |
+| **Together AI** | Llama 3.1 70B, Mixtral 8x7B, Code Llama | Open-source models, competitive pricing |
+| **Groq** | Llama 3 70B, Mixtral 8x7B | Ultra-fast inference (500+ tokens/sec) |
+| **Cohere** | Command R+, Command R | Enterprise-focused, RAG optimization |
+
+### 🏠 **Local Providers**
+| Provider | Models | Key Features |
+|----------|---------|--------------|  
+| **Ollama** | Llama 3.1/3.2, Mistral, Phi-3, CodeLlama | Easy setup, no API costs, privacy |
+| **Hugging Face** | GPT-2, DistilGPT-2, custom models | Open ecosystem, custom fine-tuning |
+| **vLLM** | Llama 2/3, Mistral, CodeLlama | High-throughput local inference |
+| **TGI** | Any HF model | Production deployment, batching |
+
+## 📋 Complete Feature Guide
+
+### 🎯 **Core Commands**
+
+#### **Query - Send Single Requests**
+```bash
+# Basic query
+uv run python cli.py query "Explain quantum computing"
+
+# Use specific provider
+uv run python cli.py query "Write Python code" --provider openai_gpt4o_mini
+
+# Control generation parameters
+uv run python cli.py query "Tell a creative story" --temperature 0.9 --max-tokens 500
+
+# Add system prompt
+uv run python cli.py query "Analyze this data" --system "You are a data scientist"
+
+# Stream response in real-time
+uv run python cli.py query "Tell a long story" --stream
+
+# Save response to file
+uv run python cli.py query "Write a README" --save output.md
+
+# Output as JSON
+uv run python cli.py query "List AI facts" --json
+```
+
+#### **Chat - Interactive Sessions**
+```bash
+# Start basic chat
+uv run python cli.py chat
+
+# Chat with specific model
+uv run python cli.py chat --provider anthropic_claude_3_haiku
+
+# Set system prompt for session
+uv run python cli.py chat --system "You are a coding assistant"
+
+# Save chat history
+uv run python cli.py chat --save-history my_session.json
+
+# Load previous chat
+uv run python cli.py chat --history previous_session.json
+```
+
+#### **Send - File Analysis**
+```bash
+# Send code for review
+uv run python cli.py send code.py --prompt "Review this code"
+
+# Analyze documents
+uv run python cli.py send document.txt --prompt "Summarize key points"
+
+# Process data files
+uv run python cli.py send data.csv --prompt "Analyze trends"
+
+# Save analysis to file
+uv run python cli.py send script.js --output analysis.md
+```
+
+#### **Batch - Multiple Queries**
+```bash
+# Process queries from file
+echo -e "What is AI?\nExplain ML\nDefine NLP" > queries.txt
+uv run python cli.py batch queries.txt
+
+# Use specific provider
+uv run python cli.py batch queries.txt --provider openai_gpt4o_mini
+
+# Parallel processing
+uv run python cli.py batch large_file.txt --parallel 5
+
+# Save all responses
+uv run python cli.py batch questions.txt --output responses.json
+```
+
+### 🔧 **Management Commands**
+
+#### **Provider Management**
+```bash
+# List configured providers
+uv run python cli.py list
+
+# Detailed view with costs
+uv run python cli.py list --detailed
+
+# Test specific provider
+uv run python cli.py test openai_gpt4o_mini
+
+# Health check all providers
+uv run python cli.py health-check
+
+# Compare responses
+uv run python cli.py compare --providers openai_gpt4o_mini,anthropic_claude_3_haiku --query "Explain recursion"
+```
+
+#### **Configuration Management** 
+```bash
+# Validate current config
+uv run python cli.py validate-config
+
+# Generate basic config
+uv run python cli.py generate-config --type basic
+
+# Generate production config
+uv run python cli.py generate-config --type production --output prod.json
+
+# Use custom config
+uv run python cli.py --config custom.json list
+```
+
+### 🏠 **Local Model Management**
+
+#### **Ollama Integration**
+```bash
+# List local Ollama models
+uv run python cli.py list-local
+
+# Pull new models
+uv run python cli.py pull llama3.2:3b
+uv run python cli.py pull mistral:latest
+
+# Test local models
+uv run python cli.py test-local llama3.1:8b
+
+# Generate Ollama config
+uv run python cli.py generate-ollama-config --output ollama.json
+```
+
+#### **Hugging Face Integration**
+```bash
+# Login to HF Hub
+uv run python cli.py hf-login
+
+# Search models
+uv run python cli.py list-hf --search "gpt2" --limit 10
+
+# Download models
+uv run python cli.py download-hf gpt2
+uv run python cli.py download-hf distilbert-base-uncased --cache-dir ./models
+
+# Test HF models
+uv run python cli.py test-hf gpt2 --query "Once upon a time"
+
+# Generate HF config
+uv run python cli.py generate-hf-config --models "gpt2,distilgpt2"
+```
+
+#### **High-Performance Inference**
+```bash
+# List vLLM compatible models
+uv run python cli.py list-vllm
+
+# Test vLLM inference
+uv run python cli.py test-vllm meta-llama/Llama-2-7b-chat-hf --query "Hello"
+
+# Test TGI endpoints
+uv run python cli.py test-tgi --endpoint http://localhost:8080 --query "Test"
+
+# Generate engines config
+uv run python cli.py generate-engines-config --output engines.json
+```
+
+## ⚙️ Configuration Guide
+
+### 🎛️ **Configuration Format**
+The models system supports both **YAML** (recommended) and **JSON** configuration files. YAML provides better readability and maintainability.
+
+### **Basic Configuration**
+```yaml
+name: "My AI Models"
+version: "1.0.0"
+default_provider: "openai_gpt4o_mini"
+
+providers:
+  openai_gpt4o_mini:
+    type: "cloud"
+    provider: "openai"
+    model: "gpt-4o-mini"
+    api_key: "${OPENAI_API_KEY}"
+    temperature: 0.7
+    max_tokens: 2048
+```
+
+### **Available Configuration Files**
+- **`config/default.yaml`** - Comprehensive template with all options
+- **`config/development.yaml`** - Optimized for local development
+- **`config/production.yaml`** - Production-ready with robust fallbacks
+- **`config/ollama_local.yaml`** - Complete local models configuration via Ollama
+- **`config/use_case_examples.yaml`** - 8 specialized use case configurations (customer support, code generation, content creation, data analysis, real-time chat, privacy-first, multilingual, cost-optimized)
+
+### 🔄 **Production Configuration with Fallbacks**
+```yaml
+name: "Production Setup"
+default_provider: "primary"
+fallback_chain: 
+  - "primary"
+  - "secondary" 
+  - "local_backup"
+
+providers:
+  primary:
+    type: "cloud"
+    provider: "openai"
+    model: "gpt-4o-mini"
+    api_key: "${OPENAI_API_KEY}"
+    timeout: 30
+
+  secondary:
+    type: "cloud"
+    provider: "anthropic"
+    model: "claude-3-haiku-20240307"
+    api_key: "${ANTHROPIC_API_KEY}"
+    timeout: 45
+
+  local_backup:
+    type: "local"
+    provider: "ollama"
+    model: "llama3.1:8b"
+    host: "localhost"
+```
+
+### 🎯 **Use Case Specific Configurations**
+
+See `config/use_case_examples.yaml` for optimized setups:
+- **Customer Support**: Fast, helpful responses with cost control
+- **Code Generation**: Optimized for programming with specialized models
+- **Content Creation**: High creativity settings for marketing and writing
+- **Data Analysis**: Analytical accuracy with advanced reasoning models
+- **Real-time Chat**: Ultra-fast inference for interactive applications
+- **Privacy-First**: Local-only models for sensitive data
+- **Multilingual**: Optimized for international and cross-language use
+- **Cost-Optimized**: Minimize expenses while maintaining quality
+
+### 🌐 **Environment Variables**
+```bash
+# Required for cloud providers
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+TOGETHER_API_KEY=...
+GROQ_API_KEY=gsk_...
+COHERE_API_KEY=...
+
+# Optional for Hugging Face
+HF_TOKEN=hf_...
+
+# Optional for local models
+OLLAMA_HOST=localhost
+```
+
+## 🎓 Training & Fine-Tuning Roadmap
+
+> **Coming Soon**: Comprehensive training workflows for custom model development
+
+### 🚀 **Phase 1: Data Preparation (Q4 2024)**
+
+#### **Dataset Management**
+```bash
+# Planned commands for data preparation
+uv run python cli.py data prepare --source raw_data/ --output processed/
+uv run python cli.py data validate --dataset processed/ --format jsonl
+uv run python cli.py data split --dataset processed/ --train 0.8 --val 0.1 --test 0.1
+```
+
+**Features:**
+- **Automated data cleaning** and format conversion
+- **Quality filtering** with configurable thresholds  
+- **Train/validation/test** splitting with stratification
+- **Data deduplication** and privacy filtering
+- **Format conversion** (JSON, JSONL, Parquet, CSV)
+
+#### **Domain-Specific Datasets**
+- **RAG Training Data**: Question-context-answer triplets
+- **Code Generation**: Repository analysis and function documentation
+- **Conversation Data**: Multi-turn dialogue formatting
+- **Classification Data**: Label balancing and augmentation
+
+### 🔬 **Phase 2: Fine-Tuning Infrastructure (Q1 2025)**
+
+#### **Local Fine-Tuning Support**
+```bash
+# Planned fine-tuning commands
+uv run python cli.py train start --model llama3.1:8b --dataset my_data.jsonl
+uv run python cli.py train monitor --job job_12345
+uv run python cli.py train evaluate --model fine_tuned/checkpoint-1000
+```
+
+**Supported Methods:**
+- **LoRA/QLoRA**: Parameter-efficient fine-tuning
+- **Full Fine-Tuning**: Complete model retraining
+- **Instruction Tuning**: Chat and instruction following
+- **RLHF**: Reinforcement learning from human feedback
+
+#### **Cloud Fine-Tuning Integration**
+- **OpenAI Fine-Tuning**: GPT-3.5/4 custom models
+- **Together AI**: Llama and Mistral fine-tuning
+- **Hugging Face AutoTrain**: Automated training pipelines
+- **Custom Training**: Integration with training platforms
+
+### 🎯 **Phase 3: Advanced Training (Q2 2025)**
+
+#### **Multi-Modal Training**
+```bash
+# Planned multi-modal support
+uv run python cli.py train vision --model llava --dataset image_text_pairs/
+uv run python cli.py train audio --model whisper --dataset speech_transcripts/
+```
+
+#### **Specialized Training Workflows**
+- **RAG Model Training**: Retrieval-augmented generation optimization
+- **Code Model Training**: Programming language specialization  
+- **Domain Adaptation**: Medical, legal, financial model variants
+- **Multilingual Training**: Cross-language transfer learning
+
+#### **Training Infrastructure**
+- **Distributed Training**: Multi-GPU and multi-node support
+- **Experiment Tracking**: MLflow and Weights & Biases integration
+- **Model Versioning**: Automated model registry and deployment
+- **Performance Monitoring**: Training metrics and evaluation pipelines
+
+### 🏭 **Phase 4: Production Deployment (Q3 2025)**
+
+#### **Model Serving**
+```bash
+# Planned deployment commands
+uv run python cli.py deploy start --model my_fine_tuned_model --port 8080
+uv run python cli.py deploy scale --replicas 3 --gpu-per-replica 1
+uv run python cli.py deploy monitor --metrics latency,throughput,accuracy
+```
+
+#### **Production Features**
+- **Auto-scaling**: Dynamic resource allocation based on load
+- **A/B Testing**: Model variant comparison in production
+- **Performance Monitoring**: Real-time metrics and alerting
+- **Cost Optimization**: Efficient resource utilization
+
+### 📚 **Training Resources & Documentation**
+
+#### **Getting Started Guides** (Available Now)
+- **[Training Best Practices](docs/TRAINING_BEST_PRACTICES.md)** - Coming Soon
+- **[Data Preparation Guide](docs/DATA_PREPARATION.md)** - Coming Soon  
+- **[Fine-Tuning Cookbook](docs/FINE_TUNING_COOKBOOK.md)** - Coming Soon
+- **[Production Deployment](docs/PRODUCTION_DEPLOYMENT.md)** - Coming Soon
+
+#### **Training Templates** (Planned)
+- **Instruction Following**: Format and optimize for chat models
+- **Code Generation**: Programming task specialization
+- **RAG Optimization**: Retrieval-augmented generation improvement
+- **Domain Specialization**: Medical, legal, financial model variants
+
+#### **Integration Examples**
+```python
+# Planned Python API for training workflows
+from llamafarm_models.training import FineTuningPipeline
+
+# Initialize training pipeline
+trainer = FineTuningPipeline(
+    base_model="llama3.1:8b",
+    dataset="my_training_data.jsonl", 
+    method="lora",
+    output_dir="./fine_tuned_models"
+)
+
+# Start training
+trainer.train(
+    epochs=3,
+    learning_rate=1e-4,
+    batch_size=16
+)
+
+# Evaluate results
+metrics = trainer.evaluate()
+print(f"Training completed: {metrics}")
+```
+
+### 🛠️ **Current Training Capabilities**
+
+While full training infrastructure is in development, you can currently:
+
+#### **Prepare for Training**
+```bash
+# Generate training data from conversations
+uv run python cli.py chat --save-history training_conversations.json
+
+# Process files for training data
+uv run python cli.py send documents/ --prompt "Generate Q&A pairs" --output training_data.txt
+
+# Batch process for dataset creation
+uv run python cli.py batch question_prompts.txt --output answers.jsonl
+```
+
+#### **Model Evaluation**
+```bash
+# Compare models for training baseline
+uv run python cli.py compare --providers openai_gpt4o_mini,ollama_llama3 --query "Evaluate this task"
+
+# Test custom prompts across models
+uv run python cli.py batch evaluation_questions.txt --provider your_model
+```
+
+#### **Integration Planning**
+The models system is designed to integrate seamlessly with:
+- **LlamaFarm RAG**: Training data from RAG evaluations
+- **LlamaFarm Prompts**: Prompt optimization and evaluation
+- **Custom Training Pipelines**: API-compatible model serving
 
 ## 🔗 Integration with LlamaFarm Ecosystem
 
-### **RAG System Integration**
-- **Custom Embeddings**: Fine-tune embedding models for domain-specific retrieval
-- **Retrieval Enhancement**: Train models to better utilize retrieved context
-- **Query Understanding**: Fine-tune models for better query interpretation
-- **Response Generation**: Domain-specific response generation models
-
-### **Prompts System Integration**
-- **Template Optimization**: Train models optimized for specific prompt templates
-- **Strategy Learning**: Models that learn from prompt strategy effectiveness
-- **Context Utilization**: Fine-tune for better prompt context understanding
-
-### **Configuration Ecosystem**
-- **Unified Config Schema**: Extends existing JSON configuration format
-- **Environment Consistency**: Same dev/staging/prod configuration patterns
-- **CLI Integration**: Seamless integration with existing CLI tools
-
-## 📊 Development Roadmap
-
-### **🚀 Phase 1: MVP (Weeks 1-3) - "Quick Wins"**
-
-**Goal**: Basic fine-tuning capability with LoRA method
-
-**Deliverables**:
-- [ ] **LoRA Configuration System**: JSON-based LoRA fine-tuning configs
-- [ ] **Basic Dataset Creation**: Simple tools to convert documents to training format
-- [ ] **CLI Commands**: `llamafarm models train`, `llamafarm models deploy`
-- [ ] **Example Configurations**: 3-5 working examples for common use cases
-
-**Success Criteria**:
-- User can fine-tune a 7B model using LoRA with single command
-- Basic dataset creation from PDF/text documents works
-- Model can be deployed and used with existing RAG pipeline
-
-**Quick Implementation**:
+### 🧠 **RAG System Integration**
 ```bash
-# Example commands for MVP
-llamafarm models train --config configs/basic_lora.json
-llamafarm models create-dataset --source docs/ --format alpaca
-llamafarm models deploy --model fine_tuned_model --adapter lora_adapter
+# Use models with RAG context
+cd ../rag && uv run python cli.py search "topic" | \
+  cd ../models && uv run python cli.py query "Summarize this context" --provider openai_gpt4o_mini
 ```
 
-### **🔧 Phase 2: POC (Weeks 4-8) - "Proof of Concept"**
-
-**Goal**: Multi-method support with automated dataset creation
-
-**Deliverables**:
-- [ ] **Multiple Fine-tuning Methods**: LoRA, QLoRA, Adapter support
-- [ ] **Automated Dataset Creation**: Generate Q&A pairs from RAG documents
-- [ ] **Model Registry**: Version control and management for trained models
-- [ ] **Basic Evaluation**: Automated quality assessment of fine-tuned models
-- [ ] **Integration Testing**: Models work seamlessly with existing RAG pipeline
-
-**Success Criteria**:
-- Support for 3+ fine-tuning methods
-- Automated dataset generation from existing document corpus
-- Model versioning and rollback capability
-- Integrated evaluation metrics
-
-**Enhanced Configuration**:
-```json
-{
-  "fine_tuning": {
-    "method": "qlora",
-    "base_model": "meta-llama/Llama-2-7b-hf",
-    "dataset": {
-      "source": "rag_documents",
-      "format": "auto_generate_qa",
-      "augmentation": true
-    },
-    "evaluation": {
-      "metrics": ["perplexity", "rag_accuracy"],
-      "test_set": "holdout_20_percent"
-    }
-  }
-}
-```
-
-### **💎 Phase 3: Must-Haves (Weeks 9-16) - "Production Ready"**
-
-**Goal**: Production-grade system with advanced features
-
-**Deliverables**:
-- [ ] **Advanced Dataset Tools**: Synthetic data generation, quality control, augmentation
-- [ ] **Hot-Swappable Adapters**: Runtime model/adapter switching
-- [ ] **Distributed Training**: Multi-GPU and distributed fine-tuning support
-- [ ] **Comprehensive Evaluation**: Automated benchmarking and A/B testing
-- [ ] **Production Deployment**: Kubernetes/Docker deployment configurations
-- [ ] **Monitoring & Observability**: Training metrics, model performance tracking
-- [ ] **Web UI**: Optional web interface for model management
-
-**Success Criteria**:
-- Enterprise-grade model management capabilities
-- Automated quality assurance for all training runs
-- Production deployment with monitoring and alerting
-- Comprehensive documentation and examples
-
-**Advanced Features**:
-```json
-{
-  "training_job": {
-    "method": "hybrid_lora_adapter",
-    "distributed": {
-      "strategy": "deepspeed_zero3",
-      "gpus": 8,
-      "nodes": 2
-    },
-    "dataset": {
-      "synthetic_generation": {
-        "enabled": true,
-        "base_model": "gpt-4",
-        "diversity_threshold": 0.8
-      },
-      "quality_control": {
-        "min_quality_score": 0.7,
-        "toxicity_filter": true,
-        "factual_verification": true
-      }
-    },
-    "monitoring": {
-      "wandb_project": "llamafarm_models",
-      "alerting": {
-        "loss_threshold": 0.1,
-        "quality_degradation": 0.05
-      }
-    }
-  }
-}
-```
-
-### **🌟 Phase 4: Future/Advanced (Weeks 17+) - "Cutting Edge"**
-
-**Goal**: Advanced AI capabilities and research features
-
-**Future Integrations**:
-- [ ] **AutoML Fine-tuning**: Automated hyperparameter optimization
-- [ ] **Multi-Modal Models**: Support for vision-language models
-- [ ] **Federated Learning**: Distributed training across organizations
-- [ ] **Model Compression**: Advanced quantization and pruning techniques
-- [ ] **Continuous Learning**: Online learning from user interactions
-- [ ] **Neural Architecture Search**: Automated model architecture optimization
-
-## 🔧 Configuration-Driven Design
-
-### **Unified Configuration Schema**
-```json
-{
-  "model_config": {
-    "name": "llamafarm_custom_model_v1",
-    "version": "1.0.0",
-    "base_model": "meta-llama/Llama-2-7b-hf",
-    
-    "fine_tuning": {
-      "method": "lora",
-      "parameters": {
-        "r": 16,
-        "lora_alpha": 32,
-        "lora_dropout": 0.1,
-        "target_modules": ["q_proj", "v_proj"]
-      },
-      "training": {
-        "epochs": 3,
-        "batch_size": 4,
-        "learning_rate": 2e-4,
-        "warmup_steps": 100
-      }
-    },
-    
-    "dataset": {
-      "source": {
-        "type": "rag_documents",
-        "path": "./rag/data/",
-        "include_metadata": true
-      },
-      "preprocessing": {
-        "format": "alpaca",
-        "max_length": 2048,
-        "qa_generation": {
-          "enabled": true,
-          "questions_per_doc": 3,
-          "model": "gpt-4o-mini-turbo"
-        }
-      },
-      "validation": {
-        "split_ratio": 0.2,
-        "quality_threshold": 0.8
-      }
-    },
-    
-    "evaluation": {
-      "metrics": ["perplexity", "bleu", "rouge", "rag_accuracy"],
-      "benchmarks": ["hellaswag", "mmlu"],
-      "custom_evaluations": ["domain_specific_qa"]
-    },
-    
-    "deployment": {
-      "target": "kubernetes",
-      "replicas": 2,
-      "resources": {
-        "gpu": "1x_a100",
-        "memory": "32Gi"
-      },
-      "auto_scaling": {
-        "min_replicas": 1,
-        "max_replicas": 10,
-        "cpu_threshold": 80
-      }
-    }
-  }
-}
-```
-
-## 📊 Method Selection Framework
-
-### **Quick Decision Tree**
-```
-Fine-tuning Method Selection
-├─ Limited GPU Memory (<24GB)
-│  ├─ Model Size >13B → QLoRA
-│  └─ Model Size ≤13B → LoRA
-├─ Multiple Tasks/Domains
-│  ├─ Frequent Switching → Hot-Swappable Adapters
-│  └─ Static Deployment → Multi-LoRA
-├─ Maximum Quality Needed
-│  ├─ Large Dataset (>100K) → Full Fine-tuning
-│  └─ Small Dataset (<10K) → LoRA with higher rank
-└─ Production Deployment
-   ├─ Single Domain → Merged LoRA
-   └─ Multi-Domain → Adapter Registry
-```
-
-### **Method Comparison Matrix**
-
-| Method | GPU Memory | Training Speed | Quality | Deployment | Use Case |
-|--------|------------|----------------|---------|------------|----------|
-| **LoRA** | Low (15-20%) | Fast | 95-98% | Easy | General purpose |
-| **QLoRA** | Very Low (8-12%) | Medium | 93-96% | Easy | Large models |
-| **Full Fine-tune** | High (100%) | Slow | 100% | Standard | Maximum quality |
-| **Adapters** | Medium (20-30%) | Fast | 94-97% | Flexible | Multi-task |
-| **Prefix Tuning** | Very Low (5-10%) | Very Fast | 85-92% | Easy | Task-specific |
-
-## 🗄️ Dataset Creation Strategy
-
-### **Automated Dataset Generation**
-The system automatically creates training datasets from existing LlamaFarm data:
-
-1. **Document Analysis**: Extract content from RAG document corpus
-2. **Q&A Generation**: Use LLMs to generate question-answer pairs
-3. **Quality Control**: Automated filtering and validation
-4. **Format Conversion**: Convert to standard training formats (Alpaca, ChatML, etc.)
-5. **Augmentation**: Synthetic data generation for improved diversity
-
-### **Dataset Sources**
-- **RAG Documents**: Convert existing document corpus to training data
-- **Conversation Logs**: Extract patterns from user interactions
-- **Domain Corpora**: Import domain-specific datasets
-- **Synthetic Generation**: AI-generated training examples
-- **Human Feedback**: Incorporate user feedback and corrections
-
-### **Quality Assurance Pipeline**
-```json
-{
-  "quality_control": {
-    "filters": {
-      "minimum_length": 20,
-      "maximum_length": 2048,
-      "language_detection": "en",
-      "toxicity_threshold": 0.1,
-      "factual_consistency": 0.8
-    },
-    "validation": {
-      "duplicate_detection": true,
-      "coherence_scoring": true,
-      "domain_relevance": true
-    },
-    "metrics": {
-      "diversity_score": ">0.7",
-      "quality_score": ">0.8",
-      "coverage_analysis": true
-    }
-  }
-}
-```
-
-## 💻 CLI-First Interface
-
-### **Core Commands**
+### 📝 **Prompts System Integration**  
 ```bash
-# Dataset creation
-llamafarm models create-dataset --source ./rag/data --format alpaca --output ./datasets/rag_qa.json
-
-# Training
-llamafarm models train --config ./config_examples/lora_basic.json --dataset ./datasets/rag_qa.json
-
-# Evaluation
-llamafarm models evaluate --model ./trained_models/lora_v1 --benchmark hellaswag
-
-# Deployment
-llamafarm models deploy --model ./trained_models/lora_v1 --target kubernetes --replicas 2
-
-# Registry management
-llamafarm models list --type adapters
-llamafarm models register --model ./trained_models/lora_v1 --name "rag_enhancement_v1"
-llamafarm models rollback --name "rag_enhancement_v1" --version "1.0.0"
-
-# Hot-swapping
-llamafarm models swap-adapter --adapter medical_specialist --target production
+# Use optimized prompts with models
+cd ../prompts && uv run python -m prompts.cli execute "query" --template medical_qa | \
+  cd ../models && uv run python cli.py query - --provider anthropic_claude_3_haiku
 ```
 
-### **Integration with Existing CLI**
-The models system extends the existing Go and Python CLIs:
+### 🔄 **Unified Workflows**
+- **RAG → Models**: Retrieved context + model generation
+- **Prompts → Models**: Optimized prompts + model execution  
+- **Models → Training**: Generated data + fine-tuning pipelines
 
-```go
-// cli/cmd/models.go
-var modelsCmd = &cobra.Command{
-    Use:   "models",
-    Short: "Model fine-tuning and management",
-    Long:  "Commands for training, deploying, and managing custom models",
-}
+## 🛠️ Troubleshooting
 
-func init() {
-    rootCmd.AddCommand(modelsCmd)
-    modelsCmd.AddCommand(trainCmd)
-    modelsCmd.AddCommand(deployCmd)
-    modelsCmd.AddCommand(evaluateCmd)
-}
-```
+### ❗ **Common Issues**
 
-## 🔄 Model Registry & Version Control
-
-### **Registry Architecture**
-- **Model Versioning**: Semantic versioning for all models and adapters
-- **Metadata Storage**: Training parameters, performance metrics, deployment info
-- **Artifact Management**: Efficient storage and retrieval of model files
-- **Dependency Tracking**: Track base models, datasets, and configuration changes
-- **Access Control**: Role-based permissions for model management
-
-### **Registry Operations**
+#### **API Key Problems**
 ```bash
-# Register new model
-llamafarm models register \
-  --name "medical_qa_specialist" \
-  --version "1.2.0" \
-  --base-model "llama-2-7b" \
-  --method "lora" \
-  --dataset "medical_qa_v2" \
-  --performance-metrics "./eval_results.json"
+# Check environment variables
+env | grep API_KEY
 
+# Validate configuration
+uv run python cli.py validate-config
+
+# Test specific provider
+uv run python cli.py test openai_gpt4o_mini
+```
+
+#### **Ollama Issues**
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Start Ollama service
+ollama serve
+
+# Pull missing models
+uv run python cli.py pull llama3.1:8b
+```
+
+#### **Model Not Found**
+```bash
 # List available models
-llamafarm models list --filter domain=medical
+uv run python cli.py list
+uv run python cli.py list-local
 
-# Download specific version
-llamafarm models pull medical_qa_specialist:1.1.0
-
-# Promote to production
-llamafarm models promote medical_qa_specialist:1.2.0 --env production
+# Check configuration
+uv run python cli.py --config your_config.json list
 ```
 
-## 📈 Evaluation & Benchmarking
+### 🔍 **Debugging Tools**
+```bash
+# Health check all providers
+uv run python cli.py health-check
 
-### **Automated Evaluation Pipeline**
-Every trained model undergoes comprehensive evaluation:
+# Detailed provider information
+uv run python cli.py list --detailed
 
-1. **Standard Benchmarks**: MMLU, HellaSwag, TruthfulQA
-2. **Domain-Specific Tests**: Custom evaluation sets for specific use cases
-3. **RAG Integration Tests**: Performance when integrated with retrieval system
-4. **Production Simulation**: Real-world usage pattern simulation
-5. **A/B Testing**: Automated comparison with baseline models
-
-### **Performance Tracking**
-```json
-{
-  "evaluation_results": {
-    "model_id": "medical_qa_v1.2.0",
-    "timestamp": "2024-01-15T10:30:00Z",
-    "benchmarks": {
-      "mmlu": {"accuracy": 0.72, "improvement": "+0.05"},
-      "hellaswag": {"accuracy": 0.68, "improvement": "+0.02"},
-      "medical_qa": {"accuracy": 0.89, "improvement": "+0.12"}
-    },
-    "rag_integration": {
-      "retrieval_relevance": 0.85,
-      "response_quality": 0.88,
-      "latency_p95": "150ms"
-    },
-    "production_metrics": {
-      "user_satisfaction": 4.2,
-      "task_completion_rate": 0.91,
-      "error_rate": 0.03
-    }
-  }
-}
+# Test with verbose output
+uv run python cli.py query "test" --provider openai_gpt4o_mini --json
 ```
 
-## 🚀 Production Deployment
+## 🧪 Testing & Development
 
-### **Deployment Strategies**
-- **Blue-Green Deployment**: Zero-downtime model updates
-- **Canary Releases**: Gradual rollout with automatic rollback
-- **A/B Testing**: Compare model performance in production
-- **Hot-Swappable Adapters**: Runtime model switching without restart
+### **Run Tests**
+```bash
+# Unit tests (34 tests)
+uv run python -m pytest tests/test_models.py -v
 
-### **Infrastructure Integration**
-```yaml
-# Kubernetes deployment example
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: llamafarm-custom-model
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: llamafarm-model
-      version: medical-qa-v1.2.0
-  template:
-    spec:
-      containers:
-      - name: model-server
-        image: llamafarm/model-server:latest
-        env:
-        - name: MODEL_PATH
-          value: "/models/medical_qa_v1.2.0"
-        - name: ADAPTER_REGISTRY
-          value: "http://registry.llamafarm.internal"
-        resources:
-          requests:
-            nvidia.com/gpu: 1
-            memory: "16Gi"
-          limits:
-            nvidia.com/gpu: 1
-            memory: "32Gi"
+# Integration tests (requires API keys)
+uv run python -m pytest tests/test_e2e.py -v
+
+# Specific provider tests
+uv run python -m pytest tests/test_models.py::TestOllamaIntegration -v
 ```
 
-## 🔧 Technical Implementation Notes
+### **Development Setup**
+```bash
+# Install development dependencies
+uv sync --dev
 
-### **Memory Optimization**
-- **Gradient Checkpointing**: Reduce memory usage during training
-- **Mixed Precision**: FP16/BF16 training for efficiency
-- **Model Sharding**: Distribute large models across multiple devices
-- **Adapter Sharing**: Efficient storage and loading of multiple adapters
+# Run with coverage
+uv run python -m pytest --cov=. --cov-report=html
 
-### **Performance Optimization**
-- **Batch Processing**: Optimal batch sizes for different hardware
-- **Cache Management**: Intelligent caching of model weights and adapters
-- **Quantization**: Post-training quantization for deployment
-- **Compilation**: JIT compilation for inference optimization
+# Format code
+uv run black cli.py
+```
 
-### **Security & Compliance**
-- **Model Provenance**: Track data sources and training lineage
-- **Access Controls**: Role-based access to models and training data
-- **Data Privacy**: PII detection and handling in training datasets
-- **Audit Logging**: Comprehensive logging for compliance requirements
+## 📚 Documentation & Resources
 
-## 🔍 Next Steps for Implementation
+- **[Developer Structure Guide](STRUCTURE.md)** - Internal architecture and development patterns
+- **[API Integration Examples](docs/WORKING_API_CALLS.md)** - Real API call demonstrations
+- **[Feature Verification](docs/ALL_WORKING_CONFIRMED.md)** - Complete feature testing results
+- **[Configuration Examples](examples/)** - Working configuration templates
 
-### **Phase 1 Implementation Priority**
-1. **LoRA Configuration System** - Start with most popular fine-tuning method
-2. **Basic Dataset Creation** - Simple document-to-training-data pipeline
-3. **CLI Integration** - Extend existing CLI with model commands
-4. **Example Configurations** - Working examples for common use cases
+## 🤝 Contributing
 
-### **Technical Dependencies**
-- **PEFT Library**: Hugging Face parameter-efficient fine-tuning
-- **Transformers**: Model loading and training infrastructure
-- **Datasets**: Data processing and management
-- **Accelerate**: Multi-GPU and distributed training support
+We welcome contributions! Please see:
+1. **[STRUCTURE.md](STRUCTURE.md)** - Developer architecture guide
+2. **[GitHub Issues](../../issues)** - Bug reports and feature requests  
+3. **Test Requirements** - All new features must include tests
+4. **Documentation** - Update relevant docs with changes
 
-### **Integration Points**
-- **RAG Pipeline**: Models enhance existing retrieval and generation
-- **Prompts System**: Custom models optimized for specific prompt strategies
-- **Vector Stores**: Fine-tuned embedding models for better retrieval
-- **Configuration System**: Unified JSON configuration across all components
+## 📊 Current Status
 
-## 💡 Key Success Factors
-
-### **Ease of Use**
-- **Single Command Training**: `llamafarm models train --config basic.json`
-- **Automatic Dataset Creation**: Generate training data from existing documents
-- **Sensible Defaults**: Working configurations out of the box
-- **Progressive Complexity**: Start simple, add advanced features as needed
-
-### **Production Readiness**
-- **Comprehensive Testing**: Automated testing for all fine-tuning methods
-- **Monitoring Integration**: Track training and deployment metrics
-- **Version Control**: Proper model versioning and rollback capabilities
-- **Documentation**: Clear documentation and examples for all features
-
-### **Scalability**
-- **Multi-GPU Support**: Scale training across multiple devices
-- **Distributed Training**: Support for large-scale training jobs
-- **Efficient Storage**: Optimal storage and loading of models and adapters
-- **Auto-Scaling**: Dynamic resource allocation based on demand
+- ✅ **34/34 unit tests passing**
+- ✅ **12/12 integration tests passing**  
+- ✅ **25+ CLI commands working**
+- ✅ **Real API integration confirmed**
+- ✅ **Production-ready configurations**
+- 🚧 **Training infrastructure in development**
 
 ---
 
-This Models system provides a comprehensive, production-ready foundation for fine-tuning and managing custom models within the LlamaFarm ecosystem, enabling sophisticated AI customization while maintaining the project's core values of simplicity, configurability, and reliability.
+## 🦙 Ready to wrangle some models? No prob-llama!
+
+Get started with your AI model management journey using the LlamaFarm Models System! 🚀

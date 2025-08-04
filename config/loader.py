@@ -204,8 +204,16 @@ def load_config(
 def _resolve_config_file(config_path: str | Path | None = None, directory: str | Path = Path.cwd()) -> Path:
     if config_path is not None:
         config_file = Path(config_path)
-        if not config_file.is_file():
-            raise ConfigError(f"Configuration file not found: {config_file}")
+
+        if config_file.suffix:
+            # It's a file path
+            if not config_file.is_file():
+                raise ConfigError(f"Configuration file not found: {config_file}")
+        else:
+            # It's a directory path, look for config file within it
+            config_file = find_config_file(config_path)
+            if config_file is None:
+                raise ConfigError(f"No configuration file found in {config_path}")
     else:
         config_file = find_config_file(directory)
         if config_file is None:
@@ -299,7 +307,9 @@ def save_config(
 
     Args:
         config: Configuration dictionary to save.
-        config_path: Path where to save the configuration file.
+        config_path: Path where to save the configuration file or directory.
+                    If it's a file path, saves to that file.
+                    If it's a directory, looks for existing config or defaults to llamafarm.yaml.
         format: File format to use ('yaml', 'toml', 'json').
                If None, infers from file extension.
         validate: Whether to validate against JSON schema before saving.
@@ -311,7 +321,34 @@ def save_config(
     Raises:
         ConfigError: If validation fails or file cannot be saved.
     """
-    config_file = find_config_file(config_path) or Path(config_path) / "llamafarm.yaml"
+    config_path = Path(config_path)
+
+    # Determine the actual config file path
+    if config_path.suffix:
+        # It's a file path, use it directly
+        config_file = config_path
+    else:
+        # It's a directory path, look for existing config or use default
+        try:
+            existing_config = find_config_file(config_path)
+            if existing_config:
+                config_file = existing_config
+            else:
+                # No existing config, create new one with appropriate extension
+                if format == "json":
+                    config_file = config_path / "llamafarm.json"
+                elif format == "toml":
+                    config_file = config_path / "llamafarm.toml"
+                else:
+                    config_file = config_path / "llamafarm.yaml"
+        except ConfigError:
+            # Directory doesn't exist, use default filename based on format
+            if format == "json":
+                config_file = config_path / "llamafarm.json"
+            elif format == "toml":
+                config_file = config_path / "llamafarm.toml"
+            else:
+                config_file = config_path / "llamafarm.yaml"
 
     # Validate configuration before saving
     if validate:
@@ -372,7 +409,8 @@ def update_config(
     Update an existing configuration file with new values.
 
     Args:
-        config_path: Path to the existing configuration file.
+        config_path: Path to the existing configuration file or directory.
+                    If it's a directory, looks for existing config file.
         updates: Dictionary of updates to apply to the configuration.
         validate: Whether to validate the updated configuration.
         create_backup: Whether to create a backup before updating.
@@ -383,13 +421,25 @@ def update_config(
     Raises:
         ConfigError: If file doesn't exist, cannot be loaded, or validation fails.
     """
-    config_file = Path(config_path or ".")
+    config_path = Path(config_path)
 
-    if not config_file.exists():
-        raise ConfigError(f"Configuration file not found: {config_file}")
+    # Determine the actual config file path
+    if config_path.suffix:
+        # It's a file path
+        config_file = config_path
+        if not config_file.exists():
+            raise ConfigError(f"Configuration file not found: {config_file}")
+    else:
+        # It's a directory path, look for existing config
+        try:
+            config_file = find_config_file(config_path)
+            if config_file is None:
+                raise ConfigError(f"No configuration file found in directory: {config_path}")
+        except ConfigError:
+            raise ConfigError(f"Directory does not exist or contains no config file: {config_path}")
 
     # Load existing configuration
-    config = load_config(config_path, validate=False)
+    config = load_config(config_file, validate=False)
 
     # Apply updates (deep merge)
     def deep_update(base: dict, updates: dict) -> dict:

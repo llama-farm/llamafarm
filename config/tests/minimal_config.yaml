@@ -1,5 +1,8 @@
 version: v1
 
+name: minimal_config
+namespace: test
+
 rag:
   parsers:
     csv:
@@ -43,3 +46,16 @@ rag:
 models:
   - provider: "local"
     model: "llama3.1:8b"
+
+datasets:
+  - name: "minimal_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
+
+prompts:
+  - name: "minimal_prompt"
+    prompt: "This is a minimal prompt."
+    description: "This is a description of the minimal prompt."

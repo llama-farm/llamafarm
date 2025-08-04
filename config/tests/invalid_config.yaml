@@ -1,5 +1,8 @@
 version: v2  # Invalid version
 
+name: invalid_config
+namespace: test
+
 rag:
   parsers:
     csv:
@@ -40,3 +43,11 @@ rag:
 models:
   - provider: "invalid_provider"  # Invalid provider
     model: "test-model"
+
+datasets:
+  - name: "test_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
