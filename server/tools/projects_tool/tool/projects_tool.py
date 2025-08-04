@@ -1,6 +1,6 @@
 # Imports
-from atomic_agents.lib.base.base_io_schema import BaseIOSchema
-from atomic_agents.lib.base.base_tool import BaseTool, BaseToolConfig
+from atomic_agents.base import BaseIOSchema
+from atomic_agents.base import BaseTool, BaseToolConfig
 from typing import List, Dict, Any, Optional, Literal
 import os
 from pathlib import Path

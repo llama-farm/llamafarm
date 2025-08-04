@@ -4,8 +4,9 @@ import re
 from typing import Dict, Optional, List
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
-from atomic_agents.lib.components.agent_memory import AgentMemory
-from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgentInputSchema, BaseAgentOutputSchema
+from atomic_agents.context import ChatHistory
+from atomic_agents.agents import AtomicAgent, AgentConfig, BasicChatInputSchema, BasicChatOutputSchema
+from atomic_agents.base import BaseIOSchema
 import instructor
 from openai import OpenAI
 from core.config import settings
@@ -26,7 +27,7 @@ class ChatResponse(BaseModel):
 
 # Store agent instances to maintain conversation context
 # In production, use Redis, database, or other persistent storage
-agent_sessions: Dict[str, BaseAgent] = {}
+agent_sessions: Dict[str, AtomicAgent] = {}
 
 def get_tools_system_prompt() -> str:
     """Generate a system prompt that includes information about available tools."""
@@ -65,16 +66,16 @@ Examples of correct responses:
 
 Remember: ALWAYS use the tool call format when handling project requests!"""
 
-def create_agent() -> BaseAgent:
+def create_agent() -> AtomicAgent:
     """Create a new agent instance"""
     # Initialize memory
-    memory = AgentMemory()
+    memory = ChatHistory()
     
     # Create system prompt with tool information
     system_prompt = get_tools_system_prompt()
     
     # Initialize memory with an initial message from the assistant
-    initial_message = BaseAgentOutputSchema(chat_message="Hello! How can I assist you today? I can help you manage your LlamaFarm configurations and projects.")
+    initial_message = BasicChatOutputSchema(chat_message="Hello! How can I assist you today? I can help you manage your LlamaFarm configurations and projects.")
     memory.add_message("assistant", initial_message)
     
     # Create OpenAI-compatible client pointing to Ollama
@@ -86,18 +87,18 @@ def create_agent() -> BaseAgent:
     client = instructor.from_openai(ollama_client)
 
     # Agent setup with specified configuration
-    agent = BaseAgent(
-        config=BaseAgentConfig(
+    agent = AtomicAgent(
+        config=AgentConfig(
             client=client,
             model=settings.ollama_model,  # Using Ollama model name (make sure this model is installed)
-            memory=memory,
+            history=memory,
             system_role="system",
             system_prompt_generator=None,  # We'll handle system prompt manually
         )
     )
     
     # Add system prompt to memory
-    memory.add_message("system", BaseAgentOutputSchema(chat_message=system_prompt))
+    memory.add_message("system", BasicChatOutputSchema(chat_message=system_prompt))
     
     return agent
 
@@ -215,7 +216,7 @@ async def chat(
 
         # Process the user's input through the agent and get the response
         print(f"🤖 [Inference] Running agent with message: '{request.message[:100]}...'")
-        input_schema = BaseAgentInputSchema(chat_message=request.message)
+        input_schema = BasicChatInputSchema(chat_message=request.message)
         response = agent.run(input_schema)
         
         # Extract the message from the response
@@ -331,7 +332,7 @@ async def test_agent_response(request: ChatRequest):
         
         # Process the user's input through the agent and get the response
         print(f"🤖 [Inference] Running agent with message: '{request.message[:100]}...'")
-        input_schema = BaseAgentInputSchema(chat_message=request.message)
+        input_schema = BasicChatInputSchema(chat_message=request.message)
         response = agent.run(input_schema)
         
         # Extract the message from the response
