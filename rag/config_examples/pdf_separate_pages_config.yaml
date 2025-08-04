@@ -1,0 +1,24 @@
+parser:
+  type: "PDFParser"
+  config:
+    extract_metadata: true
+    extract_page_structure: true
+    combine_pages: false
+    page_separator: "\n--- PAGE ---\n"
+    min_text_length: 20
+    include_page_numbers: true
+    extract_outline: true
+
+embedder:
+  type: "OllamaEmbedder"
+  config:
+    model: "nomic-embed-text"
+    base_url: "http://localhost:11434"
+    batch_size: 16
+    timeout: 60
+
+vector_store:
+  type: "ChromaStore"
+  config:
+    collection_name: "pdf_pages"
+    persist_directory: "./data/pdf_pages_chroma_db"

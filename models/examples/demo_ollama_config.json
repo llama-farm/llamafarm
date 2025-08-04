@@ -1,0 +1,79 @@
+{
+  "name": "Ollama Local Models Configuration",
+  "version": "1.0.0",
+  "default_provider": "ollama_nomic-embed-text_latest",
+  "providers": {
+    "ollama_nomic-embed-text_latest": {
+      "type": "local",
+      "provider": "ollama",
+      "model": "nomic-embed-text:latest",
+      "host": "${OLLAMA_HOST:-localhost}",
+      "port": "${OLLAMA_PORT:-11434}",
+      "base_url": "${OLLAMA_BASE_URL:-http://localhost:11434}",
+      "timeout": 120,
+      "description": "Local nomic-embed-text:latest model via Ollama"
+    },
+    "ollama_llama3_1_8b": {
+      "type": "local",
+      "provider": "ollama",
+      "model": "llama3.1:8b",
+      "host": "${OLLAMA_HOST:-localhost}",
+      "port": "${OLLAMA_PORT:-11434}",
+      "base_url": "${OLLAMA_BASE_URL:-http://localhost:11434}",
+      "timeout": 120,
+      "description": "Local llama3.1:8b model via Ollama"
+    },
+    "ollama_llama3_latest": {
+      "type": "local",
+      "provider": "ollama",
+      "model": "llama3:latest",
+      "host": "${OLLAMA_HOST:-localhost}",
+      "port": "${OLLAMA_PORT:-11434}",
+      "base_url": "${OLLAMA_BASE_URL:-http://localhost:11434}",
+      "timeout": 120,
+      "description": "Local llama3:latest model via Ollama"
+    },
+    "ollama_llama3_2_3b": {
+      "type": "local",
+      "provider": "ollama",
+      "model": "llama3.2:3b",
+      "host": "${OLLAMA_HOST:-localhost}",
+      "port": "${OLLAMA_PORT:-11434}",
+      "base_url": "${OLLAMA_BASE_URL:-http://localhost:11434}",
+      "timeout": 120,
+      "description": "Local llama3.2:3b model via Ollama"
+    },
+    "ollama_mistral_7b": {
+      "type": "local",
+      "provider": "ollama",
+      "model": "mistral:7b",
+      "host": "${OLLAMA_HOST:-localhost}",
+      "port": "${OLLAMA_PORT:-11434}",
+      "base_url": "${OLLAMA_BASE_URL:-http://localhost:11434}",
+      "timeout": 120,
+      "description": "Local mistral:7b model via Ollama"
+    }
+  },
+  "local_settings": {
+    "ollama": {
+      "host": "localhost",
+      "port": 11434,
+      "timeout": 120,
+      "keep_alive": "5m",
+      "concurrent_requests": 4
+    }
+  },
+  "fallback_chain": [
+    "ollama_nomic-embed-text_latest",
+    "ollama_llama3_1_8b",
+    "ollama_llama3_latest"
+  ],
+  "selection_strategy": {
+    "type": "performance_optimized",
+    "factors": {
+      "speed": 0.4,
+      "memory_usage": 0.3,
+      "quality": 0.3
+    }
+  }
+}

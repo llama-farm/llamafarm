@@ -1,0 +1,61 @@
+{
+  "name": "Production Model Configuration",
+  "version": "1.0.0",
+  "environment": "production",
+  "default_provider": "openai_gpt4",
+  "providers": {
+    "openai_gpt4": {
+      "type": "cloud",
+      "provider": "openai",
+      "model": "gpt-4-turbo-preview",
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "max_tokens": 4096,
+      "temperature": 0.7,
+      "rate_limit": {
+        "requests_per_minute": 500,
+        "tokens_per_minute": 90000
+      }
+    },
+    "openai_gpt35": {
+      "type": "cloud",
+      "provider": "openai",
+      "model": "gpt-3.5-turbo",
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "max_tokens": 4096,
+      "temperature": 0.7,
+      "cost_per_1k_tokens": 0.002
+    }
+  },
+  "fallback_strategy": {
+    "enabled": true,
+    "chain": [
+      {
+        "provider": "openai_gpt4",
+        "conditions": [
+          "api_healthy",
+          "within_rate_limit"
+        ]
+      },
+      {
+        "provider": "openai_gpt35",
+        "conditions": [
+          "api_healthy"
+        ]
+      }
+    ],
+    "retry_strategy": {
+      "max_retries": 3,
+      "backoff_multiplier": 2
+    }
+  },
+  "monitoring": {
+    "track_usage": true,
+    "track_costs": true,
+    "alert_thresholds": {
+      "daily_cost_usd": 100,
+      "error_rate_percent": 5
+    }
+  }
+}

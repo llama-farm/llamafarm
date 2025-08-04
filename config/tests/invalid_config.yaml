@@ -1,0 +1,53 @@
+version: v2  # Invalid version
+
+name: invalid_config
+namespace: test
+
+rag:
+  parsers:
+    csv:
+      type: "InvalidParserType"  # Invalid parser type
+      config:
+        content_fields: ["question"]
+        metadata_fields: ["category"]
+      file_extensions: [".csv"]
+      mime_types: ["text/csv"]
+
+  embedders:
+    default:
+      type: "OllamaEmbedder"
+      config:
+        model: "test-model"
+        batch_size: "invalid"  # Should be integer
+        timeout: 30
+
+  vector_stores:
+    default:
+      type: "ChromaStore"
+      config:
+        collection_name: "test"
+        persist_directory: "./test_data"
+
+  retrieval_strategies:
+    default:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+
+  defaults:
+    parser: "auto"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"
+
+models:
+  - provider: "invalid_provider"  # Invalid provider
+    model: "test-model"
+
+datasets:
+  - name: "test_dataset"
+    files: ["test_file.csv"]
+    parser: "csv"
+    embedder: "default"
+    vector_store: "default"
+    retrieval_strategy: "default"

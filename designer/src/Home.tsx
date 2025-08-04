@@ -30,10 +30,10 @@ function Home() {
           </p>
 
           <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-gray-900 dark:text-white">
+
             What are you building?
           </h1>
         </div>
-
         <div className="max-w-3xl mx-auto">
           <div className="backdrop-blur-sm rounded-lg border p-1 relative bg-white/80 border-gray-300 shadow-lg dark:bg-black/10 dark:border-blue-400/50">
             <textarea
@@ -62,6 +62,7 @@ function Home() {
             </button>
           </div>
         </div>
+
 
         <p className="max-w-2xl mx-auto text-sm sm:text-base leading-relaxed text-gray-600 dark:text-white/90">
           We'll help you bring your AI project dreams to life, all while showing

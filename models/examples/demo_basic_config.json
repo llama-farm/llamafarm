@@ -1,0 +1,16 @@
+{
+  "name": "Basic Model Configuration",
+  "version": "1.0.0",
+  "default_provider": "openai_gpt4",
+  "providers": {
+    "openai_gpt4": {
+      "type": "cloud",
+      "provider": "openai",
+      "model": "gpt-4-turbo-preview",
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "max_tokens": 4096,
+      "temperature": 0.7
+    }
+  }
+}

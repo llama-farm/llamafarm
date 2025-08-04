@@ -1401,6 +1401,9 @@ source = { editable = "." }
 dependencies = [
     { name = "chromadb" },
     { name = "colorama" },
+    { name = "pypdf2" },
+    { name = "pyyaml" },
+    { name = "reportlab" },
     { name = "requests" },
     { name = "tqdm" },
 ]
@@ -1515,6 +1518,7 @@ requires-dist = [
     { name = "prometheus-client", marker = "extra == 'monitoring'", specifier = ">=0.17.0" },
     { name = "psutil", marker = "extra == 'monitoring'", specifier = ">=5.9.0" },
     { name = "pymilvus", marker = "extra == 'vector-dbs'", specifier = ">=2.3.0" },
+    { name = "pypdf2", specifier = ">=3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
@@ -1522,7 +1526,9 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
     { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.10.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "qdrant-client", marker = "extra == 'vector-dbs'", specifier = ">=1.6.0" },
+    { name = "reportlab", specifier = ">=4.4.3" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "requests-mock", marker = "extra == 'test'", specifier = ">=1.10.0" },
     { name = "responses", marker = "extra == 'test'", specifier = ">=0.23.0" },
@@ -3476,6 +3482,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pypdf2"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9f/bb/18dc3062d37db6c491392007dfd1a7f524bb95886eb956569ac38a23a784/PyPDF2-3.0.1.tar.gz", hash = "sha256:a74408f69ba6271f71b9352ef4ed03dc53a31aa404d29b5d31f53bfecfee1440", size = 227419, upload-time = "2022-12-31T10:36:13.13Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/5e/c86a5643653825d3c913719e788e41386bee415c2b87b4f955432f2de6b2/pypdf2-3.0.1-py3-none-any.whl", hash = "sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928", size = 232572, upload-time = "2022-12-31T10:36:10.327Z" },
+]
+
+[[package]]
 name = "pypika"
 version = "0.48.9"
 source = { registry = "https://pypi.org/simple" }
@@ -3803,6 +3821,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4f/df/119329e6498215dca213e5fec9ea8fcd1c72456a214a2f4bd674870293fd/regex-2025.7.31-cp39-cp39-win32.whl", hash = "sha256:f7858175abee523c5b04cc1de5d3d03168aed4805aad747641752c027aaa6335", size = 268756, upload-time = "2025-07-30T00:13:20.723Z" },
     { url = "https://files.pythonhosted.org/packages/df/85/ee8ef31713906b462b3476f25f9a08e979081f0967daa4b46efb10395f27/regex-2025.7.31-cp39-cp39-win_amd64.whl", hash = "sha256:097c2adaedf5fba5819df298750cd3966da94fdd549e2d9e5040d7e315de97dd", size = 280486, upload-time = "2025-07-30T00:13:22.752Z" },
     { url = "https://files.pythonhosted.org/packages/0b/7c/3e274b86eb7ea686edc76faaa2d183bc716a325fa19605cd0b758e43b412/regex-2025.7.31-cp39-cp39-win_arm64.whl", hash = "sha256:c28c00fbe30dd5e99162b88765c8d014d06581927ceab8fa851267041e48820c", size = 272913, upload-time = "2025-07-30T00:13:24.506Z" },
+]
+
+[[package]]
+name = "reportlab"
+version = "4.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "charset-normalizer" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2f/83/3d44b873fa71ddc7d323c577fe4cfb61e05b34d14e64b6a232f9cfbff89d/reportlab-4.4.3.tar.gz", hash = "sha256:073b0975dab69536acd3251858e6b0524ed3e087e71f1d0d1895acb50acf9c7b", size = 3887532, upload-time = "2025-07-23T11:18:23.799Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/52/c8/aaf4e08679e7b1dc896ad30de0d0527f0fd55582c2e6deee4f2cc899bf9f/reportlab-4.4.3-py3-none-any.whl", hash = "sha256:df905dc5ec5ddaae91fc9cb3371af863311271d555236410954961c5ee6ee1b5", size = 1953896, upload-time = "2025-07-23T11:18:20.572Z" },
 ]
 
 [[package]]

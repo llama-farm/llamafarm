@@ -1,0 +1,183 @@
+name: Build CLI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-cli:
+    name: Build CLI Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            output: llamafarm-linux-amd64
+          - goos: linux
+            goarch: arm64
+            output: llamafarm-linux-arm64
+          - goos: darwin
+            goarch: amd64
+            output: llamafarm-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: llamafarm-darwin-arm64
+          - goos: windows
+            goarch: amd64
+            output: llamafarm-windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            output: llamafarm-windows-arm64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+          cache-dependency-path: cli/go.sum
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Copy schema.yaml to CLI config
+        run: |
+          mkdir -p cli/cmd/config
+          cp config/schema.yaml cli/cmd/config/
+
+      - name: Install dependencies
+        working-directory: cli
+        run: go mod download
+
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      - name: Build CLI binary
+        working-directory: cli
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          # Get version from git tag or commit
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=${GITHUB_SHA::8}
+          fi
+
+          # Build with version info
+          go build -ldflags "-s -w -X llamafarm-cli/cmd.Version=${VERSION}" -o ../dist/${{ matrix.output }} .
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: dist/${{ matrix.output }}
+          retention-days: 30
+
+  # Create checksums for all binaries
+  create-checksums:
+    name: Create Checksums
+    runs-on: ubuntu-latest
+    needs: build-cli
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          cd dist/
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: dist/checksums.txt
+          retention-days: 30
+
+  # Create GitHub release on tag push
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-cli, create-checksums]
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/llamafarm-*
+            dist/checksums.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          body: |
+            ## LlamaFarm CLI ${{ github.ref_name }}
+
+            ### Downloads
+
+            Choose the appropriate binary for your platform:
+
+            **Linux:**
+            - [llamafarm-linux-amd64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/llamafarm-linux-amd64) (Intel/AMD 64-bit)
+            - [llamafarm-linux-arm64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/llamafarm-linux-arm64) (ARM 64-bit)
+
+            **macOS:**
+            - [llamafarm-darwin-amd64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/llamafarm-darwin-amd64) (Intel Macs)
+            - [llamafarm-darwin-arm64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/llamafarm-darwin-arm64) (Apple Silicon Macs)
+
+            **Windows:**
+            - [llamafarm-windows-amd64.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/llamafarm-windows-amd64.exe) (Intel/AMD 64-bit)
+            - [llamafarm-windows-arm64.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/llamafarm-windows-arm64.exe) (ARM 64-bit)
+
+            **Verification:**
+            - [checksums.txt](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/checksums.txt) - SHA256 checksums for all binaries
+
+            ### Installation
+
+            1. Download the appropriate binary for your platform
+            2. Make it executable (Linux/macOS): `chmod +x llamafarm-*`
+            3. Move to your PATH: `sudo mv llamafarm-* /usr/local/bin/llamafarm`
+            4. Verify installation: `llamafarm version`
+
+            ### Verification
+
+            You can verify the integrity of downloaded binaries using the checksums:
+
+            ```bash
+            # Download checksums
+            curl -L -O https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/checksums.txt
+
+            # Verify (replace with your downloaded binary)
+            sha256sum -c checksums.txt --ignore-missing
+            ```

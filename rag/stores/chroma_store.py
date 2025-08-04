@@ -168,6 +168,191 @@ class ChromaStore(VectorStore):
             self.logger.error(f"Failed to get collection info: {e}")
             return {}
 
+    def delete_documents(self, filter_criteria: Dict[str, Any]) -> int:
+        """Delete documents based on filter criteria."""
+        try:
+            # ChromaDB delete with where clause
+            where_clause = self._build_where_clause(filter_criteria)
+            if where_clause:
+                self.collection.delete(where=where_clause)
+                # ChromaDB doesn't return count, so we estimate
+                self.logger.info(f"Deleted documents matching filter: {filter_criteria}")
+                return 1  # Placeholder count
+            else:
+                self.logger.warning("No valid filter criteria provided")
+                return 0
+        except Exception as e:
+            self.logger.error(f"Failed to delete documents: {e}")
+            return 0
+    
+    def update_metadata(self, filter_criteria: Dict[str, Any], update_metadata: Dict[str, Any]) -> int:
+        """Update metadata for documents matching filter criteria."""
+        try:
+            # ChromaDB doesn't support direct metadata updates
+            # Would need to query, modify, and upsert
+            self.logger.warning("ChromaDB metadata updates require query + upsert pattern")
+            return 0
+        except Exception as e:
+            self.logger.error(f"Failed to update metadata: {e}")
+            return 0
+    
+    def query_documents(
+        self, 
+        filter_criteria: Dict[str, Any], 
+        include_embeddings: bool = False
+    ) -> List[Document]:
+        """Query documents based on filter criteria without embeddings."""
+        try:
+            where_clause = self._build_where_clause(filter_criteria)
+            
+            # Query with metadata filter only (no similarity search)
+            results = self.collection.get(
+                where=where_clause,
+                include=["documents", "metadatas", "embeddings" if include_embeddings else None]
+            )
+            
+            documents = []
+            if results["ids"]:
+                for i, doc_id in enumerate(results["ids"]):
+                    doc = Document(
+                        id=doc_id,
+                        content=results["documents"][i] if results.get("documents") else "",
+                        metadata=results["metadatas"][i] or {},
+                        embeddings=results["embeddings"][i] if include_embeddings and results.get("embeddings") else None
+                    )
+                    documents.append(doc)
+            
+            return documents
+        except Exception as e:
+            self.logger.error(f"Failed to query documents: {e}")
+            return []
+    
+    def get_document_by_id(self, doc_id: str) -> Optional[Document]:
+        """Get a specific document by ID."""
+        try:
+            results = self.collection.get(
+                ids=[doc_id],
+                include=["documents", "metadatas", "embeddings"]
+            )
+            
+            if results["ids"] and len(results["ids"]) > 0:
+                return Document(
+                    id=results["ids"][0],
+                    content=results["documents"][0] if results.get("documents") else "",
+                    metadata=results["metadatas"][0] or {},
+                    embeddings=results["embeddings"][0] if results.get("embeddings") else None
+                )
+            return None
+        except Exception as e:
+            self.logger.error(f"Failed to get document {doc_id}: {e}")
+            return None
+    
+    def list_documents(
+        self, 
+        limit: Optional[int] = None, 
+        offset: Optional[int] = None
+    ) -> List[Document]:
+        """List documents with optional pagination."""
+        try:
+            get_params = {
+                "include": ["documents", "metadatas"]
+            }
+            
+            if limit:
+                get_params["limit"] = limit
+            if offset:
+                get_params["offset"] = offset
+            
+            results = self.collection.get(**get_params)
+            
+            documents = []
+            if results["ids"]:
+                for i, doc_id in enumerate(results["ids"]):
+                    doc = Document(
+                        id=doc_id,
+                        content=results["documents"][i] if results.get("documents") else "",
+                        metadata=results["metadatas"][i] or {}
+                    )
+                    documents.append(doc)
+            
+            return documents
+        except Exception as e:
+            self.logger.error(f"Failed to list documents: {e}")
+            return []
+    
+    def get_collection_stats(self) -> Dict[str, Any]:
+        """Get detailed collection statistics."""
+        try:
+            count = self.collection.count()
+            
+            # Get sample to analyze metadata patterns
+            sample = self.collection.get(limit=100, include=["metadatas"])
+            
+            # Analyze metadata
+            active_count = 0
+            deleted_count = 0
+            versions = set()
+            
+            for metadata in sample.get("metadatas", []):
+                if metadata:
+                    if metadata.get("is_active", True):
+                        active_count += 1
+                    else:
+                        deleted_count += 1
+                    
+                    if "version" in metadata:
+                        versions.add(metadata["version"])
+            
+            return {
+                "total_documents": count,
+                "active_documents": active_count,
+                "deleted_documents": deleted_count,
+                "unique_versions": len(versions),
+                "storage_size_mb": 0.0,  # ChromaDB doesn't expose this directly
+                "collection_name": self.collection_name,
+                "client_type": type(self.client).__name__
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to get collection stats: {e}")
+            return {
+                "total_documents": 0,
+                "active_documents": 0,
+                "deleted_documents": 0,
+                "unique_versions": 0,
+                "storage_size_mb": 0.0
+            }
+    
+    def _build_where_clause(self, filter_criteria: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Build ChromaDB where clause from filter criteria."""
+        if not filter_criteria:
+            return None
+        
+        where_conditions = {}
+        
+        for key, value in filter_criteria.items():
+            if isinstance(value, dict):
+                # Handle operators like $lt, $gt, $in, etc.
+                for op, op_value in value.items():
+                    if op == "$lt":
+                        where_conditions[key] = {"$lt": op_value}
+                    elif op == "$gt":
+                        where_conditions[key] = {"$gt": op_value}
+                    elif op == "$lte":
+                        where_conditions[key] = {"$lte": op_value}
+                    elif op == "$gte":
+                        where_conditions[key] = {"$gte": op_value}
+                    elif op == "$ne":
+                        where_conditions[key] = {"$ne": op_value}
+                    elif op == "$in":
+                        where_conditions[key] = {"$in": op_value}
+                    elif op == "$nin":
+                        where_conditions[key] = {"$nin": op_value}
+            else:
+                # Direct equality match
+                where_conditions[key] = value
+        
+        return where_conditions if where_conditions else None
+    
     def _serialize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Serialize metadata for ChromaDB storage."""
         serialized = {}

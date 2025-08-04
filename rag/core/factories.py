@@ -3,6 +3,7 @@
 from typing import Dict, Any, Type
 from core.base import Parser, Embedder, VectorStore
 from parsers.csv_parser import CSVParser, CustomerSupportCSVParser
+from parsers.pdf_parser import PDFParser
 from embedders.ollama_embedder import OllamaEmbedder
 from stores.chroma_store import ChromaStore
 
@@ -38,6 +39,7 @@ class ParserFactory(ComponentFactory):
     _registry = {
         "CSVParser": CSVParser,
         "CustomerSupportCSVParser": CustomerSupportCSVParser,
+        "PDFParser": PDFParser,
     }
 
 

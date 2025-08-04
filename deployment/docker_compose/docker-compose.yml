@@ -54,7 +54,7 @@ networks:
   default:
     driver: bridge
 
-volumes:
+volumes: {}
   # Add persistent volumes if needed
   # server_data:
   # designer_data:

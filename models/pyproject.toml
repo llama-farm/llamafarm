@@ -1,0 +1,101 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llamafarm-models"
+version = "0.1.0"
+description = "LlamaFarm Models System - Cloud and Local Model Management"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "LlamaFarm Team", email = "team@llamafarm.dev"},
+]
+keywords = ["rag", "llm", "models", "openai", "anthropic", "ollama"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+    "together>=1.0.0",
+    "httpx>=0.25.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "aiohttp>=3.9.0",
+    "tenacity>=8.2.0",
+    "tiktoken>=0.5.0",
+    "colorama>=0.4.6",
+    "rich>=13.0.0",
+    "click>=8.1.0",
+    "jsonschema>=4.20.0",
+    "PyYAML>=6.0",
+    "huggingface-hub>=0.19.0",
+    "transformers>=4.35.0",
+    "torch>=2.0.0",
+    "accelerate>=0.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.11.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.5.0",
+]
+vllm = [
+    "vllm>=0.2.0",
+]
+tgi = [
+    "text-generation>=0.6.0",
+]
+
+[project.scripts]
+llamafarm-models = "cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.uv]
+dev-dependencies = [
+    "ipdb>=0.13.13",
+    "ipython>=8.20.0",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["models"]
+skip_gitignore = true

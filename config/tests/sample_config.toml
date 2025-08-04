@@ -1,0 +1,120 @@
+version = "v1"
+
+name = "sample_config"
+namespace = "test"
+
+[[prompts]]
+name = "customer_support"
+prompt = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
+description = "Default customer support prompt for handling user inquiries"
+
+[[prompts]]
+name = "technical_documentation"
+prompt = "You are a technical documentation assistant. Provide clear, accurate, and detailed explanations of technical concepts."
+description = "Prompt for generating technical documentation and explanations"
+
+[[prompts]]
+name = "code_review"
+prompt = "You are a code review assistant. Analyze code for best practices, potential bugs, and improvements."
+description = "Prompt for conducting code reviews and providing feedback"
+
+[rag]
+description = "Customer support RAG configuration for testing"
+
+[rag.parsers.csv]
+type = "CustomerSupportCSVParser"
+file_extensions = [".csv"]
+mime_types = ["text/csv", "application/csv"]
+
+[rag.parsers.csv.config]
+content_fields = ["question", "answer", "solution", "explanation"]
+metadata_fields = ["category", "timestamp", "priority", "tags", "author"]
+id_field = "id"
+combine_content = true
+content_separator = "\n\n"
+
+[rag.parsers.csv.config.chunk_metadata]
+generate_summary = true
+extract_keywords = true
+include_statistics = true
+
+[rag.embedders.default]
+type = "OllamaEmbedder"
+
+[rag.embedders.default.config]
+model = "mxbai-embed-large"
+base_url = "http://localhost:11434"
+batch_size = 32
+timeout = 60
+
+[rag.vector_stores.default]
+type = "ChromaStore"
+
+[rag.vector_stores.default.config]
+collection_name = "customer_support_knowledge_base"
+persist_directory = "./data/vector_store/chroma"
+
+[rag.vector_stores.default.config.metadata_config]
+enable_versioning = true
+enable_soft_delete = true
+hash_algorithm = "sha256"
+required_metadata = ["doc_id", "chunk_id", "filename", "created_at", "updated_at"]
+indexed_metadata = ["doc_id", "filename", "created_at"]
+
+[rag.vector_stores.default.config.metadata_config.retention_policy]
+default_ttl_days = 365
+max_versions = 10
+cleanup_schedule = "weekly"
+
+[rag.retrieval_strategies.default]
+type = "BasicSimilarityStrategy"
+description = "Basic similarity search"
+
+[rag.retrieval_strategies.default.config]
+distance_metric = "cosine"
+
+[rag.defaults]
+parser = "auto"
+embedder = "default"
+vector_store = "default"
+retrieval_strategy = "default"
+
+[[models]]
+provider = "local"
+model = "llama3.1:8b"
+
+[[models]]
+provider = "local"
+model = "llama3.1:70b"
+
+[[models]]
+provider = "openai"
+model = "gpt-4"
+
+[[models]]
+provider = "openai"
+model = "gpt-4o-mini-turbo"
+
+[[models]]
+provider = "anthropic"
+model = "claude-3-sonnet-20240229"
+
+[[models]]
+provider = "anthropic"
+model = "claude-3-haiku-20240307"
+
+[[models]]
+provider = "google"
+model = "gemini-pro"
+
+[[models]]
+provider = "custom"
+model = "custom-fine-tuned-model-v1"
+
+[[datasets]]
+name = "sample_dataset"
+files = ["test_file.csv"]
+parser = "csv"
+embedder = "default"
+vector_store = "default"
+retrieval_strategy = "default"

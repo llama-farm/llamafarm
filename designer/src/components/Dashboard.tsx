@@ -6,6 +6,7 @@ import SlackLogo from '../assets/logos/slack-logo.svg'
 const DataCards = () => {
   return (
     <div className="w-full flex flex-row gap-2">
+
       <div className="w-1/3 h-[103px] flex flex-col gap-2 rounded-lg p-4 bg-white shadow-md dark:bg-blue-500">
         <div className="text-sm text-gray-700 dark:text-white">
           Model accuracy
