@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 # Import the project service
-from server.services.project_service import ProjectService
+from services.project_service import ProjectService
 
 # Input Schema
 class ProjectsToolInput(BaseIOSchema):

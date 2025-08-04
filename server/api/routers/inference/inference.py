@@ -14,8 +14,13 @@ import instructor
 from openai import OpenAI
 from core.config import settings
 
-# Import your fixed tool
-from tools.projects_tool.tool import ProjectsTool, ProjectsToolInput
+try:
+    from tools.projects_tool.tool import ProjectsTool, ProjectsToolInput
+    print("✅ [Inference] Successfully imported ProjectsTool")
+except ImportError as e:
+    print(f"❌ [Inference] Failed to import ProjectsTool: {e}")
+    print("💡 [Inference] Make sure you're running in the virtual environment")
+    raise
 
 router = APIRouter(
     prefix="/inference",
@@ -75,7 +80,8 @@ NAMESPACE_PATTERNS = [
     r"in\s+(\w+)\s+namespace",
     r"namespace\s+(\w+)",
     r"in\s+(\w+)(?:\s|$)",
-    r"from\s+(\w+)(?:\s|$)"
+    r"from\s+(\w+)(?:\s|$)",
+    r"(\w+)\s+namespace"
 ]
 
 PROJECT_ID_PATTERNS = [
@@ -520,6 +526,14 @@ async def get_agent_status():
     """Get status of all active agent sessions"""
     capabilities = ModelManager.get_capabilities(settings.ollama_model)
     
+    # Check if atomic_agents is available
+    atomic_agents_available = False
+    try:
+        import atomic_agents
+        atomic_agents_available = True
+    except ImportError:
+        pass
+    
     return {
         "active_sessions": len(agent_sessions),
         "session_ids": list(agent_sessions.keys()),
@@ -527,5 +541,7 @@ async def get_agent_status():
         "model_supports_tools": capabilities.supports_tools,
         "integration_type": "enhanced_detection_with_fallback",
         "tools_enabled": True,
-        "manual_fallback_available": True
+        "manual_fallback_available": True,
+        "atomic_agents_available": atomic_agents_available,
+        "environment_status": "healthy" if atomic_agents_available else "missing_dependencies"
     }
