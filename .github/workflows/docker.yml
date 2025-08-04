@@ -31,9 +31,9 @@ jobs:
             dockerfile: ./server/Dockerfile
             description: "LlamaFarm Server - FastAPI backend"
           - service: runtime
-            context: ./runtime
+            context: ./
             dockerfile: ./runtime/Dockerfile
-            description: "LlamaFarm Runtime - Python runtime service"
+            description: "LlamaFarm Runtime"
 
     steps:
       - name: Checkout repository
