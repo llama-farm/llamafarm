@@ -10,8 +10,13 @@ export interface Message {
   timestamp: Date
   isLoading?: boolean
 }
-function Chatbox() {
-  const [isPanelOpen, setIsPanelOpen] = useState<boolean>(true)
+
+interface ChatboxProps {
+  isPanelOpen: boolean
+  setIsPanelOpen: (isOpen: boolean) => void
+}
+
+function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       type: 'user',
@@ -21,7 +26,7 @@ function Chatbox() {
     {
       type: 'assistant',
       content:
-        'Great start! Before we dive in, we’ll need to take a look at your data. Do you have any aircraft logs or other context we can work with?',
+        "Great start! Before we dive in, we'll need to take a look at your data. Do you have any aircraft logs or other context we can work with?",
       timestamp: new Date(),
     },
   ])
@@ -36,11 +41,7 @@ function Chatbox() {
   }
 
   return (
-    <div
-      className={`bg-[#131E45] w-full h-full flex flex-col  text-white ${
-        isPanelOpen ? 'w-1/4' : 'w-[47px]'
-      }`}
-    >
+    <div className="bg-[#131E45] w-full h-full flex flex-col text-white">
       <div
         className={`flex  ${
           isPanelOpen ? 'justify-end mr-1 mt-1' : 'justify-center mt-3'
