@@ -7,7 +7,7 @@ function Header() {
   const [isBuilding, setIsBuilding] = useState(false)
   const navigate = useNavigate()
   const isSelected = useLocation().pathname.split('/')[2]
-  const { theme, setTheme } = useTheme()
+  const { setTheme } = useTheme()
 
   useEffect(() => {
     if (window.location.pathname !== '/') {
