@@ -72,7 +72,7 @@ const Data = () => {
         <div className="mb-2">Project data</div>
         <div className="mb-6 flex flex-row gap-2 justify-between items-center">
           <div className="text-sm">Dataset</div>
-          <button className="py-2 px-3 bg-blue-200 rounded-lg text-sm">
+          <button className="py-2 px-3 bg-blue-200 rounded-lg text-sm text-white ">
             Upload data
           </button>
         </div>
@@ -80,11 +80,14 @@ const Data = () => {
           <div
             className={`w-full h-full flex flex-col items-center justify-center border-[1px] border-dashed rounded-lg p-4 gap-2 transition-colors border-blue-100`}
           >
-            <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px]">
+            <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-blue-200 dark:text-white">
               {isDropped ? (
                 <Loader />
               ) : (
-                <FontIcon type="upload" className="w-10 h-10 text-white" />
+                <FontIcon
+                  type="upload"
+                  className="w-10 h-10 text-blue-200 dark:text-white"
+                />
               )}
               <div className="text-xl">Drop data here</div>
             </div>

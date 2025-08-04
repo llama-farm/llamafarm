@@ -7,7 +7,7 @@ body,
 #root {
   width: 100%;
   height: 100% !important;
-  background-color: #000b1b;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .custom-dashed-border {
