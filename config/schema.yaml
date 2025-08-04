@@ -33,6 +33,8 @@ properties:
           description: Prompt text
         description:
           type: string
+    default: []
+
   rag:
     type: object
     description: RAG (Retrieval-Augmented Generation) configuration
@@ -253,6 +255,8 @@ properties:
           items:
             type: string
             description: File path (e.g., "data/mydoc.pdf")
+          default: []
+    default: []
 
   models:
     type: array
