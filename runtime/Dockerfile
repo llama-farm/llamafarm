@@ -14,7 +14,7 @@ COPY runtime/pyproject.toml runtime/uv.lock ./
 RUN uv sync --locked --no-dev
 
 # Copy source code
-COPY . .
+COPY runtime/ .
 
 # Expose port
 EXPOSE 8000

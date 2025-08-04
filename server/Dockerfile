@@ -1,6 +1,9 @@
 # Use Python 3.12 slim image
 FROM python:3.12-slim
 
+RUN apt update && apt install -y curl && rm -rf /var/lib/apt/lists/*
+
+
 # Set working directory
 WORKDIR /app
 

@@ -21,7 +21,7 @@ RUN rm -rf node_modules package-lock.json && \
     npm install --legacy-peer-deps && \
     npm run build
 
-# Production stage  
+# Production stage
 FROM nginx:alpine
 
 # Install jq for environment variable processing
