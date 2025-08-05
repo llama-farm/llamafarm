@@ -35,8 +35,6 @@ jobs:
       - name: Copy config/schema.yaml to cli/config/schema.yaml
         run: cp config/schema.yaml cli/config/schema.yaml
 
-
-jobs:
   quick-test:
     name: Quick Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
