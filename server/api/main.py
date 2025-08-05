@@ -1,37 +1,38 @@
-import logging
-
 import fastapi
 from asgi_correlation_id import CorrelationIdMiddleware
 
 import api.routers as routers
+from api.middleware.errors import ErrorHandlerMiddleware
 from api.middleware.structlog import StructLogMiddleware
+from core.logging import FastAPIStructLogger
 from core.settings import settings
 from core.version import version
 
-logger = logging.getLogger(__name__)
+logger = FastAPIStructLogger()
 
 API_PREFIX = "/v1"
+
 def llama_farm_api() -> fastapi.FastAPI:
-  app = fastapi.FastAPI()
+    app = fastapi.FastAPI()
 
-  app.add_middleware(StructLogMiddleware)
-  app.add_middleware(CorrelationIdMiddleware)
+    app.add_middleware(ErrorHandlerMiddleware)
+    app.add_middleware(StructLogMiddleware)
+    app.add_middleware(CorrelationIdMiddleware)
 
-  app.include_router(routers.projects_router, prefix=API_PREFIX)
-  app.include_router(routers.datasets_router, prefix=API_PREFIX)
-  app.include_router(routers.inference_router, prefix=API_PREFIX)
+    app.include_router(routers.projects_router, prefix=API_PREFIX)
+    app.include_router(routers.datasets_router, prefix=API_PREFIX)
+    app.include_router(routers.inference_router, prefix=API_PREFIX)
 
-  app.add_api_route(
-    path="/",
-    methods=["GET"],
-    endpoint=lambda: {"message": "Hello, World!"}
-  )
-  app.add_api_route(
-    path="/info",
-    methods=["GET"],
-    endpoint=lambda: {
-      "version": version,
-      "data_directory": settings.lf_data_dir,
-    })
+    app.add_api_route(
+        path="/", methods=["GET"], endpoint=lambda: {"message": "Hello, World!"}
+    )
+    app.add_api_route(
+        path="/info",
+        methods=["GET"],
+        endpoint=lambda: {
+            "version": version,
+            "data_directory": settings.lf_data_dir,
+        },
+    )
 
-  return app
+    return app

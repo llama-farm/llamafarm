@@ -1,136 +1,173 @@
-import os
 import hashlib
-import mimetypes
-
+import os
 from datetime import datetime
+
+from fastapi import UploadFile
 from pydantic import BaseModel
 from server.services.project_service import ProjectService
 
+from core.logging import FastAPIStructLogger
+
+logger = FastAPIStructLogger()
+
 DATA_DIR_NAME = "lf_data"
 
+
 class MetadataFileContent(BaseModel):
-  original_file_name: str
-  resolved_file_name: str
-  added_at: datetime
-  size: int
-  mime_type: str
-  hash: str
+    original_file_name: str
+    resolved_file_name: str
+    size: int
+    mime_type: str
+    hash: str
+
+
+class FileExistsInAnotherDatasetError(Exception):
+    pass
+
 
 class DataService:
-  """
-  Service for managing data
+    """
+    Service for managing data
 
-  Data is stored in the project data directory in the following structure:
-  
-  data_dir/
-    meta/
-      <file_content_hash>.json # Metadata file
-    blobs/
-      <file_content_hash> # File content
-    index/
-      by_name/
-        <original_file_name> -> ../raw/<file_content_hash> # symlink to the file content
+    Data is stored in the project data directory in the following structure:
 
-  The metadata file is a json file that contains the following information:
-  {
-    "original_file_name": "example.pdf",
-    "resolved_file_name": "example_1719852800.pdf", # resolved file name with timestamp to avoid collisions
-    "timestamp": "1753978291",
-    "size": 1000, # in bytes
-    "mime_type": "application/pdf", # mime type of the original file
-    "hash": "2b3e321d021e5c625a4a003f0624801fa46faab59b530caddcd65a5c106b8a17" # hash of the file content
-  }
+    data_dir/
+      meta/
+        <file_content_hash>.json # Metadata file
+      blobs/
+        <file_content_hash> # File content
+      index/
+        by_name/
+          <original_file_name> -> ../raw/<file_content_hash> # symlink to the file content
 
-  File name collisions are resolved by adding an epoch timestamp to the file name. E.g. "example.pdf" -> "example_1719852800.pdf"
-  """
+    The metadata file is a json file that contains the following information:
+    {
+      "original_file_name": "example.pdf",
+      "resolved_file_name": "example_1719852800.pdf", # resolved file name with timestamp to avoid collisions
+      "timestamp": "1753978291",
+      "size": 1000, # in bytes
+      "mime_type": "application/pdf", # mime type of the original file
+      "hash": "2b3e321d021e5c625a4a003f0624801fa46faab59b530caddcd65a5c106b8a17" # hash of the file content
+    }
 
-  @classmethod
-  def get_data_dir(cls, project_id: str):
-    return os.path.join(ProjectService.get_project_dir(project_id), DATA_DIR_NAME)
+    File name collisions are resolved by adding an epoch timestamp to the file name. E.g. "example.pdf" -> "example_1719852800.pdf"
+    """
 
-  @classmethod
-  def hash_data(cls, data: bytes):
-    return hashlib.sha256(data).hexdigest()
+    @classmethod
+    def get_data_dir(cls, namespace: str, project_id: str):
+        project_dir = ProjectService.get_project_dir(namespace, project_id)
+        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME), exist_ok=True)
+        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "meta"), exist_ok=True)
+        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "raw"), exist_ok=True)
+        os.makedirs(
+            os.path.join(project_dir, DATA_DIR_NAME, "index", "by_name"), exist_ok=True
+        )
+        return os.path.join(project_dir, DATA_DIR_NAME)
 
-  @classmethod
-  def append_collision_timestamp(cls, file_name: str):
-    return f"{file_name}_{datetime.now().timestamp()}"
+    @classmethod
+    def hash_data(cls, data: bytes):
+        return hashlib.sha256(data).hexdigest()
 
-  def add_data_bytes(
-    self,
-    project_id: str,
-    file_name: str,
-    data: bytes,
-    mime_type: str = None,
-  ) -> str:
-    data_dir = self.get_data_dir(project_id)
-    data_hash = self.hash_data(data)
-    resolved_file_name = self.append_collision_timestamp(file_name)
+    @classmethod
+    def append_collision_timestamp(cls, file_name: str):
+        file_name_without_extension, extension = os.path.splitext(file_name)
+        return f"{file_name_without_extension}_{datetime.now().timestamp()}{extension}"
 
-    # Create metadata file
-    metadata_path = os.path.join(data_dir, "meta", f"{data_hash}.json")
-    with open(metadata_path, "w") as f:
-      f.write(MetadataFileContent(
-        original_file_name=file_name,
-        resolved_file_name=resolved_file_name,
-        timestamp=datetime.now().timestamp(),
-        size=len(data),
-        mime_type=mime_type or mimetypes.guess_type(file_name),
-        hash=data_hash
-      ).model_dump_json())
+    @classmethod
+    async def add_data_file(
+        cls,
+        namespace: str,
+        project_id: str,
+        file: UploadFile,
+    ) -> MetadataFileContent:
+        data_dir = cls.get_data_dir(namespace, project_id)
+        file_data = await file.read()
+        data_hash = cls.hash_data(file_data)
+        resolved_file_name = cls.append_collision_timestamp(file.filename)
 
-    # Create raw file
-    data_path = os.path.join(data_dir, "raw", data_hash)
-    with open(data_path, "wb") as f:
-      f.write(data)
+        # Create metadata file
+        metadata_path = os.path.join(data_dir, "meta", f"{data_hash}.json")
+        metadata_file_content = MetadataFileContent(
+            original_file_name=file.filename,
+            resolved_file_name=resolved_file_name,
+            timestamp=datetime.now().timestamp(),
+            size=len(file_data),
+            mime_type=file.content_type,
+            hash=data_hash,
+        )
+        with open(metadata_path, "w") as f:
+            f.write(metadata_file_content.model_dump_json())
 
-    # Create index file
-    index_path = os.path.join(data_dir, "index", "by_name", resolved_file_name)
-    os.symlink(data_path, index_path)
-    return data_path
+        # Create raw file
+        data_path = os.path.join(data_dir, "raw", data_hash)
+        with open(data_path, "wb") as f:
+            f.write(file_data)
 
+        # Create index file
+        index_path = os.path.join(data_dir, "index", "by_name", resolved_file_name)
+        os.symlink(data_path, index_path)
 
-  def add_data_file(self, project_id: str, file_path: str) -> str:
-    data_dir = self.get_data_dir(project_id)
-    file = open(file_path, "rb")
-    file_data = file.read()
-    file.close()
-    data_hash = self.hash_data(file_data)
-    resolved_file_name = self.append_collision_timestamp(os.path.basename(file_path))
-    
-    # Create metadata file
-    metadata_path = os.path.join(data_dir, "meta", f"{data_hash}.json")
-    with open(metadata_path, "w") as f:
-      f.write(MetadataFileContent(
-        original_file_name=os.path.basename(file_path),
-        resolved_file_name=resolved_file_name,
-        timestamp=datetime.now().timestamp(),
-        size=len(file_data),
-        mime_type=mimetypes.guess_type(file_path)[0],
-        hash=data_hash
-      ).model_dump_json())
+        logger.info(
+            f"Wrote file '{file.filename}' to disk",
+            metadata=metadata_file_content.model_dump(),
+            data_dir=data_dir,
+        )
+        return metadata_file_content
 
-    # Create raw file
-    data_path = os.path.join(data_dir, "raw", data_hash)
-    with open(data_path, "wb") as f:
-      f.write(file_data)
-    
-    # Create index file
-    index_path = os.path.join(data_dir, "index", "by_name", resolved_file_name)
-    os.symlink(data_path, index_path)
-    return data_path
+    @classmethod
+    def read_data_file(
+        cls,
+        namespace: str,
+        project_id: str,
+        file_content_hash: str,
+    ) -> bytes:
+        data_dir = cls.get_data_dir(namespace, project_id)
+        data_path = os.path.join(data_dir, "raw", file_content_hash)
+        with open(data_path, "rb") as f:
+            return f.read()
 
-  def read_data_file(self, project_id: str, file_content_hash: str) -> bytes:
-    data_dir = self.get_data_dir(project_id)
-    data_path = os.path.join(data_dir, "raw", file_content_hash)
-    with open(data_path, "rb") as f:
-      return f.read()
+    @classmethod
+    def get_data_file_metadata_by_hash(
+        cls,
+        namespace: str,
+        project_id: str,
+        file_content_hash: str,
+    ) -> MetadataFileContent:
+        data_dir = cls.get_data_dir(namespace, project_id)
+        metadata_path = os.path.join(data_dir, "meta", f"{file_content_hash}.json")
+        with open(metadata_path) as f:
+            return MetadataFileContent.model_validate_json(f.read())
 
-  def delete_data_file(self, project_id: str, file_content_hash: str):
-    data_dir = self.get_data_dir(project_id)
-    data_path = os.path.join(data_dir, "raw", file_content_hash)
-    os.remove(data_path)
-    metadata_path = os.path.join(data_dir, "meta", f"{file_content_hash}.json")
-    os.remove(metadata_path)
-    index_path = os.path.join(data_dir, "index", "by_name", file_content_hash)
-    os.remove(index_path)
+    @classmethod
+    def delete_data_file(
+        cls,
+        namespace: str,
+        project_id: str,
+        dataset: str,
+        file: MetadataFileContent,
+    ) -> MetadataFileContent:
+        data_dir = cls.get_data_dir(namespace, project_id)
+
+        # Make sure the file is not in use by another dataset
+        project = ProjectService.get_project(namespace, project_id)
+        other_dataset = next(
+            (ds for ds in project.config.get("datasets") if ds["name"] != dataset),
+            None,
+        )
+        if other_dataset:
+            raise FileExistsInAnotherDatasetError(
+                f"File '{file.hash}' is in use by dataset '{other_dataset.name}'"
+            )
+
+        metadata_path = os.path.join(data_dir, "meta", f"{file.hash}.json")
+        os.remove(metadata_path)
+        data_path = os.path.join(data_dir, "raw", file.hash)
+        os.remove(data_path)
+        index_path = os.path.join(data_dir, "index", "by_name", file.resolved_file_name)
+        os.remove(index_path)
+
+        logger.info(
+            f"Deleted file '{file.hash}' from disk",
+            metadata=file.model_dump(),
+            data_dir=data_dir,
+        )

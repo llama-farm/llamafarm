@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from api.errors import NamespaceNotFoundError
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
@@ -13,6 +14,7 @@ sys.path.insert(0, str(repo_root))
 from config import LlamaFarmConfig, generate_base_config, load_config, save_config  # noqa: E402, I001
 
 logger = FastAPIStructLogger()
+
 class Project(BaseModel):
   namespace: str;
   name: str;
@@ -63,8 +65,15 @@ class ProjectService:
 
     namespace_dir = cls.get_namespace_dir(namespace)
     logger.info(f"Listing projects in {namespace_dir}")
+
+    dirs: list[str]
+    try:
+      dirs = os.listdir(namespace_dir)
+    except FileNotFoundError as e:
+      raise NamespaceNotFoundError(namespace) from e
+
     projects = []
-    for project_name in os.listdir(namespace_dir):
+    for project_name in dirs:
       cfg = load_config(directory=os.path.join(namespace_dir, project_name), validate=False)
       projects.append(Project(
         namespace=namespace,
@@ -89,8 +98,6 @@ class ProjectService:
 
   @classmethod
   def save_config(cls, namespace: str, project_id: str, config: LlamaFarmConfig) -> LlamaFarmConfig:
-    logger.debug(
-      f"Saving config to {cls.get_project_dir(namespace, project_id)}",
-      config=config,
-    )
-    return save_config(config, cls.get_project_dir(namespace, project_id))
+    cfg = save_config(config, cls.get_project_dir(namespace, project_id))
+    logger.debug("Saved project config", config=config)
+    return cfg

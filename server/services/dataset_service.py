@@ -1,21 +1,21 @@
-import logging
-
-from typing import List
-
-logger = logging.getLogger(__name__)
-
 from config import config_types
+
+from api.errors import DatasetNotFoundError, NotFoundError
+from core.logging import FastAPIStructLogger
+from services.data_service import MetadataFileContent
 from services.project_service import ProjectService
 
-type Dataset = config_types.DatasetsConfig
+Dataset = config_types.DatasetsConfig
 
 DEFAULT_PARSERS = ["pdf", "text", "csv", "json", "markdown"]
+
+logger = FastAPIStructLogger()
 
 class DatasetService:
     """Service for managing datasets within projects"""
 
     @classmethod
-    def list_datasets(cls, namespace: str, project: str) -> List[Dataset]:
+    def list_datasets(cls, namespace: str, project: str) -> list[Dataset]:
         """
         List all datasets for a given project
         """
@@ -101,10 +101,67 @@ class DatasetService:
         }
 
     @classmethod
-    def get_supported_parsers(cls, namespace: str, project: str) -> List[str]:
+    def get_supported_parsers(cls, namespace: str, project: str) -> list[str]:
         """
         Get list of supported parsers for the project
         """
         project_config = ProjectService.load_config(namespace, project)
         custom_parsers = project_config.get("rag", {}).get("parsers", []) or []
         return DEFAULT_PARSERS + custom_parsers
+
+    @classmethod
+    def add_file_to_dataset(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file: MetadataFileContent,
+    ):
+        """
+        Add a file to a dataset
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        existing_datasets = project_config.get("datasets", [])
+        dataset_to_update = next(
+            (
+                ds
+                for ds in existing_datasets
+                if ds["name"] == dataset
+            ),
+            None,
+        )
+        if dataset_to_update is None:
+            raise DatasetNotFoundError(dataset)
+        dataset_to_update["files"].append(file.hash)
+        project_config.update({"datasets": existing_datasets})
+        ProjectService.save_config(namespace, project, project_config)
+
+    @classmethod
+    def remove_file_from_dataset(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file_hash: str,
+    ):
+        """
+        Remove a file from a dataset
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        existing_datasets = project_config.get("datasets", [])
+        dataset_to_update = next(
+            (
+                ds
+                for ds in existing_datasets
+                if ds["name"] == dataset
+            ),
+            None,
+        )
+        if dataset_to_update is None:
+            raise ValueError(f"Dataset {dataset} not found")
+        try:
+            dataset_to_update["files"].remove(file_hash)
+        except ValueError as e:
+            raise NotFoundError(f"File {file_hash} not found in dataset") from e
+        project_config.update({"datasets": existing_datasets})
+        ProjectService.save_config(namespace, project, project_config)
