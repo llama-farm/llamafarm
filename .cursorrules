@@ -1,0 +1,314 @@
+# LlamaFarm Development Rules
+
+## Project Overview
+LlamaFarm is a modular, Python-based AI/ML framework for building production-ready AI applications with local control. It follows a strategy-based configuration approach with a focus on extensibility and maintainability.
+
+## Core Development Principles
+
+### 1. Strategy-First Configuration Approach
+- **Strategy System**: Pre-configured setups for specific use cases (simple, legal, customer_support, etc.)
+- **Traditional Config**: Direct component configuration still supported for advanced users
+- **YAML-First**: All configurations use YAML format with extensive commenting
+- Use Pydantic models for configuration validation
+- Support environment variable substitution (${VAR_NAME})
+- Provide comprehensive schema documentation (schema.yaml)
+
+### 2. Modular Architecture
+- Each module should work independently
+- Use factory patterns for component creation
+- Implement plugin architecture for extensibility
+- Keep clear separation between modules
+
+### 3. Provider-Agnostic Design
+- Support multiple backends (OpenAI, Anthropic, Ollama, etc.)
+- Implement fallback chains for reliability
+- Avoid vendor lock-in
+- Local-first with cloud integration options
+
+## Code Standards
+
+### Python Development
+- Use Python 3.9+ with full type hints
+- Follow Black formatting (88-char lines)
+- Use isort for import sorting
+- Implement comprehensive error handling
+- Use Pydantic for data validation
+
+### Package Management
+- Use UV for dependency management
+- Maintain pyproject.toml for project configuration
+- Pin dependencies for reproducibility
+- Use virtual environments
+
+### Testing Requirements
+- Write tests for all new features
+- Use pytest framework
+- Mock external dependencies
+- Maintain test coverage above 80%
+- Run tests before committing: `uv run pytest`
+
+### Code Organization (RAG Example)
+```
+rag/
+├── strategies/     # Strategy system (config.py, loader.py, manager.py)
+├── core/           # Core functionality  
+├── parsers/        # Document parsers
+├── extractors/     # Content extractors
+├── embedders/      # Text embedding models
+├── stores/         # Vector database integrations
+├── retrieval/      # Retrieval strategies
+├── config/         # Configuration schemas
+├── examples/       # Usage examples and configs
+├── tests/          # Test suites
+├── schema.yaml     # Complete component schema documentation
+├── default_strategies.yaml  # Predefined strategies
+└── cli.py          # CLI interface with strategy support
+```
+
+## Development Workflow
+
+### Before Starting
+1. Review existing code patterns in the module
+2. Check configuration schemas
+3. Understand the factory/plugin patterns used
+4. Review test structure
+
+### When Writing Code
+1. Start with configuration schema (Pydantic model)
+2. Implement factory pattern for component creation
+3. Add comprehensive logging
+4. Include type hints for all functions
+5. Write docstrings for public APIs
+
+### CLI Development
+- Use Click for Python CLIs
+- Provide rich terminal output
+- Include --help documentation
+- **Strategy Support**: Add --strategy and --strategy-overrides options
+- Support both strategy and traditional config approaches
+- Add strategy-specific commands (list, show, recommend, convert, test)
+- Add progress indicators for long operations
+
+### Error Handling
+- Create custom exception classes
+- Provide helpful error messages
+- Log errors appropriately
+- Handle external API failures gracefully
+
+## Configuration Management
+
+### Strategy-Based Configuration
+```yaml
+# Strategy approach (recommended)
+version: "v1"
+strategy: "customer_support"
+strategy_overrides:
+  components:
+    embedder:
+      config:
+        batch_size: 32
+
+# Traditional approach (still supported)
+version: "v1"
+parser:
+  type: "PDFParser"
+  config:
+    extract_images: true
+embedder:
+  type: "OllamaEmbedder"
+  config:
+    model: "nomic-embed-text"
+    api_key: ${API_KEY}
+```
+
+### Best Practices
+- **Schema Documentation**: Maintain comprehensive schema.yaml for all components
+- **Strategy Defaults**: Provide sensible default strategies for common use cases
+- Version all configuration schemas
+- Validate configurations early with Pydantic
+- Support strategy overrides for customization
+- Document all available strategies and components
+
+## Testing Guidelines
+
+### Test Structure
+```python
+class TestComponent:
+    def test_initialization(self):
+        # Test basic setup
+    
+    def test_configuration(self, temp_config):
+        # Test config loading
+    
+    @patch('external.api')
+    def test_external_calls(self, mock_api):
+        # Mock external dependencies
+```
+
+### Running Tests
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=module_name
+
+# Run specific test
+uv run pytest tests/test_specific.py::TestClass::test_method
+```
+
+## Documentation Standards
+
+### Code Documentation
+- Docstrings for all public functions/classes
+- Type hints for clarity
+- Examples in docstrings
+- Configuration examples in docs/
+
+### README Structure
+1. Overview and purpose
+2. Installation instructions
+3. Configuration guide
+4. Usage examples
+5. API reference
+6. Contributing guidelines
+
+## Git Workflow
+
+### Commit Messages
+- Use conventional commits (feat:, fix:, docs:, etc.)
+- Reference issues when applicable
+- Keep messages concise but descriptive
+
+### Branch Strategy
+- Feature branches from main
+- PR reviews required
+- Run tests before pushing
+- Update documentation with features
+
+## Security Considerations
+
+### API Keys and Secrets
+- Never hardcode credentials
+- Use environment variables
+- Support multiple auth methods
+- Validate API keys early
+
+### Data Privacy
+- Local-first approach
+- Optional telemetry (off by default)
+- Clear data retention policies
+- Support data anonymization
+
+## Performance Guidelines
+
+### Optimization Priorities
+1. Configuration parsing efficiency
+2. Minimize external API calls
+3. Implement caching where appropriate
+4. Support batch operations
+5. Profile before optimizing
+
+### Resource Management
+- Set reasonable defaults
+- Allow resource limits configuration
+- Implement graceful degradation
+- Monitor memory usage
+
+## Extension Guidelines
+
+### Creating New Components
+1. Define configuration schema (Pydantic models)
+2. Implement factory class and register component
+3. **Update schema.yaml** with component documentation
+4. **Add to default strategies** where appropriate
+5. Add CLI commands with strategy support
+6. Write comprehensive tests including strategy integration
+7. Document usage with both strategy and traditional config examples
+
+### Plugin Development
+- Follow existing plugin patterns
+- Implement required interfaces
+- Provide configuration examples
+- Test with multiple providers
+- Document limitations
+
+## Common Patterns
+
+### Factory Pattern
+```python
+class ComponentFactory:
+    @staticmethod
+    def create(config: Dict[str, Any]) -> Component:
+        component_type = config.get("type")
+        return REGISTRY[component_type](config)
+```
+
+### Configuration Loading
+```python
+def load_config(path: str) -> Dict[str, Any]:
+    with open(path) as f:
+        config = yaml.safe_load(f)
+    # Substitute environment variables
+    return substitute_env_vars(config)
+```
+
+### CLI Command with Strategy Support
+```python
+@cli.command()
+@click.option('--config', '-c', help='Configuration file')
+@click.option('--strategy', '-s', help='Strategy name')
+@click.option('--strategy-overrides', help='Strategy overrides (JSON)')
+def command(config, strategy, strategy_overrides):
+    """Command description."""
+    cfg = load_config_with_strategy_support(
+        config_path=config,
+        strategy_name=strategy,
+        strategy_overrides=strategy_overrides
+    )
+    # Implementation
+
+# Strategy management commands
+@cli.group()
+def strategies():
+    """Strategy management commands."""
+    pass
+
+@strategies.command()
+def list_strategies():
+    """List available strategies."""
+    # Implementation
+```
+
+## Quality Checklist
+
+Before submitting code:
+- [ ] Tests pass: `uv run pytest`
+- [ ] Code formatted: `uv run black .`
+- [ ] Imports sorted: `uv run isort .`
+- [ ] Type hints added
+- [ ] Documentation updated
+- [ ] **Strategy integration tested** (if applicable)
+- [ ] **schema.yaml updated** with new components
+- [ ] **default_strategies.yaml updated** if appropriate
+- [ ] Configuration examples provided (both strategy and traditional)
+- [ ] CLI commands support strategy options
+- [ ] Error handling implemented
+- [ ] Logging added appropriately
+
+## Strategy System Guidelines
+
+### When Adding New Parsers/Extractors/Components
+1. **Register in Factory**: Add to appropriate factory registry
+2. **Document in Schema**: Update schema.yaml with full documentation
+3. **Strategy Integration**: Consider which strategies should use this component
+4. **Default Configuration**: Provide sensible defaults
+5. **CLI Integration**: Ensure CLI can list/test the component
+6. **Test Coverage**: Include strategy system tests
+
+### Strategy Design Principles
+- **Use Case Focused**: Each strategy should solve specific problems
+- **Optimized Defaults**: Strategies should work well out-of-the-box
+- **Override Friendly**: Users should be able to customize easily
+- **Documentation Heavy**: Extensive comments explaining choices
+- **Performance Categorized**: Clear performance/resource/complexity ratings

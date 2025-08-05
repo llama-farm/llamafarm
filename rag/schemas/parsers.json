@@ -1,0 +1,745 @@
+{
+  "type": "parser",
+  "version": "1.0.0",
+  "generated_by": "cli_compile.py",
+  "components": {
+    "html_parser": {
+      "schema": {
+        "name": "html_parser",
+        "type": "parser",
+        "class_name": "HtmlParser",
+        "description": "HtmlParser component",
+        "version": "1.0.0",
+        "dependencies": {
+          "optional": [],
+          "required": []
+        },
+        "config_schema": {
+          "type": "object",
+          "properties": {}
+        },
+        "use_cases": []
+      },
+      "path": "components/parsers_new/html_parser",
+      "has_implementation": true
+    },
+    "docx_parser": {
+      "schema": {
+        "name": "docx_parser",
+        "type": "parser",
+        "class_name": "DocxParser",
+        "description": "DocxParser component",
+        "version": "1.0.0",
+        "dependencies": {
+          "optional": [],
+          "required": []
+        },
+        "config_schema": {
+          "type": "object",
+          "properties": {}
+        },
+        "use_cases": []
+      },
+      "path": "components/parsers_new/docx_parser",
+      "has_implementation": true
+    },
+    "text_parser": {
+      "schema": {
+        "name": "text_parser",
+        "type": "parser",
+        "class_name": "PlainTextParser",
+        "description": "Parser for plain text files with encoding detection and structure analysis",
+        "version": "1.0.0",
+        "dependencies": {
+          "optional": [
+            "chardet"
+          ],
+          "required": []
+        },
+        "config_schema": {
+          "type": "object",
+          "properties": {
+            "encoding": {
+              "type": "string",
+              "default": "auto",
+              "description": "Text encoding ('auto' for detection, or specific like 'utf-8')"
+            },
+            "chunk_size": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "default": null,
+              "description": "Split text into chunks of this size (characters)"
+            },
+            "preserve_line_breaks": {
+              "type": "boolean",
+              "default": true,
+              "description": "Preserve original line breaks in content"
+            },
+            "strip_empty_lines": {
+              "type": "boolean",
+              "default": true,
+              "description": "Remove excessive empty lines"
+            },
+            "detect_structure": {
+              "type": "boolean",
+              "default": true,
+              "description": "Detect headers, lists, and code blocks"
+            }
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "file_path": {
+                  "type": "string"
+                },
+                "file_name": {
+                  "type": "string"
+                },
+                "encoding": {
+                  "type": "string"
+                },
+                "line_count": {
+                  "type": "integer"
+                },
+                "word_count": {
+                  "type": "integer"
+                },
+                "has_headers": {
+                  "type": "boolean"
+                },
+                "has_lists": {
+                  "type": "boolean"
+                },
+                "has_code_blocks": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "supported_extensions": [
+          ".txt",
+          ".log",
+          ".text",
+          ".asc",
+          ".readme"
+        ],
+        "use_cases": [
+          "Log file analysis",
+          "Plain text document processing",
+          "Configuration file parsing",
+          "README file processing",
+          "Code documentation",
+          "Large text file chunking"
+        ],
+        "examples": [
+          {
+            "name": "Log analysis",
+            "config": {
+              "encoding": "auto",
+              "chunk_size": 10000,
+              "detect_structure": false,
+              "strip_empty_lines": true
+            },
+            "description": "Process log files with chunking"
+          },
+          {
+            "name": "Documentation",
+            "config": {
+              "encoding": "utf-8",
+              "detect_structure": true,
+              "preserve_line_breaks": true,
+              "strip_empty_lines": false
+            },
+            "description": "Parse documentation with structure detection"
+          }
+        ]
+      },
+      "path": "components/parsers_new/text_parser",
+      "has_implementation": true
+    },
+    "markdown_parser": {
+      "schema": {
+        "name": "markdown_parser",
+        "type": "parser",
+        "class_name": "MarkdownParser",
+        "description": "MarkdownParser component",
+        "version": "1.0.0",
+        "dependencies": {
+          "optional": [],
+          "required": []
+        },
+        "config_schema": {
+          "type": "object",
+          "properties": {}
+        },
+        "use_cases": []
+      },
+      "path": "components/parsers_new/markdown_parser",
+      "has_implementation": true
+    },
+    "csv_parser": {
+      "schema": {
+        "name": "csv_parser",
+        "type": "parser",
+        "class_name": "CSVParser",
+        "description": "Parser for CSV files with configurable field mapping",
+        "version": "1.0.0",
+        "dependencies": {
+          "optional": [],
+          "required": []
+        },
+        "config_schema": {
+          "type": "object",
+          "properties": {
+            "content_fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [
+                "subject",
+                "body"
+              ],
+              "description": "CSV columns to use as document content"
+            },
+            "metadata_fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "CSV columns to include as metadata"
+            },
+            "id_field": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null,
+              "description": "CSV column to use as document ID"
+            },
+            "combine_content": {
+              "type": "boolean",
+              "default": true,
+              "description": "Combine multiple content fields into one document"
+            },
+            "content_separator": {
+              "type": "string",
+              "default": "\n\n",
+              "description": "Separator when combining content fields"
+            }
+          }
+        },
+        "supported_extensions": [
+          ".csv",
+          ".tsv"
+        ],
+        "use_cases": [
+          "Customer support tickets",
+          "Product catalogs",
+          "Survey responses",
+          "Tabular data processing",
+          "Contact lists",
+          "Inventory management"
+        ]
+      },
+      "path": "components/parsers_new/csv_parser",
+      "has_implementation": true
+    },
+    "excel_parser": {
+      "schema": {
+        "name": "excel_parser",
+        "type": "parser",
+        "class_name": "ExcelParser",
+        "description": "ExcelParser component",
+        "version": "1.0.0",
+        "dependencies": {
+          "optional": [],
+          "required": []
+        },
+        "config_schema": {
+          "type": "object",
+          "properties": {}
+        },
+        "use_cases": []
+      },
+      "path": "components/parsers_new/excel_parser",
+      "has_implementation": true
+    },
+    "pdf_parser": {
+      "schema": {
+        "name": "pdf_parser",
+        "type": "parser",
+        "class_name": "PDFParser",
+        "description": "Extracts text, metadata, and structure from PDF documents with configurable page handling and outline extraction",
+        "version": "1.0.0",
+        "dependencies": {
+          "required": [
+            "PyPDF2"
+          ],
+          "optional": []
+        },
+        "config_schema": {
+          "type": "object",
+          "properties": {
+            "extract_metadata": {
+              "type": "boolean",
+              "default": true,
+              "description": "Extract PDF metadata (title, author, creation date, etc.)"
+            },
+            "extract_page_structure": {
+              "type": "boolean",
+              "default": true,
+              "description": "Extract page-level structure information (dimensions, rotation)"
+            },
+            "combine_pages": {
+              "type": "boolean",
+              "default": true,
+              "description": "Combine all pages into single document vs separate document per page"
+            },
+            "page_separator": {
+              "type": "string",
+              "default": "\n\n--- Page Break ---\n\n",
+              "description": "Separator to use between pages when combining"
+            },
+            "min_text_length": {
+              "type": "integer",
+              "default": 10,
+              "minimum": 0,
+              "description": "Minimum text length to include a page"
+            },
+            "include_page_numbers": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include page numbers in extracted text"
+            },
+            "extract_outline": {
+              "type": "boolean",
+              "default": true,
+              "description": "Extract document outline/bookmarks if available"
+            }
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "documents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "properties": {
+                      "source_file": {
+                        "type": "string"
+                      },
+                      "file_size_bytes": {
+                        "type": "integer"
+                      },
+                      "total_pages": {
+                        "type": "integer"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "author": {
+                        "type": "string"
+                      },
+                      "creation_date": {
+                        "type": "string"
+                      },
+                      "has_outline": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "use_cases": [
+          "Legal document processing",
+          "Research paper analysis",
+          "Financial report extraction",
+          "Technical documentation parsing",
+          "Book and publication processing",
+          "Invoice and receipt processing"
+        ],
+        "examples": [
+          {
+            "name": "Research papers",
+            "config": {
+              "extract_metadata": true,
+              "combine_pages": true,
+              "extract_outline": true,
+              "include_page_numbers": true,
+              "min_text_length": 50
+            },
+            "description": "Extract academic papers with full metadata and structure"
+          },
+          {
+            "name": "Legal documents",
+            "config": {
+              "extract_metadata": true,
+              "combine_pages": false,
+              "extract_page_structure": true,
+              "page_separator": "\n\n[NEW PAGE]\n\n",
+              "include_page_numbers": true
+            },
+            "description": "Parse legal documents with page-by-page separation"
+          },
+          {
+            "name": "Financial reports",
+            "config": {
+              "extract_metadata": true,
+              "combine_pages": true,
+              "extract_outline": true,
+              "min_text_length": 20,
+              "include_page_numbers": false
+            },
+            "description": "Extract financial reports focusing on content over structure"
+          }
+        ]
+      },
+      "path": "components/parsers_new/pdf_parser",
+      "has_implementation": true
+    }
+  },
+  "defaults_registry": {
+    "html_parser": {
+      "default": {
+        "name": "Default Configuration",
+        "description": "Default settings for html_parser",
+        "config": {},
+        "recommended_for": [
+          "General use"
+        ]
+      }
+    },
+    "docx_parser": {
+      "default": {
+        "name": "Default Configuration",
+        "description": "Default settings for docx_parser",
+        "config": {},
+        "recommended_for": [
+          "General use"
+        ]
+      }
+    },
+    "text_parser": {
+      "log_analysis": {
+        "name": "Log File Analysis",
+        "description": "Optimized for processing log files and system outputs",
+        "config": {
+          "encoding": "auto",
+          "chunk_size": 50000,
+          "preserve_line_breaks": true,
+          "strip_empty_lines": true,
+          "detect_structure": false
+        },
+        "recommended_for": [
+          "Server logs",
+          "Application logs",
+          "System outputs",
+          "Debug files"
+        ]
+      },
+      "documentation": {
+        "name": "Documentation Processing",
+        "description": "Process documentation with structure detection",
+        "config": {
+          "encoding": "utf-8",
+          "chunk_size": null,
+          "preserve_line_breaks": true,
+          "strip_empty_lines": false,
+          "detect_structure": true
+        },
+        "recommended_for": [
+          "README files",
+          "Technical documentation",
+          "User manuals",
+          "Text guides"
+        ]
+      },
+      "large_documents": {
+        "name": "Large Document Chunking",
+        "description": "Handle large text files with intelligent chunking",
+        "config": {
+          "encoding": "auto",
+          "chunk_size": 25000,
+          "preserve_line_breaks": true,
+          "strip_empty_lines": true,
+          "detect_structure": true
+        },
+        "recommended_for": [
+          "Books",
+          "Research papers",
+          "Long articles",
+          "Large datasets"
+        ]
+      },
+      "clean_processing": {
+        "name": "Clean Text Processing",
+        "description": "Clean processing with minimal structure detection",
+        "config": {
+          "encoding": "utf-8",
+          "chunk_size": null,
+          "preserve_line_breaks": false,
+          "strip_empty_lines": true,
+          "detect_structure": false
+        },
+        "recommended_for": [
+          "Data cleaning",
+          "Content migration",
+          "Simple text processing"
+        ]
+      }
+    },
+    "markdown_parser": {
+      "default": {
+        "name": "Default Configuration",
+        "description": "Default settings for markdown_parser",
+        "config": {},
+        "recommended_for": [
+          "General use"
+        ]
+      }
+    },
+    "csv_parser": {
+      "general_purpose": {
+        "name": "General Purpose CSV Parsing",
+        "description": "Basic CSV parsing with flexible field configuration",
+        "config": {
+          "content_fields": [
+            "text",
+            "content",
+            "description"
+          ],
+          "metadata_fields": [],
+          "combine_content": true,
+          "content_separator": "\n\n"
+        },
+        "recommended_for": [
+          "General CSV files",
+          "Simple tabular data",
+          "Mixed content"
+        ]
+      },
+      "customer_support": {
+        "name": "Customer Support Tickets",
+        "description": "Optimized for customer support ticket CSV files",
+        "config": {
+          "content_fields": [
+            "subject",
+            "body",
+            "answer"
+          ],
+          "metadata_fields": [
+            "type",
+            "queue",
+            "priority",
+            "language",
+            "status"
+          ],
+          "combine_content": true,
+          "content_separator": "\n\n---\n\n",
+          "id_field": "ticket_id"
+        },
+        "recommended_for": [
+          "Support tickets",
+          "Help desk data",
+          "Customer inquiries"
+        ]
+      },
+      "survey_responses": {
+        "name": "Survey Response Analysis",
+        "description": "Parse survey responses with rating and demographic data",
+        "config": {
+          "content_fields": [
+            "response_text",
+            "comments",
+            "feedback"
+          ],
+          "metadata_fields": [
+            "respondent_id",
+            "survey_date",
+            "rating",
+            "age_group",
+            "location"
+          ],
+          "combine_content": true,
+          "content_separator": " ",
+          "id_field": "response_id"
+        },
+        "recommended_for": [
+          "Survey data",
+          "Feedback forms",
+          "Market research"
+        ]
+      },
+      "product_catalog": {
+        "name": "Product Catalog Processing",
+        "description": "Parse product information with structured metadata",
+        "config": {
+          "content_fields": [
+            "name",
+            "description",
+            "features"
+          ],
+          "metadata_fields": [
+            "category",
+            "price",
+            "brand",
+            "sku",
+            "availability"
+          ],
+          "combine_content": true,
+          "content_separator": "\n",
+          "id_field": "sku"
+        },
+        "recommended_for": [
+          "E-commerce catalogs",
+          "Product databases",
+          "Inventory lists"
+        ]
+      },
+      "contact_management": {
+        "name": "Contact and CRM Data",
+        "description": "Process contact lists and CRM exports",
+        "config": {
+          "content_fields": [
+            "notes",
+            "description",
+            "bio"
+          ],
+          "metadata_fields": [
+            "name",
+            "email",
+            "phone",
+            "company",
+            "role",
+            "tags"
+          ],
+          "combine_content": false,
+          "id_field": "contact_id"
+        },
+        "recommended_for": [
+          "Contact lists",
+          "CRM exports",
+          "Lead databases"
+        ]
+      }
+    },
+    "excel_parser": {
+      "default": {
+        "name": "Default Configuration",
+        "description": "Default settings for excel_parser",
+        "config": {},
+        "recommended_for": [
+          "General use"
+        ]
+      }
+    },
+    "pdf_parser": {
+      "default": {
+        "name": "Default Configuration",
+        "description": "Default settings for pdf_parser",
+        "config": {},
+        "recommended_for": [
+          "General use"
+        ]
+      }
+    }
+  },
+  "use_case_index": {
+    "Log file analysis": [
+      "text_parser"
+    ],
+    "Plain text document processing": [
+      "text_parser"
+    ],
+    "Configuration file parsing": [
+      "text_parser"
+    ],
+    "README file processing": [
+      "text_parser"
+    ],
+    "Code documentation": [
+      "text_parser"
+    ],
+    "Large text file chunking": [
+      "text_parser"
+    ],
+    "Customer support tickets": [
+      "csv_parser"
+    ],
+    "Product catalogs": [
+      "csv_parser"
+    ],
+    "Survey responses": [
+      "csv_parser"
+    ],
+    "Tabular data processing": [
+      "csv_parser"
+    ],
+    "Contact lists": [
+      "csv_parser"
+    ],
+    "Inventory management": [
+      "csv_parser"
+    ],
+    "Legal document processing": [
+      "pdf_parser"
+    ],
+    "Research paper analysis": [
+      "pdf_parser"
+    ],
+    "Financial report extraction": [
+      "pdf_parser"
+    ],
+    "Technical documentation parsing": [
+      "pdf_parser"
+    ],
+    "Book and publication processing": [
+      "pdf_parser"
+    ],
+    "Invoice and receipt processing": [
+      "pdf_parser"
+    ]
+  },
+  "dependency_graph": {
+    "text_parser": {
+      "optional": [
+        "chardet"
+      ],
+      "required": []
+    },
+    "pdf_parser": {
+      "required": [
+        "PyPDF2"
+      ],
+      "optional": []
+    }
+  }
+}

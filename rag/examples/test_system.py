@@ -13,9 +13,9 @@ import csv
 from pathlib import Path
 
 from core.base import Document
-from parsers.csv_parser import CustomerSupportCSVParser
-from embedders.ollama_embedder import OllamaEmbedder
-from stores.chroma_store import ChromaStore
+from components.parsers.csv_parser import CustomerSupportCSVParser
+from components.embedders.ollama_embedder import OllamaEmbedder
+from components.stores.chroma_store import ChromaStore
 
 
 class TestCSVParser(unittest.TestCase):

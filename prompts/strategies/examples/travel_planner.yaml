@@ -1,0 +1,142 @@
+# Travel Planning Strategy
+# Comprehensive travel and itinerary planning assistant
+
+name: "Travel Planning Assistant"
+description: "Personalized travel planning with itineraries, recommendations, and local insights"
+use_cases:
+  - "travel_planning"
+  - "itinerary_creation"
+  - "destination_research"
+  - "hotel_recommendations"
+  - "activity_suggestions"
+  - "travel_tips"
+performance_profile: "balanced"
+complexity: "complex"
+
+templates:
+  default:
+    template: "travel_itinerary"
+    config:
+      itinerary_format: "day_by_day"
+      include_timings: true
+      include_transportation: true
+      include_costs: true
+      local_insights: true
+      weather_consideration: true
+  
+  specialized:
+    - condition:
+        query_type: "budget_travel"
+      template: "budget_travel_plan"
+      config:
+        cost_breakdown: true
+        money_saving_tips: true
+        free_activities: true
+        budget_accommodations: true
+        local_food_options: true
+      priority: 20
+    
+    - condition:
+        query_type: "luxury_travel"
+      template: "luxury_travel_plan"
+      config:
+        premium_experiences: true
+        exclusive_venues: true
+        concierge_services: true
+        fine_dining: true
+      priority: 20
+    
+    - condition:
+        query_type: "adventure_travel"
+      template: "adventure_itinerary"
+      config:
+        outdoor_activities: true
+        difficulty_levels: true
+        equipment_needed: true
+        safety_guidelines: true
+        local_guides: true
+      priority: 15
+    
+    - condition:
+        query_type: "family_travel"
+      template: "family_travel_plan"
+      config:
+        kid_friendly: true
+        age_appropriate: true
+        rest_breaks: true
+        emergency_facilities: true
+        entertainment_options: true
+      priority: 15
+    
+    - condition:
+        context:
+          trip_duration:
+            max: 3  # Short trips
+      template: "weekend_getaway"
+      config:
+        condensed_itinerary: true
+        must_see_only: true
+        efficient_routing: true
+      priority: 10
+
+selection_rules:
+  - name: "destination_specific"
+    condition:
+      expression: "context.get('destination_type') == 'city'"
+    template: "city_exploration"
+    priority: 25
+  
+  - name: "beach_vacation"
+    condition:
+      expression: "'beach' in context.get('interests', []) or 'coastal' in context.get('query', '').lower()"
+    template: "beach_vacation_plan"
+    priority: 20
+  
+  - name: "cultural_travel"
+    condition:
+      expression: "'culture' in context.get('interests', []) or 'history' in context.get('interests', [])"
+    template: "cultural_itinerary"
+    priority: 20
+  
+  - name: "solo_travel"
+    condition:
+      expression: "context.get('group_size') == 1 or 'solo' in context.get('query', '').lower()"
+    template: "solo_travel_guide"
+    priority: 15
+
+global_config:
+  system_prompts:
+    - content: "You are an experienced travel planner. Create personalized, practical itineraries considering local customs, weather, and traveler preferences."
+      position: "system"
+      priority: 100
+    - content: "Always include safety tips, visa requirements, and health precautions. Be culturally sensitive."
+      position: "system"
+      priority: 90
+    - content: "Provide realistic timings and consider rest periods. Include both popular and hidden gems."
+      position: "prefix"
+      priority: 50
+  temperature: 0.8  # Higher for creative suggestions
+  max_tokens: 2000  # Detailed itineraries
+  model_preferences: ["gpt-4", "claude-3-opus"]
+
+optimization:
+  caching: true  # Cache destination information
+  compression: false  # Keep full details
+  token_optimization: false  # Comprehensive plans
+  parallel_processing: true  # Multiple destinations
+
+input_transforms:
+  - input: "destination"
+    transform: "trim"
+  - input: "dates"
+    transform: "clean_whitespace"
+
+metadata:
+  version: "3.0.0"
+  author: "LlamaFarm Travel Team"
+  tags: ["travel", "tourism", "itinerary", "vacation", "planning"]
+  data_sources:
+    - "destination_database"
+    - "weather_api"
+    - "travel_reviews"
+    - "local_insights"

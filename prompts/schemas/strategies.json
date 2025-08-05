@@ -1,0 +1,336 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Prompt Strategies Schema",
+  "description": "Schema for defining prompt strategies in the LlamaFarm prompts system",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/definitions/strategy"
+  },
+  "definitions": {
+    "strategy": {
+      "type": "object",
+      "required": ["name", "description", "templates"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable strategy name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the strategy's purpose and use cases"
+        },
+        "use_cases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Common use cases for this strategy"
+        },
+        "templates": {
+          "type": "object",
+          "required": ["default"],
+          "properties": {
+            "default": {
+              "$ref": "#/definitions/templateConfig",
+              "description": "Default template configuration"
+            },
+            "fallback": {
+              "$ref": "#/definitions/templateConfig",
+              "description": "Fallback template if default fails"
+            },
+            "specialized": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/specializedTemplate"
+              },
+              "description": "Specialized templates for specific conditions"
+            }
+          },
+          "description": "Template configurations for the strategy"
+        },
+        "selection_rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/selectionRule"
+          },
+          "description": "Rules for automatic template selection"
+        },
+        "global_config": {
+          "type": "object",
+          "properties": {
+            "system_prompts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "System prompt content"
+                  },
+                  "position": {
+                    "type": "string",
+                    "enum": ["prefix", "suffix", "system"],
+                    "description": "Where to place the prompt"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "description": "Order priority (higher = earlier)"
+                  }
+                }
+              },
+              "description": "Global system prompts"
+            },
+            "temperature": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2,
+              "description": "Default temperature for all templates"
+            },
+            "max_tokens": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Default max tokens for all templates"
+            },
+            "model_preferences": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Preferred models in order of preference"
+            }
+          },
+          "description": "Global configuration applied to all templates"
+        },
+        "optimization": {
+          "type": "object",
+          "properties": {
+            "caching": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable prompt caching"
+            },
+            "compression": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable prompt compression"
+            },
+            "token_optimization": {
+              "type": "boolean",
+              "default": true,
+              "description": "Optimize token usage"
+            },
+            "parallel_processing": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable parallel template processing"
+            }
+          },
+          "description": "Performance optimization settings"
+        },
+        "performance_profile": {
+          "type": "string",
+          "enum": ["speed", "accuracy", "balanced", "cost_optimized"],
+          "description": "Performance optimization profile"
+        },
+        "complexity": {
+          "type": "string",
+          "enum": ["simple", "moderate", "complex"],
+          "description": "Strategy complexity level"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string",
+              "description": "Strategy version"
+            },
+            "author": {
+              "type": "string",
+              "description": "Strategy author"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Creation timestamp"
+            },
+            "updated_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Last update timestamp"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Searchable tags"
+            }
+          },
+          "description": "Strategy metadata"
+        }
+      }
+    },
+    "templateConfig": {
+      "type": "object",
+      "required": ["template"],
+      "properties": {
+        "template": {
+          "type": "string",
+          "description": "Template ID to use"
+        },
+        "config": {
+          "type": "object",
+          "description": "Template-specific configuration overrides"
+        },
+        "input_transforms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "string",
+                "description": "Input variable name"
+              },
+              "transform": {
+                "type": "string",
+                "enum": ["lowercase", "uppercase", "trim", "truncate", "clean_whitespace", "escape_html"],
+                "description": "Transform to apply"
+              },
+              "params": {
+                "type": "object",
+                "description": "Transform parameters"
+              }
+            }
+          },
+          "description": "Input transformations to apply"
+        },
+        "output_transforms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "transform": {
+                "type": "string",
+                "enum": ["parse_json", "extract_code", "clean_markdown", "validate_format"],
+                "description": "Output transform to apply"
+              },
+              "params": {
+                "type": "object",
+                "description": "Transform parameters"
+              }
+            }
+          },
+          "description": "Output transformations to apply"
+        }
+      }
+    },
+    "specializedTemplate": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/templateConfig"
+        },
+        {
+          "type": "object",
+          "required": ["condition"],
+          "properties": {
+            "condition": {
+              "type": "object",
+              "description": "Conditions that trigger this template",
+              "properties": {
+                "query_type": {
+                  "type": "string",
+                  "description": "Type of query"
+                },
+                "context_size": {
+                  "type": "object",
+                  "properties": {
+                    "min": {
+                      "type": "integer"
+                    },
+                    "max": {
+                      "type": "integer"
+                    }
+                  },
+                  "description": "Context size range"
+                },
+                "has_context": {
+                  "type": "boolean",
+                  "description": "Whether context is present"
+                },
+                "input_length": {
+                  "type": "object",
+                  "properties": {
+                    "min": {
+                      "type": "integer"
+                    },
+                    "max": {
+                      "type": "integer"
+                    }
+                  },
+                  "description": "Input length range"
+                },
+                "custom": {
+                  "type": "object",
+                  "description": "Custom condition properties"
+                }
+              }
+            },
+            "priority": {
+              "type": "integer",
+              "default": 0,
+              "description": "Priority when multiple conditions match (higher wins)"
+            }
+          }
+        }
+      ]
+    },
+    "selectionRule": {
+      "type": "object",
+      "required": ["name", "condition", "template"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Rule name for debugging"
+        },
+        "condition": {
+          "type": "object",
+          "description": "Conditions to evaluate",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "Expression to evaluate (supports simple logic)"
+            },
+            "match_all": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "All conditions must match"
+            },
+            "match_any": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Any condition must match"
+            }
+          }
+        },
+        "template": {
+          "type": "string",
+          "description": "Template ID to use when rule matches"
+        },
+        "priority": {
+          "type": "integer",
+          "default": 0,
+          "description": "Rule priority (higher wins)"
+        },
+        "stop_on_match": {
+          "type": "boolean",
+          "default": false,
+          "description": "Stop evaluating further rules if this matches"
+        }
+      }
+    }
+  }
+}

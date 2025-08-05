@@ -1,0 +1,463 @@
+# Prompts System Comprehensive Schema
+# This schema defines all available components and their configurations
+
+# =============================================================================
+# TEMPLATES - Prompt Template Components
+# =============================================================================
+templates:
+  BasicQATemplate:
+    description: "Simple question-answering template"
+    category: "basic"
+    inputs: ["query", "context"]
+    outputs: ["prompt"]
+    config_schema:
+      temperature_hint:
+        type: float
+        default: 0.7
+        description: "Suggested temperature for generation"
+      max_tokens_hint:
+        type: integer
+        default: 500
+        description: "Suggested max tokens for response"
+      system_message:
+        type: string
+        default: ""
+        description: "Optional system message override"
+    use_cases: ["simple_queries", "faq", "basic_qa"]
+    frameworks: ["langchain", "native"]
+    
+  DetailedQATemplate:
+    description: "Detailed question-answering with structured output"
+    category: "basic"
+    inputs: ["query", "context", "format_instructions"]
+    outputs: ["prompt"]
+    config_schema:
+      include_reasoning:
+        type: boolean
+        default: true
+        description: "Include reasoning steps in response"
+      include_confidence:
+        type: boolean
+        default: false
+        description: "Include confidence scores"
+      response_structure:
+        type: string
+        default: "answer_first"
+        enum: ["answer_first", "reasoning_first", "structured"]
+        description: "Response structure preference"
+    use_cases: ["detailed_analysis", "complex_queries", "structured_responses"]
+    frameworks: ["langchain", "native"]
+
+  ChainOfThoughtTemplate:
+    description: "Step-by-step reasoning through complex problems"
+    category: "advanced"
+    inputs: ["query", "context", "examples"]
+    outputs: ["prompt"]
+    config_schema:
+      num_steps:
+        type: integer
+        default: 5
+        description: "Maximum reasoning steps"
+      step_format:
+        type: string
+        default: "numbered"
+        enum: ["numbered", "bullet", "narrative"]
+        description: "Format for reasoning steps"
+      include_self_reflection:
+        type: boolean
+        default: true
+        description: "Include self-reflection step"
+    use_cases: ["complex_reasoning", "problem_solving", "mathematical_problems"]
+    frameworks: ["langchain", "native"]
+
+  FewShotTemplate:
+    description: "Learning from examples with structured few-shot prompting"
+    category: "few_shot"
+    inputs: ["task", "examples", "query"]
+    outputs: ["prompt"]
+    config_schema:
+      example_format:
+        type: string
+        default: "input_output"
+        enum: ["input_output", "conversation", "structured"]
+        description: "Format for presenting examples"
+      min_examples:
+        type: integer
+        default: 2
+        description: "Minimum number of examples required"
+      max_examples:
+        type: integer
+        default: 5
+        description: "Maximum examples to include"
+      example_selection:
+        type: string
+        default: "random"
+        enum: ["random", "similar", "diverse"]
+        description: "Strategy for selecting examples"
+    use_cases: ["classification", "format_learning", "pattern_recognition"]
+    frameworks: ["langchain", "native"]
+
+  ConversationalTemplate:
+    description: "Conversational AI assistant template"
+    category: "chat"
+    inputs: ["message", "history", "context"]
+    outputs: ["prompt"]
+    config_schema:
+      personality:
+        type: string
+        default: "helpful"
+        enum: ["helpful", "professional", "friendly", "concise"]
+        description: "Assistant personality style"
+      include_context:
+        type: boolean
+        default: true
+        description: "Include context in conversation"
+      history_limit:
+        type: integer
+        default: 10
+        description: "Maximum conversation history to include"
+      response_style:
+        type: string
+        default: "natural"
+        enum: ["natural", "structured", "brief"]
+        description: "Response style preference"
+    use_cases: ["chatbots", "virtual_assistants", "customer_support"]
+    frameworks: ["langchain", "native"]
+
+  SummarizationTemplate:
+    description: "Text summarization with customizable output"
+    category: "basic"
+    inputs: ["text", "max_length", "style"]
+    outputs: ["prompt"]
+    config_schema:
+      summary_type:
+        type: string
+        default: "concise"
+        enum: ["concise", "detailed", "bullet_points", "key_points"]
+        description: "Type of summary to generate"
+      preserve_key_details:
+        type: boolean
+        default: true
+        description: "Preserve important details"
+      include_metadata:
+        type: boolean
+        default: false
+        description: "Include metadata in summary"
+    use_cases: ["document_summarization", "content_extraction", "briefing"]
+    frameworks: ["langchain", "native"]
+
+  CodeAnalysisTemplate:
+    description: "Source code analysis and review"
+    category: "domain_specific"
+    inputs: ["code", "language", "analysis_type"]
+    outputs: ["prompt"]
+    config_schema:
+      analysis_depth:
+        type: string
+        default: "standard"
+        enum: ["basic", "standard", "comprehensive"]
+        description: "Depth of code analysis"
+      include_suggestions:
+        type: boolean
+        default: true
+        description: "Include improvement suggestions"
+      check_patterns:
+        type: array
+        default: ["bugs", "performance", "style", "security"]
+        description: "Patterns to check for"
+      output_format:
+        type: string
+        default: "markdown"
+        enum: ["markdown", "json", "plain"]
+        description: "Output format for analysis"
+    use_cases: ["code_review", "debugging", "optimization", "security_analysis"]
+    frameworks: ["langchain", "native"]
+
+  ToolPlanningTemplate:
+    description: "Multi-step tool usage planning for agents"
+    category: "agentic"
+    inputs: ["goal", "available_tools", "constraints"]
+    outputs: ["prompt"]
+    config_schema:
+      max_steps:
+        type: integer
+        default: 10
+        description: "Maximum planning steps"
+      include_fallbacks:
+        type: boolean
+        default: true
+        description: "Include fallback strategies"
+      optimization_goal:
+        type: string
+        default: "efficiency"
+        enum: ["efficiency", "accuracy", "cost", "speed"]
+        description: "Primary optimization goal"
+      parallel_execution:
+        type: boolean
+        default: false
+        description: "Plan for parallel tool execution"
+    use_cases: ["agent_planning", "workflow_design", "task_decomposition"]
+    frameworks: ["langchain", "langgraph", "native"]
+
+  EvaluationTemplate:
+    description: "LLM-as-judge evaluation template"
+    category: "domain_specific"
+    inputs: ["content", "criteria", "rubric"]
+    outputs: ["prompt"]
+    config_schema:
+      scoring_type:
+        type: string
+        default: "numeric"
+        enum: ["numeric", "letter_grade", "pass_fail", "detailed"]
+        description: "Type of scoring to use"
+      include_justification:
+        type: boolean
+        default: true
+        description: "Include detailed justification"
+      criteria_weighting:
+        type: object
+        default: {}
+        description: "Weights for different criteria"
+      comparison_mode:
+        type: boolean
+        default: false
+        description: "Enable comparison between multiple items"
+    use_cases: ["quality_assessment", "response_evaluation", "content_grading"]
+    frameworks: ["langchain", "native"]
+
+  RAGResponseTemplate:
+    description: "Retrieval-augmented generation response template"
+    category: "domain_specific"
+    inputs: ["query", "retrieved_documents", "metadata"]
+    outputs: ["prompt"]
+    config_schema:
+      citation_style:
+        type: string
+        default: "inline"
+        enum: ["inline", "footnote", "none", "academic"]
+        description: "How to cite sources"
+      relevance_threshold:
+        type: float
+        default: 0.7
+        description: "Minimum relevance for document inclusion"
+      synthesis_approach:
+        type: string
+        default: "comprehensive"
+        enum: ["comprehensive", "focused", "comparative"]
+        description: "Approach to synthesizing information"
+      include_confidence:
+        type: boolean
+        default: false
+        description: "Include confidence in retrieved information"
+    use_cases: ["rag_systems", "document_qa", "knowledge_retrieval"]
+    frameworks: ["langchain", "llamaindex", "native"]
+
+# =============================================================================
+# STRATEGIES - Template Selection and Configuration Strategies
+# =============================================================================
+strategies:
+  description: "Pre-configured prompt strategies for different use cases"
+  schema:
+    name:
+      type: string
+      description: "Strategy name"
+    description:
+      type: string
+      description: "Strategy description and use cases"
+    templates:
+      type: object
+      description: "Template configurations for different scenarios"
+      properties:
+        default:
+          type: object
+          description: "Default template configuration"
+        fallback:
+          type: object
+          description: "Fallback template if default fails"
+        specialized:
+          type: array
+          description: "Specialized templates for specific conditions"
+    selection_rules:
+      type: array
+      description: "Rules for automatic template selection"
+      items:
+        type: object
+        properties:
+          condition:
+            type: object
+            description: "Conditions to match"
+          template:
+            type: string
+            description: "Template to use when conditions match"
+          priority:
+            type: integer
+            description: "Rule priority (higher wins)"
+    global_config:
+      type: object
+      description: "Global configuration applied to all templates"
+      properties:
+        system_prompts:
+          type: array
+          description: "System prompts to prepend"
+        temperature:
+          type: float
+          description: "Default temperature"
+        max_tokens:
+          type: integer
+          description: "Default max tokens"
+    optimization:
+      type: object
+      properties:
+        caching:
+          type: boolean
+          description: "Enable prompt caching"
+        compression:
+          type: boolean
+          description: "Enable prompt compression"
+        token_optimization:
+          type: boolean
+          description: "Optimize token usage"
+
+# =============================================================================
+# FRAMEWORKS - Supported LLM Frameworks
+# =============================================================================
+frameworks:
+  langchain:
+    description: "LangChain framework integration"
+    features:
+      - "chain_composition"
+      - "memory_management"
+      - "tool_integration"
+      - "streaming"
+    template_adapter: "LangChainAdapter"
+    
+  langgraph:
+    description: "LangGraph workflow integration"
+    features:
+      - "graph_workflows"
+      - "state_management"
+      - "conditional_routing"
+      - "parallel_execution"
+    template_adapter: "LangGraphAdapter"
+    
+  llamaindex:
+    description: "LlamaIndex integration"
+    features:
+      - "document_indexing"
+      - "query_engines"
+      - "response_synthesis"
+    template_adapter: "LlamaIndexAdapter"
+    
+  native:
+    description: "Native prompt handling without framework"
+    features:
+      - "direct_api_calls"
+      - "minimal_overhead"
+      - "custom_formatting"
+    template_adapter: "NativeAdapter"
+
+# =============================================================================
+# CONFIGURATION VALIDATION
+# =============================================================================
+validation:
+  description: "Schema validation and configuration rules"
+  
+  template_requirements:
+    - "All templates must have unique IDs"
+    - "Required inputs must be defined"
+    - "Category must be valid"
+    - "At least one framework must be supported"
+  
+  strategy_requirements:
+    - "Must have at least one template configured"
+    - "Selection rules must have valid conditions"
+    - "Template references must exist"
+  
+  compatibility:
+    template_framework: "many_to_many"
+    strategy_template: "one_to_many"
+    framework_features: "framework_specific"
+
+# =============================================================================
+# EXAMPLES
+# =============================================================================
+examples:
+  simple_qa_strategy:
+    description: "Basic Q&A strategy for simple queries"
+    templates:
+      default:
+        template: "BasicQATemplate"
+        config:
+          temperature_hint: 0.7
+          max_tokens_hint: 300
+  
+  customer_support_strategy:
+    description: "Customer support with context and history"
+    templates:
+      default:
+        template: "ConversationalTemplate"
+        config:
+          personality: "helpful"
+          include_context: true
+      specialized:
+        - condition:
+            query_type: "technical"
+          template: "DetailedQATemplate"
+          config:
+            include_reasoning: true
+  
+  code_review_strategy:
+    description: "Comprehensive code review and analysis"
+    templates:
+      default:
+        template: "CodeAnalysisTemplate"
+        config:
+          analysis_depth: "comprehensive"
+          check_patterns: ["bugs", "performance", "security", "style"]
+  
+  research_assistant_strategy:
+    description: "Research assistant with RAG integration"
+    templates:
+      default:
+        template: "RAGResponseTemplate"
+        config:
+          citation_style: "academic"
+          synthesis_approach: "comprehensive"
+      fallback:
+        template: "DetailedQATemplate"
+        config:
+          include_reasoning: true
+
+# =============================================================================
+# USAGE NOTES
+# =============================================================================
+usage_notes:
+  template_selection: |
+    1. **BasicQATemplate**: Simple Q&A without complex reasoning
+    2. **ChainOfThoughtTemplate**: Complex problems requiring step-by-step reasoning
+    3. **FewShotTemplate**: Learning patterns from examples
+    4. **ConversationalTemplate**: Interactive chat experiences
+    5. **CodeAnalysisTemplate**: Source code review and analysis
+    6. **ToolPlanningTemplate**: Agent task planning
+    7. **EvaluationTemplate**: Quality assessment and grading
+    8. **RAGResponseTemplate**: Retrieval-augmented generation
+  
+  strategy_design: |
+    - Start with a default template for general cases
+    - Add specialized templates for specific scenarios
+    - Use selection rules for automatic template switching
+    - Configure global settings for consistency
+    - Test with various inputs to ensure coverage
+  
+  framework_selection: |
+    - **langchain**: Full-featured chains and memory management
+    - **langgraph**: Complex workflows with state management
+    - **llamaindex**: Document-heavy applications
+    - **native**: Direct API usage with minimal overhead
+  
+  performance_tips: |
+    - Enable caching for frequently used prompts
+    - Use compression for long contexts
+    - Optimize token usage with concise templates
+    - Batch similar requests when possible
+    - Monitor token consumption across strategies

@@ -1,0 +1,145 @@
+# Software Architecture Strategy
+# System design and architecture planning
+
+name: "Software Architecture Advisor"
+description: "System design, architecture patterns, and technical decision guidance"
+use_cases:
+  - "system_design"
+  - "architecture_review"
+  - "technology_selection"
+  - "scalability_planning"
+  - "design_patterns"
+  - "technical_decisions"
+performance_profile: "accuracy"
+complexity: "complex"
+
+templates:
+  default:
+    template: "architecture_design"
+    config:
+      include_diagrams: true
+      pattern_recommendations: true
+      trade_offs: true
+      scalability_analysis: true
+      technology_stack: true
+  
+  specialized:
+    - condition:
+        query_type: "microservices"
+      template: "microservices_architecture"
+      config:
+        service_boundaries: true
+        communication_patterns: true
+        data_consistency: true
+        deployment_strategies: true
+        monitoring_approach: true
+      priority: 20
+    
+    - condition:
+        query_type: "cloud_architecture"
+      template: "cloud_design"
+      config:
+        cloud_providers: ["AWS", "Azure", "GCP"]
+        cost_optimization: true
+        security_best_practices: true
+        disaster_recovery: true
+        multi_region: true
+      priority: 20
+    
+    - condition:
+        query_type: "database_design"
+      template: "data_architecture"
+      config:
+        data_modeling: true
+        consistency_patterns: true
+        sharding_strategies: true
+        caching_layers: true
+        migration_planning: true
+      priority: 15
+    
+    - condition:
+        query_type: "api_design"
+      template: "api_architecture"
+      config:
+        rest_principles: true
+        graphql_consideration: true
+        versioning_strategy: true
+        authentication_patterns: true
+        rate_limiting: true
+      priority: 15
+    
+    - condition:
+        context:
+          scale: "startup"
+      template: "startup_architecture"
+      config:
+        mvp_focus: true
+        cost_conscious: true
+        rapid_iteration: true
+        technical_debt_awareness: true
+      priority: 10
+    
+    - condition:
+        context:
+          scale: "enterprise"
+      template: "enterprise_architecture"
+      config:
+        governance: true
+        compliance_requirements: true
+        integration_patterns: true
+        legacy_migration: true
+      priority: 10
+
+selection_rules:
+  - name: "performance_critical"
+    condition:
+      expression: "'performance' in context.get('requirements', []) or 'latency' in context.get('query', '').lower()"
+    template: "performance_architecture"
+    priority: 25
+  
+  - name: "security_focus"
+    condition:
+      expression: "'security' in context.get('requirements', []) or 'secure' in context.get('query', '').lower()"
+    template: "security_architecture"
+    priority: 30
+  
+  - name: "real_time_systems"
+    condition:
+      expression: "'real-time' in context.get('query', '').lower() or 'streaming' in context.get('query', '').lower()"
+    template: "real_time_architecture"
+    priority: 20
+
+global_config:
+  system_prompts:
+    - content: "You are an experienced software architect. Provide practical, scalable solutions considering both current and future needs."
+      position: "system"
+      priority: 100
+    - content: "Always discuss trade-offs, alternatives, and migration paths. Consider team expertise and operational complexity."
+      position: "system"
+      priority: 90
+    - content: "Include concrete examples and reference architectures where applicable."
+      position: "prefix"
+      priority: 50
+  temperature: 0.5  # Balanced for technical accuracy
+  max_tokens: 2000  # Detailed architectures
+  model_preferences: ["gpt-4", "claude-3-opus"]
+
+optimization:
+  caching: true
+  compression: false
+  token_optimization: false  # Full technical details
+  parallel_processing: false
+
+output_transforms:
+  - transform: "extract_code"  # Extract architecture code/configs
+
+metadata:
+  version: "3.2.0"
+  author: "LlamaFarm Architecture Team"
+  tags: ["architecture", "system-design", "software", "scalability", "patterns"]
+  expertise_areas:
+    - "distributed_systems"
+    - "cloud_native"
+    - "microservices"
+    - "event_driven"
+    - "domain_driven_design"

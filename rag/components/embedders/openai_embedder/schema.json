@@ -1,0 +1,16 @@
+{
+  "name": "openai_embedder",
+  "type": "embedder",
+  "class_name": "OpenaiEmbedder",
+  "description": "OpenaiEmbedder component",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "use_cases": []
+}

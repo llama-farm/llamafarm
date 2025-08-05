@@ -1,0 +1,582 @@
+# RAG System Default Strategies
+# Pre-configured strategies for common use cases
+# Users can extend, modify, or create custom strategies based on these templates
+
+# =============================================================================
+# SIMPLE STRATEGIES - Getting Started
+# =============================================================================
+simple:
+  name: "Simple Document Processing"
+  description: "Basic document processing for getting started with RAG"
+  use_cases: ["development", "testing", "small_datasets"]
+  performance_priority: "speed"
+  resource_usage: "low"
+  complexity: "simple"
+  
+  components:
+    parser:
+      type: "CSVParser"
+      config:
+        content_fields: ["subject", "body"]
+        metadata_fields: ["type", "priority"]
+        combine_content: true
+        content_separator: "\n\n"
+    
+    extractors: []  # No extractors for simplicity
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://localhost:11434"
+        batch_size: 8
+        timeout: 60
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "simple_documents"
+        persist_directory: "./data/simple_chroma_db"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+
+# =============================================================================
+# CUSTOMER SUPPORT STRATEGIES
+# =============================================================================
+customer_support:
+  name: "Customer Support Optimization"
+  description: "Optimized for customer support ticket processing and search"
+  use_cases: ["helpdesk", "support_tickets", "customer_service"]
+  performance_priority: "balanced"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "CustomerSupportCSVParser"
+      config:
+        content_fields: ["subject", "body", "answer"]
+        metadata_fields: ["type", "priority", "queue", "language", "status"]
+        combine_content: true
+        content_separator: "\n\n---\n\n"
+        id_field: "ticket_id"
+    
+    extractors:
+      - type: "RAKEExtractor"
+        config:
+          max_keywords: 15
+          min_length: 2
+          max_length: 4
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "EMAIL", "PHONE", "MONEY"]
+          use_fallback: true
+      - type: "SummaryExtractor"
+        config:
+          summary_sentences: 2
+          include_key_phrases: true
+          include_statistics: true
+      - type: "PatternExtractor"
+        config:
+          predefined_patterns: ["email", "phone", "url"]
+          case_sensitive: false
+      - type: "ContentStatisticsExtractor"
+        config:
+          include_readability: true
+          include_structure: true
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://localhost:11434"
+        batch_size: 16
+        timeout: 90
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "support_tickets"
+        persist_directory: "./data/support_chroma_db"
+    
+    retrieval_strategy:
+      type: "MetadataFilteredStrategy"
+      config:
+        default_filters:
+          priority: ["high", "medium"]
+          status: ["open", "in_progress"]
+        fallback_multiplier: 2
+        distance_metric: "cosine"
+
+# =============================================================================
+# LEGAL DOCUMENT STRATEGIES
+# =============================================================================
+legal:
+  name: "Legal Document Analysis"
+  description: "Comprehensive legal document processing with entity extraction"
+  use_cases: ["legal_research", "contract_analysis", "compliance"]
+  performance_priority: "accuracy"
+  resource_usage: "high"
+  complexity: "complex"
+  
+  components:
+    parser:
+      type: "PDFParser"
+      config:
+        extract_metadata: true
+        extract_page_structure: true
+        combine_pages: false  # Keep pages separate for legal analysis
+        page_separator: "\n--- PAGE BREAK ---\n"
+        min_text_length: 50
+        include_page_numbers: true
+        extract_outline: true
+    
+    extractors:
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "GPE", "DATE", "TIME", "MONEY", "LAW", "COURT"]
+          model: "en_core_web_sm"
+          use_fallback: true
+          min_entity_length: 2
+      - type: "DateTimeExtractor"
+        config:
+          fuzzy_parsing: true
+          extract_relative: true
+          extract_times: true
+          default_timezone: "UTC"
+      - type: "YAKEExtractor"
+        config:
+          max_ngram_size: 4
+          max_keywords: 20
+          deduplication_threshold: 0.8
+      - type: "ContentStatisticsExtractor"
+        config:
+          include_readability: true
+          include_vocabulary: true
+          include_structure: true
+    
+    embedder:
+      type: "OllamaEmbedder"  # Can be switched to OpenAI for production
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://localhost:11434"
+        batch_size: 8  # Lower batch size for large documents
+        timeout: 120
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "legal_documents"
+        persist_directory: "./data/legal_chroma_db"
+    
+    retrieval_strategy:
+      type: "HybridUniversalStrategy"
+      config:
+        strategies:
+          - type: "BasicSimilarityStrategy"
+            weight: 0.4
+            config:
+              distance_metric: "cosine"
+          - type: "MetadataFilteredStrategy"
+            weight: 0.3
+            config:
+              default_filters:
+                document_type: ["contract", "legal_brief", "statute"]
+              fallback_multiplier: 2
+          - type: "RerankedStrategy"
+            weight: 0.3
+            config:
+              initial_k: 25
+              rerank_factors:
+                recency_boost: 0.2
+                length_boost: 0.1
+                metadata_boost: 0.3
+        combination_method: "weighted_average"
+        diversity_boost: 0.1
+
+# =============================================================================
+# RESEARCH & ACADEMIC STRATEGIES
+# =============================================================================
+research:
+  name: "Research & Academic Analysis"
+  description: "Academic paper and research document processing"
+  use_cases: ["academic_research", "literature_review", "scientific_papers"]
+  performance_priority: "accuracy"
+  resource_usage: "high"
+  complexity: "complex"
+  
+  components:
+    parser:
+      type: "PDFParser"
+      config:
+        extract_metadata: true
+        extract_page_structure: true
+        combine_pages: true  # Combine for full context
+        page_separator: "\n\n"
+        min_text_length: 100
+        include_page_numbers: false  # Don't clutter with page numbers
+        extract_outline: true
+    
+    extractors:
+      - type: "TFIDFExtractor"
+        config:
+          max_features: 50
+          min_df: 2
+          max_df: 0.8
+          ngram_range: [1, 3]
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "GPE", "DATE", "MONEY"]
+          use_fallback: true
+      - type: "ContentStatisticsExtractor"
+        config:
+          include_readability: true
+          include_vocabulary: true
+          include_structure: true
+          include_sentiment_indicators: false
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://localhost:11434"
+        batch_size: 12
+        timeout: 120
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "research_papers"
+        persist_directory: "./data/research_chroma_db"
+    
+    retrieval_strategy:
+      type: "MultiQueryStrategy"
+      config:
+        num_queries: 4
+        aggregation_method: "weighted"
+        search_multiplier: 3
+        distance_metric: "cosine"
+
+# =============================================================================
+# BUSINESS INTELLIGENCE STRATEGIES
+# =============================================================================
+business:
+  name: "Business Intelligence Analysis"
+  description: "Business document and report processing with analytics"
+  use_cases: ["business_reports", "financial_documents", "corporate_analysis"]
+  performance_priority: "balanced"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "PDFParser"  # Can handle both PDF reports and CSV data
+      config:
+        extract_metadata: true
+        extract_page_structure: true
+        combine_pages: true
+        min_text_length: 30
+        include_page_numbers: true
+        extract_outline: true
+    
+    extractors:
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["ORG", "PERSON", "MONEY", "DATE", "PERCENT"]
+          use_fallback: true
+      - type: "DateTimeExtractor"
+        config:
+          fuzzy_parsing: true
+          extract_relative: true
+      - type: "RAKEExtractor"
+        config:
+          max_keywords: 12
+          min_length: 2
+          max_length: 3
+      - type: "ContentStatisticsExtractor"
+        config:
+          include_readability: true
+          include_structure: true
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://localhost:11434"
+        batch_size: 16
+        timeout: 90
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "business_documents"
+        persist_directory: "./data/business_chroma_db"
+    
+    retrieval_strategy:
+      type: "RerankedStrategy"
+      config:
+        initial_k: 20
+        rerank_factors:
+          recency_boost: 0.3  # Business docs value recency
+          length_boost: 0.1
+          metadata_boost: 0.2
+        length_normalization: true
+        distance_metric: "cosine"
+
+# =============================================================================
+# TECHNICAL DOCUMENTATION STRATEGIES
+# =============================================================================
+technical:
+  name: "Technical Documentation"
+  description: "Software documentation, APIs, and technical content processing"
+  use_cases: ["api_docs", "technical_manuals", "software_documentation"]
+  performance_priority: "accuracy"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "PDFParser"  # Handles technical PDFs, can be extended for markdown
+      config:
+        extract_metadata: true
+        extract_page_structure: true
+        combine_pages: false  # Keep sections separate
+        page_separator: "\n--- SECTION ---\n"
+        min_text_length: 50
+        include_page_numbers: true
+        extract_outline: true
+    
+    extractors:
+      - type: "YAKEExtractor"
+        config:
+          max_ngram_size: 3
+          max_keywords: 25
+          deduplication_threshold: 0.7
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["ORG", "PRODUCT", "VERSION", "URL", "EMAIL"]
+          use_fallback: true
+      - type: "ContentStatisticsExtractor"
+        config:
+          include_readability: true
+          include_vocabulary: true
+          include_structure: true
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://localhost:11434"
+        batch_size: 14
+        timeout: 90
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "technical_docs"
+        persist_directory: "./data/technical_chroma_db"
+    
+    retrieval_strategy:
+      type: "MetadataFilteredStrategy"
+      config:
+        default_filters:
+          document_type: ["api_doc", "manual", "guide"]
+        fallback_multiplier: 2
+        distance_metric: "cosine"
+
+# =============================================================================
+# IMAGE PROCESSING STRATEGIES (Future Extension)
+# =============================================================================
+image:
+  name: "Image and Multimodal Processing"
+  description: "Image processing with OCR and visual analysis (future extension)"
+  use_cases: ["scanned_documents", "image_analysis", "multimodal_content"]
+  performance_priority: "accuracy"
+  resource_usage: "high"
+  complexity: "complex"
+  
+  # Note: This is a template for future image processing capabilities
+  components:
+    parser:
+      type: "ImageParser"  # Future implementation
+      config:
+        ocr_enabled: true
+        extract_text: true
+        extract_visual_features: true
+        image_preprocessing: true
+    
+    extractors:
+      - type: "OCRTextExtractor"  # Future implementation
+        config:
+          language: "eng"
+          confidence_threshold: 0.8
+      - type: "VisualFeatureExtractor"  # Future implementation
+        config:
+          extract_objects: true
+          extract_text_regions: true
+    
+    embedder:
+      type: "MultimodalEmbedder"  # Future implementation
+      config:
+        text_model: "nomic-embed-text"
+        image_model: "clip-vit-base-patch32"
+        fusion_method: "concatenate"
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "multimodal_content"
+        persist_directory: "./data/multimodal_chroma_db"
+    
+    retrieval_strategy:
+      type: "MultimodalStrategy"  # Future implementation
+      config:
+        text_weight: 0.7
+        visual_weight: 0.3
+        similarity_threshold: 0.5
+
+# =============================================================================
+# PRODUCTION-READY STRATEGIES
+# =============================================================================
+production:
+  name: "Production Deployment"
+  description: "Production-optimized configuration with performance and reliability"
+  use_cases: ["production_deployment", "high_scale", "enterprise"]
+  performance_priority: "balanced"
+  resource_usage: "high"
+  complexity: "complex"
+  
+  components:
+    parser:
+      type: "CustomerSupportCSVParser"  # Can be switched based on data type
+      config:
+        content_fields: ["subject", "body", "answer"]
+        metadata_fields: ["type", "priority", "queue", "language", "created_at"]
+        combine_content: true
+        content_separator: "\n\n"
+    
+    extractors:
+      - type: "RAKEExtractor"
+        config:
+          max_keywords: 20
+          min_length: 2
+          max_length: 4
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "EMAIL", "PHONE", "MONEY", "DATE"]
+          use_fallback: true
+    
+    embedder:
+      type: "OllamaEmbedder"  # Switch to OpenAI for production if needed
+      config:
+        model: "nomic-embed-text"
+        base_url: "http://ollama-server:11434"  # Containerized service
+        batch_size: 32  # Higher batch size for throughput
+        timeout: 120
+    
+    vector_store:
+      type: "ChromaStore"  # Switch to Pinecone for large scale
+      config:
+        collection_name: "production_documents"
+        host: "chroma-server"  # Dedicated server
+        port: 8000
+        persist_directory: "/data/chroma_db"  # Persistent volume
+    
+    retrieval_strategy:
+      type: "HybridUniversalStrategy"
+      config:
+        strategies:
+          - type: "ChromaBasicStrategy"
+            weight: 0.5
+            config:
+              distance_metric: "cosine"
+          - type: "MetadataFilteredStrategy"
+            weight: 0.3
+            config:
+              default_filters: {}
+              fallback_multiplier: 2
+          - type: "RerankedStrategy"
+            weight: 0.2
+            config:
+              initial_k: 30
+              rerank_factors:
+                recency_boost: 0.2
+                metadata_boost: 0.3
+        combination_method: "rank_fusion"
+        diversity_boost: 0.05
+
+# =============================================================================
+# CUSTOM STRATEGY TEMPLATE
+# =============================================================================
+custom_template:
+  name: "Custom Strategy Template"
+  description: "Template for creating custom strategies - copy and modify"
+  use_cases: ["template", "customization", "user_defined"]
+  performance_priority: "balanced"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "CSVParser"  # Change to your preferred parser
+      config:
+        content_fields: ["content"]  # Customize field mapping
+        metadata_fields: ["category", "tags"]
+        combine_content: false
+    
+    extractors:  # Add/remove extractors as needed
+      - type: "YAKEExtractor"
+        config:
+          max_keywords: 10
+    
+    embedder:
+      type: "OllamaEmbedder"  # Choose your embedding provider
+      config:
+        model: "nomic-embed-text"
+        batch_size: 16
+    
+    vector_store:
+      type: "ChromaStore"  # Choose your vector database
+      config:
+        collection_name: "custom_collection"
+        persist_directory: "./data/custom_chroma_db"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"  # Choose your retrieval approach
+      config:
+        distance_metric: "cosine"
+
+# =============================================================================
+# STRATEGY USAGE NOTES
+# =============================================================================
+usage_notes:
+  selecting_strategies: |
+    1. **simple**: Best for getting started, testing, small datasets
+    2. **customer_support**: Optimized for support ticket processing
+    3. **legal**: Comprehensive legal document analysis with entities
+    4. **research**: Academic papers and research documents
+    5. **business**: Business reports and corporate documents
+    6. **technical**: Software documentation and technical content
+    7. **production**: High-performance production deployment
+    8. **custom_template**: Starting point for your own strategies
+  
+  customization: |
+    - Copy any strategy and modify components as needed
+    - Mix and match parsers, extractors, and retrieval strategies
+    - Adjust configuration parameters for your specific use case
+    - Test performance and accuracy with your data
+  
+  performance_tuning: |
+    - Increase batch_size for higher throughput (more memory usage)
+    - Use ChromaDB-specific strategies for better ChromaDB performance
+    - Add more extractors for richer metadata (slower processing)
+    - Use HybridUniversalStrategy for better accuracy (slower retrieval)
+  
+  scaling_considerations: |
+    - Switch from Ollama to OpenAI embeddings for higher quality
+    - Switch from ChromaStore to Pinecone for larger scale
+    - Use containerized services (ollama-server, chroma-server)
+    - Implement caching and connection pooling for production

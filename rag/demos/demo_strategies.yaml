@@ -1,0 +1,328 @@
+# Demo Strategies Configuration
+# Strategy-first configurations for all RAG demos
+# This file demonstrates the power of the strategy system for quick setup
+
+version: "v1"
+
+# =============================================================================
+# DEMO 1: RESEARCH PAPERS STRATEGY
+# =============================================================================
+research_papers_demo:
+  name: "Research Papers Demo Strategy"
+  description: "Optimized strategy for academic research paper analysis demo"
+  use_cases: ["demo", "research", "academic_analysis"]
+  performance_priority: "accuracy"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "PlainTextParser"
+      config:
+        chunk_size: 2000
+        overlap: 300
+        preserve_line_breaks: true
+        detect_structure: true
+    
+    extractors:
+      - type: "ContentStatisticsExtractor"
+        config:
+          include_readability: true
+          include_vocabulary: true
+          include_structure: true
+          include_sentiment_indicators: true
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT", "PRODUCT"]
+          use_fallback: true
+          min_entity_length: 2
+      - type: "SummaryExtractor"
+        config:
+          summary_sentences: 3
+          min_sentence_length: 10
+          max_sentence_length: 500
+          include_key_phrases: true
+          include_statistics: true
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        batch_size: 3
+        timeout: 60
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "research_papers"
+        persist_directory: "./demos/vectordb/research_papers"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+        top_k: 3
+        # All search parameters are configured here - no hardcoding!
+
+# =============================================================================
+# DEMO 2: CUSTOMER SUPPORT STRATEGY
+# =============================================================================
+customer_support_demo:
+  name: "Customer Support Demo Strategy"
+  description: "Optimized strategy for customer support system demo" 
+  use_cases: ["demo", "customer_support", "helpdesk"]
+  performance_priority: "balanced"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "CustomerSupportCSVParser"
+      config:
+        content_fields: ["description"]
+        metadata_fields: ["ticket_id", "customer_name", "customer_email", "priority", "category", "issue_type", "status", "agent_name"]
+        priority_mapping:
+          "Critical": 1
+          "High": 2
+          "Medium": 3
+          "Low": 4
+    
+    extractors:
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT", "PRODUCT"]
+          use_fallback: true
+          min_entity_length: 2
+      - type: "PatternExtractor"
+        config:
+          patterns: ["email", "phone", "url", "ip_address"]
+          include_context: true
+      - type: "SummaryExtractor"
+        config:
+          summary_sentences: 3
+          min_sentence_length: 10
+          max_sentence_length: 500
+          include_key_phrases: true
+          include_statistics: true
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        batch_size: 4
+        timeout: 60
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "customer_support"
+        persist_directory: "./demos/vectordb/customer_support"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+        top_k: 3
+        # Search filtering configured here, not hardcoded
+
+# =============================================================================
+# DEMO 3: CODE DOCUMENTATION STRATEGY
+# =============================================================================
+code_documentation_demo:
+  name: "Code Documentation Demo Strategy"
+  description: "Optimized strategy for technical documentation demo"
+  use_cases: ["demo", "documentation", "technical"]
+  performance_priority: "accuracy"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "MarkdownParser"
+      config:
+        preserve_structure: true
+        extract_headers: true
+        code_block_handling: "preserve"
+        link_extraction: true
+    
+    extractors:
+      - type: "HeadingExtractor"
+        config:
+          max_heading_level: 6
+          include_content_preview: true
+          preserve_hierarchy: true
+      - type: "LinkExtractor"
+        config:
+          extract_internal: true
+          extract_external: true
+          validate_links: false
+          include_anchor_text: true
+      - type: "PatternExtractor"
+        config:
+          patterns: ["url", "email", "code_reference"]
+          include_context: true
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        batch_size: 4
+        timeout: 60
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "code_documentation"
+        persist_directory: "./demos/vectordb/code_documentation"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+        top_k: 3
+
+# =============================================================================
+# DEMO 4: NEWS ANALYSIS STRATEGY
+# =============================================================================
+news_analysis_demo:
+  name: "News Analysis Demo Strategy"
+  description: "Optimized strategy for news article analysis demo"
+  use_cases: ["demo", "news", "media_analysis"]
+  performance_priority: "balanced"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "HTMLParser"
+      config:
+        extract_text_only: true
+        remove_scripts: true
+        remove_styles: true
+        preserve_links: true
+        clean_whitespace: true
+    
+    extractors:
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "GPE", "DATE", "EVENT", "MONEY"]
+          use_fallback: true
+          min_entity_length: 2
+      - type: "SummaryExtractor"
+        config:
+          summary_sentences: 2
+          min_sentence_length: 15
+          max_sentence_length: 400
+          include_key_phrases: true
+      - type: "LinkExtractor"
+        config:
+          extract_internal: true
+          extract_external: true
+          include_anchor_text: true
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        batch_size: 4
+        timeout: 60
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "news_analysis"
+        persist_directory: "./demos/vectordb/news_analysis"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+        top_k: 3
+
+# =============================================================================
+# DEMO 5: BUSINESS REPORTS STRATEGY
+# =============================================================================
+business_reports_demo:
+  name: "Business Reports Demo Strategy"
+  description: "Optimized strategy for business document analysis demo"
+  use_cases: ["demo", "business", "financial_analysis"]
+  performance_priority: "balanced"
+  resource_usage: "medium"
+  complexity: "moderate"
+  
+  components:
+    parser:
+      type: "PDFParser"  # Can handle PDFs, will also work with Excel/CSV
+      config:
+        extract_metadata: true
+        extract_page_structure: true
+        combine_pages: true
+        min_text_length: 50
+        include_page_numbers: false
+    
+    extractors:
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["ORG", "PERSON", "MONEY", "DATE", "PERCENT"]
+          use_fallback: true
+          min_entity_length: 2
+      - type: "SummaryExtractor"
+        config:
+          summary_sentences: 3
+          include_key_phrases: true
+          include_statistics: true
+      - type: "ContentStatisticsExtractor"
+        config:
+          include_readability: true
+          include_structure: true
+          include_vocabulary: true
+      - type: "TableExtractor"
+        config:
+          extract_headers: true
+          preserve_formatting: false
+          min_rows: 2
+          min_columns: 2
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        batch_size: 4
+        timeout: 60
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "business_reports"
+        persist_directory: "./demos/vectordb/business_reports"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+        top_k: 3
+
+# =============================================================================
+# DEMO USAGE NOTES
+# =============================================================================
+demo_notes:
+  purpose: |
+    These strategies showcase the power of strategy-first configuration:
+    - No hardcoded parameters in demo code
+    - Easy switching between different configurations
+    - Consistent component configuration across demos
+    - Clear separation of configuration from implementation
+  
+  customization: |
+    To modify demo behavior:
+    1. Edit the strategy configuration in this file
+    2. No code changes needed in the demo files
+    3. All search parameters, component configs are here
+    4. Easy to experiment with different settings
+  
+  extending: |
+    To add new demos:
+    1. Copy an existing strategy as template
+    2. Modify components and configurations
+    3. Update demo code to use new strategy name
+    4. All configuration stays in this single file

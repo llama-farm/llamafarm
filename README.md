@@ -17,7 +17,7 @@
 
 ## 🚀 What is LlamaFarm?
 
-LlamaFarm is a comprehensive, modular framework for building AI Projects that run locally, collaborate, and deploy anywhere. We provide battle-tested components for RAG systems, vector databases, model management, prompt engineering, and soon fine-tuning - all designed to work seamlessly together or independently.  
+LlamaFarm is a comprehensive, modular framework for building AI Projects that run locally, collaborate, and deploy anywhere. We provide battle-tested components for RAG systems, vector databases, model management, prompt engineering, and fine-tuning - all designed to work seamlessly together or independently.  
 
 ### 🎯 Our Mission
 
@@ -41,30 +41,35 @@ We're building LlamaFarm in public! Join us:
 ## ✨ Features
 
 ### 🔍 RAG (Retrieval-Augmented Generation)
-*Transform any document into AI-accessible knowledge*
+*Transform any document into AI-accessible knowledge with strategy-based configuration*
 
-- **📄 Universal Document Support**: Parse PDFs, CSVs, Word docs, web pages, and more
+- **🎯 Strategy System**: Choose from 9 pre-configured strategies (simple, legal, customer_support, etc.)
+- **📄 Universal Document Support**: Parse PDFs, CSVs, Markdown, web pages, and more
 - **🧩 Modular Pipeline**: Mix and match parsers, embedders, and vector stores
 - **🎯 Smart Retrieval**: 5+ retrieval strategies including hybrid search and re-ranking
 - **🔌 Database Agnostic**: Works with ChromaDB, Pinecone, Weaviate, Qdrant, and more
-- **📊 Local Extractors**: 5 built-in extractors for metadata enrichment without LLMs
+- **📊 Local Extractors**: Built-in extractors for metadata enrichment without LLMs
 - **⚡ Production Ready**: Batch processing, error handling, and progress tracking
 
-**Quick Example:**
+**Quick Example (Strategy-Based):**
 ```bash
-# Ingest documents with smart extraction
-uv run python rag/cli.py ingest documents/ --extractors keywords entities statistics
+# Use predefined strategy for quick setup
+uv run python rag/cli.py --strategy customer_support ingest support_docs/
 
-# Search with advanced retrieval
-uv run python rag/cli.py search "How does the authentication system work?" --top-k 5
+# Search with strategy-optimized retrieval
+uv run python rag/cli.py --strategy legal search "contract termination clause"
+
+# List available strategies
+uv run python rag/cli.py strategies list
 ```
 
 [Learn more about RAG →](rag/README.md)
 
 ### 🤖 Model Management
-*Run and manage AI models locally or in the cloud*
+*Run and manage AI models locally or in the cloud with complete fine-tuning support*
 
 - **🌍 Multi-Provider Support**: OpenAI, Anthropic, Google, Cohere, Together, Groq, Ollama, HuggingFace
+- **🎓 Fine-Tuning System**: Production-ready fine-tuning with LoRA, QLoRA, and full training
 - **💰 Cost Optimization**: Automatic provider fallbacks and smart routing
 - **📊 Usage Tracking**: Monitor tokens, costs, and performance
 - **🔄 Load Balancing**: Distribute requests across multiple providers
@@ -84,6 +89,18 @@ providers:
     provider: "ollama"
     model: "llama3.2"
     temperature: 0.7
+```
+
+**Fine-Tuning Example:**
+```bash
+# Use strategy-based fine-tuning
+uv run python models/cli.py finetune start --strategy mac_m1_lora --dataset data.jsonl
+
+# Custom fine-tuning
+uv run python models/cli.py finetune start \
+  --dataset my_data.jsonl \
+  --base-model llama3.1-8b \
+  --method lora
 ```
 
 [Learn more about Models →](models/README.md)
@@ -112,15 +129,6 @@ uv run python prompts/cli.py evaluate "AI response text" --template llm_judge
 
 [Learn more about Prompts →](prompts/README.md)
 
-### 🎓 Fine-Tuning (Coming Soon!)
-*Train custom models on your data*
-
-- **🔧 Local Training**: Fine-tune models on your hardware
-- **☁️ Cloud Training**: Integration with major training platforms
-- **📊 Dataset Management**: Tools for data preparation and validation
-- **🎯 Task-Specific Models**: Optimize for your specific use case
-- **📈 Training Analytics**: Monitor loss, accuracy, and other metrics
-
 ---
 
 ## 🚀 Getting Started
@@ -144,36 +152,60 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Set up RAG system
 cd rag
 uv sync
-./setup_and_demo.sh
+uv run python cli.py strategies list
 
 # Set up Models system  
 cd ../models
 uv sync
-./setup_and_demo.sh
+uv run python cli.py list
 
 # Set up Prompts system
 cd ../prompts
 uv sync
-./setup_and_demo.sh
+uv run python -m prompts.cli template list
 ```
 
-### 🎮 Try It Out
+### 🎮 Try the Interactive Demos
 
+#### RAG System Demos
 ```bash
-# RAG: Ingest and search documents
 cd rag
-uv run python cli.py ingest samples/documents.pdf
-uv run python cli.py search "What are the key findings?"
+# Run all 5 demos sequentially
+uv run python demos/master_demo.py
 
-# Models: Chat with multiple providers
-cd ../models
-uv run python cli.py chat --provider openai "Explain quantum computing"
-uv run python cli.py chat --provider ollama "Write a Python function"
+# Or run individual demos:
+uv run python demos/demo1_research_papers.py    # Academic paper analysis
+uv run python demos/demo2_customer_support.py   # Support ticket processing
+uv run python demos/demo3_code_documentation.py # Code documentation analysis
+uv run python demos/demo4_news_analysis.py      # News article processing
+uv run python demos/demo5_business_reports.py   # Business report analysis
+```
 
-# Prompts: Use intelligent templates
-cd ../prompts
-uv run python -m prompts.cli execute "Compare solar vs wind energy" \
-  --template comparative_analysis
+#### Models System Demos
+```bash
+cd models
+# Run all demos
+uv run python demos/run_all_demos.py
+
+# Or run individual demos:
+uv run python demos/demo1_cloud_with_fallback.py  # Cloud with local fallback
+uv run python demos/demo2_multi_model_cloud.py    # Multiple cloud models
+uv run python demos/demo3_quick_training.py       # Quick fine-tuning demo
+uv run python demos/demo4_complex_training.py     # Advanced training pipeline
+```
+
+#### Prompts System Demos
+```bash
+cd prompts
+# Run all demos
+uv run python demos/run_all_demos.py
+
+# Or run individual demos:
+uv run python demos/demo1_simple_qa.py          # Basic Q&A templates
+uv run python demos/demo2_customer_support.py   # Support response generation
+uv run python demos/demo3_code_assistant.py     # Code generation templates
+uv run python demos/demo4_rag_research.py       # RAG integration demo
+uv run python demos/demo5_advanced_reasoning.py # Chain-of-thought reasoning
 ```
 
 ---
@@ -182,51 +214,68 @@ uv run python -m prompts.cli execute "Compare solar vs wind energy" \
 
 ### Component Guides
 - 📖 [RAG System Guide](rag/README.md) - Document processing and retrieval
-- 🤖 [Models Guide](models/README.md) - Model management and providers
+- 🤖 [Models Guide](models/README.md) - Model management, providers, and fine-tuning
 - 📝 [Prompts Guide](prompts/README.md) - Prompt engineering and templates
 
-### Tutorials
-- 🎓 [Building Your First RAG App](docs/tutorials/first-rag-app.md)
-- 🔧 [Setting Up Local Models](docs/tutorials/local-models.md)
-- 🎯 [Prompt Engineering Best Practices](docs/tutorials/prompt-engineering.md)
+### Developer Guides
+- 🏗️ [RAG Architecture](rag/STRUCTURE.md) - RAG system internals
+- 🔧 [Models Architecture](models/STRUCTURE.md) - Models system internals
+- 📋 [Prompts Architecture](prompts/STRUCTURE.md) - Prompts system internals
+
+### Strategy Documentation
+- 🎯 [RAG Strategies](rag/STRATEGY_SYSTEM_SUMMARY.md) - Complete RAG strategy guide
+- 🎓 [Fine-Tuning Strategies](models/strategies/README.md) - Training strategy guide
 
 ### API Reference
-- 🔌 [RAG API](docs/api/rag.md)
-- 🤖 [Models API](docs/api/models.md)
-- 📝 [Prompts API](docs/api/prompts.md)
+- 🔌 [RAG API](rag/api.py) - RESTful API for RAG operations
+- 🤖 [Models CLI](models/cli.py) - Complete CLI documentation
+- 📝 [Prompts CLI](prompts/prompts/core/cli/strategy_cli.py) - Prompts CLI reference
 
 ---
 
 ## 🛠️ Architecture
 
-LlamaFarm follows a modular, configuration-driven architecture:
+LlamaFarm follows a modular, strategy-driven architecture:
 
 ```
 llamafarm/
-├── rag/              # Document processing and retrieval
-│   ├── core/         # Base classes and interfaces
-│   ├── parsers/      # Document parsers (PDF, CSV, etc.)
-│   ├── embedders/    # Text embedding models
-│   ├── stores/       # Vector database integrations
-│   └── retrieval/    # Retrieval strategies
+├── rag/                          # Document processing and retrieval
+│   ├── components/               # Component-based architecture
+│   │   ├── embedders/           # Text embedding models
+│   │   ├── extractors/          # Content extractors
+│   │   ├── parsers/             # Document parsers
+│   │   ├── retrievers/          # Retrieval strategies
+│   │   └── stores/              # Vector databases
+│   ├── strategies/              # Pre-configured strategies
+│   ├── demos/                   # Interactive demonstrations
+│   └── schema.yaml              # Component schemas
 │
-├── models/           # Model management
-│   ├── providers/    # LLM provider integrations
-│   ├── config/       # Configuration system
-│   ├── monitoring/   # Usage tracking and analytics
-│   └── optimization/ # Cost and performance optimization
+├── models/                      # Model management & fine-tuning
+│   ├── components/              # Component-based architecture
+│   │   ├── cloud_apis/          # Cloud provider integrations
+│   │   ├── fine_tuners/         # Fine-tuning implementations
+│   │   ├── model_apps/          # Local model runners
+│   │   └── model_repositories/  # Model registry integrations
+│   ├── strategies/              # Training strategies
+│   ├── demos/                   # Interactive demonstrations
+│   └── cli.py                   # Unified CLI interface
 │
-├── prompts/          # Prompt engineering
-│   ├── templates/    # Prompt template library
-│   ├── strategies/   # Template selection strategies
-│   ├── evaluation/   # Response evaluation tools
-│   └── agents/       # Multi-agent coordination
+├── prompts/                     # Prompt engineering
+│   ├── templates/               # Template library
+│   ├── strategies/              # Template strategies
+│   ├── demos/                   # Interactive demonstrations
+│   └── core/                    # Core functionality
 │
-└── training/         # Fine-tuning (coming soon)
-    ├── datasets/     # Dataset management
-    ├── trainers/     # Training implementations
-    └── evaluation/   # Model evaluation
+└── config/                      # Shared configuration
+    └── *.yaml                   # YAML-first configuration
 ```
+
+### Key Design Principles
+- **Strategy System**: Pre-configured setups for specific use cases
+- **Component Architecture**: Modular, extensible components
+- **Factory Pattern**: Dynamic component creation and registration
+- **YAML Configuration**: Human-readable, well-documented configs
+- **Local-First**: Prioritize local execution with cloud options
 
 ---
 
@@ -280,27 +329,6 @@ See our [Contributing Guide](CONTRIBUTING.md) for more details.
 
 ---
 
-## 👥 Contributors
-
-Thanks to all our amazing contributors who make LlamaFarm possible!
-
-<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
-<!-- prettier-ignore-start -->
-<!-- markdownlint-disable -->
-<table>
-  <tbody>
-    <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/contributor1"><img src="https://avatars.githubusercontent.com/contributor1?v=4?s=100" width="100px;" alt="Contributor 1"/><br /><sub><b>Contributor 1</b></sub></a><br /><a href="https://github.com/llama-farm/llamafarm/commits?author=contributor1" title="Code">💻</a></td>
-      <!-- Add more contributors here -->
-    </tr>
-  </tbody>
-</table>
-<!-- markdownlint-restore -->
-<!-- prettier-ignore-end -->
-<!-- ALL-CONTRIBUTORS-LIST:END -->
-
----
-
 ## 🙏 Open Source Credits
 
 LlamaFarm is built on the shoulders of giants. Special thanks to:
@@ -318,7 +346,7 @@ LlamaFarm is built on the shoulders of giants. Special thanks to:
 - 📝 [Pydantic](https://github.com/pydantic/pydantic) - Data validation
 - 🎨 [Rich](https://github.com/Textualize/rich) - Beautiful terminal output
 
-See [CREDITS.md](CREDITS.md) for a complete list.
+See [CREDITS.md](docs/CREDITS.md) for a complete list.
 
 ---
 
@@ -328,14 +356,13 @@ LlamaFarm is MIT licensed. See [LICENSE](LICENSE) for details.
 
 ---
 
-
-
 ## 💬 Community
 
 Join the LlamaFarm community:
 
 - 💬 [Discord Server](https://discord.gg/llamafarm) - Chat with the community
-
+- 🐛 [GitHub Issues](https://github.com/llama-farm/llamafarm/issues) - Report bugs
+- 💡 [GitHub Discussions](https://github.com/llama-farm/llamafarm/discussions) - Share ideas
 
 ---
 
@@ -346,5 +373,6 @@ Join the LlamaFarm community:
   <p>
     <a href="https://github.com/llama-farm/llamafarm">⭐ Star us on GitHub</a> • 
     <a href="https://discord.gg/llamafarm">💬 Join Discord</a> • 
+    <a href="https://twitter.com/llamafarm">🐦 Follow on Twitter</a>
   </p>
 </div>

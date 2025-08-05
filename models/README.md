@@ -321,161 +321,301 @@ HF_TOKEN=hf_...
 OLLAMA_HOST=localhost
 ```
 
-## 🎓 Training & Fine-Tuning Roadmap
+## 🎓 Fine-Tuning System
 
-> **Coming Soon**: Comprehensive training workflows for custom model development
+> **Production Ready**: Comprehensive fine-tuning with strategy-based configuration and hardware optimization
 
-### 🚀 **Phase 1: Data Preparation (Q4 2024)**
+The LlamaFarm Models system now includes a complete fine-tuning implementation with support for LoRA, QLoRA, and full fine-tuning using PyTorch and LlamaFactory.
 
-#### **Dataset Management**
+### 🚀 **Quick Start**
+
+#### **Strategy-Based Fine-Tuning (Recommended)**
 ```bash
-# Planned commands for data preparation
-uv run python cli.py data prepare --source raw_data/ --output processed/
-uv run python cli.py data validate --dataset processed/ --format jsonl
-uv run python cli.py data split --dataset processed/ --train 0.8 --val 0.1 --test 0.1
+# List available strategies
+uv run python cli.py finetune strategies list
+
+# Use a pre-configured strategy
+uv run python cli.py finetune start --strategy mac_m1_lora --dataset my_data.jsonl
+
+# Get strategy recommendations
+uv run python cli.py finetune strategies recommend --hardware mac --model-size 8b
+
+# Estimate resource requirements
+uv run python cli.py finetune estimate --strategy gpu_full_finetune
 ```
 
-**Features:**
-- **Automated data cleaning** and format conversion
-- **Quality filtering** with configurable thresholds  
-- **Train/validation/test** splitting with stratification
-- **Data deduplication** and privacy filtering
-- **Format conversion** (JSON, JSONL, Parquet, CSV)
-
-#### **Domain-Specific Datasets**
-- **RAG Training Data**: Question-context-answer triplets
-- **Code Generation**: Repository analysis and function documentation
-- **Conversation Data**: Multi-turn dialogue formatting
-- **Classification Data**: Label balancing and augmentation
-
-### 🔬 **Phase 2: Fine-Tuning Infrastructure (Q1 2025)**
-
-#### **Local Fine-Tuning Support**
+#### **Custom Configuration**
 ```bash
-# Planned fine-tuning commands
-uv run python cli.py train start --model llama3.1:8b --dataset my_data.jsonl
-uv run python cli.py train monitor --job job_12345
-uv run python cli.py train evaluate --model fine_tuned/checkpoint-1000
+# Start training with custom settings
+uv run python cli.py finetune start \
+  --dataset my_data.jsonl \
+  --base-model llama3.1-8b \
+  --method lora \
+  --output-dir ./my_fine_tuned_model
+
+# Dry run to validate configuration
+uv run python cli.py finetune start --dataset my_data.jsonl --strategy mac_m1_lora --dry-run
 ```
 
-**Supported Methods:**
-- **LoRA/QLoRA**: Parameter-efficient fine-tuning
-- **Full Fine-Tuning**: Complete model retraining
-- **Instruction Tuning**: Chat and instruction following
-- **RLHF**: Reinforcement learning from human feedback
+### 📋 **Available Strategies**
 
-#### **Cloud Fine-Tuning Integration**
-- **OpenAI Fine-Tuning**: GPT-3.5/4 custom models
-- **Together AI**: Llama and Mistral fine-tuning
-- **Hugging Face AutoTrain**: Automated training pipelines
-- **Custom Training**: Integration with training platforms
+| Strategy | Hardware | Model Size | Method | Use Cases |
+|----------|----------|------------|--------|-----------|
+| **mac_m1_lora** | Mac M1/M2 | 3B-8B | LoRA | Personal projects, coding helpers |
+| **gpu_full_finetune** | High-end GPU | 8B-70B | Full/LoRA | Production models, research |
+| **cpu_small_model** | CPU-only | 3B | LoRA | Testing, experimentation |
+| **cloud_scalable** | Multi-GPU | 8B-70B+ | QLoRA | Large-scale training |
 
-### 🎯 **Phase 3: Advanced Training (Q2 2025)**
-
-#### **Multi-Modal Training**
+#### **Strategy Details**
 ```bash
-# Planned multi-modal support
-uv run python cli.py train vision --model llava --dataset image_text_pairs/
-uv run python cli.py train audio --model whisper --dataset speech_transcripts/
+# View detailed strategy information
+uv run python cli.py finetune strategies show mac_m1_lora
+
+# Get hardware-specific recommendations
+uv run python cli.py finetune strategies recommend --hardware gpu --use-case production
 ```
 
-#### **Specialized Training Workflows**
-- **RAG Model Training**: Retrieval-augmented generation optimization
-- **Code Model Training**: Programming language specialization  
-- **Domain Adaptation**: Medical, legal, financial model variants
-- **Multilingual Training**: Cross-language transfer learning
+### 🛠️ **Supported Methods**
 
-#### **Training Infrastructure**
-- **Distributed Training**: Multi-GPU and multi-node support
-- **Experiment Tracking**: MLflow and Weights & Biases integration
-- **Model Versioning**: Automated model registry and deployment
-- **Performance Monitoring**: Training metrics and evaluation pipelines
+#### **LoRA (Low-Rank Adaptation)**
+- **Memory Efficient**: ~4x less memory than full fine-tuning
+- **Fast Training**: Significantly faster training times
+- **Good Quality**: Maintains most of the original model quality
+- **Recommended for**: Personal projects, experimentation, resource-constrained environments
 
-### 🏭 **Phase 4: Production Deployment (Q3 2025)**
+#### **QLoRA (Quantized LoRA)**
+- **Ultra Memory Efficient**: ~16x less memory than full fine-tuning
+- **4-bit Quantization**: Uses NF4 quantization for maximum efficiency
+- **Large Model Support**: Fine-tune 70B+ models on consumer hardware
+- **Recommended for**: Large models, limited VRAM, cloud cost optimization
 
-#### **Model Serving**
+#### **Full Fine-Tuning**
+- **Maximum Quality**: Best possible fine-tuning results
+- **High Resource Requirements**: Requires significant GPU memory
+- **Slower Training**: Takes longer but provides complete model adaptation
+- **Recommended for**: Production models, research, domain-specific applications
+
+### 💻 **Hardware Compatibility**
+
+#### **Mac Apple Silicon (M1/M2/M3)**
 ```bash
-# Planned deployment commands
-uv run python cli.py deploy start --model my_fine_tuned_model --port 8080
-uv run python cli.py deploy scale --replicas 3 --gpu-per-replica 1
-uv run python cli.py deploy monitor --metrics latency,throughput,accuracy
+# Optimized for Mac with Metal Performance Shaders
+uv run python cli.py finetune start --strategy mac_m1_lora --dataset data.jsonl
+
+# Recommended settings:
+# - Models: Up to 8B parameters (Llama 3.1 8B, Mistral 7B)
+# - Memory: 16GB+ unified memory recommended
+# - Method: LoRA with small batch sizes
+# - Expected time: 2-4 hours for 1000 samples
 ```
 
-#### **Production Features**
-- **Auto-scaling**: Dynamic resource allocation based on load
-- **A/B Testing**: Model variant comparison in production
-- **Performance Monitoring**: Real-time metrics and alerting
-- **Cost Optimization**: Efficient resource utilization
-
-### 📚 **Training Resources & Documentation**
-
-#### **Getting Started Guides** (Available Now)
-- **[Training Best Practices](docs/TRAINING_BEST_PRACTICES.md)** - Coming Soon
-- **[Data Preparation Guide](docs/DATA_PREPARATION.md)** - Coming Soon  
-- **[Fine-Tuning Cookbook](docs/FINE_TUNING_COOKBOOK.md)** - Coming Soon
-- **[Production Deployment](docs/PRODUCTION_DEPLOYMENT.md)** - Coming Soon
-
-#### **Training Templates** (Planned)
-- **Instruction Following**: Format and optimize for chat models
-- **Code Generation**: Programming task specialization
-- **RAG Optimization**: Retrieval-augmented generation improvement
-- **Domain Specialization**: Medical, legal, financial model variants
-
-#### **Integration Examples**
-```python
-# Planned Python API for training workflows
-from llamafarm_models.training import FineTuningPipeline
-
-# Initialize training pipeline
-trainer = FineTuningPipeline(
-    base_model="llama3.1:8b",
-    dataset="my_training_data.jsonl", 
-    method="lora",
-    output_dir="./fine_tuned_models"
-)
-
-# Start training
-trainer.train(
-    epochs=3,
-    learning_rate=1e-4,
-    batch_size=16
-)
-
-# Evaluate results
-metrics = trainer.evaluate()
-print(f"Training completed: {metrics}")
-```
-
-### 🛠️ **Current Training Capabilities**
-
-While full training infrastructure is in development, you can currently:
-
-#### **Prepare for Training**
+#### **High-End GPUs (RTX 4090, A100, H100)**
 ```bash
-# Generate training data from conversations
-uv run python cli.py chat --save-history training_conversations.json
+# Full fine-tuning on powerful GPUs
+uv run python cli.py finetune start --strategy gpu_full_finetune --dataset data.jsonl
 
-# Process files for training data
-uv run python cli.py send documents/ --prompt "Generate Q&A pairs" --output training_data.txt
-
-# Batch process for dataset creation
-uv run python cli.py batch question_prompts.txt --output answers.jsonl
+# Recommended settings:
+# - Models: Up to 70B with QLoRA, 8B with full fine-tuning
+# - Memory: 24GB+ VRAM
+# - Method: Full fine-tuning or LoRA
+# - Expected time: 1-4 hours depending on method
 ```
 
-#### **Model Evaluation**
+#### **CPU-Only Systems**
 ```bash
-# Compare models for training baseline
-uv run python cli.py compare --providers openai_gpt4o_mini,ollama_llama3 --query "Evaluate this task"
+# CPU training for testing (very slow)
+uv run python cli.py finetune start --strategy cpu_small_model --dataset data.jsonl
 
-# Test custom prompts across models
-uv run python cli.py batch evaluation_questions.txt --provider your_model
+# Recommended settings:
+# - Models: 3B parameters maximum
+# - Memory: 8GB+ RAM
+# - Method: LoRA only
+# - Expected time: 6-24 hours
 ```
 
-#### **Integration Planning**
-The models system is designed to integrate seamlessly with:
-- **LlamaFarm RAG**: Training data from RAG evaluations
-- **LlamaFarm Prompts**: Prompt optimization and evaluation
-- **Custom Training Pipelines**: API-compatible model serving
+#### **Multi-GPU/Cloud Setups**
+```bash
+# Distributed training for large models
+uv run python cli.py finetune start --strategy cloud_scalable --dataset data.jsonl
+
+# Recommended settings:
+# - Models: 70B+ parameters
+# - Hardware: 4+ GPUs with 40GB+ VRAM each
+# - Method: QLoRA for efficiency
+# - Expected time: 1-2 hours with proper setup
+```
+
+### 📊 **Resource Requirements Table**
+
+| Model Size | Method | Min Memory | Recommended | Training Time | Suitable Hardware |
+|------------|--------|------------|-------------|---------------|-------------------|
+| **3B** | LoRA | 8GB | 16GB | 1-3 hours | Mac M1, RTX 3060+ |
+| **8B** | LoRA | 12GB | 24GB | 2-4 hours | Mac Studio, RTX 4070+ |
+| **8B** | Full | 32GB | 48GB | 4-8 hours | RTX 4090, A100 |
+| **70B** | QLoRA | 24GB | 40GB | 2-6 hours | A100, H100 |
+| **70B** | Full | 280GB | 400GB | 8-24 hours | 8x A100 |
+
+### 📝 **Dataset Formats**
+
+#### **Supported Formats**
+- **JSONL**: JSON Lines format (recommended)
+- **JSON**: Standard JSON arrays
+- **Alpaca**: Instruction-input-output format
+- **CSV**: Comma-separated values
+
+#### **Alpaca Format Example**
+```json
+{
+  "instruction": "Write a Python function to calculate factorial",
+  "input": "",
+  "output": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)"
+}
+```
+
+#### **Conversation Format Example**
+```json
+{
+  "text": "### Instruction:\nExplain machine learning\n\n### Response:\nMachine learning is a subset of AI that enables computers to learn from data..."
+}
+```
+
+### 🔧 **Advanced Configuration**
+
+#### **Configuration File Example**
+```yaml
+# fine_tuning_config.yaml
+base_model:
+  name: "llama3.1-8b"
+  huggingface_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+  torch_dtype: "bfloat16"
+
+method:
+  type: "lora"
+  r: 16
+  alpha: 32
+  dropout: 0.1
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+
+training_args:
+  output_dir: "./fine_tuned_models"
+  num_train_epochs: 3
+  learning_rate: 2e-4
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  warmup_ratio: 0.03
+  max_seq_length: 2048
+  
+dataset:
+  path: "./training_data.jsonl"
+  data_format: "jsonl"
+  conversation_template: "alpaca"
+
+environment:
+  device: "auto"
+  seed: 42
+```
+
+#### **Using Custom Configuration**
+```bash
+uv run python cli.py finetune start --config fine_tuning_config.yaml --dataset my_data.jsonl
+```
+
+### 📈 **Training Management**
+
+#### **Monitor Training Progress**
+```bash
+# Start training and get job ID
+uv run python cli.py finetune start --strategy mac_m1_lora --dataset data.jsonl
+
+# Monitor progress (not yet implemented)
+uv run python cli.py finetune monitor --job-id <job-id>
+
+# List all training jobs (not yet implemented)
+uv run python cli.py finetune jobs
+```
+
+#### **Resume from Checkpoint**
+```bash
+# Resume training from checkpoint (not yet implemented)
+uv run python cli.py finetune resume --checkpoint ./fine_tuned_models/checkpoint-1000
+```
+
+### 🧪 **Model Evaluation & Export**
+
+#### **Evaluate Fine-Tuned Model**
+```bash
+# Evaluate model performance (not yet implemented)
+uv run python cli.py finetune evaluate --model-path ./fine_tuned_models/final
+
+# Export model for deployment (not yet implemented)
+uv run python cli.py finetune export --model-path ./fine_tuned_models/final --output ./exported_model
+```
+
+### 🎯 **Best Practices**
+
+#### **Data Preparation**
+1. **Quality over Quantity**: 1000 high-quality examples > 10000 poor examples
+2. **Consistent Formatting**: Use consistent templates and formatting
+3. **Balanced Dataset**: Ensure diverse examples across your use cases
+4. **Data Validation**: Always validate your dataset format before training
+
+#### **Training Tips**
+1. **Start Small**: Begin with LoRA on a small model for testing
+2. **Monitor Resources**: Use `--dry-run` to estimate requirements first
+3. **Save Checkpoints**: Regular checkpointing prevents data loss
+4. **Experiment Tracking**: Keep detailed logs of experiments and results
+
+#### **Hardware Optimization**
+1. **Mac Users**: Use strategy `mac_m1_lora` for optimized Metal Performance
+2. **GPU Users**: Enable mixed precision (bf16) for faster training
+3. **CPU Users**: Only for testing - consider cloud GPU for production
+4. **Multi-GPU**: Use `cloud_scalable` strategy for distributed training
+
+### 🔍 **Troubleshooting**
+
+#### **Common Issues**
+
+**Out of Memory (OOM)**
+```bash
+# Reduce batch size and increase gradient accumulation
+# Or switch to QLoRA method
+uv run python cli.py finetune start --strategy cpu_small_model  # Fallback to CPU
+```
+
+**Slow Training on Mac**
+```bash
+# Ensure Metal Performance Shaders are enabled
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+uv run python cli.py finetune start --strategy mac_m1_lora
+```
+
+**Model Not Found**
+```bash
+# Check available models and verify HuggingFace model ID
+uv run python cli.py finetune strategies show mac_m1_lora
+```
+
+#### **Performance Optimization**
+- **Batch Size**: Start with 1-2, increase gradually based on memory
+- **Sequence Length**: Reduce max_seq_length if hitting memory limits
+- **Gradient Accumulation**: Use to simulate larger batch sizes
+- **Mixed Precision**: Enable bf16 on modern hardware for speed
+
+### 📚 **Integration Examples**
+
+#### **With RAG System**
+```bash
+# Generate training data from RAG evaluations
+cd ../rag && uv run python cli.py search "topic" --output rag_context.json
+cd ../models && uv run python cli.py finetune start --dataset rag_context.json
+```
+
+#### **With Prompt System**
+```bash
+# Use optimized prompts for training data generation
+cd ../prompts && uv run python cli.py execute --template data_generation
+cd ../models && uv run python cli.py finetune start --dataset generated_data.jsonl
+```
 
 ## 🔗 Integration with LlamaFarm Ecosystem
 

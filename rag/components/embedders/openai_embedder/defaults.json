@@ -1,0 +1,10 @@
+{
+  "default": {
+    "name": "Default Configuration",
+    "description": "Default settings for openai_embedder",
+    "config": {},
+    "recommended_for": [
+      "General use"
+    ]
+  }
+}

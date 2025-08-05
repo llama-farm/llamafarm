@@ -43,6 +43,8 @@ dependencies = [
     "transformers>=4.35.0",
     "torch>=2.0.0",
     "accelerate>=0.20.0",
+    "datasets>=4.0.0",
+    "peft>=0.17.0",
 ]
 
 [project.optional-dependencies]

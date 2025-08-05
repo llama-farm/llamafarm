@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from parsers.pdf_parser import PDFParser
+from components.parsers.pdf_parser import PDFParser
 from core.base import Document
 
 
@@ -157,7 +157,7 @@ class TestPDFParser:
         parser = PDFParser(config={"extract_metadata": False})
         
         # Mock PyPDF2 for this test
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             mock_reader.pages = [MagicMock()]
             mock_reader.pages[0].extract_text.return_value = "Sample text content"
@@ -188,7 +188,7 @@ class TestPDFParser:
         """Test filtering of pages with insufficient text."""
         parser = PDFParser(config={"min_text_length": 50})
         
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             # Create pages with different text lengths
             mock_page1 = MagicMock()
@@ -221,7 +221,7 @@ class TestPDFParser:
         """Test inclusion of page numbers in text."""
         parser = PDFParser(config={"include_page_numbers": True, "combine_pages": False})
         
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "Sample page content"
@@ -249,7 +249,7 @@ class TestPDFParser:
         """Test PDF outline/bookmark extraction."""
         parser = PDFParser(config={"extract_outline": True})
         
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "Sample content"

@@ -1405,6 +1405,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "reportlab" },
     { name = "requests" },
+    { name = "rich" },
     { name = "tqdm" },
 ]
 
@@ -1532,6 +1533,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31.0" },
     { name = "requests-mock", marker = "extra == 'test'", specifier = ">=1.10.0" },
     { name = "responses", marker = "extra == 'test'", specifier = ">=0.23.0" },
+    { name = "rich", specifier = ">=14.1.0" },
     { name = "sentence-transformers", marker = "extra == 'embeddings'", specifier = ">=2.2.0" },
     { name = "torch", marker = "extra == 'embeddings'", specifier = ">=2.0.0" },
     { name = "tqdm", specifier = ">=4.65.0" },

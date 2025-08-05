@@ -8,7 +8,7 @@ from pathlib import Path
 # Add parent directory to path so we can import modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from api import SearchAPI, search
-from retrieval.factory import RetrievalStrategyFactory, create_retrieval_strategy_from_config
+from components.retrievers.factory import RetrievalStrategyFactory, create_retrieval_strategy_from_config
 
 
 def test_basic_setup():

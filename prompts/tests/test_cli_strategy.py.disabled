@@ -1,0 +1,341 @@
+"""
+Tests for the strategy-based CLI.
+"""
+
+import pytest
+from click.testing import CliRunner
+import json
+import yaml
+from pathlib import Path
+from unittest.mock import Mock, patch, MagicMock
+
+# Add parent directory to path
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+
+from prompts.core.cli.strategy_cli import cli, init_system
+
+
+class TestCLICommands:
+    """Test CLI commands."""
+    
+    @pytest.fixture
+    def runner(self):
+        """Create CLI test runner."""
+        return CliRunner()
+    
+    @pytest.fixture
+    def mock_system(self):
+        """Mock the strategy system."""
+        with patch('prompts.core.cli.strategy_cli.init_system') as mock_init:
+            mock_manager = Mock()
+            mock_init.return_value = mock_manager
+            
+            # Setup mock strategies
+            mock_strategies = {
+                "test_strategy": Mock(
+                    name="Test Strategy",
+                    description="A test strategy",
+                    use_cases=["testing", "qa"],
+                    performance_profile=Mock(value="balanced"),
+                    complexity=Mock(value="simple"),
+                    templates=Mock(
+                        default=Mock(template="qa_basic", config={"temp": 0.7}),
+                        fallback=None,
+                        specialized=[]
+                    ),
+                    selection_rules=[],
+                    global_config=Mock(
+                        system_prompts=[],
+                        temperature=0.7,
+                        max_tokens=500,
+                        model_preferences=[]
+                    ),
+                    to_dict=lambda: {"name": "Test Strategy", "description": "A test strategy"}
+                )
+            }
+            
+            mock_manager.load_strategies.return_value = mock_strategies
+            mock_manager.get_strategy.return_value = mock_strategies.get("test_strategy")
+            mock_manager.list_strategies.return_value = list(mock_strategies.keys())
+            mock_manager.execute_strategy.return_value = "Generated prompt output"
+            mock_manager.recommend_strategies.return_value = [mock_strategies["test_strategy"]]
+            mock_manager.get_execution_stats.return_value = {
+                "test_strategy": {"qa_basic": 5}
+            }
+            mock_manager.get_template_usage.return_value = {
+                "qa_basic": ["test_strategy"]
+            }
+            
+            yield mock_manager
+    
+    def test_cli_help(self, runner):
+        """Test CLI help command."""
+        result = runner.invoke(cli, ['--help'])
+        assert result.exit_code == 0
+        assert 'LlamaFarm Prompts Strategy Management CLI' in result.output
+    
+    def test_strategy_list(self, runner, mock_system):
+        """Test listing strategies."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, ['strategy', 'list'])
+            assert result.exit_code == 0
+            assert 'Test Strategy' in result.output
+    
+    def test_strategy_list_json(self, runner, mock_system):
+        """Test listing strategies in JSON format."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, ['strategy', 'list', '--format', 'json'])
+            assert result.exit_code == 0
+            # Should contain JSON output
+            assert '"name"' in result.output
+            assert '"Test Strategy"' in result.output
+    
+    def test_strategy_show(self, runner, mock_system):
+        """Test showing strategy details."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, ['strategy', 'show', 'test_strategy'])
+            assert result.exit_code == 0
+            assert 'Test Strategy' in result.output
+            assert 'balanced' in result.output
+            assert 'simple' in result.output
+    
+    def test_strategy_execute(self, runner, mock_system):
+        """Test executing a strategy."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, [
+                'strategy', 'execute', 'test_strategy',
+                '--query', 'What is AI?'
+            ])
+            assert result.exit_code == 0
+            assert 'Generated prompt output' in result.output
+    
+    def test_strategy_execute_with_context(self, runner, mock_system):
+        """Test executing a strategy with context."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            context_json = json.dumps({"type": "technical"})
+            result = runner.invoke(cli, [
+                'strategy', 'execute', 'test_strategy',
+                '--query', 'What is AI?',
+                '--context', context_json
+            ])
+            assert result.exit_code == 0
+            mock_system.execute_strategy.assert_called_once()
+            call_args = mock_system.execute_strategy.call_args
+            assert call_args[1]['context']['type'] == 'technical'
+    
+    def test_strategy_recommend(self, runner, mock_system):
+        """Test strategy recommendations."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, [
+                'strategy', 'recommend',
+                '--use-case', 'testing',
+                '--performance', 'balanced'
+            ])
+            assert result.exit_code == 0
+            assert 'Test Strategy' in result.output
+    
+    def test_strategy_create(self, runner, mock_system):
+        """Test creating a new strategy interactively."""
+        mock_system.create_strategy.return_value = Mock(
+            to_dict=lambda: {"name": "New Strategy", "description": "Created"}
+        )
+        
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            # Simulate user input
+            result = runner.invoke(cli, [
+                'strategy', 'create',
+                '--name', 'New Strategy',
+                '--description', 'A new test strategy',
+                '--template', 'qa_basic'
+            ], input='\n')  # Empty line to finish use cases
+            
+            assert result.exit_code == 0
+            mock_system.create_strategy.assert_called_once()
+    
+    def test_strategy_validate(self, runner, mock_system, tmp_path):
+        """Test validating a strategy file."""
+        # Create test strategy file
+        strategy_file = tmp_path / "test_strategy.yaml"
+        strategy_data = {
+            "test": {
+                "name": "Test",
+                "description": "Test strategy",
+                "templates": {
+                    "default": {"template": "qa_basic"}
+                }
+            }
+        }
+        
+        with open(strategy_file, 'w') as f:
+            yaml.dump(strategy_data, f)
+        
+        mock_system.loader.validate_strategy.return_value = []  # No errors
+        
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, ['strategy', 'validate', str(strategy_file)])
+            assert result.exit_code == 0
+            assert 'Valid' in result.output
+    
+    def test_template_usage(self, runner, mock_system):
+        """Test showing template usage."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, ['template', 'usage'])
+            assert result.exit_code == 0
+            assert 'qa_basic' in result.output
+            assert 'test_strategy' in result.output
+    
+    def test_stats_command(self, runner, mock_system):
+        """Test showing system statistics."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, ['stats'])
+            assert result.exit_code == 0
+            assert 'System Statistics' in result.output
+            assert 'test_strategy' in result.output
+            assert '5' in result.output  # execution count
+    
+    def test_demo_command(self, runner, mock_system):
+        """Test running demo."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            result = runner.invoke(cli, ['demo', '--strategy', 'test_strategy'])
+            assert result.exit_code == 0
+            assert 'Demo - Strategy: test_strategy' in result.output
+            # Should execute demo queries
+            assert mock_system.execute_strategy.call_count >= 3
+    
+    def test_demo_interactive(self, runner, mock_system):
+        """Test interactive demo mode."""
+        with patch('prompts.core.cli.strategy_cli.strategy_manager', mock_system):
+            # Simulate user input: one query then quit
+            result = runner.invoke(cli, [
+                'demo', '--strategy', 'test_strategy', '--interactive'
+            ], input='Test question\nquit\n')
+            
+            assert result.exit_code == 0
+            assert 'Interactive Demo' in result.output
+            assert 'Generated prompt output' in result.output
+
+
+class TestCLIErrorHandling:
+    """Test CLI error handling."""
+    
+    @pytest.fixture
+    def runner(self):
+        return CliRunner()
+    
+    def test_invalid_strategy_file(self, runner):
+        """Test handling invalid strategy file."""
+        result = runner.invoke(cli, [
+            '--strategies-file', 'non_existent.yaml',
+            'strategy', 'list'
+        ])
+        assert result.exit_code != 0
+        assert 'Error loading system' in result.output
+    
+    def test_strategy_not_found(self, runner):
+        """Test handling non-existent strategy."""
+        mock_manager = Mock()
+        mock_manager.get_strategy.return_value = None
+        
+        with patch('prompts.core.cli.strategy_cli.init_system', return_value=mock_manager):
+            with patch('prompts.cli_strategy.strategy_manager', mock_manager):
+                result = runner.invoke(cli, ['strategy', 'show', 'non_existent'])
+                assert result.exit_code == 0
+                assert "Strategy 'non_existent' not found" in result.output
+    
+    def test_invalid_json_context(self, runner):
+        """Test handling invalid JSON in context."""
+        mock_manager = Mock()
+        
+        with patch('prompts.core.cli.strategy_cli.init_system', return_value=mock_manager):
+            with patch('prompts.cli_strategy.strategy_manager', mock_manager):
+                result = runner.invoke(cli, [
+                    'strategy', 'execute', 'test',
+                    '--context', 'invalid json'
+                ])
+                assert result.exit_code == 0
+                assert 'Invalid context JSON' in result.output
+    
+    def test_strategy_execution_error(self, runner):
+        """Test handling strategy execution errors."""
+        mock_manager = Mock()
+        mock_manager.execute_strategy.side_effect = Exception("Execution failed")
+        
+        with patch('prompts.core.cli.strategy_cli.init_system', return_value=mock_manager):
+            with patch('prompts.cli_strategy.strategy_manager', mock_manager):
+                result = runner.invoke(cli, [
+                    'strategy', 'execute', 'test',
+                    '--query', 'test'
+                ])
+                assert result.exit_code == 0
+                assert 'Error executing strategy' in result.output
+
+
+class TestCLIIntegration:
+    """Integration tests for CLI."""
+    
+    @pytest.fixture
+    def runner(self):
+        return CliRunner()
+    
+    @pytest.fixture
+    def temp_strategies(self, tmp_path):
+        """Create temporary strategy files."""
+        strategies = {
+            "cli_test": {
+                "name": "CLI Test Strategy",
+                "description": "Strategy for CLI testing",
+                "use_cases": ["testing", "cli"],
+                "templates": {
+                    "default": {
+                        "template": "test_template",
+                        "config": {"temperature": 0.5}
+                    }
+                },
+                "performance_profile": "speed",
+                "complexity": "simple"
+            }
+        }
+        
+        strategy_file = tmp_path / "cli_strategies.yaml"
+        with open(strategy_file, 'w') as f:
+            yaml.dump(strategies, f)
+        
+        return str(strategy_file)
+    
+    def test_full_workflow(self, runner, temp_strategies):
+        """Test complete CLI workflow."""
+        # Mock the template components
+        with patch('prompts.core.cli.strategy_cli.TemplateRegistry') as mock_registry:
+            with patch('prompts.core.cli.strategy_cli.TemplateEngine') as mock_engine:
+                mock_engine.return_value.render.return_value = "Test output"
+                
+                # List strategies
+                result = runner.invoke(cli, [
+                    '--strategies-file', temp_strategies,
+                    'strategy', 'list'
+                ])
+                assert result.exit_code == 0
+                assert 'CLI Test Strategy' in result.output
+                
+                # Show specific strategy
+                result = runner.invoke(cli, [
+                    '--strategies-file', temp_strategies,
+                    'strategy', 'show', 'cli_test'
+                ])
+                assert result.exit_code == 0
+                assert 'CLI Test Strategy' in result.output
+                assert 'speed' in result.output
+                
+                # Execute strategy
+                result = runner.invoke(cli, [
+                    '--strategies-file', temp_strategies,
+                    'strategy', 'execute', 'cli_test',
+                    '--query', 'Test query'
+                ])
+                assert result.exit_code == 0
+                assert 'Test output' in result.output
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

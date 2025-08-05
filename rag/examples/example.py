@@ -9,9 +9,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.base import Pipeline
-from parsers.csv_parser import CustomerSupportCSVParser
-from embedders.ollama_embedder import OllamaEmbedder
-from stores.chroma_store import ChromaStore
+from components.parsers.csv_parser import CustomerSupportCSVParser
+from components.embedders.ollama_embedder import OllamaEmbedder
+from components.stores.chroma_store import ChromaStore
 
 
 def main():

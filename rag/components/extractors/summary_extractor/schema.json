@@ -1,0 +1,93 @@
+{
+  "name": "summary_extractor",
+  "type": "extractor",
+  "class_name": "SummaryExtractor", 
+  "description": "Generates document summaries using statistical and rule-based approaches without LLMs",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "summary_sentences": {
+        "type": "integer",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Number of sentences to include in summary"
+      },
+      "min_sentence_length": {
+        "type": "integer", 
+        "default": 10,
+        "minimum": 5,
+        "description": "Minimum length of sentences to consider"
+      },
+      "max_sentence_length": {
+        "type": "integer",
+        "default": 500,
+        "minimum": 50,
+        "description": "Maximum length of sentences to consider"
+      },
+      "include_key_phrases": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include key phrases in summary metadata"
+      },
+      "include_statistics": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include document statistics in summary"
+      },
+      "scoring_method": {
+        "type": "string",
+        "enum": ["frequency", "position", "combined"],
+        "default": "combined",
+        "description": "Method for scoring sentence importance"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object", 
+    "properties": {
+      "summary": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string"},
+          "sentences": {"type": "array"},
+          "key_phrases": {"type": "array"},
+          "statistics": {"type": "object"}
+        }
+      }
+    }
+  },
+  "use_cases": [
+    "Document summarization",
+    "Content preview generation",
+    "Research paper abstracts",
+    "News article summaries",
+    "Report executive summaries"
+  ],
+  "examples": [
+    {
+      "name": "Brief summary",
+      "config": {
+        "summary_sentences": 2,
+        "min_sentence_length": 15,
+        "scoring_method": "combined"
+      },
+      "description": "Generate a brief 2-sentence summary"
+    },
+    {
+      "name": "Detailed summary",
+      "config": {
+        "summary_sentences": 5,
+        "include_key_phrases": true,
+        "include_statistics": true,
+        "scoring_method": "frequency"
+      },
+      "description": "Generate detailed summary with metadata"
+    }
+  ]
+}

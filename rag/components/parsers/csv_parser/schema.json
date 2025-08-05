@@ -1,0 +1,52 @@
+{
+  "name": "csv_parser",
+  "type": "parser",
+  "class_name": "CSVParser",
+  "description": "Parser for CSV files with configurable field mapping",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "content_fields": {
+        "type": "array",
+        "items": {"type": "string"},
+        "default": ["subject", "body"],
+        "description": "CSV columns to use as document content"
+      },
+      "metadata_fields": {
+        "type": "array", 
+        "items": {"type": "string"},
+        "default": [],
+        "description": "CSV columns to include as metadata"
+      },
+      "id_field": {
+        "type": ["string", "null"],
+        "default": null,
+        "description": "CSV column to use as document ID"
+      },
+      "combine_content": {
+        "type": "boolean",
+        "default": true,
+        "description": "Combine multiple content fields into one document"
+      },
+      "content_separator": {
+        "type": "string",
+        "default": "\n\n",
+        "description": "Separator when combining content fields"
+      }
+    }
+  },
+  "supported_extensions": [".csv", ".tsv"],
+  "use_cases": [
+    "Customer support tickets",
+    "Product catalogs", 
+    "Survey responses",
+    "Tabular data processing",
+    "Contact lists",
+    "Inventory management"
+  ]
+}

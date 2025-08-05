@@ -1,0 +1,20 @@
+{
+  "config": {
+    "temperature_hint": 0.3,
+    "max_tokens_hint": 1000,
+    "system_message": "You are an expert code reviewer and software engineer.",
+    "analysis_depth": "standard",
+    "include_suggestions": true
+  },
+  "input_defaults": {
+    "analysis_type": "review"
+  },
+  "framework_specific": {
+    "langchain": {
+      "prompt_class": "PromptTemplate"
+    },
+    "native": {
+      "api_format": "messages"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "default": {
+    "name": "Default Configuration",
+    "description": "Default settings for qdrant_store",
+    "config": {},
+    "recommended_for": [
+      "General use"
+    ]
+  }
+}

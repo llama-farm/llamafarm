@@ -1,0 +1,453 @@
+# Default strategies for the models system
+
+local_development:
+  description: "Local development with Ollama - perfect for testing and development"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "llama3.2:3b"
+      auto_start: true
+      models:
+        - name: "llama3.2:3b"
+          pull_on_start: true
+
+cloud_production:
+  description: "Production deployment with OpenAI API"
+  cloud_api:
+    type: "openai"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      default_model: "gpt-3.5-turbo"
+      timeout: 60
+      max_retries: 3
+
+hybrid_with_fallback:
+  description: "Cloud API with comprehensive local fallback chain"
+  cloud_api:
+    type: "openai"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      default_model: "gpt-4"
+      timeout: 30
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "llama3.2:3b"
+      auto_start: false
+  fallback_chain: "general_chain"
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "llama3.2:3b"
+        models:
+          - name: "llama3.2:3b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "mistral:7b"
+        models:
+          - name: "mistral:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "phi3.5:3.8b"
+        models:
+          - name: "phi3.5:3.8b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "tinyllama:1.1b"
+        models:
+          - name: "tinyllama:1.1b"
+            pull_on_start: true
+
+multi_cloud:
+  description: "Multiple cloud providers for flexibility"
+  cloud_api:
+    type: "openai"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      default_model: "gpt-3.5-turbo"
+
+research_hub:
+  description: "Research setup with HuggingFace integration"
+  repository:
+    type: "huggingface"
+    config:
+      token: "${HUGGINGFACE_TOKEN}"
+      cache_dir: "~/.cache/huggingface"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "llama3.2:3b"
+
+# =============================================================================
+# MEDICAL AI STRATEGIES
+# =============================================================================
+
+medical_specialist:
+  description: "Medical domain specialist with DeepSeek-R1-Medicalai model"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
+      models:
+        - name: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
+          pull_on_start: true
+          alias: "deepseek-medical"
+      auto_start: true
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "llama3.2:3b"
+        models:
+          - name: "llama3.2:3b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "mistral:7b"
+        models:
+          - name: "mistral:7b"
+            pull_on_start: true
+
+medical_ai_advanced:
+  description: "Advanced medical AI with comprehensive fallback chain"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
+      models:
+        - name: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
+          pull_on_start: true
+          alias: "deepseek-medical"
+      auto_start: true
+  fallback_chain: "medical_chain"
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "meditron:7b"
+        models:
+          - name: "meditron:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "biomistral:7b"
+        models:
+          - name: "biomistral:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "llama3.1:8b"
+        models:
+          - name: "llama3.1:8b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "llama3.2:3b"
+        models:
+          - name: "llama3.2:3b"
+            pull_on_start: true
+
+# =============================================================================
+# CODE GENERATION STRATEGIES
+# =============================================================================
+
+code_assistant:
+  description: "Code generation with comprehensive fallback chain"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "codellama:13b"
+      models:
+        - name: "codellama:13b"
+          pull_on_start: true
+      auto_start: true
+  fallback_chain: "code_chain"
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "codellama:7b"
+        models:
+          - name: "codellama:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "deepseek-coder:6.7b"
+        models:
+          - name: "deepseek-coder:6.7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "codeqwen:7b"
+        models:
+          - name: "codeqwen:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "starcoder2:3b"
+        models:
+          - name: "starcoder2:3b"
+            pull_on_start: true
+
+# =============================================================================
+# MULTILINGUAL STRATEGIES
+# =============================================================================
+
+multilingual_expert:
+  description: "Multilingual processing with regional fallbacks"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "qwen2.5:14b"
+      models:
+        - name: "qwen2.5:14b"
+          pull_on_start: true
+      auto_start: true
+  fallback_chain: "multilingual_chain"
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "qwen2.5:7b"
+        models:
+          - name: "qwen2.5:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "mistral:7b"
+        models:
+          - name: "mistral:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "gemma2:9b"
+        models:
+          - name: "gemma2:9b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "llama3.2:3b"
+        models:
+          - name: "llama3.2:3b"
+            pull_on_start: true
+
+# =============================================================================
+# REASONING STRATEGIES
+# =============================================================================
+
+reasoning_powerhouse:
+  description: "Complex reasoning with quality-focused fallbacks"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "deepseek-r1:32b"
+      models:
+        - name: "deepseek-r1:32b"
+          pull_on_start: true
+      auto_start: true
+  fallback_chain: "reasoning_chain"
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "deepseek-r1:7b"
+        models:
+          - name: "deepseek-r1:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "llama3.1:8b"
+        models:
+          - name: "llama3.1:8b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "wizard-math:7b"
+        models:
+          - name: "wizard-math:7b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "llama3.2:3b"
+        models:
+          - name: "llama3.2:3b"
+            pull_on_start: true
+
+# =============================================================================
+# MOBILE/LIGHTWEIGHT STRATEGIES
+# =============================================================================
+
+lightweight_mobile:
+  description: "Optimized for mobile and edge devices"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "phi3.5:3.8b"
+      models:
+        - name: "phi3.5:3.8b"
+          pull_on_start: true
+      auto_start: true
+  fallback_chain: "lightweight_chain"
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "phi3:mini"
+        models:
+          - name: "phi3:mini"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "llama3.2:1b"
+        models:
+          - name: "llama3.2:1b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "tinyllama:1.1b"
+        models:
+          - name: "tinyllama:1.1b"
+            pull_on_start: true
+
+# =============================================================================
+# ENTERPRISE STRATEGIES
+# =============================================================================
+
+enterprise_production:
+  description: "Enterprise-grade with maximum reliability"
+  cloud_api:
+    type: "openai"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      default_model: "gpt-4"
+      timeout: 30
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "llama3.1:70b"
+      models:
+        - name: "llama3.1:70b"
+          pull_on_start: false  # Too large for auto-pull
+      auto_start: true
+  fallback_chain: "general_chain"
+  fallbacks:
+    - type: "ollama"
+      config:
+        default_model: "llama3.1:8b"
+        models:
+          - name: "llama3.1:8b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "llama3.2:3b"
+        models:
+          - name: "llama3.2:3b"
+            pull_on_start: true
+    - type: "ollama"
+      config:
+        default_model: "mistral:7b"
+        models:
+          - name: "mistral:7b"
+            pull_on_start: true
+
+# =============================================================================
+# FINE-TUNING STRATEGIES FOR DIFFERENT ENVIRONMENTS
+# =============================================================================
+
+m1_fine_tuning:
+  description: "M1/M2 Mac optimized fine-tuning with MPS backend"
+  model_app:
+    type: "ollama"
+    config:
+      default_model: "llama3.2:3b"
+      models:
+        - name: "llama3.2:3b"
+          pull_on_start: true
+      auto_start: true
+  fine_tuner:
+    type: "pytorch"
+    config:
+      base_model:
+        name: "llama3.2-3b"
+        huggingface_id: "meta-llama/Llama-3.2-3B"
+      method:
+        type: "lora"
+        r: 8  # Smaller for M1
+        alpha: 16
+        dropout: 0.1
+        target_modules: ["q_proj", "v_proj"]
+      training_args:
+        num_train_epochs: 2  # Fewer epochs for M1
+        per_device_train_batch_size: 1  # Smaller batch for M1
+        learning_rate: 3e-4
+        fp16: false  # M1 doesn't support fp16
+        bf16: false  # Use fp32 on M1
+        device: "mps"  # M1 Metal Performance Shaders
+      fallback_to_cpu: true
+
+cuda_fine_tuning:
+  description: "NVIDIA GPU optimized fine-tuning with CUDA"
+  fine_tuner:
+    type: "pytorch"
+    config:
+      base_model:
+        name: "llama3.1-8b"
+        huggingface_id: "meta-llama/Llama-3.1-8B"
+      method:
+        type: "qlora"  # More memory efficient
+        r: 64
+        alpha: 128
+        dropout: 0.1
+        target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+      training_args:
+        num_train_epochs: 3
+        per_device_train_batch_size: 4
+        gradient_accumulation_steps: 4
+        learning_rate: 2e-4
+        bf16: true  # Better on modern GPUs
+        device: "cuda"
+      memory_optimization: true
+
+cpu_fine_tuning:
+  description: "CPU-only fine-tuning for systems without GPU"
+  fine_tuner:
+    type: "pytorch"
+    config:
+      base_model:
+        name: "tinyllama-1.1b"
+        huggingface_id: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+      method:
+        type: "lora"
+        r: 4  # Very small for CPU
+        alpha: 8
+        dropout: 0.1
+        target_modules: ["q_proj", "v_proj"]
+      training_args:
+        num_train_epochs: 1  # Minimal for CPU
+        per_device_train_batch_size: 1
+        learning_rate: 5e-4
+        fp16: false  # CPU doesn't support fp16
+        bf16: false
+        device: "cpu"
+      patience: true  # CPU training is slow
+
+llamafactory_advanced:
+  description: "Advanced fine-tuning with LlamaFactory (all platforms)"
+  fine_tuner:
+    type: "llamafactory"
+    config:
+      base_model:
+        name: "llama3.2-3b"
+      method:
+        type: "qlora"
+        r: 32
+        alpha: 64
+        dropout: 0.05
+      training_args:
+        num_train_epochs: 3
+        per_device_train_batch_size: 2
+        gradient_accumulation_steps: 8
+        learning_rate: 1e-4
+        max_seq_length: 2048
+      dataset:
+        conversation_template: "medical"
+      optimization:
+        gradient_checkpointing: true
+        dataloader_num_workers: 4

@@ -1,0 +1,166 @@
+# Creative Workshop Strategy
+# Multi-purpose creative assistance for various artistic endeavors
+
+name: "Creative Workshop Assistant"
+description: "Comprehensive creative support for writing, art, music, and design projects"
+use_cases:
+  - "creative_writing"
+  - "story_development"
+  - "poetry"
+  - "songwriting"
+  - "art_concepts"
+  - "design_brainstorming"
+  - "creative_blocks"
+performance_profile: "balanced"
+complexity: "complex"
+
+templates:
+  default:
+    template: "creative_brainstorming"
+    config:
+      idea_count: 5
+      detail_level: "moderate"
+      include_variations: true
+      creative_techniques: true
+      inspiration_sources: true
+  
+  specialized:
+    - condition:
+        query_type: "story_writing"
+      template: "story_development"
+      config:
+        plot_structure: true
+        character_development: true
+        world_building: true
+        dialogue_samples: true
+        conflict_tension: true
+        genre_conventions: true
+      priority: 20
+    
+    - condition:
+        query_type: "poetry"
+      template: "poetry_workshop"
+      config:
+        forms_and_meters: true
+        imagery_techniques: true
+        sound_devices: true
+        emotional_resonance: true
+        revision_suggestions: true
+      priority: 20
+    
+    - condition:
+        query_type: "songwriting"
+      template: "songwriting_assistant"
+      config:
+        song_structure: true
+        rhyme_schemes: true
+        melody_suggestions: true
+        hook_development: true
+        genre_elements: true
+      priority: 15
+    
+    - condition:
+        query_type: "visual_art"
+      template: "art_conceptualization"
+      config:
+        composition_principles: true
+        color_theory: true
+        style_exploration: true
+        medium_suggestions: true
+        reference_ideas: true
+      priority: 15
+    
+    - condition:
+        query_type: "creative_block"
+      template: "creativity_unblocking"
+      config:
+        exercises: true
+        perspective_shifts: true
+        constraint_based_prompts: true
+        freewriting_prompts: true
+        inspiration_techniques: true
+      priority: 25
+    
+    - condition:
+        context:
+          project_stage: "ideation"
+      template: "ideation_workshop"
+      config:
+        brainstorming_methods: true
+        mind_mapping: true
+        random_connections: true
+        what_if_scenarios: true
+      priority: 10
+    
+    - condition:
+        context:
+          project_stage: "revision"
+      template: "creative_revision"
+      config:
+        critique_framework: true
+        editing_techniques: true
+        fresh_perspectives: true
+        polish_suggestions: true
+      priority: 10
+
+selection_rules:
+  - name: "genre_specific"
+    condition:
+      expression: "context.get('genre') in ['fantasy', 'sci-fi', 'mystery', 'romance']"
+    template: "genre_workshop"
+    priority: 15
+  
+  - name: "collaboration_mode"
+    condition:
+      expression: "'collaborat' in context.get('query', '').lower() or 'partner' in context.get('query', '').lower()"
+    template: "creative_collaboration"
+    priority: 20
+  
+  - name: "experimental_art"
+    condition:
+      expression: "'experimental' in context.get('style', '') or 'avant-garde' in context.get('style', '')"
+    template: "experimental_creative"
+    priority: 25
+
+global_config:
+  system_prompts:
+    - content: "You are a creative workshop facilitator. Encourage experimentation, celebrate uniqueness, and provide constructive support."
+      position: "system"
+      priority: 100
+    - content: "Balance creative freedom with practical techniques. Respect the artist's vision while offering helpful guidance."
+      position: "system"
+      priority: 90
+    - content: "Draw from diverse artistic traditions and contemporary practices. Make creativity accessible and enjoyable."
+      position: "prefix"
+      priority: 50
+  temperature: 0.9  # High for creativity
+  max_tokens: 1500
+  model_preferences: ["gpt-4", "claude-3-opus"]
+
+optimization:
+  caching: false  # Fresh ideas each time
+  compression: false
+  token_optimization: false
+  parallel_processing: true  # Multiple ideas
+
+output_transforms:
+  - transform: "clean_markdown"
+
+metadata:
+  version: "4.1.0"
+  author: "LlamaFarm Creative Team"
+  tags: ["creativity", "writing", "art", "music", "design", "brainstorming"]
+  creative_domains:
+    - "writing"
+    - "visual_arts"
+    - "music"
+    - "design"
+    - "performance"
+    - "multimedia"
+  techniques:
+    - "brainstorming"
+    - "mind_mapping"
+    - "SCAMPER"
+    - "random_word"
+    - "perspective_shift"
+    - "constraint_based"

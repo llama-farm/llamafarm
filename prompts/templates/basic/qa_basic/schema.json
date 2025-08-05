@@ -1,0 +1,109 @@
+{
+  "template_id": "qa_basic",
+  "name": "Basic Question Answering",
+  "description": "Simple question answering template for general queries",
+  "category": "basic",
+  "version": "1.0.0",
+  "author": "LlamaFarm Team",
+  
+  "inputs": {
+    "query": {
+      "type": "string",
+      "required": true,
+      "description": "The question to answer",
+      "validation": {
+        "min_length": 1,
+        "max_length": 1000
+      }
+    },
+    "context": {
+      "type": "array",
+      "required": true,
+      "description": "Context documents for answering the question",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  
+  "outputs": {
+    "prompt": {
+      "type": "string",
+      "description": "The formatted prompt ready for LLM"
+    }
+  },
+  
+  "config_options": {
+    "temperature_hint": {
+      "type": "float",
+      "default": 0.7,
+      "min": 0,
+      "max": 2,
+      "description": "Suggested temperature for generation"
+    },
+    "max_tokens_hint": {
+      "type": "integer",
+      "default": 500,
+      "min": 1,
+      "max": 4096,
+      "description": "Suggested max tokens for response"
+    },
+    "system_message": {
+      "type": "string",
+      "default": "",
+      "description": "Optional system message override"
+    },
+    "context_format": {
+      "type": "string",
+      "default": "numbered",
+      "enum": ["numbered", "bullet", "plain"],
+      "description": "How to format context documents"
+    }
+  },
+  
+  "template": "Based on the following context:\n\n{{ context | format_documents }}\n\nQuestion: {{ query }}\n\nAnswer:",
+  
+  "frameworks": ["langchain", "native"],
+  
+  "use_cases": [
+    "simple_queries",
+    "faq",
+    "basic_qa",
+    "knowledge_retrieval"
+  ],
+  
+  "metadata": {
+    "complexity": "low",
+    "domain": "general",
+    "tags": ["qa", "basic", "general"],
+    "token_estimate": {
+      "min": 50,
+      "typical": 200,
+      "max": 600
+    }
+  },
+  
+  "examples": [
+    {
+      "name": "Basic factual question",
+      "inputs": {
+        "query": "What is machine learning?",
+        "context": [
+          {
+            "title": "ML Introduction",
+            "content": "Machine learning is a subset of AI that enables computers to learn from data."
+          }
+        ]
+      },
+      "expected_output": "Based on the context, machine learning is a subset of AI that enables computers to learn from data."
+    }
+  ]
+}

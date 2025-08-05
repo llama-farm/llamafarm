@@ -3,11 +3,11 @@
 import pytest
 from pathlib import Path
 
-from prompts.core.prompt_system import PromptSystem
-from prompts.models.config import PromptConfig, GlobalPromptConfig
-from prompts.models.context import PromptContext
-from prompts.models.template import PromptTemplate, TemplateType, TemplateComplexity, TemplateMetadata
-from prompts.models.strategy import PromptStrategy, StrategyType, StrategyRule, RuleOperator
+from prompts.core.engines.prompt_system import PromptSystem
+from prompts.core.models.config import PromptConfig, GlobalPromptConfig
+from prompts.core.models.context import PromptContext
+from prompts.core.models.template import PromptTemplate, TemplateType, TemplateComplexity, TemplateMetadata
+from prompts.core.models.strategy import PromptStrategy, StrategyType, StrategyRule, RuleOperator
 
 
 @pytest.fixture

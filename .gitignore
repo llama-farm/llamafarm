@@ -267,6 +267,11 @@ data/*.pdf
 data/*.docx
 data/*.doc
 
+# RAG data directories
+rag/data/
+**/data/*_chroma_db/
+**/data/vector_store/
+
 # User uploads and ingestion staging
 uploads/
 ingestion_staging/
@@ -594,3 +599,6 @@ Icon?
 Network Trash Folder
 Temporary Items
 .apdisk
+
+
+*/rag/data/*
