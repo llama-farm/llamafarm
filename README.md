@@ -2,14 +2,14 @@
 
 <div align="center">
   <img src="docs/images/rocket-llama.png" alt="Llama Building a Rocket" width="400">
-  
+
   **Empowering developers to build production-ready AI applications with complete local control**
-  
+
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
   [![Discord](https://img.shields.io/discord/1234567890?color=7289da&logo=discord&logoColor=white)](https://discord.gg/llamafarm)
-  
+
    [Getting Started](#-getting-started) • [Features](#-features) • [Contributing](#-contributing)
 </div>
 
@@ -17,7 +17,7 @@
 
 ## 🚀 What is LlamaFarm?
 
-LlamaFarm is a comprehensive, modular framework for building AI Projects that run locally, collaborate, and deploy anywhere. We provide battle-tested components for RAG systems, vector databases, model management, prompt engineering, and soon fine-tuning - all designed to work seamlessly together or independently.  
+LlamaFarm is a comprehensive, modular framework for building AI Projects that run locally, collaborate, and deploy anywhere. We provide battle-tested components for RAG systems, vector databases, model management, prompt engineering, and soon fine-tuning - all designed to work seamlessly together or independently.
 
 ### 🎯 Our Mission
 
@@ -35,6 +35,37 @@ We're building LlamaFarm in public! Join us:
 - 💡 [Request features](https://github.com/llama-farm/llamafarm/discussions)
 - 🤝 [Contribute code](CONTRIBUTING.md)
 - 💬 [Join our Discord](https://discord.gg/llamafarm)
+
+---
+
+## 🚀 Quick Start
+
+### Install the CLI
+
+Get started with LlamaFarm in seconds:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/llamafarm/llamafarm/main/install.sh | bash
+```
+
+After installation, verify it works:
+```bash
+lf version
+lf help
+```
+
+For detailed installation options and troubleshooting, see the [Installation Guide](INSTALL.md).
+
+### Your First Project
+
+```bash
+# Initialize a new project
+lf init my-ai-project
+cd my-ai-project
+
+# Start the designer interface
+lf designer start
+```
 
 ---
 
@@ -79,7 +110,7 @@ providers:
     provider: "openai"
     model: "gpt-4o-mini"
     fallback_to: "local_llama"
-  
+
   local_llama:
     provider: "ollama"
     model: "llama3.2"
@@ -146,7 +177,7 @@ cd rag
 uv sync
 ./setup_and_demo.sh
 
-# Set up Models system  
+# Set up Models system
 cd ../models
 uv sync
 ./setup_and_demo.sh
@@ -256,7 +287,7 @@ llamafarm/
 
 <div align="center">
   <img src="docs/images/iron-workers-llama.png" alt="Iron Worker Llamas" width="400">
-  
+
   **Join our herd of contributors building the future of local AI!**
 </div>
 
@@ -344,7 +375,7 @@ Join the LlamaFarm community:
     <b>Ready to farm some AI? 🦙🚜</b>
   </p>
   <p>
-    <a href="https://github.com/llama-farm/llamafarm">⭐ Star us on GitHub</a> • 
-    <a href="https://discord.gg/llamafarm">💬 Join Discord</a> • 
+    <a href="https://github.com/llama-farm/llamafarm">⭐ Star us on GitHub</a> •
+    <a href="https://discord.gg/llamafarm">💬 Join Discord</a> •
   </p>
 </div>
