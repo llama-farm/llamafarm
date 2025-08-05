@@ -246,7 +246,7 @@ class PyTorchFineTuner:
         logger.info(f"Dataset prepared with {len(self.dataset)} examples")
         return self.dataset
     
-    def _tokenize_dataset(self, dataset) -> Dataset:
+    def _tokenize_dataset(self, dataset):
         """Tokenize the dataset."""
         training_args = self.config.get("training_args", {})
         max_length = training_args.get("max_seq_length", 512)
@@ -296,7 +296,7 @@ class PyTorchFineTuner:
         
         return tokenized_dataset
     
-    def start_training(self, job_id: Optional[str] = None) -> TrainingJob:
+    def start_training(self, job_id: Optional[str] = None):
         """Start the fine-tuning process."""
         if job_id is None:
             job_id = str(uuid.uuid4())
@@ -370,7 +370,7 @@ class PyTorchFineTuner:
         
         return job
     
-    def _create_training_arguments(self) -> TrainingArguments:
+    def _create_training_arguments(self):
         """Create TrainingArguments from configuration."""
         config = self.config.get("training_args", {})
         
@@ -442,11 +442,11 @@ class PyTorchFineTuner:
                 self._current_job.status = "cancelled"
                 self._current_job.completed_at = datetime.now()
     
-    def get_training_status(self) -> Optional[TrainingJob]:
+    def get_training_status(self):
         """Get the current training status."""
         return self._current_job
     
-    def resume_training(self, checkpoint_path: Path) -> TrainingJob:
+    def resume_training(self, checkpoint_path: Path):
         """Resume training from a checkpoint."""
         logger.info(f"Resuming training from: {checkpoint_path}")
         

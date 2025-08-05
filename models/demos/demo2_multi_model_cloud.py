@@ -5,6 +5,7 @@ Demo 2: Multi-Model Cloud Strategy
 
 Demonstrates using different models for different tasks to optimize
 cost and performance.
+NO SIMULATION - Real API calls only!
 """
 
 import os
@@ -34,13 +35,14 @@ console = Console()
 def main():
     """Run the multi-model cloud demo."""
     console.print(Panel("""
-[bold cyan]Multi-Model Cloud Strategy Demo[/bold cyan]
+[bold cyan]Multi-Model Cloud Strategy Demo - REAL API CALLS ONLY[/bold cyan]
 
 This demo shows:
 • Using different models for different tasks
 • Cost optimization by task complexity
 • Performance vs cost trade-offs
 • Model selection strategies
+• NO SIMULATION - Real responses only!
     """, title="Demo 2", expand=False))
     
     # Model configurations for different tasks
@@ -132,8 +134,8 @@ This demo shows:
     
     # Check if we have API key
     if not os.getenv("OPENAI_API_KEY"):
-        console.print("[yellow]⚠️  No OpenAI API key found. Running simulation...[/yellow]")
-        simulate_demo(scenarios, model_configs)
+        console.print("[red]✗ No OpenAI API key found![/red]")
+        console.print("[yellow]Please set OPENAI_API_KEY in your .env file[/yellow]")
         return
     
     # Run actual demo
@@ -160,7 +162,7 @@ This demo shows:
                 start_time = time.time()
                 
                 try:
-                    # Make API call
+                    # Make actual API call
                     response = manager.generate(
                         scenario["prompt"],
                         model=config["model"]
@@ -187,6 +189,7 @@ This demo shows:
                     
                 except Exception as e:
                     progress.update(task, description=f"❌ Failed: {str(e)[:30]}...")
+                    console.print(f"[red]Error: {e}[/red]")
                     results.append({
                         "scenario": scenario["name"],
                         "model": config["name"],
@@ -203,197 +206,7 @@ This demo shows:
         
     except Exception as e:
         console.print(f"\n[red]Error: {e}[/red]")
-        console.print("[yellow]Running simulation instead...[/yellow]")
-        simulate_demo(scenarios, model_configs)
-
-
-def simulate_demo(scenarios, model_configs):
-    """Simulate the demo when API isn't available."""
-    console.print("\n[blue]🎬 Simulating Multi-Model Cloud Demo...[/blue]\n")
-    
-    # Simulated responses for each scenario type
-    simulated_responses = {
-        "simple": """To reset your password, please follow these steps:
-
-1. Go to the login page
-2. Click on "Forgot Password?" link
-3. Enter your registered email address
-4. Check your email for a password reset link
-5. Click the link and follow the instructions to create a new password
-
-If you don't receive the email within 5 minutes, please check your spam folder or contact support.""",
-        
-        "reasoning": """Based on the quarterly sales data provided:
-- Q1: $100k (baseline)
-- Q2: $95k (-5% decline)
-- Q3: $92k (-8% decline from Q1)
-- Q4: $110k (+10% growth from Q1)
-
-Analysis:
-1. **Mid-year slump**: Q2-Q3 showed consistent decline, possibly due to seasonal factors or market conditions
-2. **Strong recovery**: Q4 showed significant improvement, exceeding Q1 performance
-
-Recommendations:
-1. **Investigate Q2-Q3 factors**: Identify what caused the mid-year decline
-2. **Replicate Q4 success**: Analyze what strategies worked in Q4
-3. **Seasonal planning**: Prepare targeted campaigns for traditionally slow quarters
-4. **Customer retention**: Focus on maintaining customer base during low periods
-5. **Product diversification**: Consider offerings that perform well in Q2-Q3""",
-        
-        "creative": """Introducing the Aurora Home Assistant – Your Intelligent Living Companion
-
-Imagine walking into a home that knows you better than you know yourself. Aurora isn't just another smart speaker; it's the heart of your connected life. With advanced AI that learns your routines, Aurora orchestrates your entire home ecosystem with graceful intelligence.
-
-Wake to gentle lighting that mimics sunrise, while your favorite morning playlist eases you into the day. Aurora has already adjusted your thermostat to the perfect temperature and started brewing your coffee. Throughout your day, it anticipates your needs – dimming lights for movie night, securing your home when you leave, and even reminding you of important tasks with a warm, conversational tone.
-
-Built with privacy at its core, Aurora processes everything locally, ensuring your data never leaves your home. Its sleek, minimalist design blends seamlessly into any decor, while its powerful capabilities transform your house into a truly intelligent home.
-
-Aurora: Where technology meets intuition.""",
-        
-        "premium": """## Distributed Caching System Architecture
-
-A distributed caching system is designed to store frequently accessed data across multiple nodes to improve application performance and reduce database load.
-
-### Core Components:
-
-1. **Cache Nodes**: Individual servers storing cached data
-   - Memory-based storage (Redis, Memcached)
-   - Persistent storage options for durability
-   
-2. **Consistent Hashing**: Distributes data across nodes
-   - Minimizes redistribution when nodes are added/removed
-   - Example: Ring-based hash with virtual nodes
-   
-3. **Replication Strategy**:
-   - Master-slave replication for read scaling
-   - Multi-master for high availability
-   
-4. **Cache Invalidation**:
-   - TTL (Time To Live) based expiration
-   - Event-driven invalidation
-   - Write-through/Write-behind strategies
-
-### Example Architecture:
-```
-Load Balancer
-     |
-+----+----+----+
-|    |    |    |
-Node1 Node2 Node3
- |     |     |
-Replica Replica Replica
-```
-
-### Implementation Example (Redis Cluster):
-- 6 nodes minimum (3 masters, 3 slaves)
-- Automatic sharding across 16,384 hash slots
-- Automatic failover with Redis Sentinel
-- Supports up to 1000 nodes
-
-Key considerations: Data consistency, network partitions, cache warming strategies, and monitoring.""",
-        
-        "code": """```python
-def binary_search(arr, target):
-    \"\"\"
-    Performs binary search on a sorted array.
-    
-    Args:
-        arr: Sorted list of comparable elements
-        target: Element to search for
-        
-    Returns:
-        int: Index of target element if found, -1 otherwise
-        
-    Raises:
-        ValueError: If array is None or not sorted
-        TypeError: If elements are not comparable
-    \"\"\"
-    # Input validation
-    if arr is None:
-        raise ValueError("Array cannot be None")
-    
-    if not arr:
-        return -1
-    
-    # Verify array is sorted
-    if not all(arr[i] <= arr[i + 1] for i in range(len(arr) - 1)):
-        raise ValueError("Array must be sorted")
-    
-    left, right = 0, len(arr) - 1
-    
-    try:
-        while left <= right:
-            mid = left + (right - left) // 2
-            
-            if arr[mid] == target:
-                return mid
-            elif arr[mid] < target:
-                left = mid + 1
-            else:
-                right = mid - 1
-                
-    except TypeError as e:
-        raise TypeError(f"Elements must be comparable: {e}")
-    
-    return -1
-```"""
-    }
-    
-    total_cost = 0.0
-    results = []
-    
-    console.print("[bold]Running scenarios with optimal model selection:[/bold]\n")
-    
-    for i, scenario in enumerate(scenarios, 1):
-        config = model_configs[scenario["type"]]
-        
-        console.print(f"[bold]Scenario {i}/{len(scenarios)}:[/bold] {scenario['name']}")
-        console.print(f"[dim]Using: {config['name']} | Query: {scenario['prompt'][:50]}...[/dim]")
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task(f"Processing with {config['name']}...", total=None)
-            
-            # Simulate processing time based on model
-            processing_time = {
-                "simple": 0.8,
-                "reasoning": 1.5,
-                "creative": 1.2,
-                "premium": 2.0,
-                "code": 1.3
-            }[scenario["type"]]
-            
-            time.sleep(processing_time)
-            
-            # Calculate simulated cost
-            cost = (scenario["expected_tokens"] / 1000) * config["cost_per_1k"]
-            total_cost += cost
-            
-            progress.update(task, description=f"✅ Complete (${cost:.4f})")
-            
-            # Get simulated response
-            response = simulated_responses[scenario["type"]]
-            
-            results.append({
-                "scenario": scenario["name"],
-                "model": config["name"],
-                "time": processing_time,
-                "cost": cost,
-                "response_preview": response[:100] + "...",
-                "full_response": response
-            })
-            
-            # Print the full response
-            console.print(f"\n[bold green]Response:[/bold green]")
-            console.print(Panel(response, expand=False))
-        
-        console.print()
-    
-    console.print()
-    display_results(results, total_cost)
+        console.print("[yellow]Please check your API key and try again.[/yellow]")
 
 
 def display_results(results, total_cost):
@@ -416,7 +229,7 @@ def display_results(results, total_cost):
     console.print(table)
     
     # Summary panel
-    avg_time = sum(r["time"] for r in results) / len(results)
+    avg_time = sum(r["time"] for r in results) / len(results) if results else 0
     
     console.print("\n")
     console.print(Panel(f"""
@@ -436,6 +249,11 @@ Average Response Time: {avg_time:.2f}s
 • Performance scales with model capability
 • Most tasks don't need the most expensive model
 • Strategic model selection maintains quality
+
+[bold]All Responses Above Are Real:[/bold]
+• Every response shown is from actual API calls
+• No simulated data - real model outputs only
+• Costs are based on actual token usage
     """, title="Multi-Model Strategy Results", expand=False))
     
     # Cost comparison

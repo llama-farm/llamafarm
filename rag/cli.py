@@ -20,11 +20,12 @@ from core.factories import (
     create_embedder_from_config,
     create_parser_from_config,
     create_vector_store_from_config,
+    create_retrieval_strategy_from_config,
     EmbedderFactory,
     VectorStoreFactory,
     ParserFactory,
 )
-from components.retrievers.factory import create_retrieval_strategy_from_config
+# Import for retrieval strategies is handled via core.factories
 from utils.progress import LlamaProgressTracker, create_enhanced_progress_bar
 from utils.path_resolver import PathResolver, resolve_paths_in_config
 from core.document_manager import DocumentManager, DeletionStrategy, UpdateStrategy
@@ -954,7 +955,7 @@ def run_retrieval_tests(args, tracker: LlamaProgressTracker) -> Dict[str, Any]:
     
     try:
         # Test strategy creation
-        from components.retrievers.factory import create_retrieval_strategy_from_config
+        # Import for retrieval strategies is handled via core.factories
         
         # Test basic strategy
         basic_config = {

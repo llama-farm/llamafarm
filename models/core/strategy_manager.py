@@ -131,6 +131,105 @@ class StrategyManager:
         
         return strategies
     
+    def get_strategy_info(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get detailed information about a strategy.
+        
+        Args:
+            name: Strategy name
+            
+        Returns:
+            Strategy information dict or None if not found
+        """
+        # Check default strategies first
+        if name in self._default_strategies:
+            strategy = self._default_strategies[name]
+            return {
+                "name": name,
+                "description": strategy.get("description", ""),
+                "source": "default",
+                "components": list(k for k in strategy.keys() if k != "description"),
+                "use_cases": self._infer_use_cases(strategy),
+                "hardware_requirements": self._infer_hardware_requirements(strategy),
+                "resource_usage": self._infer_resource_usage(strategy),
+                "complexity": self._infer_complexity(strategy)
+            }
+        
+        # Check custom strategies
+        strategy_file = self.strategies_dir / f"{name}.yaml"
+        if strategy_file.exists():
+            try:
+                with open(strategy_file) as f:
+                    strategy = yaml.safe_load(f)
+                    return {
+                        "name": name,
+                        "description": strategy.get("description", ""),
+                        "source": "custom",
+                        "components": list(k for k in strategy.keys() if k != "description"),
+                        "use_cases": self._infer_use_cases(strategy),
+                        "hardware_requirements": self._infer_hardware_requirements(strategy),
+                        "resource_usage": self._infer_resource_usage(strategy),
+                        "complexity": self._infer_complexity(strategy)
+                    }
+            except Exception as e:
+                logger.error(f"Failed to load strategy {name}: {e}")
+        
+        return None
+    
+    def _infer_use_cases(self, strategy: Dict[str, Any]) -> List[str]:
+        """Infer use cases from strategy configuration."""
+        use_cases = []
+        if "fine_tuner" in strategy:
+            use_cases.append("model fine-tuning")
+            if "medical" in str(strategy).lower():
+                use_cases.append("medical AI")
+            if "code" in str(strategy).lower():
+                use_cases.append("code generation")
+        if "cloud_api" in strategy:
+            use_cases.append("cloud deployment")
+        if "model_app" in strategy:
+            use_cases.append("local deployment")
+        return use_cases
+    
+    def _infer_hardware_requirements(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
+        """Infer hardware requirements from strategy configuration."""
+        reqs = {"type": "Unknown", "minimum_ram": "Unknown"}
+        
+        if "fine_tuner" in strategy:
+            config = strategy["fine_tuner"].get("config", {})
+            device = config.get("training_args", {}).get("device", "")
+            
+            if device == "mps":
+                reqs = {"type": "M1/M2 Mac", "minimum_ram": "8GB"}
+            elif device == "cuda":
+                reqs = {"type": "NVIDIA GPU", "minimum_ram": "16GB"}
+            elif device == "cpu":
+                reqs = {"type": "CPU only", "minimum_ram": "4GB"}
+        
+        return reqs
+    
+    def _infer_resource_usage(self, strategy: Dict[str, Any]) -> str:
+        """Infer resource usage from strategy configuration."""
+        if "fine_tuner" in strategy:
+            config = strategy["fine_tuner"].get("config", {})
+            batch_size = config.get("training_args", {}).get("per_device_train_batch_size", 1)
+            if batch_size == 1:
+                return "Low"
+            elif batch_size <= 4:
+                return "Medium"
+            else:
+                return "High"
+        return "Unknown"
+    
+    def _infer_complexity(self, strategy: Dict[str, Any]) -> str:
+        """Infer complexity from strategy configuration."""
+        component_count = len([k for k in strategy.keys() if k != "description"])
+        if component_count <= 2:
+            return "Simple"
+        elif component_count <= 4:
+            return "Medium"
+        else:
+            return "Complex"
+    
     def load_strategy(self, name: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Load a strategy configuration.
         

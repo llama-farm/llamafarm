@@ -26,6 +26,14 @@ def register_essential_components():
         FineTunerFactory.register('llamafactory', LlamaFactoryFineTuner)
     except ImportError:
         pass
+    
+    try:
+        # Register OpenAI cloud API
+        from .cloud_apis.openai.openai_api import OpenAIAPI
+        CloudAPIFactory.register('openai', OpenAIAPI)
+    except ImportError as e:
+        print(f"Failed to register OpenAI: {e}")
+        pass
 
 # Register components on import
 register_essential_components()

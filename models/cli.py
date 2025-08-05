@@ -46,7 +46,8 @@ except ImportError:
 
 # Import fine-tuning components
 try:
-    from fine_tuning import FineTunerFactory, StrategyManager
+    from fine_tuning import FineTunerFactory
+    from fine_tuning.core.strategies import StrategyManager as FineTuningStrategyManager
     from fine_tuning.core.base import FineTuningConfig
     FINETUNING_AVAILABLE = True
 except ImportError:
@@ -2306,12 +2307,21 @@ def start_finetuning(args):
             config = FineTuningConfig(**config_data)
         elif args.strategy:
             # Load from strategy
+            from core.strategy_manager import StrategyManager
             strategy_manager = StrategyManager()
-            config_data = strategy_manager.get_strategy_config(args.strategy)
-            if not config_data:
-                print_error(f"Strategy not found: {args.strategy}")
+            try:
+                strategy_data = strategy_manager.load_strategy(args.strategy)
+                # Extract fine_tuner config from strategy
+                if "fine_tuner" not in strategy_data:
+                    print_error(f"Strategy '{args.strategy}' does not contain fine-tuning configuration")
+                    return
+                config_data = strategy_data["fine_tuner"]["config"]
+                # Add framework type
+                config_data["framework"] = {"type": strategy_data["fine_tuner"]["type"]}
+                config = FineTuningConfig(**config_data)
+            except ValueError as e:
+                print_error(str(e))
                 return
-            config = FineTuningConfig(**config_data)
         else:
             # Create minimal config from arguments
             config_data = {
@@ -2416,19 +2426,25 @@ def manage_finetune_strategies(args):
         return
     
     try:
+        from core.strategy_manager import StrategyManager
         strategy_manager = StrategyManager()
         
         if args.strategies_command == "list":
             strategies = strategy_manager.list_strategies()
-            if not strategies:
-                print_info("No strategies available")
+            
+            # Filter for strategies with fine_tuner component
+            finetuning_strategies = []
+            for s in strategies:
+                if isinstance(s, dict) and "fine_tuner" in s.get("components", []):
+                    finetuning_strategies.append(s)
+            
+            if not finetuning_strategies:
+                print_info("No fine-tuning strategies available")
                 return
             
-            print_info(f"Available fine-tuning strategies ({len(strategies)}):")
-            for name in strategies:
-                info = strategy_manager.get_strategy_info(name)
-                if info:
-                    print_info(f"  {name}: {info.get('description', 'No description')}")
+            print_info(f"Available fine-tuning strategies ({len(finetuning_strategies)}):")
+            for strategy in finetuning_strategies:
+                print_info(f"  {strategy['name']}: {strategy.get('description', 'No description')}")
         
         elif args.strategies_command == "show":
             info = strategy_manager.get_strategy_info(args.name)
@@ -2465,12 +2481,21 @@ def estimate_finetune_resources(args):
     """Estimate fine-tuning resource requirements."""
     try:
         if args.strategy:
+            from core.strategy_manager import StrategyManager
             strategy_manager = StrategyManager()
-            config_data = strategy_manager.get_strategy_config(args.strategy)
-            if not config_data:
-                print_error(f"Strategy not found: {args.strategy}")
+            try:
+                strategy_data = strategy_manager.load_strategy(args.strategy)
+                # Extract fine_tuner config from strategy
+                if "fine_tuner" not in strategy_data:
+                    print_error(f"Strategy '{args.strategy}' does not contain fine-tuning configuration")
+                    return
+                config_data = strategy_data["fine_tuner"]["config"]
+                # Add framework type
+                config_data["framework"] = {"type": strategy_data["fine_tuner"]["type"]}
+                config = FineTuningConfig(**config_data)
+            except ValueError as e:
+                print_error(str(e))
                 return
-            config = FineTuningConfig(**config_data)
         elif args.config:
             config_data = load_config(args.config)
             config = FineTuningConfig(**config_data)
