@@ -82,7 +82,7 @@ download_file() {
     info "Downloading from: $url"
 
     if command_exists curl; then
-        curl -L -o "$output" "$url" || error "Failed to download with curl"
+        curl -f -L -o "$output" "$url" || error "Failed to download with curl"
     elif command_exists wget; then
         wget -O "$output" "$url" || error "Failed to download with wget"
     fi
@@ -93,7 +93,7 @@ get_latest_version() {
     local api_url="https://api.github.com/repos/$REPO/releases/latest"
 
     if command_exists curl; then
-        curl -s "$api_url" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' | head -1
+        curl -f -s "$api_url" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' | head -1
     elif command_exists wget; then
         wget -qO- "$api_url" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' | head -1
     fi
