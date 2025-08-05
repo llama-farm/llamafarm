@@ -23,6 +23,19 @@ on:
       - '.github/workflows/test-installer.yml'
   workflow_dispatch:
 
+# Ensure cli/config directory exists and copy config/schema.yaml before any job
+# This step runs before all jobs using the workflow_call 'pre' trick
+jobs:
+  pre:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy config/schema.yaml to cli/config/schema.yaml
+        run: cp config/schema.yaml cli/config/schema.yaml
+
+
 jobs:
   quick-test:
     name: Quick Test on ${{ matrix.os }}
