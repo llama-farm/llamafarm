@@ -3,7 +3,7 @@
 # Quick Installer Test Script
 # This script performs basic validation of the installer without external dependencies
 
-set -e
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -335,14 +335,6 @@ main() {
     info "✅ Security patterns"
     info "✅ Documentation completeness"
     info ""
-    info "Next steps for thorough testing:"
-    info "1. Run ./scripts/test-installer-local.sh for local simulation"
-    info "2. Run ./scripts/test-installer-comprehensive.sh for multi-environment testing"
-    info "3. Create a test release: git tag test-v1.0.0 && git push origin test-v1.0.0"
-    info "4. Test the real installer after GitHub Actions builds the binaries"
-    info ""
-    info "When ready for production:"
-    info "git tag v1.0.0 && git push origin v1.0.0"
 }
 
 # Run the tests

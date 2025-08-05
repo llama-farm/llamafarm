@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - main
-    # Review gh actions docs if you want to further define triggers, paths, etc
-    # https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#on
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
@@ -24,9 +25,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: docs/website/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm i
       - name: Build website
         run: npm run build
 
@@ -38,6 +40,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
