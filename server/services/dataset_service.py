@@ -1,19 +1,10 @@
-import os
-import sys
 import logging
 
-from pathlib import Path
-from pydantic import BaseModel
 from typing import List
 
 logger = logging.getLogger(__name__)
 
-# Add the parent directory to the Python path so we can import the config package
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
 from config import config_types
-from core.config import settings
 from services.project_service import ProjectService
 
 type Dataset = config_types.DatasetsConfig

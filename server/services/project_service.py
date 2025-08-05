@@ -1,19 +1,18 @@
 import os
 import sys
-import logging
-
 from pathlib import Path
+
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+from core.logging import FastAPIStructLogger
+from core.settings import settings
 
-# Add the parent directory to the Python path so we can import the config package
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
-from config import load_config, LlamaFarmConfig, save_config, example, loader, config_types, generate_base_config
-from core.config import settings
+from config import LlamaFarmConfig, generate_base_config, load_config, save_config  # noqa: E402, I001
 
+logger = FastAPIStructLogger()
 class Project(BaseModel):
   namespace: str;
   name: str;
@@ -54,7 +53,7 @@ class ProjectService:
   @classmethod
   def list_projects(cls, namespace: str) -> list[Project]:
     if settings.lf_project_dir is not None:
-      print(f"Listing projects in {settings.lf_project_dir}")
+      logger.info(f"Listing projects in {settings.lf_project_dir}")
       cfg = load_config(directory=settings.lf_project_dir, validate=False)
       return [Project(
         namespace=namespace,
@@ -63,7 +62,7 @@ class ProjectService:
       )]
 
     namespace_dir = cls.get_namespace_dir(namespace)
-    print(f"Listing projects in {namespace_dir}")
+    logger.info(f"Listing projects in {namespace_dir}")
     projects = []
     for project_name in os.listdir(namespace_dir):
       cfg = load_config(directory=os.path.join(namespace_dir, project_name), validate=False)
@@ -90,6 +89,8 @@ class ProjectService:
 
   @classmethod
   def save_config(cls, namespace: str, project_id: str, config: LlamaFarmConfig) -> LlamaFarmConfig:
-    print(f"Saving config to {cls.get_project_dir(namespace, project_id)}")
-    print(f"Config: {config}")
+    logger.debug(
+      f"Saving config to {cls.get_project_dir(namespace, project_id)}",
+      config=config,
+    )
     return save_config(config, cls.get_project_dir(namespace, project_id))

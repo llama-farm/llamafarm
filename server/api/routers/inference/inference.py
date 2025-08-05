@@ -6,7 +6,7 @@ from atomic_agents.lib.components.agent_memory import AgentMemory
 from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgentInputSchema, BaseAgentOutputSchema
 import instructor
 from openai import OpenAI
-from core.config import settings
+from core.settings import settings
 
 router = APIRouter(
     prefix="/inference",
