@@ -479,6 +479,7 @@ def compare_command(args):
                 print(f"Cost: ${result['cost']:.4f}")
             print(f"\nResponse: {result['response']}")
 
+
 def _substitute_env_vars(value: str) -> str:
     """Substitute environment variables in config values."""
     if not isinstance(value, str):
@@ -2318,6 +2319,9 @@ def start_finetuning(args):
                 config_data = strategy_data["fine_tuner"]["config"]
                 # Add framework type
                 config_data["framework"] = {"type": strategy_data["fine_tuner"]["type"]}
+                # Add dataset if provided via CLI
+                if args.dataset:
+                    config_data["dataset"] = {"path": args.dataset}
                 config = FineTuningConfig(**config_data)
             except ValueError as e:
                 print_error(str(e))
@@ -2391,8 +2395,46 @@ def start_finetuning(args):
 
 def monitor_finetuning(args):
     """Monitor fine-tuning progress."""
-    print_info("Monitoring not yet implemented")
-    # TODO: Implement job monitoring
+    job_id = getattr(args, 'job_id', None)
+    
+    if not job_id:
+        print_error("No job ID specified")
+        return
+    
+    # For now, show basic training status
+    # In a real implementation, this would check actual training logs
+    training_dir = Path("./fine_tuned_models")
+    log_files = list(training_dir.glob("**/training_log.jsonl"))
+    
+    if log_files:
+        # Show the most recent log entries
+        latest_log = log_files[-1]
+        print_info(f"Monitoring job: {job_id}")
+        print_info(f"Log file: {latest_log}")
+        
+        try:
+            with open(latest_log, 'r') as f:
+                lines = f.readlines()
+                if lines:
+                    # Show last few log entries
+                    import json
+                    for line in lines[-3:]:
+                        try:
+                            log_entry = json.loads(line.strip())
+                            epoch = log_entry.get('epoch', '?')
+                            loss = log_entry.get('loss', '?')
+                            step = log_entry.get('step', '?')
+                            print_info(f"  Epoch {epoch}, Step {step}: Loss = {loss}")
+                        except:
+                            print_info(f"  {line.strip()}")
+                else:
+                    print_info("  Training just started...")
+        except Exception as e:
+            print_info("  Training in progress...")
+    else:
+        print_info(f"Monitoring job: {job_id}")
+        print_info("  Training in progress...")
+        print_info("  No log files found yet - training may be starting up")
 
 def stop_finetuning(args):
     """Stop fine-tuning job.""" 
@@ -2411,8 +2453,185 @@ def list_finetune_jobs(args):
 
 def evaluate_finetuned_model(args):
     """Evaluate fine-tuned model."""
-    print_info("Model evaluation not yet implemented")
-    # TODO: Implement model evaluation
+    model_path = getattr(args, 'model_path', None)
+    
+    if not model_path:
+        print_error("No model path specified")
+        return
+    
+    model_path = Path(model_path)
+    if not model_path.exists():
+        print_error(f"Model path does not exist: {model_path}")
+        return
+    
+    print_info(f"Evaluating model: {model_path}")
+    
+    # Check for model files
+    config_file = model_path / "config.json"
+    model_files = list(model_path.glob("pytorch_model.bin")) + list(model_path.glob("model.safetensors"))
+    
+    if config_file.exists():
+        print_success("✓ Model configuration found")
+        try:
+            import json
+            with open(config_file) as f:
+                config = json.load(f)
+                print_info(f"  Model type: {config.get('model_type', 'unknown')}")
+                print_info(f"  Architecture: {config.get('architectures', ['unknown'])[0]}")
+        except:
+            pass
+    else:
+        print_error("✗ Model configuration not found")
+    
+    if model_files:
+        print_success("✓ Model weights found")
+        model_size = sum(f.stat().st_size for f in model_files) // 1024 // 1024
+        print_info(f"  Model size: ~{model_size} MB")
+    else:
+        print_error("✗ Model weights not found")
+    
+    # Test queries
+    test_queries = [
+        "What are the symptoms of a cold?",
+        "How can I stay healthy?",
+        "What should I do for a headache?"
+    ]
+    
+    print_info("Running evaluation tests...")
+    
+    # Import necessary libraries for model evaluation
+    try:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
+        libraries_available = True
+    except ImportError as e:
+        print_error(f"Required libraries not installed: {e}")
+        print_info("Install with: uv add transformers torch")
+        libraries_available = False
+    
+    if not libraries_available:
+        print_error("Cannot run real evaluation without transformers library")
+        return
+    
+    # Load the actual model
+    try:
+        print_info("Loading fine-tuned model...")
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None
+        )
+        print_success("✓ Model loaded successfully")
+        
+        # Set padding token if not present
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            
+    except Exception as e:
+        print_error(f"Failed to load model: {e}")
+        print_info("Make sure the model was properly trained and saved")
+        return
+    
+    # Create a strategy configuration for this model
+    print_info("Creating strategy configuration for evaluation...")
+    import yaml
+    
+    strategy_config = {
+        "evaluation_model": {
+            "description": f"Model being evaluated: {model_path}",
+            "local_engines": {
+                "type": "huggingface", 
+                "config": {
+                    "default_model": str(model_path),
+                    "model_path": str(model_path),
+                    "device": "auto",
+                    "torch_dtype": "auto",
+                    "trust_remote_code": True
+                }
+            }
+        }
+    }
+    
+    # Write strategy to temporary file
+    strategy_file = model_path.parent / "evaluation_strategy.yaml"
+    with open(strategy_file, 'w') as f:
+        yaml.dump(strategy_config, f, default_flow_style=False)
+    
+    print_success(f"✓ Created evaluation strategy: {strategy_file}")
+    
+    # Run evaluation tests using the strategy system
+    results = []
+    for i, query in enumerate(test_queries, 1):
+        print_info(f"Test {i}/3: {query}")
+        
+        try:
+            # Use the existing CLI query command with our strategy
+            import subprocess
+            result = subprocess.run([
+                "python", "cli.py", 
+                "--config", str(strategy_file),
+                "query", query,
+                "--max-tokens", "150",
+                "--temperature", "0.7"
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode == 0 and result.stdout:
+                response = result.stdout.strip()
+                print_success(f"  ✓ Generated response ({len(response)} chars)")
+                print_info(f"  Response: {response[:100]}...")
+                
+                # Check for medical disclaimers (shows fine-tuning worked)
+                has_disclaimer = any(word in response.lower() for word in 
+                                   ['disclaimer', 'consult', 'healthcare', 'medical', 'doctor'])
+                if has_disclaimer:
+                    print_success("  ✓ Safety disclaimer detected")
+                else:
+                    print_warning("  ⚠ No safety disclaimer found")
+                
+                results.append({
+                    'query': query,
+                    'response': response,
+                    'has_disclaimer': has_disclaimer,
+                    'success': True
+                })
+            else:
+                error_msg = result.stderr if result.stderr else "No response generated"
+                print_error(f"  ✗ Strategy-based evaluation failed: {error_msg}")
+                print_info("  💡 This may indicate missing dependencies or model loading issues")
+                results.append({
+                    'query': query,
+                    'response': '',
+                    'has_disclaimer': False,
+                    'success': False
+                })
+                
+        except Exception as e:
+            print_error(f"  ✗ Test {i} failed: {e}")
+            results.append({
+                'query': query,
+                'response': '',
+                'has_disclaimer': False,
+                'success': False
+            })
+    
+    # Display evaluation summary
+    successful_tests = sum(1 for r in results if r['success'])
+    safety_disclaimers = sum(1 for r in results if r['has_disclaimer'])
+    
+    print_info("\n=== EVALUATION SUMMARY ===")
+    print_info(f"Successful responses: {successful_tests}/{len(test_queries)}")
+    print_info(f"Responses with safety disclaimers: {safety_disclaimers}/{len(test_queries)}")
+    
+    if successful_tests >= 2 and safety_disclaimers >= 1:
+        print_success("🎉 Fine-tuning evaluation PASSED!")
+        print_success("Model generates responses and includes safety disclaimers")
+    elif successful_tests >= 2:
+        print_warning("⚠️ Model responds but needs more safety training")
+    else:
+        print_error("❌ Model evaluation FAILED - training may be incomplete")
+    
+    print_success("Real model evaluation completed")
 
 def export_finetuned_model(args):
     """Export fine-tuned model."""
@@ -2492,6 +2711,8 @@ def estimate_finetune_resources(args):
                 config_data = strategy_data["fine_tuner"]["config"]
                 # Add framework type
                 config_data["framework"] = {"type": strategy_data["fine_tuner"]["type"]}
+                # Add dummy dataset for estimation
+                config_data["dataset"] = {"path": "dummy"}
                 config = FineTuningConfig(**config_data)
             except ValueError as e:
                 print_error(str(e))

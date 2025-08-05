@@ -222,6 +222,35 @@ def timer(func):
     return dataset_path
 
 
+def create_code_model_strategy(model_path: Path):
+    """Create a strategy configuration for the fine-tuned code model."""
+    import yaml
+    
+    strategy_config = {
+        "finetuned_code_demo": {
+            "description": f"Fine-tuned code generation model from demo4 at {model_path}",
+            "local_engines": {
+                "type": "huggingface",
+                "config": {
+                    "default_model": str(model_path),
+                    "model_path": str(model_path),
+                    "device": "auto",
+                    "torch_dtype": "auto",
+                    "trust_remote_code": True
+                }
+            }
+        }
+    }
+    
+    # Write strategy to temporary file
+    strategy_file = Path("demos/finetuned_code_strategy.yaml")
+    strategy_file.parent.mkdir(exist_ok=True)
+    with open(strategy_file, 'w') as f:
+        yaml.dump(strategy_config, f, default_flow_style=False)
+    
+    console.print(f"[green]✓[/green] Created code model strategy: {strategy_file}")
+    return strategy_file
+
 def main():
     """Run the advanced fine-tuning demo."""
     console.print(Panel("""
@@ -415,8 +444,11 @@ No hardcoded values in demo!
         for prompt in test_prompts:
             console.print(f"\n[cyan]Prompt:[/cyan] {prompt}")
             
+            # Create strategy for this model and use query command
+            strategy_config = create_code_model_strategy(model_path) 
+            
             output, error = run_cli_command(
-                f"python cli.py generate --model {model_path} --prompt \"{prompt}\"",
+                f"python cli.py --config {strategy_config} query \"{prompt}\" --max-tokens 300",
                 show_output=False
             )
             
@@ -436,8 +468,8 @@ No hardcoded values in demo!
     console.print(Panel("""
 [bold]Deployment Commands:[/bold]
 
-1. Test the fine-tuned model:
-   [cyan]python cli.py generate --model ./fine_tuned_models/codellama-13b-code/ --prompt "Write a Python function to merge two sorted lists"[/cyan]
+1. Test the fine-tuned model with strategy:
+   [cyan]python cli.py --config demos/finetuned_code_strategy.yaml query "Write a Python function to merge two sorted lists"[/cyan]
 
 2. Export to Ollama:
    [cyan]python cli.py finetune export --model-path ./fine_tuned_models/codellama-13b-code/ --format ollama --name codellama-code-finetuned[/cyan]
