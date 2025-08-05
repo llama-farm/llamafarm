@@ -111,7 +111,11 @@ async def test_native_tools(request: ChatRequest):
         if MessageAnalyzer.is_project_related(request.message):
             if ResponseAnalyzer.needs_manual_execution(response_message, request.message):
                 print(f"🔧 [Test] Testing manual execution...")
-                manual_result = ToolExecutor.execute_manual(request.message)
+                request_context = {
+                    "namespace": getattr(request, 'namespace', None),
+                    "project_id": getattr(request, 'project_id', None)
+                }
+                manual_result = ToolExecutor.execute_manual(request.message, request_context)
         
         print(f"✅ [Inference] Test completed successfully")
         

@@ -12,41 +12,48 @@ class ToolExecutor:
     """Handles tool execution (both native and manual)"""
     
     @staticmethod
-    def execute_manual(message: str) -> ToolResult:
-        """Manually execute tool based on message analysis"""
+    def execute_manual(message: str, request_context: Optional[Dict[str, Any]] = None) -> ToolResult:
+        """Manually execute tool based on enhanced message analysis"""
         try:
             from tools.projects_tool.tool import ProjectsTool, ProjectsToolInput
             projects_tool = ProjectsTool()
-            action = MessageAnalyzer.determine_action(message)
-            namespace = MessageAnalyzer.extract_namespace(message)
+            
+            # Extract request fields
+            context = request_context or {}
+            request_namespace = context.get("namespace")
+            request_project_id = context.get("project_id")
+            
+            # Use enhanced LLM-based analysis
+            analysis = MessageAnalyzer.analyze_with_llm(message, request_namespace, request_project_id)
+            action = ProjectAction.CREATE if analysis.action.lower() == "create" else ProjectAction.LIST
             
             if action == ProjectAction.CREATE:
-                project_id = MessageAnalyzer.extract_project_id(message)
-                if not project_id:
+                if not analysis.project_id:
                     return ToolResult(
                         success=False,
                         action=action.value,
-                        namespace=namespace,
+                        namespace=analysis.namespace,
                         message="Please specify a project name to create. For example: 'Create project my_app'"
                     )
                 
                 tool_input = ProjectsToolInput(
                     action=action.value,
-                    namespace=namespace,
-                    project_id=project_id
+                    namespace=analysis.namespace,
+                    project_id=analysis.project_id
                 )
             else:
-                tool_input = ProjectsToolInput(action=action.value, namespace=namespace)
+                tool_input = ProjectsToolInput(action=action.value, namespace=analysis.namespace)
             
-            print(f"🔧 [Manual Tool] Executing {action.value} in namespace '{namespace}'" + 
+            print(f"🔧 [Manual Tool] Executing {action.value} in namespace '{analysis.namespace}'" + 
                   (f" with project_id '{tool_input.project_id}'" if hasattr(tool_input, 'project_id') and tool_input.project_id else ""))
+            print(f"🧠 [LLM Analysis] Confidence: {analysis.confidence:.2f}, Reasoning: {analysis.reasoning}")
             
             result = projects_tool.run(tool_input)
             
             return ToolResult(
                 success=result.success,
                 action=action.value,
-                namespace=namespace,
+                namespace=analysis.namespace,
                 result=result,
                 integration_type=IntegrationType.MANUAL
             )
@@ -135,7 +142,12 @@ class ChatProcessor:
         if ResponseAnalyzer.needs_manual_execution(response_message, request.message):
             print(f"🔧 [Inference] Template/incomplete response detected: '{response_message[:100]}...'")
             
-            tool_result = ToolExecutor.execute_manual(request.message)
+            # Pass request fields to enhanced analysis via generic context
+            request_context = {
+                "namespace": getattr(request, 'namespace', None),
+                "project_id": getattr(request, 'project_id', None)
+            }
+            tool_result = ToolExecutor.execute_manual(request.message, request_context)
             
             if tool_result.success:
                 response_message = ResponseFormatter.format_tool_response(tool_result)

@@ -1,4 +1,3 @@
-import uuid
 from typing import Dict, Optional, List, Any
 from pydantic import BaseModel
 from dataclasses import dataclass
@@ -6,6 +5,8 @@ from enum import Enum
 
 class ChatRequest(BaseModel):
     message: str
+    namespace: Optional[str] = None
+    project_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     message: str
