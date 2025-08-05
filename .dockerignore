@@ -13,11 +13,14 @@ htmlcov/
 .venv/
 venv/
 env/
+**/.venv/
+**/venv/
+**/env/
+**/.python-version
 
 # Development files
 .git/
 .gitignore
-README.md
 .pre-commit-config.yaml
 
 # IDE
@@ -38,3 +41,6 @@ dist/
 # Docker
 Dockerfile
 .dockerignore
+
+# Node.js
+node_modules/

@@ -2,6 +2,7 @@
 .ruff_cache/
 node_modules/
 llamafarm-cli
+.python-version
 
 # Generated files
 cli/cmd/config/schema.yaml
@@ -332,7 +333,7 @@ crash_*.txt
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon?
+
 ._*
 .DocumentRevisions-V100
 .fseventsd
@@ -427,7 +428,6 @@ sandbox/
 # Docker
 Dockerfile.local
 docker-compose.override.yml
-.dockerignore
 
 # Container volumes
 docker_volumes/
@@ -576,9 +576,6 @@ build.xml
 # Thumbnails
 *.thumb
 
-# Icon files
-Icon?
-
 # Files that might appear in the root of a volume
 .DocumentRevisions-V100
 .fseventsd
@@ -594,3 +591,10 @@ Icon?
 Network Trash Folder
 Temporary Items
 .apdisk
+.nx/installation
+.nx/cache
+.nx/workspace-data
+
+
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md

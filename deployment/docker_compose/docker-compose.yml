@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   # FastAPI Backend Server
   server:
     build:
-      context: ../server
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: server/Dockerfile
     ports:
-      - "8000:8000"
+      - "7744:8000"
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
@@ -21,10 +19,10 @@ services:
   # React Frontend Designer
   designer:
     build:
-      context: ../designer
+      context: ../../designer
       dockerfile: Dockerfile
     ports:
-      - "3000:80"
+      - "3123:80"
     environment:
       - VITE_APP_API_URL=http://localhost:8000
       - VITE_APP_ENV=production
@@ -42,8 +40,8 @@ services:
   # Python Runtime Service
   runtime:
     build:
-      context: ../runtime
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: runtime/Dockerfile
     environment:
       - PYTHONUNBUFFERED=1
     depends_on:

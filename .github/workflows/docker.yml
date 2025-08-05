@@ -27,13 +27,13 @@ jobs:
             dockerfile: ./designer/Dockerfile
             description: "LlamaFarm Designer - React frontend with nginx"
           - service: server
-            context: ./server
+            context: ./
             dockerfile: ./server/Dockerfile
             description: "LlamaFarm Server - FastAPI backend"
           - service: runtime
-            context: ./runtime
+            context: ./
             dockerfile: ./runtime/Dockerfile
-            description: "LlamaFarm Runtime - Python runtime service"
+            description: "LlamaFarm Runtime"
 
     steps:
       - name: Checkout repository

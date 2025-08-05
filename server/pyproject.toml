@@ -28,7 +28,6 @@ dependencies = [
     "urllib3==1.26.20",
     "six>=1.16.0",
     "requests>=2.25.0",
-
 ]
 
 [project.optional-dependencies]
