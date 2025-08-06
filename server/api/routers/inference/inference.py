@@ -1,5 +1,4 @@
 import uuid
-from typing import Dict, Optional
 
 import instructor
 from atomic_agents.agents.base_agent import (
@@ -13,7 +12,7 @@ from fastapi import APIRouter, Header, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
 
-from core.config import settings
+from core.settings import settings
 
 router = APIRouter(
     prefix="/inference",
@@ -29,7 +28,7 @@ class ChatResponse(BaseModel):
 
 # Store agent instances to maintain conversation context
 # In production, use Redis, database, or other persistent storage
-agent_sessions: Dict[str, BaseAgent] = {}
+agent_sessions: dict[str, BaseAgent] = {}
 
 def create_agent() -> BaseAgent:
     """Create a new agent instance"""
@@ -37,13 +36,14 @@ def create_agent() -> BaseAgent:
     memory = AgentMemory()
     
     # Initialize memory with an initial message from the assistant
-    initial_message = BaseAgentOutputSchema(chat_message="Hello! How can I assist you today?")
+    initial_message = BaseAgentOutputSchema(
+        chat_message="Hello! How can I assist you today?")
     memory.add_message("assistant", initial_message)
     
     # Create OpenAI-compatible client pointing to Ollama
     ollama_client = OpenAI(
         base_url=settings.ollama_host,
-        api_key=settings.ollama_api_key,  # Ollama doesn't require a real API key, but instructor needs something
+        api_key=settings.ollama_api_key,
     )
     
     client = instructor.from_openai(ollama_client)
@@ -52,7 +52,7 @@ def create_agent() -> BaseAgent:
     agent = BaseAgent(
         config=BaseAgentConfig(
             client=client,
-            model=settings.ollama_model,  # Using Ollama model name (make sure this model is installed)
+            model=settings.ollama_model, 
             memory=memory,
         )
     )
@@ -62,7 +62,7 @@ def create_agent() -> BaseAgent:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest, 
-    session_id: Optional[str] = Header(None, alias="X-Session-ID")
+    session_id: str | None = Header(None, alias="X-Session-ID")
 ):
     """Send a message to the chat agent"""
     try:
@@ -90,7 +90,9 @@ async def chat(
         return ChatResponse(message=response_message, session_id=session_id)
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error processing chat: {str(e)}"
+        ) from e
 
 @router.delete("/chat/session/{session_id}")
 async def delete_chat_session(session_id: str):
