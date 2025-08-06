@@ -103,7 +103,7 @@ jobs:
         working-directory: ${{ matrix.component }}
         run: |
           # Install pytest if not already in dependencies
-          uv add --dev pytest pytest-cov || true
+          uv add --dev pytest pytest-cov pytest-asyncio || true
 
       - name: Run linting
         working-directory: ${{ matrix.component }}
