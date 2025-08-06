@@ -4,9 +4,13 @@ import instructor
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from core.logging import FastAPIStructLogger
 from core.settings import settings
 
 from .models import ProjectAction
+
+# Initialize logger
+logger = FastAPIStructLogger()
 
 # Constants
 TEMPLATE_INDICATORS = [
@@ -65,7 +69,7 @@ class LLMAnalyzer:
                 mode=instructor.Mode.JSON,
                 )
         except Exception as e:
-            print(f"Warning: Failed to initialize LLM analyzer client: {e}")
+            logger.warning("Failed to initialize LLM analyzer client", error=str(e))
             self.client = None
     
     def analyze_project_intent(self, message: str) -> ProjectAnalysis:
@@ -117,7 +121,7 @@ Examples:
             return response
             
         except Exception as e:
-            print(f"Warning: LLM analysis failed, falling back to rule-based: {e}")
+            logger.warning("LLM analysis failed, falling back to rule-based", error=str(e))
             return self._fallback_analysis(message)
     
     def _fallback_analysis(self, message: str) -> ProjectAnalysis:
@@ -272,10 +276,7 @@ class ResponseAnalyzer:
         
         # If it looks like hallucinated project data, force tool execution
         if any(indicator in response_lower for indicator in hallucination_indicators):
-            print(
-                "🔧 [ResponseAnalyzer] Detected potential hallucinated project data, "
-                "forcing tool execution"
-                )
+            logger.info("Detected potential hallucinated project data, forcing tool execution")
             return True
         
         # For project queries asking for specific counts/numbers, be more aggressive
@@ -284,10 +285,7 @@ class ResponseAnalyzer:
             ["how many", "count", "number of", "total"]) 
             and
             any(char.isdigit() for char in response) and "found" not in response_lower):
-            print(
-                "🔧 [ResponseAnalyzer] Count query with suspicious numeric response, "
-                "forcing tool execution"
-                )
+            logger.info("Count query with suspicious numeric response, forcing tool execution")
             return True
         
         return False 

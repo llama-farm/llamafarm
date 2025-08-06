@@ -2,9 +2,14 @@ from typing import Any
 
 from atomic_agents import BasicChatInputSchema
 
+from core.logging import FastAPIStructLogger
+
 from .analyzers import MessageAnalyzer, ResponseAnalyzer
 from .factories import AgentFactory
 from .models import IntegrationType, ProjectAction, ToolResult
+
+# Initialize logger
+logger = FastAPIStructLogger()
 
 # Store agent instances to maintain conversation context
 agent_sessions: dict[str, Any] = {}
@@ -56,16 +61,14 @@ class ToolExecutor:
                 tool_input = ProjectsToolInput(
                     action=action.value, namespace=analysis.namespace)
             
-            print(
-                f"🔧 [Manual Tool] Executing {action.value} "
-                f"in namespace '{analysis.namespace}'" + 
-                (f" with project_id '{tool_input.project_id}'" 
-                if hasattr(tool_input, 'project_id') and tool_input.project_id 
-                else "")
-                )
-            print(
-                f"🧠 [LLM Analysis] Confidence: {analysis.confidence:.2f}, "
-                f"Reasoning: {analysis.reasoning}")
+            logger.info(
+                "Executing manual tool action",
+                action=action.value,
+                namespace=analysis.namespace,
+                project_id=getattr(tool_input, 'project_id', None) if hasattr(tool_input, 'project_id') else None,
+                confidence=analysis.confidence,
+                reasoning=analysis.reasoning
+            )
             
             result = projects_tool.run(tool_input)
             
@@ -78,7 +81,7 @@ class ToolExecutor:
             )
             
         except Exception as e:
-            print(f"❌ [Manual Tool] Error: {str(e)}")
+            logger.error("Manual tool execution failed", error=str(e))
             return ToolResult(
                 success=False,
                 action="unknown",
@@ -153,16 +156,16 @@ class ChatProcessor:
         if session_id not in agent_sessions:
             agent = AgentFactory.create_agent()
             agent_sessions[session_id] = agent
-            print(f"🆕 [Inference] Created new agent session: {session_id}")
+            logger.info("Created new agent session", session_id=session_id)
         else:
             agent = agent_sessions[session_id]
-            print(f"🔄 [Inference] Using existing agent session: {session_id}")
+            logger.info("Using existing agent session", session_id=session_id)
 
         # Run agent
-        print(
-            f"🤖 [Inference] Running agent with message: "
-            f"'{request.message[:100]}...'"
-            )
+        logger.info(
+            "Running agent with message",
+            message_preview=request.message[:100] + "..."
+        )
         input_schema = BasicChatInputSchema(chat_message=request.message)
         response = agent.run(input_schema)
         
@@ -171,14 +174,14 @@ class ChatProcessor:
             response_message = response.chat_message
         else:
             response_message = str(response)
-        print(f"📤 [Inference] Initial agent response: {response_message[:200]}...")
+        logger.info("Initial agent response", response_preview=response_message[:200] + "...")
         
         # Check if manual execution is needed
         if ResponseAnalyzer.needs_manual_execution(response_message, request.message):
-            print(
-                f"🔧 [Inference] Template/incomplete response detected: "
-                f"'{response_message[:100]}...'"
-                )
+            logger.info(
+                "Template/incomplete response detected",
+                response_preview=response_message[:100] + "..."
+            )
             
             # Pass request fields to enhanced analysis via generic context
             request_context = {
@@ -190,11 +193,11 @@ class ChatProcessor:
             if tool_result.success:
                 response_message = ResponseFormatter.format_tool_response(tool_result)
                 tool_info = ResponseFormatter.create_tool_info(tool_result)
-                print("✅ [Inference] Manual execution successful")
+                logger.info("Manual execution successful")
             else:
                 response_message = tool_result.message
                 tool_info = ResponseFormatter.create_tool_info(tool_result)
-                print("❌ [Inference] Manual execution failed")
+                logger.error("Manual execution failed")
         
         elif MessageAnalyzer.is_project_related(request.message):
             tool_info = [{
@@ -214,9 +217,9 @@ class AgentSessionManager:
     def get_session(session_id: str) -> Any:
         """Get existing session or create new one"""
         if session_id not in agent_sessions:
-            agent = AgentFactory.create_agent()
-            agent_sessions[session_id] = agent
-            print(f"🆕 [Inference] Created new agent session: {session_id}")
+                    agent = AgentFactory.create_agent()
+        agent_sessions[session_id] = agent
+        logger.info("Created new agent session", session_id=session_id)
         return agent_sessions[session_id]
     
     @staticmethod
@@ -225,7 +228,7 @@ class AgentSessionManager:
         if session_id in agent_sessions:
             agent_sessions[session_id].reset_history()
             del agent_sessions[session_id]
-            print(f"🗑️ [Inference] Deleted session: {session_id}")
+            logger.info("Deleted session", session_id=session_id)
             return True
         return False
     

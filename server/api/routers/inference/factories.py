@@ -9,9 +9,13 @@ from atomic_agents import (
 )
 from openai import OpenAI
 
+from core.logging import FastAPIStructLogger
 from core.settings import settings
 
 from .models import ModelCapabilities
+
+# Initialize logger
+logger = FastAPIStructLogger()
 
 # Constants
 TOOL_CALLING_MODELS = [
@@ -90,26 +94,24 @@ Format project lists in a readable way with bullet points."""
     @staticmethod
     def create_agent() -> AtomicAgent[BasicChatInputSchema, BasicChatOutputSchema]:
         """Create a new agent instance with enhanced tool integration"""
-        print("🔧 [Inference] Creating new agent...")
+        logger.info("Creating new agent")
         
         # Get model capabilities
         capabilities = ModelManager.get_capabilities(settings.ollama_model)
-        print(
-            f"🔍 [Inference] Model {settings.ollama_model} tool calling support: "
-            f"{capabilities.supports_tools}"
-            )
-        print(
-            f"✅ [Inference] Using {capabilities.instructor_mode.value} "
-            "mode for instructor"
-            )
+        logger.info(
+            "Model capabilities determined",
+            model=settings.ollama_model,
+            supports_tools=capabilities.supports_tools,
+            instructor_mode=capabilities.instructor_mode.value
+        )
 
         # Create tool instances
         try:
             from tools.projects_tool.tool import ProjectsTool
             projects_tool = ProjectsTool()
-            print("✅ [Inference] Created ProjectsTool instance")
-        except ImportError:
-            print("❌ [Inference] Failed to import ProjectsTool: {e}")
+            logger.info("Created ProjectsTool instance")
+        except ImportError as e:
+            logger.error("Failed to import ProjectsTool", error=str(e))
             projects_tool = None
         
         # Create system prompt and agent config
@@ -124,10 +126,10 @@ Format project lists in a readable way with bullet points."""
         )
         
         if capabilities.supports_tools and projects_tool:
-            print("✅ [Inference] Added native tool support")
+            logger.info("Added native tool support")
         else:
-            print("⚠️ [Inference] No native tools added - will use manual execution")
+            logger.warning("No native tools added - will use manual execution")
         
         agent = AtomicAgent[BasicChatInputSchema, BasicChatOutputSchema](agent_config)
-        print("✅ [Inference] Agent created successfully")
+        logger.info("Agent created successfully")
         return agent 
