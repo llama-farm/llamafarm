@@ -199,11 +199,13 @@ test_prerequisites() {
 
     # Check go version
     if command -v go > /dev/null; then
-        local go_version=$(go version | awk '{print $3}' | sed 's/go//')
+        local go_version
+        go_version=$(go version | awk '{print $3}' | sed 's/go//')
         info "Go version: $go_version"
 
         # Check if go version is 1.19 or later (simple check)
-        if [[ "$go_version" > "1.19" ]] || [[ "$go_version" == "1.19"* ]]; then
+        # Use bc to compare Go version numbers (supports decimals)
+        if echo "$go_version >= 1.19" | bc -l | grep -q 1; then
             success "Go version is compatible"
         else
             warning "Go version may be too old (need 1.19+)"
@@ -216,11 +218,13 @@ test_security() {
     info "Testing security aspects..."
 
     # Check script permissions
-    local perms=$(stat -c %a install.sh 2>/dev/null || stat -f %Lp install.sh)
+    local perms
+    perms=$(stat -c %a install.sh 2>/dev/null || stat -f %Lp install.sh)
     info "Install script permissions: $perms"
 
     # Check for basic security patterns
-    local security_checks=0
+    local security_checks
+    security_checks=0
 
     if grep -q "set -e" install.sh; then
         success "✓ Script uses 'set -e' for error handling"
