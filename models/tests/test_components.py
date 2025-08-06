@@ -132,16 +132,13 @@ class TestModelManager:
         assert manager._fine_tuner is None
         assert manager._model_app is None
     
-    @patch('models.core.model_manager.StrategyManager')
-    def test_from_strategy(self, mock_strategy_manager):
+    def test_from_strategy(self):
         """Test creating ModelManager from strategy."""
-        mock_strategy_manager.return_value.load_strategy.return_value = {
-            "model_app": {"type": "ollama", "config": {}}
-        }
-        
-        manager = ModelManager.from_strategy("test_strategy")
+        # Use an existing strategy instead of mocking
+        manager = ModelManager.from_strategy("local_development")
         
         assert manager.config["model_app"]["type"] == "ollama"
+        assert manager.config["strategy"] == "local_development"
     
     def test_get_config_summary(self, mock_config):
         """Test configuration summary."""
@@ -236,11 +233,11 @@ class TestPyTorchFineTuner:
             }
         }
     
-    @patch('models.components.fine_tuners.pytorch.pytorch_fine_tuner.PYTORCH_AVAILABLE', False)
+    @patch('components.fine_tuners.pytorch.pytorch_fine_tuner.PYTORCH_AVAILABLE', False)
     def test_pytorch_unavailable(self):
         """Test handling when PyTorch is not available."""
         with pytest.raises(ImportError):
-            from components.fine_tuners.pytorch import PyTorchFineTuner
+            from components.fine_tuners.pytorch.pytorch_fine_tuner import PyTorchFineTuner
             tuner = PyTorchFineTuner({})
     
     def test_pytorch_config_validation(self, pytorch_config):
@@ -327,21 +324,23 @@ class TestOpenAIAPI:
             "timeout": 60
         }
     
-    @patch('models.components.cloud_apis.openai.openai_api.OPENAI_AVAILABLE', False)
+    @patch('components.cloud_apis.openai.openai_api.OPENAI_AVAILABLE', False)
     def test_openai_unavailable(self):
         """Test handling when OpenAI package is not available."""
         with pytest.raises(ImportError):
-            from components.cloud_apis.openai import OpenAIAPI
+            from components.cloud_apis.openai.openai_api import OpenAIAPI
             api = OpenAIAPI({})
     
-    @patch('models.components.cloud_apis.openai.openai_api.OPENAI_AVAILABLE', True)
-    @patch('models.components.cloud_apis.openai.openai_api.OpenAI')
+    @patch('components.cloud_apis.openai.openai_api.OPENAI_AVAILABLE', True)
+    @patch('components.cloud_apis.openai.openai_api.OpenAI')
+    @patch('components.cloud_apis.openai.openai_api.os.environ', {})
     def test_openai_initialization(self, mock_openai_class, openai_config):
         """Test OpenAI initialization."""
-        from components.cloud_apis.openai import OpenAIAPI
+        from components.cloud_apis.openai.openai_api import OpenAIAPI
         
         api = OpenAIAPI(openai_config)
-        mock_openai_class.assert_called_once_with(api_key="test-key")
+        # The OpenAI client should be called with api_key and organization=None
+        mock_openai_class.assert_called_once_with(api_key="test-key", organization=None)
 
 
 class TestHuggingFaceRepository:
@@ -355,18 +354,18 @@ class TestHuggingFaceRepository:
             "cache_dir": "/tmp/hf_cache"
         }
     
-    @patch('models.components.model_repositories.huggingface.huggingface_repository.HUGGINGFACE_AVAILABLE', False)
+    @patch('components.model_repositories.huggingface.huggingface_repository.HUGGINGFACE_AVAILABLE', False)
     def test_hf_unavailable(self):
         """Test handling when HuggingFace Hub is not available."""
         with pytest.raises(ImportError):
-            from components.model_repositories.huggingface import HuggingFaceRepository
+            from components.model_repositories.huggingface.huggingface_repository import HuggingFaceRepository
             repo = HuggingFaceRepository({})
     
-    @patch('models.components.model_repositories.huggingface.huggingface_repository.HUGGINGFACE_AVAILABLE', True)
-    @patch('models.components.model_repositories.huggingface.huggingface_repository.HfApi')
+    @patch('components.model_repositories.huggingface.huggingface_repository.HUGGINGFACE_AVAILABLE', True)
+    @patch('components.model_repositories.huggingface.huggingface_repository.HfApi')
     def test_hf_initialization(self, mock_hf_api, hf_config):
         """Test HuggingFace initialization."""
-        from components.model_repositories.huggingface import HuggingFaceRepository
+        from components.model_repositories.huggingface.huggingface_repository import HuggingFaceRepository
         
         repo = HuggingFaceRepository(hf_config)
         assert repo.token == "test-token"

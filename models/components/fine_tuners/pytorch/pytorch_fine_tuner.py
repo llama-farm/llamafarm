@@ -33,6 +33,7 @@ try:
     from datasets import load_dataset, Dataset
     import transformers
     PYTORCH_AVAILABLE = True
+    IMPORT_ERROR = None
 except ImportError as e:
     PYTORCH_AVAILABLE = False
     IMPORT_ERROR = e
