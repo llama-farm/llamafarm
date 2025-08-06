@@ -60,7 +60,7 @@ The document concludes with this final section that summarizes the content."""
     @pytest.fixture
     def default_parser(self):
         """Create default text parser."""
-        return PlainTextParser({
+        return PlainTextParser(name="PlainTextParser", config={
             "encoding": "utf-8",
             "chunk_size": None,
             "preserve_line_breaks": True,
@@ -71,7 +71,7 @@ The document concludes with this final section that summarizes the content."""
     def test_parser_initialization(self):
         """Test parser initialization with different configs."""
         # Default config
-        parser = PlainTextParser()
+        parser = PlainTextParser(name="PlainTextParser")
         assert parser is not None
         assert parser.encoding == "auto"
         assert parser.preserve_line_breaks == True
@@ -84,7 +84,7 @@ The document concludes with this final section that summarizes the content."""
             "strip_empty_lines": False,
             "detect_structure": False
         }
-        parser = PlainTextParser(custom_config)
+        parser = PlainTextParser(name="PlainTextParser", config=custom_config)
         assert parser.encoding == "utf-8"
         assert parser.chunk_size == 1000
         assert parser.preserve_line_breaks == False
@@ -140,7 +140,7 @@ The document concludes with this final section that summarizes the content."""
     def test_chunking_functionality(self, sample_text_content):  
         """Test document chunking with size limits."""
         # Create parser with small chunk size
-        chunking_parser = PlainTextParser({
+        chunking_parser = PlainTextParser(name="PlainTextParser", config={
             "chunk_size": 200,  # Small chunk size
             "preserve_line_breaks": True
         })
