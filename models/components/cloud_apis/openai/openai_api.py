@@ -40,8 +40,11 @@ class OpenAIAPI(BaseCloudAPI):
         # Create client without organization to avoid mismatched organization errors
         # Explicitly set organization=None to prevent auto-reading from OPENAI_ORG_ID env var
         self.client = OpenAI(api_key=api_key, organization=None)
+        
+        # Debug: Log what organization is set
+        logger.debug(f"OpenAI client created with organization: {self.client.organization}")
             
-        self.default_model = config.get("default_model", "gpt-3.5-turbo")
+        self.default_model = config.get("default_model", "gpt-4o-mini")
     
     def validate_credentials(self) -> bool:
         """Validate API credentials."""
@@ -153,6 +156,10 @@ class OpenAIAPI(BaseCloudAPI):
                 
         except Exception as e:
             logger.error(f"Chat failed: {e}")
+            # Log additional details for debugging
+            if hasattr(e, 'response'):
+                logger.debug(f"Error response: {getattr(e.response, 'text', 'No text')}")
+            logger.debug(f"Client organization: {self.client.organization}")
             raise e  # Re-raise to allow fallback handling
     
     def _stream_completion_response(self, response) -> Generator[str, None, None]:

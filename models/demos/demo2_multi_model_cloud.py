@@ -48,9 +48,9 @@ This demo shows:
     # Model configurations for different tasks
     model_configs = {
         "simple": {
-            "model": "gpt-3.5-turbo",
-            "name": "GPT-3.5 Turbo",
-            "cost_per_1k": 0.0015,
+            "model": "gpt-4o-mini",
+            "name": "GPT-4o Mini",
+            "cost_per_1k": 0.0002,
             "use_case": "Simple queries, classifications"
         },
         "reasoning": {
@@ -240,7 +240,7 @@ Total Cost: ${total_cost:.4f}
 Average Response Time: {avg_time:.2f}s
 
 [bold]Cost Optimization:[/bold]
-• Simple tasks: GPT-3.5 Turbo (90% cost savings vs GPT-4)
+• Simple tasks: GPT-4o Mini (99% cost savings vs GPT-4)
 • Complex tasks: GPT-4 only when needed
 • Total savings: ~65% vs using GPT-4 for everything
 
