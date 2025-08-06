@@ -1,13 +1,13 @@
 """Tool service for the new atomic tool architecture"""
 
 import logging
-from typing import Dict, Optional, List, Any, Tuple
-from atomic_agents import BasicChatInputSchema
+from typing import Any
 
-from tools.core import ToolRegistry, get_tool, list_tools, ToolExecutionResult
-from tools.core.errors import ToolNotFoundError, ToolExecutionError
-from .models import ToolResult, IntegrationType, ProjectAction
-from .analyzers import MessageAnalyzer, ResponseAnalyzer
+from tools.core import get_tool, list_tools
+from tools.core.errors import ToolExecutionError, ToolNotFoundError
+
+from .analyzers import MessageAnalyzer
+from .models import IntegrationType, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,8 @@ class AtomicToolExecutor:
     """Handles tool execution using the new atomic tool architecture"""
     
     @staticmethod
-    def execute_tool(tool_name: str, message: str, request_context: Optional[Dict[str, Any]] = None) -> ToolResult:
+    def execute_tool(tool_name: str, message: str, request_context: 
+        dict[str, Any] | None = None) -> ToolResult:
         """
         Execute a tool by name using message analysis with optional request context.
         
@@ -34,12 +35,16 @@ class AtomicToolExecutor:
             
             # Analyze message for parameters - each tool handles its own analysis
             if tool_name == "projects":
-                input_dict = AtomicToolExecutor._extract_projects_input(message, request_context or {})
+                input_dict = AtomicToolExecutor._extract_projects_input(
+                    message, request_context or {})
                 # Convert dict to ProjectsToolInput
                 from tools.projects_tool.tool.projects_tool import ProjectsToolInput
                 input_data = ProjectsToolInput(**input_dict)
             else:
-                raise ToolExecutionError(tool_name, f"Message analysis not implemented for tool: {tool_name}")
+                raise ToolExecutionError(
+                    tool_name, 
+                    f"Message analysis not implemented for tool: {tool_name}"
+                    )
             
             # Execute tool
             result = tool.run(input_data)
@@ -49,7 +54,11 @@ class AtomicToolExecutor:
                 success=result.success,
                 action=getattr(input_data, "action", "unknown"),
                 namespace=getattr(input_data, "namespace", "unknown"),
-                message=result.message if hasattr(result, 'message') else ("Success" if result.success else "Tool execution failed"),
+                message=(
+                    result.message 
+                    if hasattr(result, 'message') 
+                    else ("Success" if result.success else "Tool execution failed")
+                    ),
                 result=result,
                 integration_type=IntegrationType.MANUAL
             )
@@ -75,14 +84,17 @@ class AtomicToolExecutor:
             )
     
     @staticmethod
-    def _extract_projects_input(message: str, request_context: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_projects_input(
+        message: str, request_context: dict[str, Any]
+        ) -> dict[str, Any]:
         """Extract input parameters for projects tool from message and request context"""
         # Extract projects-specific fields from generic request context
         request_namespace = request_context.get("namespace")
         request_project_id = request_context.get("project_id")
         
         # Use enhanced LLM-based analysis with request field support
-        analysis = MessageAnalyzer.analyze_with_llm(message, request_namespace, request_project_id)
+        analysis = MessageAnalyzer.analyze_with_llm(
+            message, request_namespace, request_project_id)
         
         input_data = {
             "action": analysis.action,
@@ -95,7 +107,7 @@ class AtomicToolExecutor:
         return input_data
     
     @staticmethod
-    def get_available_tools() -> List[Dict[str, Any]]:
+    def get_available_tools() -> list[dict[str, Any]]:
         """Get information about all available tools from registry"""
         available_tools = []
         
@@ -122,7 +134,9 @@ class AtomicToolExecutor:
                         "parameters": {
                             "action": "Required: 'list' or 'create'",
                             "namespace": "Required: namespace string",
-                            "project_id": "Required for create action: project identifier"
+                            "project_id": (
+                                "Required for create action: project identifier"
+                                )
                         },
                         "examples": [
                             "List my projects",
@@ -147,7 +161,7 @@ class AtomicToolExecutor:
         return available_tools
     
     @staticmethod
-    def health_check_all() -> Dict[str, bool]:
+    def health_check_all() -> dict[str, bool]:
         """Perform health checks on all registered tools"""
         health_status = {}
         
@@ -169,26 +183,56 @@ class ToolRegistryManager:
     def initialize_tools():
         """Initialize and register all available tools"""
         try:
-            # Import and register projects tool
+            logger.info("Starting tool initialization...")
+            
+            # Force import and instantiate tools to ensure @tool decorator runs
             from tools.projects_tool.tool.projects_tool import ProjectsTool
-            logger.info("Projects tool registered automatically via @tool decorator")
+            
+            # Create instance to trigger registration if needed
+            projects_tool = ProjectsTool()
+            logger.info(f"ProjectsTool instantiated: {projects_tool}")
+            
+            # Verify registration worked
+            registered_tools = list_tools()
+            logger.info(f"Tools registered after import: {registered_tools}")
+            
+            if "projects" not in registered_tools:
+                logger.warning("Projects tool not found in registry after import")
+                # Try manual registration if auto-registration failed
+                from tools.core import register_tool
+                register_tool("projects", projects_tool)
+                logger.info("Manually registered projects tool")
+                
+                # Verify again
+                registered_tools = list_tools()
+                logger.info(f"Tools registered after manual registration: {registered_tools}")
             
             # Add future tool imports here
             # from tools.documents_tool.tool import DocumentsTool
+            # documents_tool = DocumentsTool()
             # from tools.analytics_tool.tool import AnalyticsTool
+            # analytics_tool = AnalyticsTool()
             
-            # Log registered tools
-            registered_tools = list_tools()
-            logger.info(f"Successfully initialized {len(registered_tools)} tools: {registered_tools}")
+            # Final verification
+            final_tools = list_tools()
+            logger.info(
+                f"Successfully initialized {len(final_tools)} tools: "
+                f"{final_tools}"
+            )
             
-            return True
+            return len(final_tools) > 0
             
+        except ImportError as e:
+            logger.error(f"Failed to import tools: {e}")
+            logger.error("Check that tools.projects_tool.tool.projects_tool module exists")
+            return False
         except Exception as e:
             logger.error(f"Failed to initialize tools: {e}")
+            logger.exception("Full traceback:")
             return False
     
     @staticmethod
-    def get_registry_status() -> Dict[str, Any]:
+    def get_registry_status() -> dict[str, Any]:
         """Get status information about the tool registry"""
         try:
             tools = list_tools()
@@ -212,3 +256,21 @@ class ToolRegistryManager:
                 "registry_available": False,
                 "error": str(e)
             }
+
+
+# Auto-initialize tools when module is imported
+def _auto_initialize():
+    """Automatically initialize tools when this module is imported"""
+    try:
+        logger.info("Auto-initializing tools on module import...")
+        success = ToolRegistryManager.initialize_tools()
+        if success:
+            logger.info("Auto-initialization completed successfully")
+        else:
+            logger.warning("Auto-initialization completed with issues")
+    except Exception as e:
+        logger.error(f"Auto-initialization failed: {e}")
+
+
+# Run auto-initialization
+_auto_initialize()

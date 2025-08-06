@@ -1,10 +1,12 @@
 import re
-from typing import Optional
-from pydantic import BaseModel, Field
+
 import instructor
 from openai import OpenAI
+from pydantic import BaseModel, Field
+
+from core.settings import settings
+
 from .models import ProjectAction
-from core.config import settings
 
 # Constants
 TEMPLATE_INDICATORS = [
@@ -37,8 +39,10 @@ EXCLUDED_NAMESPACES = ["the", "a", "an", "my", "projects", "project"]
 class ProjectAnalysis(BaseModel):
     """Structured output for project-related message analysis"""
     action: str = Field(description="The action to take: 'create' or 'list'")
-    namespace: Optional[str] = Field(description="The namespace mentioned, or None if not specified")
-    project_id: Optional[str] = Field(description="The project ID/name for create actions, or None if not specified")
+    namespace: str | None = Field(
+        description="The namespace mentioned, or None if not specified")
+    project_id: str | None = Field(
+        description="The project ID/name for create actions, or None if not specified")
     confidence: float = Field(description="Confidence score between 0 and 1")
     reasoning: str = Field(description="Brief explanation of the analysis")
 
@@ -56,7 +60,10 @@ class LLMAnalyzer:
                 base_url=settings.ollama_host,
                 api_key=settings.ollama_api_key,
             )
-            self.client = instructor.from_openai(ollama_client, mode=instructor.Mode.JSON)
+            self.client = instructor.from_openai(
+                ollama_client, 
+                mode=instructor.Mode.JSON,
+                )
         except Exception as e:
             print(f"Warning: Failed to initialize LLM analyzer client: {e}")
             self.client = None
@@ -92,7 +99,8 @@ Examples:
 - "create project myapp" → create, namespace: test, project_id: myapp
 - "list projects in production" → list, namespace: production, project_id: null
 - "show me my projects" → list, namespace: test, project_id: null
-- "make a new project called demo in dev namespace" → create, namespace: dev, project_id: demo
+- "make a new project called demo in dev namespace" 
+→ create, namespace: dev, project_id: demo
 """
 
             response = self.client.chat.completions.create(
@@ -116,7 +124,11 @@ Examples:
         """Fallback to rule-based analysis when LLM is unavailable"""
         action = MessageAnalyzer.determine_action_legacy(message)
         namespace = MessageAnalyzer.extract_namespace(message)
-        project_id = MessageAnalyzer.extract_project_id(message) if action == ProjectAction.CREATE else None
+        project_id = MessageAnalyzer.extract_project_id(message) 
+        if action == ProjectAction.CREATE:
+            project_id = MessageAnalyzer.extract_project_id(message)
+        else:
+            project_id = None
         
         return ProjectAnalysis(
             action=action.value,
@@ -140,7 +152,11 @@ class MessageAnalyzer:
         return cls._llm_analyzer
     
     @staticmethod
-    def analyze_with_llm(message: str, request_namespace: Optional[str] = None, request_project_id: Optional[str] = None) -> ProjectAnalysis:
+    def analyze_with_llm(
+        message: str,
+        request_namespace: str | None = None,
+        request_project_id: str | None = None,
+    ) -> ProjectAnalysis:
         """
         Enhanced analysis using LLM with request field override support.
         This is the new primary method for message analysis.
@@ -152,11 +168,11 @@ class MessageAnalyzer:
         # Override with request fields if provided (suggestion 2)
         if request_namespace is not None:
             analysis.namespace = request_namespace
-            analysis.reasoning += f" (namespace overridden from request field)"
+            analysis.reasoning += " (namespace overridden from request field)"
         
         if request_project_id is not None:
             analysis.project_id = request_project_id
-            analysis.reasoning += f" (project_id overridden from request field)"
+            analysis.reasoning += " (project_id overridden from request field)"
         
         # Use default namespace if still None
         if analysis.namespace is None:
@@ -180,7 +196,7 @@ class MessageAnalyzer:
         return "test"  # default
 
     @staticmethod
-    def extract_project_id(message: str) -> Optional[str]:
+    def extract_project_id(message: str) -> str | None:
         """Extract project ID from create project messages (legacy method)"""
         message_lower = message.lower()
         
@@ -195,13 +211,18 @@ class MessageAnalyzer:
     def determine_action_legacy(message: str) -> ProjectAction:
         """Determine if user wants to create or list projects (legacy method)"""
         message_lower = message.lower()
-        return ProjectAction.CREATE if any(word in message_lower for word in CREATE_KEYWORDS) else ProjectAction.LIST
+        return ProjectAction.CREATE if any(
+            word in message_lower for word in CREATE_KEYWORDS) else ProjectAction.LIST
     
     @staticmethod
     def determine_action(message: str) -> ProjectAction:
         """Determine if user wants to create or list projects (enhanced method)"""
         analysis = MessageAnalyzer.analyze_with_llm(message)
-        return ProjectAction.CREATE if analysis.action.lower() == "create" else ProjectAction.LIST
+        return (
+            ProjectAction.CREATE
+            if analysis.action.lower() == "create"
+            else ProjectAction.LIST
+        )
 
     @staticmethod
     def is_project_related(message: str) -> bool:
@@ -215,7 +236,8 @@ class ResponseAnalyzer:
     def is_template_response(response: str) -> bool:
         """Detect if response contains template placeholders"""
         response_lower = response.lower()
-        return any(indicator.lower() in response_lower for indicator in TEMPLATE_INDICATORS)
+        return any(
+            indicator.lower() in response_lower for indicator in TEMPLATE_INDICATORS)
 
     @staticmethod
     def needs_manual_execution(response: str, message: str) -> bool:
@@ -250,14 +272,22 @@ class ResponseAnalyzer:
         
         # If it looks like hallucinated project data, force tool execution
         if any(indicator in response_lower for indicator in hallucination_indicators):
-            print(f"🔧 [ResponseAnalyzer] Detected potential hallucinated project data, forcing tool execution")
+            print(
+                "🔧 [ResponseAnalyzer] Detected potential hallucinated project data, "
+                "forcing tool execution"
+                )
             return True
         
         # For project queries asking for specific counts/numbers, be more aggressive
-        if any(word in message.lower() for word in ["how many", "count", "number of", "total"]):
-            # If response contains specific numbers but no tool execution evidence
-            if any(char.isdigit() for char in response) and "found" not in response_lower:
-                print(f"🔧 [ResponseAnalyzer] Count query with suspicious numeric response, forcing tool execution")
-                return True
+        if (
+            any(word in message.lower() for word in 
+            ["how many", "count", "number of", "total"]) 
+            and
+            any(char.isdigit() for char in response) and "found" not in response_lower):
+            print(
+                "🔧 [ResponseAnalyzer] Count query with suspicious numeric response, "
+                "forcing tool execution"
+                )
+            return True
         
         return False 

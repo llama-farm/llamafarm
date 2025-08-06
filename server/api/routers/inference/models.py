@@ -1,17 +1,19 @@
-from typing import Dict, Optional, List, Any
-from pydantic import BaseModel
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel
+
 
 class ChatRequest(BaseModel):
     message: str
-    namespace: Optional[str] = None
-    project_id: Optional[str] = None
+    namespace: str | None = None
+    project_id: str | None = None
 
 class ChatResponse(BaseModel):
     message: str
     session_id: str
-    tool_results: Optional[List[Dict]] = None
+    tool_results: list[dict] | None = None
 
 class IntegrationType(Enum):
     NATIVE = "native_atomic_agents"

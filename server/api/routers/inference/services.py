@@ -1,18 +1,20 @@
-from typing import Dict, Optional, List, Any, Tuple
+from typing import Any
+
 from atomic_agents import BasicChatInputSchema
-from .models import ToolResult, IntegrationType, ProjectAction
+
 from .analyzers import MessageAnalyzer, ResponseAnalyzer
-from .factories import AgentFactory, ModelManager
-from core.config import settings
+from .factories import AgentFactory
+from .models import IntegrationType, ProjectAction, ToolResult
 
 # Store agent instances to maintain conversation context
-agent_sessions: Dict[str, Any] = {}
+agent_sessions: dict[str, Any] = {}
 
 class ToolExecutor:
     """Handles tool execution (both native and manual)"""
     
     @staticmethod
-    def execute_manual(message: str, request_context: Optional[Dict[str, Any]] = None) -> ToolResult:
+    def execute_manual(
+        message: str, request_context: dict[str, Any] | None = None) -> ToolResult:
         """Manually execute tool based on enhanced message analysis"""
         try:
             from tools.projects_tool.tool import ProjectsTool, ProjectsToolInput
@@ -24,8 +26,14 @@ class ToolExecutor:
             request_project_id = context.get("project_id")
             
             # Use enhanced LLM-based analysis
-            analysis = MessageAnalyzer.analyze_with_llm(message, request_namespace, request_project_id)
-            action = ProjectAction.CREATE if analysis.action.lower() == "create" else ProjectAction.LIST
+            analysis = MessageAnalyzer.analyze_with_llm(
+                message, request_namespace, request_project_id
+                )
+            action = (
+                ProjectAction.CREATE 
+                if analysis.action.lower() == "create" 
+                else ProjectAction.LIST
+                )
             
             if action == ProjectAction.CREATE:
                 if not analysis.project_id:
@@ -33,7 +41,10 @@ class ToolExecutor:
                         success=False,
                         action=action.value,
                         namespace=analysis.namespace,
-                        message="Please specify a project name to create. For example: 'Create project my_app'"
+                        message=(
+                            "Please specify a project name to create. "
+                            "For example: 'Create project my_app'"
+                            )
                     )
                 
                 tool_input = ProjectsToolInput(
@@ -42,11 +53,19 @@ class ToolExecutor:
                     project_id=analysis.project_id
                 )
             else:
-                tool_input = ProjectsToolInput(action=action.value, namespace=analysis.namespace)
+                tool_input = ProjectsToolInput(
+                    action=action.value, namespace=analysis.namespace)
             
-            print(f"🔧 [Manual Tool] Executing {action.value} in namespace '{analysis.namespace}'" + 
-                  (f" with project_id '{tool_input.project_id}'" if hasattr(tool_input, 'project_id') and tool_input.project_id else ""))
-            print(f"🧠 [LLM Analysis] Confidence: {analysis.confidence:.2f}, Reasoning: {analysis.reasoning}")
+            print(
+                f"🔧 [Manual Tool] Executing {action.value} "
+                f"in namespace '{analysis.namespace}'" + 
+                (f" with project_id '{tool_input.project_id}'" 
+                if hasattr(tool_input, 'project_id') and tool_input.project_id 
+                else "")
+                )
+            print(
+                f"🧠 [LLM Analysis] Confidence: {analysis.confidence:.2f}, "
+                f"Reasoning: {analysis.reasoning}")
             
             result = projects_tool.run(tool_input)
             
@@ -85,7 +104,10 @@ class ResponseFormatter:
             if result.total == 0:
                 return f"I found no projects in the '{namespace}' namespace."
             
-            response = f"I found {result.total} project(s) in the '{namespace}' namespace:\n\n"
+            response = (
+                f"I found {result.total} project(s) in the '{namespace}' "
+                "namespace:\n\n"
+                )
             if result.projects:
                 for project in result.projects:
                     response += f"• **{project['project_id']}**\n"
@@ -98,28 +120,34 @@ class ResponseFormatter:
         
         elif action == ProjectAction.CREATE.value:
             if result.success:
-                return f"✅ Successfully created project '{result.project_id}' in namespace '{namespace}'"
+                return (
+                    f"✅ Successfully created project '{result.project_id}' "
+                    f"in namespace '{namespace}'"
+                    )
             else:
                 return f"❌ Failed to create project: {result.message}"
         
         return str(result)
 
     @staticmethod
-    def create_tool_info(tool_result: ToolResult) -> List[Dict]:
+    def create_tool_info(tool_result: ToolResult) -> list[dict]:
         """Create tool result information for response"""
         return [{
             "tool_used": "projects",
             "integration_type": tool_result.integration_type.value,
             "action": tool_result.action,
             "namespace": tool_result.namespace,
-            "message": f"{tool_result.integration_type.value.replace('_', ' ').title()} {'successful' if tool_result.success else 'failed'}"
+            "message": (
+                f"{tool_result.integration_type.value.replace('_', ' ').title()} "
+                f"{'successful' if tool_result.success else 'failed'}"
+                )
         }]
 
 class ChatProcessor:
     """Main chat processing logic"""
     
     @staticmethod
-    def process_chat(request: Any, session_id: str) -> Tuple[str, Optional[List[Dict]]]:
+    def process_chat(request: Any, session_id: str) -> tuple[str, list[dict] | None]:
         """Process chat request and return response with tool info"""
         # Get or create agent
         if session_id not in agent_sessions:
@@ -131,16 +159,26 @@ class ChatProcessor:
             print(f"🔄 [Inference] Using existing agent session: {session_id}")
 
         # Run agent
-        print(f"🤖 [Inference] Running agent with message: '{request.message[:100]}...'")
+        print(
+            f"🤖 [Inference] Running agent with message: "
+            f"'{request.message[:100]}...'"
+            )
         input_schema = BasicChatInputSchema(chat_message=request.message)
         response = agent.run(input_schema)
         
-        response_message = response.chat_message if hasattr(response, 'chat_message') else str(response)
+        response_message = response.chat_message 
+        if hasattr(response, 'chat_message'):
+            response_message = response.chat_message
+        else:
+            response_message = str(response)
         print(f"📤 [Inference] Initial agent response: {response_message[:200]}...")
         
         # Check if manual execution is needed
         if ResponseAnalyzer.needs_manual_execution(response_message, request.message):
-            print(f"🔧 [Inference] Template/incomplete response detected: '{response_message[:100]}...'")
+            print(
+                f"🔧 [Inference] Template/incomplete response detected: "
+                f"'{response_message[:100]}...'"
+                )
             
             # Pass request fields to enhanced analysis via generic context
             request_context = {
@@ -152,11 +190,11 @@ class ChatProcessor:
             if tool_result.success:
                 response_message = ResponseFormatter.format_tool_response(tool_result)
                 tool_info = ResponseFormatter.create_tool_info(tool_result)
-                print(f"✅ [Inference] Manual execution successful")
+                print("✅ [Inference] Manual execution successful")
             else:
                 response_message = tool_result.message
                 tool_info = ResponseFormatter.create_tool_info(tool_result)
-                print(f"❌ [Inference] Manual execution failed")
+                print("❌ [Inference] Manual execution failed")
         
         elif MessageAnalyzer.is_project_related(request.message):
             tool_info = [{
@@ -197,6 +235,6 @@ class AgentSessionManager:
         return len(agent_sessions)
     
     @staticmethod
-    def get_session_ids() -> List[str]:
+    def get_session_ids() -> list[str]:
         """Get list of active session IDs"""
         return list(agent_sessions.keys()) 

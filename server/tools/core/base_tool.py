@@ -2,10 +2,10 @@
 Base tool definitions and execution result classes.
 """
 
-from typing import Any, Optional
 from dataclasses import dataclass
-from atomic_agents import BaseTool as AtomicBaseTool
+from typing import Any
 
+from atomic_agents import BaseTool as AtomicBaseTool
 
 # Re-export atomic_agents BaseTool for consistency
 BaseTool = AtomicBaseTool
@@ -15,9 +15,9 @@ BaseTool = AtomicBaseTool
 class ToolExecutionResult:
     """Result of tool execution."""
     success: bool
-    data: Optional[Any] = None
-    error_message: Optional[str] = None
-    metadata: Optional[dict] = None
+    data: Any | None = None
+    error_message: str | None = None
+    metadata: dict | None = None
     
     def __post_init__(self):
         """Ensure we have either data or error_message based on success."""
