@@ -39,9 +39,27 @@ class ProcessingResult:
 class Component(ABC):
     """Base class for all pipeline components."""
 
-    def __init__(self, name: str = None, config: Dict[str, Any] = None):
-        self.name = name or self.__class__.__name__
-        self.config = config or {}
+    def __init__(self, name_or_config: Any = None, config: Dict[str, Any] = None):
+        # Handle backwards compatibility
+        # If first arg is a dict, treat it as config (old style)
+        # If first arg is a string, treat it as name (new style)
+        if isinstance(name_or_config, dict):
+            # Old style: Component(config_dict)
+            self.name = self.__class__.__name__
+            self.config = name_or_config
+        elif isinstance(name_or_config, str):
+            # New style: Component(name, config)
+            self.name = name_or_config
+            self.config = config or {}
+        elif name_or_config is None:
+            # Default: Component()
+            self.name = self.__class__.__name__
+            self.config = config or {}
+        else:
+            # Fallback for any other type
+            self.name = self.__class__.__name__
+            self.config = {}
+            
         self.logger = logging.getLogger(self.name)
 
     @abstractmethod

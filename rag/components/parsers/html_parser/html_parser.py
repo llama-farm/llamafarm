@@ -22,14 +22,13 @@ class HtmlParser(Parser):
     
     def __init__(self, name: str = "HtmlParser", config: Optional[Dict[str, Any]] = None):
         super().__init__(name, config)
-        config = config or {}
-        self.extract_links = config.get("extract_links", True)
-        self.extract_images = config.get("extract_images", True)
-        self.extract_meta_tags = config.get("extract_meta_tags", True)
-        self.preserve_structure = config.get("preserve_structure", False)
-        self.remove_scripts = config.get("remove_scripts", True)
-        self.remove_styles = config.get("remove_styles", True)
-        self.extract_tables = config.get("extract_tables", False)
+        self.extract_links = self.config.get("extract_links", True)
+        self.extract_images = self.config.get("extract_images", True)
+        self.extract_meta_tags = self.config.get("extract_meta_tags", True)
+        self.preserve_structure = self.config.get("preserve_structure", False)
+        self.remove_scripts = self.config.get("remove_scripts", True)
+        self.remove_styles = self.config.get("remove_styles", True)
+        self.extract_tables = self.config.get("extract_tables", False)
     
     def validate_config(self) -> bool:
         """Validate parser configuration."""
@@ -141,7 +140,8 @@ class HtmlParser(Parser):
         metadata = {
             "type": "html_document",
             "source": source,
-            "content_type": "text/html"
+            "content_type": "text/html",
+            "parser_type": "HTMLParser"
         }
         
         # Extract title
@@ -193,7 +193,8 @@ class HtmlParser(Parser):
             "source": source,
             "section": section_num,
             "header": header,
-            "content_type": "text/html"
+            "content_type": "text/html",
+            "parser_type": "HTMLParser"
         }
         
         doc_id = f"html_section_{section_num}_{hash(content) % 10000}"
@@ -288,6 +289,7 @@ class HtmlParser(Parser):
             "type": "html_document",
             "source": source,
             "content_type": "text/html",
+            "parser_type": "HTMLParser",
             "parser_method": "regex_fallback"
         }
         

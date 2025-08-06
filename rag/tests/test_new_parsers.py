@@ -143,7 +143,10 @@ def test_html_parser():
                 "remove_scripts": True
             })
             
-            docs = parser.parse(temp_file)
+            # HTMLParser expects content, not file path
+            with open(temp_file, 'rb') as f:
+                content = f.read()
+            docs = parser.parse(content, source=temp_file)
             
             assert len(docs) == 1, f"Expected 1 document, got {len(docs)}"
             doc = docs[0]
@@ -298,7 +301,10 @@ And a [link to example](https://example.com).
                 "extract_links": True
             })
             
-            docs = parser.parse(temp_file)
+            # MarkdownParser expects content, not file path
+            with open(temp_file, 'rb') as f:
+                content = f.read()
+            docs = parser.parse(content, source=temp_file)
             
             assert len(docs) >= 1, f"Expected at least 1 document, got {len(docs)}"
             doc = docs[0]

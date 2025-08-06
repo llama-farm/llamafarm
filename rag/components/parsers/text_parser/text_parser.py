@@ -28,7 +28,7 @@ class PlainTextParser(Parser):
             name: Parser name
             config: Parser configuration
         """
-        super().__init__(name=name, config=config or {})
+        super().__init__(name, config)
         
         # Configuration options
         self.encoding = self.config.get("encoding", "auto")  # auto-detect or specify

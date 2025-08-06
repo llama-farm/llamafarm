@@ -152,7 +152,8 @@ Follow us on Twitter @company or Facebook facebook.com/company
         enhanced_docs = extractor.extract([test_doc])
         
         # Get the result from the enhanced document
-        result = enhanced_docs[0].metadata
+        # LinkExtractor stores data in metadata["extractors"]["links"]
+        result = enhanced_docs[0].metadata.get("extractors", {}).get("links", {})
         
         # Check basic structure
         assert "urls" in result, "Should extract URLs"
@@ -259,7 +260,8 @@ Final section content.
         enhanced_docs = extractor.extract([test_doc])
         
         # Get the result from the enhanced document
-        result = enhanced_docs[0].metadata
+        # HeadingExtractor stores data in metadata["extractors"]["headings"]
+        result = enhanced_docs[0].metadata.get("extractors", {}).get("headings", {})
         
         # Check basic structure
         assert "headings" in result, "Should extract headings"

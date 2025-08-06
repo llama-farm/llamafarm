@@ -23,12 +23,11 @@ class DocxParser(Parser):
     
     def __init__(self, name: str = "DocxParser", config: Optional[Dict[str, Any]] = None):
         super().__init__(name, config)
-        config = config or {}
-        self.extract_headers = config.get("extract_headers", True)
-        self.extract_tables = config.get("extract_tables", True)
-        self.extract_images = config.get("extract_images", False)
-        self.preserve_structure = config.get("preserve_structure", True)
-        self.include_metadata = config.get("include_metadata", True)
+        self.extract_headers = self.config.get("extract_headers", True)
+        self.extract_tables = self.config.get("extract_tables", True)
+        self.extract_images = self.config.get("extract_images", False)
+        self.preserve_structure = self.config.get("preserve_structure", True)
+        self.include_metadata = self.config.get("include_metadata", True)
     
     def validate_config(self) -> bool:
         """Validate parser configuration."""

@@ -15,11 +15,10 @@ class MarkdownParser(Parser):
     
     def __init__(self, name: str = "MarkdownParser", config: Optional[Dict[str, Any]] = None):
         super().__init__(name, config)
-        config = config or {}
-        self.extract_headers = config.get("extract_headers", True)
-        self.extract_links = config.get("extract_links", True)
-        self.extract_code_blocks = config.get("extract_code_blocks", True)
-        self.preserve_structure = config.get("preserve_structure", True)
+        self.extract_headers = self.config.get("extract_headers", True)
+        self.extract_links = self.config.get("extract_links", True)
+        self.extract_code_blocks = self.config.get("extract_code_blocks", True)
+        self.preserve_structure = self.config.get("preserve_structure", True)
     
     def validate_config(self) -> bool:
         """Validate parser configuration."""
@@ -108,7 +107,8 @@ class MarkdownParser(Parser):
             "source": source,
             "section": section_num,
             "header": header,
-            "content_type": "text/markdown"
+            "content_type": "text/markdown",
+            "parser_type": "MarkdownParser"
         }
         
         # Extract additional metadata
@@ -142,7 +142,8 @@ class MarkdownParser(Parser):
         metadata = {
             "type": "markdown_document",
             "source": source,
-            "content_type": "text/markdown"
+            "content_type": "text/markdown",
+            "parser_type": "MarkdownParser"
         }
         
         # Extract metadata

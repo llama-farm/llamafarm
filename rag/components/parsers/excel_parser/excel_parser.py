@@ -30,14 +30,13 @@ class ExcelParser(Parser):
     
     def __init__(self, name: str = "ExcelParser", config: Optional[Dict[str, Any]] = None):
         super().__init__(name, config)
-        config = config or {}
-        self.parse_all_sheets = config.get("parse_all_sheets", True)
-        self.max_rows_per_sheet = config.get("max_rows_per_sheet", 10000)
-        self.include_formulas = config.get("include_formulas", False)
-        self.treat_first_row_as_header = config.get("treat_first_row_as_header", True)
-        self.separate_sheets_as_documents = config.get("separate_sheets_as_documents", True)
-        self.extract_charts = config.get("extract_charts", False)
-        self.skip_empty_rows = config.get("skip_empty_rows", True)
+        self.parse_all_sheets = self.config.get("parse_all_sheets", True)
+        self.max_rows_per_sheet = self.config.get("max_rows_per_sheet", 10000)
+        self.include_formulas = self.config.get("include_formulas", False)
+        self.treat_first_row_as_header = self.config.get("treat_first_row_as_header", True)
+        self.separate_sheets_as_documents = self.config.get("separate_sheets_as_documents", True)
+        self.extract_charts = self.config.get("extract_charts", False)
+        self.skip_empty_rows = self.config.get("skip_empty_rows", True)
     
     def validate_config(self) -> bool:
         """Validate parser configuration."""
