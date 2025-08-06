@@ -64,6 +64,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Copy config/schema.yaml to cli/cmd/config/schema.yaml
         run: cp config/schema.yaml cli/cmd/config/schema.yaml
