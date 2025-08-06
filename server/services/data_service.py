@@ -4,9 +4,9 @@ from datetime import datetime
 
 from fastapi import UploadFile
 from pydantic import BaseModel
-from server.services.project_service import ProjectService
 
 from core.logging import FastAPIStructLogger
+from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
 
