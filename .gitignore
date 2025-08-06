@@ -536,14 +536,24 @@ profiling_results/
 memory_profiler_*/
 
 # ==============================================================================
-# Custom RAG System Specific
+# LlamaFarm RAG System Specific
 # ==============================================================================
 
-# Custom model downloads
-custom_models/
-downloaded_models/
+# IMPORTANT: What we INCLUDE vs EXCLUDE for RAG:
+# ✅ INCLUDE: Sample documents and datasets
+#    - rag/samples/*.pdf, *.csv, *.txt
+#    - rag/examples/*.json
+#    - rag/demos/data/*.csv (sample data)
+# ❌ EXCLUDE: Only vector stores and indexes
+#    - chroma_db/
+#    - *.faiss
+#    - vector_backups/
 
-# Vector index backups
+# Vector stores and indexes
+chroma_db/
+*.chroma
+*.faiss
+*.index
 vector_backups/
 index_snapshots/
 
@@ -553,13 +563,32 @@ temp_embeddings/
 batch_processing/
 
 # ==============================================================================
-# LlamaFarm Models System Specific
+# LlamaFarm PROMPTS System Specific
 # ==============================================================================
 
-# IMPORTANT: What we INCLUDE vs EXCLUDE:
+# IMPORTANT: What we INCLUDE vs EXCLUDE for PROMPTS:
+# ✅ INCLUDE: All prompt templates and examples
+#    - prompts/templates/*.yaml
+#    - prompts/strategies/*.yaml
+#    - prompts/examples/*.json
+# ❌ EXCLUDE: Only cache and temp files
+#    - prompt_cache/
+#    - .prompt_history
+
+# Prompt system cache
+prompt_cache/
+.prompt_history
+prompt_outputs/
+
+# ==============================================================================
+# LlamaFarm MODELS System Specific
+# ==============================================================================
+
+# IMPORTANT: What we INCLUDE vs EXCLUDE for MODELS:
 # ✅ INCLUDE: All datasets (users need these for training!)
-#    - demos/datasets/medical/*.jsonl
-#    - demos/datasets/code/*.json
+#    - models/demos/datasets/medical/*.jsonl
+#    - models/demos/datasets/code/*.json
+#    - models/demos/datasets/*.csv
 #    - Any training data files
 # ❌ EXCLUDE: Only model weights and training outputs
 #    - fine_tuned_models/
