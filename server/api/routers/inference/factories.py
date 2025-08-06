@@ -30,8 +30,9 @@ class ModelManager:
     def get_capabilities(model_name: str) -> ModelCapabilities:
         """Get model capabilities based on model name"""
         model_lower = model_name.lower()
-        supports_tools = any
-        (supported in model_lower for supported in TOOL_CALLING_MODELS)
+        supports_tools = any(
+            supported in model_lower for supported in TOOL_CALLING_MODELS
+        )
         
         return ModelCapabilities(
             supports_tools=supports_tools,
@@ -57,7 +58,9 @@ class AgentFactory:
         """Create system prompt based on model capabilities"""
         return f"""You are a helpful assistant for LlamaFarm project management.
 You have access to a projects tool that can list and create projects in different namespaces.
-Tool calling support: {'NATIVE' if capabilities.supports_tools else 'FALLBACK'}
+Tool calling support: {
+    'NATIVE' if capabilities.supports_tools else 'FALLBACK'
+}
 
 Analyze the user's request to determine if they need project management assistance.
 For listing projects: use action='list' with the appropriate namespace

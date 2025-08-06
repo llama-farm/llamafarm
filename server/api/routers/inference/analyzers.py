@@ -8,6 +8,10 @@ from core.logging import FastAPIStructLogger
 from core.settings import settings
 
 from .models import ProjectAction
+from .strategies import (
+    AnalysisStrategyFactory,
+    ResponseValidationStrategy,
+)
 
 # Initialize logger
 logger = FastAPIStructLogger()
@@ -121,25 +125,24 @@ Examples:
             return response
             
         except Exception as e:
-            logger.warning("LLM analysis failed, falling back to rule-based", error=str(e))
+            logger.warning(
+                "LLM analysis failed, falling back to rule-based", 
+                error=str(e)
+            )
             return self._fallback_analysis(message)
     
     def _fallback_analysis(self, message: str) -> ProjectAnalysis:
         """Fallback to rule-based analysis when LLM is unavailable"""
-        action = MessageAnalyzer.determine_action_legacy(message)
-        namespace = MessageAnalyzer.extract_namespace(message)
-        project_id = MessageAnalyzer.extract_project_id(message) 
-        if action == ProjectAction.CREATE:
-            project_id = MessageAnalyzer.extract_project_id(message)
-        else:
-            project_id = None
+        # Use the new strategy-based approach
+        strategy = AnalysisStrategyFactory.create_strategy("rule_based")
+        result = strategy.analyze(message)
         
         return ProjectAnalysis(
-            action=action.value,
-            namespace=namespace,
-            project_id=project_id,
-            confidence=0.7,  # Lower confidence for rule-based
-            reasoning="Rule-based fallback analysis (LLM unavailable)"
+            action=result["action"],
+            namespace=result["namespace"],
+            project_id=result["project_id"],
+            confidence=result["confidence"],
+            reasoning=result["reasoning"] + " (LLM unavailable)"
         )
 
 class MessageAnalyzer:
@@ -236,56 +239,26 @@ class MessageAnalyzer:
 class ResponseAnalyzer:
     """Handles response analysis and validation"""
     
+    # Class-level validation strategy instance
+    _validation_strategy = None
+    
+    @classmethod
+    def get_validation_strategy(cls) -> ResponseValidationStrategy:
+        """Get or create validation strategy instance"""
+        if cls._validation_strategy is None:
+            cls._validation_strategy = (
+                AnalysisStrategyFactory.create_validation_strategy()
+            )
+        return cls._validation_strategy
+    
     @staticmethod
     def is_template_response(response: str) -> bool:
         """Detect if response contains template placeholders"""
-        response_lower = response.lower()
-        return any(
-            indicator.lower() in response_lower for indicator in TEMPLATE_INDICATORS)
+        strategy = ResponseAnalyzer.get_validation_strategy()
+        return strategy._is_template_response(response)
 
     @staticmethod
     def needs_manual_execution(response: str, message: str) -> bool:
         """Determine if manual tool execution is needed"""
-        if not MessageAnalyzer.is_project_related(message):
-            return False
-        
-        # Check for obvious template/placeholder responses
-        if ResponseAnalyzer.is_template_response(response):
-            return True
-            
-        # Check for explicit inability statements
-        if any(phrase in response.lower() for phrase in [
-            "i don't have access", "cannot directly", "i will use the project tool",
-            "let me check", "i'll need to", "i need to check"
-        ]):
-            return True
-        
-        # Check for very short responses (likely incomplete)
-        if len(response.strip()) < 50:
-            return True
-        
-        # NEW: Check for signs of hallucinated project data
-        # If the response contains specific project information but seems generic/fake
-        response_lower = response.lower()
-        hallucination_indicators = [
-            "project 1", "project 2", "project 3",  # Generic project names
-            "example project", "sample project", "test project",
-            "your projects:", "following projects:", "* project",
-            "you have the following", "here are your projects"
-        ]
-        
-        # If it looks like hallucinated project data, force tool execution
-        if any(indicator in response_lower for indicator in hallucination_indicators):
-            logger.info("Detected potential hallucinated project data, forcing tool execution")
-            return True
-        
-        # For project queries asking for specific counts/numbers, be more aggressive
-        if (
-            any(word in message.lower() for word in 
-            ["how many", "count", "number of", "total"]) 
-            and
-            any(char.isdigit() for char in response) and "found" not in response_lower):
-            logger.info("Count query with suspicious numeric response, forcing tool execution")
-            return True
-        
-        return False 
+        strategy = ResponseAnalyzer.get_validation_strategy()
+        return strategy.needs_manual_execution(response, message) 

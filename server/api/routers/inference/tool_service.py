@@ -30,6 +30,12 @@ class AtomicToolExecutor:
             ToolResult with execution details
         """
         try:
+            # Ensure tools are initialized before use
+            if not ensure_tools_initialized():
+                raise ToolExecutionError(
+                    tool_name, "Tool registry not properly initialized"
+                )
+            
             # Get tool from registry
             tool = get_tool(tool_name)
             
@@ -94,7 +100,8 @@ class AtomicToolExecutor:
         
         # Use enhanced LLM-based analysis with request field support
         analysis = MessageAnalyzer.analyze_with_llm(
-            message, request_namespace, request_project_id)
+            message, request_namespace, request_project_id
+        )
         
         input_data = {
             "action": analysis.action,
@@ -109,6 +116,10 @@ class AtomicToolExecutor:
     @staticmethod
     def get_available_tools() -> list[dict[str, Any]]:
         """Get information about all available tools from registry"""
+        # Ensure tools are initialized before listing
+        if not ensure_tools_initialized():
+            return []
+        
         available_tools = []
         
         for tool_name in list_tools():
@@ -163,6 +174,10 @@ class AtomicToolExecutor:
     @staticmethod
     def health_check_all() -> dict[str, bool]:
         """Perform health checks on all registered tools"""
+        # Ensure tools are initialized before health checking
+        if not ensure_tools_initialized():
+            return {}
+        
         health_status = {}
         
         for tool_name in list_tools():
@@ -216,15 +231,16 @@ class ToolRegistryManager:
             # Final verification
             final_tools = list_tools()
             logger.info(
-                f"Successfully initialized {len(final_tools)} tools: "
-                f"{final_tools}"
+                f"Successfully initialized {len(final_tools)} tools: {final_tools}"
             )
             
             return len(final_tools) > 0
             
         except ImportError as e:
             logger.error(f"Failed to import tools: {e}")
-            logger.error("Check that tools.projects_tool.tool.projects_tool module exists")
+            logger.error(
+                "Check that tools.projects_tool.tool.projects_tool module exists"
+            )
             return False
         except Exception as e:
             logger.error(f"Failed to initialize tools: {e}")
@@ -235,6 +251,17 @@ class ToolRegistryManager:
     def get_registry_status() -> dict[str, Any]:
         """Get status information about the tool registry"""
         try:
+            # Ensure tools are initialized before getting status
+            if not ensure_tools_initialized():
+                return {
+                    "total_tools": 0,
+                    "registered_tools": [],
+                    "health_status": {},
+                    "healthy_tools": 0,
+                    "registry_available": False,
+                    "error": "Tool registry not initialized"
+                }
+            
             tools = list_tools()
             health_status = AtomicToolExecutor.health_check_all()
             
@@ -258,19 +285,23 @@ class ToolRegistryManager:
             }
 
 
-# Auto-initialize tools when module is imported
-def _auto_initialize():
-    """Automatically initialize tools when this module is imported"""
-    try:
-        logger.info("Auto-initializing tools on module import...")
-        success = ToolRegistryManager.initialize_tools()
-        if success:
-            logger.info("Auto-initialization completed successfully")
-        else:
-            logger.warning("Auto-initialization completed with issues")
-    except Exception as e:
-        logger.error(f"Auto-initialization failed: {e}")
+# Module initialization state
+_tools_initialized = False
 
-
-# Run auto-initialization
-_auto_initialize()
+def ensure_tools_initialized():
+    """Ensure tools are initialized exactly once. Call this explicitly when needed."""
+    global _tools_initialized
+    if not _tools_initialized:
+        try:
+            logger.info("Initializing tools on first use...")
+            success = ToolRegistryManager.initialize_tools()
+            if success:
+                logger.info("Tool initialization completed successfully")
+                _tools_initialized = True
+            else:
+                logger.warning("Tool initialization completed with issues")
+                _tools_initialized = False
+        except Exception as e:
+            logger.error(f"Tool initialization failed: {e}")
+            _tools_initialized = False
+    return _tools_initialized

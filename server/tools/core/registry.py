@@ -2,28 +2,31 @@
 Tool registry for managing and discovering tools.
 """
 
-from typing import Dict, List, Type, Any, Optional
+import logging
+from typing import Any, Optional
+
 from .base_tool import BaseTool
 from .errors import ToolNotFoundError, ToolRegistryError
-import importlib
-import inspect
+
+logger = logging.getLogger(__name__)
 
 
 class ToolRegistry:
     """Registry for managing tool instances and discovery."""
     
-    _tools: Dict[str, BaseTool] = {}
-    _tool_classes: Dict[str, Type[BaseTool]] = {}
+    _tools: dict[str, BaseTool] = {}
+    _tool_classes: dict[str, type[BaseTool]] = {}
     
     @classmethod
     def register(cls, name: str, tool_instance: BaseTool) -> None:
         """Register a tool instance."""
         if not isinstance(tool_instance, BaseTool):
-            raise ToolRegistryError(f"Tool must be an instance of BaseTool, got {type(tool_instance)}")
+            raise ToolRegistryError(
+                f"Tool must be an instance of BaseTool, got {type(tool_instance)}")
         
         cls._tools[name] = tool_instance
         cls._tool_classes[name] = tool_instance.__class__
-        print(f"🔧 [Registry] Registered tool: {name}")
+        logger.info(f"Tool registered: {name} ({tool_instance.__class__.__name__})")
     
     @classmethod
     def get_tool(cls, name: str) -> BaseTool:
@@ -38,7 +41,7 @@ class ToolRegistry:
         return cls._tools[name]
     
     @classmethod
-    def list_tools(cls) -> List[str]:
+    def list_tools(cls) -> list[str]:
         """List all registered tool names."""
         # Auto-discover tools if registry is empty
         if not cls._tools:
@@ -56,7 +59,7 @@ class ToolRegistry:
                 cls.register(name, ProjectsTool())
             # Add other tool discovery patterns here
         except Exception as e:
-            print(f"⚠️  [Registry] Failed to auto-load tool '{name}': {e}")
+            logger.warning(f"Failed to auto-load tool '{name}': {e}")
     
     @classmethod
     def _discover_tools(cls) -> None:
@@ -65,7 +68,7 @@ class ToolRegistry:
             # Auto-load known tools
             cls._try_load_tool("projects")
         except Exception as e:
-            print(f"⚠️  [Registry] Tool discovery failed: {e}")
+            logger.warning(f"Tool discovery failed: {e}")
     
     @classmethod
     def clear(cls) -> None:
@@ -85,15 +88,15 @@ def get_tool(name: str) -> BaseTool:
     return ToolRegistry.get_tool(name)
 
 
-def list_tools() -> List[str]:
+def list_tools() -> list[str]:
     """List all tools in the global registry."""
     return ToolRegistry.list_tools()
 
 
 # Decorator for automatic tool registration
-def tool(name: Optional[str] = None):
+def tool(name: str | None = None):
     """Decorator to automatically register a tool class."""
-    def decorator(tool_class: Type[BaseTool]):
+    def decorator(tool_class: type[BaseTool]):
         tool_name = name or tool_class.__name__.lower().replace('tool', '')
         
         # Create instance and register
@@ -101,7 +104,7 @@ def tool(name: Optional[str] = None):
             tool_instance = tool_class()
             register_tool(tool_name, tool_instance)
         except Exception as e:
-            print(f"⚠️  [Registry] Failed to auto-register tool '{tool_name}': {e}")
+            logger.warning(f"Failed to auto-register tool '{tool_name}': {e}")
         
         return tool_class
     
