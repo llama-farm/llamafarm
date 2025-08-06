@@ -1,0 +1,99 @@
+type: embedder
+version: 1.0.0
+generated_by: cli_compile.py
+components:
+  ollama_embedder:
+    schema:
+      name: ollama_embedder
+      type: embedder
+      class_name: OllamaEmbedder
+      description: OllamaEmbedder component
+      version: 1.0.0
+      dependencies:
+        optional: []
+        required: []
+      config_schema:
+        type: object
+        properties: {}
+      use_cases: []
+    path: components/embedders_new/ollama_embedder
+    has_implementation: true
+  huggingface_embedder:
+    schema:
+      name: huggingface_embedder
+      type: embedder
+      class_name: HuggingfaceEmbedder
+      description: HuggingfaceEmbedder component
+      version: 1.0.0
+      dependencies:
+        optional: []
+        required: []
+      config_schema:
+        type: object
+        properties: {}
+      use_cases: []
+    path: components/embedders_new/huggingface_embedder
+    has_implementation: true
+  openai_embedder:
+    schema:
+      name: openai_embedder
+      type: embedder
+      class_name: OpenaiEmbedder
+      description: OpenaiEmbedder component
+      version: 1.0.0
+      dependencies:
+        optional: []
+        required: []
+      config_schema:
+        type: object
+        properties: {}
+      use_cases: []
+    path: components/embedders_new/openai_embedder
+    has_implementation: true
+  sentence_transformer_embedder:
+    schema:
+      name: sentence_transformer_embedder
+      type: embedder
+      class_name: SentenceTransformerEmbedder
+      description: SentenceTransformerEmbedder component
+      version: 1.0.0
+      dependencies:
+        optional: []
+        required: []
+      config_schema:
+        type: object
+        properties: {}
+      use_cases: []
+    path: components/embedders_new/sentence_transformer_embedder
+    has_implementation: true
+defaults_registry:
+  ollama_embedder:
+    default:
+      name: Default Configuration
+      description: Default settings for ollama_embedder
+      config: {}
+      recommended_for:
+      - General use
+  huggingface_embedder:
+    default:
+      name: Default Configuration
+      description: Default settings for huggingface_embedder
+      config: {}
+      recommended_for:
+      - General use
+  openai_embedder:
+    default:
+      name: Default Configuration
+      description: Default settings for openai_embedder
+      config: {}
+      recommended_for:
+      - General use
+  sentence_transformer_embedder:
+    default:
+      name: Default Configuration
+      description: Default settings for sentence_transformer_embedder
+      config: {}
+      recommended_for:
+      - General use
+use_case_index: {}
+dependency_graph: {}

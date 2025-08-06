@@ -1,0 +1,157 @@
+academic_research:
+  name: Academic Research
+  description: Optimized for academic papers and research documents
+  config:
+    methods:
+    - rake
+    - tfidf
+    combine_results: true
+    max_combined_keywords: 20
+    rake_config:
+      min_length: 1
+      max_length: 5
+      max_keywords: 15
+      min_frequency: 1
+    tfidf_config:
+      max_features: 15
+      min_df: 1
+      max_df: 0.8
+      ngram_range:
+      - 1
+      - 3
+  recommended_for:
+  - Research papers
+  - Academic articles
+  - Technical documentation
+  - Scientific journals
+marketing_content:
+  name: Marketing Content
+  description: Focused on marketing and web content analysis
+  config:
+    methods:
+    - rake
+    - yake
+    combine_results: true
+    max_combined_keywords: 12
+    rake_config:
+      min_length: 1
+      max_length: 3
+      max_keywords: 10
+      min_frequency: 1
+    yake_config:
+      language: en
+      max_ngram_size: 2
+      deduplication_threshold: 0.8
+      max_keywords: 10
+  recommended_for:
+  - Blog posts
+  - Marketing materials
+  - Website content
+  - Social media posts
+news_analysis:
+  name: News Analysis
+  description: Optimized for news articles and journalistic content
+  config:
+    methods:
+    - rake
+    - yake
+    - tfidf
+    combine_results: true
+    max_combined_keywords: 15
+    rake_config:
+      min_length: 1
+      max_length: 4
+      max_keywords: 8
+      min_frequency: 1
+    yake_config:
+      language: en
+      max_ngram_size: 3
+      deduplication_threshold: 0.9
+      max_keywords: 8
+    tfidf_config:
+      max_features: 8
+      min_df: 1
+      max_df: 0.9
+      ngram_range:
+      - 1
+      - 2
+  recommended_for:
+  - News articles
+  - Press releases
+  - Journalistic content
+  - Current events
+business_documents:
+  name: Business Documents
+  description: Tailored for business and corporate documentation
+  config:
+    methods:
+    - rake
+    - tfidf
+    combine_results: true
+    max_combined_keywords: 18
+    rake_config:
+      min_length: 1
+      max_length: 4
+      max_keywords: 12
+      min_frequency: 1
+    tfidf_config:
+      max_features: 12
+      min_df: 1
+      max_df: 0.85
+      ngram_range:
+      - 1
+      - 2
+  recommended_for:
+  - Business reports
+  - Corporate documents
+  - Financial reports
+  - Strategic plans
+fast_extraction:
+  name: Fast Extraction
+  description: Quick keyword extraction for large document batches
+  config:
+    methods:
+    - rake
+    combine_results: false
+    rake_config:
+      min_length: 1
+      max_length: 3
+      max_keywords: 8
+      min_frequency: 1
+  recommended_for:
+  - Large document collections
+  - Real-time processing
+  - Performance-critical applications
+comprehensive_analysis:
+  name: Comprehensive Analysis
+  description: Deep keyword analysis using all available methods
+  config:
+    methods:
+    - rake
+    - yake
+    - tfidf
+    combine_results: true
+    max_combined_keywords: 25
+    rake_config:
+      min_length: 1
+      max_length: 6
+      max_keywords: 20
+      min_frequency: 1
+    yake_config:
+      language: en
+      max_ngram_size: 4
+      deduplication_threshold: 0.9
+      max_keywords: 20
+      window_size: 2
+    tfidf_config:
+      max_features: 20
+      min_df: 1
+      max_df: 0.95
+      ngram_range:
+      - 1
+      - 4
+  recommended_for:
+  - Important documents
+  - Detailed analysis
+  - Research projects
+  - Content audit

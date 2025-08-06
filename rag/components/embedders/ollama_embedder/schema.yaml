@@ -1,0 +1,12 @@
+name: ollama_embedder
+type: embedder
+class_name: OllamaEmbedder
+description: OllamaEmbedder component
+version: 1.0.0
+dependencies:
+  optional: []
+  required: []
+config_schema:
+  type: object
+  properties: {}
+use_cases: []

@@ -1,0 +1,87 @@
+name: path_extractor
+type: extractor
+class_name: PathExtractor
+description: Extracts and preserves source file path information in document metadata for reliable retrieval and display
+version: 1.0.0
+dependencies:
+  optional: []
+  required: []
+config_schema:
+  type: object
+  properties:
+    store_full_path:
+      type: boolean
+      default: true
+      description: Store the complete file path
+    store_filename:
+      type: boolean
+      default: true
+      description: Store just the filename
+    store_directory:
+      type: boolean
+      default: true
+      description: Store the parent directory path
+    store_extension:
+      type: boolean
+      default: true
+      description: Store the file extension
+    normalize_paths:
+      type: boolean
+      default: false
+      description: Normalize paths to use forward slashes
+    relative_to:
+      type: string
+      default: null
+      description: Make paths relative to this directory (if provided)
+output_schema:
+  type: object
+  properties:
+    path:
+      type: object
+      properties:
+        full_path:
+          type: string
+        filename:
+          type: string
+        directory:
+          type: string
+        extension:
+          type: string
+    file_path:
+      type: string
+    file_name:
+      type: string
+    directory:
+      type: string
+    file_extension:
+      type: string
+use_cases:
+- Preserving source information in vector databases
+- Document traceability and audit trails
+- Search result display enhancement
+- Multi-file document processing
+- Content management systems
+examples:
+- name: Basic path extraction
+  config:
+    store_full_path: true
+    store_filename: true
+    store_directory: true
+    store_extension: true
+  description: Store all path components for maximum flexibility
+- name: Filename only
+  config:
+    store_full_path: false
+    store_filename: true
+    store_directory: false
+    store_extension: false
+  description: Store only the filename for simple identification
+- name: Relative paths
+  config:
+    store_full_path: true
+    store_filename: true
+    store_directory: true
+    store_extension: true
+    normalize_paths: true
+    relative_to: ./data
+  description: Store paths relative to a data directory with normalized separators

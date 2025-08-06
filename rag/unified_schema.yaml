@@ -1,0 +1,1944 @@
+# RAG System Unified Schema
+# Version: 2.0.0
+# This comprehensive schema combines strategy-level configuration with all component schemas
+# Created by merging strategy_schema.yaml and schema.yaml with component-level details
+
+version: "2.0.0"
+schema_type: "unified"
+description: "Complete RAG system schema defining strategies, components, and their configurations"
+
+# ==============================================================================
+# STRATEGY DEFINITION SCHEMA
+# ==============================================================================
+
+strategy_definition:
+  type: "object"
+  required: ["name", "description", "components"]
+  properties:
+    name:
+      type: "string"
+      pattern: "^[a-z][a-z0-9_]*$"
+      description: "Unique strategy identifier (lowercase, underscores)"
+      examples: ["simple", "customer_support", "legal_documents"]
+    
+    description:
+      type: "string"
+      minLength: 10
+      maxLength: 500
+      description: "Clear description of the strategy's purpose and use cases"
+    
+    version:
+      type: "string"
+      pattern: "^\\d+\\.\\d+\\.\\d+$"
+      default: "1.0.0"
+      description: "Strategy version (semantic versioning)"
+    
+    tags:
+      type: "array"
+      items:
+        type: "string"
+      description: "Tags for categorization and discovery"
+      examples: [["production", "optimized"], ["development", "testing"]]
+    
+    use_cases:
+      type: "array"
+      items:
+        type: "string"
+      minItems: 1
+      description: "Specific use cases this strategy is designed for"
+    
+    components:
+      type: "object"
+      required: ["parser", "embedder", "vector_store", "retrieval_strategy"]
+      properties:
+        parser:
+          $ref: "#/components/parsers"
+        extractors:
+          type: "array"
+          items:
+            $ref: "#/components/extractors"
+        embedder:
+          $ref: "#/components/embedders"
+        vector_store:
+          $ref: "#/components/vector_stores"
+        retrieval_strategy:
+          $ref: "#/components/retrieval_strategies"
+    
+    optimization:
+      $ref: "#/optimization_settings"
+    
+    validation:
+      $ref: "#/validation_settings"
+    
+    monitoring:
+      $ref: "#/monitoring_settings"
+
+# ==============================================================================
+# COMPONENT DEFINITIONS
+# ==============================================================================
+
+components:
+  # =============================================================================
+  # PARSERS - Document Processing Components
+  # =============================================================================
+  parsers:
+    CSVParser:
+      description: "Parses CSV files with flexible field mapping"
+      class_name: "CSVParser"
+      module: "components.parsers.csv_parser"
+      inputs: ["csv"]
+      outputs: ["documents"]
+      config_schema:
+        type: "object"
+        properties:
+          content_fields:
+            type: "array"
+            items:
+              type: "string"
+            default: ["subject", "body"]
+            description: "Fields to use as document content"
+          metadata_fields:
+            type: "array"
+            items:
+              type: "string"
+            default: []
+            description: "Fields to store as metadata"
+          id_field:
+            type: "string"
+            default: "id"
+            description: "Field to use as document ID"
+          combine_content:
+            type: "boolean"
+            default: false
+            description: "Whether to combine multiple content fields"
+          content_separator:
+            type: "string"
+            default: " "
+            description: "Separator for combined content"
+          encoding:
+            type: "string"
+            default: "utf-8"
+            description: "CSV file encoding"
+          delimiter:
+            type: "string"
+            default: ","
+            description: "CSV delimiter character"
+      use_cases: ["customer_support", "structured_data", "business_records"]
+      dependencies:
+        required: []
+        optional: ["pandas"]
+
+    PDFParser:
+      description: "Extracts text, metadata, and structure from PDF documents"
+      class_name: "PDFParser"
+      module: "components.parsers.pdf_parser"
+      inputs: ["pdf"]
+      outputs: ["documents"]
+      config_schema:
+        type: "object"
+        properties:
+          extract_metadata:
+            type: "boolean"
+            default: true
+            description: "Extract PDF metadata (title, author, creation date, etc.)"
+          extract_page_structure:
+            type: "boolean"
+            default: true
+            description: "Extract page-level structure information"
+          combine_pages:
+            type: "boolean"
+            default: true
+            description: "Combine all pages into single document vs separate document per page"
+          page_separator:
+            type: "string"
+            default: "\n\n--- Page Break ---\n\n"
+            description: "Separator to use between pages when combining"
+          min_text_length:
+            type: "integer"
+            default: 10
+            minimum: 0
+            description: "Minimum text length to include a page"
+          include_page_numbers:
+            type: "boolean"
+            default: true
+            description: "Include page numbers in extracted text"
+          extract_outline:
+            type: "boolean"
+            default: true
+            description: "Extract document outline/bookmarks if available"
+          extract_images:
+            type: "boolean"
+            default: false
+            description: "Extract embedded images from PDF"
+          ocr_enabled:
+            type: "boolean"
+            default: false
+            description: "Enable OCR for scanned documents"
+      use_cases: ["legal_documents", "research_papers", "reports", "manuals"]
+      dependencies:
+        required: ["PyPDF2"]
+        optional: ["pdfplumber", "pymupdf", "pytesseract"]
+
+    MarkdownParser:
+      description: "Parses Markdown files with structure extraction"
+      class_name: "MarkdownParser"
+      module: "components.parsers.markdown_parser"
+      inputs: ["markdown", "md"]
+      outputs: ["documents"]
+      config_schema:
+        type: "object"
+        properties:
+          extract_metadata:
+            type: "boolean"
+            default: true
+            description: "Extract YAML frontmatter and Markdown metadata"
+          extract_headings:
+            type: "boolean"
+            default: true
+            description: "Extract heading structure and hierarchy"
+          extract_links:
+            type: "boolean"
+            default: true
+            description: "Extract all links from the document"
+          extract_code_blocks:
+            type: "boolean"
+            default: true
+            description: "Extract code blocks with language detection"
+          chunk_by_headings:
+            type: "boolean"
+            default: false
+            description: "Split document into chunks based on headings"
+          preserve_formatting:
+            type: "boolean"
+            default: false
+            description: "Preserve Markdown formatting in content"
+          heading_level_split:
+            type: "integer"
+            default: 2
+            minimum: 1
+            maximum: 6
+            description: "Heading level to split on when chunk_by_headings is true"
+      use_cases: ["documentation", "technical_writing", "knowledge_bases", "wikis"]
+      dependencies:
+        required: []
+        optional: ["PyYAML", "markdown", "mistune"]
+
+    HTMLParser:
+      description: "Parses HTML documents with structure preservation"
+      class_name: "HTMLParser"
+      module: "components.parsers.html_parser"
+      inputs: ["html", "htm"]
+      outputs: ["documents"]
+      config_schema:
+        type: "object"
+        properties:
+          extract_metadata:
+            type: "boolean"
+            default: true
+            description: "Extract HTML meta tags and head information"
+          extract_links:
+            type: "boolean"
+            default: true
+            description: "Extract all hyperlinks"
+          extract_images:
+            type: "boolean"
+            default: true
+            description: "Extract image sources and alt text"
+          preserve_structure:
+            type: "boolean"
+            default: false
+            description: "Preserve HTML structure in extracted content"
+          remove_scripts:
+            type: "boolean"
+            default: true
+            description: "Remove JavaScript code blocks"
+          remove_styles:
+            type: "boolean"
+            default: true
+            description: "Remove CSS style blocks"
+          text_only:
+            type: "boolean"
+            default: false
+            description: "Extract only text content, no structure"
+      use_cases: ["web_scraping", "documentation", "content_extraction"]
+      dependencies:
+        required: ["beautifulsoup4"]
+        optional: ["lxml", "html5lib"]
+
+    DocxParser:
+      description: "Parses Microsoft Word documents"
+      class_name: "DocxParser"
+      module: "components.parsers.docx_parser"
+      inputs: ["docx", "doc"]
+      outputs: ["documents"]
+      config_schema:
+        type: "object"
+        properties:
+          extract_metadata:
+            type: "boolean"
+            default: true
+            description: "Extract document properties and metadata"
+          extract_headers_footers:
+            type: "boolean"
+            default: true
+            description: "Include headers and footers in content"
+          extract_comments:
+            type: "boolean"
+            default: true
+            description: "Extract document comments"
+          extract_tables:
+            type: "boolean"
+            default: true
+            description: "Extract and format tables"
+          extract_images:
+            type: "boolean"
+            default: false
+            description: "Extract embedded images"
+          preserve_formatting:
+            type: "boolean"
+            default: false
+            description: "Preserve text formatting (bold, italic, etc.)"
+      use_cases: ["business_documents", "reports", "contracts", "letters"]
+      dependencies:
+        required: ["python-docx"]
+        optional: ["docx2txt"]
+
+    ExcelParser:
+      description: "Parses Excel spreadsheets"
+      class_name: "ExcelParser"
+      module: "components.parsers.excel_parser"
+      inputs: ["xlsx", "xls", "xlsm"]
+      outputs: ["documents"]
+      config_schema:
+        type: "object"
+        properties:
+          sheet_names:
+            type: "array"
+            items:
+              type: "string"
+            default: null
+            description: "Specific sheets to parse (null for all)"
+          combine_sheets:
+            type: "boolean"
+            default: false
+            description: "Combine all sheets into one document"
+          extract_formulas:
+            type: "boolean"
+            default: false
+            description: "Extract cell formulas"
+          extract_charts:
+            type: "boolean"
+            default: false
+            description: "Extract chart metadata"
+          table_format:
+            type: "string"
+            enum: ["csv", "markdown", "json", "text"]
+            default: "markdown"
+            description: "Format for table extraction"
+          header_row:
+            type: "integer"
+            default: 0
+            minimum: 0
+            description: "Row index to use as headers"
+      use_cases: ["financial_data", "business_reports", "data_analysis"]
+      dependencies:
+        required: ["openpyxl"]
+        optional: ["xlrd", "pandas"]
+
+    PlainTextParser:
+      description: "Simple text file parser"
+      class_name: "TextParser"
+      module: "components.parsers.text_parser"
+      inputs: ["txt", "text", "log"]
+      outputs: ["documents"]
+      config_schema:
+        type: "object"
+        properties:
+          encoding:
+            type: "string"
+            default: "utf-8"
+            description: "Text file encoding"
+          chunk_size:
+            type: "integer"
+            default: 1000
+            minimum: 100
+            description: "Size of text chunks in characters"
+          chunk_overlap:
+            type: "integer"
+            default: 200
+            minimum: 0
+            description: "Overlap between chunks"
+          split_by:
+            type: "string"
+            enum: ["characters", "words", "sentences", "paragraphs", "lines"]
+            default: "characters"
+            description: "Method for splitting text"
+          preserve_whitespace:
+            type: "boolean"
+            default: false
+            description: "Preserve original whitespace"
+      use_cases: ["simple_documents", "logs", "notes", "plain_text"]
+      dependencies:
+        required: []
+        optional: []
+
+  # =============================================================================
+  # EXTRACTORS - Content Analysis Components
+  # =============================================================================
+  extractors:
+    KeywordExtractor:
+      description: "General keyword extraction with multiple algorithms"
+      class_name: "KeywordExtractor"
+      module: "components.extractors.keyword_extractor"
+      inputs: ["text"]
+      outputs: ["keywords", "scores"]
+      config_schema:
+        type: "object"
+        properties:
+          algorithm:
+            type: "string"
+            enum: ["rake", "yake", "tfidf", "textrank"]
+            default: "rake"
+            description: "Keyword extraction algorithm"
+          max_keywords:
+            type: "integer"
+            default: 10
+            minimum: 1
+            maximum: 100
+            description: "Maximum number of keywords to extract"
+          min_keyword_length:
+            type: "integer"
+            default: 3
+            minimum: 1
+            description: "Minimum keyword length in characters"
+          include_scores:
+            type: "boolean"
+            default: true
+            description: "Include relevance scores with keywords"
+          language:
+            type: "string"
+            default: "english"
+            description: "Language for stop words"
+      use_cases: ["content_tagging", "search_optimization", "topic_extraction"]
+      dependencies:
+        required: []
+        optional: ["yake", "rake-nltk", "textrank"]
+
+    EntityExtractor:
+      description: "Named Entity Recognition (NER)"
+      class_name: "EntityExtractor"
+      module: "components.extractors.entity_extractor"
+      inputs: ["text"]
+      outputs: ["entities"]
+      config_schema:
+        type: "object"
+        properties:
+          model:
+            type: "string"
+            default: "en_core_web_sm"
+            description: "spaCy model name or 'regex' for fallback"
+          entity_types:
+            type: "array"
+            items:
+              type: "string"
+            default: ["PERSON", "ORG", "GPE", "DATE", "TIME", "MONEY", "EMAIL", "PHONE", "URL"]
+            description: "Entity types to extract"
+          use_fallback:
+            type: "boolean"
+            default: true
+            description: "Use regex fallback if spaCy unavailable"
+          min_entity_length:
+            type: "integer"
+            default: 2
+            minimum: 1
+            description: "Minimum entity length"
+          merge_entities:
+            type: "boolean"
+            default: true
+            description: "Merge adjacent entities of same type"
+          confidence_threshold:
+            type: "number"
+            default: 0.7
+            minimum: 0.0
+            maximum: 1.0
+            description: "Minimum confidence score for entities"
+      use_cases: ["legal_documents", "business_documents", "contact_extraction"]
+      dependencies:
+        required: []
+        optional: ["spacy", "transformers"]
+
+    DateTimeExtractor:
+      description: "Date and time extraction with fuzzy parsing"
+      class_name: "DateTimeExtractor"
+      module: "components.extractors.datetime_extractor"
+      inputs: ["text"]
+      outputs: ["dates", "times", "durations"]
+      config_schema:
+        type: "object"
+        properties:
+          fuzzy_parsing:
+            type: "boolean"
+            default: true
+            description: "Enable fuzzy date parsing"
+          extract_relative:
+            type: "boolean"
+            default: true
+            description: "Extract relative dates (yesterday, next week)"
+          extract_times:
+            type: "boolean"
+            default: true
+            description: "Extract time expressions"
+          extract_durations:
+            type: "boolean"
+            default: true
+            description: "Extract duration expressions"
+          default_timezone:
+            type: "string"
+            default: "UTC"
+            description: "Default timezone for parsing"
+          date_format:
+            type: "string"
+            default: "ISO"
+            description: "Output date format"
+          prefer_dates_from:
+            type: "string"
+            enum: ["past", "future", "current"]
+            default: "current"
+            description: "Preference for ambiguous dates"
+      use_cases: ["scheduling", "temporal_analysis", "event_extraction"]
+      dependencies:
+        required: []
+        optional: ["python-dateutil", "parsedatetime"]
+
+    HeadingExtractor:
+      description: "Extract document headings and structure"
+      class_name: "HeadingExtractor"
+      module: "components.extractors.heading_extractor"
+      inputs: ["text", "markdown", "html"]
+      outputs: ["headings", "hierarchy"]
+      config_schema:
+        type: "object"
+        properties:
+          max_level:
+            type: "integer"
+            default: 6
+            minimum: 1
+            maximum: 6
+            description: "Maximum heading level to extract"
+          include_hierarchy:
+            type: "boolean"
+            default: true
+            description: "Include heading hierarchy structure"
+          extract_outline:
+            type: "boolean"
+            default: true
+            description: "Generate document outline"
+          min_heading_length:
+            type: "integer"
+            default: 3
+            minimum: 1
+            description: "Minimum heading text length"
+      use_cases: ["document_structure", "navigation", "summarization"]
+      dependencies:
+        required: []
+        optional: []
+
+    LinkExtractor:
+      description: "Extract URLs and links from documents"
+      class_name: "LinkExtractor"
+      module: "components.extractors.link_extractor"
+      inputs: ["text", "html", "markdown"]
+      outputs: ["links", "domains"]
+      config_schema:
+        type: "object"
+        properties:
+          extract_urls:
+            type: "boolean"
+            default: true
+            description: "Extract plain URLs from text"
+          extract_emails:
+            type: "boolean"
+            default: true
+            description: "Extract email addresses"
+          extract_domains:
+            type: "boolean"
+            default: true
+            description: "Extract unique domains"
+          validate_urls:
+            type: "boolean"
+            default: false
+            description: "Validate URL format"
+          resolve_redirects:
+            type: "boolean"
+            default: false
+            description: "Follow and resolve URL redirects"
+      use_cases: ["web_analysis", "reference_extraction", "contact_extraction"]
+      dependencies:
+        required: []
+        optional: ["validators", "requests"]
+
+    PathExtractor:
+      description: "Extract file paths and system paths"
+      class_name: "PathExtractor"
+      module: "components.extractors.path_extractor"
+      inputs: ["text"]
+      outputs: ["paths", "path_types"]
+      config_schema:
+        type: "object"
+        properties:
+          extract_file_paths:
+            type: "boolean"
+            default: true
+            description: "Extract file system paths"
+          extract_urls:
+            type: "boolean"
+            default: true
+            description: "Extract URL paths"
+          extract_s3_paths:
+            type: "boolean"
+            default: true
+            description: "Extract S3 bucket paths"
+          validate_paths:
+            type: "boolean"
+            default: false
+            description: "Validate path existence"
+          normalize_paths:
+            type: "boolean"
+            default: true
+            description: "Normalize path formats"
+      use_cases: ["code_analysis", "system_documentation", "configuration_files"]
+      dependencies:
+        required: []
+        optional: ["pathlib"]
+
+    PatternExtractor:
+      description: "Regex-based pattern extraction"
+      class_name: "PatternExtractor"
+      module: "components.extractors.pattern_extractor"
+      inputs: ["text"]
+      outputs: ["patterns", "matches"]
+      config_schema:
+        type: "object"
+        properties:
+          predefined_patterns:
+            type: "array"
+            items:
+              type: "string"
+              enum: ["email", "phone", "url", "ip", "ssn", "credit_card", "zip_code"]
+            default: []
+            description: "Predefined patterns to extract"
+          custom_patterns:
+            type: "array"
+            items:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                pattern:
+                  type: "string"
+                description:
+                  type: "string"
+            default: []
+            description: "Custom regex patterns"
+          case_sensitive:
+            type: "boolean"
+            default: false
+            description: "Case-sensitive matching"
+          return_positions:
+            type: "boolean"
+            default: false
+            description: "Return match positions in text"
+      use_cases: ["data_extraction", "pii_detection", "format_validation"]
+      dependencies:
+        required: []
+        optional: []
+
+    StatisticsExtractor:
+      description: "Extract text statistics and metrics"
+      class_name: "StatisticsExtractor"
+      module: "components.extractors.statistics_extractor"
+      inputs: ["text"]
+      outputs: ["statistics", "metrics"]
+      config_schema:
+        type: "object"
+        properties:
+          include_readability:
+            type: "boolean"
+            default: true
+            description: "Calculate readability scores"
+          include_vocabulary:
+            type: "boolean"
+            default: true
+            description: "Analyze vocabulary statistics"
+          include_structure:
+            type: "boolean"
+            default: true
+            description: "Analyze text structure"
+          include_sentiment:
+            type: "boolean"
+            default: false
+            description: "Basic sentiment indicators"
+          include_language:
+            type: "boolean"
+            default: true
+            description: "Detect language"
+      use_cases: ["content_analysis", "quality_metrics", "text_profiling"]
+      dependencies:
+        required: []
+        optional: ["textstat", "langdetect"]
+
+    SummaryExtractor:
+      description: "Extract summaries and key sentences"
+      class_name: "SummaryExtractor"
+      module: "components.extractors.summary_extractor"
+      inputs: ["text"]
+      outputs: ["summary", "key_sentences"]
+      config_schema:
+        type: "object"
+        properties:
+          summary_sentences:
+            type: "integer"
+            default: 3
+            minimum: 1
+            maximum: 10
+            description: "Number of sentences in summary"
+          algorithm:
+            type: "string"
+            enum: ["textrank", "lsa", "luhn", "lexrank"]
+            default: "textrank"
+            description: "Summarization algorithm"
+          include_key_phrases:
+            type: "boolean"
+            default: true
+            description: "Extract key phrases"
+          include_statistics:
+            type: "boolean"
+            default: true
+            description: "Include text statistics"
+      use_cases: ["document_previews", "content_summarization", "abstracts"]
+      dependencies:
+        required: []
+        optional: ["sumy", "gensim"]
+
+    TableExtractor:
+      description: "Extract and parse tables from documents"
+      class_name: "TableExtractor"
+      module: "components.extractors.table_extractor"
+      inputs: ["text", "html", "markdown"]
+      outputs: ["tables", "table_data"]
+      config_schema:
+        type: "object"
+        properties:
+          output_format:
+            type: "string"
+            enum: ["dict", "list", "csv", "markdown"]
+            default: "dict"
+            description: "Output format for tables"
+          extract_headers:
+            type: "boolean"
+            default: true
+            description: "Extract table headers"
+          merge_cells:
+            type: "boolean"
+            default: true
+            description: "Handle merged cells"
+          min_rows:
+            type: "integer"
+            default: 2
+            minimum: 1
+            description: "Minimum rows to consider as table"
+      use_cases: ["data_extraction", "report_parsing", "structured_data"]
+      dependencies:
+        required: []
+        optional: ["pandas", "tabulate"]
+
+  # =============================================================================
+  # EMBEDDERS - Vector Generation Components
+  # =============================================================================
+  embedders:
+    OllamaEmbedder:
+      description: "Local embeddings via Ollama"
+      class_name: "OllamaEmbedder"
+      module: "components.embedders.ollama_embedder"
+      privacy: "high"
+      cost: "free"
+      performance: "medium"
+      config_schema:
+        type: "object"
+        properties:
+          model:
+            type: "string"
+            default: "nomic-embed-text"
+            description: "Ollama embedding model name"
+          base_url:
+            type: "string"
+            default: "http://localhost:11434"
+            description: "Ollama API endpoint"
+          dimension:
+            type: "integer"
+            default: 768
+            description: "Embedding dimension"
+          batch_size:
+            type: "integer"
+            default: 16
+            minimum: 1
+            maximum: 128
+            description: "Batch processing size"
+          timeout:
+            type: "integer"
+            default: 60
+            minimum: 10
+            description: "Request timeout in seconds"
+          auto_pull:
+            type: "boolean"
+            default: true
+            description: "Auto-pull missing models"
+      models:
+        nomic-embed-text:
+          dimension: 768
+          context_length: 8192
+          size: "274MB"
+        mxbai-embed-large:
+          dimension: 1024
+          context_length: 512
+          size: "670MB"
+      use_cases: ["privacy_focused", "local_deployment", "development"]
+      dependencies:
+        required: ["ollama"]
+        optional: []
+
+    OpenAIEmbedder:
+      description: "OpenAI embedding models via API"
+      class_name: "OpenAIEmbedder"
+      module: "components.embedders.openai_embedder"
+      privacy: "low"
+      cost: "paid"
+      performance: "high"
+      config_schema:
+        type: "object"
+        required: ["api_key"]
+        properties:
+          api_key:
+            type: "string"
+            description: "OpenAI API key"
+          model:
+            type: "string"
+            default: "text-embedding-3-small"
+            enum: ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"]
+            description: "OpenAI embedding model"
+          dimension:
+            type: "integer"
+            description: "Override dimension (for 3-small and 3-large)"
+          batch_size:
+            type: "integer"
+            default: 100
+            minimum: 1
+            maximum: 2048
+            description: "Batch processing size"
+          max_retries:
+            type: "integer"
+            default: 3
+            minimum: 0
+            description: "Maximum retry attempts"
+      models:
+        text-embedding-3-small:
+          dimension: 1536
+          max_dimension: 1536
+          price_per_million: 0.02
+        text-embedding-3-large:
+          dimension: 3072
+          max_dimension: 3072
+          price_per_million: 0.13
+        text-embedding-ada-002:
+          dimension: 1536
+          price_per_million: 0.10
+      use_cases: ["production", "high_quality", "cloud_deployment"]
+      dependencies:
+        required: ["openai"]
+        optional: []
+
+    HuggingFaceEmbedder:
+      description: "HuggingFace transformer models"
+      class_name: "HuggingFaceEmbedder"
+      module: "components.embedders.huggingface_embedder"
+      privacy: "high"
+      cost: "free"
+      performance: "variable"
+      config_schema:
+        type: "object"
+        properties:
+          model_name:
+            type: "string"
+            default: "sentence-transformers/all-MiniLM-L6-v2"
+            description: "HuggingFace model identifier"
+          device:
+            type: "string"
+            enum: ["cpu", "cuda", "mps", "auto"]
+            default: "auto"
+            description: "Computation device"
+          batch_size:
+            type: "integer"
+            default: 32
+            minimum: 1
+            description: "Batch processing size"
+          normalize_embeddings:
+            type: "boolean"
+            default: true
+            description: "L2 normalize embeddings"
+          show_progress_bar:
+            type: "boolean"
+            default: false
+            description: "Show progress during encoding"
+          cache_folder:
+            type: "string"
+            default: null
+            description: "Model cache directory"
+      popular_models:
+        all-MiniLM-L6-v2:
+          dimension: 384
+          size: "80MB"
+          speed: "very_fast"
+        all-mpnet-base-v2:
+          dimension: 768
+          size: "420MB"
+          speed: "fast"
+        e5-large-v2:
+          dimension: 1024
+          size: "1.3GB"
+          speed: "medium"
+      use_cases: ["flexible", "research", "custom_models"]
+      dependencies:
+        required: ["transformers", "torch"]
+        optional: ["sentence-transformers"]
+
+    SentenceTransformerEmbedder:
+      description: "Sentence transformer models"
+      class_name: "SentenceTransformerEmbedder"
+      module: "components.embedders.sentence_transformer_embedder"
+      privacy: "high"
+      cost: "free"
+      performance: "high"
+      config_schema:
+        type: "object"
+        properties:
+          model_name:
+            type: "string"
+            default: "all-MiniLM-L6-v2"
+            description: "Sentence transformer model name"
+          device:
+            type: "string"
+            default: "cpu"
+            description: "Computation device"
+          batch_size:
+            type: "integer"
+            default: 32
+            minimum: 1
+            description: "Batch processing size"
+          normalize_embeddings:
+            type: "boolean"
+            default: true
+            description: "Normalize embeddings"
+          pooling_strategy:
+            type: "string"
+            enum: ["mean", "max", "cls"]
+            default: "mean"
+            description: "Token pooling strategy"
+      use_cases: ["semantic_search", "similarity", "clustering"]
+      dependencies:
+        required: ["sentence-transformers"]
+        optional: []
+
+  # =============================================================================
+  # VECTOR STORES - Storage and Indexing Components
+  # =============================================================================
+  vector_stores:
+    ChromaStore:
+      description: "ChromaDB vector database"
+      class_name: "ChromaStore"
+      module: "components.stores.chroma_store"
+      capabilities:
+        - "native_metadata_filtering"
+        - "batch_operations"
+        - "persistent_storage"
+        - "http_client"
+      performance: "high"
+      scalability: "medium"
+      config_schema:
+        type: "object"
+        properties:
+          collection_name:
+            type: "string"
+            default: "documents"
+            description: "Collection name"
+          persist_directory:
+            type: "string"
+            default: "./data/chroma_db"
+            description: "Persistence directory"
+          host:
+            type: "string"
+            default: null
+            description: "Server host (for HTTP mode)"
+          port:
+            type: "integer"
+            default: 8000
+            description: "Server port"
+          distance_function:
+            type: "string"
+            enum: ["cosine", "l2", "ip"]
+            default: "cosine"
+            description: "Distance metric"
+          embedding_function:
+            type: "string"
+            default: null
+            description: "Built-in embedding function"
+      use_cases: ["development", "small_to_medium", "local"]
+      dependencies:
+        required: ["chromadb"]
+        optional: []
+
+    FAISSStore:
+      description: "Facebook AI Similarity Search"
+      class_name: "FAISSStore"
+      module: "components.stores.faiss_store"
+      capabilities:
+        - "gpu_acceleration"
+        - "large_scale"
+        - "approximate_search"
+        - "exact_search"
+      performance: "very_high"
+      scalability: "very_high"
+      config_schema:
+        type: "object"
+        properties:
+          dimension:
+            type: "integer"
+            required: true
+            description: "Vector dimension"
+          index_type:
+            type: "string"
+            enum: ["Flat", "IVF", "HNSW", "LSH"]
+            default: "Flat"
+            description: "Index type"
+          metric:
+            type: "string"
+            enum: ["L2", "IP", "Cosine"]
+            default: "L2"
+            description: "Distance metric"
+          nlist:
+            type: "integer"
+            default: 100
+            description: "Number of clusters (IVF)"
+          nprobe:
+            type: "integer"
+            default: 10
+            description: "Clusters to search (IVF)"
+          use_gpu:
+            type: "boolean"
+            default: false
+            description: "Enable GPU acceleration"
+      use_cases: ["large_scale", "research", "production"]
+      dependencies:
+        required: ["faiss-cpu"]
+        optional: ["faiss-gpu"]
+
+    PineconeStore:
+      description: "Managed Pinecone vector database"
+      class_name: "PineconeStore"
+      module: "components.stores.pinecone_store"
+      capabilities:
+        - "managed_service"
+        - "serverless"
+        - "metadata_filtering"
+        - "namespace_support"
+      performance: "very_high"
+      scalability: "very_high"
+      config_schema:
+        type: "object"
+        required: ["api_key", "index_name"]
+        properties:
+          api_key:
+            type: "string"
+            description: "Pinecone API key"
+          environment:
+            type: "string"
+            default: "us-east-1-aws"
+            description: "Pinecone environment"
+          index_name:
+            type: "string"
+            description: "Index name"
+          dimension:
+            type: "integer"
+            required: true
+            description: "Vector dimension"
+          metric:
+            type: "string"
+            enum: ["euclidean", "cosine", "dotproduct"]
+            default: "cosine"
+            description: "Distance metric"
+          namespace:
+            type: "string"
+            default: ""
+            description: "Namespace for isolation"
+          replicas:
+            type: "integer"
+            default: 1
+            minimum: 1
+            description: "Number of replicas"
+      use_cases: ["production", "managed", "scalable"]
+      dependencies:
+        required: ["pinecone-client"]
+        optional: []
+
+    QdrantStore:
+      description: "Qdrant vector database"
+      class_name: "QdrantStore"
+      module: "components.stores.qdrant_store"
+      capabilities:
+        - "hybrid_search"
+        - "payload_indexing"
+        - "snapshots"
+        - "sharding"
+      performance: "high"
+      scalability: "high"
+      config_schema:
+        type: "object"
+        properties:
+          host:
+            type: "string"
+            default: "localhost"
+            description: "Qdrant server host"
+          port:
+            type: "integer"
+            default: 6333
+            description: "Qdrant server port"
+          grpc_port:
+            type: "integer"
+            default: 6334
+            description: "gRPC port"
+          api_key:
+            type: "string"
+            default: null
+            description: "API key for authentication"
+          collection_name:
+            type: "string"
+            default: "documents"
+            description: "Collection name"
+          vector_size:
+            type: "integer"
+            required: true
+            description: "Vector dimension"
+          distance:
+            type: "string"
+            enum: ["Cosine", "Euclid", "Dot"]
+            default: "Cosine"
+            description: "Distance metric"
+          on_disk:
+            type: "boolean"
+            default: false
+            description: "Store vectors on disk"
+      use_cases: ["production", "hybrid_search", "filtering"]
+      dependencies:
+        required: ["qdrant-client"]
+        optional: []
+
+  # =============================================================================
+  # RETRIEVAL STRATEGIES - Search and Ranking Components
+  # =============================================================================
+  retrieval_strategies:
+    BasicSimilarityStrategy:
+      description: "Simple vector similarity search"
+      class_name: "BasicSimilarityStrategy"
+      module: "components.retrievers.basic_similarity"
+      compatibility: ["universal"]
+      performance: "fast"
+      complexity: "low"
+      config_schema:
+        type: "object"
+        properties:
+          top_k:
+            type: "integer"
+            default: 10
+            minimum: 1
+            maximum: 1000
+            description: "Number of results to retrieve"
+          distance_metric:
+            type: "string"
+            default: "cosine"
+            enum: ["cosine", "euclidean", "manhattan", "dot"]
+            description: "Distance metric"
+          score_threshold:
+            type: "number"
+            default: null
+            minimum: 0.0
+            maximum: 1.0
+            description: "Minimum similarity score"
+      use_cases: ["simple_queries", "baseline", "prototyping"]
+      dependencies: []
+
+    MetadataFilteredStrategy:
+      description: "Vector search with metadata filtering"
+      class_name: "MetadataFilteredStrategy"
+      module: "components.retrievers.metadata_filtered"
+      compatibility: ["universal"]
+      performance: "medium"
+      complexity: "medium"
+      config_schema:
+        type: "object"
+        properties:
+          top_k:
+            type: "integer"
+            default: 10
+            minimum: 1
+            description: "Number of results"
+          filters:
+            type: "object"
+            default: {}
+            description: "Metadata filters"
+          filter_mode:
+            type: "string"
+            enum: ["pre", "post"]
+            default: "pre"
+            description: "When to apply filters"
+          fallback_multiplier:
+            type: "integer"
+            default: 3
+            minimum: 1
+            description: "Multiplier for post-filtering"
+      use_cases: ["filtered_search", "multi_tenant", "categorical"]
+      dependencies: []
+
+    MultiQueryStrategy:
+      description: "Multiple query variations for better recall"
+      class_name: "MultiQueryStrategy"
+      module: "components.retrievers.multi_query"
+      compatibility: ["universal"]
+      performance: "medium"
+      complexity: "medium"
+      config_schema:
+        type: "object"
+        properties:
+          num_queries:
+            type: "integer"
+            default: 3
+            minimum: 1
+            maximum: 10
+            description: "Number of query variations"
+          top_k:
+            type: "integer"
+            default: 10
+            minimum: 1
+            description: "Results per query"
+          aggregation_method:
+            type: "string"
+            default: "weighted"
+            enum: ["max", "mean", "weighted", "reciprocal_rank"]
+            description: "Result aggregation method"
+          query_weights:
+            type: "array"
+            items:
+              type: "number"
+            default: null
+            description: "Weights for each query"
+      use_cases: ["complex_queries", "improved_recall", "ambiguous"]
+      dependencies: []
+
+    RerankedStrategy:
+      description: "Multi-factor relevance reranking"
+      class_name: "RerankedStrategy"
+      module: "components.retrievers.reranked"
+      compatibility: ["universal"]
+      performance: "slow"
+      complexity: "high"
+      config_schema:
+        type: "object"
+        properties:
+          initial_k:
+            type: "integer"
+            default: 30
+            minimum: 10
+            description: "Initial candidates"
+          final_k:
+            type: "integer"
+            default: 10
+            minimum: 1
+            description: "Final results"
+          rerank_factors:
+            type: "object"
+            properties:
+              similarity_weight:
+                type: "number"
+                default: 0.7
+              recency_weight:
+                type: "number"
+                default: 0.1
+              length_weight:
+                type: "number"
+                default: 0.1
+              metadata_weight:
+                type: "number"
+                default: 0.1
+            description: "Reranking factor weights"
+          normalize_scores:
+            type: "boolean"
+            default: true
+            description: "Normalize scores before combining"
+      use_cases: ["production", "quality_focus", "complex_ranking"]
+      dependencies: []
+
+    HybridUniversalStrategy:
+      description: "Combine multiple strategies"
+      class_name: "HybridUniversalStrategy"
+      module: "components.retrievers.hybrid_universal"
+      compatibility: ["universal"]
+      performance: "slow"
+      complexity: "high"
+      config_schema:
+        type: "object"
+        properties:
+          strategies:
+            type: "array"
+            items:
+              type: "object"
+              properties:
+                type:
+                  type: "string"
+                weight:
+                  type: "number"
+                  default: 1.0
+                config:
+                  type: "object"
+            description: "Sub-strategies to combine"
+          combination_method:
+            type: "string"
+            default: "weighted_average"
+            enum: ["weighted_average", "rank_fusion", "score_fusion"]
+            description: "Combination method"
+          final_k:
+            type: "integer"
+            default: 10
+            minimum: 1
+            description: "Final number of results"
+      use_cases: ["balanced", "production", "complex_requirements"]
+      dependencies: []
+
+# ==============================================================================
+# OPTIMIZATION SETTINGS
+# ==============================================================================
+
+optimization_settings:
+  type: "object"
+  description: "Performance and resource optimization"
+  properties:
+    performance_priority:
+      type: "string"
+      enum: ["speed", "accuracy", "balanced", "cost"]
+      default: "balanced"
+      description: "Primary optimization goal"
+    
+    resource_constraints:
+      type: "object"
+      properties:
+        max_memory_mb:
+          type: "integer"
+          minimum: 128
+          description: "Maximum memory usage"
+        max_cpu_cores:
+          type: "integer"
+          minimum: 1
+          description: "Maximum CPU cores"
+        gpu_enabled:
+          type: "boolean"
+          default: false
+          description: "GPU acceleration available"
+        gpu_memory_mb:
+          type: "integer"
+          minimum: 1024
+          description: "GPU memory limit"
+    
+    batch_settings:
+      type: "object"
+      properties:
+        parser_batch_size:
+          type: "integer"
+          minimum: 1
+          default: 10
+          description: "Document parsing batch size"
+        embedder_batch_size:
+          type: "integer"
+          minimum: 1
+          default: 32
+          description: "Embedding generation batch size"
+        indexing_batch_size:
+          type: "integer"
+          minimum: 1
+          default: 100
+          description: "Vector indexing batch size"
+    
+    caching:
+      type: "object"
+      properties:
+        enable_embedding_cache:
+          type: "boolean"
+          default: true
+          description: "Cache embeddings"
+        enable_search_cache:
+          type: "boolean"
+          default: false
+          description: "Cache search results"
+        cache_backend:
+          type: "string"
+          enum: ["memory", "redis", "disk"]
+          default: "memory"
+          description: "Cache storage backend"
+        cache_ttl_seconds:
+          type: "integer"
+          minimum: 0
+          default: 3600
+          description: "Cache TTL"
+
+# ==============================================================================
+# VALIDATION SETTINGS (FUTURE IMPLEMENTATION)
+# ==============================================================================
+
+validation_settings:
+  type: "object"
+  description: "Input validation and quality checks"
+  properties:
+    document_validation:
+      type: "object"
+      properties:
+        min_length:
+          type: "integer"
+          minimum: 0
+          default: 10
+          description: "Minimum document length"
+        max_length:
+          type: "integer"
+          minimum: 0
+          default: 1000000
+          description: "Maximum document length"
+        allowed_types:
+          type: "array"
+          items:
+            type: "string"
+          default: ["text", "pdf", "csv", "html", "markdown"]
+          description: "Allowed document types"
+        encoding_detection:
+          type: "boolean"
+          default: true
+          description: "Auto-detect encoding"
+    
+    metadata_validation:
+      type: "object"
+      properties:
+        required_fields:
+          type: "array"
+          items:
+            type: "string"
+          default: []
+          description: "Required metadata fields"
+        field_types:
+          type: "object"
+          additionalProperties:
+            type: "string"
+          description: "Expected field types"
+        value_constraints:
+          type: "object"
+          additionalProperties:
+            type: "object"
+          description: "Field value constraints"
+    
+    content_filters:
+      type: "array"
+      items:
+        type: "object"
+        properties:
+          type:
+            type: "string"
+            enum: ["regex", "keyword", "language", "pii"]
+          pattern:
+            type: "string"
+          action:
+            type: "string"
+            enum: ["reject", "warn", "redact", "tag"]
+          severity:
+            type: "string"
+            enum: ["low", "medium", "high", "critical"]
+
+# ==============================================================================
+# MONITORING SETTINGS (FUTURE IMPLEMENTATION)
+# ==============================================================================
+
+monitoring_settings:
+  type: "object"
+  description: "Monitoring and observability"
+  properties:
+    metrics:
+      type: "object"
+      properties:
+        enable_metrics:
+          type: "boolean"
+          default: true
+          description: "Enable metrics collection"
+        metrics_backend:
+          type: "string"
+          enum: ["console", "prometheus", "datadog", "cloudwatch"]
+          default: "console"
+          description: "Metrics export backend"
+        metrics_interval:
+          type: "integer"
+          default: 60
+          description: "Metrics collection interval (seconds)"
+        custom_metrics:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              name:
+                type: "string"
+              type:
+                type: "string"
+                enum: ["counter", "gauge", "histogram"]
+              labels:
+                type: "array"
+                items:
+                  type: "string"
+    
+    logging:
+      type: "object"
+      properties:
+        log_level:
+          type: "string"
+          enum: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+          default: "INFO"
+          description: "Logging level"
+        log_format:
+          type: "string"
+          enum: ["json", "text", "structured"]
+          default: "text"
+          description: "Log format"
+        log_destination:
+          type: "string"
+          enum: ["console", "file", "syslog", "cloudwatch"]
+          default: "console"
+          description: "Log destination"
+        log_rotation:
+          type: "object"
+          properties:
+            enabled:
+              type: "boolean"
+              default: true
+            max_size_mb:
+              type: "integer"
+              default: 100
+            max_files:
+              type: "integer"
+              default: 10
+    
+    tracing:
+      type: "object"
+      properties:
+        enable_tracing:
+          type: "boolean"
+          default: false
+          description: "Enable distributed tracing"
+        tracing_backend:
+          type: "string"
+          enum: ["jaeger", "zipkin", "datadog", "xray"]
+          default: "jaeger"
+          description: "Tracing backend"
+        sample_rate:
+          type: "number"
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.1
+          description: "Trace sampling rate"
+    
+    alerting:
+      type: "object"
+      properties:
+        enable_alerts:
+          type: "boolean"
+          default: false
+          description: "Enable alerting"
+        alert_channels:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              type:
+                type: "string"
+                enum: ["email", "slack", "pagerduty", "webhook"]
+              config:
+                type: "object"
+        alert_rules:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              name:
+                type: "string"
+              condition:
+                type: "string"
+              threshold:
+                type: "number"
+              severity:
+                type: "string"
+                enum: ["low", "medium", "high", "critical"]
+
+# ==============================================================================
+# PREDEFINED STRATEGY TEMPLATES
+# ==============================================================================
+
+strategy_templates:
+  minimal:
+    name: "minimal"
+    description: "Minimal configuration for quick prototyping"
+    components:
+      parser:
+        type: "PlainTextParser"
+        config:
+          chunk_size: 1000
+          chunk_overlap: 200
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 16
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "minimal_docs"
+      retrieval_strategy:
+        type: "BasicSimilarityStrategy"
+        config:
+          top_k: 10
+    optimization:
+      performance_priority: "speed"
+  
+  balanced:
+    name: "balanced"
+    description: "Balanced configuration for general use"
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          combine_pages: true
+          extract_metadata: true
+      extractors:
+        - type: "KeywordExtractor"
+          config:
+            algorithm: "yake"
+            max_keywords: 15
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "DATE", "GPE"]
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 32
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "balanced_docs"
+          persist_directory: "./chroma_db"
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          top_k: 15
+    optimization:
+      performance_priority: "balanced"
+      batch_settings:
+        embedder_batch_size: 32
+        indexing_batch_size: 100
+  
+  production:
+    name: "production"
+    description: "Production-ready configuration"
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          combine_pages: false
+          extract_metadata: true
+          extract_outline: true
+      extractors:
+        - type: "KeywordExtractor"
+          config:
+            algorithm: "yake"
+            max_keywords: 20
+          priority: 80
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "MONEY"]
+            use_fallback: true
+          priority: 70
+        - type: "StatisticsExtractor"
+          config:
+            include_readability: true
+            include_language: true
+          priority: 60
+      embedder:
+        type: "OpenAIEmbedder"
+        config:
+          model: "text-embedding-3-small"
+          batch_size: 100
+      vector_store:
+        type: "PineconeStore"
+        config:
+          index_name: "production"
+          dimension: 1536
+      retrieval_strategy:
+        type: "HybridUniversalStrategy"
+        config:
+          strategies:
+            - type: "BasicSimilarityStrategy"
+              weight: 0.4
+            - type: "MetadataFilteredStrategy"
+              weight: 0.3
+            - type: "RerankedStrategy"
+              weight: 0.3
+          combination_method: "weighted_average"
+    optimization:
+      performance_priority: "accuracy"
+      resource_constraints:
+        max_memory_mb: 8192
+        gpu_enabled: true
+      caching:
+        enable_embedding_cache: true
+        enable_search_cache: true
+        cache_backend: "redis"
+        cache_ttl_seconds: 7200
+    monitoring:
+      metrics:
+        enable_metrics: true
+        metrics_backend: "prometheus"
+      logging:
+        log_level: "INFO"
+        log_format: "json"
+      tracing:
+        enable_tracing: true
+        tracing_backend: "jaeger"
+        sample_rate: 0.1
+
+# ==============================================================================
+# COMPATIBILITY AND VALIDATION RULES
+# ==============================================================================
+
+compatibility_rules:
+  component_compatibility:
+    description: "Component compatibility matrix"
+    rules:
+      - components: ["PDFParser"]
+        recommended_extractors: ["EntityExtractor", "DateTimeExtractor", "TableExtractor"]
+        incompatible_extractors: []
+      
+      - components: ["CSVParser", "ExcelParser"]
+        recommended_extractors: ["StatisticsExtractor", "PatternExtractor"]
+        incompatible_extractors: ["HeadingExtractor"]
+      
+      - components: ["MarkdownParser", "HTMLParser"]
+        recommended_extractors: ["HeadingExtractor", "LinkExtractor", "SummaryExtractor"]
+        incompatible_extractors: []
+  
+  embedder_store_compatibility:
+    description: "Embedder and vector store compatibility"
+    rules:
+      - embedder: "OllamaEmbedder"
+        dimension: 768
+        compatible_stores: ["ChromaStore", "FAISSStore", "QdrantStore"]
+        optimal_stores: ["ChromaStore"]
+      
+      - embedder: "OpenAIEmbedder"
+        models:
+          text-embedding-3-small:
+            dimension: 1536
+            compatible_stores: ["all"]
+          text-embedding-3-large:
+            dimension: 3072
+            compatible_stores: ["all"]
+      
+      - embedder: "HuggingFaceEmbedder"
+        dimension: "variable"
+        compatible_stores: ["all"]
+        notes: "Dimension depends on model"
+  
+  strategy_store_optimization:
+    description: "Optimal strategies for each vector store"
+    rules:
+      - store: "ChromaStore"
+        optimal_strategies: ["BasicSimilarityStrategy", "MetadataFilteredStrategy"]
+        good_strategies: ["MultiQueryStrategy", "HybridUniversalStrategy"]
+        avoid_strategies: []
+      
+      - store: "FAISSStore"
+        optimal_strategies: ["BasicSimilarityStrategy"]
+        good_strategies: ["MultiQueryStrategy", "RerankedStrategy"]
+        avoid_strategies: ["MetadataFilteredStrategy"]
+      
+      - store: "PineconeStore"
+        optimal_strategies: ["MetadataFilteredStrategy", "HybridUniversalStrategy"]
+        good_strategies: ["all"]
+        avoid_strategies: []
+      
+      - store: "QdrantStore"
+        optimal_strategies: ["MetadataFilteredStrategy", "HybridUniversalStrategy"]
+        good_strategies: ["all"]
+        avoid_strategies: []
+
+validation_rules:
+  required_fields:
+    strategy:
+      - "name"
+      - "description"
+      - "components.parser"
+      - "components.embedder"
+      - "components.vector_store"
+      - "components.retrieval_strategy"
+  
+  field_constraints:
+    strategy_name:
+      pattern: "^[a-z][a-z0-9_]*$"
+      max_length: 50
+    version:
+      pattern: "^\\d+\\.\\d+\\.\\d+$"
+    max_extractors: 10
+    max_batch_size: 1000
+    min_batch_size: 1
+    max_top_k: 1000
+    min_top_k: 1
+  
+  performance_warnings:
+    - condition: "extractors.length > 5"
+      message: "Using more than 5 extractors may impact processing speed"
+      severity: "warning"
+    
+    - condition: "embedder.config.batch_size > 128"
+      message: "Large batch sizes may cause memory issues"
+      severity: "warning"
+    
+    - condition: "retrieval_strategy.type == 'HybridUniversalStrategy' && strategies.length > 3"
+      message: "Combining more than 3 strategies may impact search latency"
+      severity: "warning"
+    
+    - condition: "vector_store.type == 'FAISSStore' && !optimization.resource_constraints.gpu_enabled"
+      message: "FAISS performs better with GPU acceleration"
+      severity: "info"
+
+# ==============================================================================
+# USAGE EXAMPLES AND BEST PRACTICES
+# ==============================================================================
+
+examples:
+  customer_support:
+    description: "Customer support ticket processing"
+    strategy:
+      name: "customer_support"
+      description: "Process and search customer support tickets"
+      components:
+        parser:
+          type: "CSVParser"
+          config:
+            content_fields: ["subject", "body", "resolution"]
+            metadata_fields: ["priority", "category", "status", "created_at"]
+        extractors:
+          - type: "KeywordExtractor"
+            config:
+              algorithm: "rake"
+              max_keywords: 10
+          - type: "EntityExtractor"
+            config:
+              entity_types: ["PERSON", "ORG", "EMAIL", "PHONE"]
+          - type: "DateTimeExtractor"
+            config:
+              extract_relative: true
+        embedder:
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+        vector_store:
+          type: "ChromaStore"
+          config:
+            collection_name: "support_tickets"
+        retrieval_strategy:
+          type: "MetadataFilteredStrategy"
+          config:
+            top_k: 20
+            filters:
+              priority: ["high", "critical"]
+  
+  legal_documents:
+    description: "Legal document analysis and retrieval"
+    strategy:
+      name: "legal_documents"
+      description: "Process legal documents with entity extraction"
+      components:
+        parser:
+          type: "PDFParser"
+          config:
+            combine_pages: false
+            extract_outline: true
+            include_page_numbers: true
+        extractors:
+          - type: "EntityExtractor"
+            config:
+              entity_types: ["PERSON", "ORG", "GPE", "DATE", "MONEY", "LAW"]
+          - type: "DateTimeExtractor"
+            config:
+              fuzzy_parsing: true
+          - type: "PatternExtractor"
+            config:
+              predefined_patterns: ["ssn", "phone", "email"]
+              custom_patterns:
+                - name: "case_number"
+                  pattern: "\\d{2}-[A-Z]{2}-\\d{4}"
+                  description: "Legal case number"
+        embedder:
+          type: "OpenAIEmbedder"
+          config:
+            model: "text-embedding-3-small"
+        vector_store:
+          type: "PineconeStore"
+          config:
+            index_name: "legal_docs"
+            dimension: 1536
+        retrieval_strategy:
+          type: "HybridUniversalStrategy"
+          config:
+            strategies:
+              - type: "MetadataFilteredStrategy"
+                weight: 0.5
+              - type: "RerankedStrategy"
+                weight: 0.5
+
+best_practices:
+  parser_selection:
+    - "Use PDFParser for unstructured documents with complex layouts"
+    - "Use CSVParser for structured tabular data"
+    - "Use MarkdownParser for documentation and technical content"
+    - "Enable OCR in PDFParser for scanned documents"
+  
+  extractor_configuration:
+    - "Limit extractors to those providing valuable metadata"
+    - "Order extractors by priority for performance"
+    - "Use EntityExtractor with fallback for reliability"
+    - "Configure PatternExtractor for domain-specific patterns"
+  
+  embedder_optimization:
+    - "Use local embedders (Ollama) for privacy-sensitive data"
+    - "Use OpenAI for highest quality embeddings"
+    - "Adjust batch size based on available memory"
+    - "Enable caching for frequently embedded content"
+  
+  vector_store_selection:
+    - "ChromaStore for development and small-scale deployment"
+    - "FAISSStore for large-scale with GPU acceleration"
+    - "PineconeStore for managed, serverless deployment"
+    - "QdrantStore for hybrid search requirements"
+  
+  retrieval_strategy:
+    - "Start with BasicSimilarityStrategy for baseline"
+    - "Use MetadataFilteredStrategy for categorical filtering"
+    - "Apply RerankedStrategy for quality-critical applications"
+    - "Combine strategies with HybridUniversalStrategy for balanced results"

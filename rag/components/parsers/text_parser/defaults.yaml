@@ -1,0 +1,55 @@
+log_analysis:
+  name: Log File Analysis
+  description: Optimized for processing log files and system outputs
+  config:
+    encoding: auto
+    chunk_size: 50000
+    preserve_line_breaks: true
+    strip_empty_lines: true
+    detect_structure: false
+  recommended_for:
+  - Server logs
+  - Application logs
+  - System outputs
+  - Debug files
+documentation:
+  name: Documentation Processing
+  description: Process documentation with structure detection
+  config:
+    encoding: utf-8
+    chunk_size: null
+    preserve_line_breaks: true
+    strip_empty_lines: false
+    detect_structure: true
+  recommended_for:
+  - README files
+  - Technical documentation
+  - User manuals
+  - Text guides
+large_documents:
+  name: Large Document Chunking
+  description: Handle large text files with intelligent chunking
+  config:
+    encoding: auto
+    chunk_size: 25000
+    preserve_line_breaks: true
+    strip_empty_lines: true
+    detect_structure: true
+  recommended_for:
+  - Books
+  - Research papers
+  - Long articles
+  - Large datasets
+clean_processing:
+  name: Clean Text Processing
+  description: Clean processing with minimal structure detection
+  config:
+    encoding: utf-8
+    chunk_size: null
+    preserve_line_breaks: false
+    strip_empty_lines: true
+    detect_structure: false
+  recommended_for:
+  - Data cleaning
+  - Content migration
+  - Simple text processing

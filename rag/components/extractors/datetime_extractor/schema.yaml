@@ -1,0 +1,92 @@
+name: datetime_extractor
+type: extractor
+class_name: DateTimeExtractor
+description: Extracts dates, times, and temporal expressions from text using multiple parsing strategies
+version: 1.0.0
+dependencies:
+  optional:
+  - python-dateutil
+  required: []
+config_schema:
+  type: object
+  properties:
+    fuzzy_parsing:
+      type: boolean
+      default: true
+      description: Enable fuzzy date parsing with dateutil (if available)
+    extract_relative:
+      type: boolean
+      default: true
+      description: Extract relative date expressions (yesterday, next week, etc.)
+    extract_times:
+      type: boolean
+      default: true
+      description: Extract time expressions (12:30 PM, 14:30, etc.)
+    default_timezone:
+      type: string
+      default: UTC
+      description: Default timezone for parsed dates
+    date_formats:
+      type: array
+      items:
+        type: string
+      default: []
+      description: Additional date formats to try parsing
+output_schema:
+  type: object
+  properties:
+    dates:
+      type: array
+      items:
+        type: object
+        properties:
+          text:
+            type: string
+          parsed:
+            type: string
+          type:
+            type: string
+          confidence:
+            type: number
+    times:
+      type: array
+      items:
+        type: object
+        properties:
+          text:
+            type: string
+          parsed:
+            type: string
+          type:
+            type: string
+    relative_dates:
+      type: array
+      items:
+        type: object
+        properties:
+          text:
+            type: string
+          interpretation:
+            type: string
+          type:
+            type: string
+use_cases:
+- Event extraction from documents
+- Timeline construction
+- Temporal information retrieval
+- Document chronology analysis
+- Meeting and appointment extraction
+- Historical document analysis
+examples:
+- name: Event extraction
+  config:
+    fuzzy_parsing: true
+    extract_relative: true
+    extract_times: true
+  description: Extract all temporal information for event processing
+- name: Precise dates only
+  config:
+    fuzzy_parsing: false
+    extract_relative: false
+    extract_times: false
+  description: Extract only precise, unambiguous dates

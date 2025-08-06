@@ -1,0 +1,72 @@
+general_purpose:
+  name: General Purpose Entity Extraction
+  description: Good balance for most document types
+  config:
+    entity_types:
+    - PERSON
+    - ORG
+    - GPE
+    - DATE
+    - PERCENT
+    use_fallback: true
+    min_entity_length: 2
+    confidence_threshold: 0.8
+  recommended_for:
+  - General documents
+  - Customer support
+  - News articles
+research_papers:
+  name: Academic Research Entity Extraction
+  description: Optimized for academic and research content
+  config:
+    entity_types:
+    - PERSON
+    - ORG
+    - GPE
+    - DATE
+    - WORK_OF_ART
+    - PRODUCT
+    use_fallback: true
+    min_entity_length: 3
+    confidence_threshold: 0.85
+  recommended_for:
+  - Research papers
+  - Academic documents
+  - Scientific literature
+business_reports:
+  name: Business Document Entity Extraction
+  description: Focused on business and financial entities
+  config:
+    entity_types:
+    - PERSON
+    - ORG
+    - GPE
+    - MONEY
+    - PERCENT
+    - DATE
+    use_fallback: true
+    min_entity_length: 2
+    confidence_threshold: 0.9
+  recommended_for:
+  - Financial reports
+  - Business documents
+  - Market analysis
+news_analysis:
+  name: News Article Entity Extraction
+  description: Comprehensive entity extraction for news content
+  config:
+    entity_types:
+    - PERSON
+    - ORG
+    - GPE
+    - DATE
+    - TIME
+    - EVENT
+    - PRODUCT
+    use_fallback: true
+    min_entity_length: 2
+    confidence_threshold: 0.75
+  recommended_for:
+  - News articles
+  - Press releases
+  - Media analysis

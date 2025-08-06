@@ -1,0 +1,124 @@
+name: table_extractor
+type: extractor
+class_name: TableExtractor
+description: Extracts structured tabular data from documents using multiple format detection methods
+version: 1.0.0
+dependencies:
+  optional: []
+  required: []
+config_schema:
+  type: object
+  properties:
+    min_columns:
+      type: integer
+      default: 2
+      minimum: 1
+      description: Minimum number of columns required for table detection
+    min_rows:
+      type: integer
+      default: 2
+      minimum: 1
+      description: Minimum number of rows required for table detection
+    detect_headers:
+      type: boolean
+      default: true
+      description: Whether to detect and separate table headers
+    table_formats:
+      type: array
+      items:
+        type: string
+        enum:
+        - pipe
+        - grid
+        - csv
+        - html_marker
+      default:
+      - pipe
+      - grid
+      - csv
+      description: Table formats to detect
+    max_cell_length:
+      type: integer
+      default: 200
+      minimum: 10
+      description: Maximum character length allowed per table cell
+output_schema:
+  type: object
+  properties:
+    tables:
+      type: array
+      items:
+        type: object
+        properties:
+          type:
+            type: string
+          data:
+            type: array
+            items:
+              type: array
+              items:
+                type: string
+          headers:
+            type: array
+            items:
+              type: string
+          start_line:
+            type: integer
+          end_line:
+            type: integer
+    table_count:
+      type: integer
+    total_rows:
+      type: integer
+    total_columns:
+      type: integer
+    statistics:
+      type: object
+use_cases:
+- Financial report analysis
+- Data extraction from PDFs
+- Structured content parsing
+- Research paper table extraction
+- CSV content detection
+- Spreadsheet data mining
+examples:
+- name: Basic table detection
+  config:
+    min_columns: 2
+    min_rows: 2
+    detect_headers: true
+    table_formats:
+    - pipe
+    - csv
+  description: Detect pipe and CSV tables with headers
+- name: Strict table extraction
+  config:
+    min_columns: 3
+    min_rows: 3
+    detect_headers: true
+    table_formats:
+    - grid
+    - pipe
+    max_cell_length: 100
+  description: Extract only well-formed tables with multiple columns
+- name: All format detection
+  config:
+    min_columns: 2
+    min_rows: 1
+    detect_headers: false
+    table_formats:
+    - pipe
+    - grid
+    - csv
+    - html_marker
+    max_cell_length: 500
+  description: Detect all table formats including HTML markers
+- name: Large table extraction
+  config:
+    min_columns: 1
+    min_rows: 1
+    detect_headers: true
+    table_formats:
+    - csv
+    max_cell_length: 1000
+  description: Extract large CSV tables with long cell content

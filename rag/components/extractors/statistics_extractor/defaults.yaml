@@ -1,0 +1,68 @@
+research_analysis:
+  name: Research Paper Analysis
+  description: Comprehensive statistics for academic research
+  config:
+    include_readability: true
+    include_vocabulary: true
+    include_structure: true
+    include_sentiment_indicators: false
+    language: en
+    reading_speeds:
+      slow: 120
+      average: 180
+      fast: 250
+  recommended_for:
+  - Research papers
+  - Academic articles
+  - Technical documentation
+content_marketing:
+  name: Content Marketing Analysis
+  description: Optimized for marketing and web content
+  config:
+    include_readability: true
+    include_vocabulary: false
+    include_structure: false
+    include_sentiment_indicators: true
+    language: en
+    reading_speeds:
+      slow: 150
+      average: 200
+      fast: 300
+  recommended_for:
+  - Blog posts
+  - Marketing content
+  - Web articles
+financial_analysis:
+  name: Financial Document Analysis
+  description: Statistics focused on financial and business documents
+  config:
+    include_readability: true
+    include_vocabulary: true
+    include_structure: true
+    include_sentiment_indicators: true
+    language: en
+    reading_speeds:
+      slow: 100
+      average: 150
+      fast: 200
+  recommended_for:
+  - Financial reports
+  - Business documents
+  - Legal texts
+basic_stats:
+  name: Basic Statistics
+  description: Essential metrics only for performance
+  config:
+    include_readability: true
+    include_vocabulary: false
+    include_structure: false
+    include_sentiment_indicators: false
+    language: en
+    reading_speeds:
+      slow: 150
+      average: 200
+      fast: 300
+  recommended_for:
+  - Quick analysis
+  - Large document batches
+  - Performance-critical applications

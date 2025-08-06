@@ -1,0 +1,12 @@
+name: docx_parser
+type: parser
+class_name: DocxParser
+description: DocxParser component
+version: 1.0.0
+dependencies:
+  optional: []
+  required: []
+config_schema:
+  type: object
+  properties: {}
+use_cases: []

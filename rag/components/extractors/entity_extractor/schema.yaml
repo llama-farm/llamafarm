@@ -1,0 +1,97 @@
+name: entity_extractor
+type: extractor
+class_name: EntityExtractor
+description: Extracts named entities (people, organizations, locations, etc.) from text using NLP models or regex fallback
+version: 1.0.0
+dependencies:
+  optional:
+  - spacy
+  required: []
+config_schema:
+  type: object
+  properties:
+    entity_types:
+      type: array
+      items:
+        type: string
+        enum:
+        - PERSON
+        - ORG
+        - GPE
+        - DATE
+        - TIME
+        - PERCENT
+        - MONEY
+        - PRODUCT
+        - EVENT
+        - WORK_OF_ART
+        - LAW
+        - LANGUAGE
+      default:
+      - PERSON
+      - ORG
+      - GPE
+      - DATE
+      - PERCENT
+      - PRODUCT
+      description: Types of entities to extract
+    use_fallback:
+      type: boolean
+      default: true
+      description: Use regex fallback when spaCy is not available
+    min_entity_length:
+      type: integer
+      default: 2
+      minimum: 1
+      description: Minimum length of entities to extract
+    confidence_threshold:
+      type: number
+      default: 0.8
+      minimum: 0.0
+      maximum: 1.0
+      description: Minimum confidence score for entity extraction
+output_schema:
+  type: object
+  properties:
+    entities:
+      type: array
+      items:
+        type: object
+        properties:
+          text:
+            type: string
+          label:
+            type: string
+          start:
+            type: integer
+          end:
+            type: integer
+          confidence:
+            type: number
+use_cases:
+- Customer support ticket analysis
+- Document classification
+- Content categorization
+- Information extraction from research papers
+- News article analysis
+examples:
+- name: Basic entity extraction
+  config:
+    entity_types:
+    - PERSON
+    - ORG
+    - GPE
+    use_fallback: true
+    min_entity_length: 2
+  description: Extract people, organizations, and locations
+- name: Financial entity extraction
+  config:
+    entity_types:
+    - PERSON
+    - ORG
+    - MONEY
+    - PERCENT
+    - DATE
+    confidence_threshold: 0.9
+    min_entity_length: 1
+  description: Extract entities relevant to financial documents

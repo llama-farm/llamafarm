@@ -1,0 +1,86 @@
+name: text_parser
+type: parser
+class_name: PlainTextParser
+description: Parser for plain text files with encoding detection and structure analysis
+version: 1.0.0
+dependencies:
+  optional:
+  - chardet
+  required: []
+config_schema:
+  type: object
+  properties:
+    encoding:
+      type: string
+      default: auto
+      description: Text encoding ('auto' for detection, or specific like 'utf-8')
+    chunk_size:
+      type:
+      - integer
+      - 'null'
+      default: null
+      description: Split text into chunks of this size (characters)
+    preserve_line_breaks:
+      type: boolean
+      default: true
+      description: Preserve original line breaks in content
+    strip_empty_lines:
+      type: boolean
+      default: true
+      description: Remove excessive empty lines
+    detect_structure:
+      type: boolean
+      default: true
+      description: Detect headers, lists, and code blocks
+output_schema:
+  type: object
+  properties:
+    content:
+      type: string
+    metadata:
+      type: object
+      properties:
+        file_path:
+          type: string
+        file_name:
+          type: string
+        encoding:
+          type: string
+        line_count:
+          type: integer
+        word_count:
+          type: integer
+        has_headers:
+          type: boolean
+        has_lists:
+          type: boolean
+        has_code_blocks:
+          type: boolean
+supported_extensions:
+- .txt
+- .log
+- .text
+- .asc
+- .readme
+use_cases:
+- Log file analysis
+- Plain text document processing
+- Configuration file parsing
+- README file processing
+- Code documentation
+- Large text file chunking
+examples:
+- name: Log analysis
+  config:
+    encoding: auto
+    chunk_size: 10000
+    detect_structure: false
+    strip_empty_lines: true
+  description: Process log files with chunking
+- name: Documentation
+  config:
+    encoding: utf-8
+    detect_structure: true
+    preserve_line_breaks: true
+    strip_empty_lines: false
+  description: Parse documentation with structure detection

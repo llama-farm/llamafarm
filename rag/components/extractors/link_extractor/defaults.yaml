@@ -1,0 +1,64 @@
+web_analysis:
+  name: Web Content Analysis
+  description: Comprehensive link extraction for web content
+  config:
+    extract_urls: true
+    extract_emails: true
+    extract_phone_numbers: true
+    extract_mentions: false
+    extract_hashtags: false
+    extract_file_paths: true
+    validate_urls: true
+    categorize_domains: true
+  recommended_for:
+  - Web pages
+  - HTML content
+  - Articles with references
+social_media:
+  name: Social Media Content
+  description: Optimized for social media posts and content
+  config:
+    extract_urls: true
+    extract_emails: false
+    extract_phone_numbers: false
+    extract_mentions: true
+    extract_hashtags: true
+    extract_file_paths: false
+    validate_urls: true
+    categorize_domains: true
+  recommended_for:
+  - Twitter posts
+  - Social media content
+  - User-generated content
+documentation:
+  name: Technical Documentation
+  description: Extract links and references from documentation
+  config:
+    extract_urls: true
+    extract_emails: true
+    extract_phone_numbers: false
+    extract_mentions: false
+    extract_hashtags: false
+    extract_file_paths: true
+    validate_urls: true
+    categorize_domains: true
+  recommended_for:
+  - API docs
+  - Technical guides
+  - Software documentation
+contact_extraction:
+  name: Contact Information
+  description: Focus on extracting contact details
+  config:
+    extract_urls: false
+    extract_emails: true
+    extract_phone_numbers: true
+    extract_mentions: false
+    extract_hashtags: false
+    extract_file_paths: false
+    validate_urls: false
+    categorize_domains: false
+  recommended_for:
+  - Business cards
+  - Contact lists
+  - Directory content

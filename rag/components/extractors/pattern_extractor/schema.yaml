@@ -1,0 +1,88 @@
+name: pattern_extractor
+type: extractor
+class_name: PatternExtractor
+description: Extracts patterns from text using regular expressions (emails, phone numbers, URLs, etc.)
+version: 1.0.0
+dependencies:
+  optional: []
+  required: []
+config_schema:
+  type: object
+  properties:
+    patterns:
+      type: array
+      items:
+        type: string
+        enum:
+        - email
+        - phone
+        - url
+        - ip_address
+        - ssn
+        - credit_card
+        - date
+        - time
+      default:
+      - email
+      - phone
+      - url
+      description: Predefined patterns to extract
+    custom_patterns:
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          pattern:
+            type: string
+          description:
+            type: string
+      default: []
+      description: Custom regex patterns to extract
+    include_context:
+      type: boolean
+      default: true
+      description: Include surrounding context for matches
+    context_window:
+      type: integer
+      default: 50
+      minimum: 0
+      description: Characters of context to include around matches
+output_schema:
+  type: object
+  properties:
+    patterns:
+      type: object
+      patternProperties:
+        .*:
+          type: object
+          properties:
+            matches:
+              type: array
+            count:
+              type: integer
+            description:
+              type: string
+use_cases:
+- Data validation and extraction
+- PII detection and redaction
+- Contact information extraction
+- URL and reference extraction
+- Document analysis and compliance
+examples:
+- name: Contact information extraction
+  config:
+    patterns:
+    - email
+    - phone
+    include_context: true
+    context_window: 30
+  description: Extract emails and phone numbers with context
+- name: Web content analysis
+  config:
+    patterns:
+    - url
+    - email
+    include_context: false
+  description: Extract URLs and emails from web content

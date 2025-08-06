@@ -1,0 +1,12 @@
+name: excel_parser
+type: parser
+class_name: ExcelParser
+description: ExcelParser component
+version: 1.0.0
+dependencies:
+  optional: []
+  required: []
+config_schema:
+  type: object
+  properties: {}
+use_cases: []
