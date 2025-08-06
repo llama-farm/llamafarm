@@ -42,7 +42,7 @@ This configuration:
 # Model definitions
 models: []
 
-# Pipeline configuration  
+# Pipeline configuration
 pipeline: []
 
 # Deployment settings
@@ -64,13 +64,13 @@ models:
     device: cuda  # or cpu, auto
     quantization: int8  # int4, int8, float16
     cache_dir: ./models
-    
+
   # Cloud API example
   - name: cloud-gpt
     type: openai
     model: gpt-4
     api_key: ${OPENAI_API_KEY}  # Environment variable
-    
+
   # Custom model
   - name: custom-bert
     type: custom
@@ -91,7 +91,7 @@ pipeline:
       max_tokens: 500
       temperature: 0.7
   - output: response
-  
+
   # Complex pipeline with embeddings
   - input: documents
   - embed:
@@ -121,22 +121,22 @@ deploy:
     port: 8080
     workers: 4
     gpu_layers: 35
-    
+
   # Cloud deployment
   aws:
     region: us-east-1
     instance_type: g4dn.xlarge
     min_instances: 1
     max_instances: 10
-    
-  # Edge deployment  
+
+  # Edge deployment
   edge:
     devices:
       - name: jetson-1
         ip: 192.168.1.100
       - name: rpi-cluster
         ips: [192.168.1.101, 192.168.1.102]
-        
+
   # Kubernetes
   kubernetes:
     namespace: llamafarm
@@ -161,11 +161,11 @@ models:
   - name: fast-model
     type: llama2-7b
     tags: ["fast", "general"]
-    
-  - name: accurate-model  
+
+  - name: accurate-model
     type: llama2-70b
     tags: ["accurate", "slow"]
-    
+
 pipeline:
   - route:
       by: complexity
@@ -224,7 +224,7 @@ settings:
     prometheus:
       enable: true
       port: 9090
-      
+
     logging:
       level: info  # debug, info, warning, error
       format: json
@@ -234,7 +234,7 @@ settings:
         - elasticsearch:
             host: localhost:9200
             index: llamafarm-logs
-            
+
     tracing:
       enable: true
       jaeger:
@@ -254,16 +254,16 @@ settings:
         - name: production
           key: ${PROD_API_KEY}
           rate_limit: 1000/hour
-          
+
     ssl:
       enable: true
       cert: ./certs/cert.pem
       key: ./certs/key.pem
-      
+
     cors:
       origins: ["https://myapp.com"]
       methods: ["GET", "POST"]
-      
+
     input_validation:
       max_length: 10000
       block_patterns: ["<script>", "DROP TABLE"]
@@ -277,10 +277,10 @@ Use environment variables for sensitive data:
 models:
   - name: openai
     api_key: ${OPENAI_API_KEY}
-    
+
   - name: anthropic
     api_key: ${ANTHROPIC_API_KEY:-default_value}  # With default
-    
+
 settings:
   database:
     url: ${DATABASE_URL}
@@ -298,7 +298,7 @@ models:
   - name: assistant
     type: llama2-7b
     quantization: int4  # Faster for development
-    
+
 deploy:
   local:
     debug: true
@@ -312,7 +312,7 @@ models:
   - name: assistant
     type: llama2-70b
     quantization: float16  # Better quality
-    
+
 deploy:
   aws:
     auto_scale: true
@@ -343,28 +343,28 @@ models:
   - name: embedder
     type: sentence-transformers
     model: all-MiniLM-L6-v2
-    
+
   - name: generator
     type: llama2-13b
     device: cuda
-    
+
 pipeline:
   - ingest:
       source: ./documents
       chunk_size: 512
       overlap: 50
-      
+
   - embed:
       model: embedder
-      
+
   - store:
       type: chromadb
       persist: ./db
-      
+
   - retrieve:
       model: embedder
       top_k: 5
-      
+
   - generate:
       model: generator
       template: |
@@ -379,22 +379,22 @@ pipeline:
 models:
   - name: translator
     type: m2m100
-    
+
   - name: multilingual
     type: xlm-roberta
-    
+
 pipeline:
   - detect_language:
       model: multilingual
-      
+
   - translate:
       model: translator
       target: english
       when: language != "en"
-      
+
   - process:
       model: llama2
-      
+
   - translate_back:
       model: translator
       target: ${detected_language}
@@ -410,12 +410,12 @@ experiments:
         model: llama2
         prompt: "You are a helpful assistant."
         weight: 50
-        
-      - name: variant-b  
+
+      - name: variant-b
         model: llama2
         prompt: "You are a knowledgeable expert."
         weight: 50
-        
+
     metrics:
       - response_quality
       - user_satisfaction
@@ -434,5 +434,5 @@ experiments:
 ## Next Steps
 
 - Explore [Model Configuration](./models) for detailed model options
-- Learn about [Deployment Strategies](./deployment) 
-- See [Examples](./examples) for complete configurations
+- Learn about [Deployment Strategies](./deployment)
+- See [Examples](#) for complete configurations
