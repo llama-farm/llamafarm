@@ -640,7 +640,38 @@ cd ../prompts && uv run python -m prompts.cli execute "query" --template medical
 
 ## 🛠️ Troubleshooting
 
-### ❗ **Common Issues**
+### ❗ **Critical Setup Issues**
+
+#### **OpenAI Organization Header Error** ⚠️ 
+```bash
+# Error: "OpenAI-Organization header should match organization for API key"
+# This is the most common issue - here's the fix:
+
+# 1. Check your .env file and COMMENT OUT the OPENAI_ORG_ID line:
+# OPENAI_ORG_ID=  # Optional: your organization ID (commented out to prevent header issues)
+
+# 2. Restart your demo/CLI after making this change
+
+# 3. Test that it's fixed:
+uv run python cli.py test openai_gpt4o_mini
+```
+
+#### **Environment Configuration Setup**
+```bash
+# 1. Copy the environment template:
+cp ../.env.example ../.env
+
+# 2. Add your OpenAI API key to .env:
+OPENAI_API_KEY=sk-your-key-here
+
+# 3. IMPORTANT: Comment out or remove OPENAI_ORG_ID:
+# OPENAI_ORG_ID=  # Optional: your organization ID (commented out to prevent header issues)
+
+# 4. Test your configuration:
+uv run python cli.py validate-config
+```
+
+### ❗ **Common Demo Issues**
 
 #### **API Key Problems**
 ```bash
@@ -652,6 +683,18 @@ uv run python cli.py validate-config
 
 # Test specific provider
 uv run python cli.py test openai_gpt4o_mini
+
+# If you get "quota exceeded" but have quota, check your API key is loaded:
+echo $OPENAI_API_KEY  # Should show your key
+```
+
+#### **Demo Quick Tests**
+```bash
+# Test the fixed demos with automated mode:
+DEMO_MODE=automated uv run python demos/demo_fallback.py
+DEMO_MODE=automated uv run python demos/demo_multi_model.py
+DEMO_MODE=automated uv run python demos/demo_pytorch.py --skip-training --skip-ollama
+DEMO_MODE=automated uv run python demos/demo_llamafactory.py --validate-only
 ```
 
 #### **Ollama Issues**
