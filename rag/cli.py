@@ -20,16 +20,18 @@ from core.factories import (
     create_embedder_from_config,
     create_parser_from_config,
     create_vector_store_from_config,
+    create_retrieval_strategy_from_config,
     EmbedderFactory,
     VectorStoreFactory,
     ParserFactory,
 )
-from retrieval.factory import create_retrieval_strategy_from_config
+# Import for retrieval strategies is handled via core.factories
 from utils.progress import LlamaProgressTracker, create_enhanced_progress_bar
 from utils.path_resolver import PathResolver, resolve_paths_in_config
 from core.document_manager import DocumentManager, DeletionStrategy, UpdateStrategy
 from core.extractor_integration import ExtractorIntegrator, apply_extractors_from_cli_args
-from extractors import registry
+from components.extractors import registry
+from strategies import StrategyManager
 
 
 def setup_logging(level: str = "INFO"):
@@ -259,6 +261,60 @@ def load_config(config_path: str, base_dir: str = None) -> Dict[str, Any]:
         sys.exit(1)
 
 
+def load_config_with_strategy_support(
+    config_path: Optional[str] = None,
+    strategy_name: Optional[str] = None, 
+    strategy_overrides: Optional[str] = None,
+    base_dir: str = None
+) -> Dict[str, Any]:
+    """
+    Load configuration with strategy support.
+    
+    Args:
+        config_path: Path to traditional config file
+        strategy_name: Name of strategy to use
+        strategy_overrides: JSON string of strategy overrides
+        base_dir: Base directory for path resolution
+        
+    Returns:
+        Configuration dictionary
+    """
+    if strategy_name:
+        # Strategy-based configuration
+        strategy_manager = StrategyManager()
+        
+        # Parse overrides if provided
+        overrides = {}
+        if strategy_overrides:
+            try:
+                overrides = json.loads(strategy_overrides)
+            except json.JSONDecodeError as e:
+                print(f"❌ Invalid strategy overrides JSON: {e}")
+                sys.exit(1)
+        
+        # Convert strategy to config
+        config = strategy_manager.convert_strategy_to_config(strategy_name, overrides)
+        if not config:
+            print(f"❌ Strategy '{strategy_name}' not found")
+            available = strategy_manager.get_available_strategies()
+            if available:
+                print(f"Available strategies: {', '.join(available)}")
+            sys.exit(1)
+        
+        # Remove strategy metadata for pipeline creation
+        config.pop("_strategy_info", None)
+        return config
+    
+    elif config_path:
+        # Traditional config file
+        return load_config(config_path, base_dir)
+    
+    else:
+        print("❌ Either --config or --strategy must be provided")
+        print("💡 Use 'strategies list' to see available strategies")
+        sys.exit(1)
+
+
 def create_pipeline_from_config(
     config: Dict[str, Any], 
     enhanced: bool = False, 
@@ -338,14 +394,19 @@ def ingest_command(args):
         tracker.print_error(f"Data source error: {e}")
         sys.exit(1)
 
-    # Load configuration
+    # Load configuration (with strategy support)
     try:
-        config = load_config(
-            args.config, args.base_dir if hasattr(args, "base_dir") else None
+        config = load_config_with_strategy_support(
+            config_path=args.config,
+            strategy_name=getattr(args, 'strategy', None),
+            strategy_overrides=getattr(args, 'strategy_overrides', None),
+            base_dir=args.base_dir if hasattr(args, "base_dir") else None
         )
         
         # Show config type
-        if is_unified_config(config):
+        if hasattr(args, 'strategy') and args.strategy:
+            tracker.print_info(f"🚀 Using strategy: {args.strategy}")
+        elif is_unified_config(config):
             tracker.print_info(f"📋 Using unified configuration v{config.get('version', '2.0')}")
         else:
             tracker.print_info("📋 Using legacy configuration format")
@@ -454,9 +515,18 @@ def search_command(args):
     setup_logging(args.log_level)
     tracker = LlamaProgressTracker()
 
-    # Load configuration
+    # Load configuration (with strategy support)
     base_dir = getattr(args, "base_dir", None)
-    config = load_config(args.config, base_dir)
+    config = load_config_with_strategy_support(
+        config_path=args.config,
+        strategy_name=getattr(args, 'strategy', None),
+        strategy_overrides=getattr(args, 'strategy_overrides', None),
+        base_dir=base_dir
+    )
+    
+    # Show config type
+    if hasattr(args, 'strategy') and args.strategy:
+        tracker.print_info(f"🚀 Using strategy: {args.strategy}")
 
     # Select components with overrides
     try:
@@ -885,7 +955,7 @@ def run_retrieval_tests(args, tracker: LlamaProgressTracker) -> Dict[str, Any]:
     
     try:
         # Test strategy creation
-        from retrieval.factory import create_retrieval_strategy_from_config
+        # Import for retrieval strategies is handled via core.factories
         
         # Test basic strategy
         basic_config = {
@@ -916,7 +986,7 @@ def run_retrieval_tests(args, tracker: LlamaProgressTracker) -> Dict[str, Any]:
         results["passed"] += 1
         
         # Test strategy registry
-        from retrieval.strategies.universal import UNIVERSAL_STRATEGIES
+        from components.retrievers.strategies.universal import UNIVERSAL_STRATEGIES
         strategy_count = len(UNIVERSAL_STRATEGIES)
         print(f"   ✓ {strategy_count} universal strategies available")
         results["tests"].append({"name": "Strategy Registry", "status": "PASS"})
@@ -1420,6 +1490,118 @@ def test_extractor_command(args):
         print(f"Traceback: {traceback.format_exc()}")
 
 
+def strategy_command(args):
+    """Handle strategy commands."""
+    strategy_manager = StrategyManager()
+    
+    if args.strategy_command == "list":
+        strategies = strategy_manager.get_available_strategies()
+        
+        if not strategies:
+            print("❌ No strategies available")
+            return
+        
+        if args.detailed:
+            print(f"\n🚀 {Fore.CYAN}Available RAG Strategies{Style.RESET_ALL}")
+            print("=" * 80)
+            strategy_manager.print_all_strategies()
+        else:
+            print(f"\n🚀 {Fore.CYAN}Available Strategies ({len(strategies)}){Style.RESET_ALL}")
+            print("=" * 50)
+            for strategy_name in sorted(strategies):
+                info = strategy_manager.get_strategy_info(strategy_name)
+                if info:
+                    print(f"{Fore.GREEN}{strategy_name:15}{Style.RESET_ALL} - {info['description']}")
+            print(f"\n💡 Use 'strategies show <name>' for details")
+            print(f"💡 Use 'strategies list --detailed' for full information")
+    
+    elif args.strategy_command == "show":
+        info = strategy_manager.get_strategy_info(args.name)
+        if not info:
+            print(f"❌ Strategy '{args.name}' not found")
+            available = strategy_manager.get_available_strategies()
+            if available:
+                print(f"Available strategies: {', '.join(available)}")
+            return
+        
+        strategy_manager.print_strategy_summary(args.name)
+    
+    elif args.strategy_command == "recommend":
+        criteria = {}
+        if args.use_case:
+            criteria["use_case"] = args.use_case
+        if args.performance:
+            criteria["performance_priority"] = args.performance
+        if args.resources:
+            criteria["resource_usage"] = args.resources
+        if args.complexity:
+            criteria["complexity"] = args.complexity
+        
+        recommendations = strategy_manager.recommend_strategies(**criteria)
+        
+        if not recommendations:
+            print("❌ No strategies match your criteria")
+            return
+        
+        print(f"\n🎯 {Fore.CYAN}Strategy Recommendations{Style.RESET_ALL}")
+        print("=" * 50)
+        
+        for i, rec in enumerate(recommendations[:5], 1):  # Show top 5
+            print(f"\n{i}. {Fore.GREEN}{rec['name']}{Style.RESET_ALL}")
+            print(f"   {rec['description']}")
+            print(f"   Use cases: {', '.join(rec['use_cases'])}")
+            print(f"   Performance: {rec['performance_priority']} | Resources: {rec['resource_usage']} | Complexity: {rec['complexity']}")
+    
+    elif args.strategy_command == "convert":
+        overrides = {}
+        if args.overrides:
+            try:
+                overrides = json.loads(args.overrides)
+            except json.JSONDecodeError as e:
+                print(f"❌ Invalid JSON overrides: {e}")
+                return
+        
+        success = strategy_manager.export_strategy_as_config(
+            args.strategy_name, 
+            args.output_file
+        )
+        
+        if success:
+            print(f"✅ Strategy '{args.strategy_name}' exported to {args.output_file}")
+        else:
+            print(f"❌ Failed to export strategy '{args.strategy_name}'")
+    
+    elif args.strategy_command == "test":
+        overrides = {}
+        if args.overrides:
+            try:
+                overrides = json.loads(args.overrides)
+            except json.JSONDecodeError as e:
+                print(f"❌ Invalid JSON overrides: {e}")
+                return
+        
+        config = strategy_manager.convert_strategy_to_config(args.strategy_name, overrides)
+        if not config:
+            print(f"❌ Strategy '{args.strategy_name}' not found")
+            return
+        
+        # Validate the configuration
+        errors = strategy_manager.validate_strategy_config(config)
+        if errors:
+            print(f"❌ Strategy configuration has errors:")
+            for error in errors:
+                print(f"   - {error}")
+            return
+        
+        print(f"✅ Strategy '{args.strategy_name}' configuration is valid")
+        
+        # Test with sample file if provided
+        if args.sample_file:
+            print(f"\n🧪 Testing with sample file: {args.sample_file}")
+            # TODO: Implement sample file testing
+            print("Sample file testing not yet implemented")
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="Simple RAG System CLI with Unified Configuration Support")
@@ -1565,19 +1747,65 @@ def main():
     ingest_parser.add_argument("--extractor-config", 
                               help="JSON config for extractors (e.g., '{\"yake\": {\"max_keywords\": 15}}')")
 
+    # Strategy commands
+    strategy_parser = subparsers.add_parser("strategies", help="Strategy operations")
+    strategy_subparsers = strategy_parser.add_subparsers(dest="strategy_command", help="Strategy commands")
+    
+    # List strategies
+    list_strategies_parser = strategy_subparsers.add_parser("list", help="List available strategies")
+    list_strategies_parser.add_argument("--detailed", action="store_true",
+                                       help="Show detailed strategy information")
+    
+    # Show strategy info
+    show_strategy_parser = strategy_subparsers.add_parser("show", help="Show strategy details")
+    show_strategy_parser.add_argument("name", help="Strategy name to show")
+    
+    # Recommend strategies
+    recommend_parser = strategy_subparsers.add_parser("recommend", help="Recommend strategies")
+    recommend_parser.add_argument("--use-case", help="Use case to optimize for")
+    recommend_parser.add_argument("--performance", choices=["speed", "accuracy", "balanced"],
+                                 help="Performance priority")
+    recommend_parser.add_argument("--resources", choices=["low", "medium", "high"],
+                                 help="Resource usage level")
+    recommend_parser.add_argument("--complexity", choices=["simple", "moderate", "complex"],
+                                 help="Complexity level")
+    
+    # Convert strategy to config
+    convert_parser = strategy_subparsers.add_parser("convert", help="Convert strategy to config file")
+    convert_parser.add_argument("strategy_name", help="Strategy name to convert")
+    convert_parser.add_argument("output_file", help="Output configuration file")
+    convert_parser.add_argument("--overrides", help="JSON overrides to apply")
+    
+    # Test strategy
+    test_strategy_parser = strategy_subparsers.add_parser("test", help="Test a strategy configuration")
+    test_strategy_parser.add_argument("strategy_name", help="Strategy name to test")
+    test_strategy_parser.add_argument("--sample-file", help="Sample file to test with")
+    test_strategy_parser.add_argument("--overrides", help="JSON overrides to apply")
+
+    # Add strategy support to main commands
+    ingest_parser.add_argument("--strategy", help="Strategy name to use instead of config file")
+    ingest_parser.add_argument("--strategy-overrides", help="JSON overrides for strategy")
+    search_parser.add_argument("--strategy", help="Strategy name to use instead of config file")
+    search_parser.add_argument("--strategy-overrides", help="JSON overrides for strategy")
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         print("\n💡 Examples:")
-        print("  # Auto-detect file type and ingest")
-        print("  uv run python cli.py --config config_examples/unified_multi_strategy_config.yaml ingest samples/small_sample.csv")
+        print("  # Use a strategy (recommended)")
+        print("  uv run python cli.py --strategy simple ingest samples/small_sample.csv")
+        print("  uv run python cli.py --strategy customer_support search \"password reset\"")
         print("")
-        print("  # Search with specific strategy")
-        print("  uv run python cli.py --config config_examples/unified_multi_strategy_config.yaml search --retrieval hybrid-balanced \"login problems\"")
+        print("  # List available strategies")
+        print("  uv run python cli.py strategies list")
+        print("  uv run python cli.py strategies show simple")
         print("")
-        print("  # Override components")
-        print("  uv run python cli.py ingest --parser pdf_chunked --embedder fast samples/document.pdf")
+        print("  # Traditional config file approach")
+        print("  uv run python cli.py --config config_examples/basic_config.yaml ingest samples/small_sample.csv")
+        print("")
+        print("  # Override strategy settings")
+        print("  uv run python cli.py --strategy legal --strategy-overrides '{\"embedder\":{\"config\":{\"batch_size\":32}}}' ingest legal_docs/")
         sys.exit(1)
 
     if args.command == "ingest":
@@ -1592,6 +1820,8 @@ def main():
         manage_command(args)
     elif args.command == "extractors":
         extractor_command(args)
+    elif args.command == "strategies":
+        strategy_command(args)
 
 
 if __name__ == "__main__":

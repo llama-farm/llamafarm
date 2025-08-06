@@ -1,0 +1,16 @@
+{
+  "name": "html_parser",
+  "type": "parser",
+  "class_name": "HtmlParser",
+  "description": "HtmlParser component",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "use_cases": []
+}

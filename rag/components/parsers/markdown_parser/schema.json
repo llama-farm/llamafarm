@@ -1,0 +1,16 @@
+{
+  "name": "markdown_parser",
+  "type": "parser",
+  "class_name": "MarkdownParser",
+  "description": "MarkdownParser component",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "use_cases": []
+}

@@ -1,0 +1,16 @@
+{
+  "name": "multi_query",
+  "type": "retriever",
+  "class_name": "MultiQuery",
+  "description": "MultiQuery component",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "use_cases": []
+}

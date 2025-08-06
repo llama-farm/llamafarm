@@ -1,0 +1,110 @@
+{
+  "name": "heading_extractor",
+  "type": "extractor",
+  "class_name": "HeadingExtractor",
+  "description": "Extracts document headings and hierarchical structure using multiple detection methods",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "extract_markdown_headings": {
+        "type": "boolean",
+        "default": true,
+        "description": "Extract markdown-style headings (# ## ### etc.)"
+      },
+      "extract_underlined_headings": {
+        "type": "boolean",
+        "default": true,
+        "description": "Extract underlined headings (text followed by === or ---)"
+      },
+      "extract_numbered_headings": {
+        "type": "boolean",
+        "default": true,
+        "description": "Extract numbered headings (1. 1.1. 1.1.1. etc.)"
+      },
+      "extract_caps_headings": {
+        "type": "boolean",
+        "default": true,
+        "description": "Extract all-caps headings"
+      },
+      "min_heading_length": {
+        "type": "integer",
+        "default": 3,
+        "minimum": 1,
+        "description": "Minimum length for heading text"
+      },
+      "max_heading_length": {
+        "type": "integer",
+        "default": 200,
+        "minimum": 10,
+        "description": "Maximum length for heading text"
+      },
+      "generate_toc": {
+        "type": "boolean",
+        "default": true,
+        "description": "Generate table of contents from headings"
+      },
+      "detect_sections": {
+        "type": "boolean",
+        "default": true,
+        "description": "Detect document sections based on headings"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "headings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "text": {"type": "string"},
+            "level": {"type": "integer"},
+            "type": {"type": "string"},
+            "line_number": {"type": "integer"}
+          }
+        }
+      },
+      "heading_count": {"type": "integer"},
+      "hierarchy": {"type": "object"},
+      "table_of_contents": {"type": "array"},
+      "sections": {"type": "array"},
+      "statistics": {"type": "object"}
+    }
+  },
+  "use_cases": [
+    "Document structure analysis",
+    "Table of contents generation",
+    "Section detection",
+    "Navigation assistance",
+    "Document outlining",
+    "Technical documentation analysis"
+  ],
+  "examples": [
+    {
+      "name": "Markdown documentation",
+      "config": {
+        "extract_markdown_headings": true,
+        "extract_underlined_headings": false,
+        "generate_toc": true,
+        "detect_sections": true
+      },
+      "description": "Extract headings from markdown documentation"
+    },
+    {
+      "name": "Academic papers",
+      "config": {
+        "extract_numbered_headings": true,
+        "extract_caps_headings": true,
+        "min_heading_length": 5,
+        "generate_toc": true
+      },
+      "description": "Extract structured headings from academic papers"
+    }
+  ]
+}

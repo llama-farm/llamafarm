@@ -1,0 +1,10 @@
+{
+  "default": {
+    "name": "Default Configuration",
+    "description": "Default settings for excel_parser",
+    "config": {},
+    "recommended_for": [
+      "General use"
+    ]
+  }
+}

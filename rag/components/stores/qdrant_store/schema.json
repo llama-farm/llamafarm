@@ -1,0 +1,16 @@
+{
+  "name": "qdrant_store",
+  "type": "store",
+  "class_name": "QdrantStore",
+  "description": "QdrantStore component",
+  "version": "1.0.0",
+  "dependencies": {
+    "optional": [],
+    "required": []
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "use_cases": []
+}

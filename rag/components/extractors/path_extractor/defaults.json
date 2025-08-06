@@ -1,0 +1,63 @@
+{
+  "general_purpose": {
+    "name": "General Purpose Path Extraction",
+    "description": "Store all path components for maximum flexibility",
+    "config": {
+      "store_full_path": true,
+      "store_filename": true,
+      "store_directory": true,
+      "store_extension": true,
+      "normalize_paths": false
+    },
+    "recommended_for": ["General documents", "Search systems", "Content management"]
+  },
+  "minimal": {
+    "name": "Minimal Path Information",
+    "description": "Store only filename for lightweight metadata",
+    "config": {
+      "store_full_path": false,
+      "store_filename": true,
+      "store_directory": false,
+      "store_extension": false,
+      "normalize_paths": false
+    },
+    "recommended_for": ["Simple identification", "Memory-constrained systems", "Display-only use"]
+  },
+  "cross_platform": {
+    "name": "Cross-Platform Path Storage",
+    "description": "Normalized paths for cross-platform compatibility",
+    "config": {
+      "store_full_path": true,
+      "store_filename": true,
+      "store_directory": true,
+      "store_extension": true,
+      "normalize_paths": true
+    },
+    "recommended_for": ["Cross-platform systems", "Web applications", "Cloud storage"]
+  },
+  "relative_paths": {
+    "name": "Relative Path Storage",
+    "description": "Store paths relative to project root",
+    "config": {
+      "store_full_path": true,
+      "store_filename": true,
+      "store_directory": true,
+      "store_extension": true,
+      "normalize_paths": true,
+      "relative_to": "./"
+    },
+    "recommended_for": ["Portable projects", "Version control", "Distributed systems"]
+  },
+  "archival": {
+    "name": "Archival Path Storage",
+    "description": "Comprehensive path information for long-term storage",
+    "config": {
+      "store_full_path": true,
+      "store_filename": true,
+      "store_directory": true,
+      "store_extension": true,
+      "normalize_paths": true
+    },
+    "recommended_for": ["Document archives", "Compliance systems", "Audit trails"]
+  }
+}

@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from parsers.csv_parser import CSVParser, CustomerSupportCSVParser
+from components.parsers.csv_parser import CSVParser, CustomerSupportCSVParser
 
 
 class TestCSVParser:

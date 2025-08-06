@@ -1,0 +1,151 @@
+version: "2.0"
+description: "Demonstration of extractor integration with RAG system"
+
+parsers:
+  csv_with_extractors:
+    type: "CustomerSupportCSVParser"
+    config:
+      content_fields: ["subject", "body", "answer"]
+      metadata_fields: ["type", "priority", "language", "tags", "department"]
+      id_field: "id"
+      combine_content: true
+      content_separator: "\n\n"
+      extractors:
+        - type: "yake"
+          config:
+            max_keywords: 15
+            max_ngram_size: 3
+            deduplication_threshold: 0.7
+        - type: "entities"
+          config:
+            entity_types: ["PERSON", "ORG", "EMAIL", "PHONE", "MONEY"]
+            use_fallback: true
+            min_entity_length: 2
+        - type: "datetime"
+          config:
+            fuzzy_parsing: true
+            extract_relative: true
+            extract_times: true
+        - type: "statistics"
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_sentiment_indicators: true
+    file_extensions: [".csv"]
+    mime_types: ["text/csv", "application/csv"]
+  
+  pdf_legal_with_extractors:
+    type: "PDFParser"
+    config:
+      extract_metadata: true
+      extract_page_structure: true
+      combine_pages: true
+      page_separator: "\n\n--- Page Break ---\n\n"
+      extractors:
+        - type: "entities"
+          config:
+            entity_types: ["PERSON", "ORG", "DATE", "MONEY", "PERCENT", "LAW"]
+            use_fallback: true
+        - type: "rake"
+          config:
+            min_length: 2
+            max_length: 5
+            max_keywords: 20
+            min_frequency: 1
+        - type: "datetime"
+          config:
+            fuzzy_parsing: true
+            extract_relative: false
+            extract_times: false
+    file_extensions: [".pdf"]
+    mime_types: ["application/pdf"]
+  
+  text_analysis:
+    type: "TextParser"
+    config:
+      extractors:
+        - type: "statistics"
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+            include_sentiment_indicators: true
+        - type: "yake"
+          config:
+            max_keywords: 10
+            language: "en"
+        - type: "tfidf"
+          config:
+            max_features: 15
+            ngram_range: [1, 3]
+            min_df: 1
+            max_df: 0.95
+    file_extensions: [".txt", ".md"]
+    mime_types: ["text/plain", "text/markdown"]
+
+embedders:
+  default:
+    type: "OllamaEmbedder"
+    config:
+      model: "nomic-embed-text"
+      base_url: "http://localhost:11434"
+      batch_size: 16
+      timeout: 60
+
+vector_stores:
+  default:
+    type: "ChromaStore"
+    config:
+      collection_name: "extractor_demo"
+      persist_directory: "./data/extractor_demo_chroma_db"
+      metadata_config:
+        enable_versioning: true
+        enable_soft_delete: true
+        hash_algorithm: "sha256"
+
+retrieval_strategies:
+  default:
+    type: "BasicSimilarityStrategy"
+    config:
+      distance_metric: "cosine"
+    description: "Basic similarity search with cosine distance"
+  
+  metadata_enhanced:
+    type: "MetadataFilteredStrategy"
+    config:
+      distance_metric: "cosine"
+      default_filters:
+        is_active: true
+      filter_boost:
+        sentiment_classification:
+          positive: 0.1
+          neutral: 0.0
+          negative: -0.1
+        reading_level:
+          Easy: 0.05
+          Standard: 0.0
+          Difficult: -0.05
+    description: "Metadata-filtered search with sentiment and readability boosting"
+
+defaults:
+  parser: "auto"
+  embedder: "default"
+  vector_store: "default"
+  retrieval_strategy: "default"
+
+extractor_examples:
+  cli_usage:
+    description: "Examples of using extractors from CLI"
+    examples:
+      - command: "uv run python cli.py ingest samples/small_sample.csv --extractors yake entities statistics"
+        description: "Apply YAKE, entity extraction, and statistics to CSV ingestion"
+      - command: "uv run python cli.py ingest samples/document.pdf --extractors rake entities --extractor-config '{\"rake\": {\"max_keywords\": 20}, \"entities\": {\"entity_types\": [\"PERSON\", \"ORG\", \"DATE\"]}}'"
+        description: "Apply RAKE and entity extraction with custom configuration"
+      - command: "uv run python cli.py extractors list --detailed"
+        description: "List all available extractors with detailed information"
+      - command: "uv run python cli.py extractors test --extractor yake --text \"Machine learning and AI are transforming technology\""
+        description: "Test YAKE extractor on sample text"
+  
+  config_integration:
+    description: "Extractors are automatically applied during parsing when configured in parser settings"
+    note: "CLI extractors are applied in addition to parser-configured extractors"

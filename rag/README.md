@@ -1,404 +1,576 @@
-# Simple Extensible RAG System
+# RAG System - Developer Quick Start Guide
 
-A lightweight, extensible RAG (Retrieval-Augmented Generation) system designed for easy contribution and customization. Built with a modular architecture that makes it simple to add new data sources, embedding models, and vector databases.
+A powerful, extensible RAG (Retrieval-Augmented Generation) system featuring **strategy-first configuration** and modular architecture. Built for developers who want to get started quickly and extend easily.
 
-## Features
+## 🚀 Quick Start for Developers
 
-- **Extensible Architecture**: Easy to add new parsers, embedders, and vector stores
-- **CSV Support**: Built-in support for customer support tickets and other tabular data
-- **Ollama Integration**: Local embeddings using Ollama
-- **ChromaDB Support**: Persistent vector storage
-- **Simple CLI**: Easy setup and management
-- **Configuration-Driven**: JSON configuration files
-- **Testing Framework**: Comprehensive tests included
+### Prerequisites
+- **Python 3.8+**
+- **UV** (fast Python package manager) - [Installation guide](https://docs.astral.sh/uv/getting-started/installation/)
+- **Ollama** (for local embeddings) - [Download](https://ollama.com/download)
 
-## Quick Start
-
-### 🚀 Automated Setup (Recommended)
-
-**For macOS users**, we provide automated setup scripts:
+### 1. Installation (1 minute)
 
 ```bash
-# Full setup and demo (recommended for first-time users)
-./setup_and_demo.sh
-
-# Quick extractor testing only (no full system setup)
-./scripts/quick_extractor_demo.sh
-
-# Automated setup without prompts
-./setup_and_demo.sh --skip-prompts
-
-# Run tests only
-./setup_and_demo.sh --tests-only
+# Clone and setup
+cd rag/
+uv sync                    # Install all dependencies
+ollama serve               # Start Ollama (in separate terminal)
+ollama pull nomic-embed-text  # Download embedding model
 ```
 
-The setup script will:
-- ✅ Install dependencies (uv, Ollama, Python packages)
-- ✅ Set up virtual environment
-- ✅ Download embedding models
-- ✅ Run comprehensive demos of all features
-- ✅ Show usage examples
-
-### 📋 Manual Setup
-
-If you prefer manual setup or are not on macOS:
-
-#### Prerequisites
-
-1. **Python 3.8+**
-2. **Ollama** (for embeddings)
-
-#### macOS Installation with UV (Recommended)
-#### macOS Installation with UV (Recommended)
-
-1. **Install UV (the fast Python package manager)**:
-   ```bash
-   # Method 1: Official installer
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   
-   # Method 2: Homebrew
-   brew install uv
-   
-   # Method 3: pipx
-   pipx install uv
-   ```
-
-2. **Install Ollama**:
-   ```bash
-   # Method 1: Official installer
-   curl -fsSL https://ollama.com/install.sh | sh
-   
-   # Method 2: Homebrew (alternative)
-   brew install ollama
-   ```
-
-3. **Start Ollama and pull the embedding model**:
-   ```bash
-   # Start Ollama service
-   ollama serve
-   
-   # In a new terminal, pull the embedding model
-   ollama pull nomic-embed-text
-   ```
-
-4. **Setup the project with UV**:
-   ```bash
-   # Clone the repository
-   cd rag/
-   
-   # Create virtual environment and install dependencies
-   uv sync
-   
-   # Activate the environment  
-   source .venv/bin/activate
-   
-   # Or run commands directly with uv
-   uv run python cli.py --help
-   ```
-
-### Alternative Installation (pip/venv)
-
-If you prefer traditional pip/venv:
-   ```bash
-   # Create virtual environment
-   python3 -m venv .venv
-   source .venv/bin/activate
-   
-   # Install with pip
-   pip install -e .
-   ```
-
-### Basic Usage
-
-1. **Test the system:**
-1. **Test the system:**
-   ```bash
-   # Test CSV parsing
-   uv run python cli.py test --test-file samples/small_sample.csv 
-   
-   # Test PDF parsing (if you have a PDF file)
-   uv run python cli.py test --test-file samples/test_document.pdf
-   ```
-
-## 🔧 Local-Only Extractors
-
-The RAG system includes 5 local-only extractors that enhance documents with metadata **without requiring external LLMs**:
-
-### Available Extractors
-
-- **YAKE**: Advanced keyword extraction considering position and context
-- **RAKE**: Fast phrase extraction using stop words as delimiters  
-- **TF-IDF**: Term frequency analysis for finding unique terms
-- **Entities**: Person, organization, date, email, phone extraction (spaCy + regex fallbacks)
-- **DateTime**: Date, time, and relative date extraction
-- **Statistics**: Readability metrics, vocabulary analysis, content statistics
-
-### Extractor Commands
+### 2. Run Your First Demo (30 seconds)
 
 ```bash
-# List all available extractors
-uv run python cli.py extractors list --detailed
+# Option 1: Single impressive demo
+uv run python demos/enhanced_demo.py
 
-# Test an extractor on sample text
-uv run python cli.py extractors test --extractor yake
+# Option 2: All 5 domain-specific demos (15-25 minutes)
+uv run python demos/master_demo.py
 
-# Test with your own text
-uv run python cli.py extractors test --extractor entities --text "Contact John Doe at john@company.com"
-
-# Test with a file
-uv run python cli.py extractors test --extractor statistics --file samples/document.txt
+# Option 3: Individual domain demos
+uv run python demos/demo1_research_papers.py
+uv run python demos/demo2_customer_support.py
+uv run python demos/demo3_code_documentation.py
+uv run python demos/demo4_news_analysis.py
+uv run python demos/demo5_business_reports.py
 ```
 
-### Using Extractors During Ingestion
+### 3. Master the CLI (Comprehensive Guide)
 
 ```bash
-# Apply extractors during CSV ingestion
-uv run python cli.py ingest samples/small_sample.csv --extractors yake entities statistics
+# List available strategies and get recommendations
+uv run python cli.py strategies list
+uv run python cli.py strategies recommend --use-case customer_support
 
-# Apply with custom configuration
-uv run python cli.py ingest document.pdf --extractors rake entities \
+# Quick start with your data
+uv run python cli.py --strategy simple ingest your_documents.pdf
+uv run python cli.py --strategy simple search "your query here"
+
+# Try different strategies
+uv run python cli.py --strategy customer_support ingest support_data.csv
+uv run python cli.py --strategy legal ingest legal_docs/
+uv run python cli.py --strategy research ingest research_papers/
+```
+
+### 4. Run Tests (Verify Everything Works)
+
+```bash
+# Quick validation
+uv run python -m pytest tests/ -v
+
+# Comprehensive component testing
+uv run python tests/test_new_parsers.py
+uv run python tests/test_new_extractors.py  
+uv run python tests/test_new_embedders.py
+uv run python tests/test_new_stores.py
+```
+
+## 🎯 Key Features for Developers
+
+### Strategy-First Architecture
+- **8+ Predefined Strategies**: `simple`, `customer_support`, `legal`, `research`, `news_analysis`, etc.
+- **One-Command Setup**: `--strategy simple` gets you running immediately
+- **Easy Customization**: Override specific settings while keeping strategy benefits
+- **Smart Recommendations**: CLI suggests strategies based on your use case
+
+### Modular Component System
+- **12+ Parsers**: CSV, PDF, Markdown, Word, Excel, HTML, Plain Text
+- **9+ Extractors**: Keywords, entities, tables, links, headings, summaries (all local, no APIs needed)
+- **4+ Embedders**: Ollama, OpenAI, HuggingFace, SentenceTransformers
+- **4+ Vector Stores**: ChromaDB, FAISS, Pinecone, Qdrant
+- **5+ Retrieval Strategies**: From basic similarity to advanced hybrid approaches
+
+### Developer Experience
+- **Factory Pattern**: Easy component registration and creation
+- **Comprehensive Schema**: Complete API documentation in `schema.yaml`
+- **Full Test Coverage**: 118 tests passing, comprehensive mocking
+- **Rich CLI**: Beautiful terminal output with progress bars and tables
+- **Extensible**: Add new components without changing core code
+
+## 📚 Demo System (Learn by Example)
+
+The RAG system includes 5 comprehensive demos showing different strategies and real-world applications:
+
+| Demo | Domain | What It Shows | Runtime |
+|------|--------|---------------|---------|
+| **Research Papers** | Academia | Statistical analysis + entity extraction | 3-5 min |
+| **Customer Support** | Business | Case matching + pattern recognition | 2-4 min |
+| **Code Documentation** | Technical | Structure preservation + cross-references | 2-3 min |
+| **News Analysis** | Media | Sentiment analysis + trend tracking | 3-4 min |
+| **Business Reports** | Finance | Multi-format processing + metrics extraction | 4-6 min |
+
+Each demo:
+- ✅ Processes real documents with multiple extractors
+- ✅ Creates domain-specific vector databases
+- ✅ Demonstrates semantic search with actual similarity scores
+- ✅ Shows metadata extraction and filtering
+- ✅ Explains why each strategy works for its domain
+
+### Running Demos
+
+```bash
+# All demos with beautiful analysis (recommended first time)
+uv run python demos/master_demo.py
+
+# Quick enhanced demo showing the system in action
+uv run python demos/enhanced_demo.py
+
+# Individual domain demos
+uv run python demos/demo1_research_papers.py     # Academic content
+uv run python demos/demo2_customer_support.py    # Support tickets
+uv run python demos/demo3_code_documentation.py  # Technical docs
+uv run python demos/demo4_news_analysis.py       # Media content
+uv run python demos/demo5_business_reports.py    # Financial data
+```
+
+After running demos, your vector databases are ready for querying:
+
+```bash
+# Query demo databases
+uv run python cli.py search "transformer architecture" --collection research_papers
+uv run python cli.py search "login issues" --collection customer_support
+uv run python cli.py search "API security best practices" --collection code_documentation
+```
+
+## 🖥️ Complete CLI Reference Guide
+
+The RAG CLI provides powerful commands for document processing, search, and system management. Here's everything you need to know:
+
+### Global Options (Available on All Commands)
+
+```bash
+# Configuration options
+--config, -c           # Path to config file (alternative to --strategy)
+--strategy             # Use predefined strategy (recommended)
+--strategy-overrides   # JSON overrides for strategy settings
+--base-dir, -b         # Base directory for relative paths
+--log-level           # Logging level (DEBUG, INFO, WARNING, ERROR)
+
+# Examples
+uv run python cli.py --strategy simple ingest data.csv
+uv run python cli.py --config my_config.yaml search "query"
+uv run python cli.py --log-level DEBUG --strategy research ingest papers/
+```
+
+### Strategy System (The Easy Way)
+
+#### 1. Discover Available Strategies
+```bash
+# List all available strategies
+uv run python cli.py strategies list
+
+# Get detailed strategy information
+uv run python cli.py strategies list --detailed
+
+# Show specific strategy details
+uv run python cli.py strategies show simple
+uv run python cli.py strategies show customer_support
+
+# Get strategy recommendations
+uv run python cli.py strategies recommend --use-case customer_support
+uv run python cli.py strategies recommend --performance speed --resources low
+uv run python cli.py strategies recommend --use-case legal --performance accuracy
+```
+
+#### 2. Available Predefined Strategies
+- **`simple`**: Basic document processing, great for getting started
+- **`customer_support`**: Optimized for support tickets with entity extraction
+- **`legal`**: Legal document processing with compliance features
+- **`research`**: Academic papers with statistical analysis
+- **`business`**: Financial reports with metrics extraction  
+- **`technical`**: Code documentation with structure preservation
+- **`production`**: Enterprise-ready configuration with performance optimization
+
+#### 3. Using Strategies (Recommended Approach)
+```bash
+# Basic strategy usage
+uv run python cli.py --strategy simple ingest documents.csv
+uv run python cli.py --strategy simple search "password reset"
+
+# Domain-specific strategies
+uv run python cli.py --strategy customer_support ingest support_tickets.csv
+uv run python cli.py --strategy legal ingest contracts/*.pdf
+uv run python cli.py --strategy research ingest papers/*.pdf
+uv run python cli.py --strategy business ingest reports/*.xlsx
+
+# Production usage
+uv run python cli.py --strategy production ingest large_dataset/
+uv run python cli.py --strategy production search "complex business query"
+```
+
+#### 4. Strategy Overrides (Customize While Keeping Benefits)
+```bash
+# Override embedder batch size
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":32}}}}' \
+  ingest data.csv
+
+# Override vector store collection name
+uv run python cli.py --strategy customer_support \
+  --strategy-overrides '{"components":{"vector_store":{"config":{"collection_name":"my_tickets"}}}}' \
+  ingest tickets.csv
+
+# Override multiple components
+uv run python cli.py --strategy research \
+  --strategy-overrides '{
+    "components": {
+      "embedder": {"config": {"batch_size": 64}},
+      "vector_store": {"config": {"persist_directory": "./my_research_db"}},
+      "retrieval_strategy": {"config": {"top_k": 15}}
+    }
+  }' ingest papers/
+
+# Complex override example - change parser and add extractors
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{
+    "components": {
+      "parser": {"type": "PlainTextParser", "config": {"chunk_size": 500}},
+      "extractors": [
+        {"type": "YAKEExtractor", "config": {"max_keywords": 20}},
+        {"type": "EntityExtractor", "config": {"entity_types": ["PERSON", "ORG"]}}
+      ]
+    }
+  }' ingest documents/
+```
+
+#### 5. Strategy Testing and Conversion
+```bash
+# Test a strategy with sample data
+uv run python cli.py strategies test simple --sample-file test.csv
+
+# Test with overrides
+uv run python cli.py strategies test customer_support \
+  --sample-file tickets.csv \
+  --overrides '{"embedder":{"config":{"batch_size":8}}}'
+
+# Convert strategy to traditional config file
+uv run python cli.py strategies convert simple simple_config.yaml
+uv run python cli.py strategies convert customer_support support_config.yaml \
+  --overrides '{"vector_store":{"config":{"collection_name":"custom_support"}}}'
+```
+
+### Document Ingestion (The Core Workflow)
+
+#### 1. Basic Ingestion
+```bash
+# Single file ingestion (auto-detects file type)
+uv run python cli.py --strategy simple ingest document.pdf
+uv run python cli.py --strategy simple ingest data.csv
+uv run python cli.py --strategy simple ingest report.docx
+
+# Directory ingestion (processes all supported files)
+uv run python cli.py --strategy simple ingest documents/
+uv run python cli.py --strategy research ingest research_papers/
+uv run python cli.py --strategy legal ingest legal_docs/
+```
+
+#### 2. Parser Override and File Type Control
+```bash
+# Override automatic parser detection
+uv run python cli.py --strategy simple ingest data.txt --parser csv
+uv run python cli.py --strategy simple ingest document.pdf --parser pdf_chunked
+
+# Available parser overrides: csv, pdf, pdf_chunked, text, markdown, html
+uv run python cli.py --strategy technical ingest docs.md --parser markdown
+uv run python cli.py --strategy business ingest report.html --parser html
+```
+
+#### 3. Extractor Integration During Ingestion
+```bash
+# Apply extractors during ingestion
+uv run python cli.py --strategy simple ingest documents.csv \
+  --extractors yake entities statistics
+
+# Configure extractors with custom settings
+uv run python cli.py --strategy simple ingest documents.pdf \
+  --extractors rake entities \
   --extractor-config '{"rake": {"max_keywords": 20}, "entities": {"entity_types": ["PERSON", "ORG"]}}'
 
-# Use configuration-based extractors (see config_examples/extractors_demo_config.yaml)
-uv run python cli.py --config config_examples/extractors_demo_config.yaml ingest samples/document.pdf
+# Available extractors: yake, rake, tfidf, entities, datetime, statistics, 
+# summary, table, link, heading, pattern
 ```
 
-### Extractor Output Example
-
-```json
-{
-  "yake_keywords": ["machine learning", "artificial intelligence", "data analysis"],
-  "entities_person": ["John Smith", "Sarah Johnson"],
-  "entities_email": ["contact@company.com"],
-  "word_count": 1250,
-  "reading_time_minutes": 6.25,
-  "sentiment_classification": "positive",
-  "flesch_reading_ease": 65.2
-}
-```
-
-## 📊 CSV Processing
-
-### CSV Commands with Sample Data
-
+#### 4. Advanced Ingestion Examples
 ```bash
-# 1. Test CSV parsing with sample data
-uv run python cli.py --config config_examples/basic_config.yaml \
-  test --test-file samples/small_sample.csv
+# Multi-format business data ingestion
+uv run python cli.py --strategy business ingest financial_reports/ \
+  --extractors table statistics summary
 
-# 2. Ingest CSV data using specific configuration
-uv run python cli.py --config config_examples/basic_config.yaml \
-  ingest samples/small_sample.csv
+# Customer support with comprehensive extraction
+uv run python cli.py --strategy customer_support ingest support_data.csv \
+  --extractors entities pattern summary statistics
 
-# 3. Search the ingested CSV data
-uv run python cli.py --config config_examples/basic_config.yaml \
-  search "login problems"
+# Research papers with academic extractors
+uv run python cli.py --strategy research ingest papers/ \
+  --extractors entities statistics summary heading
 
-# 4. Check collection info
-uv run python cli.py --config config_examples/basic_config.yaml info
+# Legal documents with compliance extraction
+uv run python cli.py --strategy legal ingest contracts/ \
+  --extractors entities datetime pattern heading statistics
 ```
 
-### Custom CSV Configuration
+### Search & Retrieval
 
+#### 1. Basic Search
 ```bash
-# Use custom CSV configuration for different CSV formats
-uv run python cli.py --config config_examples/custom_csv_config.yaml \
-  ingest your_custom_data.csv
+# Simple search with strategy
+uv run python cli.py --strategy simple search "password reset"
+uv run python cli.py --strategy customer_support search "login issues"
+uv run python cli.py --strategy research search "machine learning algorithms"
+
+# Control number of results
+uv run python cli.py --strategy simple search "network error" --top-k 10
+uv run python cli.py --strategy legal search "contract terms" --top-k 3
 ```
 
-## 📄 PDF Processing
-
-### Single PDF Document
-
+#### 2. Advanced Search with Filters
 ```bash
-# 1. Test PDF parsing with sample document
-uv run python cli.py --config config_examples/pdf_config.yaml \
-  test --test-file samples/test_document.pdf
+# Search with metadata filters
+uv run python cli.py --strategy customer_support search "authentication" \
+  --filter '{"priority": "high"}'
 
-# 2. Ingest single PDF (combined pages mode)
-uv run python cli.py --config config_examples/pdf_config.yaml \
-  ingest samples/test_document.pdf
+uv run python cli.py --strategy business search "revenue growth" \
+  --filter '{"department": "finance", "year": 2024}'
 
-# 3. Search PDF content
-uv run python cli.py --config config_examples/pdf_config.yaml \
-  search "specific topic from PDF"
+# Complex filters with operators
+uv run python cli.py --strategy legal search "liability" \
+  --filter '{"priority": {"$in": ["high", "urgent"]}, "status": {"$ne": "closed"}}'
+
+# Date-based filtering
+uv run python cli.py --strategy research search "AI ethics" \
+  --filter '{"publication_date": {"$gte": "2023-01-01"}}'
 ```
 
-### Multiple PDF Files
-
+#### 3. Cross-Collection Search
 ```bash
-# Process multiple PDFs by running command for each file
-uv run python cli.py --config config_examples/pdf_config.yaml \
-  ingest samples/document1.pdf
-
-uv run python cli.py --config config_examples/pdf_config.yaml \
-  ingest samples/document2.pdf
-
-uv run python cli.py --config config_examples/pdf_config.yaml \
-  ingest samples/document3.pdf
+# Search specific collections (after running demos)
+uv run python cli.py search "transformer architecture" --collection research_papers
+uv run python cli.py search "password reset procedures" --collection customer_support
+uv run python cli.py search "API authentication methods" --collection code_documentation
+uv run python cli.py search "quarterly performance metrics" --collection business_reports
 ```
 
-### PDF Directory Processing
-
+#### 4. Search Strategy Comparison
 ```bash
-# Process all PDFs in a directory using a script
-# First, create a simple script to process multiple files:
-for pdf in samples/pdfs/*.pdf; do
-  echo "Processing: $pdf"
-  uv run python cli.py --config config_examples/pdf_config.yaml ingest "$pdf"
+# Compare different strategies on same query
+uv run python cli.py --strategy simple search "security vulnerability"
+uv run python cli.py --strategy customer_support search "security vulnerability"  
+uv run python cli.py --strategy legal search "security vulnerability"
+
+# Test different retrieval configurations
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"retrieval_strategy":{"config":{"distance_metric":"euclidean"}}}}' \
+  search "data breach"
+```
+
+### Component Management & Testing
+
+#### 1. List Available Components
+```bash
+# List parsers
+uv run python cli.py parsers list
+
+# List extractors with details
+uv run python cli.py extractors list --detailed
+
+# List embedding models
+uv run python cli.py embedders list
+
+# List vector stores
+uv run python cli.py stores list
+```
+
+#### 2. Test Individual Extractors
+```bash
+# Test extractor with sample text
+uv run python cli.py extractors test --extractor yake
+uv run python cli.py extractors test --extractor entities --text "Contact John Doe at john@company.com for project updates"
+
+# Test extractor with file
+uv run python cli.py extractors test --extractor statistics --file sample_document.txt
+uv run python cli.py extractors test --extractor rake --file research_paper.pdf
+
+# Test with custom configuration
+uv run python cli.py extractors test --extractor yake --text "Machine learning and artificial intelligence applications" \
+  --config '{"max_keywords": 10, "deduplication_threshold": 0.7}'
+```
+
+#### 3. System Testing
+```bash
+# Test basic system functionality
+uv run python cli.py test
+
+# Test with specific file
+uv run python cli.py test --test-file samples/test_document.pdf
+
+# Test end-to-end pipeline
+uv run python cli.py test --test-file samples/support_tickets.csv
+```
+
+### Document Management
+
+#### 1. Vector Store Information
+```bash
+# Show collection information
+uv run python cli.py info
+
+# Show specific vector store info
+uv run python cli.py info --vector-store custom_collection
+
+# Get detailed statistics
+uv run python cli.py manage stats --detailed
+```
+
+#### 2. Document Operations
+```bash
+# Delete operations
+uv run python cli.py manage delete --older-than 30  # Delete docs older than 30 days
+uv run python cli.py manage delete --doc-ids "doc1" "doc2" "doc3"
+uv run python cli.py manage delete --strategy soft --filter '{"priority": "low"}'
+
+# Replace documents
+uv run python cli.py manage replace new_version.pdf --target-doc-id "old_doc_123"
+uv run python cli.py manage replace updated_data.csv --target-doc-id "data_456" --strategy versioning
+
+# Cleanup operations
+uv run python cli.py manage cleanup --duplicates
+uv run python cli.py manage cleanup --old-versions 5  # Keep only 5 latest versions
+uv run python cli.py manage cleanup --expired
+```
+
+#### 3. Hash and Integrity Operations
+```bash
+# Find duplicate documents
+uv run python cli.py manage hash --find-duplicates
+
+# Verify document integrity
+uv run python cli.py manage hash --verify-integrity
+
+# Rehash documents (after content changes)
+uv run python cli.py manage hash --rehash
+```
+
+### Advanced Usage Patterns
+
+#### 1. Batch Processing Workflows
+```bash
+# Process multiple directories with different strategies
+for dir in legal_docs customer_support research_papers; do
+  strategy=$(case $dir in
+    legal_docs) echo "legal" ;;
+    customer_support) echo "customer_support" ;;
+    research_papers) echo "research" ;;
+  esac)
+  uv run python cli.py --strategy $strategy ingest $dir/
 done
 
-# Or use find to process PDFs recursively
-find samples/ -name "*.pdf" -exec uv run python cli.py \
-  --config config_examples/pdf_config.yaml ingest {} \;
+# Bulk search across multiple collections
+for query in "security policy" "data protection" "compliance requirements"; do
+  echo "=== Searching: $query ==="
+  uv run python cli.py --strategy legal search "$query" --top-k 3
+done
 ```
 
-### PDF Page-by-Page Processing
-
+#### 2. Environment-Specific Configurations
 ```bash
-# Use separate pages configuration for page-level search
-uv run python cli.py --config config_examples/pdf_separate_pages_config.yaml \
-  ingest samples/multi_page_document.pdf
+# Development environment
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"vector_store":{"config":{"persist_directory":"./dev_db"}}}}' \
+  ingest test_data/
 
-# Search will return individual pages as separate results
-uv run python cli.py --config config_examples/pdf_separate_pages_config.yaml \
-  search "chapter introduction"
+# Staging environment  
+uv run python cli.py --strategy production \
+  --strategy-overrides '{"components":{"vector_store":{"config":{"persist_directory":"./staging_db"}}}}' \
+  ingest staging_data/
+
+# Production environment
+uv run python cli.py --strategy production ingest production_data/
 ```
 
-### Advanced PDF Processing Examples
-
+#### 3. Performance Optimization Examples
 ```bash
-# Process PDFs with custom base directory
-uv run python cli.py --base-dir /path/to/project \
-  --config config_examples/pdf_config.yaml \
-  ingest data/documents/report.pdf
+# High-performance ingestion (large datasets)
+uv run python cli.py --strategy production \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":128}}}}' \
+  ingest large_dataset/
 
-# Process from different directory
-cd /different/directory
-uv run python /path/to/rag/cli.py \
-  --config /path/to/rag/config_examples/pdf_config.yaml \
-  ingest ~/Documents/important_document.pdf
+# Memory-optimized processing (limited resources)
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":4}}}}' \
+  ingest documents/
+
+# Speed-optimized search (disable complex retrievers)
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"retrieval_strategy":{"type":"BasicSimilarityStrategy"}}}' \
+  search "quick query"
 ```
 
-## 🔍 Search Examples
+### Debugging and Development
 
+#### 1. Verbose Output and Debugging
 ```bash
-# Search CSV data with basic retrieval strategy
-uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml \
-  search "password reset" --top-k 3
+# Enable debug logging
+uv run python cli.py --log-level DEBUG --strategy simple ingest test.csv
 
-# Search with advanced hybrid retrieval strategy
-uv run python cli.py --config config_examples/advanced_retrieval_config.yaml \
-  search "login authentication" --top-k 5
+# Detailed strategy information
+uv run python cli.py strategies show production --detailed
 
-# Search PDF data with metadata filtering
-uv run python cli.py --config config_examples/pdf_with_retrieval_config.json \
-  search "methodology" --top-k 5
-
-# Compare different retrieval strategies
-uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml search "security issue"
-uv run python cli.py --config config_examples/advanced_retrieval_config.yaml search "security issue"
+# Test strategy with verbose output
+uv run python cli.py --log-level INFO strategies test customer_support --sample-file test_tickets.csv
 ```
 
-### 🧪 Testing and Examples
-
+#### 2. Configuration Validation
 ```bash
-# Test the entire retrieval system
-uv run python examples/test_retrieval_system.py
+# Validate strategy configuration
+uv run python cli.py strategies test simple
 
-# Explore retrieval strategies with examples
-uv run python examples/example_retrieval_usage.py
+# Test overrides syntax
+uv run python cli.py strategies test customer_support \
+  --overrides '{"components":{"embedder":{"config":{"batch_size":16}}}}'
 
-# Basic API usage examples
-uv run python examples/example_api_usage.py
+# Convert and validate traditional config
+uv run python cli.py strategies convert legal legal_config.yaml
+uv run python cli.py --config legal_config.yaml test
 ```
 
-## 🛤️ Flexible Path Resolution
+## 🛠️ Development Commands
 
-The RAG system supports flexible path resolution for both configuration files and data sources, making it easy to work with different project structures and deployment scenarios.
-
-### Configuration File Paths
-
-Config files are searched in multiple locations (in order of preference):
-
+### Everyday Development
 ```bash
-# 1. Relative to current/base directory
-uv run python cli.py --config my_config.json
+# Install dependencies
+uv sync
 
-# 2. Relative to user config directory
-uv run python cli.py --config config.json  # Searches ~/.config/rag/config.json
+# Add new dependency
+uv add package-name
 
-# 3. Absolute path
-uv run python cli.py --config /etc/rag/production.json
+# Run with UV (recommended)
+uv run python cli.py --help
+uv run python your_script.py
 
-# 4. From subdirectory
-uv run python cli.py --config config_examples/flexible_paths_config.json
+# Traditional activation (alternative)
+source .venv/bin/activate
+python cli.py --help
 ```
 
-### Data Source Paths
-
-Data sources support various path formats:
-
+### Testing & Quality
 ```bash
-# Relative paths (resolved from current or base directory)
-uv run python cli.py ingest samples/small_sample.csv
-uv run python cli.py ingest data/tickets.csv
+# Run all tests
+uv run python -m pytest tests/
 
-# Absolute paths
-uv run python cli.py ingest /path/to/data/tickets.csv
+# Test specific components
+uv run python -m pytest tests/components/parsers/
+uv run python -m pytest tests/components/extractors/
 
-# Home directory expansion
-uv run python cli.py ingest ~/Documents/support_data.csv
+# Test with coverage
+uv run python -m pytest --cov=components --cov-report=html
 
-# With custom base directory
-uv run python cli.py --base-dir /project/root ingest data/tickets.csv
+# Integration tests
+uv run python tests/test_retrieval_system.py
 ```
 
-### Base Directory Override
-
-Use `--base-dir` to change the reference point for relative paths:
-
+### Code Quality
 ```bash
-# Set custom base directory for all relative paths
-uv run python cli.py --base-dir /my/project/root \
-  --config configs/prod.json \
-  ingest data/latest_tickets.csv
-```
-
-### Path Resolution in Config Files
-
-Paths within configuration files are automatically resolved:
-
-```json
-{
-  "vector_store": {
-    "type": "ChromaStore",
-    "config": {
-      "persist_directory": "./data/chroma_db"  // Auto-resolved and created
-    }
-  }
-}
-```
-
-### Alternative: Run the Example Script
-
-```bash
-# With UV
-uv run python examples/example.py
-
-# Or with activated environment
-python examples/example.py
-```
-
-### Development Commands
-
-```bash
-# Run tests
-uv run pytest
-
-# Run tests with coverage
-uv run pytest --cov
-
 # Format code
 uv run black .
 uv run isort .
@@ -406,862 +578,598 @@ uv run isort .
 # Type checking
 uv run mypy .
 
-# Install development dependencies
-uv sync --dev
-
-# Add new dependency
-uv add package-name
-
-# Add development dependency
-uv add --dev package-name
+# Linting
+uv run ruff check .
 ```
 
-## Architecture
+## 🏗️ Architecture Overview
 
-The system is built around four core components:
+The system uses a **modular, strategy-first architecture**:
 
-### 1. Parsers
-Convert various data formats into the universal `Document` format.
-
-- `CSVParser`: Generic CSV parser with configurable fields
-- `CustomerSupportCSVParser`: Specialized for support ticket data
-- `PDFParser`: Extract text, metadata, and structure from PDF documents
-- `PDFParser`: Extract text, metadata, and structure from PDF documents
-
-### 2. Embedders
-Generate vector embeddings from text content.
-
-- `OllamaEmbedder`: Uses local Ollama models
-
-### 3. Vector Stores
-Store and search document embeddings.
-
-- `ChromaStore`: ChromaDB integration with persistence
-
-### 4. Universal Retrieval Strategies
-Advanced, database-agnostic retrieval strategies that automatically optimize for your vector database.
-
-- `BasicSimilarityStrategy`: Simple vector similarity search (great for getting started)
-- `MetadataFilteredStrategy`: Intelligent metadata filtering with native/fallback support
-- `MultiQueryStrategy`: Uses multiple query variations to improve recall  
-- `RerankedStrategy`: Multi-factor re-ranking for sophisticated relevance scoring
-- `HybridUniversalStrategy`: Combines multiple strategies with configurable weights
-
-### 5. Pipeline
-### 4. Universal Retrieval Strategies
-Advanced, database-agnostic retrieval strategies that automatically optimize for your vector database.
-
-- `BasicSimilarityStrategy`: Simple vector similarity search (great for getting started)
-- `MetadataFilteredStrategy`: Intelligent metadata filtering with native/fallback support
-- `MultiQueryStrategy`: Uses multiple query variations to improve recall  
-- `RerankedStrategy`: Multi-factor re-ranking for sophisticated relevance scoring
-- `HybridUniversalStrategy`: Combines multiple strategies with configurable weights
-
-### 5. Pipeline
-Chains components together for end-to-end processing.
-
-## 🎯 Universal Retrieval Strategies
-
-The system features a powerful **database-agnostic retrieval system** that automatically optimizes strategies based on your vector database capabilities. All strategies work with any vector database while automatically using database-specific optimizations when available.
-
-### Available Strategies
-
-#### **BasicSimilarityStrategy** - Getting Started
-```json
-{
-  "retrieval_strategy": {
-    "type": "BasicSimilarityStrategy",
-    "config": {
-      "distance_metric": "cosine"
-    }
-  }
-}
 ```
-- **Use Cases**: Getting started, simple semantic search, baseline testing
-- **Performance**: Fast | **Complexity**: Low
+📦 Components (Extensible)
+├── 📄 Parsers: PlainTextParser, CSVParser, PDFParser, MarkdownParser...
+├── 🔍 Extractors: YAKEExtractor, EntityExtractor, TableExtractor...
+├── 🧠 Embedders: OllamaEmbedder, OpenAIEmbedder, HuggingFaceEmbedder...
+├── 🗄️ Stores: ChromaStore, FAISSStore, PineconeStore, QdrantStore...
+└── 🎯 Retrievers: BasicSimilarity, MetadataFiltered, MultiQuery, Hybrid...
 
-#### **MetadataFilteredStrategy** - Smart Filtering  
-```json
-{
-  "retrieval_strategy": {
-    "type": "MetadataFilteredStrategy",
-    "config": {
-      "distance_metric": "cosine",
-      "default_filters": {
-        "priority": ["high", "medium"],
-        "type": "documentation"
-      },
-      "fallback_multiplier": 3
-    }
-  }
-}
+🏭 Core System
+├── 🏗️ Factories: Component creation and registration
+├── 📋 Strategies: Pre-configured combinations for common use cases
+├── 🔄 Pipeline: Document processing workflow
+└── 📊 Schema: Configuration validation and API documentation
+
+🎭 User Interface
+├── 🖥️ CLI: Full-featured command-line interface
+├── 🎬 Demos: 5 comprehensive domain-specific showcases
+└── 🧪 Tests: 118 tests with mocking and validation
 ```
-- **Features**: Native filtering when supported, automatic fallback, complex operators (`$ne`, `$in`, `$gt`, etc.)
-- **Use Cases**: Domain-specific searches, multi-tenant applications, content categorization
-- **Performance**: Medium | **Complexity**: Medium
 
-#### **MultiQueryStrategy** - Enhanced Recall
-```json
-{
-  "retrieval_strategy": {
-    "type": "MultiQueryStrategy", 
-    "config": {
-      "num_queries": 3,
-      "aggregation_method": "weighted",
-      "search_multiplier": 2
-    }
-  }
-}
-```
-- **Aggregation Methods**: `max` (best score), `mean` (average), `weighted` (decreasing weights)
-- **Use Cases**: Ambiguous queries, query expansion, improving recall for complex questions
-- **Performance**: Medium | **Complexity**: Medium
+### Key Patterns
 
-#### **RerankedStrategy** - Sophisticated Ranking
-```json
-{
-  "retrieval_strategy": {
-    "type": "RerankedStrategy",
-    "config": {
-      "initial_k": 20,
-      "length_normalization": 1000,
-      "rerank_factors": {
-        "recency": 0.1,
-        "length": 0.05, 
-        "metadata_boost": 0.2
-      }
-    }
-  }
-}
-```
-- **Reranking Factors**: Recency boost, content length preference, metadata-based boosts (priority, type, quality indicators)
-- **Use Cases**: Production systems, time-sensitive content, multi-factor relevance
-- **Performance**: Slower | **Complexity**: High
+1. **Factory Pattern**: All components register with factories for dynamic creation
+2. **Strategy System**: Pre-configured combinations optimized for specific use cases
+3. **Configuration-Driven**: Everything configurable via YAML with Pydantic validation
+4. **Local-First**: Prioritize local execution with optional cloud providers
 
-#### **HybridUniversalStrategy** - Best of All Worlds
-```json
-{
-  "retrieval_strategy": {
-    "type": "HybridUniversalStrategy",
-    "config": {
-      "combination_method": "weighted_average",
-      "normalize_scores": true,
-      "diversity_boost": 0.1,
-      "strategies": [
-        {"type": "BasicSimilarityStrategy", "weight": 0.4},
-        {"type": "MetadataFilteredStrategy", "weight": 0.3},
-        {"type": "RerankedStrategy", "weight": 0.2},
-        {"type": "MultiQueryStrategy", "weight": 0.1}
-      ]
-    }
-  }
-}
-```
-- **Combination Methods**: `weighted_average` (score-based), `rank_fusion` (position-based)
-- **Features**: Strategy aliases (`basic`, `filtered`, `multi_query`, `reranked`)
-- **Use Cases**: Production systems, balanced precision/recall, complex requirements  
-- **Performance**: Variable | **Complexity**: High
+## 🔧 Adding New Components
 
-### Strategy Selection Guide
+The system is designed for easy extension. Here's how to add new components:
 
-| Use Case | Recommended Strategy | Why |
-|----------|---------------------|-----|
-| **Getting Started** | `BasicSimilarityStrategy` | Simple, fast, reliable baseline |
-| **Production General** | `HybridUniversalStrategy` | Balanced performance across use cases |
-| **High Precision** | `RerankedStrategy` | Multi-factor ranking for nuanced results |
-| **Filtered Content** | `MetadataFilteredStrategy` | Efficient domain-specific searches |
-| **Complex Queries** | `MultiQueryStrategy` | Better recall for ambiguous questions |
-| **High Performance** | `BasicSimilarityStrategy` | Minimal overhead, maximum speed |
-
-## 🎯 Universal Retrieval Strategies
-
-The system features a powerful **database-agnostic retrieval system** that automatically optimizes strategies based on your vector database capabilities. All strategies work with any vector database while automatically using database-specific optimizations when available.
-
-### Available Strategies
-
-#### **BasicSimilarityStrategy** - Getting Started
-```json
-{
-  "retrieval_strategy": {
-    "type": "BasicSimilarityStrategy",
-    "config": {
-      "distance_metric": "cosine"
-    }
-  }
-}
-```
-- **Use Cases**: Getting started, simple semantic search, baseline testing
-- **Performance**: Fast | **Complexity**: Low
-
-#### **MetadataFilteredStrategy** - Smart Filtering  
-```json
-{
-  "retrieval_strategy": {
-    "type": "MetadataFilteredStrategy",
-    "config": {
-      "distance_metric": "cosine",
-      "default_filters": {
-        "priority": ["high", "medium"],
-        "type": "documentation"
-      },
-      "fallback_multiplier": 3
-    }
-  }
-}
-```
-- **Features**: Native filtering when supported, automatic fallback, complex operators (`$ne`, `$in`, `$gt`, etc.)
-- **Use Cases**: Domain-specific searches, multi-tenant applications, content categorization
-- **Performance**: Medium | **Complexity**: Medium
-
-#### **MultiQueryStrategy** - Enhanced Recall
-```json
-{
-  "retrieval_strategy": {
-    "type": "MultiQueryStrategy", 
-    "config": {
-      "num_queries": 3,
-      "aggregation_method": "weighted",
-      "search_multiplier": 2
-    }
-  }
-}
-```
-- **Aggregation Methods**: `max` (best score), `mean` (average), `weighted` (decreasing weights)
-- **Use Cases**: Ambiguous queries, query expansion, improving recall for complex questions
-- **Performance**: Medium | **Complexity**: Medium
-
-#### **RerankedStrategy** - Sophisticated Ranking
-```json
-{
-  "retrieval_strategy": {
-    "type": "RerankedStrategy",
-    "config": {
-      "initial_k": 20,
-      "length_normalization": 1000,
-      "rerank_factors": {
-        "recency": 0.1,
-        "length": 0.05, 
-        "metadata_boost": 0.2
-      }
-    }
-  }
-}
-```
-- **Reranking Factors**: Recency boost, content length preference, metadata-based boosts (priority, type, quality indicators)
-- **Use Cases**: Production systems, time-sensitive content, multi-factor relevance
-- **Performance**: Slower | **Complexity**: High
-
-#### **HybridUniversalStrategy** - Best of All Worlds
-```json
-{
-  "retrieval_strategy": {
-    "type": "HybridUniversalStrategy",
-    "config": {
-      "combination_method": "weighted_average",
-      "normalize_scores": true,
-      "diversity_boost": 0.1,
-      "strategies": [
-        {"type": "BasicSimilarityStrategy", "weight": 0.4},
-        {"type": "MetadataFilteredStrategy", "weight": 0.3},
-        {"type": "RerankedStrategy", "weight": 0.2},
-        {"type": "MultiQueryStrategy", "weight": 0.1}
-      ]
-    }
-  }
-}
-```
-- **Combination Methods**: `weighted_average` (score-based), `rank_fusion` (position-based)
-- **Features**: Strategy aliases (`basic`, `filtered`, `multi_query`, `reranked`)
-- **Use Cases**: Production systems, balanced precision/recall, complex requirements  
-- **Performance**: Variable | **Complexity**: High
-
-### Strategy Selection Guide
-
-| Use Case | Recommended Strategy | Why |
-|----------|---------------------|-----|
-| **Getting Started** | `BasicSimilarityStrategy` | Simple, fast, reliable baseline |
-| **Production General** | `HybridUniversalStrategy` | Balanced performance across use cases |
-| **High Precision** | `RerankedStrategy` | Multi-factor ranking for nuanced results |
-| **Filtered Content** | `MetadataFilteredStrategy` | Efficient domain-specific searches |
-| **Complex Queries** | `MultiQueryStrategy` | Better recall for ambiguous questions |
-| **High Performance** | `BasicSimilarityStrategy` | Minimal overhead, maximum speed |
-
-## Configuration
-
-Configuration is JSON-based and includes three main sections. The system supports flexible configuration file placement and automatic path resolution.
-
-### CLI Configuration Options
+### 1. Add a New Parser
 
 ```bash
-# Global options (available for all commands)
---config, -c     Configuration file path (default: rag_config.json)
---base-dir, -b   Base directory for relative path resolution
---log-level      Logging level (DEBUG, INFO, WARNING, ERROR)
+# Create structure
+mkdir -p components/parsers/your_parser/
+touch components/parsers/your_parser/{__init__.py,your_parser.py,schema.py}
 ```
-
-### Configuration File Structure
-Configuration is JSON-based and includes three main sections. The system supports flexible configuration file placement and automatic path resolution.
-
-### CLI Configuration Options
-
-```bash
-# Global options (available for all commands)
---config, -c     Configuration file path (default: rag_config.json)
---base-dir, -b   Base directory for relative path resolution
---log-level      Logging level (DEBUG, INFO, WARNING, ERROR)
-```
-
-### Configuration File Structure
-
-```json
-{
-  "parser": {
-    "type": "CustomerSupportCSVParser",
-    "config": {
-      "content_fields": ["subject", "body", "answer"],
-      "metadata_fields": ["type", "priority", "language"]
-    }
-  },
-  "embedder": {
-    "type": "OllamaEmbedder",
-    "config": {
-      "model": "nomic-embed-text",
-      "batch_size": 16
-    }
-  },
-  "vector_store": {
-    "type": "ChromaStore",
-    "config": {
-      "collection_name": "support_tickets",
-      "persist_directory": "./chroma_db"
-    }
-  }
-}
-```
-
-### Sample Configurations
-
-#### Basic Configurations
-- `config_examples/basic_config.yaml`: Simple setup without retrieval strategies
-- `config_examples/custom_csv_config.yaml`: Custom CSV format configuration
-- `config_examples/flexible_paths_config.json`: Demonstrates flexible path resolution
-
-#### PDF Processing
-- `config_examples/pdf_config.yaml`: PDF processing with combined pages
-- `config_examples/pdf_separate_pages_config.yaml`: PDF processing with separate page documents  
-- `config_examples/pdf_with_retrieval_config.json`: PDF processing with retrieval strategies
-
-#### Retrieval Strategy Examples
-- `config_examples/universal_retrieval_config.json`: Basic similarity strategy
-- `config_examples/metadata_filtered_config.json`: Smart metadata filtering
-- `config_examples/multi_query_retrieval_config.json`: Enhanced recall with multiple queries
-- `config_examples/reranked_strategy_config.json`: Sophisticated multi-factor ranking
-- `config_examples/hybrid_universal_config.json`: Weighted strategy combination
-- `config_examples/rank_fusion_hybrid_config.json`: Rank fusion combination method
-- `config_examples/advanced_retrieval_config.yaml`: Complex 4-strategy hybrid
-- `config_examples/strategy_aliases_config.json`: Using strategy aliases (`basic`, `filtered`, etc.)
-- `config_examples/production_config.json`: Production-ready configuration
-
-## Adding New Components
-
-### Adding a New Parser
-
-1. **Create a new parser class:**
 
 ```python
-from core.base import Parser, Document, ProcessingResult
+# components/parsers/your_parser/your_parser.py
+from typing import List, Dict, Any
+from core.base import BaseParser, Document
 
-class MyCustomParser(Parser):
-    def parse(self, source: str) -> ProcessingResult:
-        documents = []
-        # Your parsing logic here
-        return ProcessingResult(documents=documents)
-```
-
-2. **Register in CLI:**
-
-Add to `create_pipeline_from_config()` in `cli.py`:
-
-```python
-elif parser_type == "MyCustomParser":
-    parser = MyCustomParser(config=parser_config.get("config", {}))
-```
-
-### Adding a New Embedder
-
-1. **Create embedder class:**
-
-```python
-from core.base import Embedder
-
-class MyEmbedder(Embedder):
-    def embed(self, texts: List[str]) -> List[List[float]]:
-        # Your embedding logic here
-        return embeddings
-```
-
-2. **Register in CLI and update configuration**
-
-### Adding a New Vector Store
-
-1. **Create store class:**
-
-```python  
-from core.base import VectorStore, Document
-
-class MyVectorStore(VectorStore):
-    def add_documents(self, documents: List[Document]) -> bool:
-        # Storage logic
-        pass
+class YourParser(BaseParser):
+    """Parser for your specific format."""
     
-    def search(self, query: str, top_k: int = 10) -> List[Document]:
-        # Search logic
-        pass
+    def parse(self, content: bytes, metadata: Dict[str, Any] = None) -> List[Document]:
+        # Your parsing logic here
+        return [Document(content=text, metadata=metadata or {})]
 ```
-
-2. **Register in CLI**
-
-## Examples
-
-### Programmatic Usage
 
 ```python
-from core.base import Pipeline
-from parsers.csv_parser import CustomerSupportCSVParser
-from embedders.ollama_embedder import OllamaEmbedder
-from stores.chroma_store import ChromaStore
+# Register in core/factories.py
+from components.parsers.your_parser.your_parser import YourParser
 
-# Create pipeline
-pipeline = Pipeline("My RAG Pipeline")
-pipeline.add_component(CustomerSupportCSVParser())
-pipeline.add_component(OllamaEmbedder())
-pipeline.add_component(ChromaStore())
-
-# Process data
-result = pipeline.run(source="my_data.csv")
+class ParserFactory(ComponentFactory):
+    _registry = {
+        # ... existing parsers
+        "YourParser": YourParser,
+    }
 ```
 
-### 🔍 Using the Internal Search API
+### 2. Add Tests
 
-The RAG system includes an internal Python API for programmatic search access:
+```python
+# tests/components/parsers/test_your_parser.py
+import pytest
+from components.parsers.your_parser.your_parser import YourParser
+
+class TestYourParser:
+    def test_basic_parsing(self):
+        parser = YourParser({})
+        # Test your parsing logic
+```
+
+### 3. Add to Strategy (Optional)
+
+```yaml
+# strategies/your_strategy.yaml
+your_strategy:
+  description: "Optimized for your use case"
+  components:
+    parser:
+      type: "YourParser"
+      config:
+        option1: true
+```
+
+The same pattern applies to **Extractors**, **Embedders**, **Stores**, and **Retrievers**. See [`STRUCTURE.md`](STRUCTURE.md) for detailed developer guidance.
+
+## 📖 Configuration Examples
+
+### Strategy-Based (Recommended)
+```bash
+# Use predefined strategies
+uv run python cli.py --strategy simple ingest data.csv
+uv run python cli.py --strategy customer_support ingest tickets.csv
+uv run python cli.py --strategy legal ingest contracts/
+
+# Customize strategy settings
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":32}}}}' \
+  ingest data/
+```
+
+### Traditional Configuration
+```yaml
+# config/custom.yaml
+version: "v1"
+parser:
+  type: "CSVParser"
+  config:
+    content_fields: ["title", "description"]
+    metadata_fields: ["category", "priority"]
+
+embedder:
+  type: "OllamaEmbedder"
+  config:
+    model: "nomic-embed-text"
+    batch_size: 16
+
+vector_store:
+  type: "ChromaStore"
+  config:
+    collection_name: "documents"
+    persist_directory: "./vector_db"
+```
+
+```bash
+# Use traditional config
+uv run python cli.py --config config/custom.yaml ingest data.csv
+```
+
+## 🎯 Real-World Workflow Examples
+
+### Complete Document Processing Workflows
+
+#### Customer Support Knowledge Base Setup
+```bash
+# 1. Setup: Ingest support tickets with comprehensive extraction
+uv run python cli.py --strategy customer_support ingest support_tickets.csv \
+  --extractors entities pattern summary statistics
+
+# 2. Search: Find similar cases
+uv run python cli.py --strategy customer_support search "user cannot login" \
+  --filter '{"priority": "high"}' --top-k 5
+
+# 3. Management: Regular cleanup
+uv run python cli.py manage cleanup --duplicates
+uv run python cli.py manage delete --older-than 90
+```
+
+#### Legal Document Analysis Workflow
+```bash
+# 1. Ingest: Process legal documents with compliance extraction
+uv run python cli.py --strategy legal ingest contracts/ \
+  --extractors entities datetime pattern heading statistics
+
+# 2. Research: Find relevant cases and precedents
+uv run python cli.py --strategy legal search "liability clauses" \
+  --filter '{"document_type": "contract", "jurisdiction": "US"}' --top-k 10
+
+# 3. Analysis: Cross-reference different document types
+uv run python cli.py --strategy legal search "force majeure" \
+  --filter '{"date_range": {"$gte": "2020-01-01"}}' --top-k 15
+```
+
+#### Research Paper Processing Pipeline
+```bash
+# 1. Batch Processing: Ingest academic papers
+uv run python cli.py --strategy research ingest research_papers/ \
+  --extractors entities statistics summary heading
+
+# 2. Literature Review: Find related work
+uv run python cli.py --strategy research search "transformer architecture" \
+  --filter '{"publication_year": {"$gte": 2020}}' --top-k 20
+
+# 3. Citation Analysis: Track key researchers and institutions
+uv run python cli.py --strategy research search "attention mechanisms" \
+  --filter '{"authors": {"$contains": "Vaswani"}}' --top-k 10
+```
+
+#### Business Intelligence Workflow
+```bash
+# 1. Multi-format Ingestion: Process various business documents
+uv run python cli.py --strategy business ingest quarterly_reports/ \
+  --extractors table statistics summary
+
+uv run python cli.py --strategy business ingest financial_data.xlsx \
+  --extractors table statistics pattern
+
+# 2. Strategic Analysis: Find performance trends
+uv run python cli.py --strategy business search "revenue growth" \
+  --filter '{"quarter": "Q4", "year": 2024}' --top-k 8
+
+# 3. Comparative Analysis: Cross-department insights
+uv run python cli.py --strategy business search "cost optimization" \
+  --filter '{"department": {"$in": ["finance", "operations"]}}' --top-k 12
+```
+
+### Production Deployment Patterns
+
+#### Development to Production Pipeline
+```bash
+# Development: Test with small dataset
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"vector_store":{"config":{"persist_directory":"./dev_db"}}}}' \
+  ingest test_data/
+
+# Staging: Validate with production-like data
+uv run python cli.py --strategy production \
+  --strategy-overrides '{"components":{"vector_store":{"config":{"persist_directory":"./staging_db"}}}}' \
+  ingest staging_data/
+
+# Production: Full-scale deployment
+uv run python cli.py --strategy production ingest production_data/
+```
+
+#### Performance Scaling Examples
+```bash
+# Small Dataset (< 1000 docs): Basic strategy
+uv run python cli.py --strategy simple ingest small_docs/
+
+# Medium Dataset (1000-10000 docs): Optimized batch processing
+uv run python cli.py --strategy production \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":32}}}}' \
+  ingest medium_docs/
+
+# Large Dataset (> 10000 docs): High-performance configuration
+uv run python cli.py --strategy production \
+  --strategy-overrides '{
+    "components": {
+      "embedder": {"config": {"batch_size": 128}},
+      "vector_store": {"config": {"batch_size": 1000}}
+    }
+  }' ingest large_docs/
+```
+
+## 🔍 Programmatic API
 
 ```python
 from api import SearchAPI, search
 
-# Quick search using convenience function
+# Quick search
 results = search("password reset", top_k=3)
 for result in results:
     print(f"Score: {result.score:.3f} - {result.content[:100]}...")
 
-# Advanced usage with API class
-api = SearchAPI(config_path="config_examples/basic_config.yaml")
-
-# Search with filters
+# Advanced usage
+api = SearchAPI(config_path="config/custom.yaml")
 results = api.search(
     query="security issue",
     top_k=5,
-    min_score=-500.0,  # Only high-confidence results
-    metadata_filter={"priority": "high"}  # Only high priority items
+    metadata_filter={"priority": "high"}
 )
-
-# Get raw Document objects
-documents = api.search("network error", return_raw_documents=True)
-
-# Get collection info
-info = api.get_collection_info()
 ```
 
-#### API Features:
-- **Configurable search parameters**: `top_k`, `min_score`, `metadata_filter`
-- **Multiple return formats**: `SearchResult` objects or raw `Document` objects
-- **Metadata filtering**: Filter by any metadata field (priority, tags, etc.)
-- **Collection information**: Get stats about the vector store
-- **Multiple configurations**: Use different configs for different data types
+## 🚨 Troubleshooting & Common Issues
 
-Run the example script to see all features:
+### CLI Issues
+
+#### Command Not Found or Import Errors
 ```bash
-uv run python examples/example_api_usage.py
+# Ensure dependencies are installed
+uv sync
+
+# Check Python environment
+uv run python -c "import sys; print(sys.path)"
+
+# Verify CLI works
+uv run python cli.py --help
+
+# Alternative: activate environment manually
+source .venv/bin/activate
+python cli.py --help
 ```
 
-### 🔍 Advanced Retrieval Strategies
-
-The RAG system now supports configurable retrieval strategies for fine-tuned search behavior:
-
-```python
-from api import SearchAPI
-
-# Use different retrieval strategies via configuration
-basic_api = SearchAPI("config_examples/basic_with_retrieval_config.yaml")
-advanced_api = SearchAPI("config_examples/advanced_retrieval_config.yaml")
-
-# Basic strategy - simple vector similarity
-basic_results = basic_api.search("password reset", top_k=3)
-
-# Advanced hybrid strategy - combines multiple approaches  
-advanced_results = advanced_api.search("login authentication", top_k=5)
-
-# Compare strategy effectiveness
-print(f"Basic strategy found {len(basic_results)} results")
-print(f"Advanced strategy found {len(advanced_results)} results")
-```
-
-#### Available Retrieval Strategies:
-
-1. **ChromaBasicStrategy** - Simple vector similarity search
-   ```json
-   {
-     "retrieval_strategy": {
-       "type": "ChromaBasicStrategy",
-       "config": {"distance_metric": "cosine"}
-     }
-   }
-   ```
-
-2. **ChromaHybridStrategy** - Combines multiple strategies with weights
-   ```json
-   {
-     "retrieval_strategy": {
-       "type": "ChromaHybridStrategy", 
-       "config": {
-         "strategies": [
-           {"type": "ChromaBasicStrategy", "weight": 0.5},
-           {"type": "ChromaRerankedStrategy", "weight": 0.3},
-           {"type": "ChromaMetadataFilterStrategy", "weight": 0.2}
-         ]
-       }
-     }
-   }
-   ```
-
-3. **ChromaMetadataFilterStrategy** - Vector search with metadata filtering
-4. **ChromaMultiQueryStrategy** - Uses multiple query variations  
-5. **ChromaRerankedStrategy** - Re-ranks results with multiple factors
-
-#### Testing Retrieval Strategies:
-
+#### Strategy Configuration Problems
 ```bash
-# Test the retrieval system
-uv run python test_retrieval_system.py
+# List available strategies
+uv run python cli.py strategies list
 
-# Run retrieval examples  
-uv run python example_retrieval_usage.py
+# Validate strategy syntax
+uv run python cli.py strategies test simple
 
-# Compare strategies side-by-side
-uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml search "security issue"
-uv run python cli.py --config config_examples/advanced_retrieval_config.yaml search "security issue"
+# Test override syntax
+uv run python cli.py strategies test customer_support \
+  --overrides '{"components":{"embedder":{"config":{"batch_size":8}}}}'
+
+# Convert to traditional config for debugging
+uv run python cli.py strategies convert simple debug_config.yaml
+uv run python cli.py --config debug_config.yaml test
 ```
 
-See `retrieval/README.md` for detailed documentation on all available strategies and configuration options.
+### Ollama Integration Issues
 
-### Custom CSV Format
-
-For custom CSV formats, configure field mappings:
-
-```json
-{
-  "parser": {
-    "type": "CSVParser",
-    "config": {
-      "content_fields": ["title", "description", "solution"],
-      "metadata_fields": ["category", "severity", "date"],
-      "id_field": "ticket_number",
-      "combine_content": true,
-      "content_separator": "\\n\\n"
-    }
-  }
-}
-```
-
-## Testing
-
-Run the comprehensive test suite:
-
+#### Ollama Service Problems
 ```bash
-python examples/test_system.py
-```
-
-This tests:
-- CSV parsing functionality
-- Ollama integration (if available)
-- ChromaDB storage
-- End-to-end pipeline
-
-## File Structure
-
-```
-rag/
-├── core/
-│   ├── __init__.py
-│   ├── base.py              # Base classes
-│   ├── enhanced_pipeline.py # Enhanced pipeline with progress tracking  
-│   └── factories.py         # Factory pattern for component creation
-│   ├── base.py              # Base classes
-│   ├── enhanced_pipeline.py # Enhanced pipeline with progress tracking  
-│   └── factories.py         # Factory pattern for component creation
-├── parsers/
-│   ├── __init__.py
-│   ├── csv_parser.py        # CSV parsers
-│   └── pdf_parser.py        # PDF parser with PyPDF2
-│   ├── csv_parser.py        # CSV parsers
-│   └── pdf_parser.py        # PDF parser with PyPDF2
-├── embedders/
-│   ├── __init__.py
-│   └── ollama_embedder.py   # Ollama integration
-├── stores/
-│   ├── __init__.py
-│   └── chroma_store.py      # ChromaDB integration
-├── utils/
-│   ├── __init__.py
-│   ├── progress.py          # Progress tracking with llama puns
-│   └── path_resolver.py     # Flexible path resolution
-├── tests/                   # Comprehensive test suite
-│   ├── test_csv_parser.py
-│   ├── test_pdf_parser.py
-│   └── ...
-├── utils/
-│   ├── __init__.py
-│   ├── progress.py          # Progress tracking with llama puns
-│   └── path_resolver.py     # Flexible path resolution
-├── tests/                   # Comprehensive test suite
-│   ├── test_csv_parser.py
-│   ├── test_pdf_parser.py
-│   └── ...
-├── config_examples/         # Sample configurations
-│   ├── basic_config.json
-│   ├── custom_csv_config.json
-│   ├── pdf_config.json
-│   └── pdf_separate_pages_config.json
-├── samples/                 # Sample data files
-│   └── small_sample.csv
-│   ├── basic_config.json
-│   ├── custom_csv_config.json
-│   ├── pdf_config.json
-│   └── pdf_separate_pages_config.json
-├── samples/                 # Sample data files
-│   └── small_sample.csv
-├── cli.py                   # Command-line interface
-├── pyproject.toml          # UV project configuration
-├── pyproject.toml          # UV project configuration
-└── README.md              # This file
-```
-
-## Contributing
-
-This system is designed for easy extension. To contribute:
-
-1. **Add new components** following the base class patterns
-2. **Update CLI registration** for new component types
-3. **Add tests** for new functionality
-4. **Update documentation** with usage examples
-
-### Component Guidelines
-
-- Inherit from appropriate base classes (`Parser`, `Embedder`, `VectorStore`)
-- Implement required abstract methods
-- Include configuration validation
-- Add error handling and logging
-- Follow the established patterns
-
-## Troubleshooting
-
-### macOS-Specific Issues
-
-#### Ollama Installation Problems
-```bash
-# If the curl install fails, try Homebrew
-brew install ollama
-
-# Start Ollama
-ollama serve
-```
-
-#### Python/pip Issues
-```bash
-# Use Python 3 explicitly if needed
-# Create your rag_config.json file first (see Configuration section)
-python3 cli.py test
-
-# Create virtual environment if you get permission errors
-python3 -m venv rag_env
-source rag_env/bin/activate
-pip install -r requirements.txt
-```
-
-#### Check if Everything is Working
-```bash
-# Test Ollama connection
+# Check if Ollama is running
 curl http://localhost:11434/api/tags
 
-# Run comprehensive system tests with UV
-uv run python examples/test_system.py
+# Start Ollama service
+ollama serve
 
-# Or run pytest
-uv run pytest
+# Check available models
+ollama list
+
+# Pull required embedding model
+ollama pull nomic-embed-text
+
+# Test embedding generation
+curl http://localhost:11434/api/embeddings -d '{
+  "model": "nomic-embed-text",
+  "prompt": "test embedding"
+}'
 ```
 
-### General Issues
+#### Embedding Generation Failures
+```bash
+# Test with smaller batch size
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":1}}}}' \
+  ingest small_test.csv
 
-#### Ollama Problems
-- Ensure Ollama is running: `ollama serve`
-- Check model availability: `ollama list`
-- Pull required model: `ollama pull nomic-embed-text`
+# Enable debug logging
+uv run python cli.py --log-level DEBUG --strategy simple ingest test.csv
 
-#### ChromaDB Issues
-- Check permissions on persist directory
-- Ensure disk space available
-- Try deleting collection and recreating
+# Check available memory
+free -h  # Linux
+vm_stat  # macOS
+```
 
-#### Performance Tips
-- Adjust batch sizes based on your hardware
-- Use appropriate embedding models for your use case
-- Consider chunking large CSV files
+### Performance Issues
 
-## 🚀 Next Steps & Roadmap
+#### Slow Ingestion
+```bash
+# Check current configuration
+uv run python cli.py strategies show simple
 
-The RAG system is designed for continuous extension and improvement. Here are the planned next steps for expanding capabilities:
+# Optimize for speed
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{
+    "components": {
+      "embedder": {"config": {"batch_size": 32}},
+      "extractors": []
+    }
+  }' ingest large_dataset/
 
-### 🔧 Infrastructure Improvements
+# Use production strategy for large datasets
+uv run python cli.py --strategy production ingest large_dataset/
+```
 
-#### Top-Level Configuration Library Integration
-- Replace current JSON config loading with centralized config management
-- Support for environment-based configuration
-- Configuration validation and schema enforcement
-- Hot-reload capabilities for development
+#### Memory Issues
+```bash
+# Reduce batch size
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":4}}}}' \
+  ingest documents/
 
-#### Global Logging Module Integration
-- Replace current basic logging with enterprise-grade logging system
-- Structured logging with JSON output
-- Log aggregation and monitoring integration
-- Configurable log levels per component
+# Process files individually instead of directories
+for file in documents/*.pdf; do
+  uv run python cli.py --strategy simple ingest "$file"
+done
 
-#### Advanced Component Registration
-- Dynamic component discovery and registration
+# Check system resources during processing
+top  # Monitor CPU/memory usage
+```
+
+### Search and Retrieval Issues
+
+#### No Search Results
+```bash
+# Check collection info
+uv run python cli.py info
+
+# Verify documents were ingested
+uv run python cli.py manage stats --detailed
+
+# Test with broader search
+uv run python cli.py --strategy simple search "common words" --top-k 10
+
+# Check with different strategy
+uv run python cli.py --strategy customer_support search "your query"
+```
+
+#### Poor Search Quality
+```bash
+# Try different retrieval strategies
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"retrieval_strategy":{"type":"MetadataFilteredStrategy"}}}' \
+  search "your query"
+
+# Increase number of results
+uv run python cli.py --strategy simple search "query" --top-k 20
+
+# Use more sophisticated strategy
+uv run python cli.py --strategy production search "query"
+```
+
+### File Processing Issues
+
+#### Unsupported File Types
+```bash
+# Check supported parsers
+uv run python cli.py parsers list
+
+# Override parser selection
+uv run python cli.py --strategy simple ingest unknown_file.ext --parser text
+
+# Convert file format if needed
+pandoc document.doc -o document.pdf  # Convert to supported format
+```
+
+#### Parser Failures
+```bash
+# Test file parsing separately
+uv run python cli.py test --test-file problematic_document.pdf
+
+# Try different parser
+uv run python cli.py --strategy simple ingest document.pdf --parser pdf_chunked
+
+# Enable debug logging
+uv run python cli.py --log-level DEBUG --strategy simple ingest document.pdf
+```
+
+### Database and Storage Issues
+
+#### ChromaDB Connection Problems
+```bash
+# Check database directory permissions
+ls -la ./data/simple_chroma_db/
+
+# Create directory manually if needed
+mkdir -p ./data/simple_chroma_db
+
+# Use custom database location
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"vector_store":{"config":{"persist_directory":"./custom_db"}}}}' \
+  ingest documents/
+```
+
+#### Collection Issues
+```bash
+# List collection info
+uv run python cli.py info
+
+# Clear and recreate collection
+uv run python cli.py manage cleanup --duplicates
+
+# Use different collection name
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{"components":{"vector_store":{"config":{"collection_name":"new_collection"}}}}' \
+  ingest documents/
+```
+
+### Performance Optimization Guide
+
+#### Hardware-Based Recommendations
+
+**Low Resources (< 8GB RAM, CPU only):**
+```bash
+# Use minimal strategy with small batches
+uv run python cli.py --strategy simple \
+  --strategy-overrides '{
+    "components": {
+      "embedder": {"config": {"batch_size": 2}},
+      "extractors": []
+    }
+  }' ingest documents/
+```
+
+**Medium Resources (8-16GB RAM, integrated GPU):**
+```bash
+# Balanced configuration
+uv run python cli.py --strategy customer_support \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":16}}}}' \
+  ingest documents/
+```
+
+**High Resources (16GB+ RAM, dedicated GPU):**
+```bash
+# High-performance configuration
+uv run python cli.py --strategy production \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":128}}}}' \
+  ingest documents/
+```
+
+#### Dataset Size Recommendations
+
+**Small (< 1,000 documents):**
+```bash
+uv run python cli.py --strategy simple ingest small_docs/
+```
+
+**Medium (1,000 - 50,000 documents):**
+```bash
+uv run python cli.py --strategy production \
+  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":32}}}}' \
+  ingest medium_docs/
+```
+
+**Large (50,000+ documents):**
+```bash
+# Process in chunks
+split -l 10000 large_dataset.csv chunk_
+for chunk in chunk_*; do
+  uv run python cli.py --strategy production ingest "$chunk"
+done
+```
+
+### Quick Reference Commands
+
+#### Essential Daily Commands
+```bash
+# Quick start
+uv run python cli.py --strategy simple ingest documents/
+uv run python cli.py --strategy simple search "query"
+
+# System check
+uv run python cli.py strategies list
+uv run python cli.py info
+uv run python cli.py test
+
+# Maintenance
+uv run python cli.py manage cleanup --duplicates
+uv run python cli.py manage stats --detailed
+```
+
+#### Emergency Recovery
+```bash
+# Reset database
+rm -rf ./data/simple_chroma_db/
+uv run python cli.py --strategy simple ingest documents/
+
+# Test system health
+uv run python -m pytest tests/ -v
+
+# Verify Ollama
+curl http://localhost:11434/api/tags
+```
+
+## 📚 Documentation
+
+- **[STRUCTURE.md](STRUCTURE.md)**: Complete developer architecture guide
+- **[demos/README.md](demos/README.md)**: Detailed demo documentation
+- **[schema.yaml](schema.yaml)**: Complete API documentation
+- **[METADATA_BEST_PRACTICES.md](METADATA_BEST_PRACTICES.md)**: Metadata management guide
+
+## 🤝 Contributing
+
+1. **Follow the patterns**: Use factory registration, base classes, and configuration schemas
+2. **Write tests**: All new components need comprehensive tests
+3. **Update documentation**: Keep STRUCTURE.md and schema.yaml current
+4. **Test thoroughly**: Run the full test suite and demos
+5. **Add examples**: Show how to use new components
+
+## 📈 What's Next?
+
+The RAG system is designed for continuous extension:
+
+### Immediate Next Steps
+- Add more vector stores (Pinecone, Qdrant, Weaviate)
+- Expand parser support (Word, XML, JSON, Code)
+- Add more embedding providers (OpenAI, Cohere)
+- Build web interface and REST API
+
+### Architecture Evolution
 - Plugin system for third-party extensions
-- Runtime component loading from external packages
-- Component dependency management
+- Distributed processing capabilities
+- Advanced metadata management
+- Performance monitoring and analytics
 
-### 📄 New Parser Support
+The modular architecture ensures all extensions integrate seamlessly with existing components and strategies.
 
-#### Document Format Expansion
-- ✅ **PDF Parser**: Extract text, metadata, and structure from PDF documents (COMPLETED)
-- ✅ **PDF Parser**: Extract text, metadata, and structure from PDF documents (COMPLETED)
-- **Word Document Parser**: Support for .docx files with rich formatting
-- **JSON Parser**: Handle nested JSON structures and arrays
-- **XML Parser**: Parse structured XML data with schema validation
-- **Web Scraper Parser**: Extract content from web pages and APIs
-- **Email Parser**: Process .eml and .msg files with attachment handling
-- **Markdown Parser**: Parse .md files with proper heading hierarchy
+---
 
-#### Specialized Parsers
-- **Code Parser**: Extract functions, classes, and documentation from source code
-- **Log Parser**: Structure log files with timestamp and severity extraction
-- **Database Parser**: Connect directly to databases for real-time ingestion
+**Get started in under 2 minutes:**
+```bash
+cd rag/
+uv sync
+ollama serve &
+ollama pull nomic-embed-text
+uv run python demos/enhanced_demo.py
+```
 
-### 🗄️ New Vector Database Support
-
-#### Enterprise Vector Stores
-- **Pinecone**: Managed vector database with high-performance search
-- **Weaviate**: GraphQL-based vector database with semantic capabilities
-- **Qdrant**: High-performance vector similarity search engine
-- **Milvus**: Open-source vector database for large-scale deployments
-- **LanceDB**: Serverless vector database with SQL support
-
-#### Traditional Database Integration
-- **PostgreSQL with pgvector**: Leverage existing PostgreSQL infrastructure
-- **Elasticsearch**: Full-text search with vector similarity capabilities
-- **Redis with RedisSearch**: In-memory vector search for low-latency applications
-
-### 🧠 New Embedding Model Support
-
-#### Commercial Embedding APIs
-- **OpenAI Embeddings**: text-embedding-ada-002 and newer models
-- **Cohere Embed**: Multilingual embedding models
-- **Anthropic Claude**: When embedding APIs become available
-- **Google PaLM Embeddings**: Google's large language model embeddings
-
-#### Open Source Models
-- **Sentence Transformers**: Wide variety of pre-trained models
-- **Hugging Face Transformers**: Custom and fine-tuned embedding models
-- **BGE Models**: Beijing Academy of AI's high-performance embedders
-- **E5 Models**: Microsoft's multilingual embedding models
-
-#### Specialized Embeddings
-- **Code Embeddings**: Models trained specifically for source code
-- **Domain-Specific Models**: Healthcare, legal, finance-trained embedders
-- **Multimodal Embeddings**: Support for text + image embeddings
-
-### 🤖 AI Integration & API Keys
-
-#### ChatGPT/OpenAI Integration
-- **API Key Management**: Secure storage and rotation of OpenAI API keys
-- **GPT Integration**: Use GPT models for query expansion and result summarization
-- **Function Calling**: Leverage GPT's function calling for structured queries
-- **Streaming Responses**: Real-time response streaming for better UX
-
-#### Multi-Provider Support
-- **Anthropic Claude**: API key management and integration
-- **Google Gemini**: Support for Google's AI models
-- **Azure OpenAI**: Enterprise OpenAI service integration
-- **Local LLM Integration**: Support for locally hosted language models
-
-### 🎨 User Experience Enhancements
-
-#### Advanced CLI Features
-- **Interactive Mode**: Step-by-step guided setup and usage
-- **Configuration Wizard**: Automated configuration generation
-- **Batch Processing**: Handle multiple files and directories
-- **Progress Persistence**: Resume interrupted processing
-- **Result Export**: Save search results in various formats
-
-#### Web Interface
-- **REST API**: HTTP endpoints for all RAG operations
-- **Web Dashboard**: Browser-based interface for management
-- **Real-time Monitoring**: Live system status and performance metrics
-- **User Authentication**: Multi-user support with role-based access
-
-### 🔒 Security & Compliance
-
-#### Data Protection
-- **Encryption at Rest**: Secure storage of documents and embeddings
-- **API Key Encryption**: Secure credential management
-- **Access Controls**: Fine-grained permissions for different operations
-- **Audit Logging**: Complete audit trail of all system operations
-
-#### Privacy Features
-- **Data Anonymization**: Remove PII from documents before processing
-- **Selective Deletion**: Remove specific documents from vector stores
-- **Compliance Reporting**: Generate reports for regulatory requirements
-
-### 📊 Performance & Scalability
-
-#### Optimization Features
-- **Distributed Processing**: Scale across multiple machines
-- **GPU Acceleration**: Leverage CUDA for faster embedding generation
-- **Caching Layer**: Intelligent caching of embeddings and results
-- **Load Balancing**: Distribute requests across multiple instances
-
-#### Monitoring & Analytics
-- **Performance Metrics**: Track processing speed and accuracy
-- **Usage Analytics**: Understand system usage patterns
-- **Cost Tracking**: Monitor API usage and associated costs
-- **Health Checks**: Automated system health monitoring
-
-### 🧪 Advanced Features
-
-#### Intelligent Processing
-- **Semantic Chunking**: Smart document splitting based on content structure
-- **Query Expansion**: Automatic query enhancement for better results
-- **Result Ranking**: ML-based relevance scoring and ranking
-- **Duplicate Detection**: Identify and handle duplicate content
-
-#### Integration Capabilities
-- **Webhook Support**: Real-time notifications for processing events
-- **ETL Pipeline Integration**: Connect with data pipeline tools
-- **Message Queue Support**: Async processing with RabbitMQ/Kafka
-- **Kubernetes Deployment**: Cloud-native deployment configurations
-
-Each of these enhancements builds upon the solid foundation already established, utilizing the factory pattern and modular architecture to ensure seamless integration and minimal breaking changes.
-
-## License
-
-This project is designed as a simple, extensible foundation for RAG systems. Feel free to use, modify, and extend as needed.
+**Questions?** Check out the [demos](demos/), run the [tests](tests/), or dive into the [architecture guide](STRUCTURE.md).

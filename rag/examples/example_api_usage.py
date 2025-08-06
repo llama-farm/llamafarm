@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 """Example usage of the internal search API."""
 
-import sys
-from pathlib import Path
-
-# Add parent directory to path so we can import modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from api import SearchAPI, search
 from pprint import pprint
 
@@ -32,20 +27,21 @@ def example_api_with_filters():
     # Initialize API with specific config
     api = SearchAPI(config_path="config_examples/basic_config.yaml")
     
-    # Search with minimum score filter
+    # Search with parameters configured in the config file
+    # No hardcoded min_score - this should be in the configuration!
     results = api.search(
         query="security breach",
-        top_k=5,
-        min_score=-500.0  # Only high-confidence results
+        top_k=5
+        # min_score parameter removed - should be configured in the config file
     )
     
-    print(f"Found {len(results)} results with high confidence scores\n")
+    print(f"Found {len(results)} results\n")
     
-    # Search with metadata filter
+    # Search with metadata filter (this is appropriate to specify in the API call)
     results_filtered = api.search(
         query="login issues",
         top_k=10,
-        metadata_filter={"priority": "high"}  # Only high priority tickets
+        metadata_filter={"priority": "high"}  # Filtering by metadata is appropriate in API calls
     )
     
     print(f"Found {len(results_filtered)} high-priority results about login issues\n")

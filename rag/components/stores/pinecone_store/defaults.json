@@ -1,0 +1,10 @@
+{
+  "default": {
+    "name": "Default Configuration",
+    "description": "Default settings for pinecone_store",
+    "config": {},
+    "recommended_for": [
+      "General use"
+    ]
+  }
+}

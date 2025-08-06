@@ -1,0 +1,10 @@
+{
+  "default": {
+    "name": "Default Configuration",
+    "description": "Default settings for pdf_parser",
+    "config": {},
+    "recommended_for": [
+      "General use"
+    ]
+  }
+}

@@ -1,8 +1,29 @@
-# LlamaFarm RAG System - Comprehensive Default Configuration
+# RAG System - Comprehensive Default Configuration
 # This file demonstrates ALL possible configuration options with detailed comments
-# Uncomment and modify sections as needed for your use case
+# You can use individual components OR strategy-based configuration
 
 version: v1
+
+# =============================================================================
+# STRATEGY-BASED CONFIGURATION (RECOMMENDED APPROACH)
+# =============================================================================
+# Use predefined strategies instead of configuring individual components
+# Available strategies: simple, customer_support, legal, research, business, technical, production
+
+# strategy: "simple"                        # Uncomment to use strategy-based config
+# strategy_overrides:                       # Override specific strategy settings
+#   embedder:
+#     config:
+#       batch_size: 32
+#   retrieval_strategy:
+#     config:
+#       distance_metric: "euclidean"
+
+# =============================================================================
+# COMPONENT-BASED CONFIGURATION (ADVANCED USERS)
+# =============================================================================
+# Configure individual components for complete control
+# This approach gives you full flexibility but requires more configuration
 
 # =============================================================================
 # GLOBAL PROMPTS - System-wide prompts for different use cases
@@ -149,18 +170,16 @@ rag:
       file_extensions: [".pdf"]
       mime_types: ["application/pdf"]
     
-    # Text Parser - For plain text files
+    # Plain Text Parser - For plain text files
     text:
-      type: "TextParser"
+      type: "PlainTextParser"
       config:
         chunk_size: 500
         chunk_overlap: 100
-        preserve_paragraphs: true         # Try to keep paragraphs intact
-        
-        # Text cleaning options
-        # normalize_whitespace: true       # Normalize whitespace
-        # remove_extra_newlines: true     # Remove excessive newlines
-        # strip_html: false               # Remove HTML tags
+        preserve_line_breaks: true        # Preserve line breaks
+        strip_empty_lines: true           # Remove empty lines
+        detect_structure: true            # Detect headers, lists, etc.
+        encoding: "auto"                  # Auto-detect encoding
         
         chunk_metadata:
           extractors:
@@ -173,8 +192,32 @@ rag:
               include_sentiment: true
               word_frequency_top_n: 5
       
-      file_extensions: [".txt", ".md", ".rst"]
-      mime_types: ["text/plain", "text/markdown"]
+      file_extensions: [".txt", ".log", ".text", ".asc", ".readme"]
+      mime_types: ["text/plain"]
+    
+    # Markdown Parser - For markdown files
+    markdown:
+      type: "MarkdownParser"
+      config:
+        extract_frontmatter: true         # Extract YAML frontmatter
+        chunk_by_headings: true           # Chunk by heading structure
+        preserve_code_blocks: true        # Keep code blocks intact
+        extract_links: true               # Extract markdown links
+        
+        chunk_metadata:
+          extractors:
+            heading:
+              extract_markdown_headings: true
+              extract_numbered_headings: false
+              generate_toc: true
+              
+            link:
+              extract_urls: true
+              extract_emails: false
+              extract_mentions: true
+      
+      file_extensions: [".md", ".markdown", ".rst"]
+      mime_types: ["text/markdown", "text/x-markdown"]
     
     # JSON Parser - For structured JSON data
     # json:
@@ -190,29 +233,82 @@ rag:
     #   file_extensions: [".json", ".jsonl"]
     #   mime_types: ["application/json"]
     
-    # Word Document Parser
-    # docx:
-    #   type: "DocxParser"
-    #   config:
-    #     extract_metadata: true
-    #     extract_tables: true
-    #     extract_images: false
-    #     chunk_size: 1000
-    #     chunk_overlap: 200
-    #   file_extensions: [".docx", ".doc"]
-    #   mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+    # Word Document Parser - For Microsoft Word documents
+    docx:
+      type: "DocxParser"
+      config:
+        extract_tables: true              # Extract table content
+        extract_headers_footers: true     # Include headers/footers
+        preserve_formatting: false        # Preserve basic formatting
+        include_document_properties: true # Include metadata
+        
+        chunk_metadata:
+          extractors:
+            table:
+              min_columns: 2
+              min_rows: 2
+              detect_headers: true
+              
+            heading:
+              extract_markdown_headings: false
+              extract_underlined_headings: true
+              extract_numbered_headings: true
+      
+      file_extensions: [".docx"]
+      mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
     
-    # HTML Parser
-    # html:
-    #   type: "HTMLParser"
-    #   config:
-    #     extract_links: true
-    #     remove_scripts: true
-    #     remove_styles: true
-    #     chunk_size: 800
-    #     chunk_overlap: 160
-    #   file_extensions: [".html", ".htm"]
-    #   mime_types: ["text/html"]
+    # HTML Parser - For web content and HTML files
+    html:
+      type: "HTMLParser"
+      config:
+        extract_links: true               # Extract all links
+        extract_images: true              # Extract image references
+        extract_tables: true              # Extract HTML tables
+        extract_meta: true                # Extract meta tags
+        preserve_structure: true          # Preserve heading structure
+        remove_scripts: true              # Remove script tags
+        remove_styles: true               # Remove style tags
+        include_alt_text: true            # Include image alt text
+        
+        chunk_metadata:
+          extractors:
+            link:
+              extract_urls: true
+              extract_emails: true
+              extract_file_paths: false
+              categorize_domains: true
+              
+            table:
+              table_formats: ["pipe", "grid", "html_marker"]
+              min_columns: 2
+      
+      file_extensions: [".html", ".htm", ".xhtml"]
+      mime_types: ["text/html", "application/xhtml+xml"]
+    
+    # Excel Parser - For spreadsheet files
+    excel:
+      type: "ExcelParser"
+      config:
+        parse_all_sheets: true            # Parse all worksheets
+        include_sheet_stats: true         # Include sheet statistics
+        max_rows: 10000                   # Limit rows per sheet
+        skip_empty_rows: true             # Skip empty rows
+        convert_to_text: "table"          # "table", "csv", "markdown"
+        
+        chunk_metadata:
+          extractors:
+            table:
+              min_columns: 1
+              min_rows: 1
+              detect_headers: true
+              
+            statistics:
+              include_readability: false
+              include_sentiment: false
+              word_frequency_top_n: 5
+      
+      file_extensions: [".xlsx", ".xls", ".xlsm"]
+      mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"]
     
     # Email Parser (EML/MSG files)
     # email:
@@ -253,33 +349,62 @@ rag:
         batch_size: 64                    # Larger batch for speed
         timeout: 30
     
-    # Cloud embedder - OpenAI (commented out, requires API key)
-    # openai:
-    #   type: "OpenAIEmbedder"
-    #   config:
-    #     model: "text-embedding-3-small"   # or "text-embedding-3-large"
-    #     api_key: "${OPENAI_API_KEY}"
-    #     batch_size: 100                   # OpenAI allows larger batches
-    #     timeout: 30
-    #     dimensions: 1536                  # Embedding dimensions
+    # Cloud embedder - OpenAI (requires API key)
+    openai:
+      type: "OpenAIEmbedder"
+      config:
+        model: "text-embedding-3-small"    # "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"
+        api_key: "${OPENAI_API_KEY}"       # Set environment variable
+        batch_size: 100                    # OpenAI allows larger batches
+        timeout: 30
+        max_retries: 3                     # Retry on failures
+        dimensions: 1536                   # Embedding dimensions (for supported models)
     
-    # Cohere embedder
-    # cohere:
-    #   type: "CohereEmbedder"
-    #   config:
-    #     model: "embed-english-v3.0"
-    #     api_key: "${COHERE_API_KEY}"
-    #     input_type: "search_document"     # "search_document" or "search_query"
-    #     batch_size: 96
+    # HuggingFace Transformers embedder - Local models
+    huggingface:
+      type: "HuggingFaceEmbedder"
+      config:
+        model_name: "sentence-transformers/all-MiniLM-L6-v2"  # Lightweight model
+        device: "auto"                     # "auto", "cpu", "cuda", "mps"
+        max_length: 512                    # Maximum input length
+        batch_size: 32
+        normalize_embeddings: true         # Normalize for cosine similarity
+        trust_remote_code: false           # Security setting
     
-    # Hugging Face local embedder
-    # huggingface:
-    #   type: "HuggingFaceEmbedder"
+    # Sentence Transformers embedder - Optimized for semantic similarity
+    sentence_transformers:
+      type: "SentenceTransformerEmbedder"
+      config:
+        model_name: "all-mpnet-base-v2"    # High-quality model
+        device: "auto"                     # "auto", "cpu", "cuda", "mps"
+        batch_size: 32
+        normalize_embeddings: true         # Normalize embeddings
+        show_progress_bar: false           # Show progress during encoding
+        convert_to_tensor: false           # Return as lists, not tensors
+    
+    # Alternative sentence transformer models (commented examples)
+    # sentence_transformers_fast:
+    #   type: "SentenceTransformerEmbedder" 
     #   config:
-    #     model: "sentence-transformers/all-MiniLM-L6-v2"
-    #     device: "cpu"                     # "cpu", "cuda", "mps"
-    #     batch_size: 16
-    #     cache_dir: "~/.cache/huggingface"
+    #     model_name: "all-MiniLM-L6-v2"    # Faster, smaller model
+    #     device: "auto"
+    #     batch_size: 64
+    #     normalize_embeddings: true
+    
+    # sentence_transformers_multilingual:
+    #   type: "SentenceTransformerEmbedder"
+    #   config:
+    #     model_name: "paraphrase-multilingual-mpnet-base-v2"  # Multilingual support
+    #     device: "auto"
+    #     batch_size: 16                    # Larger model, smaller batch
+    #     normalize_embeddings: true
+    
+    # sentence_transformers_qa:
+    #   type: "SentenceTransformerEmbedder"
+    #   config:
+    #     model_name: "multi-qa-mpnet-base-cos-v1"  # Optimized for Q&A
+    #     device: "auto"
+    #     batch_size: 32
     #     normalize_embeddings: true
 
   # ---------------------------------------------------------------------------
@@ -339,29 +464,45 @@ rag:
           enable_versioning: false         # Simpler setup for dev
           enable_soft_delete: false
     
-    # Production vector store examples (commented out)
-    # pinecone:
-    #   type: "PineconeStore"
-    #   config:
-    #     api_key: "${PINECONE_API_KEY}"
-    #     environment: "${PINECONE_ENVIRONMENT}"
-    #     index_name: "llamafarm-prod"
-    #     dimension: 1536
-    #     metric: "cosine"
-    #     cloud: "aws"
-    #     region: "us-east-1"
+    # FAISS vector store - Fast local similarity search
+    faiss:
+      type: "FAISSStore"
+      config:
+        persist_directory: "./data/vector_store/faiss"
+        index_type: "IndexFlatIP"          # "IndexFlatIP", "IndexFlatL2", "IndexIVFFlat", "IndexIVFPQ"
+        normalize_vectors: true            # Normalize for cosine similarity
+        use_gpu: false                     # Use GPU acceleration (if available)
+        # nlist: 100                       # For IVF indices
+        # nprobe: 10                       # For IVF indices
     
-    # qdrant:
-    #   type: "QdrantStore"
-    #   config:
-    #     host: "localhost"
-    #     port: 6333
-    #     collection_name: "llamafarm_docs"
-    #     vector_size: 1024
-    #     distance: "Cosine"
-    #     # api_key: "${QDRANT_API_KEY}"    # For Qdrant Cloud
-    #     # url: "https://xyz.qdrant.tech"  # For Qdrant Cloud
+    # Pinecone cloud vector store - Managed service
+    pinecone:
+      type: "PineconeStore"
+      config:
+        api_key: "${PINECONE_API_KEY}"     # Required API key
+        environment: "${PINECONE_ENVIRONMENT}"  # e.g., "us-east-1-aws"
+        index_name: "llamafarm-prod"       # Index name
+        dimension: 1536                    # Must match embedder dimension
+        metric: "cosine"                   # "cosine", "euclidean", "dotproduct"
+        pod_type: "p1.x1"                  # Pod configuration
+        replicas: 1                        # Number of replicas
+        shards: 1                          # Number of shards
     
+    # Qdrant vector store - Open source, high performance
+    qdrant:
+      type: "QdrantStore"
+      config:
+        host: "localhost"                  # Qdrant server host
+        port: 6333                         # HTTP port
+        collection_name: "llamafarm_docs"  # Collection name
+        dimension: 1536                    # Vector dimension
+        distance: "Cosine"                 # "Cosine", "Dot", "Euclid"
+        use_grpc: false                    # Use gRPC for better performance
+        # grpc_port: 6334                  # gRPC port
+        # url: "https://xyz.qdrant.tech"   # For Qdrant Cloud
+        # api_key: "${QDRANT_API_KEY}"     # For Qdrant Cloud
+    
+    # Alternative vector store configurations (commented examples)
     # weaviate:
     #   type: "WeaviateStore"
     #   config:
