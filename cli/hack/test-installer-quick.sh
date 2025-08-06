@@ -255,10 +255,17 @@ test_security() {
     # Run shellcheck if available
     if command -v shellcheck > /dev/null; then
         info "Running shellcheck analysis..."
-        if shellcheck install.sh; then
+        # Run shellcheck and capture exit code without failing the script
+        set +e  # Temporarily disable exit on error
+        shellcheck install.sh
+        local shellcheck_exit=$?
+        set -e  # Re-enable exit on error
+
+        if [[ $shellcheck_exit -eq 0 ]]; then
             success "✓ Shellcheck analysis passed"
         else
-            warning "⚠ Shellcheck found issues (see output above)"
+            warning "⚠ Shellcheck found issues (exit code: $shellcheck_exit)"
+            info "Note: Shellcheck issues are treated as warnings, not errors"
         fi
     else
         info "ℹ Shellcheck not available, skipping static analysis"

@@ -80,17 +80,15 @@ lf help
 # Show version
 lf version
 
-# Basic greeting (example command)
-lf hello
-lf hello John
-lf hello John --uppercase
+# Start the AI designer
+lf designer start
 ```
 
 ### Available Commands
 
 - `help` - Show help information for any command
 - `version` - Print the version number
-- `hello [name]` - Example greeting command with optional name and flags
+- `designer start` - Start the AI designer
 
 ### Command Structure
 
