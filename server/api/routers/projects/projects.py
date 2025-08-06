@@ -32,7 +32,6 @@ router = APIRouter(
 @router.get("/{namespace}", response_model=ListProjectsResponse)
 async def list_projects(namespace: str):
     projects = ProjectService.list_projects(namespace)
-    print(f"Projects: {projects}")
     return ListProjectsResponse(
       total=len(projects),
       projects=[Project(

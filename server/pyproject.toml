@@ -28,6 +28,8 @@ dependencies = [
     "urllib3==1.26.20",
     "six>=1.16.0",
     "requests>=2.25.0",
+    "structlog>=25.4.0",
+    "asgi-correlation-id>=4.3.4",
 ]
 
 [project.optional-dependencies]
