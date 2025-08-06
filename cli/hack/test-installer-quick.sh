@@ -223,33 +223,32 @@ test_security() {
     info "Install script permissions: $perms"
 
     # Check for basic security patterns
-    local security_checks
-    security_checks=0
+    local security_checks=0
 
     if grep -q "set -e" install.sh; then
         success "✓ Script uses 'set -e' for error handling"
-        ((security_checks++))
+        security_checks=$((security_checks + 1))
     else
         warning "⚠ Script should use 'set -e' for safety"
     fi
 
     if grep -q "curl.*-f" install.sh; then
         success "✓ Script uses curl with fail-fast flag"
-        ((security_checks++))
+        security_checks=$((security_checks + 1))
     else
         warning "⚠ Consider using curl -f for better error handling"
     fi
 
     if grep -q "curl.*-s" install.sh; then
         success "✓ Script uses curl in silent mode"
-        ((security_checks++))
+        security_checks=$((security_checks + 1))
     else
         info "ℹ Script could use curl -s for cleaner output"
     fi
 
     if grep -q "tar.*-z" install.sh; then
         success "✓ Script handles gzipped archives"
-        ((security_checks++))
+        security_checks=$((security_checks + 1))
     else
         warning "⚠ Script should handle gzipped archives"
     fi
