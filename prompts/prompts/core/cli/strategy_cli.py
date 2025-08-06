@@ -13,13 +13,20 @@ from rich.syntax import Syntax
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.tree import Tree
 
-import sys
 from pathlib import Path
-# Add parent to path for strategies import
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+
+# Import handling for both package and direct script execution
+import sys
+prompts_dir = Path(__file__).parent.parent.parent.parent
+
+# Only add to path if needed and not already present
+if str(prompts_dir) not in sys.path:
+    sys.path.insert(0, str(prompts_dir))
+
+# Now import with absolute imports
 from strategies import StrategyManager, StrategyConfig
-from ..engines.template_registry import TemplateRegistry
-from ..engines.template_engine import TemplateEngine
+from prompts.core.engines.template_registry import TemplateRegistry
+from prompts.core.engines.template_engine import TemplateEngine
 
 console = Console()
 
