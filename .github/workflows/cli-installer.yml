@@ -47,6 +47,12 @@ jobs:
           go-version: '1.24'
           cache-dependency-path: cli/go.sum
 
+      - name: Install curl
+        run: |
+          sudo apt update
+          sudo apt install -y curl
+        if: matrix.os == 'ubuntu-latest'
+
       - name: Run quick installer tests
         run: ./cli/hack/test-installer-quick.sh
 
