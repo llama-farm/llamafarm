@@ -9,7 +9,7 @@ from .strategies.universal import (
     RerankedStrategy,
     HybridUniversalStrategy
 )
-from stores.capabilities import DatabaseCapabilities
+from components.stores.capabilities import DatabaseCapabilities
 
 
 class StrategyRegistry:
