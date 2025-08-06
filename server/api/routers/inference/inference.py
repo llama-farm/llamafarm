@@ -1,162 +1,102 @@
 import uuid
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Header
-from atomic_agents import BasicChatInputSchema
+from typing import Dict, Optional
 
-# Import business logic from separate modules
-from .models import ChatRequest, ChatResponse, IntegrationType, ProjectAction
-from .services import ChatProcessor, AgentSessionManager, ToolExecutor, ResponseFormatter
-from .analyzers import MessageAnalyzer, ResponseAnalyzer
-from .factories import ModelManager
+import instructor
+from atomic_agents.agents.base_agent import (
+    BaseAgent,
+    BaseAgentConfig,
+    BaseAgentInputSchema,
+    BaseAgentOutputSchema,
+)
+from atomic_agents.lib.components.agent_memory import AgentMemory
+from fastapi import APIRouter, Header, HTTPException
+from openai import OpenAI
+from pydantic import BaseModel
+
 from core.config import settings
-
-try:
-    from tools.projects_tool.tool import ProjectsTool, ProjectsToolInput
-    print("✅ [Inference] Successfully imported ProjectsTool")
-except ImportError as e:
-    print(f"❌ [Inference] Failed to import ProjectsTool: {e}")
-    print("💡 [Inference] Make sure you're running in the virtual environment")
-    raise
 
 router = APIRouter(
     prefix="/inference",
     tags=["inference"],
 )
 
-# Route handlers
+class ChatRequest(BaseModel):
+    message: str
+
+class ChatResponse(BaseModel):
+    message: str
+    session_id: str
+
+# Store agent instances to maintain conversation context
+# In production, use Redis, database, or other persistent storage
+agent_sessions: Dict[str, BaseAgent] = {}
+
+def create_agent() -> BaseAgent:
+    """Create a new agent instance"""
+    # Initialize memory
+    memory = AgentMemory()
+    
+    # Initialize memory with an initial message from the assistant
+    initial_message = BaseAgentOutputSchema(chat_message="Hello! How can I assist you today?")
+    memory.add_message("assistant", initial_message)
+    
+    # Create OpenAI-compatible client pointing to Ollama
+    ollama_client = OpenAI(
+        base_url=settings.ollama_host,
+        api_key=settings.ollama_api_key,  # Ollama doesn't require a real API key, but instructor needs something
+    )
+    
+    client = instructor.from_openai(ollama_client)
+
+    # Agent setup with specified configuration
+    agent = BaseAgent(
+        config=BaseAgentConfig(
+            client=client,
+            model=settings.ollama_model,  # Using Ollama model name (make sure this model is installed)
+            memory=memory,
+        )
+    )
+    
+    return agent
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest, 
     session_id: Optional[str] = Header(None, alias="X-Session-ID")
 ):
-    """Send a message to the chat agent with enhanced tool integration"""
-    print(f"💬 [Inference] /chat endpoint called with message: '{request.message[:100]}...'")
-    print(f"🆔 [Inference] Session ID: {session_id}")
-    
+    """Send a message to the chat agent"""
     try:
-        # Generate session ID if not provided
-        if not session_id:
-            session_id = str(uuid.uuid4())
+        # If no session ID provided, create a new one
+        if not session_id or session_id not in agent_sessions:
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            agent = create_agent()
+            agent_sessions[session_id] = agent
+        else:
+            # Use existing agent to maintain conversation context
+            agent = agent_sessions[session_id]
+
+        # Process the user's input through the agent and get the response
+        input_schema = BaseAgentInputSchema(chat_message=request.message)
+        response = agent.run(input_schema)
         
-        # Process chat
-        response_message, tool_info = ChatProcessor.process_chat(request, session_id)
+        # Extract the message from the response
+        if hasattr(response, 'chat_message'):
+            response_message = response.chat_message
+        else:
+            # Fallback if the response structure is different
+            response_message = str(response)
         
-        return ChatResponse(
-            message=response_message, 
-            session_id=session_id,
-            tool_results=tool_info
-        )
+        return ChatResponse(message=response_message, session_id=session_id)
         
     except Exception as e:
-        print(f"💥 [Inference] Error in chat endpoint: {str(e)}")
-        import traceback
-        print(f"📚 [Inference] Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
 
 @router.delete("/chat/session/{session_id}")
 async def delete_chat_session(session_id: str):
     """Delete a chat session"""
-    if AgentSessionManager.delete_session(session_id):
+    if session_id in agent_sessions:
+        del agent_sessions[session_id]
         return {"message": f"Session {session_id} deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="Session not found")
-
-@router.get("/tools")
-async def get_available_tools():
-    """Get information about available tools"""
-    capabilities = ModelManager.get_capabilities(settings.ollama_model)
-    
-    return [
-        {
-            "name": "projects",
-            "description": "Tool for managing projects - list and create operations",
-            "integration": f"{'native' if capabilities.supports_tools else 'manual'}_with_fallback",
-            "model_support": capabilities.supports_tools,
-            "current_model": settings.ollama_model,
-            "actions": [action.value for action in ProjectAction],
-            "parameters": {
-                "action": "Required: 'list' or 'create'",
-                "namespace": "Required: namespace string", 
-                "project_id": "Required for create action: project identifier"
-            },
-            "examples": [
-                "List my projects",
-                "Show projects in <name> namespace", 
-                "List how many projects I have in <name>",
-                "Create a new project called my_app",
-                "Create project demo in test namespace"
-            ]
-        }
-    ]
-
-@router.post("/test-native-tools")
-async def test_native_tools(request: ChatRequest):
-    """Test the enhanced tool integration"""
-    print(f"🧪 [Inference] Testing enhanced tool integration with: '{request.message}'")
-    
-    try:
-        from .factories import AgentFactory
-        
-        agent = AgentFactory.create_agent()
-        capabilities = ModelManager.get_capabilities(settings.ollama_model)
-        
-        # Test with the user's message
-        input_schema = BasicChatInputSchema(chat_message=request.message)
-        response = agent.run(input_schema)
-        
-        response_message = response.chat_message if hasattr(response, 'chat_message') else str(response)
-        
-        # Check if manual execution is needed
-        manual_result = None
-        if MessageAnalyzer.is_project_related(request.message):
-            if ResponseAnalyzer.needs_manual_execution(response_message, request.message):
-                print(f"🔧 [Test] Testing manual execution...")
-                request_context = {
-                    "namespace": getattr(request, 'namespace', None),
-                    "project_id": getattr(request, 'project_id', None)
-                }
-                manual_result = ToolExecutor.execute_manual(request.message, request_context)
-        
-        print(f"✅ [Inference] Test completed successfully")
-        
-        return {
-            "user_message": request.message,
-            "agent_response": response_message,
-            "model_supports_tools": capabilities.supports_tools,
-            "current_model": settings.ollama_model,
-            "template_detected": ResponseAnalyzer.is_template_response(response_message),
-            "manual_execution_test": manual_result.__dict__ if manual_result else None,
-            "integration_type": "enhanced_with_detection",
-            "status": "success"
-        }
-        
-    except Exception as e:
-        print(f"💥 [Inference] Error in test_native_tools: {str(e)}")
-        import traceback
-        print(f"📚 [Inference] Full traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Error testing tools: {str(e)}")
-
-@router.get("/agent-status")
-async def get_agent_status():
-    """Get status of all active agent sessions"""
-    capabilities = ModelManager.get_capabilities(settings.ollama_model)
-    
-    # Check if atomic_agents is available
-    atomic_agents_available = False
-    try:
-        import atomic_agents
-        atomic_agents_available = True
-    except ImportError:
-        pass
-    
-    return {
-        "active_sessions": AgentSessionManager.get_session_count(),
-        "session_ids": AgentSessionManager.get_session_ids(),
-        "current_model": settings.ollama_model,
-        "model_supports_tools": capabilities.supports_tools,
-        "integration_type": "enhanced_detection_with_fallback",
-        "tools_enabled": True,
-        "manual_fallback_available": True,
-        "atomic_agents_available": atomic_agents_available,
-        "environment_status": "healthy" if atomic_agents_available else "missing_dependencies"
-    }
