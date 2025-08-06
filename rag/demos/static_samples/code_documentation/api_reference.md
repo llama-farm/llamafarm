@@ -404,7 +404,7 @@ from components.parsers.text_parser import PlainTextParser
 class TestTextParser(unittest.TestCase):
     
     def setUp(self):
-        self.parser = PlainTextParser({
+        self.parser = PlainTextParser(name="PlainTextParser", config={
             'chunk_size': 100,
             'overlap': 20
         })

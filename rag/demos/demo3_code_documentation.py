@@ -289,7 +289,7 @@ def demonstrate_code_documentation_rag():
     print_section_header("Documentation System Initialization", "⚙️")
     
     console.print("🔧 Initializing Markdown documentation parser...")
-    parser = MarkdownParser(config={
+    parser = MarkdownParser(name="MarkdownParser", config={
         "extract_headers": True,        # Extract headers
         "extract_links": True,          # Extract links
         "extract_code_blocks": True,    # Extract code blocks

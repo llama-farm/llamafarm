@@ -215,7 +215,7 @@ def demonstrate_metadata_enrichment():
     pipeline = Pipeline("metadata_pipeline")
     
     # Add parser
-    parser = PlainTextParser({"chunk_size": 500})
+    parser = PlainTextParser(name="PlainTextParser", config={"chunk_size": 500})
     pipeline.add_component(parser)
     
     # Add metadata enricher as a custom component

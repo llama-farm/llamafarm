@@ -237,12 +237,12 @@ The document concludes with this final section that summarizes the content."""
         content_with_empty_lines = sample_text_content + "\n\n\n\nExtra content\n\n\n"
         
         # Parser with strip_empty_lines=True
-        strip_parser = PlainTextParser({
+        strip_parser = PlainTextParser(name="PlainTextParser", config={
             "strip_empty_lines": True
         })
         
         # Parser with strip_empty_lines=False  
-        no_strip_parser = PlainTextParser({
+        no_strip_parser = PlainTextParser(name="PlainTextParser", config={
             "strip_empty_lines": False
         })
         
@@ -267,12 +267,12 @@ The document concludes with this final section that summarizes the content."""
     def test_preserve_line_breaks_option(self, sample_text_content):
         """Test line break preservation option."""
         # Parser that preserves line breaks
-        preserve_parser = PlainTextParser({
+        preserve_parser = PlainTextParser(name="PlainTextParser", config={
             "preserve_line_breaks": True
         })
         
         # Parser that doesn't preserve line breaks
-        no_preserve_parser = PlainTextParser({
+        no_preserve_parser = PlainTextParser(name="PlainTextParser", config={
             "preserve_line_breaks": False
         })
         

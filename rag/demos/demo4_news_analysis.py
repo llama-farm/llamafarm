@@ -407,7 +407,7 @@ def demonstrate_news_analysis_rag():
     print_section_header("News Analysis System Initialization", "⚙️")
     
     console.print("🔧 Initializing HTML news parser...")
-    parser = HTMLParser(config={
+    parser = HTMLParser(name="HTMLParser", config={
         "extract_links": True,          # Extract article links
         "extract_images": True,         # Extract images
         "extract_meta_tags": True,      # Extract HTML meta tags

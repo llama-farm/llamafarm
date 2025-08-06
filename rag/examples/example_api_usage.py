@@ -25,23 +25,22 @@ def example_api_with_filters():
     print("\n=== Advanced Search with Filters ===\n")
     
     # Initialize API with specific config
-    api = SearchAPI(config_path="config_examples/basic_config.yaml")
+    api = SearchAPI(config_path="config_examples/basic_config.json")
     
-    # Search with parameters configured in the config file
-    # No hardcoded min_score - this should be in the configuration!
+    # Search with minimum score filter
     results = api.search(
         query="security breach",
-        top_k=5
-        # min_score parameter removed - should be configured in the config file
+        top_k=5,
+        min_score=-500.0  # Only high-confidence results
     )
     
-    print(f"Found {len(results)} results\n")
+    print(f"Found {len(results)} results with high confidence scores\n")
     
-    # Search with metadata filter (this is appropriate to specify in the API call)
+    # Search with metadata filter
     results_filtered = api.search(
         query="login issues",
         top_k=10,
-        metadata_filter={"priority": "high"}  # Filtering by metadata is appropriate in API calls
+        metadata_filter={"priority": "high"}  # Only high priority tickets
     )
     
     print(f"Found {len(results_filtered)} high-priority results about login issues\n")
@@ -83,13 +82,13 @@ def example_multiple_configs():
     print("\n=== Multiple Configurations Example ===\n")
     
     # Search CSV data
-    csv_api = SearchAPI(config_path="config_examples/basic_config.yaml")
+    csv_api = SearchAPI(config_path="config_examples/basic_config.json")
     csv_results = csv_api.search("customer complaint", top_k=2)
     print(f"CSV search found {len(csv_results)} results")
     
     # Search PDF data (if ingested)
     try:
-        pdf_api = SearchAPI(config_path="config_examples/pdf_config.yaml")
+        pdf_api = SearchAPI(config_path="config_examples/pdf_config.json")
         pdf_results = pdf_api.search("methodology", top_k=2)
         print(f"PDF search found {len(pdf_results)} results")
     except Exception as e:

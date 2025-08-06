@@ -83,12 +83,12 @@ class TestPDFParser:
         finally:
             Path(temp_file).unlink()
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available")
     def test_parse_real_pdf(self):
         """Test parsing a real PDF file."""
         parser = PDFParser()
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         # Should successfully parse the PDF
         assert len(result.documents) > 0
@@ -97,16 +97,16 @@ class TestPDFParser:
         doc = result.documents[0]
         assert isinstance(doc, Document)
         assert len(doc.content) > 0
-        assert doc.source == "samples/test_document.pdf"
+        assert doc.source == "samples/pdfs/test_document.pdf"
         assert "parser_type" in doc.metadata
         assert doc.metadata["parser_type"] == "PDFParser"
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available") 
     def test_parse_pdf_separate_pages(self):
         """Test parsing PDF with separate page documents."""
         parser = PDFParser(config={"combine_pages": False})
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         # Should create separate documents for each page
         assert len(result.documents) > 1  # Multi-page PDF
@@ -116,12 +116,12 @@ class TestPDFParser:
             assert doc.metadata["page_number"] == i + 1
             assert "total_pages" in doc.metadata
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available")
     def test_parse_pdf_combined_pages(self):
         """Test parsing PDF with combined page content."""
         parser = PDFParser(config={"combine_pages": True})
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         # Should create single document with all pages
         assert len(result.documents) == 1
@@ -131,12 +131,12 @@ class TestPDFParser:
         assert doc.metadata["total_pages"] > 1
         assert "--- Page Break ---" in doc.content or "[Page " in doc.content
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available")
     def test_pdf_metadata_extraction(self):
         """Test PDF metadata extraction."""
         parser = PDFParser(config={"extract_metadata": True})
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         assert len(result.documents) > 0
         doc = result.documents[0]

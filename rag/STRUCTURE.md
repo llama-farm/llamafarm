@@ -290,7 +290,7 @@ These documents provide rich, realistic content for testing and demonstration.
    
    class TestYourParser:
        def test_basic_parsing(self):
-           parser = YourParser({"option1": True})
+           parser = YourParser(name="YourParser", config={"option1": True})
            # Test parsing logic
    ```
 

@@ -46,7 +46,7 @@ Final paragraph with some text.
         
         try:
             # Test parser
-            parser = PlainTextParser({
+            parser = PlainTextParser(name="PlainTextParser", config={
                 "preserve_line_breaks": True,
                 "detect_structure": True,
                 "strip_empty_lines": True
@@ -135,7 +135,7 @@ def test_html_parser():
         
         try:
             # Test parser
-            parser = HTMLParser({
+            parser = HTMLParser(name="HTMLParser", config={
                 "extract_links": True,
                 "extract_images": True,
                 "extract_tables": True,
@@ -193,7 +193,7 @@ def test_docx_parser():
         print("   docs = parser.parse('test.docx')")
         
         # Test basic instantiation
-        parser = DocxParser({
+        parser = DocxParser(name="DocxParser", config={
             "extract_tables": True,
             "include_document_properties": True
         })
@@ -223,7 +223,7 @@ def test_excel_parser():
         print("   docs = parser.parse('test.xlsx')")
         
         # Test basic instantiation
-        parser = ExcelParser({
+        parser = ExcelParser(name="ExcelParser", config={
             "parse_all_sheets": True,
             "include_sheet_stats": True
         })
@@ -291,7 +291,7 @@ And a [link to example](https://example.com).
         
         try:
             # Test parser
-            parser = MarkdownParser({
+            parser = MarkdownParser(name="MarkdownParser", config={
                 "extract_frontmatter": True,
                 "chunk_by_headings": True,
                 "preserve_code_blocks": True,
