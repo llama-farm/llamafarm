@@ -251,6 +251,25 @@ embeddings_cache/
 # Tokenizer files (if cached locally)
 tokenizer_cache/
 
+# Models directory specific exclusions
+model_cache/
+models/model_cache/
+models/fine_tuned_models/
+models/fine_tuning_models/
+models/ollama_exports/
+fine_tuned_models/
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.pt
+models/**/*.pth
+models/**/*.onnx
+models/**/optimizer.pt
+models/**/scheduler.pt
+models/**/rng_state.pth
+models/**/training_args.bin
+models/**/model.safetensors
+models/**/checkpoint-*/
+
 # ==============================================================================
 # Data Files (excluding samples and examples)
 # ==============================================================================

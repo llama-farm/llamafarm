@@ -38,7 +38,8 @@ class OpenAIAPI(BaseCloudAPI):
             raise ValueError("OpenAI API key not provided")
         
         # Create client without organization to avoid mismatched organization errors
-        self.client = OpenAI(api_key=api_key)
+        # Explicitly set organization=None to prevent auto-reading from OPENAI_ORG_ID env var
+        self.client = OpenAI(api_key=api_key, organization=None)
             
         self.default_model = config.get("default_model", "gpt-3.5-turbo")
     
