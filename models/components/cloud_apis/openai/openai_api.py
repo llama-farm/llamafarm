@@ -38,7 +38,9 @@ class OpenAIAPI(BaseCloudAPI):
             raise ValueError("OpenAI API key not provided")
         
         # Create client without organization to avoid mismatched organization errors
-        # Explicitly set organization=None to prevent auto-reading from OPENAI_ORG_ID env var
+        # Clear any organization env vars that might interfere
+        os.environ.pop('OPENAI_ORG_ID', None)  # Remove if set
+        os.environ.pop('OPENAI_ORGANIZATION', None)  # Remove if set
         self.client = OpenAI(api_key=api_key, organization=None)
         
         # Debug: Log what organization is set
@@ -123,6 +125,10 @@ class OpenAIAPI(BaseCloudAPI):
         model = model or self.default_model
         
         try:
+            # Debug: Log request details
+            logger.debug(f"Making OpenAI API call with model: {model}")
+            logger.debug(f"Client organization before call: {self.client.organization}")
+            
             params = {
                 "model": model,
                 "messages": messages,
