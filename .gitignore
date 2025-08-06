@@ -251,31 +251,29 @@ embeddings_cache/
 tokenizer_cache/
 
 # ==============================================================================
-# Data Files (excluding samples and examples)
+# Data Files - INCLUDE datasets for users, exclude user uploads only
 # ==============================================================================
 
-# Large datasets in data directories
-data/*.csv
-data/*.json
-data/*.jsonl
-data/*.parquet
-data/*.xlsx
-data/*.xls
-data/*.tsv
-data/*.txt
-data/*.pdf
-data/*.docx
-data/*.doc
+# NOTE: We WANT to include dataset files so users can train models!
+# Only exclude user-specific uploads and temporary data
+
+# Keep training datasets (commented out - we want these in git)
+# data/*.csv      # KEEP - training data
+# data/*.json     # KEEP - training data
+# data/*.jsonl    # KEEP - training data
+# datasets/       # KEEP - all datasets for users
 
 # RAG data directories
 rag/data/
 **/data/*_chroma_db/
 **/data/vector_store/
 
-# User uploads and ingestion staging
+# User uploads and ingestion staging (EXCLUDE these)
 uploads/
 ingestion_staging/
 user_data/
+user_uploads/
+temp_uploads/
 
 # Compressed archives
 *.zip
@@ -558,6 +556,16 @@ batch_processing/
 # LlamaFarm Models System Specific
 # ==============================================================================
 
+# IMPORTANT: What we INCLUDE vs EXCLUDE:
+# ✅ INCLUDE: All datasets (users need these for training!)
+#    - demos/datasets/medical/*.jsonl
+#    - demos/datasets/code/*.json
+#    - Any training data files
+# ❌ EXCLUDE: Only model weights and training outputs
+#    - fine_tuned_models/
+#    - checkpoint files
+#    - .gguf, .bin, .safetensors files
+
 # Fine-tuned models and checkpoints
 fine_tuned_models/
 model_cache/
@@ -621,12 +629,11 @@ convert_temp/
 ggml-model-*.gguf
 consolidated.*.pth
 
-# Training datasets (keep samples)
-datasets/*.json
-datasets/*.jsonl
-datasets/*.csv
-!datasets/samples/
-!demos/datasets/medical/medical_qa.jsonl
+# Training datasets - INCLUDE ALL (users need these!)
+# Keep all dataset files for users to train with
+# datasets/*.json   # COMMENTED OUT - we want to include these
+# datasets/*.jsonl  # COMMENTED OUT - we want to include these  
+# datasets/*.csv    # COMMENTED OUT - we want to include these
 
 # Model evaluation results
 eval_results/
