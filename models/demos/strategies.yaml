@@ -1,0 +1,487 @@
+# LlamaFarm Demo Strategies
+# All demos are driven by these strategy definitions
+# NO HARDCODED VALUES - everything comes from here
+
+version: "v1"
+
+# =============================================================================
+# DEMO 1: CLOUD API WITH FALLBACK STRATEGY
+# =============================================================================
+
+demo_fallback_strategy:
+  name: "Cloud API with Automatic Fallback"
+  description: "Production-grade API management with automatic fallback to local models"
+  
+  # Primary cloud provider
+  primary:
+    type: "openai"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      default_model: "gpt-4"
+      timeout: 30
+      max_retries: 3
+      
+  # Fallback chain - automatically tries each in order
+  fallback_chain:
+    - name: "Primary Fallback - GPT-3.5"
+      type: "openai"
+      config:
+        api_key: "${OPENAI_API_KEY}"
+        default_model: "gpt-3.5-turbo"
+        timeout: 20
+        
+    - name: "Local Ollama - Llama 3.2"
+      type: "ollama"
+      config:
+        default_model: "llama3.2:3b"
+        api_base: "http://localhost:11434"
+        
+    - name: "Local Ollama - Mistral"
+      type: "ollama"
+      config:
+        default_model: "mistral:7b"
+        api_base: "http://localhost:11434"
+        
+    - name: "Emergency Fallback - TinyLlama"
+      type: "ollama"
+      config:
+        default_model: "tinyllama:1.1b"
+        api_base: "http://localhost:11434"
+        
+  # Demo settings
+  demo_config:
+    show_latency: true
+    show_cost: true
+    show_provider: true
+    test_queries:
+      - "What is the capital of France?"
+      - "Explain quantum computing in simple terms"
+      - "Write a haiku about programming"
+
+# =============================================================================
+# DEMO 2: MULTI-MODEL OPTIMIZATION STRATEGY
+# =============================================================================
+
+demo_multi_model_strategy:
+  name: "Multi-Model Cost Optimization"
+  description: "Intelligent routing to different models based on task complexity"
+  
+  # Task routing based on complexity
+  task_routing:
+    simple:
+      description: "Simple factual queries"
+      model: "gpt-3.5-turbo"
+      provider: "openai"
+      cost_per_1k_tokens: 0.0015
+      examples:
+        - "What is 2+2?"
+        - "Capital cities"
+        - "Basic definitions"
+        
+    reasoning:
+      description: "Complex reasoning tasks"
+      model: "gpt-4o-mini"
+      provider: "openai"
+      cost_per_1k_tokens: 0.015
+      examples:
+        - "Logic puzzles"
+        - "Mathematical proofs"
+        - "Analytical questions"
+        
+    creative:
+      description: "Creative writing tasks"
+      model: "gpt-4o"
+      provider: "openai"
+      cost_per_1k_tokens: 0.03
+      examples:
+        - "Story writing"
+        - "Poetry"
+        - "Creative solutions"
+        
+    code:
+      description: "Code generation and analysis"
+      model: "gpt-4-turbo"
+      provider: "openai"
+      cost_per_1k_tokens: 0.01
+      examples:
+        - "Write functions"
+        - "Debug code"
+        - "Explain algorithms"
+        
+    local:
+      description: "Privacy-sensitive or offline tasks"
+      model: "llama3.2:3b"
+      provider: "ollama"
+      cost_per_1k_tokens: 0.0
+      examples:
+        - "Personal data processing"
+        - "Offline operation"
+        - "High-volume tasks"
+        
+  # Demo configuration
+  demo_config:
+    show_task_analysis: true
+    show_model_selection: true
+    show_cost_comparison: true
+    show_total_savings: true
+
+# =============================================================================
+# MEDICAL TRAINING FIXED STRATEGY - Properly configured for coherent outputs
+# =============================================================================
+medical_training_fixed:
+  name: "Medical AI Training - Fixed Configuration"
+  description: "Properly configured training to produce coherent medical responses"
+  
+  base_model:
+    huggingface_id: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    dtype: "float16"  # Use float16 for MPS/CUDA
+    device_map: "auto"
+    low_cpu_mem_usage: true
+    
+  lora_config:
+    # Conservative LoRA to preserve base model quality
+    r: 16  # Higher rank for better capacity
+    lora_alpha: 32  # Alpha = 2*r for balanced training
+    target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]  # All attention layers
+    lora_dropout: 0.05  # Small dropout to prevent overfitting
+    bias: "none"
+    task_type: "CAUSAL_LM"
+    
+  training_args:
+    # Careful training parameters to avoid model degradation
+    output_dir: "fine_tuned_models/pytorch/medical_fixed"
+    num_train_epochs: 2  # Not too many epochs
+    per_device_train_batch_size: 2  # Small batch for stability
+    gradient_accumulation_steps: 2  # Effective batch = 4
+    learning_rate: 0.00002  # Conservative learning rate (2e-5)
+    warmup_ratio: 0.1  # 10% warmup
+    weight_decay: 0.01  # Light regularization
+    logging_steps: 10
+    save_steps: 50
+    eval_strategy: "steps"
+    eval_steps: 50
+    save_total_limit: 3
+    load_best_model_at_end: true
+    metric_for_best_model: "eval_loss"
+    greater_is_better: false
+    fp16: true  # Use mixed precision where available
+    gradient_checkpointing: false  # Disable for MPS compatibility
+    report_to: "none"
+    remove_unused_columns: false
+    dataloader_pin_memory: false  # For MPS compatibility
+    optim: "adamw_torch"  # Standard optimizer
+    adam_beta1: 0.9
+    adam_beta2: 0.999
+    adam_epsilon: 0.00000001  # 1e-8
+    max_grad_norm: 1.0  # Gradient clipping for stability
+    
+  dataset:
+    path: "demos/datasets/medical/medical_qa.jsonl"
+    format: "alpaca"
+    max_length: 512
+    train_split: 0.8  # 80% train, 20% eval
+    seed: 42
+    use_full_dataset: true  # Use all 128 examples
+    
+  tokenizer:
+    padding_side: "right"
+    pad_token: "eos_token"  # Use EOS as padding
+    add_eos_token: true
+    add_bos_token: true
+    truncation: true
+    max_length: 512
+    
+  generation:
+    # Generation parameters for inference
+    max_new_tokens: 150
+    temperature: 0.7
+    top_p: 0.9
+    top_k: 50
+    repetition_penalty: 1.1
+    do_sample: true
+    num_beams: 1  # No beam search for faster generation
+    
+  prompt_template:
+    # TinyLlama chat format
+    system: "You are a helpful medical AI assistant. Provide accurate, detailed medical information while always reminding users to consult healthcare professionals."
+    format: |
+      <|system|>
+      {system}</s>
+      <|user|>
+      {input}</s>
+      <|assistant|>
+      {output}</s>
+      
+  validation:
+    # Test questions to validate training
+    test_questions:
+      - "What are the symptoms of diabetes?"
+      - "How should I treat a minor burn?"
+      - "When should I see a doctor for a headache?"
+    min_response_length: 20  # Ensure responses aren't gibberish
+    max_response_length: 200
+    
+  ollama_conversion:
+    # Settings for Ollama model creation
+    enabled: true
+    model_name: "medical-assistant-fixed"
+    quantization: "Q4_K_M"
+    system_prompt: "You are a medical AI assistant trained to provide accurate, helpful medical information. Always remind users to consult healthcare professionals for actual medical advice."
+
+# =============================================================================
+# DEMO 3: PYTORCH FINE-TUNING STRATEGY (Original)
+# =============================================================================
+
+demo_pytorch_strategy:
+  name: "PyTorch Medical AI Fine-tuning"
+  description: "Fine-tune TinyLlama for medical Q&A using PyTorch and LoRA"
+  
+  # Base model selection
+  base_model:
+    name: "tinyllama"
+    huggingface_id: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    cache_dir: "./model_cache"
+    torch_dtype: "float32"  # Use float32 for M1/M2 compatibility
+    device_map: "auto"
+    
+  # LoRA configuration
+  lora_config:
+    r: 8                    # LoRA rank
+    alpha: 16               # LoRA alpha
+    dropout: 0.05           # LoRA dropout
+    target_modules:         # Which layers to apply LoRA to
+      - "q_proj"
+      - "v_proj"
+      - "k_proj"
+      - "o_proj"
+    bias: "none"
+    task_type: "CAUSAL_LM"
+    
+  # Dataset configuration
+  dataset:
+    path: "demos/datasets/medical/medical_qa.jsonl"  # Full dataset with 127 examples
+    format: "alpaca"
+    max_seq_length: 512
+    train_test_split: 0.9
+    preprocessing_num_workers: 2
+    use_full_dataset: true  # Use all 127 examples from medical_qa.jsonl
+    
+  # Training configuration
+  training:
+    output_dir: "./fine_tuned_models/pytorch/medical_demo"
+    num_train_epochs: 3
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 4
+    learning_rate: 0.0005
+    warmup_steps: 100
+    logging_steps: 10
+    save_strategy: "epoch"
+    eval_strategy: "no"     # Disable evaluation to avoid dataset requirement
+    save_total_limit: 2
+    fp16: false             # Disabled for M1/M2
+    bf16: false             # Disabled for M1/M2
+    load_best_model_at_end: false  # Not needed without evaluation
+    
+  # Ollama conversion settings
+  ollama_conversion:
+    enabled: true
+    model_name: "medical-assistant"
+    quantization: "Q4_K_M"
+    system_prompt: "You are a helpful medical AI assistant. Always remind users to consult healthcare professionals."
+    
+  # Demo settings
+  demo_config:
+    quick_mode_epochs: 1
+    show_training_progress: true
+    show_before_after_comparison: true
+    test_questions:
+      - "What are the symptoms of diabetes?"
+      - "How to lower blood pressure naturally?"
+      - "When should I see a doctor for a headache?"
+
+# =============================================================================
+# DEMO 4: LLAMAFACTORY TRAINING STRATEGY
+# =============================================================================
+
+demo_llamafactory_strategy:
+  name: "LlamaFactory Configuration-Driven Training"
+  description: "Use LlamaFactory for automated fine-tuning with comprehensive validation"
+  
+  # Model configuration
+  model:
+    name_or_path: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    cache_dir: "./model_cache"
+    use_lora: true
+    lora_rank: 8
+    lora_alpha: 16
+    lora_dropout: 0.05
+    lora_target: "q_proj,v_proj,k_proj,o_proj"
+    trust_remote_code: false
+    use_auth_token: true
+    
+  # Dataset configuration
+  dataset:
+    path: "demos/datasets/medical/medical_qa.jsonl"  # Full dataset with 127 examples
+    format: "alpaca"
+    max_samples: 0  # 0 = use all 127 examples
+    train_split: 0.9
+    preprocessing_num_workers: 2
+    max_seq_length: 512
+    use_full_dataset: true  # Use complete medical_qa.jsonl
+    columns:
+      prompt: "instruction"
+      response: "output"
+      
+  # Training configuration
+  training:
+    output_dir: "./fine_tuned_models/llamafactory/medical_demo"
+    num_train_epochs: 3
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 4
+    learning_rate: 0.0005
+    warmup_steps: 100
+    logging_steps: 10
+    save_steps: 100
+    save_total_limit: 2
+    fp16: false     # M1/M2 compatibility
+    bf16: false     # M1/M2 compatibility
+    optim: "adamw_torch"
+    lr_scheduler_type: "cosine"
+    
+  # LlamaFactory specific settings
+  llamafactory:
+    stage: "sft"              # Supervised Fine-Tuning
+    do_train: true
+    do_eval: false
+    overwrite_output_dir: true
+    plot_loss: true
+    compute_dtype: "float32"  # For M1/M2
+    model_max_length: 512
+    
+  # Validation rules
+  validation:
+    require_gpu: false        # Allow CPU/MPS
+    min_memory_gb: 8
+    check_dataset_format: true
+    check_model_exists: true
+    validation_checks:
+      - "LlamaFactory installation"
+      - "Configuration sections"
+      - "Model accessibility"
+      - "Dataset format"
+      - "Training parameters"
+      - "Environment compatibility"
+      - "Output directory"
+      - "HuggingFace token"
+      - "Memory requirements"
+      
+  # Quick mode overrides
+  quick_mode:
+    training:
+      num_train_epochs: 1
+      save_steps: 50
+      logging_steps: 5
+    dataset:
+      max_samples: 20  # Use subset for quick testing
+
+# =============================================================================
+# SHARED DATASET CONFIGURATIONS
+# =============================================================================
+
+datasets:
+  medical_qa:
+    path: "demos/datasets/medical/medical_qa.jsonl"
+    description: "Medical Q&A dataset for healthcare AI"
+    format: "jsonl"
+    fields:
+      - "instruction"
+      - "output"
+    size: "127 examples (full dataset)"
+    auto_create: true
+    sample_data:
+      - instruction: "What are the symptoms of diabetes?"
+        output: "Common symptoms of diabetes include increased thirst, frequent urination, extreme fatigue, blurred vision, slow healing wounds, and unexplained weight loss. Type 1 diabetes symptoms often appear suddenly, while Type 2 symptoms develop gradually. If you experience these symptoms, consult a healthcare provider for proper diagnosis. This information is for educational purposes only."
+      - instruction: "How can I lower my blood pressure naturally?"
+        output: "Natural ways to lower blood pressure include: regular exercise (30 minutes daily), reducing sodium intake, eating potassium-rich foods, maintaining a healthy weight, limiting alcohol, managing stress through meditation or yoga, getting adequate sleep, and quitting smoking. Always consult your healthcare provider before making significant changes, especially if you're on medication."
+      - instruction: "What should I do for a persistent headache?"
+        output: "For persistent headaches lasting more than a few days, or severe headaches with additional symptoms like fever, vision changes, or neck stiffness, seek immediate medical attention. Common relief methods include rest, hydration, stress management, and over-the-counter pain relievers as directed. However, persistent headaches require professional medical evaluation to rule out underlying conditions."
+        
+  code_generation:
+    path: "demos/datasets/code/python_functions.jsonl"
+    description: "Python code generation examples"
+    format: "jsonl"
+    fields:
+      - "instruction"
+      - "output"
+    size: "10-1000 examples"
+    auto_create: true
+    
+  customer_support:
+    path: "demos/datasets/support/customer_qa.jsonl"
+    description: "Customer support Q&A examples"
+    format: "jsonl"
+    fields:
+      - "instruction"
+      - "output"
+    size: "10-1000 examples"
+    auto_create: true
+
+# =============================================================================
+# ENVIRONMENT CONFIGURATIONS
+# =============================================================================
+
+environments:
+  mac_m1_m2:
+    device: "mps"
+    dtype: "float32"
+    use_metal: true
+    batch_size_recommendation: 1-4
+    fp16_supported: false
+    bf16_supported: false
+    
+  nvidia_gpu:
+    device: "cuda"
+    dtype: "bfloat16"
+    use_cuda: true
+    batch_size_recommendation: 4-16
+    fp16_supported: true
+    bf16_supported: true
+    
+  cpu_only:
+    device: "cpu"
+    dtype: "float32"
+    batch_size_recommendation: 1
+    fp16_supported: false
+    bf16_supported: false
+
+# =============================================================================
+# QUICK ACCESS ALIASES
+# =============================================================================
+
+aliases:
+  fallback: "demo_fallback_strategy"
+  multi_model: "demo_multi_model_strategy"
+  pytorch: "demo_pytorch_strategy"
+  llamafactory: "demo_llamafactory_strategy"
+  medical: "demo_pytorch_strategy"
+  
+# =============================================================================
+# STRATEGY SELECTION LOGIC
+# =============================================================================
+
+strategy_selection:
+  by_hardware:
+    mac: ["demo_pytorch_strategy", "demo_llamafactory_strategy"]
+    gpu: ["demo_pytorch_strategy", "demo_llamafactory_strategy"]
+    cpu: ["demo_pytorch_strategy"]
+    
+  by_use_case:
+    api_management: ["demo_fallback_strategy", "demo_multi_model_strategy"]
+    fine_tuning: ["demo_pytorch_strategy", "demo_llamafactory_strategy"]
+    cost_optimization: ["demo_multi_model_strategy"]
+    medical_ai: ["demo_pytorch_strategy", "demo_llamafactory_strategy"]
+    
+  by_complexity:
+    beginner: ["demo_fallback_strategy"]
+    intermediate: ["demo_multi_model_strategy", "demo_pytorch_strategy"]
+    advanced: ["demo_llamafactory_strategy"]

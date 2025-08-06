@@ -1,0 +1,291 @@
+# LlamaFarm Models Fine-Tuning - Default Configuration
+# This file provides sensible defaults for most fine-tuning scenarios
+# You can use strategy-based configuration OR traditional component configuration
+
+version: "v1"
+
+# =============================================================================
+# STRATEGY-BASED CONFIGURATION (RECOMMENDED APPROACH)
+# =============================================================================
+# Use predefined strategies instead of configuring individual components
+# Available strategies: mac_m1_lora, gpu_full_finetune, cpu_small_model, cloud_scalable
+
+# strategy: "mac_m1_lora"                    # Uncomment to use strategy-based config
+# strategy_overrides:                        # Override specific strategy settings
+#   training_args:
+#     epochs: 5
+#     learning_rate: 1e-4
+#   base_model:
+#     name: "llama3.1-8b"
+
+# =============================================================================
+# COMPONENT-BASED CONFIGURATION (ADVANCED USERS)
+# =============================================================================
+# Configure individual components for complete control
+
+# Base model configuration
+base_model:
+  name: "llama3.2-3b"                       # Model name for easy reference
+  huggingface_id: "meta-llama/Llama-3.2-3B-Instruct"
+  model_type: "llama"                       # Model architecture type
+  cache_dir: "~/.cache/huggingface/hub"     # Local cache directory
+  
+  # Model loading parameters
+  torch_dtype: "auto"                       # "auto", "float16", "bfloat16", "float32"
+  device_map: "auto"                        # Automatic device mapping
+  trust_remote_code: false                  # Allow custom code execution
+  
+  # Quantization settings (for memory efficiency)
+  load_in_8bit: false                       # 8-bit quantization
+  load_in_4bit: false                       # 4-bit quantization (QLoRA)
+  
+  # Advanced model settings
+  # attn_implementation: "flash_attention_2" # Use Flash Attention
+  # rope_scaling: null                      # RoPE scaling for longer contexts
+
+# Fine-tuning method configuration
+method:
+  type: "lora"                              # "lora", "qlora", "full_finetune", "adapters"
+  
+  # LoRA-specific parameters
+  r: 16                                     # LoRA rank (4-128, higher = more parameters)
+  alpha: 32                                 # LoRA alpha (scaling factor)
+  dropout: 0.1                             # LoRA dropout rate
+  bias: "none"                              # Bias handling: "none", "all", "lora_only"
+  
+  # Target modules for LoRA (model-specific)
+  target_modules:
+    - "q_proj"                              # Query projection
+    - "k_proj"                              # Key projection  
+    - "v_proj"                              # Value projection
+    - "o_proj"                              # Output projection
+    # - "gate_proj"                         # Gate projection (for Llama)
+    # - "up_proj"                           # Up projection (for Llama)
+    # - "down_proj"                         # Down projection (for Llama)
+  
+  # Task type specific settings
+  task_type: "CAUSAL_LM"                    # "CAUSAL_LM", "SEQ_2_SEQ_LM", "QUESTION_ANS"
+  
+  # QLoRA specific settings (when method is "qlora")
+  # quantization_config:
+  #   load_in_4bit: true
+  #   bnb_4bit_compute_dtype: "float16"
+  #   bnb_4bit_use_double_quant: true
+  #   bnb_4bit_quant_type: "nf4"
+
+# Framework configuration
+framework:
+  type: "pytorch"                           # "pytorch", "llamafactory"
+  
+  # PyTorch/Transformers specific settings
+  use_fast_tokenizer: true                  # Use fast tokenizer implementation
+  tokenizer_padding_side: "right"          # Padding side for tokenizer
+  
+  # Memory optimization
+  gradient_checkpointing: true              # Trade compute for memory
+  dataloader_pin_memory: true               # Pin memory for faster data loading
+  
+  # Advanced framework settings
+  # torch_compile: false                    # Use torch.compile (PyTorch 2.0+)
+  # use_reentrant: false                    # Gradient checkpointing mode
+
+# Training arguments
+training_args:
+  # Basic training settings
+  output_dir: "./fine_tuned_models"         # Output directory for checkpoints
+  num_train_epochs: 3                       # Number of training epochs
+  learning_rate: 2e-4                       # Learning rate
+  lr_scheduler_type: "cosine"               # Learning rate scheduler
+  warmup_ratio: 0.03                        # Warmup ratio (3% of total steps)
+  
+  # Batch size and gradient settings
+  per_device_train_batch_size: 4            # Batch size per device
+  per_device_eval_batch_size: 4             # Evaluation batch size
+  gradient_accumulation_steps: 4            # Steps to accumulate gradients
+  max_grad_norm: 1.0                        # Gradient clipping norm
+  
+  # Optimization settings
+  optim: "adamw_torch"                      # Optimizer: "adamw_torch", "adamw_hf", "sgd"
+  weight_decay: 0.01                        # Weight decay for regularization
+  adam_beta1: 0.9                           # Adam beta1 parameter
+  adam_beta2: 0.999                         # Adam beta2 parameter
+  adam_epsilon: 1e-8                        # Adam epsilon parameter
+  
+  # Mixed precision training
+  fp16: false                               # Use 16-bit precision (older GPUs)
+  bf16: true                                # Use bfloat16 precision (newer GPUs/TPUs)
+  tf32: true                                # Use TF32 precision (Ampere GPUs)
+  
+  # Logging and evaluation
+  logging_steps: 10                         # Log every N steps
+  eval_strategy: "steps"                    # "steps", "epoch", "no"
+  eval_steps: 100                           # Evaluate every N steps
+  save_strategy: "steps"                    # "steps", "epoch", "no"
+  save_steps: 500                           # Save checkpoint every N steps
+  save_total_limit: 3                       # Maximum number of checkpoints to keep
+  
+  # Early stopping
+  load_best_model_at_end: true              # Load best model at end of training
+  metric_for_best_model: "eval_loss"        # Metric to determine best model
+  greater_is_better: false                  # Whether higher metric is better
+  
+  # Reporting and monitoring
+  report_to: []                             # "wandb", "tensorboard", "comet_ml"
+  run_name: null                            # Run name for experiment tracking
+  
+  # Data settings
+  max_seq_length: 2048                      # Maximum sequence length
+  remove_unused_columns: false              # Keep all dataset columns
+  
+  # Advanced training settings
+  # group_by_length: false                  # Group sequences by length
+  # length_column_name: "length"            # Column name for sequence lengths
+  # ddp_find_unused_parameters: false       # DDP optimization
+  # dataloader_num_workers: 4               # Number of data loading workers
+
+# Dataset configuration
+dataset:
+  # Dataset source
+  path: null                                # Path to dataset file or directory
+  dataset_name: null                        # HuggingFace dataset name
+  dataset_config_name: null                 # Dataset configuration name
+  
+  # Data processing
+  preprocessing_num_workers: 4              # Number of preprocessing workers
+  max_train_samples: null                   # Limit training samples (for testing)
+  max_eval_samples: null                    # Limit evaluation samples
+  
+  # Data format and templates
+  data_format: "jsonl"                      # "jsonl", "json", "csv", "alpaca"
+  conversation_template: "alpaca"           # "alpaca", "vicuna", "llama3", "custom"
+  
+  # Column mapping for different formats
+  text_column: "text"                       # Column containing text data
+  instruction_column: "instruction"         # Column containing instructions
+  input_column: "input"                     # Column containing input context
+  output_column: "output"                   # Column containing expected output
+  
+  # Data splitting
+  train_split: "train"                      # Training split name
+  eval_split: "validation"                  # Evaluation split name
+  test_split: "test"                        # Test split name
+  validation_split_percentage: 10           # Percentage for validation if no eval split
+  
+  # Data filtering and validation
+  min_length: 10                            # Minimum sequence length
+  max_length: 4096                          # Maximum sequence length
+  filter_empty: true                        # Filter empty examples
+  
+  # Custom preprocessing
+  # custom_preprocessing_function: null     # Custom preprocessing function
+
+# Trainer configuration
+trainer:
+  type: "default"                           # "default", "llamafactory", "deepspeed"
+  
+  # Callbacks
+  callbacks: []                             # Custom callbacks to use
+  
+  # Evaluation settings
+  prediction_loss_only: false              # Only compute loss during evaluation
+  
+  # Checkpointing
+  resume_from_checkpoint: null              # Path to checkpoint to resume from
+  ignore_data_skip: false                   # Skip data during resume
+  
+  # Distributed training settings (for multi-GPU)
+  # local_rank: -1                          # Local rank for distributed training
+  # deepspeed: null                         # DeepSpeed configuration file
+
+# Hardware and environment settings
+environment:
+  # Device settings
+  device: "auto"                            # "auto", "cpu", "cuda", "mps"
+  no_cuda: false                            # Disable CUDA even if available
+  seed: 42                                  # Random seed for reproducibility
+  
+  # Memory settings
+  max_memory: null                          # Maximum memory per device
+  low_cpu_mem_usage: true                   # Reduce CPU memory usage during loading
+  
+  # Performance settings
+  torch_compile: false                      # Use torch.compile for optimization
+  torch_compile_backend: "inductor"         # Torch compile backend
+  torch_compile_mode: null                  # Torch compile mode
+  
+  # Debugging
+  debug_mode: false                         # Enable debug mode
+  verbose: false                            # Verbose logging
+
+# Output and monitoring
+output:
+  # Model saving
+  save_model: true                          # Save the final model
+  push_to_hub: false                        # Push model to HuggingFace Hub
+  hub_model_id: null                        # HuggingFace Hub model ID
+  hub_private_repo: true                    # Make Hub repo private
+  
+  # Tokenizer saving
+  save_tokenizer: true                      # Save tokenizer with model
+  
+  # Metrics and logging
+  compute_metrics: true                     # Compute evaluation metrics
+  log_level: "info"                         # "debug", "info", "warning", "error"
+  disable_tqdm: false                       # Disable progress bars
+  
+  # Export formats
+  # export_onnx: false                      # Export to ONNX format
+  # export_torchscript: false               # Export to TorchScript
+
+# Hardware-specific optimizations
+hardware_optimizations:
+  # Mac-specific settings
+  use_mps_if_available: true                # Use Metal Performance Shaders on Mac
+  
+  # GPU-specific settings
+  use_cuda_if_available: true               # Use CUDA if available
+  cuda_memory_fraction: 0.9                 # Fraction of GPU memory to use
+  
+  # CPU-specific settings
+  cpu_threads: null                         # Number of CPU threads (auto if null)
+
+# Advanced configuration
+advanced:
+  # Model merging (for LoRA/QLoRA)
+  merge_adapter_weights: false              # Merge adapter weights into base model
+  
+  # Experimental features
+  use_flash_attention: false                # Use Flash Attention (if available)
+  use_gradient_checkpointing: true          # Use gradient checkpointing
+  
+  # Custom model modifications
+  # custom_model_init: null                 # Custom model initialization function
+  
+  # Debugging and profiling
+  profile_memory: false                     # Profile memory usage
+  profile_compute: false                    # Profile compute usage
+
+# =============================================================================
+# EXAMPLES AND USAGE PATTERNS
+# =============================================================================
+
+# Example usage patterns (commented):
+#
+# 1. Quick start with default settings:
+#    uv run python cli.py finetune start --dataset my_data.jsonl
+#
+# 2. Use a specific strategy:
+#    uv run python cli.py finetune start --strategy mac_m1_lora --dataset my_data.jsonl
+#
+# 3. Custom configuration:
+#    uv run python cli.py finetune start --config my_finetune_config.yaml
+#
+# 4. Override specific settings:
+#    uv run python cli.py finetune start --strategy gpu_full_finetune \
+#      --override '{"training_args": {"epochs": 5, "learning_rate": 1e-4}}'
+#
+# 5. Monitor training:
+#    uv run python cli.py finetune monitor --job-id job_12345
+#
+# 6. Resume from checkpoint:
+#    uv run python cli.py finetune resume --checkpoint ./fine_tuned_models/checkpoint-1000

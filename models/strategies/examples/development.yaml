@@ -1,0 +1,110 @@
+# LlamaFarm Models - Development Configuration
+# Optimized for development with local models and fast providers
+
+name: "LlamaFarm Models - Development Configuration"
+version: "1.0.0"
+description: "Development configuration optimized for local models and testing"
+
+# Prefer local models in development to avoid API costs
+default_provider: "ollama_llama3_1_8b"
+
+# Fallback chain prioritizes local models first
+fallback_chain: 
+  - "ollama_llama3_1_8b"      # Primary: Local development model
+  - "openai_gpt4o_mini"       # Fallback: Cloud for comparison
+  - "ollama_phi3_mini"        # Fast local fallback
+
+providers:
+  # Local development models (no API costs)
+  ollama_llama3_1_8b:
+    type: "local"
+    provider: "ollama"
+    model: "llama3.1:8b"
+    host: "${OLLAMA_HOST:localhost}"
+    port: 11434
+    timeout: 120
+    temperature: 0.7
+    description: "Primary development model - good balance of speed and capability"
+
+  ollama_phi3_mini:
+    type: "local"
+    provider: "ollama"
+    model: "phi3:mini"
+    host: "${OLLAMA_HOST:localhost}"
+    port: 11434
+    timeout: 30
+    temperature: 0.7
+    description: "Fast local model for quick testing"
+
+  ollama_llama3_2_3b:
+    type: "local"
+    provider: "ollama"
+    model: "llama3.2:3b"
+    host: "${OLLAMA_HOST:localhost}"
+    port: 11434
+    timeout: 60
+    temperature: 0.7
+    description: "Small, fast model for rapid iteration"
+
+  # Cloud models for comparison (use sparingly in dev)
+  openai_gpt4o_mini:
+    type: "cloud"
+    provider: "openai"
+    model: "gpt-4o-mini"
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    max_tokens: 2048
+    temperature: 0.7
+    description: "Cloud comparison model - use sparingly in development"
+
+  # Hugging Face model for local development
+  hf_distilgpt2:
+    type: "local"
+    provider: "huggingface"
+    model: "distilgpt2"
+    cache_dir: "~/.cache/huggingface/hub"
+    device: "cpu"
+    max_tokens: 100
+    temperature: 0.7
+    description: "Lightweight HF model for basic testing"
+
+# Development-specific settings
+global_settings:
+  timeout: 60                    # Shorter timeout for dev
+  max_retries: 2                 # Fewer retries in dev
+  default_temperature: 0.8       # Slightly higher for creative testing
+  default_max_tokens: 1024       # Smaller for faster responses
+
+# Monitoring optimized for development
+monitoring:
+  track_usage: true
+  log_requests: true
+  log_responses: true            # Verbose logging in dev
+  alert_on_errors: false         # No alerting in dev
+  cost_alert_threshold: 1.0      # Low threshold for API costs
+
+# Caching for development
+caching:
+  enabled: true
+  backend: "memory"              # Simple memory cache
+  ttl_seconds: 1800              # 30 minutes
+  max_size: "100MB"              # Small cache for dev
+
+# Development helpers
+development:
+  debug_mode: true               # Enable debug features
+  verbose_logging: true          # More detailed logs
+  save_request_history: true     # Save requests for analysis
+  mock_mode: false               # Set to true to use mock responses
+
+# Model selection rules for development
+model_selection:
+  rules:
+    - condition: "task_type == 'quick_test'"
+      preferred_providers: ["ollama_phi3_mini", "hf_distilgpt2"]
+    
+    - condition: "task_type == 'development'"
+      preferred_providers: ["ollama_llama3_1_8b", "ollama_llama3_2_3b"]
+    
+    - condition: "task_type == 'comparison'"
+      preferred_providers: ["ollama_llama3_1_8b", "openai_gpt4o_mini"]
