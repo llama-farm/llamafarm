@@ -152,7 +152,7 @@ class DataService:
         # Make sure the file is not in use by another dataset
         project = ProjectService.get_project(namespace, project_id)
         other_dataset = next(
-            (ds for ds in project.config.get("datasets") if ds["name"] != dataset),
+            (ds for ds in project.config.get("datasets") if ds["name"] != dataset and file.hash in ds["files"]),
             None,
         )
         if other_dataset:

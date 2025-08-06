@@ -5,9 +5,11 @@ This module contains comprehensive tests for the DatasetService class,
 including unit tests for all public methods and edge cases.
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import Mock, patch
-from services.dataset_service import DEFAULT_PARSERS, DatasetService, Dataset
+
+from services.dataset_service import DEFAULT_PARSERS, DatasetService
 from services.project_service import ProjectService
 
 

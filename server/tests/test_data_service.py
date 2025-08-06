@@ -5,16 +5,16 @@ This module contains comprehensive tests for the DataService class,
 including unit tests for all public methods and edge cases.
 """
 
-import os
-import tempfile
-import pytest
-from unittest.mock import Mock, patch, mock_open, AsyncMock
-from datetime import datetime
-from fastapi import UploadFile
-from io import BytesIO
+from unittest.mock import AsyncMock, Mock, mock_open, patch
 
-from services.data_service import DataService, MetadataFileContent, FileExistsInAnotherDatasetError
-from services.project_service import ProjectService
+import pytest
+from fastapi import UploadFile
+
+from services.data_service import (
+    DataService,
+    FileExistsInAnotherDatasetError,
+    MetadataFileContent,
+)
 
 # Configure pytest for async tests
 pytest_plugins = ('pytest_asyncio',)
@@ -276,7 +276,7 @@ class TestDataService:
         mock_project.config = {
             "datasets": [
                 {"name": "target_dataset", "files": [self.test_file_hash]},
-                {"name": "other_dataset", "files": ["other_hash"]}
+                {"name": "other_dataset", "files": ["other_hash", self.test_file_hash]}
             ]
         }
         mock_get_project.return_value = mock_project
