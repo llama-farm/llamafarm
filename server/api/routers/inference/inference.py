@@ -38,8 +38,7 @@ async def chat(
 @router.delete("/chat/session/{session_id}")
 async def delete_chat_session(session_id: str):
     """Delete a chat session"""
-    success = AgentSessionManager.delete_session(session_id)
-    if success:
+    if success := AgentSessionManager.delete_session(session_id):
         return {"message": f"Session {session_id} deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="Session not found")
