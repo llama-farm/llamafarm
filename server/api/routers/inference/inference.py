@@ -1,13 +1,11 @@
 import uuid
 
 import instructor
-from atomic_agents.agents.base_agent import (
-    BaseAgent,
-    BaseAgentConfig,
-    BaseAgentInputSchema,
-    BaseAgentOutputSchema,
+from atomic_agents import (
+    AgentConfig,
+    AtomicAgent,
+    BasicChatInputSchema,
 )
-from atomic_agents.lib.components.agent_memory import AgentMemory
 from fastapi import APIRouter, Header, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
@@ -28,18 +26,10 @@ class ChatResponse(BaseModel):
 
 # Store agent instances to maintain conversation context
 # In production, use Redis, database, or other persistent storage
-agent_sessions: dict[str, BaseAgent] = {}
+agent_sessions: dict[str, AtomicAgent] = {}
 
-def create_agent() -> BaseAgent:
+def create_agent() -> AtomicAgent:
     """Create a new agent instance"""
-    # Initialize memory
-    memory = AgentMemory()
-    
-    # Initialize memory with an initial message from the assistant
-    initial_message = BaseAgentOutputSchema(
-        chat_message="Hello! How can I assist you today?")
-    memory.add_message("assistant", initial_message)
-    
     # Create OpenAI-compatible client pointing to Ollama
     ollama_client = OpenAI(
         base_url=settings.ollama_host,
@@ -49,11 +39,10 @@ def create_agent() -> BaseAgent:
     client = instructor.from_openai(ollama_client)
 
     # Agent setup with specified configuration
-    agent = BaseAgent(
-        config=BaseAgentConfig(
+    agent = AtomicAgent(
+        config=AgentConfig(
             client=client,
-            model=settings.ollama_model, 
-            memory=memory,
+            model=settings.ollama_model,
         )
     )
     
@@ -77,7 +66,7 @@ async def chat(
             agent = agent_sessions[session_id]
 
         # Process the user's input through the agent and get the response
-        input_schema = BaseAgentInputSchema(chat_message=request.message)
+        input_schema = BasicChatInputSchema(chat_message=request.message)
         response = agent.run(input_schema)
         
         # Extract the message from the response
