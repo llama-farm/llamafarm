@@ -1,0 +1,140 @@
+# Health and Wellness Strategy
+# Health information and wellness guidance (not medical advice)
+
+name: "Health and Wellness Guide"
+description: "Evidence-based health information and wellness recommendations"
+use_cases:
+  - "wellness_tips"
+  - "nutrition_guidance"
+  - "exercise_planning"
+  - "mental_health_resources"
+  - "lifestyle_advice"
+  - "health_education"
+performance_profile: "accuracy"
+complexity: "complex"
+
+templates:
+  default:
+    template: "health_information"
+    config:
+      evidence_based: true
+      include_sources: true
+      disclaimer_prominent: true
+      holistic_approach: true
+      actionable_advice: true
+  
+  specialized:
+    - condition:
+        query_type: "nutrition"
+      template: "nutrition_guidance"
+      config:
+        macro_breakdown: true
+        meal_suggestions: true
+        dietary_considerations: true
+        portion_guidance: true
+        scientific_backing: true
+      priority: 20
+    
+    - condition:
+        query_type: "fitness"
+      template: "fitness_planning"
+      config:
+        exercise_types: true
+        progression_plan: true
+        form_guidance: true
+        injury_prevention: true
+        adaptation_options: true
+      priority: 20
+    
+    - condition:
+        query_type: "mental_wellness"
+      template: "mental_health_support"
+      config:
+        coping_strategies: true
+        mindfulness_techniques: true
+        professional_resources: true
+        self_care_tips: true
+        crisis_resources: true
+      priority: 25
+    
+    - condition:
+        query_type: "sleep"
+      template: "sleep_optimization"
+      config:
+        sleep_hygiene: true
+        routine_suggestions: true
+        environment_tips: true
+        common_issues: true
+      priority: 15
+    
+    - condition:
+        context:
+          age_group: "senior"
+      template: "senior_wellness"
+      config:
+        age_appropriate: true
+        mobility_considerations: true
+        medication_awareness: true
+        social_wellness: true
+      priority: 20
+
+selection_rules:
+  - name: "emergency_detection"
+    condition:
+      expression: "'emergency' in context.get('query', '').lower() or 'urgent' in context.get('query', '').lower()"
+    template: "emergency_resources"
+    priority: 100
+    stop_on_match: true
+  
+  - name: "symptom_inquiry"
+    condition:
+      expression: "'symptom' in context.get('query', '').lower() or 'feeling' in context.get('query', '').lower()"
+    template: "symptom_information"
+    priority: 30
+  
+  - name: "prevention_focus"
+    condition:
+      expression: "'prevent' in context.get('query', '').lower() or 'avoid' in context.get('query', '').lower()"
+    template: "preventive_health"
+    priority: 20
+
+global_config:
+  system_prompts:
+    - content: "You provide health information for educational purposes only. This is NOT medical advice. Always recommend consulting healthcare professionals for medical concerns."
+      position: "system"
+      priority: 200
+    - content: "In case of emergency, direct users to call emergency services (911, 112, etc.) immediately."
+      position: "prefix"
+      priority: 250
+    - content: "Focus on evidence-based information from reputable health organizations. Acknowledge when evidence is limited."
+      position: "system"
+      priority: 100
+    - content: "Be sensitive to individual differences and avoid one-size-fits-all recommendations."
+      position: "system"
+      priority: 90
+  temperature: 0.3  # Low for accuracy
+  max_tokens: 1200
+  model_preferences: ["gpt-4", "claude-3-opus"]
+
+optimization:
+  caching: true  # Cache health information
+  compression: false  # Full information
+  token_optimization: false  # Complete guidance
+  parallel_processing: false
+
+output_transforms:
+  - transform: "validate_format"  # Ensure disclaimers present
+
+metadata:
+  version: "4.0.0"
+  author: "LlamaFarm Health Information Team"
+  tags: ["health", "wellness", "nutrition", "fitness", "mental-health"]
+  compliance:
+    - "health_information_disclaimer"
+    - "no_medical_advice"
+    - "evidence_based_only"
+  resources:
+    - "CDC"
+    - "WHO"
+    - "Mayo Clinic"
+    - "NIH"

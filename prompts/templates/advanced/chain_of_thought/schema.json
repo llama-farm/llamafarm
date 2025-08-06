@@ -1,0 +1,125 @@
+{
+  "template_id": "chain_of_thought",
+  "name": "Chain of Thought Reasoning",
+  "description": "Step-by-step reasoning through complex problems",
+  "category": "advanced",
+  "version": "1.0.0",
+  "author": "LlamaFarm Team",
+  
+  "inputs": {
+    "query": {
+      "type": "string",
+      "required": true,
+      "description": "The problem or question to solve",
+      "validation": {
+        "min_length": 10,
+        "max_length": 2000
+      }
+    },
+    "context": {
+      "type": "array",
+      "required": false,
+      "description": "Optional context information",
+      "items": {
+        "type": "object"
+      }
+    },
+    "examples": {
+      "type": "array",
+      "required": false,
+      "description": "Optional few-shot examples",
+      "items": {
+        "type": "object",
+        "properties": {
+          "problem": {
+            "type": "string"
+          },
+          "reasoning": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "answer": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  
+  "outputs": {
+    "prompt": {
+      "type": "string",
+      "description": "The formatted prompt with chain of thought structure"
+    }
+  },
+  
+  "config_options": {
+    "num_steps": {
+      "type": "integer",
+      "default": 5,
+      "min": 3,
+      "max": 10,
+      "description": "Maximum reasoning steps"
+    },
+    "step_format": {
+      "type": "string",
+      "default": "numbered",
+      "enum": ["numbered", "bullet", "narrative"],
+      "description": "Format for reasoning steps"
+    },
+    "include_self_reflection": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include self-reflection step"
+    },
+    "temperature_hint": {
+      "type": "float",
+      "default": 0.8,
+      "description": "Higher temperature for creative reasoning"
+    },
+    "max_tokens_hint": {
+      "type": "integer",
+      "default": 1500,
+      "description": "More tokens for detailed reasoning"
+    }
+  },
+  
+  "template": "chain_of_thought_template",
+  
+  "frameworks": ["langchain", "langgraph", "native"],
+  
+  "use_cases": [
+    "complex_reasoning",
+    "problem_solving",
+    "mathematical_problems",
+    "logical_deduction",
+    "multi_step_analysis"
+  ],
+  
+  "metadata": {
+    "complexity": "high",
+    "domain": "general",
+    "tags": ["reasoning", "chain-of-thought", "advanced", "problem-solving"],
+    "token_estimate": {
+      "min": 200,
+      "typical": 800,
+      "max": 2000
+    }
+  },
+  
+  "examples": [
+    {
+      "name": "Math word problem",
+      "inputs": {
+        "query": "A farmer has 120 apples. He sells 40% at the morning market and 25% of the remainder at the afternoon market. How many apples does he have left?"
+      },
+      "config": {
+        "num_steps": 4,
+        "step_format": "numbered"
+      },
+      "expected_output": "Let me solve this step by step..."
+    }
+  ]
+}

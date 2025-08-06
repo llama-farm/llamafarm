@@ -1,0 +1,183 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Prompt Templates Schema",
+  "description": "Schema for defining prompt templates in the LlamaFarm prompts system",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/definitions/template"
+  },
+  "definitions": {
+    "template": {
+      "type": "object",
+      "required": ["description", "category", "inputs", "outputs", "use_cases", "frameworks"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Brief description of the template's purpose"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["basic", "chat", "few_shot", "advanced", "domain_specific", "agentic"],
+          "description": "Template category for organization"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Required input variables for the template"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Output types produced by the template"
+        },
+        "config_schema": {
+          "type": "object",
+          "description": "Configuration options for the template",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["type", "description"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["string", "integer", "float", "boolean", "array", "object"]
+              },
+              "default": {
+                "description": "Default value for the configuration option"
+              },
+              "enum": {
+                "type": "array",
+                "description": "Allowed values for enum types"
+              },
+              "description": {
+                "type": "string",
+                "description": "Description of the configuration option"
+              },
+              "required": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether this configuration is required"
+              }
+            }
+          }
+        },
+        "use_cases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Common use cases for this template"
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["langchain", "langgraph", "llamaindex", "native"]
+          },
+          "description": "Supported LLM frameworks"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Example name"
+              },
+              "inputs": {
+                "type": "object",
+                "description": "Example input values"
+              },
+              "config": {
+                "type": "object",
+                "description": "Example configuration"
+              },
+              "expected_output": {
+                "type": "string",
+                "description": "Expected output format or content"
+              }
+            }
+          },
+          "description": "Usage examples for the template"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string",
+              "description": "Template version"
+            },
+            "author": {
+              "type": "string",
+              "description": "Template author"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Searchable tags"
+            },
+            "complexity": {
+              "type": "string",
+              "enum": ["low", "medium", "high"],
+              "description": "Template complexity level"
+            },
+            "token_estimate": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "integer",
+                  "description": "Minimum tokens typically used"
+                },
+                "max": {
+                  "type": "integer",
+                  "description": "Maximum tokens typically used"
+                },
+                "typical": {
+                  "type": "integer",
+                  "description": "Typical token usage"
+                }
+              },
+              "description": "Token usage estimates"
+            }
+          },
+          "description": "Additional metadata for the template"
+        },
+        "validation_rules": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "Expected type of the input"
+              },
+              "min_length": {
+                "type": "integer",
+                "description": "Minimum length for string inputs"
+              },
+              "max_length": {
+                "type": "integer",
+                "description": "Maximum length for string inputs"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Regex pattern for validation"
+              },
+              "required": {
+                "type": "boolean",
+                "description": "Whether this input is required"
+              }
+            }
+          },
+          "description": "Validation rules for template inputs"
+        }
+      }
+    }
+  }
+}

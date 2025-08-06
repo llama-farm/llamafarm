@@ -1,0 +1,144 @@
+# Financial Advisory Strategy
+# Financial education and planning assistance (not financial advice)
+
+name: "Financial Planning Assistant"
+description: "Educational financial planning and budgeting assistance"
+use_cases:
+  - "budgeting"
+  - "financial_planning"
+  - "investment_education"
+  - "debt_management"
+  - "savings_strategies"
+  - "financial_literacy"
+performance_profile: "accuracy"
+complexity: "complex"
+
+templates:
+  default:
+    template: "financial_education"
+    config:
+      include_calculations: true
+      show_examples: true
+      risk_disclosure: true
+      educational_focus: true
+      practical_steps: true
+  
+  specialized:
+    - condition:
+        query_type: "budgeting"
+      template: "budget_planning"
+      config:
+        income_analysis: true
+        expense_categories: true
+        savings_goals: true
+        visualization_suggestions: true
+        tracking_methods: true
+      priority: 20
+    
+    - condition:
+        query_type: "investment_education"
+      template: "investment_basics"
+      config:
+        risk_explanation: true
+        diversification: true
+        basic_concepts: true
+        common_mistakes: true
+        educational_resources: true
+      priority: 25
+    
+    - condition:
+        query_type: "debt_management"
+      template: "debt_strategy"
+      config:
+        repayment_strategies: true
+        interest_calculations: true
+        prioritization_methods: true
+        consolidation_options: true
+        credit_impact: true
+      priority: 20
+    
+    - condition:
+        query_type: "retirement_planning"
+      template: "retirement_education"
+      config:
+        timeline_planning: true
+        account_types: true
+        contribution_strategies: true
+        tax_considerations: true
+        common_scenarios: true
+      priority: 15
+    
+    - condition:
+        context:
+          life_stage: "student"
+      template: "student_finances"
+      config:
+        student_specific: true
+        loan_information: true
+        part_time_income: true
+        building_credit: true
+      priority: 15
+
+selection_rules:
+  - name: "emergency_fund"
+    condition:
+      expression: "'emergency' in context.get('query', '').lower() and 'fund' in context.get('query', '').lower()"
+    template: "emergency_fund_guide"
+    priority: 25
+  
+  - name: "tax_related"
+    condition:
+      expression: "'tax' in context.get('query', '').lower() or 'taxes' in context.get('query', '').lower()"
+    template: "tax_education"
+    priority: 20
+  
+  - name: "crypto_detection"
+    condition:
+      expression: "'crypto' in context.get('query', '').lower() or 'bitcoin' in context.get('query', '').lower()"
+    template: "crypto_education"
+    priority: 30
+
+global_config:
+  system_prompts:
+    - content: "You provide financial education only. This is NOT personalized financial advice. Always recommend consulting qualified financial advisors for specific situations."
+      position: "system"
+      priority: 200
+    - content: "Focus on general principles, educational examples, and widely accepted financial concepts."
+      position: "system"
+      priority: 100
+    - content: "Always emphasize the importance of individual circumstances and professional consultation."
+      position: "suffix"
+      priority: 50
+    - content: "Include relevant disclaimers about market risks and the variability of financial outcomes."
+      position: "system"
+      priority: 90
+  temperature: 0.3  # Low for accuracy
+  max_tokens: 1500
+  model_preferences: ["gpt-4", "claude-3-opus"]
+
+optimization:
+  caching: true  # Cache educational content
+  compression: false
+  token_optimization: false  # Complete explanations
+  parallel_processing: false
+
+input_transforms:
+  - input: "amounts"
+    transform: "clean_whitespace"
+
+output_transforms:
+  - transform: "validate_format"  # Ensure disclaimers
+
+metadata:
+  version: "2.5.0"
+  author: "LlamaFarm Financial Education Team"
+  tags: ["finance", "budgeting", "investing", "education", "planning"]
+  compliance:
+    - "not_financial_advice"
+    - "educational_only"
+    - "general_information"
+  resources:
+    - "SEC investor.gov"
+    - "FDIC"
+    - "Consumer Financial Protection Bureau"
+    - "IRS"

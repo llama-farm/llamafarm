@@ -1,0 +1,539 @@
+# Prompt System Default Strategies
+# Pre-configured strategies for common use cases
+
+# =============================================================================
+# SIMPLE STRATEGIES - Getting Started
+# =============================================================================
+simple_qa:
+  name: "Simple Question Answering"
+  description: "Basic Q&A strategy for straightforward queries"
+  use_cases: ["simple_queries", "faq", "basic_qa"]
+  performance_profile: "speed"
+  complexity: "simple"
+  
+  templates:
+    default:
+      template: "qa_basic"
+      config:
+        temperature_hint: 0.7
+        max_tokens_hint: 300
+        context_format: "numbered"
+    
+    fallback:
+      template: "qa_detailed"
+      config:
+        include_reasoning: false
+        response_structure: "answer_first"
+
+  global_config:
+    temperature: 0.7
+    max_tokens: 500
+    model_preferences: ["gpt-3.5-turbo", "claude-3-haiku", "llama-3-8b"]
+  
+  optimization:
+    caching: true
+    token_optimization: true
+
+# =============================================================================
+# CONVERSATIONAL STRATEGIES
+# =============================================================================
+customer_support:
+  name: "Customer Support Assistant"
+  description: "Helpful and empathetic customer support interactions"
+  use_cases: ["customer_service", "helpdesk", "support_chat"]
+  performance_profile: "balanced"
+  complexity: "moderate"
+  
+  templates:
+    default:
+      template: "conversational"
+      config:
+        personality: "helpful"
+        include_context: true
+        history_limit: 10
+        response_style: "natural"
+    
+    specialized:
+      - condition:
+          query_type: "technical"
+        template: "qa_detailed"
+        config:
+          include_reasoning: true
+          include_confidence: false
+        priority: 10
+      
+      - condition:
+          query_type: "complaint"
+        template: "conversational"
+        config:
+          personality: "professional"
+          response_style: "structured"
+        priority: 15
+
+  selection_rules:
+    - name: "technical_detection"
+      condition:
+        expression: "'error' in context.get('query', '').lower() or 'bug' in context.get('query', '').lower()"
+      template: "qa_detailed"
+      priority: 20
+  
+  global_config:
+    system_prompts:
+      - content: "You are a helpful customer support assistant. Always be polite, empathetic, and solution-focused."
+        position: "system"
+        priority: 100
+    temperature: 0.8
+    max_tokens: 600
+  
+  optimization:
+    caching: true
+    compression: false
+    token_optimization: true
+
+professional_assistant:
+  name: "Professional Assistant"
+  description: "Formal, concise professional communication"
+  use_cases: ["business_communication", "professional_chat", "executive_assistant"]
+  performance_profile: "accuracy"
+  complexity: "moderate"
+  
+  templates:
+    default:
+      template: "conversational"
+      config:
+        personality: "professional"
+        include_context: true
+        history_limit: 5
+        response_style: "brief"
+      input_transforms:
+        - input: "message"
+          transform: "trim"
+      output_transforms:
+        - transform: "clean_markdown"
+
+  global_config:
+    system_prompts:
+      - content: "You are a professional assistant. Be concise, accurate, and maintain a formal tone."
+        position: "system"
+        priority: 100
+    temperature: 0.5
+    max_tokens: 400
+
+# =============================================================================
+# REASONING STRATEGIES
+# =============================================================================
+analytical_reasoning:
+  name: "Analytical Reasoning"
+  description: "Complex problem-solving with step-by-step analysis"
+  use_cases: ["problem_solving", "analysis", "research", "decision_making"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "chain_of_thought"
+      config:
+        num_steps: 5
+        step_format: "numbered"
+        include_self_reflection: true
+    
+    specialized:
+      - condition:
+          context_size:
+            min: 5
+        template: "comparative_analysis"
+        config:
+          comparison_format: "table"
+          include_summary: true
+        priority: 10
+
+  global_config:
+    system_prompts:
+      - content: "Think carefully and work through problems systematically."
+        position: "prefix"
+        priority: 50
+    temperature: 0.8
+    max_tokens: 1500
+  
+  optimization:
+    caching: true
+    token_optimization: false  # Don't truncate reasoning
+
+mathematical_solver:
+  name: "Mathematical Problem Solver"
+  description: "Specialized strategy for mathematical and logical problems"
+  use_cases: ["math_problems", "logic_puzzles", "calculations", "proofs"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "chain_of_thought"
+      config:
+        num_steps: 7
+        step_format: "numbered"
+        include_self_reflection: true
+    
+    fallback:
+      template: "qa_detailed"
+      config:
+        include_reasoning: true
+        response_structure: "reasoning_first"
+
+  global_config:
+    system_prompts:
+      - content: "Show all mathematical steps clearly. Double-check calculations."
+        position: "system"
+        priority: 100
+    temperature: 0.3  # Low temperature for accuracy
+    max_tokens: 2000
+
+# =============================================================================
+# CREATIVE STRATEGIES
+# =============================================================================
+creative_writing:
+  name: "Creative Writing Assistant"
+  description: "Creative content generation with style flexibility"
+  use_cases: ["creative_writing", "storytelling", "content_creation", "brainstorming"]
+  performance_profile: "balanced"
+  complexity: "moderate"
+  
+  templates:
+    default:
+      template: "creative_generation"
+      config:
+        style: "engaging"
+        tone: "neutral"
+        include_examples: false
+    
+    specialized:
+      - condition:
+          query_type: "poetry"
+        template: "creative_generation"
+        config:
+          style: "poetic"
+          format: "verse"
+        priority: 10
+      
+      - condition:
+          query_type: "story"
+        template: "creative_generation"
+        config:
+          style: "narrative"
+          include_dialogue: true
+        priority: 10
+
+  global_config:
+    temperature: 0.9  # Higher for creativity
+    max_tokens: 1000
+    model_preferences: ["gpt-4", "claude-3-opus", "llama-3-70b"]
+
+# =============================================================================
+# TECHNICAL STRATEGIES
+# =============================================================================
+code_assistant:
+  name: "Code Assistant"
+  description: "Programming help with code generation and debugging"
+  use_cases: ["coding", "debugging", "code_review", "programming_help"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "code_analysis"
+      config:
+        analysis_depth: "standard"
+        include_suggestions: true
+        check_patterns: ["bugs", "performance", "style"]
+        output_format: "markdown"
+    
+    specialized:
+      - condition:
+          query_type: "debug"
+        template: "code_analysis"
+        config:
+          analysis_depth: "comprehensive"
+          check_patterns: ["bugs", "errors", "edge_cases"]
+        priority: 20
+      
+      - condition:
+          query_type: "optimize"
+        template: "code_analysis"
+        config:
+          analysis_depth: "comprehensive"
+          check_patterns: ["performance", "memory", "complexity"]
+        priority: 15
+
+  global_config:
+    system_prompts:
+      - content: "Provide clear, well-documented code with best practices."
+        position: "system"
+        priority: 100
+    temperature: 0.3
+    max_tokens: 1500
+  
+  output_transforms:
+    - transform: "extract_code"
+
+technical_documentation:
+  name: "Technical Documentation"
+  description: "Technical writing and documentation generation"
+  use_cases: ["documentation", "api_docs", "technical_writing", "tutorials"]
+  performance_profile: "accuracy"
+  complexity: "moderate"
+  
+  templates:
+    default:
+      template: "documentation_generator"
+      config:
+        format: "markdown"
+        include_examples: true
+        section_style: "numbered"
+    
+    fallback:
+      template: "qa_detailed"
+      config:
+        include_reasoning: false
+        response_structure: "structured"
+
+  global_config:
+    system_prompts:
+      - content: "Write clear, comprehensive technical documentation."
+        position: "system"
+        priority: 100
+    temperature: 0.5
+    max_tokens: 2000
+
+# =============================================================================
+# EVALUATION STRATEGIES
+# =============================================================================
+quality_evaluator:
+  name: "Quality Evaluation"
+  description: "LLM-as-judge for content quality assessment"
+  use_cases: ["evaluation", "grading", "quality_check", "review"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "evaluation"
+      config:
+        scoring_type: "numeric"
+        include_justification: true
+        criteria_weighting:
+          accuracy: 0.3
+          clarity: 0.3
+          completeness: 0.2
+          relevance: 0.2
+    
+    specialized:
+      - condition:
+          query_type: "comparison"
+        template: "evaluation"
+        config:
+          comparison_mode: true
+          scoring_type: "detailed"
+        priority: 10
+
+  global_config:
+    system_prompts:
+      - content: "Evaluate objectively based on the provided criteria."
+        position: "system"
+        priority: 100
+    temperature: 0.3
+    max_tokens: 800
+
+# =============================================================================
+# RAG STRATEGIES
+# =============================================================================
+rag_qa:
+  name: "RAG Question Answering"
+  description: "Retrieval-augmented generation for knowledge-based Q&A"
+  use_cases: ["rag_qa", "document_qa", "knowledge_retrieval", "research"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "rag_response"
+      config:
+        citation_style: "inline"
+        relevance_threshold: 0.7
+        synthesis_approach: "comprehensive"
+        include_confidence: false
+    
+    specialized:
+      - condition:
+          context_size:
+            min: 10
+        template: "rag_response"
+        config:
+          synthesis_approach: "focused"
+          relevance_threshold: 0.8
+        priority: 10
+
+  selection_rules:
+    - name: "no_context_fallback"
+      condition:
+        has_context: false
+      template: "qa_basic"
+      priority: 100
+      stop_on_match: true
+
+  global_config:
+    system_prompts:
+      - content: "Base your response only on the provided context. Cite sources."
+        position: "system"
+        priority: 100
+    temperature: 0.5
+    max_tokens: 1000
+
+research_assistant:
+  name: "Research Assistant"
+  description: "Comprehensive research and analysis with citations"
+  use_cases: ["research", "academic_writing", "literature_review", "fact_checking"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "rag_response"
+      config:
+        citation_style: "academic"
+        relevance_threshold: 0.75
+        synthesis_approach: "comprehensive"
+        include_confidence: true
+    
+    fallback:
+      template: "analytical_reasoning"
+      config:
+        num_steps: 5
+
+  global_config:
+    system_prompts:
+      - content: "Provide thorough research with proper citations and critical analysis."
+        position: "system"
+        priority: 100
+    temperature: 0.6
+    max_tokens: 2000
+    model_preferences: ["gpt-4", "claude-3-opus"]
+
+# =============================================================================
+# SPECIALIZED STRATEGIES
+# =============================================================================
+legal_assistant:
+  name: "Legal Document Assistant"
+  description: "Legal document analysis and drafting (not legal advice)"
+  use_cases: ["legal_documents", "contract_review", "legal_research"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "legal_analysis"
+      config:
+        include_citations: true
+        formal_language: true
+        disclaimer: true
+
+  global_config:
+    system_prompts:
+      - content: "This is not legal advice. Always recommend consulting a qualified attorney."
+        position: "prefix"
+        priority: 200
+    temperature: 0.3
+    max_tokens: 1500
+
+medical_information:
+  name: "Medical Information Assistant"
+  description: "Medical information and education (not medical advice)"
+  use_cases: ["medical_information", "health_education", "symptom_information"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "medical_qa"
+      config:
+        include_disclaimer: true
+        evidence_based: true
+        layman_terms: true
+
+  global_config:
+    system_prompts:
+      - content: "This is for informational purposes only. Not medical advice. Always consult healthcare professionals."
+        position: "prefix"
+        priority: 200
+      - content: "If this is an emergency, call emergency services immediately."
+        position: "prefix"
+        priority: 250
+    temperature: 0.3
+    max_tokens: 1000
+
+# =============================================================================
+# MULTI-MODAL STRATEGIES (Future)
+# =============================================================================
+visual_analysis:
+  name: "Visual Analysis"
+  description: "Image and visual content analysis (future capability)"
+  use_cases: ["image_analysis", "visual_qa", "diagram_understanding"]
+  performance_profile: "balanced"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "visual_analysis"
+      config:
+        detail_level: "comprehensive"
+        include_objects: true
+        include_text: true
+
+  metadata:
+    tags: ["future", "multimodal", "vision"]
+
+# =============================================================================
+# CUSTOM TEMPLATE
+# =============================================================================
+custom_template:
+  name: "Custom Strategy Template"
+  description: "Template for creating custom strategies"
+  use_cases: ["template", "customization"]
+  performance_profile: "balanced"
+  complexity: "simple"
+  
+  templates:
+    default:
+      template: "qa_basic"  # Replace with your template
+      config: {}  # Add your configuration
+
+  global_config:
+    temperature: 0.7
+    max_tokens: 500
+
+# =============================================================================
+# USAGE NOTES
+# =============================================================================
+usage_notes:
+  selecting_strategies: |
+    1. **simple_qa**: Basic Q&A for straightforward queries
+    2. **customer_support**: Helpful customer service interactions
+    3. **analytical_reasoning**: Complex problem-solving
+    4. **code_assistant**: Programming help and code review
+    5. **rag_qa**: Knowledge-based Q&A with citations
+    6. **quality_evaluator**: Content quality assessment
+    7. **creative_writing**: Creative content generation
+    8. **research_assistant**: Comprehensive research with citations
+  
+  customization: |
+    - Copy any strategy and modify for your needs
+    - Mix templates for different scenarios
+    - Adjust temperature and token limits
+    - Add custom selection rules
+    - Configure input/output transforms
+  
+  performance_tips: |
+    - Lower temperature (0.1-0.5) for accuracy
+    - Higher temperature (0.7-1.0) for creativity
+    - Enable caching for repeated queries
+    - Use token optimization for cost control
+    - Choose appropriate models for use case
