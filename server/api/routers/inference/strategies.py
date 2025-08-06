@@ -91,8 +91,9 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
             if not rule.enabled:
                 continue
                 
-            keyword_matches = sum(
-                1 for keyword in rule.keywords if keyword in message_lower)
+            keyword_matches = sum(bool(keyword in message_lower)
+                              for keyword in rule.keywords)
+
             if keyword_matches > 0:
                 # Extract action type from rule name
                 if "create" in rule.name.lower():
