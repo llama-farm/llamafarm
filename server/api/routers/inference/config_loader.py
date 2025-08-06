@@ -3,7 +3,7 @@ Configuration loader for analysis strategies.
 """
 
 from pathlib import Path
-from typing import Any, dict
+from typing import Any
 
 import yaml
 
