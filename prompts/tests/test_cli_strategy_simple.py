@@ -50,16 +50,40 @@ class TestCLICommands:
         return CliRunner()
     
     def test_stats_command_exists(self, runner):
-        """Test that stats command exists."""
+        """Test that stats command exists and help output structure."""
         result = runner.invoke(cli, ['stats', '--help'])
         # Command should exist even if it fails due to missing deps
         assert 'stats' in result.output.lower() or result.exit_code != 0
+        
+        # Assert help output structure when command is available
+        if result.exit_code == 0:
+            assert '--help' in result.output or 'help' in result.output.lower()
+            assert 'Usage:' in result.output or 'usage:' in result.output.lower()
+            # Check for command description or options
+            assert any(keyword in result.output.lower() for keyword in 
+                      ['show', 'display', 'statistics', 'stats', 'metrics'])
+        else:
+            # If the command fails due to missing dependencies, check for a relevant error message
+            assert any(keyword in result.output.lower() for keyword in 
+                      ['missing', 'error', 'failed', 'not found', 'dependency'])
     
     def test_demo_command_exists(self, runner):
-        """Test that demo command exists."""
+        """Test that demo command exists and help output structure."""
         result = runner.invoke(cli, ['demo', '--help'])
         # Command should exist even if it fails due to missing deps
         assert 'demo' in result.output.lower() or result.exit_code != 0
+        
+        # Assert help output structure when command is available
+        if result.exit_code == 0:
+            assert '--help' in result.output or 'help' in result.output.lower()
+            assert 'Usage:' in result.output or 'usage:' in result.output.lower()
+            # Check for command description or options
+            assert any(keyword in result.output.lower() for keyword in 
+                      ['demo', 'demonstration', 'example', 'run', 'execute'])
+        else:
+            # If the command fails due to missing dependencies, check for a relevant error message
+            assert any(keyword in result.output.lower() for keyword in 
+                      ['missing', 'error', 'failed', 'not found', 'dependency'])
 
 
 if __name__ == "__main__":

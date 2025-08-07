@@ -241,7 +241,13 @@ class StrategyManager:
         result = output
         
         for transform in transforms:
-            if transform.transform == "parse_json":
+            if transform.transform == "uppercase":
+                result = result.upper()
+            elif transform.transform == "lowercase":
+                result = result.lower()
+            elif transform.transform == "trim":
+                result = result.strip()
+            elif transform.transform == "parse_json":
                 # Extract JSON from output
                 import json
                 import re

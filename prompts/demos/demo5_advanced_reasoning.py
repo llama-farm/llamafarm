@@ -176,9 +176,10 @@ def run_demo():
     # Save to a temporary file for demo purposes
     import tempfile
     temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
+    temp_file.flush()  # Ensure file is written before using its name
+    temp_file.close()  # Close the file before passing the name
     manager.save_strategy("educational_assistant", custom_strategy, temp_file.name)
     print(f"✅ Custom strategy saved to: {temp_file.name}")
-    temp_file.close()
     
     print(f"Created custom strategy: {custom_strategy.name}")
     print(f"Templates configured: {len(custom_strategy.templates.specialized) + 1}")

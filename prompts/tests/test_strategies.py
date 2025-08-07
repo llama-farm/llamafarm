@@ -16,7 +16,7 @@ from strategies import StrategyManager, StrategyLoader, StrategyConfig
 from strategies.config import (
     TemplateConfig, TemplatesConfig, SelectionRule, 
     SpecializedTemplate, ConditionConfig, PerformanceProfile, 
-    Complexity, TransformType, InputTransform
+    Complexity, TransformType, InputTransform, Transform
 )
 
 
@@ -419,20 +419,89 @@ class TestStrategyManager:
             assert render_vars.get("title") == "TEST TITLE"     # uppercased
             assert render_vars.get("other") == "unchanged"      # unchanged
     
-    def test_recommend_strategies(self, manager):
-        """Test strategy recommendations."""
-        # Test recommendations - this uses load_strategies which loads from files
-        # So we test against actual loaded strategies, not mocked ones
-        recommendations = manager.recommend_strategies(
-            use_case="qa",
-            performance="speed",
-            complexity="simple"
+    def test_output_transforms(self, manager):
+        """Test output transformations."""
+        # Add strategy with output transforms
+        transform_strategy = StrategyConfig(
+            name="Output Transform Strategy",
+            description="Test output transforms",
+            templates=TemplatesConfig(
+                default=TemplateConfig(
+                    template="qa_basic",
+                    output_transforms=[
+                        Transform(
+                            transform=TransformType.UPPERCASE
+                        )
+                    ]
+                )
+            )
+        )
+        manager._strategies_cache["output_transform_strategy"] = transform_strategy
+        
+        # Mock template engine to return a lowercase string
+        manager.template_engine.render_template.return_value = "this is a test output"
+        
+        # Execute with output transforms
+        result = manager.execute_strategy(
+            strategy_name="output_transform_strategy",
+            inputs={"query": "test"}
         )
         
-        assert len(recommendations) >= 1
-        # Should recommend strategies with matching criteria
-        # The actual strategies loaded include "Simple Question Answering" which matches
-        assert any("qa" in r.name.lower() or "question" in r.name.lower() for r in recommendations)
+        # Check that output was transformed to uppercase
+        assert result == "THIS IS A TEST OUTPUT"
+    
+    def test_recommend_strategies(self, manager):
+        """Test strategy recommendations with mocked strategies (no file dependency)."""
+        # Create mock strategies
+        mock_strategies = {
+            "simple_qa": StrategyConfig(
+                name="Simple Question Answering",
+                description="Fast QA strategy",
+                use_cases=["qa"],
+                performance_profile=PerformanceProfile.SPEED,
+                complexity=Complexity.SIMPLE,
+                templates=TemplatesConfig(
+                    default=TemplateConfig(template="qa_basic")
+                )
+            ),
+            "complex_reasoning": StrategyConfig(
+                name="Complex Reasoning",
+                description="Accurate reasoning strategy",
+                use_cases=["reasoning"],
+                performance_profile=PerformanceProfile.ACCURACY,
+                complexity=Complexity.COMPLEX,
+                templates=TemplatesConfig(
+                    default=TemplateConfig(template="chain_of_thought")
+                )
+            ),
+            "general_qa": StrategyConfig(
+                name="General QA",
+                description="Another QA strategy",
+                use_cases=["qa", "general"],
+                performance_profile=PerformanceProfile.SPEED,
+                complexity=Complexity.SIMPLE,
+                templates=TemplatesConfig(
+                    default=TemplateConfig(template="qa_basic")
+                )
+            )
+        }
+        
+        # Mock the load_strategies method to return our mock strategies
+        with patch.object(manager, 'load_strategies', return_value=mock_strategies):
+            recommendations = manager.recommend_strategies(
+                use_case="qa",
+                performance="speed",
+                complexity="simple"
+            )
+            
+            assert len(recommendations) >= 1
+            # Should recommend strategies with matching criteria
+            assert any("qa" in r.name.lower() or "question" in r.name.lower() for r in recommendations)
+            # Should prioritize strategies that match all criteria
+            for rec in recommendations[:2]:  # Check top recommendations
+                assert "qa" in rec.use_cases
+                assert rec.performance_profile == PerformanceProfile.SPEED
+                assert rec.complexity == Complexity.SIMPLE
     
     def test_create_strategy(self, manager):
         """Test creating a new strategy."""

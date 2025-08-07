@@ -99,12 +99,16 @@ def list_strategies(output_format):
             if len(strategy.use_cases) > 3:
                 use_cases += f" (+{len(strategy.use_cases) - 3})"
             
+            # Handle both enum and string values
+            performance = getattr(strategy.performance_profile, 'value', strategy.performance_profile)
+            complexity = getattr(strategy.complexity, 'value', strategy.complexity)
+            
             table.add_row(
                 strategy_id,
                 strategy.name,
                 use_cases,
-                strategy.performance_profile.value,
-                strategy.complexity.value
+                performance,
+                complexity
             )
         
         console.print(table)

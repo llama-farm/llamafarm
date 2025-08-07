@@ -47,12 +47,22 @@ class StrategyLoader:
             return self._strategies
         
         # Load default strategies
+        loaded_any = False
+        
         if self.strategies_file and self.strategies_file.exists():
             self._load_strategies_from_file(self.strategies_file)
+            loaded_any = True
         
         # Load from directory if specified
         if self.strategies_dir and self.strategies_dir.exists():
             self._load_strategies_from_directory(self.strategies_dir)
+            loaded_any = True
+        
+        if not loaded_any:
+            logger.warning(
+                "No strategies loaded: neither strategies_file (%s) nor strategies_dir (%s) exists.",
+                self.strategies_file, self.strategies_dir
+            )
         
         self._loaded = True
         logger.info(f"Loaded {len(self._strategies)} strategies")
@@ -64,37 +74,56 @@ class StrategyLoader:
         try:
             with open(file_path, 'r') as file:
                 data = yaml.safe_load(file)
+        except FileNotFoundError:
+            logger.error(f"Strategies file not found: {file_path}")
+            return
+        except yaml.YAMLError as e:
+            logger.error(f"Invalid YAML in strategies file {file_path}: {e}")
+            return
+        except IOError as e:
+            logger.error(f"Failed to read strategies file {file_path}: {e}")
+            return
+        
+        if not data:
+            logger.warning(f"Empty strategies file: {file_path}")
+            return
             
-            # Skip metadata fields
-            strategy_names = [
-                key for key in data.keys() 
-                if not key.startswith('usage_') and not key in ['description', 'schema', 'validation']
-            ]
+        # Skip metadata fields
+        strategy_names = [
+            key for key in data.keys() 
+            if not key.startswith('usage_') and not key in ['description', 'schema', 'validation']
+        ]
+        
+        for strategy_name in strategy_names:
+            strategy_data = data[strategy_name]
             
-            for strategy_name in strategy_names:
-                strategy_data = data[strategy_name]
+            # Skip if not a complete strategy definition
+            if not isinstance(strategy_data, dict) or "templates" not in strategy_data:
+                continue
+            
+            try:
+                # Convert templates section to expected format
+                self._normalize_strategy_data(strategy_data)
                 
-                # Skip if not a complete strategy definition
-                if not isinstance(strategy_data, dict) or "templates" not in strategy_data:
-                    continue
-                
-                try:
-                    # Convert templates section to expected format
-                    self._normalize_strategy_data(strategy_data)
-                    
-                    strategy_config = StrategyConfig.from_dict(strategy_data)
-                    self._strategies[strategy_name] = strategy_config
-                    logger.debug(f"Loaded strategy: {strategy_name} from {file_path}")
-                except Exception as e:
-                    logger.error(f"Failed to load strategy {strategy_name} from {file_path}: {e}")
-                    continue
-                    
-        except Exception as e:
-            logger.error(f"Failed to load strategies file {file_path}: {e}")
+                strategy_config = StrategyConfig.from_dict(strategy_data)
+                self._strategies[strategy_name] = strategy_config
+                logger.debug(f"Loaded strategy: {strategy_name} from {file_path}")
+            except ValueError as e:
+                logger.error(f"Invalid strategy configuration for {strategy_name} in {file_path}: {e}")
+                continue
+            except KeyError as e:
+                logger.error(f"Missing required field in strategy {strategy_name} from {file_path}: {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error loading strategy {strategy_name} from {file_path}: {e}")
+                continue
     
     def _load_strategies_from_directory(self, directory: Path) -> None:
         """Load strategies from all YAML files in a directory."""
-        for yaml_file in directory.glob("*.yaml"):
+        # Support both .yaml and .yml extensions
+        yaml_files = list(directory.glob("*.yaml")) + list(directory.glob("*.yml"))
+        
+        for yaml_file in yaml_files:
             if yaml_file.name == "default_strategies.yaml":
                 continue  # Skip if already loaded
             
