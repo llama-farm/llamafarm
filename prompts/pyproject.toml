@@ -1,7 +1,7 @@
 [project]
 name = "llamafarm-prompts"
-version = "0.1.0"
-description = "LlamaFarm Prompts Management System"
+version = "0.2.0"
+description = "Strategy-based prompt management system for LLMs"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -61,5 +61,12 @@ addopts = "-v --cov=prompts --cov-report=term-missing"
 line-length = 88
 target-version = "py39"
 
+[dependency-groups]
+test = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+]
+
 [project.scripts]
-llamafarm-prompts = "prompts.cli:cli"
+llamafarm-prompts = "prompts.core.cli.legacy_cli:cli"
+llamafarm-prompts-strategy = "prompts.core.cli.strategy_cli:cli"

@@ -1,0 +1,131 @@
+# Educational Tutor Strategy
+# Adaptive learning assistant for various subjects
+
+name: "Adaptive Educational Tutor"
+description: "Personalized tutoring with adaptive difficulty and learning styles"
+use_cases:
+  - "tutoring"
+  - "homework_help"
+  - "concept_explanation"
+  - "practice_problems"
+  - "study_guide"
+  - "test_preparation"
+performance_profile: "balanced"
+complexity: "complex"
+
+templates:
+  default:
+    template: "educational_explanation"
+    config:
+      explanation_depth: "intermediate"
+      include_examples: true
+      include_analogies: true
+      check_understanding: true
+      learning_style: "visual"
+  
+  specialized:
+    - condition:
+        query_type: "math_problem"
+      template: "math_tutor"
+      config:
+        show_steps: true
+        multiple_methods: true
+        visual_aids: true
+        common_mistakes: true
+      priority: 20
+    
+    - condition:
+        query_type: "essay_help"
+      template: "writing_tutor"
+      config:
+        structure_guidance: true
+        grammar_tips: true
+        style_suggestions: true
+        citation_help: true
+      priority: 15
+    
+    - condition:
+        query_type: "concept_review"
+      template: "concept_map"
+      config:
+        hierarchical_structure: true
+        key_relationships: true
+        summary_points: true
+      priority: 10
+    
+    - condition:
+        context:
+          difficulty_level: "beginner"
+      template: "beginner_friendly"
+      config:
+        simple_language: true
+        extra_examples: true
+        step_size: "small"
+        encouragement: true
+      priority: 25
+    
+    - condition:
+        context:
+          difficulty_level: "advanced"
+      template: "advanced_tutor"
+      config:
+        technical_depth: true
+        edge_cases: true
+        connections_to_other_topics: true
+      priority: 25
+
+selection_rules:
+  - name: "practice_mode"
+    condition:
+      expression: "'practice' in context.get('mode', '') or 'exercise' in context.get('mode', '')"
+    template: "practice_problems"
+    priority: 30
+  
+  - name: "exam_prep"
+    condition:
+      expression: "'exam' in context.get('query', '').lower() or 'test' in context.get('query', '').lower()"
+    template: "test_preparation"
+    priority: 35
+  
+  - name: "visual_learner"
+    condition:
+      expression: "context.get('learning_preference') == 'visual'"
+    template: "visual_learning"
+    priority: 20
+
+global_config:
+  system_prompts:
+    - content: "You are a patient, encouraging tutor. Adapt your teaching style to the student's needs."
+      position: "system"
+      priority: 100
+    - content: "Break down complex concepts into manageable parts. Use the Socratic method when appropriate."
+      position: "system"
+      priority: 90
+    - content: "Always check for understanding and provide positive reinforcement."
+      position: "suffix"
+      priority: 50
+  temperature: 0.7  # Balanced for creativity and accuracy
+  max_tokens: 1500
+  model_preferences: ["gpt-4", "claude-3-opus", "gpt-3.5-turbo"]
+
+optimization:
+  caching: true  # Cache common explanations
+  compression: false
+  token_optimization: false  # Full explanations
+  parallel_processing: false
+
+input_transforms:
+  - input: "question"
+    transform: "clean_whitespace"
+  - input: "subject"
+    transform: "lowercase"
+
+metadata:
+  version: "3.1.0"
+  author: "LlamaFarm Education Team"
+  tags: ["education", "tutoring", "learning", "adaptive", "personalized"]
+  features:
+    - "adaptive_difficulty"
+    - "multiple_learning_styles"
+    - "progress_tracking"
+    - "concept_mapping"

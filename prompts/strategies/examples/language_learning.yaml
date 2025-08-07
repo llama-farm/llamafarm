@@ -1,0 +1,169 @@
+# Language Learning Strategy
+# Adaptive language learning and practice assistant
+
+name: "Language Learning Coach"
+description: "Personalized language learning with adaptive exercises and cultural context"
+use_cases:
+  - "language_learning"
+  - "conversation_practice"
+  - "grammar_explanation"
+  - "vocabulary_building"
+  - "pronunciation_help"
+  - "cultural_context"
+performance_profile: "balanced"
+complexity: "complex"
+
+templates:
+  default:
+    template: "language_lesson"
+    config:
+      target_language: "Spanish"  # Default, overridden by user
+      proficiency_level: "intermediate"
+      include_pronunciation: true
+      include_examples: true
+      cultural_notes: true
+      practice_exercises: true
+  
+  specialized:
+    - condition:
+        query_type: "conversation"
+      template: "conversation_practice"
+      config:
+        dialogue_format: true
+        common_phrases: true
+        context_scenarios: true
+        correction_style: "gentle"
+        encouragement: true
+      priority: 20
+    
+    - condition:
+        query_type: "grammar"
+      template: "grammar_explanation"
+      config:
+        rule_explanation: true
+        visual_tables: true
+        exception_cases: true
+        comparative_grammar: true
+        practice_sentences: true
+      priority: 20
+    
+    - condition:
+        query_type: "vocabulary"
+      template: "vocabulary_building"
+      config:
+        word_families: true
+        etymology: true
+        memory_techniques: true
+        context_sentences: true
+        spaced_repetition: true
+      priority: 15
+    
+    - condition:
+        query_type: "pronunciation"
+      template: "pronunciation_guide"
+      config:
+        phonetic_spelling: true
+        mouth_position: true
+        audio_description: true
+        common_mistakes: true
+        similar_sounds: true
+      priority: 15
+    
+    - condition:
+        context:
+          proficiency: "beginner"
+      template: "beginner_friendly"
+      config:
+        simple_explanations: true
+        visual_aids: true
+        repetition: true
+        basic_vocabulary: true
+        encouragement_high: true
+      priority: 25
+    
+    - condition:
+        context:
+          proficiency: "advanced"
+      template: "advanced_practice"
+      config:
+        idiomatic_expressions: true
+        nuanced_usage: true
+        regional_variations: true
+        literature_examples: true
+      priority: 25
+
+selection_rules:
+  - name: "immersion_mode"
+    condition:
+      expression: "context.get('mode') == 'immersion'"
+    template: "immersive_learning"
+    priority: 30
+  
+  - name: "exam_preparation"
+    condition:
+      expression: "'exam' in context.get('goal', '') or 'test' in context.get('goal', '')"
+    template: "exam_prep"
+    priority: 25
+  
+  - name: "business_language"
+    condition:
+      expression: "'business' in context.get('context', '') or 'professional' in context.get('context', '')"
+    template: "business_language"
+    priority: 20
+  
+  - name: "travel_phrases"
+    condition:
+      expression: "'travel' in context.get('goal', '') or 'tourist' in context.get('query', '').lower()"
+    template: "travel_language"
+    priority: 15
+
+global_config:
+  system_prompts:
+    - content: "You are an encouraging language teacher. Adapt to the learner's level and provide clear, practical instruction."
+      position: "system"
+      priority: 100
+    - content: "Use the target language appropriately mixed with explanations in the learner's native language. Correct errors constructively."
+      position: "system"
+      priority: 90
+    - content: "Include cultural context and real-world usage. Make learning engaging and relevant."
+      position: "prefix"
+      priority: 50
+    - content: "Always end with a practice exercise or question to reinforce learning."
+      position: "suffix"
+      priority: 40
+  temperature: 0.7  # Balanced for variety
+  max_tokens: 1200
+  model_preferences: ["gpt-4", "claude-3-opus", "gpt-3.5-turbo"]
+
+optimization:
+  caching: true  # Cache common lessons
+  compression: false
+  token_optimization: false
+  parallel_processing: false
+
+input_transforms:
+  - input: "native_language"
+    transform: "lowercase"
+  - input: "target_language"
+    transform: "lowercase"
+
+metadata:
+  version: "2.8.0"
+  author: "LlamaFarm Language Learning Team"
+  tags: ["language", "learning", "education", "conversation", "grammar"]
+  supported_languages:
+    - "Spanish"
+    - "French"
+    - "German"
+    - "Italian"
+    - "Portuguese"
+    - "Chinese"
+    - "Japanese"
+    - "Korean"
+    - "Arabic"
+    - "Russian"
+  features:
+    - "adaptive_difficulty"
+    - "cultural_integration"
+    - "pronunciation_guide"
+    - "progress_tracking"

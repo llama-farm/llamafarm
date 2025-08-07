@@ -1,0 +1,31 @@
+{
+  "template_id": "rag_response",
+  "name": "RAG Response",
+  "description": "Template for retrieval-augmented generation responses",
+  "category": "advanced",
+  "use_cases": ["rag", "research", "knowledge_base"],
+  "inputs": {
+    "query": {
+      "type": "string",
+      "required": true,
+      "description": "The user's question"
+    },
+    "retrieved_documents": {
+      "type": "array",
+      "required": true,
+      "description": "Documents retrieved for the query"
+    },
+    "metadata": {
+      "type": "object",
+      "required": false,
+      "description": "Additional metadata about the retrieval"
+    }
+  },
+  "outputs": {
+    "prompt": {
+      "type": "string",
+      "description": "Generated RAG response prompt"
+    }
+  },
+  "frameworks": ["langchain", "native"]
+}

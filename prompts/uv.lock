@@ -830,7 +830,7 @@ wheels = [
 
 [[package]]
 name = "llamafarm-prompts"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -866,6 +866,12 @@ test = [
     { name = "pytest-cov" },
 ]
 
+[package.dev-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
@@ -892,6 +898,12 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.20.0" },
 ]
 provides-extras = ["langgraph", "test", "dev"]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+]
 
 [[package]]
 name = "markdown-it-py"

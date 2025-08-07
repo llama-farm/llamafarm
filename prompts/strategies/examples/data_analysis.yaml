@@ -1,0 +1,85 @@
+# Data Analysis Strategy
+# Specialized for data science and analytics tasks
+
+name: "Data Analysis Assistant"
+description: "Comprehensive data analysis with visualizations and insights"
+use_cases: 
+  - "data_analysis"
+  - "statistical_analysis"
+  - "data_visualization"
+  - "exploratory_data_analysis"
+  - "reporting"
+performance_profile: "accuracy"
+complexity: "complex"
+
+templates:
+  default:
+    template: "data_analysis"
+    config:
+      analysis_type: "exploratory"
+      include_statistics: true
+      include_visualizations: true
+      output_format: "structured"
+  
+  specialized:
+    - condition:
+        query_type: "statistical_test"
+      template: "statistical_analysis"
+      config:
+        include_assumptions: true
+        include_interpretation: true
+        significance_level: 0.05
+      priority: 20
+    
+    - condition:
+        query_type: "prediction"
+      template: "predictive_analysis"
+      config:
+        include_confidence_intervals: true
+        include_model_details: true
+      priority: 15
+    
+    - condition:
+        context_size:
+          min: 100  # Large datasets
+      template: "big_data_analysis"
+      config:
+        sampling_strategy: "stratified"
+        parallel_processing: true
+      priority: 10
+
+selection_rules:
+  - name: "visualization_detection"
+    condition:
+      expression: "'plot' in context.get('query', '').lower() or 'graph' in context.get('query', '').lower() or 'chart' in context.get('query', '').lower()"
+    template: "data_visualization"
+    priority: 25
+  
+  - name: "correlation_detection"
+    condition:
+      expression: "'correlation' in context.get('query', '').lower() or 'relationship' in context.get('query', '').lower()"
+    template: "correlation_analysis"
+    priority: 20
+
+global_config:
+  system_prompts:
+    - content: "You are a data scientist. Provide clear statistical interpretations and actionable insights."
+      position: "system"
+      priority: 100
+    - content: "Always check data quality and mention any assumptions or limitations."
+      position: "prefix"
+      priority: 50
+  temperature: 0.3  # Low for accuracy
+  max_tokens: 2000  # Allow detailed analysis
+  model_preferences: ["gpt-4", "claude-3-opus"]
+
+optimization:
+  caching: true
+  compression: false  # Don't compress data
+  token_optimization: false  # Keep full precision
+  parallel_processing: true
+
+metadata:
+  version: "1.0.0"
+  author: "LlamaFarm Data Science Team"
+  tags: ["data", "analytics", "statistics", "visualization"]

@@ -1,0 +1,26 @@
+{% if config.system_message %}{{ config.system_message }}
+
+{% endif %}
+{% if history %}
+Previous conversation:
+{% for msg in history %}
+{{ msg.role }}: {{ msg.content }}
+{% endfor %}
+
+{% endif %}
+{% if context %}
+Additional context:
+{% for doc in context %}
+- {{ doc.title | default('Document') }}: {{ doc.content }}
+{% endfor %}
+
+{% endif %}
+Customer: {{ message }}
+
+{% if config.tone == "empathetic" %}
+(Remember to acknowledge their feelings and focus on resolution)
+{% elif config.tone == "technical" %}
+(Provide step-by-step technical guidance)
+{% endif %}
+
+Support Agent:

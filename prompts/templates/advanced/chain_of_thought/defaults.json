@@ -1,0 +1,36 @@
+{
+  "config": {
+    "num_steps": 5,
+    "step_format": "numbered",
+    "include_self_reflection": true,
+    "temperature_hint": 0.8,
+    "max_tokens_hint": 1500
+  },
+  "input_defaults": {
+    "context": [],
+    "examples": []
+  },
+  "framework_specific": {
+    "langchain": {
+      "prompt_class": "FewShotPromptTemplate",
+      "memory_compatible": true,
+      "chain_type": "llm",
+      "supports_streaming": true
+    },
+    "langgraph": {
+      "node_type": "reasoning",
+      "supports_state": true,
+      "parallel_steps": false
+    },
+    "native": {
+      "api_format": "messages",
+      "supports_system_message": true
+    }
+  },
+  "performance": {
+    "cache_enabled": true,
+    "cache_ttl": 7200,
+    "compression_enabled": false,
+    "batch_compatible": false
+  }
+}

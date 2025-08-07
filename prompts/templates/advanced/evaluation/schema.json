@@ -1,0 +1,31 @@
+{
+  "template_id": "evaluation",
+  "name": "Quality Evaluation",
+  "description": "Template for evaluating content quality against criteria",
+  "category": "advanced",
+  "use_cases": ["evaluation", "assessment", "quality_control"],
+  "inputs": {
+    "content": {
+      "type": ["string", "array"],
+      "required": true,
+      "description": "Content to evaluate (single item or list for comparison)"
+    },
+    "criteria": {
+      "type": "array",
+      "required": true,
+      "description": "Evaluation criteria"
+    },
+    "rubric": {
+      "type": "string",
+      "required": false,
+      "description": "Evaluation rubric or scoring guide"
+    }
+  },
+  "outputs": {
+    "prompt": {
+      "type": "string",
+      "description": "Generated evaluation prompt"
+    }
+  },
+  "frameworks": ["langchain", "native"]
+}

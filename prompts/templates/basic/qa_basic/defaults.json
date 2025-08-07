@@ -1,0 +1,31 @@
+{
+  "config": {
+    "temperature_hint": 0.7,
+    "max_tokens_hint": 500,
+    "system_message": "",
+    "context_format": "numbered"
+  },
+  "input_defaults": {
+    "context": []
+  },
+  "framework_specific": {
+    "langchain": {
+      "prompt_class": "PromptTemplate",
+      "memory_compatible": true,
+      "chain_type": "stuff"
+    },
+    "native": {
+      "api_format": "messages",
+      "role_mapping": {
+        "system": "system",
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  "performance": {
+    "cache_enabled": true,
+    "cache_ttl": 3600,
+    "compression_enabled": false
+  }
+}

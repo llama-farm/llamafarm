@@ -1,0 +1,33 @@
+{% if config.system_message %}{{ config.system_message }}
+
+{% endif %}
+{% if retrieved_documents %}
+Based on the retrieved documents, answer the following question:
+
+Retrieved Documents:
+{% for doc in retrieved_documents %}
+[{{ loop.index }}] {{ doc.title | default('Document ' + loop.index|string) }}
+{% if doc.relevance_score %}Relevance: {{ doc.relevance_score }}{% endif %}
+Content: {{ doc.content }}
+{% if doc.metadata %}
+Metadata: {{ doc.metadata }}
+{% endif %}
+
+{% endfor %}
+{% else %}
+No relevant documents were retrieved for this query.
+{% endif %}
+
+Question: {{ query }}
+
+{% if metadata %}
+Search Context: {{ metadata }}
+{% endif %}
+
+{% if config.citation_style == "academic" %}
+Provide a comprehensive answer with academic citations in the format [1], [2], etc.
+{% elif retrieved_documents %}
+Answer (cite sources as needed):
+{% else %}
+Answer based on general knowledge (no specific sources available):
+{% endif %}

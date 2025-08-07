@@ -1,0 +1,41 @@
+{% if config.system_message %}{{ config.system_message }}
+
+{% endif %}
+{% if config.evaluation_format == "comparative" and content is iterable and content is not string %}
+Compare the following options:
+{% for item in content %}
+Option {{ item.id | default(loop.index) }}: {{ item.text | default(item) }}
+{% endfor %}
+
+Evaluation criteria:
+{% for criterion in criteria %}
+- {{ criterion }}
+{% endfor %}
+
+Provide a comparative analysis and rank the options.
+{% else %}
+Evaluate the following content:
+
+{% if content is string %}
+{{ content }}
+{% else %}
+{% for item in content %}
+{{ item }}
+{% endfor %}
+{% endif %}
+
+Against these criteria:
+{% for criterion in criteria %}
+- {{ criterion }}
+{% endfor %}
+
+{% if rubric %}
+Rubric: {{ rubric }}
+{% endif %}
+
+{% if config.include_scores %}
+Please provide scores and detailed justification for each criterion.
+{% endif %}
+{% endif %}
+
+Evaluation:

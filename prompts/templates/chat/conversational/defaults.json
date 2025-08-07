@@ -1,0 +1,22 @@
+{
+  "config": {
+    "temperature_hint": 0.6,
+    "max_tokens_hint": 300,
+    "system_message": "You are a helpful customer support agent.",
+    "tone": "professional",
+    "empathy_level": "medium"
+  },
+  "input_defaults": {
+    "history": [],
+    "context": []
+  },
+  "framework_specific": {
+    "langchain": {
+      "prompt_class": "PromptTemplate",
+      "memory_compatible": true
+    },
+    "native": {
+      "api_format": "messages"
+    }
+  }
+}

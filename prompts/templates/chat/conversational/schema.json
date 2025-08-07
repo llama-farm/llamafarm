@@ -1,0 +1,31 @@
+{
+  "template_id": "conversational",
+  "name": "Conversational Support",
+  "description": "Template for conversational customer support interactions",
+  "category": "chat",
+  "use_cases": ["customer_support", "chat", "conversation"],
+  "inputs": {
+    "message": {
+      "type": "string",
+      "required": true,
+      "description": "The customer's message"
+    },
+    "history": {
+      "type": "array",
+      "required": false,
+      "description": "Previous conversation history"
+    },
+    "context": {
+      "type": "array",
+      "required": false,
+      "description": "Additional context documents"
+    }
+  },
+  "outputs": {
+    "prompt": {
+      "type": "string",
+      "description": "Generated support response prompt"
+    }
+  },
+  "frameworks": ["langchain", "native"]
+}
