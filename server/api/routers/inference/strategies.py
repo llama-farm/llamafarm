@@ -5,7 +5,6 @@ Extracted from analyzers.py for better maintainability and testability.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 from core.logging import FastAPIStructLogger
 
@@ -72,13 +71,7 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
             self.action_rules = config.get("action_rules", [])
             self.excluded_namespaces = set(config.get("excluded_namespaces", []))
     
-    def _get_default_config(self) -> dict:
-        """Get default configuration for rule-based analysis"""
-        return {
-            "default_namespace": "test",
-            "confidence_threshold": 0.7,
-            "enable_fuzzy_matching": True
-        }
+
     
     def analyze(self, message: str, context: dict = None) -> dict:
         """Analyze message using rule-based approach"""
@@ -106,17 +99,24 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
         namespace = self._extract_namespace(message_lower)
         
         # Extract project ID for create actions
-        project_id = self._extract_project_id(message_lower) if action == "create" else None
+        project_id = (
+            self._extract_project_id(message_lower) 
+            if action == "create" else None
+        )
         
         # Calculate confidence
-        confidence = self._calculate_confidence(action_score, namespace, project_id, action)
+        confidence = self._calculate_confidence(
+            action_score, namespace, project_id, action
+        )
         
         return {
             "action": action,
             "namespace": namespace,
             "project_id": project_id,
             "confidence": confidence,
-            "reasoning": f"Rule-based analysis: action={action}, namespace={namespace}"
+            "reasoning": (
+                f"Rule-based analysis: action={action}, namespace={namespace}"
+            )
         }
     
     def _extract_namespace(self, message_lower: str) -> str:
@@ -139,15 +139,14 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
         """Extract project ID using configurable rules"""
         import re
         
-        project_patterns = [
-            r"create\s+(?:project\s+)?(?:called\s+)?['\"]?(\w+)['\"]?",
-            r"new\s+project\s+['\"]?(\w+)['\"]?",
-            r"project\s+['\"]?(\w+)['\"]?"
-        ]
-        
-        for pattern in project_patterns:
-            if match := re.search(pattern, message_lower):
-                return match.group(1)
+        # Use patterns from action rules that contain project ID patterns
+        for rule in self.action_rules:
+            if not rule.enabled or "create" not in rule.name.lower():
+                continue
+                
+            for pattern in rule.patterns:
+                if match := re.search(pattern, message_lower):
+                    return match.group(1)
         
         return None
     
@@ -173,7 +172,9 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
 
 
 class ResponseValidationStrategy:
-    """Strategy for validating responses and determining if manual execution is needed"""
+    """
+    Strategy for validating responses and determining if manual execution is needed
+    """
     
     def __init__(self, config: ResponseValidationConfig | None = None):
         if config is None:
@@ -184,27 +185,7 @@ class ResponseValidationStrategy:
         else:
             self.config = config
     
-    def _get_default_config(self) -> ResponseValidationConfig:
-        """Get default response validation configuration"""
-        return ResponseValidationConfig(
-            template_indicators=[
-                "[number of projects]", "[project list]", "[namespace]", "[projects]",
-                "{{", "}}", "${", "[total]", "[count]", "**[list of projects",
-                "**[projects", "[list of projects", "I will use the project tool",
-                "To view the list, I will", "**[namespace", "currently **[",
-            ],
-            inability_phrases=[
-                "i don't have access", "cannot directly", "i will use the project tool",
-                "let me check", "i'll need to", "i need to check"
-            ],
-            hallucination_indicators=[
-                "project 1", "project 2", "project 3",
-                "example project", "sample project", "test project",
-                "your projects:", "following projects:", "* project",
-                "you have the following", "here are your projects"
-            ],
-            min_response_length=50
-        )
+
     
     def needs_manual_execution(self, response: str, original_message: str) -> bool:
         """Determine if manual tool execution is needed"""
@@ -233,7 +214,9 @@ class ResponseValidationStrategy:
             self.config.enable_hallucination_detection 
             and self._is_hallucinated_response(response)
         ):
-            logger.info("Hallucinated response detected, triggering manual execution")
+            logger.info(
+                "Hallucinated response detected, triggering manual execution"
+            )
             return True
         
         # Check count queries
@@ -241,7 +224,9 @@ class ResponseValidationStrategy:
             self.config.enable_count_query_validation 
             and self._is_suspicious_count_response(response, original_message)
         ):
-            logger.info("Suspicious count response detected, triggering manual execution")
+            logger.info(
+                "Suspicious count response detected, triggering manual execution"
+            )
             return True
         
         return False
@@ -258,7 +243,7 @@ class ResponseValidationStrategy:
         """Check if response contains inability statements"""
         response_lower = response.lower()
         return any(
-            phrase in response_lower 
+            phrase in response_lower
             for phrase in self.config.inability_phrases
         )
     
@@ -266,11 +251,13 @@ class ResponseValidationStrategy:
         """Check for signs of hallucinated project data"""
         response_lower = response.lower()
         return any(
-            indicator in response_lower 
+            indicator in response_lower
             for indicator in self.config.hallucination_indicators
         )
     
-    def _is_suspicious_count_response(self, response: str, original_message: str) -> bool:
+    def _is_suspicious_count_response(
+        self, response: str, original_message: str
+    ) -> bool:
         """Check for suspicious numeric responses to count queries"""
         original_lower = original_message.lower()
         response_lower = response.lower()
