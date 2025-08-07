@@ -1,0 +1,151 @@
+name: Test CLI Installer
+
+# Testing Strategy:
+# - Pull Requests: Quick tests + Docker environment testing (fast feedback)
+# - Main Branch: Quick tests + Full comprehensive testing (thorough validation)
+# - Manual: All tests including simulation (debugging/development)
+
+on:
+  pull_request:
+    paths:
+      - 'install.sh'
+      - 'cli/**'
+      - 'cli/hack/**'
+      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/cli-installer.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'cli/**'
+      - 'cli/hack/**'
+      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/test-installer.yml'
+  workflow_dispatch:
+
+# Ensure cli/config directory exists and copy config/schema.yaml before any job
+# This step runs before all jobs using the workflow_call 'pre' trick
+jobs:
+  quick-test:
+    name: Quick Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        # Windows excluded from quick test due to shell compatibility
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy config/schema.yaml to cli/config/schema.yaml
+        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: cli/go.sum
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y curl bc shellcheck
+        if: matrix.os == 'ubuntu-latest'
+
+      - name: Run quick installer tests
+        run: ./cli/hack/test-installer-quick.sh
+
+  docker-environment-test:
+    name: Docker Environment Test (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Copy config/schema.yaml to cli/cmd/config/schema.yaml
+        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: cli/go.sum
+
+      - name: Run Docker environment tests
+        run: ./cli/hack/test-installer-docker.sh
+
+  comprehensive-test:
+    name: Comprehensive Test (Main Branch)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy config/schema.yaml to cli/cmd/config/schema.yaml
+        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: cli/go.sum
+
+      - name: Run comprehensive installer tests
+        run: ./cli/hack/test-installer-comprehensive.sh
+
+  test-installer-simulation:
+    name: Test Installer Simulation (Manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy config/schema.yaml to cli/cmd/config/schema.yaml
+        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: cli/go.sum
+
+      - name: Run local installer simulation
+        run: ./cli/hack/test-installer-local.sh
+
+  test-installer-security:
+    name: Test Installer Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run security tests
+        run: |
+          # Test script with shellcheck
+          echo "Running shellcheck on install.sh..."
+          shellcheck install.sh
+
+          # Test script permissions
+          if [[ -x install.sh ]]; then
+            echo "✅ Install script is executable"
+          else
+            echo "❌ Install script should be executable in repo"
+            exit 1
+          fi
+
+          echo "✅ Security checks passed"

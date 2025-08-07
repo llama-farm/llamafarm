@@ -4,19 +4,24 @@
   <img src="docs/images/rocket-llama.png" alt="Llama Building a Rocket" width="400">
   
   **The Complete AI Development Framework - From Local Prototypes to Production Systems**
-  
+
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
   [![Go 1.19+](https://img.shields.io/badge/go-1.19+-00ADD8.svg)](https://golang.org/dl/)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
   [![Discord](https://img.shields.io/discord/1234567890?color=7289da&logo=discord&logoColor=white)](https://discord.gg/llamafarm)
+
   
   [🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [🏗️ Architecture](#-architecture) • [🤝 Contributing](#-contributing)
+
 </div>
 
 ---
 
-## 🌟 Why LlamaFarm?
+## 🚀 What is LlamaFarm?
+
+LlamaFarm is a comprehensive, modular framework for building AI Projects that run locally, collaborate, and deploy anywhere. We provide battle-tested components for RAG systems, vector databases, model management, prompt engineering, and soon fine-tuning - all designed to work seamlessly together or independently.
+
 
 LlamaFarm is a **comprehensive, modular AI framework** that gives you complete control over your AI stack. Unlike cloud-only solutions, we provide:
 
@@ -97,6 +102,7 @@ Enterprise prompt management system with version control and A/B testing.
 
 Each component is independent but designed to work seamlessly together through standardized interfaces.
 
+
 ---
 
 ## 🚀 Quick Start
@@ -121,6 +127,7 @@ Each component can be used independently or together:
 cd rag
 uv sync
 uv run python setup_demo.py  # Interactive setup wizard
+
 
 # 2. Models - LLM Management
 cd ../models
@@ -175,6 +182,7 @@ LlamaFarm uses a **strategy-based configuration** system that adapts to your use
 
 ### Strategy Configuration Example
 
+
 ```yaml
 # config/strategies.yaml
 strategies:
@@ -209,6 +217,7 @@ strategies:
       template: "conversational"
       style: "friendly"
       include_context: true
+
 ```
 
 ### Using Strategies
@@ -303,6 +312,7 @@ See [deployment guide](docs/deployment/) for detailed instructions.
 ## 🛠️ Advanced Features
 
 ### 🔄 Pipeline Composition
+
 
 ```python
 from llamafarm import Pipeline, RAG, Models, Prompts
@@ -508,6 +518,7 @@ See [CREDITS.md](CREDITS.md) for complete acknowledgments.
     <a href="https://discord.gg/llamafarm">💬 Join Discord</a> • 
     <a href="https://llamafarm.ai">📚 Read Docs</a> •
     <a href="https://twitter.com/llamafarm">🐦 Follow Updates</a>
+
   </p>
   <br>
   <p><i>Build locally. Deploy anywhere. Own your AI.</i></p>

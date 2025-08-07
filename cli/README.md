@@ -9,7 +9,36 @@ A command-line interface for managing and interacting with LlamaFarm.
 
 ## Installation
 
-### Option 1: Build from Source
+### Option 1: Quick Install (Recommended)
+
+Install the latest version with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/llamafarm/llamafarm/main/install.sh | bash
+```
+
+This will automatically detect your platform and install the appropriate binary to `/usr/local/bin`.
+
+#### Custom Installation Options
+
+```bash
+# Install specific version
+VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/llamafarm/llamafarm/main/install.sh | bash
+
+# Install to custom directory
+curl -fsSL https://raw.githubusercontent.com/llamafarm/llamafarm/main/install.sh | bash -s -- --install-dir ~/.local/bin
+
+# Install specific version to custom directory
+curl -fsSL https://raw.githubusercontent.com/llamafarm/llamafarm/main/install.sh | bash -s -- --version v1.0.0 --install-dir ~/.local/bin
+```
+
+### Option 2: Manual Download
+
+1. Go to the [releases page](https://github.com/llamafarm/llamafarm/releases)
+2. Download the appropriate binary for your platform
+3. Extract the archive and place the `lf` binary in your PATH
+
+### Option 3: Build from Source
 
 1. Clone the repository and navigate to the CLI directory:
    ```bash
@@ -23,7 +52,7 @@ A command-line interface for managing and interacting with LlamaFarm.
 
 3. Build the CLI:
    ```bash
-   go build -o llamafarm-cli
+   go build -o lf
    ```
 
 4. (Optional) Install globally:
@@ -31,7 +60,7 @@ A command-line interface for managing and interacting with LlamaFarm.
    go install
    ```
 
-### Option 2: Direct Run
+### Option 4: Direct Run (Development)
 
 You can also run the CLI directly without building:
 ```bash
@@ -42,26 +71,24 @@ go run main.go [command]
 
 ### Basic Commands
 
-Once built, you can use the CLI with the following commands:
+Once installed, you can use the CLI with the following commands:
 
 ```bash
 # Show help
-./llamafarm-cli help
+lf help
 
 # Show version
-./llamafarm-cli version
+lf version
 
-# Basic greeting (example command)
-./llamafarm-cli hello
-./llamafarm-cli hello John
-./llamafarm-cli hello John --uppercase
+# Start the AI designer
+lf designer start
 ```
 
 ### Available Commands
 
 - `help` - Show help information for any command
 - `version` - Print the version number
-- `hello [name]` - Example greeting command with optional name and flags
+- `designer start` - Start the AI designer
 
 ### Command Structure
 
