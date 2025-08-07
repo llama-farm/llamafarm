@@ -1,0 +1,70 @@
+name: Update Contributors
+
+on:
+  schedule:
+    # Run every Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/update_contributors.py'
+
+jobs:
+  update-contributors:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for contributors
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Update contributors
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/update_contributors.py
+      
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: '🤖 Update contributors list'
+          title: '🤖 Update Contributors List'
+          body: |
+            ## 🤖 Automated Contributor Update
+            
+            This PR automatically updates the contributors list in README.md based on GitHub data.
+            
+            ### Changes
+            - Updated contributor avatars and statistics
+            - Added new contributors (if any)
+            - Updated contribution counts
+            
+            ---
+            *This is an automated PR created by the [update-contributors workflow](.github/workflows/update-contributors.yml)*
+          branch: update-contributors
+          delete-branch: true
+          labels: |
+            documentation
+            automated

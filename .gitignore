@@ -539,6 +539,8 @@ memory_profiler_*/
 # Custom model downloads
 custom_models/
 downloaded_models/
+model_cache/
+fine_tuned_models/
 
 # Vector index backups
 vector_backups/
