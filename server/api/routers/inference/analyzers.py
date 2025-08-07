@@ -191,15 +191,14 @@ class MessageAnalyzer:
         """Extract namespace from user message or return default (legacy method)"""
         message_lower = message.lower()
         
-        # Look for explicit namespace mentions
+       # Look for explicit namespace mentions
         for pattern in NAMESPACE_PATTERNS:
-            match = re.search(pattern, message_lower)
-            if match:
-                namespace = match.group(1)
+            if match := re.search(pattern, message_lower):
+                namespace = match[1]
                 if namespace not in EXCLUDED_NAMESPACES:
                     return namespace
         
-        return "test"  # default
+        return "test"
 
     @staticmethod
     def extract_project_id(message: str) -> str | None:
