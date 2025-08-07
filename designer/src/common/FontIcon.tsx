@@ -1,57 +1,59 @@
 import { lazy, Suspense, useCallback } from 'react'
 
-const Sun = lazy(() => import('../assets/icons/Sun'))
-const MoonFilled = lazy(() => import('../assets/icons/MoonFilled'))
-const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
+const Add = lazy(() => import('../assets/icons/Add'))
 const ArrowFilled = lazy(() => import('../assets/icons/ArrowFilled'))
+const ChevronDown = lazy(() => import('../assets/icons/ChevronDown'))
+const CheckmarkFilled = lazy(() => import('../assets/icons/CheckmarkFilled'))
+const CheckmarkOutline = lazy(() => import('../assets/icons/CheckmarkOutline'))
 const ClosePanel = lazy(() => import('../assets/icons/ClosePanel'))
-const OpenPanel = lazy(() => import('../assets/icons/OpenPanel'))
+const Code = lazy(() => import('../assets/icons/Code'))
 const Dashboard = lazy(() => import('../assets/icons/Dashboard'))
 const Data = lazy(() => import('../assets/icons/Data'))
-const Prompt = lazy(() => import('../assets/icons/Prompt'))
-const Test = lazy(() => import('../assets/icons/Test'))
-const Integration = lazy(() => import('../assets/icons/Integration'))
-const RecentlyViewed = lazy(() => import('../assets/icons/RecentlyViewed'))
-const Code = lazy(() => import('../assets/icons/Code'))
 const Edit = lazy(() => import('../assets/icons/Edit'))
-const Add = lazy(() => import('../assets/icons/Add'))
-const Upload = lazy(() => import('../assets/icons/Upload'))
-const CheckmarkFilled = lazy(() => import('../assets/icons/CheckmarkFilled'))
-const Trashcan = lazy(() => import('../assets/icons/Trashcan'))
 const Fade = lazy(() => import('../assets/icons/Fade'))
-const ChevronDown = lazy(() => import('../assets/icons/ChevronDown'))
+const Integration = lazy(() => import('../assets/icons/Integration'))
+const MoonFilled = lazy(() => import('../assets/icons/MoonFilled'))
+const OpenPanel = lazy(() => import('../assets/icons/OpenPanel'))
+const Prompt = lazy(() => import('../assets/icons/Prompt'))
+const RecentlyViewed = lazy(() => import('../assets/icons/RecentlyViewed'))
 const Search = lazy(() => import('../assets/icons/Search'))
-const ThumbsUp = lazy(() => import('../assets/icons/ThumbsUp'))
+const Sun = lazy(() => import('../assets/icons/Sun'))
+const Test = lazy(() => import('../assets/icons/Test'))
 const ThumbsDown = lazy(() => import('../assets/icons/ThumbsDown'))
-const ThumbsUpFilled = lazy(() => import('../assets/icons/ThumbsUpFilled'))
 const ThumbsDownFilled = lazy(() => import('../assets/icons/ThumbsDownFilled'))
+const ThumbsUp = lazy(() => import('../assets/icons/ThumbsUp'))
+const ThumbsUpFilled = lazy(() => import('../assets/icons/ThumbsUpFilled'))
+const Trashcan = lazy(() => import('../assets/icons/Trashcan'))
+const Upload = lazy(() => import('../assets/icons/Upload'))
+const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
 
 type FontIconTypes =
-  | 'sun'
-  | 'moon-filled'
-  | 'user-avatar'
+  | 'add'
   | 'arrow-filled'
+  | 'chevron-down'
+  | 'checkmark-filled'
+  | 'checkmark-outline'
   | 'close-panel'
-  | 'open-panel'
+  | 'code'
   | 'dashboard'
   | 'data'
-  | 'prompt'
-  | 'test'
-  | 'integration'
-  | 'recently-viewed'
-  | 'code'
   | 'edit'
-  | 'add'
-  | 'upload'
-  | 'checkmark-filled'
-  | 'trashcan'
   | 'fade'
-  | 'chevron-down'
+  | 'integration'
+  | 'moon-filled'
+  | 'open-panel'
+  | 'prompt'
+  | 'recently-viewed'
   | 'search'
-  | 'thumbs-up'
+  | 'sun'
+  | 'test'
   | 'thumbs-down'
-  | 'thumbs-up-filled'
   | 'thumbs-down-filled'
+  | 'thumbs-up'
+  | 'thumbs-up-filled'
+  | 'trashcan'
+  | 'upload'
+  | 'user-avatar'
 
 export interface FontIconProps {
   className?: string
@@ -70,56 +72,58 @@ const FontIcon: React.FC<FontIconProps> = ({
 }) => {
   const renderIcon = useCallback(() => {
     switch (type) {
-      case 'sun':
-        return <Sun />
-      case 'moon-filled':
-        return <MoonFilled />
-      case 'user-avatar':
-        return <UserAvatar />
+      case 'add':
+        return <Add />
       case 'arrow-filled':
         return <ArrowFilled />
+      case 'chevron-down':
+        return <ChevronDown />
+      case 'checkmark-filled':
+        return <CheckmarkFilled />
+      case 'checkmark-outline':
+        return <CheckmarkOutline />
       case 'close-panel':
         return <ClosePanel />
-      case 'open-panel':
-        return <OpenPanel />
+      case 'code':
+        return <Code />
       case 'dashboard':
         return <Dashboard />
       case 'data':
         return <Data />
-      case 'prompt':
-        return <Prompt />
-      case 'test':
-        return <Test />
-      case 'integration':
-        return <Integration />
-      case 'recently-viewed':
-        return <RecentlyViewed />
-      case 'code':
-        return <Code />
       case 'edit':
         return <Edit />
-      case 'add':
-        return <Add />
-      case 'upload':
-        return <Upload />
-      case 'checkmark-filled':
-        return <CheckmarkFilled />
-      case 'trashcan':
-        return <Trashcan />
       case 'fade':
         return <Fade />
-      case 'chevron-down':
-        return <ChevronDown />
+      case 'integration':
+        return <Integration />
+      case 'moon-filled':
+        return <MoonFilled />
+      case 'open-panel':
+        return <OpenPanel />
+      case 'prompt':
+        return <Prompt />
+      case 'recently-viewed':
+        return <RecentlyViewed />
       case 'search':
         return <Search />
-      case 'thumbs-up':
-        return <ThumbsUp />
+      case 'sun':
+        return <Sun />
+      case 'test':
+        return <Test />
       case 'thumbs-down':
         return <ThumbsDown />
-      case 'thumbs-up-filled':
-        return <ThumbsUpFilled />
       case 'thumbs-down-filled':
         return <ThumbsDownFilled />
+      case 'thumbs-up':
+        return <ThumbsUp />
+      case 'thumbs-up-filled':
+        return <ThumbsUpFilled />
+      case 'trashcan':
+        return <Trashcan />
+      case 'upload':
+        return <Upload />
+      case 'user-avatar':
+        return <UserAvatar />
     }
   }, [type])
 

@@ -75,7 +75,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
             <Message key={index} message={message} />
           ))}
         </div>
-        <div className="flex flex-col gap-2 p-2 rounded-lg bg-[#F4F4F4] shadow-md dark:bg-blue-700">
+        <div className="flex flex-col gap-2 p-2 rounded-lg bg-[#F4F4F4] dark:bg-blue-700">
           <textarea
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
