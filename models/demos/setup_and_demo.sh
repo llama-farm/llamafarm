@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$SCRIPT_DIR"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 VENV_NAME="models_env"
 PARENT_ENV_FILE="../.env"
 
@@ -326,45 +326,45 @@ run_configuration_demos() {
     
     print_step "Demo 1: Generate cloud model configurations"
     print_info "Creating basic cloud model configuration..."
-    run_command "uv run python cli.py generate-config --type basic --output demo_basic_config.yaml" "Basic config generation"
+    run_command "uv run python ../cli.py generate-config --type basic --output ../config/demo_configs/demo_basic_config.yaml" "Basic config generation"
     
     wait_for_user
     
     print_step "Demo 2: Generate multi-provider configuration"
     print_info "Creating a multi-provider configuration with fallback chains..."
-    run_command "uv run python cli.py generate-config --type multi --output demo_multi_config.yaml" "Multi-provider config generation"
+    run_command "uv run python ../cli.py generate-config --type multi --output ../config/demo_configs/demo_multi_config.yaml" "Multi-provider config generation"
     
     wait_for_user
     
     print_step "Demo 3: Generate Ollama local model configuration"
     print_info "Creating configuration for local Ollama models..."
-    run_command "uv run python cli.py generate-ollama-config --output demo_ollama_config.yaml" "Ollama config generation"
+    run_command "uv run python ../cli.py generate-ollama-config --output ../config/demo_configs/demo_ollama_config.yaml" "Ollama config generation"
     
     wait_for_user
     
     print_step "Demo 4: Generate Hugging Face model configuration"
     print_info "Creating configuration for Hugging Face models..."
-    run_command "uv run python cli.py generate-hf-config --output demo_hf_config.yaml --models 'gpt2,distilgpt2'" "HF config generation"
+    run_command "uv run python ../cli.py generate-hf-config --output ../config/demo_configs/demo_hf_config.yaml --models 'gpt2,distilgpt2'" "HF config generation"
     
     wait_for_user
     
     print_step "Demo 5: Generate local inference engines configuration"
     print_info "Creating configuration for vLLM, TGI, and other local engines..."
-    run_command "uv run python cli.py generate-engines-config --output demo_engines_config.yaml --include-unavailable" "Local engines config generation"
+    run_command "uv run python ../cli.py generate-engines-config --output ../config/demo_configs/demo_engines_config.yaml --include-unavailable" "Local engines config generation"
     
     wait_for_user
     
     print_step "Demo 6: Generate production configuration"
     print_info "Creating a production-ready configuration with monitoring..."
-    run_command "uv run python cli.py generate-config --type production --output demo_production_config.yaml" "Production config generation"
+    run_command "uv run python ../cli.py generate-config --type production --output ../config/demo_configs/demo_production_config.yaml" "Production config generation"
     
     wait_for_user
     
     print_step "Demo 7: Validate all configurations"
     print_info "Validating all generated configurations..."
-    for config in demo_basic_config.yaml demo_multi_config.yaml demo_ollama_config.yaml demo_hf_config.yaml demo_engines_config.yaml demo_production_config.yaml; do
+    for config in ../config/demo_configs/demo_basic_config.yaml ../config/demo_configs/demo_multi_config.yaml ../config/demo_configs/demo_ollama_config.yaml ../config/demo_configs/demo_hf_config.yaml ../config/demo_configs/demo_engines_config.yaml ../config/demo_configs/demo_production_config.yaml; do
         if [[ -f "$config" ]]; then
-            run_command "uv run python cli.py --config $config validate-config" "Validating $config"
+            run_command "uv run python ../cli.py --config $config validate-config" "Validating $config"
         fi
     done
     
@@ -380,7 +380,7 @@ run_provider_demos() {
     
     print_step "Demo 1: List cloud model providers"
     print_info "Listing all configured cloud model providers..."
-    run_command "uv run python cli.py --config demo_multi_config.yaml list --detailed" "Cloud provider listing"
+    run_command "uv run python ../cli.py --config ../config/demo_configs/demo_multi_config.yaml list --detailed" "Cloud provider listing"
     
     wait_for_user
     
@@ -409,7 +409,7 @@ run_provider_demos() {
     
     print_step "Demo 5: Health check all providers"
     print_info "Checking health status of all providers..."
-    run_command "uv run python cli.py --config demo_multi_config.yaml health-check" "Health check"
+    run_command "uv run python ../cli.py --config ../config/demo_configs/demo_multi_config.yaml health-check" "Health check"
     
     wait_for_user
     

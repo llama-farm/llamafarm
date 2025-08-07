@@ -40,12 +40,12 @@ def test_cli_commands():
     console.print("\n[bold]Testing CLI Commands[/bold]")
     
     tests = [
-        ("Model listing", "python cli.py list"),
-        ("Strategy listing", "python cli.py finetune strategies list"),
-        ("Catalog listing", "python cli.py catalog list"),
-        ("Ollama models", "python cli.py list-local"),
-        ("Configuration validation", "python cli.py validate-config demo_test_config.yaml"),
-        ("Health check", "python cli.py health-check"),
+        ("Model listing", "python ../cli.py list"),
+        ("Strategy listing", "python ../cli.py finetune strategies list"),
+        ("Catalog listing", "python ../cli.py catalog list"),
+        ("Ollama models", "python ../cli.py list-local"),
+        ("Configuration validation", "python ../cli.py validate-config ../config/demo_configs/demo_basic_config.yaml"),
+        ("Health check", "python ../cli.py health-check"),
     ]
     
     results = []
