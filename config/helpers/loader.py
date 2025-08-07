@@ -301,9 +301,8 @@ def save_config(
     config: LlamaFarmConfig,
     config_path: str | Path | None,
     format: str | None = None,
-    validate: bool = True,
     create_backup: bool = True,
-) -> LlamaFarmConfig:
+) -> tuple[Path, LlamaFarmConfig]:
     """
     Save a configuration to disk.
 
@@ -314,7 +313,6 @@ def save_config(
                     If it's a directory, looks for existing config or defaults to llamafarm.yaml.
         format: File format to use ('yaml', 'toml', 'json').
                If None, infers from file extension.
-        validate: Whether to validate against JSON schema before saving.
         create_backup: Whether to create a backup of existing file.
 
     Returns:
@@ -354,9 +352,6 @@ def save_config(
 
     # Validate configuration before saving
     config_dict = config.model_dump(mode="json")
-    if validate:
-        schema = _load_schema()
-        _validate_config(config_dict, schema)
 
     # Create backup if requested and file exists
     backup_path = None
@@ -389,7 +384,7 @@ def save_config(
         else:
             raise ConfigError(f"Unsupported format: {format}")
 
-        return LlamaFarmConfig(**config_dict)
+        return (config_file, LlamaFarmConfig(**config_dict))
 
     except Exception:
         # If save failed and we created a backup, try to restore it
@@ -405,7 +400,6 @@ def save_config(
 def update_config(
     config_path: str | Path,
     updates: dict,
-    validate: bool = True,
     create_backup: bool = True,
 ) -> LlamaFarmConfig:
     """
@@ -415,7 +409,6 @@ def update_config(
         config_path: Path to the existing configuration file or directory.
                     If it's a directory, looks for existing config file.
         updates: Dictionary of updates to apply to the configuration.
-        validate: Whether to validate the updated configuration.
         create_backup: Whether to create a backup before updating.
 
     Returns:
@@ -462,6 +455,5 @@ def update_config(
     return save_config(
         LlamaFarmConfig(**updated_config_dict),
         config_file,
-        validate=validate,
         create_backup=create_backup,
     )

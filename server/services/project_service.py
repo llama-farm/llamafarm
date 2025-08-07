@@ -106,6 +106,6 @@ class ProjectService:
     project_id: str,
     config: LlamaFarmConfig,
   ) -> LlamaFarmConfig:
-    cfg = save_config(config, cls.get_project_dir(namespace, project_id))
-    logger.debug("Saved project config", config=config)
+    file_path, cfg = save_config(config, cls.get_project_dir(namespace, project_id))
+    logger.debug("Saved project config", config=config, file_path=file_path)
     return cfg

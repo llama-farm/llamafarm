@@ -9,38 +9,26 @@ import pytest
 
 # Import the functions we want to test
 from config import ConfigError, load_config_dict, save_config, update_config
+from config.datamodel import Dataset, LlamaFarmConfig, Prompt, Version
 
 
 class TestConfigWriter:
     """Test configuration writing functionality."""
 
     @pytest.fixture
-    def sample_config(self):
+    def sample_config(self) -> LlamaFarmConfig:
         """Sample configuration for testing."""
-        return {
-            "version": "v1",
-            "name": "sample_config",
-            "prompts": [
-                {
-                    "name": "test_prompt",
-                    "prompt": "This is a test prompt for configuration testing.",
-                    "description": "A sample prompt for testing purposes"
-                }
+        return LlamaFarmConfig(
+            version=Version.v1,
+            name="sample_config",
+            prompts=[
+                Prompt(
+                    name="test_prompt",
+                    prompt="This is a test prompt for configuration testing.",
+                    description="A sample prompt for testing purposes"
+                )
             ],
-            "rag": {
-                "parsers": {
-                    "csv": {
-                        "type": "CustomerSupportCSVParser",
-                        "config": {
-                            "content_fields": ["question", "answer"],
-                            "metadata_fields": ["category", "priority"],
-                            "id_field": "id",
-                            "combine_content": True
-                        },
-                        "file_extensions": [".csv"],
-                        "mime_types": ["text/csv"]
-                    }
-                },
+            rag={
                 "embedders": {
                     "default": {
                         "type": "OllamaEmbedder",
@@ -51,45 +39,17 @@ class TestConfigWriter:
                             "timeout": 30
                         }
                     }
-                },
-                "vector_stores": {
-                    "default": {
-                        "type": "ChromaStore",
-                        "config": {
-                            "collection_name": "test_collection",
-                            "persist_directory": "./data/test"
-                        }
-                    }
-                },
-                "retrieval_strategies": {
-                    "default": {
-                        "type": "BasicSimilarityStrategy",
-                        "config": {
-                            "distance_metric": "cosine"
-                        }
-                    }
-                },
-                "defaults": {
-                    "parser": "auto",
-                    "embedder": "default",
-                    "vector_store": "default",
-                    "retrieval_strategy": "default"
                 }
             },
-            "datasets": [
-                {
-                    "name": "test_dataset",
-                    "files": ["test_file.csv"],
-                    "parser": "csv"
-                }
+            datasets=[
+                Dataset(
+                    name="test_dataset",
+                    files=["test_file.csv"],
+                    rag_strategy="auto"
+                )
             ],
-            "models": [
-                {
-                    "provider": "local",
-                    "model": "llama3.1:8b"
-                }
-            ]
-        }
+            models=[]
+        )
 
     def test_save_config_yaml(self, sample_config):
         """Test saving configuration to YAML format."""
@@ -97,7 +57,7 @@ class TestConfigWriter:
             config_path = Path(temp_dir) / "test_config.yaml"
 
             # Save configuration
-            saved_path = save_config(sample_config, config_path)
+            saved_path, _ = save_config(sample_config, config_path)
 
             # Verify file was created
             assert saved_path.exists()
@@ -106,7 +66,6 @@ class TestConfigWriter:
             # Load and verify content
             loaded_config = load_config_dict(config_path)
             assert loaded_config["version"] == "v1"
-            assert loaded_config["rag"]["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
 
     def test_save_config_toml(self, sample_config):
         """Test saving configuration to TOML format."""
@@ -124,7 +83,6 @@ class TestConfigWriter:
                 # Load and verify content
                 loaded_config = load_config_dict(config_path)
                 assert loaded_config["version"] == "v1"
-                assert loaded_config["rag"]["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
             except ConfigError as e:
                 if "tomli-w is required" in str(e):
                     pytest.skip("tomli-w not installed, skipping TOML save test")
@@ -137,7 +95,7 @@ class TestConfigWriter:
             config_path = Path(temp_dir)
 
             # Save configuration
-            saved_path = save_config(sample_config, config_path, "json")
+            saved_path, _ = save_config(sample_config, config_path, "json")
 
             # Verify file was created with correct name and format
             assert saved_path.exists()
@@ -147,7 +105,6 @@ class TestConfigWriter:
             # Load and verify content
             loaded_config = load_config_dict(config_path)
             assert loaded_config["version"] == "v1"
-            assert loaded_config["rag"]["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
 
     def test_save_config_explicit_format(self, sample_config):
         """Test saving with explicit format specification."""
@@ -155,7 +112,7 @@ class TestConfigWriter:
             config_path = Path(temp_dir)
 
             # Save as YAML with explicit format
-            saved_path = save_config(sample_config, config_path, format="yaml")
+            saved_path, _ = save_config(sample_config, config_path, format="yaml")
 
             # Verify file was created
             assert saved_path.exists()
@@ -163,7 +120,6 @@ class TestConfigWriter:
             # Verify it's actually YAML content
             content = saved_path.read_text()
             assert "version: v1" in content
-            assert "type: CustomerSupportCSVParser" in content
 
     def test_save_config_backup(self, sample_config):
         """Test backup creation when saving over existing file."""
@@ -174,7 +130,7 @@ class TestConfigWriter:
             config_path.write_text("initial: content\n")
 
             # Save configuration (should create backup)
-            saved_path = save_config(sample_config, config_path, create_backup=True)
+            saved_path, _ = save_config(sample_config, config_path, create_backup=True)
 
             # Verify original file was updated
             assert saved_path.exists()
@@ -198,7 +154,7 @@ class TestConfigWriter:
             config_path.write_text("initial: content\n")
 
             # Save configuration without backup
-            saved_path = save_config(sample_config, config_path, create_backup=False)
+            saved_path, _ = save_config(sample_config, config_path, create_backup=False)
 
             # Verify original file was updated
             assert saved_path.exists()
@@ -238,7 +194,7 @@ class TestConfigWriter:
                 ]
             }
 
-            updated_path = update_config(config_path, updates)
+            updated_path, _ = update_config(config_path, updates)
 
             # Verify file was updated
             assert updated_path.exists()
@@ -252,7 +208,6 @@ class TestConfigWriter:
 
             # Verify other values remain unchanged
             assert loaded_config["version"] == "v1"
-            assert loaded_config["rag"]["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
 
     def test_update_config_deep_merge(self, sample_config):
         """Test deep merging in update_config."""
@@ -290,49 +245,6 @@ class TestConfigWriter:
             assert embedder_config["model"] == "nomic-embed-text"
             assert embedder_config["base_url"] == "http://localhost:11434"
             assert embedder_config["timeout"] == 30
-
-    def test_save_config_validation_error(self):
-        """Test validation error when saving invalid configuration."""
-        invalid_config = {
-            "version": "invalid_version",  # Should be "v1"
-            "name": "test_config",
-            "prompts": [],
-            "datasets": [],
-            "models": [],
-            "rag": {
-                "parsers": {},
-                "embedders": {},
-                "vector_stores": {},
-                "retrieval_strategies": {},
-                "defaults": {
-                    "parser": "auto",
-                    "embedder": "default",
-                    "vector_store": "default",
-                    "retrieval_strategy": "default"
-                }
-            }
-        }
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "invalid_config.yaml"
-
-            with pytest.raises(ConfigError, match="validation error"):
-                save_config(invalid_config, config_path, validate=True)
-
-    def test_save_config_skip_validation(self):
-        """Test saving invalid configuration with validation disabled."""
-        invalid_config = {
-            "version": "invalid_version",
-            "incomplete": "config"
-        }
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "invalid_config.yaml"
-
-            # Should succeed when validation is disabled
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            saved_path = save_config(invalid_config, config_path, validate=False)
-            assert saved_path.exists()
 
     def test_update_nonexistent_file(self):
         """Test updating a file that doesn't exist."""
