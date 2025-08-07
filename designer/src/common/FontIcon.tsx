@@ -137,7 +137,7 @@ const FontIcon: React.FC<FontIconProps> = ({
           }
           handleOnClick()
         }}
-        className={`${className} cursor-pointer hover:bg-blue-400/20 rounded-sm`}
+        className={`${className} cursor-pointer rounded-sm hover:opacity-80`}
       >
         <Suspense fallback={<></>}>{renderIcon()}</Suspense>
       </button>
