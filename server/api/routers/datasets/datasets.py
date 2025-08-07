@@ -1,8 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from api.errors import NotFoundError
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, FileExistsInAnotherDatasetError
 from services.dataset_service import Dataset, DatasetService
@@ -29,7 +27,7 @@ async def list_datasets(namespace: str, project: str):
 
 class CreateDatasetRequest(BaseModel):
     name: str
-    parser: str
+    rag_strategy: str
 
 class CreateDatasetResponse(BaseModel):
     dataset: Dataset
@@ -42,26 +40,23 @@ async def create_dataset(namespace: str, project: str, request: CreateDatasetReq
             namespace=namespace,
             project=project,
             name=request.name,
-            parser=request.parser
+            rag_strategy=request.rag_strategy,
         )
         return CreateDatasetResponse(dataset=dataset)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-class DeleteDatasetRequest(BaseModel):
-    name: str
-
 class DeleteDatasetResponse(BaseModel):
     dataset: Dataset
 
-@router.delete("/", response_model=DeleteDatasetResponse)
-async def delete_dataset(namespace: str, project: str, request: DeleteDatasetRequest):
+@router.delete("/{dataset}", response_model=DeleteDatasetResponse)
+async def delete_dataset(namespace: str, project: str, dataset: str):
     logger.bind(namespace=namespace, project=project)
     try:
         deleted_dataset = DatasetService.delete_dataset(
-        namespace=namespace,
-        project=project,
-        name=request.name
+            namespace=namespace,
+            project=project,
+            name=dataset
         )
         return DeleteDatasetResponse(dataset=deleted_dataset)
     except ValueError as e:

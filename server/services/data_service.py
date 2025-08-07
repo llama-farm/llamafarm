@@ -16,6 +16,7 @@ DATA_DIR_NAME = "lf_data"
 class MetadataFileContent(BaseModel):
     original_file_name: str
     resolved_file_name: str
+    timestamp: float
     size: int
     mime_type: str
     hash: str
@@ -84,16 +85,16 @@ class DataService:
         data_dir = cls.get_data_dir(namespace, project_id)
         file_data = await file.read()
         data_hash = cls.hash_data(file_data)
-        resolved_file_name = cls.append_collision_timestamp(file.filename)
+        resolved_file_name = cls.append_collision_timestamp(file.filename or "unknown")
 
         # Create metadata file
         metadata_path = os.path.join(data_dir, "meta", f"{data_hash}.json")
         metadata_file_content = MetadataFileContent(
-            original_file_name=file.filename,
+            original_file_name=file.filename or "unknown",
             resolved_file_name=resolved_file_name,
             timestamp=datetime.now().timestamp(),
             size=len(file_data),
-            mime_type=file.content_type,
+            mime_type=file.content_type or "application/octet-stream",
             hash=data_hash,
         )
         with open(metadata_path, "w") as f:
@@ -152,12 +153,12 @@ class DataService:
         # Make sure the file is not in use by another dataset
         project = ProjectService.get_project(namespace, project_id)
         other_dataset = next(
-            (ds for ds in project.config.get("datasets") if ds["name"] != dataset and file.hash in ds["files"]),
+            (ds for ds in project.config.datasets if ds.name != dataset and file.hash in ds.files),
             None,
         )
         if other_dataset:
             raise FileExistsInAnotherDatasetError(
-                f"File '{file.hash}' is in use by dataset '{other_dataset['name']}'"
+                f"File '{file.hash}' is in use by dataset '{other_dataset.name}'"
             )
 
         metadata_path = os.path.join(data_dir, "meta", f"{file.hash}.json")
@@ -172,3 +173,5 @@ class DataService:
             metadata=file.model_dump(),
             data_dir=data_dir,
         )
+
+        return file

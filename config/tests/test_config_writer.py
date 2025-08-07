@@ -2,14 +2,13 @@
 Tests for configuration writing functionality.
 """
 
-import json
 import tempfile
 from pathlib import Path
 
 import pytest
 
 # Import the functions we want to test
-from loader import load_config, save_config, update_config, ConfigError
+from config import ConfigError, load_config_dict, save_config, update_config
 
 
 class TestConfigWriter:
@@ -105,7 +104,7 @@ class TestConfigWriter:
             assert saved_path == config_path
 
             # Load and verify content
-            loaded_config = load_config(config_path)
+            loaded_config = load_config_dict(config_path)
             assert loaded_config["version"] == "v1"
             assert loaded_config["rag"]["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
 
@@ -123,7 +122,7 @@ class TestConfigWriter:
                 assert saved_path == config_path
 
                 # Load and verify content
-                loaded_config = load_config(config_path)
+                loaded_config = load_config_dict(config_path)
                 assert loaded_config["version"] == "v1"
                 assert loaded_config["rag"]["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
             except ConfigError as e:
@@ -146,7 +145,7 @@ class TestConfigWriter:
             assert saved_path.parent == config_path
 
             # Load and verify content
-            loaded_config = load_config(config_path)
+            loaded_config = load_config_dict(config_path)
             assert loaded_config["version"] == "v1"
             assert loaded_config["rag"]["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
 
@@ -179,7 +178,7 @@ class TestConfigWriter:
 
             # Verify original file was updated
             assert saved_path.exists()
-            loaded_config = load_config(config_path)
+            loaded_config = load_config_dict(config_path)
             assert loaded_config["version"] == "v1"
 
             # Verify backup was created
@@ -246,7 +245,7 @@ class TestConfigWriter:
             assert updated_path.parent == config_path
 
             # Load and verify changes
-            loaded_config = load_config(config_path)
+            loaded_config = load_config_dict(config_path)
             assert loaded_config["rag"]["embedders"]["default"]["config"]["batch_size"] == 32
             assert len(loaded_config["models"]) == 2
             assert loaded_config["models"][1]["provider"] == "openai"
@@ -280,7 +279,7 @@ class TestConfigWriter:
             update_config(config_path, updates)
 
             # Load and verify deep merge worked
-            loaded_config = load_config(config_path)
+            loaded_config = load_config_dict(config_path)
             embedder_config = loaded_config["rag"]["embedders"]["default"]["config"]
 
             # Updated values

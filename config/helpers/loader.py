@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    import yaml
+    import yaml  # type: ignore
 except ImportError:
     yaml = None
 
@@ -20,21 +20,21 @@ try:
     else:
         import tomli as tomllib
 except ImportError:
-    tomllib = None
+    tomllib = None # type: ignore
 
 try:
-    import tomli_w
+    import tomli_w  # type: ignore
 except ImportError:
     tomli_w = None
 
 try:
-    import jsonschema
+    import jsonschema  # type: ignore
 except ImportError:
     jsonschema = None
 
 # Handle both relative and absolute imports
 try:
-    from ..datamodel import LlamaFarmConfig
+    from config.datamodel import LlamaFarmConfig
 except ImportError:
     # If relative import fails, try absolute import (when run directly)
     import sys
@@ -45,13 +45,7 @@ except ImportError:
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
 
-    try:
-        from ..datamodel import LlamaFarmConfig
-    except ImportError:
-        # If all fails, define minimal types
-        from typing import Any
-
-        LlamaFarmConfig = dict[str, Any]
+    from ..datamodel import LlamaFarmConfig
 
 
 class ConfigError(Exception):
@@ -158,25 +152,18 @@ def find_config_file(directory: str | Path | None = None) -> Path | None:
     return None
 
 
-def load_config(
+def load_config_dict(
     config_path: str | Path | None = None,
     directory: str | Path | None = None,
     validate: bool = True,
-) -> LlamaFarmConfig:
+) -> dict[str, Any]:
     """
-    Load and validate a LlamaFarm configuration file.
+    Load configuration as a regular dictionary
+    (same as load_config but with different return type annotation).
 
-    Args:
-        config_path: Explicit path to configuration file. If provided, directory is ignored.
-        directory: Directory to search for configuration file. Defaults to current working dir.
-        validate: Whether to validate against JSON schema. Defaults to True.
-
-    Returns:
-        Loaded and validated configuration as a typed dictionary.
-
-    Raises:
-        ConfigError: If file is not found, cannot be loaded, or validation fails.
+    This is useful when you don't need strict typing or are working with dynamic configurations.
     """
+
     # Determine config file path
     config_file = _resolve_config_file(config_path, directory)
 
@@ -198,40 +185,56 @@ def load_config(
         schema = _load_schema()
         _validate_config(config, schema)
 
-    return config  # type: ignore
+    return config
 
-def _resolve_config_file(config_path: str | Path | None = None, directory: str | Path = Path.cwd()) -> Path:
+def _resolve_config_file(
+    config_path: str | Path | None = None,
+    directory: str | Path | None = None,
+) -> Path:
+    directory = directory or Path.cwd()
+
+    config_path_resolved: Path | None = None
     if config_path is not None:
-        config_file = Path(config_path)
+        config_path_resolved = Path(config_path)
 
-        if config_file.suffix:
+        if config_path_resolved.suffix:
             # It's a file path
-            if not config_file.is_file():
-                raise ConfigError(f"Configuration file not found: {config_file}")
+            if not config_path_resolved.is_file():
+                raise ConfigError(f"Configuration file not found: {config_path_resolved}")
         else:
             # It's a directory path, look for config file within it
-            config_file = find_config_file(config_path)
-            if config_file is None:
+            config_path_resolved = find_config_file(config_path_resolved)
+            if config_path_resolved is None:
                 raise ConfigError(f"No configuration file found in {config_path}")
     else:
-        config_file = find_config_file(directory)
-        if config_file is None:
+        config_path_resolved = find_config_file(directory)
+        if config_path_resolved is None:
             raise ConfigError(f"No configuration file found in {directory}")
 
-    return config_file
+    return config_path_resolved
 
-def load_config_dict(
+def load_config(
     config_path: str | Path | None = None,
     directory: str | Path | None = None,
     validate: bool = True,
-) -> dict[str, Any]:
+) -> LlamaFarmConfig:
     """
-    Load configuration as a regular dictionary
-    (same as load_config but with different return type annotation).
+    Load and validate a LlamaFarm configuration file.
 
-    This is useful when you don't need strict typing or are working with dynamic configurations.
+    Args:
+        config_path: Explicit path to configuration file. If provided, directory is ignored.
+        directory: Directory to search for configuration file. Defaults to current working dir.
+        validate: Whether to validate against JSON schema. Defaults to True.
+
+    Returns:
+        Loaded and validated configuration as a LlamaFarmConfig object.
+
+    Raises:
+        ConfigError: If file is not found, cannot be loaded, or validation fails.
     """
-    return load_config(config_path, directory, validate)
+
+    config_dict = load_config_dict(config_path, directory, validate)
+    return LlamaFarmConfig(**config_dict)
 
 
 # ============================================================================
@@ -295,12 +298,12 @@ def _create_backup(file_path: Path) -> Optional[Path]:
 
 
 def save_config(
-    config: dict,
-    config_path: str | Path = Path.cwd(),
-    format: Optional[str] = None,
+    config: LlamaFarmConfig,
+    config_path: str | Path | None,
+    format: str | None = None,
     validate: bool = True,
     create_backup: bool = True,
-) -> Path:
+) -> LlamaFarmConfig:
     """
     Save a configuration to disk.
 
@@ -320,7 +323,7 @@ def save_config(
     Raises:
         ConfigError: If validation fails or file cannot be saved.
     """
-    config_path = Path(config_path)
+    config_path = Path(config_path) if config_path else Path.cwd()
 
     # Determine the actual config file path
     if config_path.suffix:
@@ -350,9 +353,10 @@ def save_config(
                 config_file = config_path / "llamafarm.yaml"
 
     # Validate configuration before saving
+    config_dict = config.model_dump(mode="json")
     if validate:
         schema = _load_schema()
-        _validate_config(config, schema)
+        _validate_config(config_dict, schema)
 
     # Create backup if requested and file exists
     backup_path = None
@@ -377,17 +381,17 @@ def save_config(
     # Save file based on format
     try:
         if format.lower() == "yaml":
-            _save_yaml_file(config, config_file)
+            _save_yaml_file(config_dict, config_file)
         elif format.lower() == "toml":
-            _save_toml_file(config, config_file)
+            _save_toml_file(config_dict, config_file)
         elif format.lower() == "json":
-            _save_json_file(config, config_file)
+            _save_json_file(config_dict, config_file)
         else:
             raise ConfigError(f"Unsupported format: {format}")
 
-        return config_file
+        return LlamaFarmConfig(**config_dict)
 
-    except Exception as e:
+    except Exception:
         # If save failed and we created a backup, try to restore it
         if backup_path and backup_path.exists():
             try:
@@ -403,7 +407,7 @@ def update_config(
     updates: dict,
     validate: bool = True,
     create_backup: bool = True,
-) -> Path:
+) -> LlamaFarmConfig:
     """
     Update an existing configuration file with new values.
 
@@ -423,6 +427,7 @@ def update_config(
     config_path = Path(config_path)
 
     # Determine the actual config file path
+    config_file: Path | None = None
     if config_path.suffix:
         # It's a file path
         config_file = config_path
@@ -434,8 +439,8 @@ def update_config(
             config_file = find_config_file(config_path)
             if config_file is None:
                 raise ConfigError(f"No configuration file found in directory: {config_path}")
-        except ConfigError:
-            raise ConfigError(f"Directory does not exist or contains no config file: {config_path}")
+        except ConfigError as e:
+            raise ConfigError(f"Directory does not exist or contains no config file: {config_path}") from e # noqa: E501
 
     # Load existing configuration
     config = load_config(config_file, validate=False)
@@ -450,11 +455,12 @@ def update_config(
                 base[key] = value
         return base
 
-    updated_config = deep_update(config, updates)
+    config_dict = config.model_dump(mode="json")
+    updated_config_dict = deep_update(config_dict, updates)
 
     # Save updated configuration (preserves original format)
     return save_config(
-        updated_config,
+        LlamaFarmConfig(**updated_config_dict),
         config_file,
         validate=validate,
         create_backup=create_backup,

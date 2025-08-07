@@ -59,7 +59,7 @@ class ProjectService:
       cfg = load_config(directory=settings.lf_project_dir, validate=False)
       return [Project(
         namespace=namespace,
-        name=cfg.get("name", "unknown"),
+        name=cfg.name,
         config=cfg,
       )]
 
