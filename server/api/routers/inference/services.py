@@ -182,7 +182,7 @@ class ChatProcessor:
             # Run agent
             logger.info(
                 "Running agent with message",
-                message_preview=request.message[:100] + "..."
+                message_preview=f"{request.message[:100]}..."
             )
             input_schema = BasicChatInputSchema(chat_message=request.message)
             response = agent.run(input_schema)

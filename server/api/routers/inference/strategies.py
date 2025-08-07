@@ -91,9 +91,8 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
             if not rule.enabled:
                 continue
                 
-            keyword_matches = sum(bool(keyword in message_lower)
-                              for keyword in rule.keywords)
-
+            keyword_matches = sum(
+                1 for keyword in rule.keywords if keyword in message_lower)
             if keyword_matches > 0:
                 # Extract action type from rule name
                 if "create" in rule.name.lower():
@@ -129,15 +128,14 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
                 continue
                 
             for pattern in rule.patterns:
-                match = re.search(pattern, message_lower)
-                if match:
+                if match := re.search(pattern, message_lower):
                     namespace = match.group(1)
                     if namespace not in self.excluded_namespaces:
                         return namespace
         
         return self.config["default_namespace"]
     
-    def _extract_project_id(self, message_lower: str) -> Optional[str]:
+    def _extract_project_id(self, message_lower: str) -> str | None:
         """Extract project ID using configurable rules"""
         import re
         
@@ -148,8 +146,7 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
         ]
         
         for pattern in project_patterns:
-            match = re.search(pattern, message_lower)
-            if match:
+            if match := re.search(pattern, message_lower):
                 return match.group(1)
         
         return None

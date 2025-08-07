@@ -206,9 +206,8 @@ class MessageAnalyzer:
         message_lower = message.lower()
         
         for pattern in PROJECT_ID_PATTERNS:
-            match = re.search(pattern, message_lower)
-            if match:
-                return match.group(1)
+            if match := re.search(pattern, message_lower):
+                return match[1]
         
         return None
 
