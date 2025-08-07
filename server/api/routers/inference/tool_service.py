@@ -269,7 +269,7 @@ class ToolRegistryManager:
                 "total_tools": len(tools),
                 "registered_tools": tools,
                 "health_status": health_status,
-                "healthy_tools": sum(bool(status)
+                "healthy_tools": sum(bool(status) for status in health_status.values()),
                 "registry_available": True
             }
             
