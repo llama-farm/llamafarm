@@ -151,7 +151,7 @@ const Data = () => {
                 ))}
               </div>
             )}
-            <div className="mb-4">Raw data</div>
+            <div className="mb-4">Raw data files</div>
             {isLoading && droppedFiles.length <= 0 ? (
               <div className="w-full flex flex-col items-center justify-center border-[1px] border-solid rounded-lg p-4 gap-2 transition-colors border-blue-100">
                 <div className="flex flex-col items-center justify-center gap-4 text-center my-[40px]">

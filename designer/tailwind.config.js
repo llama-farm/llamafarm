@@ -21,6 +21,8 @@ export default {
         'green-100': '#48FFE4',
 
         'gray-100': '#C6C6C6',
+        'gray-200': '#F4F4F4',
+        'gray-700': '#616161',
 
         // 'gray-50': '#F4F4F4',
       },

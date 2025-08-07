@@ -12,7 +12,7 @@ const RateOutput = ({ output, tag }: RateOutputProps) => {
 
   return (
     <div
-      className={`flex flex-col border-[1px] border-solid border-blue-400 rounded-lg p-4 gap-2 ${
+      className={`flex flex-col border-[1px] border-solid border-blue-100 dark:border-blue-400 rounded-lg p-4 gap-2 ${
         isThumbsUpFilled ? 'border-green-100' : ''
       }`}
     >
@@ -21,7 +21,7 @@ const RateOutput = ({ output, tag }: RateOutputProps) => {
         <div className="flex flex-row gap-2 ml-4">
           <FontIcon
             type={isThumbsUpFilled ? 'thumbs-up-filled' : 'thumbs-up'}
-            className="w-6 h-6"
+            className="w-6 h-6 text-blue-200 dark:text-white"
             isButton
             handleOnClick={() => {
               if (isThumbsUpFilled) {
@@ -34,7 +34,7 @@ const RateOutput = ({ output, tag }: RateOutputProps) => {
           />
           <FontIcon
             type={isThumbsDownFilled ? 'thumbs-down-filled' : 'thumbs-down'}
-            className="w-6 h-6"
+            className="w-6 h-6 text-blue-200 dark:text-white"
             isButton
             handleOnClick={() => {
               if (isThumbsDownFilled) {
@@ -47,7 +47,7 @@ const RateOutput = ({ output, tag }: RateOutputProps) => {
           />
         </div>
       </div>
-      <div className="w-fit py-1 px-3 bg-blue-600 rounded-2xl text-sm">
+      <div className="w-fit py-1 px-3 bg-blue-50 dark:bg-blue-600 rounded-2xl text-sm">
         {tag}
       </div>
     </div>
