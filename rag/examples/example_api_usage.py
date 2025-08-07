@@ -3,9 +3,8 @@
 
 import sys
 from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
 
-# Add parent directory to path so we can import modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from api import SearchAPI, search
 from pprint import pprint
 
@@ -30,7 +29,7 @@ def example_api_with_filters():
     print("\n=== Advanced Search with Filters ===\n")
     
     # Initialize API with specific config
-    api = SearchAPI(config_path="config_examples/basic_config.yaml")
+    api = SearchAPI(config_path="config_examples/basic_config.json")
     
     # Search with minimum score filter
     results = api.search(
@@ -87,13 +86,13 @@ def example_multiple_configs():
     print("\n=== Multiple Configurations Example ===\n")
     
     # Search CSV data
-    csv_api = SearchAPI(config_path="config_examples/basic_config.yaml")
+    csv_api = SearchAPI(config_path="config_examples/basic_config.json")
     csv_results = csv_api.search("customer complaint", top_k=2)
     print(f"CSV search found {len(csv_results)} results")
     
     # Search PDF data (if ingested)
     try:
-        pdf_api = SearchAPI(config_path="config_examples/pdf_config.yaml")
+        pdf_api = SearchAPI(config_path="config_examples/pdf_config.json")
         pdf_results = pdf_api.search("methodology", top_k=2)
         print(f"PDF search found {len(pdf_results)} results")
     except Exception as e:

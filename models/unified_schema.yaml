@@ -2,6 +2,35 @@
 # Version: 2.0.0
 # This comprehensive schema combines strategy-level configuration with all component schemas
 # Unified schema for model orchestration strategies and components
+#
+# IMPLEMENTATION STATUS:
+# ✅ IMPLEMENTED:
+#    - OpenAI provider integration
+#    - Ollama local model support
+#    - Basic strategy configuration
+#    - Fine-tuning strategies (LoRA, QLoRA)
+#    - Fine Tuning Frameworks (PyTorch, LLamaFactory)
+#    - Basic cache implementations
+#    - Basic strategy configuration (simple_chat, multi_provider, local_first, cost_optimized)
+#    - Fine-tuning strategies (LoRA, QLoRA, Full)
+#
+# 🚧 COMING SOON:
+#    - Full 
+#    - Anthropic provider
+#    - Google AI (Gemini) provider
+#    - HuggingFace Transformers
+#    - vLLM and TGI inference engines
+#    - All routers (SimpleRouter, LoadBalancedRouter, etc.)
+#    - All processors (PromptProcessor, ResponseProcessor, etc.)
+#    - All validators (SchemaValidator, QualityValidator, etc.)
+#    - All cache implementations
+#    - Advanced routing rules
+#    - Full monitoring and observability
+#    - Cost management and tracking
+#
+# 📝 PARTIALLY IMPLEMENTED:
+#    - Optimization settings (basic features available)
+#    - Strategy templates (simple configurations work)
 
 version: "2.0.0"
 schema_type: "unified"
@@ -146,9 +175,9 @@ components:
           capabilities: ["chat", "function_calling"]
       use_cases: ["production", "rapid_prototyping", "advanced_reasoning"]
 
-    Anthropic:
+    Anthropic:  # COMING SOON
       type: "cloud_api"
-      description: "Anthropic Claude models"
+      description: "Anthropic Claude models (COMING SOON)"
       class_name: "AnthropicProvider"
       module: "components.providers.anthropic"
       capabilities: ["text_generation", "chat", "vision", "long_context"]
@@ -184,9 +213,9 @@ components:
           capabilities: ["chat", "vision", "long_context"]
       use_cases: ["long_documents", "complex_reasoning", "creative_writing"]
 
-    GoogleAI:
+    GoogleAI:  # COMING SOON
       type: "cloud_api"
-      description: "Google AI (Gemini) models"
+      description: "Google AI (Gemini) models (COMING SOON)"
       class_name: "GoogleAIProvider"
       module: "components.providers.google"
       capabilities: ["text_generation", "chat", "vision", "multi_modal"]
@@ -274,9 +303,9 @@ components:
           capabilities: ["code", "chat"]
       use_cases: ["local_development", "privacy_sensitive", "offline_deployment"]
 
-    HuggingFace:
+    HuggingFace:  # COMING SOON
       type: "local_library"
-      description: "HuggingFace Transformers models"
+      description: "HuggingFace Transformers models (COMING SOON)"
       class_name: "HuggingFaceProvider"
       module: "components.providers.huggingface"
       capabilities: ["text_generation", "classification", "embeddings", "custom_models"]
@@ -307,9 +336,9 @@ components:
             description: "Memory allocation per device"
       use_cases: ["research", "custom_models", "fine_tuning"]
 
-    vLLM:
+    vLLM:  # COMING SOON
       type: "inference_engine"
-      description: "High-performance inference with vLLM"
+      description: "High-performance inference with vLLM (COMING SOON)"
       class_name: "vLLMProvider"
       module: "components.providers.vllm"
       capabilities: ["text_generation", "batch_inference", "continuous_batching"]
@@ -343,9 +372,9 @@ components:
             default: 0.9
       use_cases: ["production", "high_throughput", "batch_processing"]
 
-    TGI:
+    TGI:  # COMING SOON
       type: "inference_engine"
-      description: "Text Generation Inference by HuggingFace"
+      description: "Text Generation Inference by HuggingFace (COMING SOON)"
       class_name: "TGIProvider"
       module: "components.providers.tgi"
       capabilities: ["text_generation", "streaming", "quantization"]
@@ -373,9 +402,9 @@ components:
       use_cases: ["production", "api_serving", "containerized"]
 
   # =============================================================================
-  # ROUTERS - Request Routing Components
+  # ROUTERS - Request Routing Components (COMING SOON)
   # =============================================================================
-  routers:
+  routers:  # COMING SOON - All routers below are not yet implemented
     SimpleRouter:
       description: "Basic request routing with fallback"
       class_name: "SimpleRouter"
@@ -453,9 +482,9 @@ components:
               type: "number"
 
   # =============================================================================
-  # PROCESSORS - Request/Response Processing Components
+  # PROCESSORS - Request/Response Processing Components (COMING SOON)
   # =============================================================================
-  processors:
+  processors:  # COMING SOON - All processors below are not yet implemented
     PromptProcessor:
       description: "Process and enhance prompts"
       class_name: "PromptProcessor"
@@ -538,9 +567,9 @@ components:
                   enum: ["block", "warn", "redact"]
 
   # =============================================================================
-  # VALIDATORS - Response Validation Components
+  # VALIDATORS - Response Validation Components (COMING SOON)
   # =============================================================================
-  validators:
+  validators:  # COMING SOON - All validators below are not yet implemented
     SchemaValidator:
       description: "Validate responses against schemas"
       class_name: "SchemaValidator"
@@ -606,9 +635,9 @@ components:
             default: 0.8
 
   # =============================================================================
-  # CACHE - Caching Components
+  # CACHE - Caching Components (COMING SOON)
   # =============================================================================
-  cache:
+  cache:  # COMING SOON - All cache implementations below are not yet implemented
     MemoryCache:
       description: "In-memory response cache"
       class_name: "MemoryCache"
@@ -673,12 +702,12 @@ components:
             default: true
 
 # ==============================================================================
-# ROUTING RULES
+# ROUTING RULES (COMING SOON)
 # ==============================================================================
 
-routing_rules:
+routing_rules:  # COMING SOON - Advanced routing rules not yet implemented
   type: "object"
-  description: "Rules for routing requests to providers"
+  description: "Rules for routing requests to providers (COMING SOON)"
   properties:
     rules:
       type: "array"
@@ -731,12 +760,12 @@ routing_rules:
           type: "string"
 
 # ==============================================================================
-# OPTIMIZATION SETTINGS
+# OPTIMIZATION SETTINGS (PARTIALLY IMPLEMENTED)
 # ==============================================================================
 
-optimization_settings:
+optimization_settings:  # PARTIALLY IMPLEMENTED - Basic optimization available
   type: "object"
-  description: "Performance and resource optimization"
+  description: "Performance and resource optimization (PARTIALLY IMPLEMENTED)"
   properties:
     performance_priority:
       type: "string"
@@ -803,12 +832,12 @@ optimization_settings:
           description: "Cache storage backend"
 
 # ==============================================================================
-# MONITORING SETTINGS
+# MONITORING SETTINGS (COMING SOON)
 # ==============================================================================
 
-monitoring_settings:
+monitoring_settings:  # COMING SOON - Monitoring features not yet implemented
   type: "object"
-  description: "Monitoring and observability configuration"
+  description: "Monitoring and observability configuration (COMING SOON)"
   properties:
     metrics:
       type: "object"
@@ -865,12 +894,12 @@ monitoring_settings:
           default: 0.1
 
 # ==============================================================================
-# COST MANAGEMENT
+# COST MANAGEMENT (COMING SOON)
 # ==============================================================================
 
-cost_management:
+cost_management:  # COMING SOON - Cost management features not yet implemented
   type: "object"
-  description: "Cost tracking and optimization"
+  description: "Cost tracking and optimization (COMING SOON)"
   properties:
     budgets:
       type: "object"

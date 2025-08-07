@@ -3,9 +3,8 @@
 
 import sys
 from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
 
-# Add parent directory to path so we can import modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from api import SearchAPI
 from retrieval.factory import RetrievalStrategyFactory, create_retrieval_strategy_from_config
 from pprint import pprint
@@ -16,7 +15,7 @@ def example_basic_retrieval():
     print("=== Basic Retrieval Strategy ===\n")
     
     # Use config with basic retrieval strategy
-    api = SearchAPI(config_path="config_examples/basic_with_retrieval_config.yaml")
+    api = SearchAPI(config_path="config_examples/basic_with_retrieval_config.json")
     
     results = api.search("password reset issues", top_k=3)
     
@@ -33,7 +32,7 @@ def example_advanced_retrieval():
     
     try:
         # Use config with hybrid retrieval strategy
-        api = SearchAPI(config_path="config_examples/advanced_retrieval_config.yaml")
+        api = SearchAPI(config_path="config_examples/advanced_retrieval_config.json")
         
         results = api.search("network connectivity problems", top_k=5)
         
@@ -64,7 +63,7 @@ def example_metadata_filtering():
     
     try:
         # Use PDF config with metadata filtering
-        api = SearchAPI(config_path="config_examples/pdf_with_retrieval_config.yaml")
+        api = SearchAPI(config_path="config_examples/pdf_with_retrieval_config.json")
         
         # Search with additional metadata filters
         results = api.search(
@@ -91,7 +90,7 @@ def example_multi_query_strategy():
     
     try:
         # Use multi-query config
-        api = SearchAPI(config_path="config_examples/multi_query_retrieval_config.yaml")
+        api = SearchAPI(config_path="config_examples/multi_query_retrieval_config.json")
         
         results = api.search("login authentication error", top_k=4)
         
@@ -158,9 +157,9 @@ def example_strategy_comparison():
     query = "security vulnerability report"
     
     configs = [
-        ("Basic", "config_examples/basic_with_retrieval_config.yaml"),
-        ("Advanced", "config_examples/advanced_retrieval_config.yaml"),
-        ("Multi-Query", "config_examples/multi_query_retrieval_config.yaml")
+        ("Basic", "config_examples/basic_with_retrieval_config.json"),
+        ("Advanced", "config_examples/advanced_retrieval_config.json"),
+        ("Multi-Query", "config_examples/multi_query_retrieval_config.json")
     ]
     
     for strategy_name, config_path in configs:
@@ -185,8 +184,8 @@ def example_collection_analysis():
     print("\n=== Collection Analysis ===\n")
     
     configs = [
-        "config_examples/basic_with_retrieval_config.yaml",
-        "config_examples/advanced_retrieval_config.yaml"
+        "config_examples/basic_with_retrieval_config.json",
+        "config_examples/advanced_retrieval_config.json"
     ]
     
     for config_path in configs:
@@ -223,6 +222,6 @@ if __name__ == "__main__":
         print(f"\nError running examples: {e}")
         print("\n💡 Getting Started:")
         print("1. Make sure you have ingested some data first:")
-        print("   uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml ingest samples/small_sample.csv")
+        print("   uv run python cli.py --config config_examples/basic_with_retrieval_config.json ingest samples/small_sample.csv")
         print("2. Try different retrieval strategies by using different config files")
         print("3. Compare results across strategies to see the differences!")
