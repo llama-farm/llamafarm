@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import GeneratedOutputs from './GeneratedOutputs'
+import GeneratedOutputs from './GeneratedOutput/GeneratedOutputs'
 
 const Prompt = () => {
   const [hasGeneratedOutputs, setHasGeneratedOutputs] = useState(false)
