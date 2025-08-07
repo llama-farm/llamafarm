@@ -15,15 +15,16 @@
 #    - Fine-tuning strategies (LoRA, QLoRA, Full)
 #
 # 🚧 COMING SOON:
-#    - Full 
+#    - Full Fine-tuning support
+#    - Environemnt dependent configuration
+#    - CUDA support
 #    - Anthropic provider
 #    - Google AI (Gemini) provider
 #    - HuggingFace Transformers
 #    - vLLM and TGI inference engines
-#    - All routers (SimpleRouter, LoadBalancedRouter, etc.)
+#    - llama.cpp support
 #    - All processors (PromptProcessor, ResponseProcessor, etc.)
 #    - All validators (SchemaValidator, QualityValidator, etc.)
-#    - All cache implementations
 #    - Advanced routing rules
 #    - Full monitoring and observability
 #    - Cost management and tracking
