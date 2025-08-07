@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "api_key": {
+      "type": "string",
+      "description": "OpenAI API key (can use ${OPENAI_API_KEY} for env var)"
+    },
+    "organization": {
+      "type": "string",
+      "description": "OpenAI organization ID (optional)"
+    },
+    "default_model": {
+      "type": "string",
+      "default": "gpt-3.5-turbo",
+      "enum": [
+        "gpt-4-turbo-preview",
+        "gpt-4",
+        "gpt-4-32k", 
+        "gpt-3.5-turbo",
+        "gpt-3.5-turbo-16k",
+        "text-embedding-ada-002",
+        "text-embedding-3-small",
+        "text-embedding-3-large"
+      ],
+      "description": "Default model to use"
+    },
+    "timeout": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 60,
+      "description": "Request timeout in seconds"
+    },
+    "max_retries": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3,
+      "description": "Maximum number of retry attempts"
+    },
+    "base_url": {
+      "type": "string",
+      "default": "https://api.openai.com/v1",
+      "description": "API base URL (for proxies or custom endpoints)"
+    }
+  }
+}

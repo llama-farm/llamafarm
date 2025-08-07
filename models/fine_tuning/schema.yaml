@@ -1,0 +1,445 @@
+# LlamaFarm Models Fine-Tuning Schema Documentation
+# This file documents all available fine-tuning components, strategies, and configurations
+
+version: "v1"
+schema_type: "fine_tuning"
+
+# =============================================================================
+# FINE-TUNING STRATEGIES
+# =============================================================================
+# Pre-configured strategies for common fine-tuning scenarios
+
+strategies:
+  mac_m1_lora:
+    description: "LoRA fine-tuning optimized for Mac M1/M2 with Metal Performance Shaders"
+    use_cases: ["personal_assistant", "coding_helper", "creative_writing"]
+    hardware_requirements:
+      type: "mac"
+      memory_gb: 16
+      storage_gb: 50
+    performance_priority: "balanced"
+    resource_usage: "low"
+    complexity: "simple"
+    components:
+      framework: "pytorch"
+      method: "lora"
+      trainer: "llamafactory"
+      dataset_processor: "jsonl_processor"
+
+  gpu_full_finetune:
+    description: "Full fine-tuning for high-end GPU setups"
+    use_cases: ["domain_specific", "research", "production_models"]
+    hardware_requirements:
+      type: "gpu"
+      gpu_memory_gb: 24
+      memory_gb: 32
+      storage_gb: 200
+    performance_priority: "accuracy"
+    resource_usage: "high"
+    complexity: "complex"
+    components:
+      framework: "pytorch"
+      method: "full_finetune"
+      trainer: "deepspeed"
+      dataset_processor: "advanced_processor"
+
+  cpu_small_model:
+    description: "CPU-only fine-tuning for small models"
+    use_cases: ["testing", "experimentation", "edge_deployment"]
+    hardware_requirements:
+      type: "cpu"
+      memory_gb: 8
+      storage_gb: 20
+    performance_priority: "speed"
+    resource_usage: "low"
+    complexity: "simple"
+    components:
+      framework: "pytorch"
+      method: "lora"
+      trainer: "cpu_trainer"
+      dataset_processor: "simple_processor"
+
+  cloud_scalable:
+    description: "Cloud-based distributed fine-tuning"
+    use_cases: ["large_scale", "multi_gpu", "production_training"]
+    hardware_requirements:
+      type: "cloud"
+      gpu_count: 4
+      gpu_memory_gb: 40
+      memory_gb: 128
+      storage_gb: 500
+    performance_priority: "speed"
+    resource_usage: "high" 
+    complexity: "complex"
+    components:
+      framework: "pytorch"
+      method: "qlora"
+      trainer: "deepspeed_multi_gpu"
+      dataset_processor: "distributed_processor"
+
+# =============================================================================
+# FINE-TUNING FRAMEWORKS
+# =============================================================================
+
+frameworks:
+  pytorch:
+    type: "framework"
+    description: "PyTorch-based fine-tuning with HuggingFace Transformers"
+    supported_methods: ["lora", "qlora", "full_finetune", "adapters"]
+    hardware_support: ["cpu", "gpu", "mac", "multi_gpu"]
+    dependencies:
+      - "torch>=2.0.0"
+      - "transformers>=4.35.0"
+      - "peft>=0.6.0"
+      - "datasets>=2.14.0"
+    config_schema:
+      learning_rate:
+        type: "float"
+        default: 2e-4
+        range: [1e-6, 1e-3]
+        description: "Learning rate for training"
+      batch_size:
+        type: "integer"
+        default: 4
+        range: [1, 64]
+        description: "Training batch size"
+      epochs:
+        type: "integer"
+        default: 3
+        range: [1, 20]
+        description: "Number of training epochs"
+      gradient_accumulation_steps:
+        type: "integer"
+        default: 4
+        range: [1, 32]
+        description: "Steps to accumulate gradients"
+
+  llamafactory:
+    type: "framework"
+    description: "LlamaFactory integration for easy fine-tuning"
+    supported_methods: ["lora", "qlora", "full_finetune"]
+    hardware_support: ["gpu", "multi_gpu"]
+    dependencies:
+      - "llamafactory-cli"
+      - "torch>=2.0.0"
+      - "transformers>=4.35.0"
+    config_schema:
+      template:
+        type: "string"
+        default: "llama3"
+        options: ["llama3", "alpaca", "vicuna", "chatglm"]
+        description: "Conversation template"
+      cutoff_len:
+        type: "integer"
+        default: 1024
+        range: [256, 8192]
+        description: "Maximum sequence length"
+
+# =============================================================================
+# FINE-TUNING METHODS
+# =============================================================================
+
+methods:
+  lora:
+    type: "method"
+    description: "Low-Rank Adaptation - Parameter-efficient fine-tuning"
+    efficiency: "high"
+    memory_usage: "low"
+    training_speed: "fast"
+    model_quality: "good"
+    supported_frameworks: ["pytorch", "llamafactory"]
+    config_schema:
+      r:
+        type: "integer"
+        default: 16
+        range: [4, 128]
+        description: "LoRA rank"
+      alpha:
+        type: "integer"
+        default: 32
+        range: [8, 256]
+        description: "LoRA alpha parameter"
+      dropout:
+        type: "float"
+        default: 0.1
+        range: [0.0, 0.5]
+        description: "LoRA dropout rate"
+      target_modules:
+        type: "list"
+        default: ["q_proj", "v_proj"]
+        options: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        description: "Target modules for LoRA"
+
+  qlora:
+    type: "method"
+    description: "Quantized LoRA - 4-bit quantized parameter-efficient fine-tuning"
+    efficiency: "very_high"
+    memory_usage: "very_low"
+    training_speed: "fast"
+    model_quality: "good"
+    supported_frameworks: ["pytorch", "llamafactory"]
+    config_schema:
+      r:
+        type: "integer"
+        default: 64
+        range: [16, 128]
+        description: "QLoRA rank"
+      alpha:
+        type: "integer"
+        default: 16
+        range: [8, 64]
+        description: "QLoRA alpha parameter"
+      quantization_config:
+        type: "object"
+        default:
+          load_in_4bit: true
+          bnb_4bit_compute_dtype: "float16"
+          bnb_4bit_use_double_quant: true
+          bnb_4bit_quant_type: "nf4"
+
+  full_finetune:
+    type: "method"
+    description: "Full model fine-tuning - Updates all parameters"
+    efficiency: "low"
+    memory_usage: "very_high"
+    training_speed: "slow"
+    model_quality: "excellent"
+    supported_frameworks: ["pytorch", "llamafactory"]
+    config_schema:
+      warmup_steps:
+        type: "integer"
+        default: 100
+        range: [0, 1000]
+        description: "Number of warmup steps"
+      weight_decay:
+        type: "float"
+        default: 0.01
+        range: [0.0, 0.1]
+        description: "Weight decay for regularization"
+
+# =============================================================================
+# TRAINERS
+# =============================================================================
+
+trainers:
+  llamafactory:
+    type: "trainer"
+    description: "LlamaFactory trainer with optimized settings"
+    supported_methods: ["lora", "qlora", "full_finetune"]
+    hardware_support: ["gpu", "multi_gpu"]
+    features: ["gradient_checkpointing", "mixed_precision", "flash_attention"]
+    config_schema:
+      use_fast_tokenizer:
+        type: "boolean"
+        default: true
+        description: "Use fast tokenizer implementation"
+      fp16:
+        type: "boolean"
+        default: true
+        description: "Use mixed precision training"
+      dataloader_num_workers:
+        type: "integer"
+        default: 4
+        range: [0, 16]
+        description: "Number of data loading workers"
+
+  deepspeed:
+    type: "trainer"
+    description: "DeepSpeed trainer for large-scale training"
+    supported_methods: ["full_finetune", "lora"]
+    hardware_support: ["multi_gpu", "cloud"]
+    features: ["zero_optimization", "gradient_checkpointing", "pipeline_parallelism"]
+    config_schema:
+      zero_stage:
+        type: "integer"
+        default: 2
+        options: [1, 2, 3]
+        description: "ZeRO optimization stage"
+
+  cpu_trainer:
+    type: "trainer"
+    description: "CPU-optimized trainer for resource-constrained environments"
+    supported_methods: ["lora"]
+    hardware_support: ["cpu", "mac"]
+    features: ["memory_efficient", "low_precision"]
+    config_schema:
+      use_cpu:
+        type: "boolean"
+        default: true
+        description: "Force CPU training"
+
+# =============================================================================
+# DATASET PROCESSORS
+# =============================================================================
+
+dataset_processors:
+  jsonl_processor:
+    type: "processor"
+    description: "Process JSONL datasets for instruction tuning"
+    supported_formats: ["jsonl", "json"]
+    features: ["conversation_formatting", "prompt_templates", "data_validation"]
+    config_schema:
+      max_seq_length:
+        type: "integer"
+        default: 2048
+        range: [256, 8192]
+        description: "Maximum sequence length"
+      template_type:
+        type: "string"
+        default: "alpaca"
+        options: ["alpaca", "vicuna", "llama3", "custom"]
+        description: "Conversation template"
+
+  advanced_processor:
+    type: "processor"
+    description: "Advanced dataset processing with augmentation"
+    supported_formats: ["jsonl", "json", "csv", "parquet"]
+    features: ["data_augmentation", "quality_filtering", "deduplication"]
+    config_schema:
+      quality_threshold:
+        type: "float"
+        default: 0.7
+        range: [0.0, 1.0]
+        description: "Quality filtering threshold"
+      augmentation_ratio:
+        type: "float"
+        default: 0.2
+        range: [0.0, 0.5]
+        description: "Data augmentation ratio"
+
+# =============================================================================
+# BASE MODELS
+# =============================================================================
+
+base_models:
+  supported_models:
+    - name: "llama3.1-8b"
+      huggingface_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+      parameter_count: "8B"
+      context_length: 8192
+      memory_requirements:
+        inference_gb: 16
+        training_lora_gb: 24
+        training_full_gb: 64
+      recommended_strategies: ["mac_m1_lora", "gpu_full_finetune"]
+    
+    - name: "llama3.2-3b"
+      huggingface_id: "meta-llama/Llama-3.2-3B-Instruct"
+      parameter_count: "3B"
+      context_length: 8192
+      memory_requirements:
+        inference_gb: 8
+        training_lora_gb: 12
+        training_full_gb: 24
+      recommended_strategies: ["mac_m1_lora", "cpu_small_model"]
+    
+    - name: "mistral-7b"
+      huggingface_id: "mistralai/Mistral-7B-Instruct-v0.3"
+      parameter_count: "7B"
+      context_length: 32768
+      memory_requirements:
+        inference_gb: 14
+        training_lora_gb: 20
+        training_full_gb: 56
+      recommended_strategies: ["mac_m1_lora", "gpu_full_finetune"]
+
+# =============================================================================
+# HARDWARE CONFIGURATIONS
+# =============================================================================
+
+hardware_profiles:
+  mac_m1:
+    type: "mac"
+    description: "Apple Silicon M1/M2 with Metal Performance Shaders"
+    memory_gb: 16
+    compute_units: 8
+    recommended_settings:
+      batch_size: 2
+      gradient_accumulation_steps: 8
+      max_seq_length: 1024
+      use_mps: true
+    limitations:
+      - "Limited memory for large models"
+      - "No CUDA support"
+    optimizations:
+      - "Use MPS backend"
+      - "Enable memory-efficient attention"
+      - "Use smaller batch sizes with gradient accumulation"
+
+  gpu_24gb:
+    type: "gpu"
+    description: "High-end GPU with 24GB VRAM (RTX 4090, RTX A5000)"
+    memory_gb: 24
+    cuda_cores: 16384
+    recommended_settings:
+      batch_size: 8
+      gradient_accumulation_steps: 2
+      max_seq_length: 2048
+      use_flash_attention: true
+    limitations:
+      - "Single GPU training only"
+    optimizations:
+      - "Use flash attention"
+      - "Enable gradient checkpointing"
+      - "Use mixed precision training"
+
+  multi_gpu:
+    type: "multi_gpu"
+    description: "Multi-GPU setup for distributed training"
+    gpu_count: 4
+    memory_per_gpu_gb: 24
+    recommended_settings:
+      batch_size: 16
+      gradient_accumulation_steps: 1
+      max_seq_length: 4096
+      use_deepspeed: true
+    optimizations:
+      - "Use DeepSpeed ZeRO"
+      - "Enable pipeline parallelism"
+      - "Use data parallel training"
+
+  cpu_only:
+    type: "cpu"
+    description: "CPU-only training for testing and small models"
+    cores: 8
+    memory_gb: 32
+    recommended_settings:
+      batch_size: 1
+      gradient_accumulation_steps: 16
+      max_seq_length: 512
+      use_cpu: true
+    limitations:
+      - "Very slow training"
+      - "Limited to small models"
+      - "No GPU acceleration"
+    optimizations:
+      - "Use CPU-optimized libraries"
+      - "Reduce model precision"
+      - "Use small batch sizes"
+
+# =============================================================================
+# EXAMPLE CONFIGURATIONS
+# =============================================================================
+
+examples:
+  quick_start:
+    description: "Quick start example for beginners"
+    strategy: "mac_m1_lora"
+    base_model: "llama3.2-3b"
+    dataset: "alpaca_cleaned"
+    training_args:
+      epochs: 1
+      learning_rate: 5e-4
+      batch_size: 2
+
+  production_quality:
+    description: "Production-quality fine-tuning setup"
+    strategy: "gpu_full_finetune"
+    base_model: "llama3.1-8b"
+    dataset: "custom_domain_data"
+    training_args:
+      epochs: 5
+      learning_rate: 1e-4
+      batch_size: 8
+      eval_steps: 100
+      save_steps: 500

@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "base_url": {
+      "type": "string",
+      "default": "http://localhost:11434",
+      "description": "Ollama API base URL"
+    },
+    "default_model": {
+      "type": "string",
+      "default": "llama3.2",
+      "description": "Default model to use"
+    },
+    "timeout": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 300,
+      "description": "Request timeout in seconds"
+    },
+    "auto_start": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically start Ollama service if not running"
+    },
+    "gpu_layers": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of layers to offload to GPU"
+    },
+    "num_thread": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of CPU threads to use"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Model name"
+          },
+          "pull_on_start": {
+            "type": "boolean",
+            "default": false,
+            "description": "Pull model on initialization"
+          }
+        }
+      },
+      "description": "Models to manage"
+    }
+  }
+}

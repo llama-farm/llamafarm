@@ -1,0 +1,36 @@
+{
+  "method": {
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.1,
+    "target_modules": ["q_proj", "v_proj"]
+  },
+  "dataset": {
+    "conversation_template": "alpaca"
+  },
+  "training_args": {
+    "num_train_epochs": 3,
+    "per_device_train_batch_size": 4,
+    "gradient_accumulation_steps": 4,
+    "learning_rate": 0.0002,
+    "warmup_ratio": 0.03,
+    "lr_scheduler_type": "cosine",
+    "max_grad_norm": 1.0,
+    "weight_decay": 0.01,
+    "fp16": false,
+    "bf16": true,
+    "max_seq_length": 1024,
+    "logging_steps": 10,
+    "save_steps": 500,
+    "save_total_limit": 3
+  },
+  "framework": {
+    "use_fast_tokenizer": true,
+    "gradient_checkpointing": false,
+    "flash_attention": false
+  },
+  "environment": {
+    "device": "auto",
+    "num_gpus": 1
+  }
+}

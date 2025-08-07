@@ -44,6 +44,15 @@ try:
 except ImportError:
     TGI_AVAILABLE = False
 
+# Import fine-tuning components
+try:
+    from fine_tuning import FineTunerFactory
+    from fine_tuning.core.strategies import StrategyManager as FineTuningStrategyManager
+    from fine_tuning.core.base import FineTuningConfig
+    FINETUNING_AVAILABLE = True
+except ImportError:
+    FINETUNING_AVAILABLE = False
+
 # Load environment variables
 load_dotenv()
 
@@ -111,15 +120,15 @@ def load_config(config_path: str) -> Dict[str, Any]:
         print_info(f"  - {Path(config_path).absolute()}")
         print_info(f"  - {(models_dir / config_path).absolute()}")
         print_info(f"  - {(models_dir / 'config_examples' / Path(config_path).name).absolute()}")
-        print_info(f"\nAvailable configs in config/ directory:")
-        config_dir = models_dir / "config"
-        if config_dir.exists():
-            for f in config_dir.glob("*.json"):
-                print_info(f"  - config/{f.name}")
-            for f in config_dir.glob("*.yaml"):
-                print_info(f"  - config/{f.name}")
-            for f in config_dir.glob("*.yml"):
-                print_info(f"  - config/{f.name}")
+        print_info(f"\nAvailable strategies in strategies/ directory:")
+        strategies_dir = models_dir / "strategies"
+        if strategies_dir.exists():
+            for f in strategies_dir.glob("*.json"):
+                print_info(f"  - strategies/{f.name}")
+            for f in strategies_dir.glob("*.yaml"):
+                print_info(f"  - strategies/{f.name}")
+            for f in strategies_dir.glob("*.yml"):
+                print_info(f"  - strategies/{f.name}")
         sys.exit(1)
     
     try:
@@ -469,6 +478,7 @@ def compare_command(args):
             if result['cost'] > 0:
                 print(f"Cost: ${result['cost']:.4f}")
             print(f"\nResponse: {result['response']}")
+
 
 def _substitute_env_vars(value: str) -> str:
     """Substitute environment variables in config values."""
@@ -1940,7 +1950,7 @@ def create_cli_parser():
 Examples:
   # Query models with default or custom configs
   uv run python cli.py query "What is machine learning?"
-  uv run python cli.py --config config/real_models_example.json query "Explain AI" --provider groq_llama3_70b
+  uv run python cli.py --config strategies/examples/production.yaml query "Explain AI" --provider groq_llama3_70b
   
   # Interactive chat session
   uv run python cli.py chat
@@ -1956,7 +1966,7 @@ Examples:
   
   # List all configured models
   uv run python cli.py list --detailed
-  uv run python cli.py --config config/use_case_examples.json list
+  uv run python cli.py --config strategies/examples/use_case_examples.yaml list
   
   # List local Ollama models
   uv run python cli.py list-local
@@ -2011,11 +2021,17 @@ Examples:
   
   # Generate local engines configuration
   uv run python cli.py generate-engines-config --output engines_config.json
+  
+  # Model catalog operations
+  uv run python cli.py catalog list --category medical --detailed
+  uv run python cli.py catalog fallbacks --chain medical_chain
+  uv run python cli.py catalog search "medical"
+  uv run python cli.py catalog info "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
         """
     )
     
     # Global options
-    parser.add_argument("--config", "-c", default="config/default.yaml",
+    parser.add_argument("--config", "-c", default="strategies/default.yaml",
                        help="Configuration file path (supports .yaml, .yml, and .json)")
     parser.add_argument("--log-level", default="INFO",
                        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -2150,7 +2166,927 @@ Examples:
     engines_config_parser.add_argument("--output", "-o", help="Output file path")
     engines_config_parser.add_argument("--include-unavailable", action="store_true", help="Include unavailable engines in config")
     
+    # Model catalog commands
+    catalog_parser = subparsers.add_parser("catalog", help="Model catalog operations")
+    catalog_subparsers = catalog_parser.add_subparsers(dest="catalog_command", help="Catalog commands")
+    
+    # List models from catalog
+    catalog_list_parser = catalog_subparsers.add_parser("list", help="List models from catalog")
+    catalog_list_parser.add_argument("--category", "-c", help="Filter by category (medical, code_generation, multilingual, etc.)")
+    catalog_list_parser.add_argument("--format", "-f", choices=["table", "json", "yaml"], default="table", help="Output format")
+    catalog_list_parser.add_argument("--detailed", "-d", action="store_true", help="Show detailed model information")
+    
+    # Show fallback chains
+    fallback_parser = catalog_subparsers.add_parser("fallbacks", help="Show fallback chains")
+    fallback_parser.add_argument("--chain", help="Show specific fallback chain")
+    fallback_parser.add_argument("--format", "-f", choices=["table", "json", "yaml"], default="table", help="Output format")
+    
+    # Search models
+    search_parser = catalog_subparsers.add_parser("search", help="Search models in catalog")
+    search_parser.add_argument("query", help="Search query")
+    search_parser.add_argument("--format", "-f", choices=["table", "json", "yaml"], default="table", help="Output format")
+    
+    # Show model details
+    info_parser = catalog_subparsers.add_parser("info", help="Show detailed model information")
+    info_parser.add_argument("model", help="Model name")
+    info_parser.add_argument("--format", "-f", choices=["table", "json", "yaml"], default="table", help="Output format")
+    
+    # Fine-tuning commands
+    if FINETUNING_AVAILABLE:
+        finetune_parser = subparsers.add_parser("finetune", help="Fine-tuning operations")
+        finetune_subparsers = finetune_parser.add_subparsers(dest="finetune_command", help="Fine-tuning commands")
+        
+        # Start training command
+        start_parser = finetune_subparsers.add_parser("start", help="Start fine-tuning")
+        start_parser.add_argument("--dataset", "-d", required=True, help="Path to training dataset")
+        start_parser.add_argument("--config", "-c", help="Fine-tuning configuration file")
+        start_parser.add_argument("--strategy", "-s", help="Strategy name to use")
+        start_parser.add_argument("--base-model", "-m", help="Base model to fine-tune")
+        start_parser.add_argument("--method", help="Fine-tuning method (lora, qlora, full)")
+        start_parser.add_argument("--output-dir", "-o", help="Output directory for results")
+        start_parser.add_argument("--job-name", help="Name for the training job")
+        start_parser.add_argument("--dry-run", action="store_true", help="Validate config without training")
+        
+        # Monitor training command
+        monitor_parser = finetune_subparsers.add_parser("monitor", help="Monitor training progress")
+        monitor_parser.add_argument("--job-id", help="Job ID to monitor")
+        monitor_parser.add_argument("--follow", "-f", action="store_true", help="Follow progress updates")
+        
+        # Stop training command
+        stop_parser = finetune_subparsers.add_parser("stop", help="Stop training")
+        stop_parser.add_argument("--job-id", help="Job ID to stop")
+        
+        # Resume training command
+        resume_parser = finetune_subparsers.add_parser("resume", help="Resume training from checkpoint")
+        resume_parser.add_argument("--checkpoint", "-c", required=True, help="Checkpoint path")
+        resume_parser.add_argument("--job-name", help="Name for the resumed job")
+        
+        # List jobs command
+        jobs_parser = finetune_subparsers.add_parser("jobs", help="List training jobs")
+        jobs_parser.add_argument("--status", help="Filter by status")
+        jobs_parser.add_argument("--limit", type=int, default=10, help="Number of jobs to show")
+        
+        # Evaluate model command
+        eval_parser = finetune_subparsers.add_parser("evaluate", help="Evaluate fine-tuned model")
+        eval_parser.add_argument("--model-path", "-m", required=True, help="Path to fine-tuned model")
+        eval_parser.add_argument("--dataset", "-d", help="Evaluation dataset")
+        eval_parser.add_argument("--output", "-o", help="Output file for results")
+        
+        # Export model command
+        export_parser = finetune_subparsers.add_parser("export", help="Export fine-tuned model")
+        export_parser.add_argument("--model-path", "-m", required=True, help="Path to fine-tuned model")
+        export_parser.add_argument("--output", "-o", required=True, help="Output directory")
+        export_parser.add_argument("--format", default="pytorch", help="Export format")
+        
+        # Strategy management commands
+        strategies_parser = finetune_subparsers.add_parser("strategies", help="Manage fine-tuning strategies")
+        strategies_subparsers = strategies_parser.add_subparsers(dest="strategies_command", help="Strategy commands")
+        
+        # List strategies
+        list_strat_parser = strategies_subparsers.add_parser("list", help="List available strategies")
+        list_strat_parser.add_argument("--detailed", action="store_true", help="Show detailed information")
+        
+        # Show strategy details
+        show_strat_parser = strategies_subparsers.add_parser("show", help="Show strategy details")
+        show_strat_parser.add_argument("name", help="Strategy name")
+        
+        # Recommend strategies
+        recommend_parser = strategies_subparsers.add_parser("recommend", help="Get strategy recommendations")
+        recommend_parser.add_argument("--hardware", help="Hardware type (mac, gpu, cpu)")
+        recommend_parser.add_argument("--model-size", help="Model size (3b, 8b, 70b)")
+        recommend_parser.add_argument("--use-case", help="Use case description")
+        
+        # Estimate resources
+        estimate_parser = finetune_subparsers.add_parser("estimate", help="Estimate resource requirements")
+        estimate_parser.add_argument("--strategy", help="Strategy to estimate")
+        estimate_parser.add_argument("--config", help="Configuration file to estimate")
+        estimate_parser.add_argument("--base-model", help="Base model name")
+    
     return parser
+
+def finetune_command(args):
+    """Handle fine-tuning commands."""
+    if not FINETUNING_AVAILABLE:
+        print_error("Fine-tuning components not available")
+        return
+    
+    if not args.finetune_command:
+        print_error("No fine-tuning command specified")
+        print_info("Available commands: start, monitor, stop, resume, jobs, evaluate, export, strategies, estimate")
+        return
+    
+    if args.finetune_command == "start":
+        start_finetuning(args)
+    elif args.finetune_command == "monitor":
+        monitor_finetuning(args)
+    elif args.finetune_command == "stop":
+        stop_finetuning(args)
+    elif args.finetune_command == "resume":
+        resume_finetuning(args)
+    elif args.finetune_command == "jobs":
+        list_finetune_jobs(args)
+    elif args.finetune_command == "evaluate":
+        evaluate_finetuned_model(args)
+    elif args.finetune_command == "export":
+        export_finetuned_model(args)
+    elif args.finetune_command == "strategies":
+        manage_finetune_strategies(args)
+    elif args.finetune_command == "estimate":
+        estimate_finetune_resources(args)
+    else:
+        print_error(f"Unknown fine-tuning command: {args.finetune_command}")
+
+def start_finetuning(args):
+    """Start a fine-tuning job."""
+    print_info("Starting fine-tuning job...")
+    
+    try:
+        # Load or create configuration
+        if args.config:
+            # Load from file
+            config_data = load_config(args.config)
+            config = FineTuningConfig(**config_data)
+        elif args.strategy:
+            # Load from strategy
+            from core.strategy_manager import StrategyManager
+            strategy_manager = StrategyManager()
+            try:
+                strategy_data = strategy_manager.load_strategy(args.strategy)
+                # Extract fine_tuner config from strategy
+                if "fine_tuner" not in strategy_data:
+                    print_error(f"Strategy '{args.strategy}' does not contain fine-tuning configuration")
+                    return
+                config_data = strategy_data["fine_tuner"]["config"]
+                # Add framework type
+                config_data["framework"] = {"type": strategy_data["fine_tuner"]["type"]}
+                # Add dataset if provided via CLI
+                if args.dataset:
+                    config_data["dataset"] = {"path": args.dataset}
+                config = FineTuningConfig(**config_data)
+            except ValueError as e:
+                print_error(str(e))
+                return
+        else:
+            # Create minimal config from arguments
+            config_data = {
+                "base_model": {"name": args.base_model or "llama3.2-3b"},
+                "method": {"type": args.method or "lora"},
+                "framework": {"type": "pytorch"},
+                "training_args": {
+                    "output_dir": args.output_dir or "./fine_tuned_models",
+                    "num_train_epochs": 3
+                },
+                "dataset": {"path": args.dataset}
+            }
+            config = FineTuningConfig(**config_data)
+        
+        # Override with CLI arguments
+        if args.dataset:
+            config.dataset["path"] = args.dataset
+        if args.output_dir:
+            config.training_args["output_dir"] = args.output_dir
+        if args.base_model:
+            config.base_model["name"] = args.base_model
+        if args.method:
+            config.method["type"] = args.method
+        
+        if args.dry_run:
+            print_info("Dry run - validating configuration...")
+            tuner = FineTunerFactory.create(config)
+            errors = tuner.validate_config()
+            if errors:
+                print_error("Configuration errors:")
+                for error in errors:
+                    print_error(f"  - {error}")
+                return
+            else:
+                print_success("Configuration is valid")
+                
+                # Show estimates
+                estimates = tuner.estimate_resources()
+                print_info("Resource estimates:")
+                print_info(f"  Memory required: {estimates['memory_gb']} GB")
+                print_info(f"  Training time: ~{estimates['training_time_hours']} hours")
+                print_info(f"  Storage needed: {estimates['storage_gb']} GB")
+                print_info(f"  GPU required: {'Yes' if estimates['gpu_required'] else 'No'}")
+                return
+        
+        # Create and start fine-tuner
+        tuner = FineTunerFactory.create(config)
+        
+        # Validate configuration
+        errors = tuner.validate_config()
+        if errors:
+            print_error("Configuration errors:")
+            for error in errors:
+                print_error(f"  - {error}")
+            return
+        
+        # Start training
+        job = tuner.start_training()
+        print_success(f"Training started - Job ID: {job.job_id}")
+        print_info(f"Output directory: {job.output_dir}")
+        print_info(f"Monitor with: uv run python cli.py finetune monitor --job-id {job.job_id}")
+        
+    except Exception as e:
+        print_error(f"Failed to start training: {e}")
+        import traceback
+        print_error(traceback.format_exc())
+
+def monitor_finetuning(args):
+    """Monitor fine-tuning progress."""
+    job_id = getattr(args, 'job_id', None)
+    
+    if not job_id:
+        print_error("No job ID specified")
+        return
+    
+    # For now, show basic training status
+    # In a real implementation, this would check actual training logs
+    training_dir = Path("./fine_tuned_models")
+    log_files = list(training_dir.glob("**/training_log.jsonl"))
+    
+    if log_files:
+        # Show the most recent log entries
+        latest_log = log_files[-1]
+        print_info(f"Monitoring job: {job_id}")
+        print_info(f"Log file: {latest_log}")
+        
+        try:
+            with open(latest_log, 'r') as f:
+                lines = f.readlines()
+                if lines:
+                    # Show last few log entries
+                    import json
+                    for line in lines[-3:]:
+                        try:
+                            log_entry = json.loads(line.strip())
+                            epoch = log_entry.get('epoch', '?')
+                            loss = log_entry.get('loss', '?')
+                            step = log_entry.get('step', '?')
+                            print_info(f"  Epoch {epoch}, Step {step}: Loss = {loss}")
+                        except:
+                            print_info(f"  {line.strip()}")
+                else:
+                    print_info("  Training just started...")
+        except Exception as e:
+            print_info("  Training in progress...")
+    else:
+        print_info(f"Monitoring job: {job_id}")
+        print_info("  Training in progress...")
+        print_info("  No log files found yet - training may be starting up")
+
+def stop_finetuning(args):
+    """Stop fine-tuning job.""" 
+    print_info("Stop not yet implemented")
+    # TODO: Implement job stopping
+
+def resume_finetuning(args):
+    """Resume fine-tuning from checkpoint."""
+    print_info("Resume not yet implemented")
+    # TODO: Implement checkpoint resuming
+
+def list_finetune_jobs(args):
+    """List fine-tuning jobs."""
+    print_info("Job listing not yet implemented")
+    # TODO: Implement job listing
+
+def evaluate_finetuned_model(args):
+    """Evaluate fine-tuned model."""
+    model_path = getattr(args, 'model_path', None)
+    
+    if not model_path:
+        print_error("No model path specified")
+        return
+    
+    model_path = Path(model_path)
+    if not model_path.exists():
+        print_error(f"Model path does not exist: {model_path}")
+        return
+    
+    print_info(f"Evaluating model: {model_path}")
+    
+    # Check for model files
+    config_file = model_path / "config.json"
+    model_files = list(model_path.glob("pytorch_model.bin")) + list(model_path.glob("model.safetensors"))
+    
+    if config_file.exists():
+        print_success("✓ Model configuration found")
+        try:
+            import json
+            with open(config_file) as f:
+                config = json.load(f)
+                print_info(f"  Model type: {config.get('model_type', 'unknown')}")
+                print_info(f"  Architecture: {config.get('architectures', ['unknown'])[0]}")
+        except:
+            pass
+    else:
+        print_error("✗ Model configuration not found")
+    
+    if model_files:
+        print_success("✓ Model weights found")
+        model_size = sum(f.stat().st_size for f in model_files) // 1024 // 1024
+        print_info(f"  Model size: ~{model_size} MB")
+    else:
+        print_error("✗ Model weights not found")
+    
+    # Test queries
+    test_queries = [
+        "What are the symptoms of a cold?",
+        "How can I stay healthy?",
+        "What should I do for a headache?"
+    ]
+    
+    print_info("Running evaluation tests...")
+    
+    # Import necessary libraries for model evaluation
+    try:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
+        libraries_available = True
+    except ImportError as e:
+        print_error(f"Required libraries not installed: {e}")
+        print_info("Install with: uv add transformers torch")
+        libraries_available = False
+    
+    if not libraries_available:
+        print_error("Cannot run real evaluation without transformers library")
+        return
+    
+    # Load the actual model
+    try:
+        print_info("Loading fine-tuned model...")
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None
+        )
+        print_success("✓ Model loaded successfully")
+        
+        # Set padding token if not present
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            
+    except Exception as e:
+        print_error(f"Failed to load model: {e}")
+        print_info("Make sure the model was properly trained and saved")
+        return
+    
+    # Create a strategy configuration for this model
+    print_info("Creating strategy configuration for evaluation...")
+    import yaml
+    
+    strategy_config = {
+        "evaluation_model": {
+            "description": f"Model being evaluated: {model_path}",
+            "local_engines": {
+                "type": "huggingface", 
+                "config": {
+                    "default_model": str(model_path),
+                    "model_path": str(model_path),
+                    "device": "auto",
+                    "torch_dtype": "auto",
+                    "trust_remote_code": True
+                }
+            }
+        }
+    }
+    
+    # Write strategy to temporary file
+    strategy_file = model_path.parent / "evaluation_strategy.yaml"
+    with open(strategy_file, 'w') as f:
+        yaml.dump(strategy_config, f, default_flow_style=False)
+    
+    print_success(f"✓ Created evaluation strategy: {strategy_file}")
+    
+    # Run evaluation tests using the strategy system
+    results = []
+    for i, query in enumerate(test_queries, 1):
+        print_info(f"Test {i}/3: {query}")
+        
+        try:
+            # Use the existing CLI query command with our strategy
+            import subprocess
+            result = subprocess.run([
+                "python", "cli.py", 
+                "--config", str(strategy_file),
+                "query", query,
+                "--max-tokens", "150",
+                "--temperature", "0.7"
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode == 0 and result.stdout:
+                response = result.stdout.strip()
+                print_success(f"  ✓ Generated response ({len(response)} chars)")
+                print_info(f"  Response: {response[:100]}...")
+                
+                # Check for medical disclaimers (shows fine-tuning worked)
+                has_disclaimer = any(word in response.lower() for word in 
+                                   ['disclaimer', 'consult', 'healthcare', 'medical', 'doctor'])
+                if has_disclaimer:
+                    print_success("  ✓ Safety disclaimer detected")
+                else:
+                    print_warning("  ⚠ No safety disclaimer found")
+                
+                results.append({
+                    'query': query,
+                    'response': response,
+                    'has_disclaimer': has_disclaimer,
+                    'success': True
+                })
+            else:
+                error_msg = result.stderr if result.stderr else "No response generated"
+                print_error(f"  ✗ Strategy-based evaluation failed: {error_msg}")
+                print_info("  💡 This may indicate missing dependencies or model loading issues")
+                results.append({
+                    'query': query,
+                    'response': '',
+                    'has_disclaimer': False,
+                    'success': False
+                })
+                
+        except Exception as e:
+            print_error(f"  ✗ Test {i} failed: {e}")
+            results.append({
+                'query': query,
+                'response': '',
+                'has_disclaimer': False,
+                'success': False
+            })
+    
+    # Display evaluation summary
+    successful_tests = sum(1 for r in results if r['success'])
+    safety_disclaimers = sum(1 for r in results if r['has_disclaimer'])
+    
+    print_info("\n=== EVALUATION SUMMARY ===")
+    print_info(f"Successful responses: {successful_tests}/{len(test_queries)}")
+    print_info(f"Responses with safety disclaimers: {safety_disclaimers}/{len(test_queries)}")
+    
+    if successful_tests >= 2 and safety_disclaimers >= 1:
+        print_success("🎉 Fine-tuning evaluation PASSED!")
+        print_success("Model generates responses and includes safety disclaimers")
+    elif successful_tests >= 2:
+        print_warning("⚠️ Model responds but needs more safety training")
+    else:
+        print_error("❌ Model evaluation FAILED - training may be incomplete")
+    
+    print_success("Real model evaluation completed")
+
+def export_finetuned_model(args):
+    """Export fine-tuned model."""
+    print_info("Model export not yet implemented")
+    # TODO: Implement model export
+
+def manage_finetune_strategies(args):
+    """Manage fine-tuning strategies."""
+    if not args.strategies_command:
+        print_error("No strategy command specified")
+        return
+    
+    try:
+        from core.strategy_manager import StrategyManager
+        strategy_manager = StrategyManager()
+        
+        if args.strategies_command == "list":
+            strategies = strategy_manager.list_strategies()
+            
+            # Filter for strategies with fine_tuner component
+            finetuning_strategies = []
+            for s in strategies:
+                if isinstance(s, dict) and "fine_tuner" in s.get("components", []):
+                    finetuning_strategies.append(s)
+            
+            if not finetuning_strategies:
+                print_info("No fine-tuning strategies available")
+                return
+            
+            print_info(f"Available fine-tuning strategies ({len(finetuning_strategies)}):")
+            for strategy in finetuning_strategies:
+                print_info(f"  {strategy['name']}: {strategy.get('description', 'No description')}")
+        
+        elif args.strategies_command == "show":
+            info = strategy_manager.get_strategy_info(args.name)
+            if not info:
+                print_error(f"Strategy not found: {args.name}")
+                return
+            
+            print_info(f"Strategy: {args.name}")
+            print_info(f"Description: {info.get('description', 'No description')}")
+            print_info(f"Use cases: {', '.join(info.get('use_cases', []))}")
+            print_info(f"Hardware: {info.get('hardware_requirements', {}).get('type', 'Unknown')}")
+            print_info(f"Resource usage: {info.get('resource_usage', 'Unknown')}")
+            print_info(f"Complexity: {info.get('complexity', 'Unknown')}")
+        
+        elif args.strategies_command == "recommend":
+            recommendations = strategy_manager.recommend_strategies(
+                hardware=args.hardware,
+                model_size=args.model_size,
+                use_case=args.use_case
+            )
+            
+            if not recommendations:
+                print_info("No matching strategies found")
+                return
+            
+            print_info("Recommended strategies:")
+            for rec in recommendations[:3]:  # Top 3
+                print_info(f"  {rec['name']}: {rec['description']}")
+        
+    except Exception as e:
+        print_error(f"Strategy management error: {e}")
+
+def estimate_finetune_resources(args):
+    """Estimate fine-tuning resource requirements."""
+    try:
+        if args.strategy:
+            from core.strategy_manager import StrategyManager
+            strategy_manager = StrategyManager()
+            try:
+                strategy_data = strategy_manager.load_strategy(args.strategy)
+                # Extract fine_tuner config from strategy
+                if "fine_tuner" not in strategy_data:
+                    print_error(f"Strategy '{args.strategy}' does not contain fine-tuning configuration")
+                    return
+                config_data = strategy_data["fine_tuner"]["config"]
+                # Add framework type
+                config_data["framework"] = {"type": strategy_data["fine_tuner"]["type"]}
+                # Add dummy dataset for estimation
+                config_data["dataset"] = {"path": "dummy"}
+                config = FineTuningConfig(**config_data)
+            except ValueError as e:
+                print_error(str(e))
+                return
+        elif args.config:
+            config_data = load_config(args.config)
+            config = FineTuningConfig(**config_data)
+        else:
+            # Create minimal config
+            config_data = {
+                "base_model": {"name": args.base_model or "llama3.2-3b"},
+                "method": {"type": "lora"},
+                "framework": {"type": "pytorch"},
+                "training_args": {"output_dir": "./fine_tuned_models"},
+                "dataset": {"path": "dummy"}
+            }
+            config = FineTuningConfig(**config_data)
+        
+        tuner = FineTunerFactory.create(config)
+        estimates = tuner.estimate_resources()
+        recommendations = tuner.get_hardware_recommendations()
+        
+        print_info("Resource Estimates:")
+        print_info(f"  Memory required: {estimates['memory_gb']} GB")
+        print_info(f"  Training time: ~{estimates['training_time_hours']} hours") 
+        print_info(f"  Storage needed: {estimates['storage_gb']} GB")
+        print_info(f"  GPU required: {'Yes' if estimates['gpu_required'] else 'No'}")
+        
+        print_info("\nHardware Recommendations:")
+        print_info(f"  Minimum memory: {recommendations['min_memory_gb']} GB")
+        print_info(f"  Recommended memory: {recommendations['recommended_memory_gb']} GB")
+        print_info(f"  Estimated time: {recommendations['estimated_time']}")
+        print_info(f"  Suitable hardware: {', '.join(recommendations['suitable_hardware'])}")
+        
+    except Exception as e:
+        print_error(f"Resource estimation error: {e}")
+
+def catalog_command(args):
+    """Handle catalog commands."""
+    try:
+        from core.strategy_manager import StrategyManager
+        manager = StrategyManager()
+        
+        if args.catalog_command == "list":
+            catalog_list_command(args, manager)
+        elif args.catalog_command == "fallbacks":
+            catalog_fallbacks_command(args, manager)
+        elif args.catalog_command == "search":
+            catalog_search_command(args, manager)
+        elif args.catalog_command == "info":
+            catalog_info_command(args, manager)
+        else:
+            print_error("Please specify a catalog subcommand (list, fallbacks, search, info)")
+            sys.exit(1)
+    except Exception as e:
+        print_error(f"Catalog command error: {e}")
+        sys.exit(1)
+
+def catalog_list_command(args, manager):
+    """List models from catalog."""
+    try:
+        catalog = manager.load_model_catalog()
+        
+        if not catalog:
+            print_warning("No model catalog found. Make sure model_catalog.yaml exists.")
+            return
+        
+        categories = catalog.get("categories", {})
+        
+        if args.category:
+            # Show specific category
+            if args.category not in categories:
+                print_error(f"Category '{args.category}' not found. Available categories: {', '.join(categories.keys())}")
+                return
+            
+            models = categories[args.category]
+            title = f"Models in '{args.category}' category"
+        else:
+            # Show all models
+            models = []
+            for category, category_models in categories.items():
+                for model in category_models:
+                    model_copy = model.copy()
+                    model_copy["category"] = category
+                    models.append(model_copy)
+            title = "All Models in Catalog"
+        
+        if args.format == "json":
+            print(json.dumps(models, indent=2))
+        elif args.format == "yaml":
+            import yaml
+            print(yaml.dump(models, default_flow_style=False))
+        else:
+            # Table format
+            if console:
+                table = Table(title=title, show_header=True, header_style="bold cyan")
+                table.add_column("Name", style="green", width=30)
+                table.add_column("Category", style="blue", width=15)
+                table.add_column("Size", style="yellow", width=10)
+                table.add_column("Quantization", style="magenta", width=12)
+                if args.detailed:
+                    table.add_column("Description", style="white", width=40)
+                    table.add_column("Use Cases", style="cyan", width=30)
+                
+                for model in models:
+                    row = [
+                        model.get("name", "Unknown"),
+                        model.get("category", "N/A"),
+                        model.get("size", "N/A"),
+                        model.get("quantization", "N/A")
+                    ]
+                    if args.detailed:
+                        row.extend([
+                            model.get("description", "")[:40] + "..." if len(model.get("description", "")) > 40 else model.get("description", ""),
+                            ", ".join(model.get("use_cases", []))[:30] + "..." if len(", ".join(model.get("use_cases", []))) > 30 else ", ".join(model.get("use_cases", []))
+                        ])
+                    table.add_row(*row)
+                
+                console.print(table)
+            else:
+                print(f"\n{title}")
+                print("=" * len(title))
+                for model in models:
+                    print(f"• {model.get('name', 'Unknown')} ({model.get('size', 'N/A')}) - {model.get('category', 'N/A')}")
+                    if args.detailed and model.get("description"):
+                        print(f"  Description: {model.get('description')}")
+                        if model.get("use_cases"):
+                            print(f"  Use Cases: {', '.join(model.get('use_cases'))}")
+                    print()
+        
+        print_success(f"Found {len(models)} models")
+        
+    except Exception as e:
+        print_error(f"Failed to list models: {e}")
+
+def catalog_fallbacks_command(args, manager):
+    """Show fallback chains."""
+    try:
+        catalog = manager.load_model_catalog()
+        
+        if not catalog:
+            print_warning("No model catalog found. Make sure model_catalog.yaml exists.")
+            return
+        
+        fallback_chains = catalog.get("fallback_chains", {})
+        
+        if args.chain:
+            # Show specific chain
+            if args.chain not in fallback_chains:
+                print_error(f"Fallback chain '{args.chain}' not found. Available chains: {', '.join(fallback_chains.keys())}")
+                return
+            
+            chains = {args.chain: fallback_chains[args.chain]}
+            title = f"Fallback Chain: {args.chain}"
+        else:
+            # Show all chains
+            chains = fallback_chains
+            title = "All Fallback Chains"
+        
+        if args.format == "json":
+            print(json.dumps(chains, indent=2))
+        elif args.format == "yaml":
+            import yaml
+            print(yaml.dump(chains, default_flow_style=False))
+        else:
+            # Table format
+            if console:
+                table = Table(title=title, show_header=True, header_style="bold cyan")
+                table.add_column("Chain Name", style="green", width=20)
+                table.add_column("Description", style="blue", width=30)
+                table.add_column("Primary Model", style="yellow", width=25)
+                table.add_column("Fallbacks", style="magenta", width=40)
+                
+                for name, chain in chains.items():
+                    fallbacks_str = " → ".join(chain.get("fallbacks", []))
+                    table.add_row(
+                        name,
+                        chain.get("description", ""),
+                        chain.get("primary", "N/A"),
+                        fallbacks_str
+                    )
+                
+                console.print(table)
+            else:
+                print(f"\n{title}")
+                print("=" * len(title))
+                for name, chain in chains.items():
+                    print(f"• {name}: {chain.get('description', '')}")
+                    print(f"  Primary: {chain.get('primary', 'N/A')}")
+                    if chain.get("fallbacks"):
+                        print(f"  Fallbacks: {' → '.join(chain.get('fallbacks'))}")
+                    print()
+        
+        print_success(f"Found {len(chains)} fallback chains")
+        
+    except Exception as e:
+        print_error(f"Failed to show fallback chains: {e}")
+
+def catalog_search_command(args, manager):
+    """Search models in catalog."""
+    try:
+        catalog = manager.load_model_catalog()
+        
+        if not catalog:
+            print_warning("No model catalog found. Make sure model_catalog.yaml exists.")
+            return
+        
+        query = args.query.lower()
+        matching_models = []
+        
+        categories = catalog.get("categories", {})
+        for category, models in categories.items():
+            for model in models:
+                # Search in name, description, and use cases
+                searchable_text = " ".join([
+                    model.get("name", ""),
+                    model.get("description", ""),
+                    " ".join(model.get("use_cases", [])),
+                    category
+                ]).lower()
+                
+                if query in searchable_text:
+                    model_copy = model.copy()
+                    model_copy["category"] = category
+                    matching_models.append(model_copy)
+        
+        if not matching_models:
+            print_warning(f"No models found matching '{args.query}'")
+            return
+        
+        if args.format == "json":
+            print(json.dumps(matching_models, indent=2))
+        elif args.format == "yaml":
+            import yaml
+            print(yaml.dump(matching_models, default_flow_style=False))
+        else:
+            # Table format
+            if console:
+                table = Table(title=f"Search Results for '{args.query}'", show_header=True, header_style="bold cyan")
+                table.add_column("Name", style="green", width=25)
+                table.add_column("Category", style="blue", width=15)
+                table.add_column("Size", style="yellow", width=10)
+                table.add_column("Description", style="white", width=40)
+                
+                for model in matching_models:
+                    desc = model.get("description", "")
+                    if len(desc) > 40:
+                        desc = desc[:37] + "..."
+                    
+                    table.add_row(
+                        model.get("name", "Unknown"),
+                        model.get("category", "N/A"),
+                        model.get("size", "N/A"),
+                        desc
+                    )
+                
+                console.print(table)
+            else:
+                print(f"\nSearch Results for '{args.query}'")
+                print("=" * (len(args.query) + 20))
+                for model in matching_models:
+                    print(f"• {model.get('name', 'Unknown')} ({model.get('size', 'N/A')}) - {model.get('category', 'N/A')}")
+                    if model.get("description"):
+                        print(f"  {model.get('description')}")
+                    print()
+        
+        print_success(f"Found {len(matching_models)} matching models")
+        
+    except Exception as e:
+        print_error(f"Failed to search models: {e}")
+
+def catalog_info_command(args, manager):
+    """Show detailed model information."""
+    try:
+        catalog = manager.load_model_catalog()
+        
+        if not catalog:
+            print_warning("No model catalog found. Make sure model_catalog.yaml exists.")
+            return
+        
+        model_name = args.model
+        found_model = None
+        found_category = None
+        
+        # Search for the model in all categories
+        categories = catalog.get("categories", {})
+        for category, models in categories.items():
+            for model in models:
+                if model.get("name", "").lower() == model_name.lower():
+                    found_model = model
+                    found_category = category
+                    break
+            if found_model:
+                break
+        
+        if not found_model:
+            print_error(f"Model '{model_name}' not found in catalog")
+            return
+        
+        if args.format == "json":
+            model_info = found_model.copy()
+            model_info["category"] = found_category
+            print(json.dumps(model_info, indent=2))
+        elif args.format == "yaml":
+            import yaml
+            model_info = found_model.copy()
+            model_info["category"] = found_category
+            print(yaml.dump(model_info, default_flow_style=False))
+        else:
+            # Rich formatted output
+            if console:
+                # Create a panel with model information
+                info_text = f"""[bold]Model Name:[/bold] {found_model.get('name', 'Unknown')}
+[bold]Category:[/bold] {found_category}
+[bold]Size:[/bold] {found_model.get('size', 'N/A')}
+[bold]Quantization:[/bold] {found_model.get('quantization', 'N/A')}
+[bold]Context Length:[/bold] {found_model.get('context_length', 'N/A')}
+
+[bold]Description:[/bold]
+{found_model.get('description', 'No description available')}
+
+[bold]Use Cases:[/bold]
+{chr(10).join(f'• {use_case}' for use_case in found_model.get('use_cases', []))}
+
+[bold]Performance:[/bold]
+• Speed: {found_model.get('performance', {}).get('speed', 'N/A')}
+• Quality: {found_model.get('performance', {}).get('quality', 'N/A')}
+• Memory Usage: {found_model.get('performance', {}).get('memory_usage', 'N/A')}
+
+[bold]Hardware Requirements:[/bold]
+• Minimum RAM: {found_model.get('hardware_requirements', {}).get('min_ram', 'N/A')}
+• Recommended RAM: {found_model.get('hardware_requirements', {}).get('recommended_ram', 'N/A')}
+• GPU Support: {found_model.get('hardware_requirements', {}).get('gpu_support', 'N/A')}"""
+
+                if found_model.get('notes'):
+                    info_text += f"\n\n[bold]Notes:[/bold]\n{found_model.get('notes')}"
+
+                panel = Panel(info_text, title=f"Model Information: {found_model.get('name')}", expand=False)
+                console.print(panel)
+            else:
+                print(f"\nModel Information: {found_model.get('name')}")
+                print("=" * (len(found_model.get('name', '')) + 20))
+                print(f"Category: {found_category}")
+                print(f"Size: {found_model.get('size', 'N/A')}")
+                print(f"Quantization: {found_model.get('quantization', 'N/A')}")
+                print(f"Context Length: {found_model.get('context_length', 'N/A')}")
+                print(f"\nDescription: {found_model.get('description', 'No description available')}")
+                
+                if found_model.get('use_cases'):
+                    print(f"\nUse Cases:")
+                    for use_case in found_model.get('use_cases', []):
+                        print(f"  • {use_case}")
+                
+                perf = found_model.get('performance', {})
+                if perf:
+                    print(f"\nPerformance:")
+                    if perf.get('speed'): print(f"  Speed: {perf.get('speed')}")
+                    if perf.get('quality'): print(f"  Quality: {perf.get('quality')}")
+                    if perf.get('memory_usage'): print(f"  Memory Usage: {perf.get('memory_usage')}")
+                
+                hw = found_model.get('hardware_requirements', {})
+                if hw:
+                    print(f"\nHardware Requirements:")
+                    if hw.get('min_ram'): print(f"  Minimum RAM: {hw.get('min_ram')}")
+                    if hw.get('recommended_ram'): print(f"  Recommended RAM: {hw.get('recommended_ram')}")
+                    if hw.get('gpu_support'): print(f"  GPU Support: {hw.get('gpu_support')}")
+                
+                if found_model.get('notes'):
+                    print(f"\nNotes: {found_model.get('notes')}")
+        
+        print_success(f"Model information displayed")
+        
+    except Exception as e:
+        print_error(f"Failed to show model info: {e}")
 
 def main():
     """Main CLI entry point."""
@@ -2214,6 +3150,13 @@ def main():
         test_tgi_command(args)
     elif args.command == "generate-engines-config":
         generate_local_engines_config_command(args)
+    elif args.command == "catalog":
+        catalog_command(args)
+    elif args.command == "finetune":
+        if not FINETUNING_AVAILABLE:
+            print_error("Fine-tuning not available. Install dependencies with: uv add torch transformers peft datasets")
+            sys.exit(1)
+        finetune_command(args)
     else:
         print_error(f"Unknown command: {args.command}")
         sys.exit(1)

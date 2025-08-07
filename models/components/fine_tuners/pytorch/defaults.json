@@ -1,0 +1,55 @@
+{
+  "base_model": {
+    "torch_dtype": "auto",
+    "device_map": "auto",
+    "trust_remote_code": false
+  },
+  "method": {
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.1,
+    "target_modules": ["q_proj", "v_proj"],
+    "bias": "none"
+  },
+  "dataset": {
+    "train_split": "train",
+    "preprocessing_num_workers": 4
+  },
+  "training_args": {
+    "num_train_epochs": 3,
+    "per_device_train_batch_size": 4,
+    "per_device_eval_batch_size": 4,
+    "gradient_accumulation_steps": 1,
+    "learning_rate": 0.0002,
+    "warmup_ratio": 0.03,
+    "lr_scheduler_type": "linear",
+    "max_grad_norm": 1.0,
+    "weight_decay": 0.01,
+    "optim": "adamw_torch",
+    "fp16": false,
+    "bf16": true,
+    "tf32": true,
+    "max_seq_length": 512,
+    "logging_steps": 10,
+    "save_strategy": "steps",
+    "save_steps": 500,
+    "save_total_limit": 3,
+    "eval_strategy": "no",
+    "eval_steps": 100,
+    "load_best_model_at_end": true,
+    "metric_for_best_model": "loss",
+    "greater_is_better": false,
+    "report_to": [],
+    "dataloader_num_workers": 0,
+    "remove_unused_columns": false
+  },
+  "framework": {
+    "gradient_checkpointing": true,
+    "use_fast_tokenizer": true
+  },
+  "environment": {
+    "device": "auto",
+    "seed": 42,
+    "low_cpu_mem_usage": true
+  }
+}

@@ -1,0 +1,501 @@
+# LlamaFarm Models Fine-Tuning - Strategy Definitions
+# Pre-configured strategies for common fine-tuning scenarios
+
+version: "v1"
+
+# =============================================================================
+# FINE-TUNING STRATEGIES
+# =============================================================================
+
+strategies:
+  # ---------------------------------------------------------------------------
+  # MAC M1/M2 OPTIMIZED STRATEGY
+  # ---------------------------------------------------------------------------
+  mac_m1_lora:
+    name: "Mac M1/M2 LoRA Training"
+    description: "LoRA fine-tuning optimized for Apple Silicon with Metal Performance Shaders"
+    use_cases: 
+      - "personal_assistant"
+      - "coding_helper" 
+      - "creative_writing"
+      - "content_generation"
+    
+    # Hardware requirements and recommendations
+    hardware_requirements:
+      type: "mac"
+      memory_gb: 16
+      storage_gb: 50
+      recommended_memory_gb: 32
+    
+    # Strategy characteristics
+    performance_priority: "balanced"          # "speed", "accuracy", "balanced"
+    resource_usage: "low"                     # "low", "medium", "high"
+    complexity: "simple"                      # "simple", "moderate", "complex"
+    training_time_estimate: "2-4 hours"      # Estimated time for 1000 samples
+    
+    # Model recommendations
+    recommended_models:
+      - "llama3.2-3b"
+      - "llama3.1-8b"
+      - "mistral-7b"
+    
+    components:
+      # Base model configuration
+      base_model:
+        torch_dtype: "float16"
+        device_map: "auto"
+        load_in_8bit: false
+        load_in_4bit: false
+        
+      # Fine-tuning method
+      method:
+        type: "lora"
+        r: 16
+        alpha: 32
+        dropout: 0.1
+        target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+        bias: "none"
+        task_type: "CAUSAL_LM"
+        
+      # Framework settings
+      framework:
+        type: "pytorch"
+        use_fast_tokenizer: true
+        gradient_checkpointing: true
+        
+      # Training arguments optimized for Mac
+      training_args:
+        output_dir: "./fine_tuned_models/mac_m1_lora"
+        num_train_epochs: 3
+        learning_rate: 2e-4
+        lr_scheduler_type: "cosine"
+        warmup_ratio: 0.03
+        
+        # Small batch size with gradient accumulation for memory efficiency
+        per_device_train_batch_size: 2
+        per_device_eval_batch_size: 2
+        gradient_accumulation_steps: 8
+        max_grad_norm: 1.0
+        
+        # Optimization
+        optim: "adamw_torch"
+        weight_decay: 0.01
+        
+        # Mixed precision (bfloat16 works well on Apple Silicon)
+        fp16: false
+        bf16: true
+        tf32: false
+        
+        # Monitoring
+        logging_steps: 10
+        eval_strategy: "steps"
+        eval_steps: 100
+        save_strategy: "steps"
+        save_steps: 500
+        save_total_limit: 2
+        
+        # Sequence length
+        max_seq_length: 1024
+        
+      # Dataset processing
+      dataset:
+        data_format: "jsonl"
+        conversation_template: "alpaca"
+        max_train_samples: null
+        preprocessing_num_workers: 2
+        validation_split_percentage: 10
+        
+      # Environment settings for Mac
+      environment:
+        device: "mps"                         # Use Metal Performance Shaders
+        seed: 42
+        max_memory: null
+        low_cpu_mem_usage: true
+        
+      # Hardware optimizations
+      hardware_optimizations:
+        use_mps_if_available: true
+        cpu_threads: 4
+        
+    # Usage notes
+    notes:
+      - "Optimized for Apple Silicon M1/M2/M3 processors"
+      - "Uses Metal Performance Shaders for acceleration"
+      - "Small batch size with gradient accumulation for memory efficiency"
+      - "Recommended for models up to 8B parameters"
+      - "Training time: 2-4 hours for 1000 samples"
+
+  # ---------------------------------------------------------------------------
+  # HIGH-END GPU STRATEGY
+  # ---------------------------------------------------------------------------
+  gpu_full_finetune:
+    name: "GPU Full Fine-Tuning"
+    description: "Full fine-tuning for high-end GPU setups with maximum quality"
+    use_cases:
+      - "domain_specific_models"
+      - "research_projects"
+      - "production_models"
+      - "specialized_applications"
+    
+    hardware_requirements:
+      type: "gpu"
+      gpu_memory_gb: 24
+      memory_gb: 32
+      storage_gb: 200
+      recommended_gpu: "RTX 4090, A100, H100"
+      
+    performance_priority: "accuracy"
+    resource_usage: "high"
+    complexity: "complex"
+    training_time_estimate: "4-12 hours"
+    
+    recommended_models:
+      - "llama3.1-8b"
+      - "mistral-7b"
+      - "llama3.1-70b"  # For multi-GPU setups
+      
+    components:
+      base_model:
+        torch_dtype: "bfloat16"
+        device_map: "auto"
+        load_in_8bit: false
+        load_in_4bit: false
+        
+      method:
+        type: "full_finetune"
+        warmup_steps: 100
+        weight_decay: 0.01
+        
+      framework:
+        type: "pytorch"
+        use_fast_tokenizer: true
+        gradient_checkpointing: true
+        
+      training_args:
+        output_dir: "./fine_tuned_models/gpu_full_finetune"
+        num_train_epochs: 5
+        learning_rate: 1e-4
+        lr_scheduler_type: "cosine"
+        warmup_ratio: 0.05
+        
+        # Larger batch sizes for high-end GPUs
+        per_device_train_batch_size: 8
+        per_device_eval_batch_size: 8
+        gradient_accumulation_steps: 2
+        max_grad_norm: 1.0
+        
+        optim: "adamw_torch"
+        weight_decay: 0.01
+        
+        # Mixed precision for A100/H100
+        fp16: false
+        bf16: true
+        tf32: true
+        
+        logging_steps: 10
+        eval_strategy: "steps"
+        eval_steps: 50
+        save_strategy: "steps"
+        save_steps: 200
+        save_total_limit: 5
+        
+        max_seq_length: 2048
+        
+      dataset:
+        data_format: "jsonl"
+        conversation_template: "alpaca"
+        preprocessing_num_workers: 8
+        validation_split_percentage: 10
+        
+      environment:
+        device: "cuda"
+        seed: 42
+        low_cpu_mem_usage: true
+        
+      hardware_optimizations:
+        use_cuda_if_available: true
+        cuda_memory_fraction: 0.95
+        
+    notes:
+      - "Requires high-end GPU with 24GB+ VRAM"
+      - "Full parameter fine-tuning for maximum quality"
+      - "Best results for domain-specific applications"
+      - "Consider multi-GPU setup for 70B+ models"
+
+  # ---------------------------------------------------------------------------
+  # CPU-ONLY STRATEGY (TESTING/EXPERIMENTAL)
+  # ---------------------------------------------------------------------------
+  cpu_small_model:
+    name: "CPU Small Model Training"
+    description: "CPU-only fine-tuning for testing and small model experimentation"
+    use_cases:
+      - "testing_workflows"
+      - "experimentation"
+      - "edge_deployment"
+      - "resource_constrained_environments"
+      
+    hardware_requirements:
+      type: "cpu"
+      memory_gb: 8
+      storage_gb: 20
+      cores: 4
+      
+    performance_priority: "speed"
+    resource_usage: "low"
+    complexity: "simple"
+    training_time_estimate: "6-24 hours"
+    
+    recommended_models:
+      - "llama3.2-3b"
+      - "distilgpt2"
+      - "gpt2"
+      
+    components:
+      base_model:
+        torch_dtype: "float32"
+        device_map: "cpu"
+        load_in_8bit: false
+        load_in_4bit: false
+        
+      method:
+        type: "lora"
+        r: 8                                  # Smaller rank for CPU training
+        alpha: 16
+        dropout: 0.1
+        target_modules: ["q_proj", "v_proj"]  # Fewer target modules
+        bias: "none"
+        
+      framework:
+        type: "pytorch"
+        use_fast_tokenizer: true
+        gradient_checkpointing: false         # Disable for CPU
+        
+      training_args:
+        output_dir: "./fine_tuned_models/cpu_small_model"
+        num_train_epochs: 2
+        learning_rate: 5e-4
+        lr_scheduler_type: "linear"
+        warmup_ratio: 0.1
+        
+        # Very small batch size for CPU
+        per_device_train_batch_size: 1
+        per_device_eval_batch_size: 1
+        gradient_accumulation_steps: 16
+        max_grad_norm: 1.0
+        
+        optim: "adamw_torch"
+        weight_decay: 0.01
+        
+        # No mixed precision on CPU
+        fp16: false
+        bf16: false
+        tf32: false
+        
+        logging_steps: 20
+        eval_strategy: "steps"
+        eval_steps: 200
+        save_strategy: "epoch"
+        save_total_limit: 2
+        
+        max_seq_length: 512                   # Shorter sequences for speed
+        
+      dataset:
+        data_format: "jsonl"
+        conversation_template: "alpaca"
+        max_train_samples: 1000               # Limit samples for testing
+        preprocessing_num_workers: 2
+        validation_split_percentage: 20
+        
+      environment:
+        device: "cpu"
+        seed: 42
+        low_cpu_mem_usage: true
+        
+      hardware_optimizations:
+        cpu_threads: 4
+        
+    notes:
+      - "Very slow training, recommended only for testing"
+      - "Limited to small models (3B parameters or less)"
+      - "Good for validating training pipelines"
+      - "Consider upgrading to GPU for production use"
+
+  # ---------------------------------------------------------------------------
+  # CLOUD/DISTRIBUTED STRATEGY  
+  # ---------------------------------------------------------------------------
+  cloud_scalable:
+    name: "Cloud Scalable Training"
+    description: "Cloud-based distributed fine-tuning for large-scale projects"
+    use_cases:
+      - "large_scale_training"
+      - "multi_gpu_setups"
+      - "production_training"
+      - "research_institutions"
+      
+    hardware_requirements:
+      type: "cloud"
+      gpu_count: 4
+      gpu_memory_gb: 40
+      memory_gb: 128
+      storage_gb: 500
+      recommended_setup: "4x A100 or H100"
+      
+    performance_priority: "speed"
+    resource_usage: "high"
+    complexity: "complex"
+    training_time_estimate: "1-4 hours"
+    
+    recommended_models:
+      - "llama3.1-8b"
+      - "llama3.1-70b"
+      - "mistral-7b"
+      - "codellama-34b"
+      
+    components:
+      base_model:
+        torch_dtype: "bfloat16"
+        device_map: "auto"
+        load_in_8bit: false
+        load_in_4bit: true                    # QLoRA for large models
+        
+      method:
+        type: "qlora"
+        r: 64
+        alpha: 16
+        dropout: 0.1
+        target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        bias: "none"
+        quantization_config:
+          load_in_4bit: true
+          bnb_4bit_compute_dtype: "bfloat16"
+          bnb_4bit_use_double_quant: true
+          bnb_4bit_quant_type: "nf4"
+        
+      framework:
+        type: "pytorch"
+        use_fast_tokenizer: true
+        gradient_checkpointing: true
+        
+      training_args:
+        output_dir: "./fine_tuned_models/cloud_scalable"
+        num_train_epochs: 3
+        learning_rate: 1e-4
+        lr_scheduler_type: "cosine"
+        warmup_ratio: 0.03
+        
+        # Large batch sizes for distributed training
+        per_device_train_batch_size: 16
+        per_device_eval_batch_size: 16
+        gradient_accumulation_steps: 1
+        max_grad_norm: 1.0
+        
+        optim: "adamw_torch"
+        weight_decay: 0.01
+        
+        fp16: false
+        bf16: true
+        tf32: true
+        
+        logging_steps: 5
+        eval_strategy: "steps"
+        eval_steps: 25
+        save_strategy: "steps"
+        save_steps: 100
+        save_total_limit: 3
+        
+        max_seq_length: 4096
+        
+        # Distributed training settings
+        dataloader_num_workers: 8
+        ddp_find_unused_parameters: false
+        
+      dataset:
+        data_format: "jsonl"
+        conversation_template: "alpaca"
+        preprocessing_num_workers: 16
+        validation_split_percentage: 5
+        
+      environment:
+        device: "cuda"
+        seed: 42
+        low_cpu_mem_usage: true
+        
+      # Advanced distributed settings
+      trainer:
+        type: "deepspeed"
+        
+    notes:
+      - "Requires multi-GPU setup or cloud infrastructure"
+      - "Uses QLoRA for memory efficiency with large models"
+      - "Optimized for fast training with high throughput"
+      - "Consider using DeepSpeed or FSDP for 70B+ models"
+
+# =============================================================================
+# STRATEGY RECOMMENDATIONS BY USE CASE
+# =============================================================================
+
+use_case_recommendations:
+  personal_projects:
+    recommended_strategies: ["mac_m1_lora", "cpu_small_model"]
+    description: "For individuals working on personal AI projects"
+    
+  small_business:
+    recommended_strategies: ["mac_m1_lora", "gpu_full_finetune"]
+    description: "Small businesses with limited hardware budget"
+    
+  research_institution:
+    recommended_strategies: ["gpu_full_finetune", "cloud_scalable"]
+    description: "Universities and research labs with GPU access"
+    
+  enterprise:
+    recommended_strategies: ["cloud_scalable", "gpu_full_finetune"]
+    description: "Large companies with significant compute resources"
+    
+  testing_development:
+    recommended_strategies: ["cpu_small_model", "mac_m1_lora"]
+    description: "Testing workflows and development environments"
+
+# =============================================================================
+# HARDWARE-BASED RECOMMENDATIONS
+# =============================================================================
+
+hardware_recommendations:
+  "Mac Studio M1 Ultra":
+    recommended_strategy: "mac_m1_lora"
+    max_model_size: "8B"
+    notes: "Excellent for LoRA training with 128GB unified memory"
+    
+  "Mac Studio M2 Ultra": 
+    recommended_strategy: "mac_m1_lora"
+    max_model_size: "8B"
+    notes: "Best Mac option for fine-tuning"
+    
+  "RTX 4090 (24GB)":
+    recommended_strategy: "gpu_full_finetune"
+    max_model_size: "8B full / 70B LoRA"
+    notes: "Excellent prosumer GPU for fine-tuning"
+    
+  "RTX 4080 (16GB)":
+    recommended_strategy: "mac_m1_lora"  # Use LoRA strategy but with CUDA
+    max_model_size: "8B LoRA only"
+    notes: "Good for LoRA training, limited memory for full fine-tuning"
+    
+  "A100 (40GB)":
+    recommended_strategy: "gpu_full_finetune"
+    max_model_size: "8B full / 70B LoRA"
+    notes: "Professional grade, excellent for production training"
+    
+  "A100 (80GB)":
+    recommended_strategy: "gpu_full_finetune"
+    max_model_size: "70B full"
+    notes: "Can handle large model full fine-tuning"
+    
+  "H100 (80GB)":
+    recommended_strategy: "cloud_scalable"
+    max_model_size: "70B+ full"
+    notes: "Top-tier performance for largest models"
+    
+  "Multi-A100 (4x40GB)":
+    recommended_strategy: "cloud_scalable"
+    max_model_size: "70B+ full"
+    notes: "Distributed training for largest models"

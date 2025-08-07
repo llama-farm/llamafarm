@@ -1,0 +1,144 @@
+version: "v1"
+name: "openai_models"
+description: "OpenAI model switching and strategy demonstration"
+
+# Strategy configuration for OpenAI model switching demo
+strategy: "openai_model_switching"
+
+# Model configurations
+models:
+  gpt-4o-mini:
+    type: "OpenAIModel"
+    config:
+      model_name: "gpt-4o-mini"
+      api_key: "${OPENAI_API_KEY}"
+      temperature: 0.7
+      max_tokens: 2000
+      cost_per_1k_input_tokens: 0.15
+      cost_per_1k_output_tokens: 0.60
+      use_cases: ["simple_qa", "chat", "content_moderation", "basic_coding"]
+      strengths: ["speed", "cost-effectiveness", "high-volume tasks"]
+      
+  gpt-4o:
+    type: "OpenAIModel"
+    config:
+      model_name: "gpt-4o"
+      api_key: "${OPENAI_API_KEY}"
+      temperature: 0.7
+      max_tokens: 4000
+      cost_per_1k_input_tokens: 5.00
+      cost_per_1k_output_tokens: 15.00
+      use_cases: ["complex_reasoning", "analysis", "research", "advanced_coding"]
+      strengths: ["reasoning", "accuracy", "complex tasks", "multimodal"]
+      
+  gpt-4-turbo:
+    type: "OpenAIModel"
+    config:
+      model_name: "gpt-4-turbo"
+      api_key: "${OPENAI_API_KEY}"
+      temperature: 0.7
+      max_tokens: 4000
+      cost_per_1k_input_tokens: 10.00
+      cost_per_1k_output_tokens: 30.00
+      use_cases: ["balanced_performance", "professional_writing", "code_review"]
+      strengths: ["balance", "reliability", "professional_quality"]
+
+# Strategy definitions for different scenarios
+strategies:
+  cost_optimized:
+    description: "Minimize costs while maintaining quality"
+    primary_model: "gpt-4o-mini"
+    fallback_models: ["gpt-4o"]
+    routing_rules:
+      - condition: "simple_query"
+        model: "gpt-4o-mini"
+      - condition: "complex_query"
+        model: "gpt-4o"
+        
+  quality_first:
+    description: "Maximize quality regardless of cost"
+    primary_model: "gpt-4o"
+    fallback_models: ["gpt-4-turbo", "gpt-4o-mini"]
+    routing_rules:
+      - condition: "any_query"
+        model: "gpt-4o"
+        
+  balanced:
+    description: "Balance cost and quality"
+    primary_model: "gpt-4o-mini"
+    fallback_models: ["gpt-4o"]
+    routing_rules:
+      - condition: "simple_query"
+        model: "gpt-4o-mini"
+      - condition: "moderate_query"
+        model: "gpt-4o-mini"
+      - condition: "complex_query"
+        model: "gpt-4o"
+        
+  performance_optimized:
+    description: "Optimize for fastest response times"
+    primary_model: "gpt-4o-mini"
+    fallback_models: ["gpt-4o"]
+    routing_rules:
+      - condition: "speed_critical"
+        model: "gpt-4o-mini"
+
+# Environment-specific configurations
+environments:
+  development:
+    default_strategy: "cost_optimized"
+    enable_caching: true
+    cache_ttl: 3600
+    max_requests_per_minute: 100
+    
+  staging:
+    default_strategy: "balanced"
+    enable_caching: true
+    cache_ttl: 1800
+    max_requests_per_minute: 500
+    
+  production:
+    default_strategy: "balanced"
+    enable_caching: true
+    cache_ttl: 3600
+    max_requests_per_minute: 2000
+    enable_monitoring: true
+    cost_alerts:
+      daily_limit: 100.0
+      hourly_limit: 10.0
+
+# Routing configuration
+routing:
+  complexity_analysis:
+    simple_indicators:
+      - "what is"
+      - "define"
+      - "who is"
+      - "when was"
+      - "basic"
+      - "simple"
+    
+    complex_indicators:
+      - "analyze"
+      - "compare and contrast"
+      - "evaluate"
+      - "synthesize"
+      - "comprehensive"
+      - "in-depth"
+      
+  automatic_switching:
+    enabled: true
+    cost_threshold: 0.10  # Switch to cheaper model if cost exceeds threshold
+    quality_threshold: 0.8  # Switch to better model if quality drops below threshold
+
+# Monitoring and logging
+monitoring:
+  track_usage: true
+  track_costs: true
+  track_performance: true
+  alert_on_high_costs: true
+  
+logging:
+  level: "INFO"
+  include_request_details: true
+  include_response_metadata: true
