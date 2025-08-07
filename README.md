@@ -34,171 +34,68 @@ LlamaFarm is a **comprehensive, modular AI framework** that gives you complete c
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Core Components
 
-### System Overview
+LlamaFarm is built as a modular system where each component can be used independently or orchestrated together for powerful AI applications.
 
-```mermaid
-graph TB
-    subgraph "📝 Prompts Layer"
-        PT[Template Library]
-        PS[Strategy Engine]
-        PE[Evaluation System]
-        PA[Multi-Agent Coordination]
-    end
-    
-    subgraph "🔍 RAG Pipeline"
-        DP[Document Parsers]
-        EM[Embedders]
-        VS[Vector Stores]
-        RT[Retrieval Strategies]
-        EX[Extractors]
-    end
-    
-    subgraph "🤖 Model Layer"
-        CP[Cloud Providers]
-        LM[Local Models]
-        FT[Fine-Tuning]
-        MO[Monitoring]
-    end
-    
-    subgraph "⚙️ Core Infrastructure"
-        CF[Config Management]
-        CL[CLI Tools]
-        AP[API Services]
-        DC[Docker Containers]
-    end
-    
-    PT --> PS --> MO
-    DP --> EM --> VS --> RT
-    RT --> PS
-    PS --> CP
-    PS --> LM
-    CF --> PT & DP & CP & LM
-    CL --> CF
-    AP --> CF
-    
-    style PT fill:#e1f5fe
-    style DP fill:#fff3e0
-    style CP fill:#f3e5f5
-    style CF fill:#e8f5e9
-```
+### ⚙️ System Components
 
-### How Components Work Together
+#### **🚀 Runtime**
+The execution environment that orchestrates all components and manages the application lifecycle.
+- **Process Management**: Handles component initialization and shutdown
+- **Resource Allocation**: Manages memory, CPU, and GPU resources efficiently
+- **Service Discovery**: Automatically finds and connects components
+- **Health Monitoring**: Tracks component status and performance metrics
+- **Error Recovery**: Automatic restart and fallback mechanisms
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant C as CLI/API
-    participant P as Prompts
-    participant R as RAG System
-    participant M as Models
-    participant S as Strategy Config
-    
-    U->>C: Query/Request
-    C->>S: Load Configuration
-    S-->>C: Strategy Settings
-    C->>R: Retrieve Context
-    R->>R: Parse → Embed → Search
-    R-->>C: Relevant Documents
-    C->>P: Select Template
-    P->>P: Apply Strategy
-    P-->>C: Formatted Prompt
-    C->>M: Execute with Provider
-    M->>M: Fallback if needed
-    M-->>C: Response
-    C-->>U: Final Output
-```
+#### **📦 Deployer**
+Zero-configuration deployment system that works from local development to production clusters.
+- **Environment Detection**: Automatically adapts to local, Docker, or cloud environments
+- **Configuration Management**: Handles environment variables and secrets securely
+- **Scaling**: Horizontal and vertical scaling based on load
+- **Load Balancing**: Distributes requests across multiple instances
+- **Rolling Updates**: Zero-downtime deployments with automatic rollback
 
----
+### 🧠 AI Components
 
-## ✨ Core Components
+#### **🔍 Data Pipeline (RAG)**
+Complete document processing and retrieval system for building knowledge-augmented applications.
+- **Document Ingestion**: Parse 15+ formats (PDF, Word, Excel, HTML, Markdown, etc.)
+- **Smart Extraction**: Extract entities, keywords, statistics without LLMs
+- **Vector Storage**: Integration with 8+ vector databases (Chroma, Pinecone, FAISS, etc.)
+- **Hybrid Search**: Combine semantic, keyword, and metadata-based retrieval
+- **Chunking Strategies**: Adaptive chunking based on document type and use case
+- **Incremental Updates**: Efficiently update knowledge base without full reprocessing
 
-### 🔍 **RAG System** - Transform Documents into AI Knowledge
+#### **🤖 Models**
+Unified interface for all LLM operations with enterprise-grade features.
+- **Multi-Provider Support**: 25+ providers (OpenAI, Anthropic, Google, Ollama, etc.)
+- **Automatic Failover**: Seamless fallback between providers when errors occur
+- **Fine-Tuning Pipeline**: Train custom models on your data *(Coming Q2 2025)*
+- **Cost Optimization**: Route queries to cheapest capable model
+- **Load Balancing**: Distribute across multiple API keys and endpoints
+- **Response Caching**: Intelligent caching to reduce API costs
+- **Model Configuration**: Per-model temperature, token limits, and parameters
 
-```mermaid
-graph LR
-    subgraph "Input"
-        D[📄 Documents]
-        W[🌐 Web Pages]
-        DB[💾 Databases]
-    end
-    
-    subgraph "Processing"
-        P[Parse] --> E[Extract]
-        E --> EM[Embed]
-        EM --> I[Index]
-    end
-    
-    subgraph "Retrieval"
-        Q[Query] --> S[Search]
-        S --> R[Rank]
-        R --> F[Filter]
-    end
-    
-    D & W & DB --> P
-    I --> S
-    F --> O[Output]
-```
+#### **📝 Prompts**
+Enterprise prompt management system with version control and A/B testing.
+- **Template Library**: 20+ pre-built templates for common use cases
+- **Dynamic Variables**: Jinja2 templating with type validation
+- **Strategy Selection**: Automatically choose best template based on context
+- **Version Control**: Track prompt changes and performance over time
+- **A/B Testing**: Compare prompt variations with built-in analytics
+- **Chain-of-Thought**: Built-in support for reasoning chains
+- **Multi-Agent**: Coordinate multiple specialized prompts
 
-**Features:**
-- **Universal Parsers**: PDF, Word, Excel, CSV, HTML, Markdown, and more
-- **Smart Extractors**: Keywords, entities, statistics, sentiment, topics - no LLM required
-- **Multiple Embedders**: OpenAI, Ollama, HuggingFace, Sentence Transformers
-- **Vector Store Flexibility**: ChromaDB, Pinecone, FAISS, Qdrant, Weaviate
-- **Advanced Retrieval**: Hybrid search, re-ranking, metadata filtering
-- **Production Features**: Batch processing, progress tracking, error recovery
+### 🔄 How Components Work Together
 
-### 🤖 **Model Management** - Unified Interface for All LLMs
+1. **User Request** → Runtime receives and validates the request
+2. **Context Retrieval** → Data Pipeline searches relevant documents
+3. **Prompt Selection** → Prompts system chooses optimal template
+4. **Model Execution** → Models component handles LLM interaction with automatic failover
+5. **Response Delivery** → Runtime returns formatted response to user
 
-```mermaid
-graph TB
-    subgraph "Providers"
-        O[OpenAI]
-        A[Anthropic]
-        G[Google]
-        C[Cohere]
-        T[Together]
-        GR[Groq]
-        OL[Ollama]
-        HF[HuggingFace]
-    end
-    
-    subgraph "Management"
-        LB[Load Balancer]
-        FB[Fallback Logic]
-        RL[Rate Limiter]
-        CM[Cost Monitor]
-    end
-    
-    subgraph "Features"
-        ST[Streaming]
-        FN[Functions]
-        EM[Embeddings]
-        FT[Fine-Tuning]
-    end
-    
-    O & A & G & C & T & GR & OL & HF --> LB
-    LB --> FB --> RL --> CM
-    CM --> ST & FN & EM & FT
-```
-
-**Features:**
-- **25+ Provider Support**: All major cloud and local providers
-- **Intelligent Routing**: Automatic fallbacks and load balancing
-- **Cost Optimization**: Token tracking and budget management
-- **Local Models**: Full Ollama and HuggingFace integration
-- **Fine-Tuning**: Custom model training *(Coming Soon - [Help wanted!](https://github.com/llama-farm/llamafarm/labels/help-wanted))*
-
-### 📝 **Prompt Engineering** - Enterprise-Grade Template System
-
-**Features:**
-- **20+ Pre-Built Templates**: Across 6 categories
-- **Strategy-Based Selection**: Context-aware template matching
-- **Dynamic Variables**: Jinja2 templating with validation
-- **Multi-Agent Support**: Coordinate complex workflows
-- **A/B Testing**: Built-in experimentation framework
-- **Quality Evaluation**: 5 evaluation templates included
+Each component is independent but designed to work seamlessly together through standardized interfaces.
 
 ---
 
