@@ -446,18 +446,6 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
 
 ---
 
-## 📊 Benchmarks
-
-| Operation | LlamaFarm | Alternative A | Alternative B |
-|-----------|-----------|---------------|---------------|
-| Document Ingestion | 1,000 docs/min | 400 docs/min | 600 docs/min |
-| Embedding Generation | 50ms/chunk | 120ms/chunk | 80ms/chunk |
-| Vector Search | 5ms @ 1M vectors | 15ms @ 1M | 10ms @ 1M |
-| LLM Fallback | Automatic | Manual | Not Supported |
-| Cost Optimization | -60% avg | Baseline | -30% avg |
-
----
-
 ## 🚦 Roadmap
 
 ### ✅ Released
