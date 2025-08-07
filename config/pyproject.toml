@@ -40,7 +40,7 @@ fix = true
 lint.select = ["E", "F", "I", "B", "UP", "SIM"]
 
 # Exclude some files
-exclude = ["migrations", ".venv", "venv", "build", "dist"]
+exclude = ["migrations", ".venv", "venv", "build", "dist", "datamodel.py"]
 
 [tool.mypy]
 python_version = "3.8"
