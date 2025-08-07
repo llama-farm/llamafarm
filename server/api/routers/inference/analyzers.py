@@ -111,7 +111,7 @@ Examples:
 → create, namespace: dev, project_id: demo
 """
 
-            response = self.client.chat.completions.create(
+            return self.client.chat.completions.create(
                 model=settings.ollama_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -122,7 +122,6 @@ Examples:
                 max_retries=2
             )
             
-            return response
             
         except Exception as e:
             logger.warning(
