@@ -13,8 +13,8 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config_types import LlamaFarmConfig
-from loader import ConfigError, find_config_file, load_config
+from datamodel import LlamaFarmConfig
+from helpers.loader import ConfigError, find_config_file, load_config
 
 
 class TestConfigLoader:
@@ -271,7 +271,8 @@ def test_integration_usage():
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
     # Test package-style import
-    from config import LlamaFarmConfig, load_config
+    from config import load_config
+    from config.datamodel import LlamaFarmConfig
 
     test_dir = Path(__file__).parent
     config_path = test_dir / "sample_config.yaml"

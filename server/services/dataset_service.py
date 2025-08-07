@@ -1,11 +1,9 @@
-from config import config_types
+from config.datamodel import Dataset
 
 from api.errors import DatasetNotFoundError, NotFoundError
 from core.logging import FastAPIStructLogger
 from services.data_service import MetadataFileContent
 from services.project_service import ProjectService
-
-Dataset = config_types.DatasetsConfig
 
 DEFAULT_PARSERS = ["pdf", "text", "csv", "json", "markdown"]
 

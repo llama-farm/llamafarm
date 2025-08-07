@@ -5,9 +5,9 @@ with JSON schema validation and write capabilities.
 
 import json
 import sys
-from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
 try:
     import yaml
@@ -34,7 +34,7 @@ except ImportError:
 
 # Handle both relative and absolute imports
 try:
-    from .config_types import ConfigDict, LlamaFarmConfig
+    from ..datamodel import LlamaFarmConfig
 except ImportError:
     # If relative import fails, try absolute import (when run directly)
     import sys
@@ -46,13 +46,12 @@ except ImportError:
         sys.path.insert(0, str(current_dir))
 
     try:
-        from config_types import ConfigDict, LlamaFarmConfig
+        from ..datamodel import LlamaFarmConfig
     except ImportError:
         # If all fails, define minimal types
         from typing import Any
 
         LlamaFarmConfig = dict[str, Any]
-        ConfigDict = dict[str, Any]
 
 
 class ConfigError(Exception):
@@ -63,7 +62,7 @@ class ConfigError(Exception):
 
 def _load_schema() -> dict:
     """Load the JSON schema from schema.yaml."""
-    schema_path = Path(__file__).parent / "schema.yaml"
+    schema_path = Path(__file__).parent.parent / "schema.yaml"
 
     if not schema_path.exists():
         raise ConfigError(f"Schema file not found: {schema_path}")
@@ -225,7 +224,7 @@ def load_config_dict(
     config_path: str | Path | None = None,
     directory: str | Path | None = None,
     validate: bool = True,
-) -> ConfigDict:
+) -> dict[str, Any]:
     """
     Load configuration as a regular dictionary
     (same as load_config but with different return type annotation).

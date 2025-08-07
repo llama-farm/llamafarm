@@ -11,8 +11,8 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config_types import LlamaFarmConfig, ModelConfig, PromptConfig, RAGConfig
-from loader import load_config
+from datamodel import LlamaFarmConfig, Model, Prompt
+from helpers.loader import load_config
 
 
 class TestModuleIntegration:
@@ -29,7 +29,7 @@ class TestModuleIntegration:
         config: LlamaFarmConfig = load_config(config_path=config_path)
 
         # Simulate RAG module extracting its configuration
-        rag_config: RAGConfig = config["rag"]
+        rag_config = config["rag"]
 
         # Parser configuration extraction
         parser_type = rag_config["parsers"]["csv"]["type"]
@@ -72,10 +72,10 @@ class TestModuleIntegration:
         config: LlamaFarmConfig = load_config(config_path=config_path)
 
         # Simulate model manager extracting model configurations
-        models: list[ModelConfig] = config["models"]
+        models = config["models"]
 
         # Group models by provider (common pattern)
-        models_by_provider: dict[str, list[ModelConfig]] = {}
+        models_by_provider = {}
         for model in models:
             provider = model["provider"]
             if provider not in models_by_provider:
@@ -114,7 +114,7 @@ class TestModuleIntegration:
         prompts = config.get("prompts", [])
         if prompts:
             # Simulate prompt manager creating a lookup dictionary
-            prompt_lookup: dict[str, PromptConfig] = {}
+            prompt_lookup = {}
             for prompt in prompts:
                 if "name" in prompt:
                     prompt_lookup[prompt["name"]] = prompt
@@ -349,7 +349,7 @@ prompts:
         config: LlamaFarmConfig = load_config(config_path=config_path)
 
         # Simulate component factory pattern based on config
-        def create_parser_from_config(rag_config: RAGConfig):
+        def create_parser_from_config(rag_config):
             """Simulate parser factory."""
             parser_type = rag_config["parsers"]["csv"]["type"]
             parser_config = rag_config["parsers"]["csv"]["config"]
@@ -363,7 +363,7 @@ prompts:
             else:
                 raise ValueError(f"Unknown parser type: {parser_type}")
 
-        def create_embedder_from_config(rag_config: RAGConfig):
+        def create_embedder_from_config(rag_config):
             """Simulate embedder factory."""
             embedder_type = rag_config["embedders"]["default"]["type"]
             embedder_config = rag_config["embedders"]["default"]["config"]
