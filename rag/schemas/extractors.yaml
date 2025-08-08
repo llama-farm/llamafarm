@@ -1,1766 +1,242 @@
-type: extractor
-version: 1.0.0
-generated_by: cli_compile.py
-components:
-  table_extractor:
-    schema:
-      name: table_extractor
-      type: extractor
-      class_name: TableExtractor
-      description: Extracts structured tabular data from documents using multiple format detection methods
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties:
-          min_columns:
-            type: integer
-            default: 2
-            minimum: 1
-            description: Minimum number of columns required for table detection
-          min_rows:
-            type: integer
-            default: 2
-            minimum: 1
-            description: Minimum number of rows required for table detection
-          detect_headers:
-            type: boolean
-            default: true
-            description: Whether to detect and separate table headers
-          table_formats:
-            type: array
-            items:
-              type: string
-              enum:
-              - pipe
-              - grid
-              - csv
-              - html_marker
-            default:
-            - pipe
-            - grid
-            - csv
-            description: Table formats to detect
-          max_cell_length:
-            type: integer
-            default: 200
-            minimum: 10
-            description: Maximum character length allowed per table cell
-      output_schema:
-        type: object
-        properties:
-          tables:
-            type: array
-            items:
-              type: object
-              properties:
-                type:
-                  type: string
-                data:
-                  type: array
-                  items:
-                    type: array
-                    items:
-                      type: string
-                headers:
-                  type: array
-                  items:
-                    type: string
-                start_line:
-                  type: integer
-                end_line:
-                  type: integer
-          table_count:
-            type: integer
-          total_rows:
-            type: integer
-          total_columns:
-            type: integer
-          statistics:
-            type: object
-      use_cases:
-      - Financial report analysis
-      - Data extraction from PDFs
-      - Structured content parsing
-      - Research paper table extraction
-      - CSV content detection
-      - Spreadsheet data mining
-      examples:
-      - name: Basic table detection
+extractors:
+  TableExtractor:
+    description: Extract tables
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard table extractor
         config:
-          min_columns: 2
-          min_rows: 2
-          detect_headers: true
-          table_formats:
-          - pipe
-          - csv
-        description: Detect pipe and CSV tables with headers
-      - name: Strict table extraction
+          enabled: true
+        recommended_for:
+        - General use
+  LinkExtractor:
+    description: Extract URLs and links
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard link extractor
         config:
-          min_columns: 3
-          min_rows: 3
-          detect_headers: true
-          table_formats:
-          - grid
-          - pipe
-          max_cell_length: 100
-        description: Extract only well-formed tables with multiple columns
-      - name: All format detection
+          enabled: true
+        recommended_for:
+        - General use
+  PatternExtractor:
+    description: Extract regex patterns
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard pattern extractor
         config:
-          min_columns: 2
-          min_rows: 1
-          detect_headers: false
-          table_formats:
-          - pipe
-          - grid
-          - csv
-          - html_marker
-          max_cell_length: 500
-        description: Detect all table formats including HTML markers
-      - name: Large table extraction
-        config:
-          min_columns: 1
-          min_rows: 1
-          detect_headers: true
-          table_formats:
-          - csv
-          max_cell_length: 1000
-        description: Extract large CSV tables with long cell content
-    path: components/extractors_new/table_extractor
-    has_implementation: true
-  link_extractor:
-    schema:
-      name: link_extractor
-      type: extractor
-      class_name: LinkExtractor
-      description: Extracts URLs, email addresses, phone numbers, and various reference types from text
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties:
-          extract_urls:
-            type: boolean
-            default: true
-            description: Extract HTTP/HTTPS URLs from text
-          extract_emails:
-            type: boolean
-            default: true
-            description: Extract email addresses from text
-          extract_phone_numbers:
-            type: boolean
-            default: true
-            description: Extract phone numbers in various formats
-          extract_mentions:
-            type: boolean
-            default: true
-            description: Extract @mentions from text
-          extract_hashtags:
-            type: boolean
-            default: true
-            description: 'Extract #hashtags from text'
-          extract_file_paths:
-            type: boolean
-            default: true
-            description: Extract file paths (Windows, Unix, UNC)
-          validate_urls:
-            type: boolean
-            default: true
-            description: Validate and parse URL components
-          categorize_domains:
-            type: boolean
-            default: true
-            description: Categorize URLs by domain type
-      output_schema:
-        type: object
-        properties:
-          urls:
-            type: array
-            items:
-              type: object
-              properties:
-                url:
-                  type: string
-                domain:
-                  type: string
-                scheme:
-                  type: string
-                is_valid:
-                  type: boolean
-          emails:
-            type: array
-            items:
-              type: string
-          phone_numbers:
-            type: array
-          mentions:
-            type: array
-            items:
-              type: string
-          hashtags:
-            type: array
-            items:
-              type: string
-          file_paths:
-            type: array
-          total_links:
-            type: integer
-          domain_categories:
-            type: object
-      use_cases:
-      - Link discovery and validation
-      - Contact information extraction
-      - Social media analysis
-      - Reference gathering
-      - URL categorization
-      - Content connectivity analysis
-      examples:
-      - name: Web content analysis
-        config:
-          extract_urls: true
-          extract_emails: true
-          validate_urls: true
-          categorize_domains: true
-        description: Extract and categorize links from web content
-      - name: Social media posts
-        config:
-          extract_urls: true
-          extract_mentions: true
-          extract_hashtags: true
-          extract_emails: false
-          extract_file_paths: false
-        description: Extract social media references and links
-    path: components/extractors_new/link_extractor
-    has_implementation: true
-  pattern_extractor:
-    schema:
-      name: pattern_extractor
-      type: extractor
-      class_name: PatternExtractor
-      description: Extracts patterns from text using regular expressions (emails, phone numbers, URLs, etc.)
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties:
-          patterns:
-            type: array
-            items:
-              type: string
-              enum:
-              - email
-              - phone
-              - url
-              - ip_address
-              - ssn
-              - credit_card
-              - date
-              - time
-            default:
-            - email
-            - phone
-            - url
-            description: Predefined patterns to extract
-          custom_patterns:
-            type: array
-            items:
-              type: object
-              properties:
-                name:
-                  type: string
-                pattern:
-                  type: string
-                description:
-                  type: string
-            default: []
-            description: Custom regex patterns to extract
-          include_context:
-            type: boolean
-            default: true
-            description: Include surrounding context for matches
-          context_window:
-            type: integer
-            default: 50
-            minimum: 0
-            description: Characters of context to include around matches
-      output_schema:
-        type: object
-        properties:
-          patterns:
-            type: object
-            patternProperties:
-              .*:
-                type: object
-                properties:
-                  matches:
-                    type: array
-                  count:
-                    type: integer
-                  description:
-                    type: string
-      use_cases:
-      - Data validation and extraction
-      - PII detection and redaction
-      - Contact information extraction
-      - URL and reference extraction
-      - Document analysis and compliance
-      examples:
-      - name: Contact information extraction
-        config:
-          patterns:
-          - email
-          - phone
-          include_context: true
-          context_window: 30
-        description: Extract emails and phone numbers with context
-      - name: Web content analysis
-        config:
-          patterns:
-          - url
-          - email
-          include_context: false
-        description: Extract URLs and emails from web content
-    path: components/extractors_new/pattern_extractor
-    has_implementation: true
-  entity_extractor:
-    schema:
-      name: entity_extractor
-      type: extractor
-      class_name: EntityExtractor
-      description: Extracts named entities (people, organizations, locations, etc.) from text using NLP models or regex fallback
-      version: 1.0.0
-      dependencies:
-        optional:
-        - spacy
-        required: []
-      config_schema:
-        type: object
-        properties:
-          entity_types:
-            type: array
-            items:
-              type: string
-              enum:
-              - PERSON
-              - ORG
-              - GPE
-              - DATE
-              - TIME
-              - PERCENT
-              - MONEY
-              - PRODUCT
-              - EVENT
-              - WORK_OF_ART
-              - LAW
-              - LANGUAGE
-            default:
-            - PERSON
-            - ORG
-            - GPE
-            - DATE
-            - PERCENT
-            - PRODUCT
-            description: Types of entities to extract
-          use_fallback:
-            type: boolean
-            default: true
-            description: Use regex fallback when spaCy is not available
-          min_entity_length:
-            type: integer
-            default: 2
-            minimum: 1
-            description: Minimum length of entities to extract
-          confidence_threshold:
-            type: number
-            default: 0.8
-            minimum: 0.0
-            maximum: 1.0
-            description: Minimum confidence score for entity extraction
-      output_schema:
-        type: object
-        properties:
-          entities:
-            type: array
-            items:
-              type: object
-              properties:
-                text:
-                  type: string
-                label:
-                  type: string
-                start:
-                  type: integer
-                end:
-                  type: integer
-                confidence:
-                  type: number
-      use_cases:
-      - Customer support ticket analysis
-      - Document classification
-      - Content categorization
-      - Information extraction from research papers
-      - News article analysis
-      examples:
-      - name: Basic entity extraction
-        config:
-          entity_types:
+          enabled: true
+        recommended_for:
+        - General use
+  EntityExtractor:
+    description: Extract named entities using NER
+    config_schema:
+      model:
+        type: string
+        default: en_core_web_sm
+        description: NER model name
+      entity_types:
+        type: array
+        items:
+          type: string
+          enum:
           - PERSON
           - ORG
           - GPE
-          use_fallback: true
-          min_entity_length: 2
-        description: Extract people, organizations, and locations
-      - name: Financial entity extraction
-        config:
-          entity_types:
-          - PERSON
-          - ORG
-          - MONEY
-          - PERCENT
           - DATE
-          confidence_threshold: 0.9
-          min_entity_length: 1
-        description: Extract entities relevant to financial documents
-    path: components/extractors_new/entity_extractor
-    has_implementation: true
-  datetime_extractor:
-    schema:
-      name: datetime_extractor
-      type: extractor
-      class_name: DateTimeExtractor
-      description: Extracts dates, times, and temporal expressions from text using multiple parsing strategies
-      version: 1.0.0
-      dependencies:
-        optional:
-        - python-dateutil
-        required: []
-      config_schema:
-        type: object
-        properties:
-          fuzzy_parsing:
-            type: boolean
-            default: true
-            description: Enable fuzzy date parsing with dateutil (if available)
-          extract_relative:
-            type: boolean
-            default: true
-            description: Extract relative date expressions (yesterday, next week, etc.)
-          extract_times:
-            type: boolean
-            default: true
-            description: Extract time expressions (12:30 PM, 14:30, etc.)
-          default_timezone:
-            type: string
-            default: UTC
-            description: Default timezone for parsed dates
-          date_formats:
-            type: array
-            items:
-              type: string
-            default: []
-            description: Additional date formats to try parsing
-      output_schema:
-        type: object
-        properties:
-          dates:
-            type: array
-            items:
-              type: object
-              properties:
-                text:
-                  type: string
-                parsed:
-                  type: string
-                type:
-                  type: string
-                confidence:
-                  type: number
-          times:
-            type: array
-            items:
-              type: object
-              properties:
-                text:
-                  type: string
-                parsed:
-                  type: string
-                type:
-                  type: string
-          relative_dates:
-            type: array
-            items:
-              type: object
-              properties:
-                text:
-                  type: string
-                interpretation:
-                  type: string
-                type:
-                  type: string
-      use_cases:
-      - Event extraction from documents
-      - Timeline construction
-      - Temporal information retrieval
-      - Document chronology analysis
-      - Meeting and appointment extraction
-      - Historical document analysis
-      examples:
-      - name: Event extraction
-        config:
-          fuzzy_parsing: true
-          extract_relative: true
-          extract_times: true
-        description: Extract all temporal information for event processing
-      - name: Precise dates only
-        config:
-          fuzzy_parsing: false
-          extract_relative: false
-          extract_times: false
-        description: Extract only precise, unambiguous dates
-    path: components/extractors_new/datetime_extractor
-    has_implementation: true
-  summary_extractor:
-    schema:
-      name: summary_extractor
-      type: extractor
-      class_name: SummaryExtractor
-      description: Generates document summaries using statistical and rule-based approaches without LLMs
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties:
-          summary_sentences:
-            type: integer
-            default: 3
-            minimum: 1
-            maximum: 10
-            description: Number of sentences to include in summary
-          min_sentence_length:
-            type: integer
-            default: 10
-            minimum: 5
-            description: Minimum length of sentences to consider
-          max_sentence_length:
-            type: integer
-            default: 500
-            minimum: 50
-            description: Maximum length of sentences to consider
-          include_key_phrases:
-            type: boolean
-            default: true
-            description: Include key phrases in summary metadata
-          include_statistics:
-            type: boolean
-            default: true
-            description: Include document statistics in summary
-          scoring_method:
-            type: string
-            enum:
-            - frequency
-            - position
-            - combined
-            default: combined
-            description: Method for scoring sentence importance
-      output_schema:
-        type: object
-        properties:
-          summary:
-            type: object
-            properties:
-              text:
-                type: string
-              sentences:
-                type: array
-              key_phrases:
-                type: array
-              statistics:
-                type: object
-      use_cases:
-      - Document summarization
-      - Content preview generation
-      - Research paper abstracts
-      - News article summaries
-      - Report executive summaries
-      examples:
-      - name: Brief summary
-        config:
-          summary_sentences: 2
-          min_sentence_length: 15
-          scoring_method: combined
-        description: Generate a brief 2-sentence summary
-      - name: Detailed summary
-        config:
-          summary_sentences: 5
-          include_key_phrases: true
-          include_statistics: true
-          scoring_method: frequency
-        description: Generate detailed summary with metadata
-    path: components/extractors_new/summary_extractor
-    has_implementation: true
-  heading_extractor:
-    schema:
-      name: heading_extractor
-      type: extractor
-      class_name: HeadingExtractor
-      description: Extracts document headings and hierarchical structure using multiple detection methods
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties:
-          extract_markdown_headings:
-            type: boolean
-            default: true
-            description: 'Extract markdown-style headings (# ## ### etc.)'
-          extract_underlined_headings:
-            type: boolean
-            default: true
-            description: Extract underlined headings (text followed by === or ---)
-          extract_numbered_headings:
-            type: boolean
-            default: true
-            description: Extract numbered headings (1. 1.1. 1.1.1. etc.)
-          extract_caps_headings:
-            type: boolean
-            default: true
-            description: Extract all-caps headings
-          min_heading_length:
-            type: integer
-            default: 3
-            minimum: 1
-            description: Minimum length for heading text
-          max_heading_length:
-            type: integer
-            default: 200
-            minimum: 10
-            description: Maximum length for heading text
-          generate_toc:
-            type: boolean
-            default: true
-            description: Generate table of contents from headings
-          detect_sections:
-            type: boolean
-            default: true
-            description: Detect document sections based on headings
-      output_schema:
-        type: object
-        properties:
-          headings:
-            type: array
-            items:
-              type: object
-              properties:
-                text:
-                  type: string
-                level:
-                  type: integer
-                type:
-                  type: string
-                line_number:
-                  type: integer
-          heading_count:
-            type: integer
-          hierarchy:
-            type: object
-          table_of_contents:
-            type: array
-          sections:
-            type: array
-          statistics:
-            type: object
-      use_cases:
-      - Document structure analysis
-      - Table of contents generation
-      - Section detection
-      - Navigation assistance
-      - Document outlining
-      - Technical documentation analysis
-      examples:
-      - name: Markdown documentation
-        config:
-          extract_markdown_headings: true
-          extract_underlined_headings: false
-          generate_toc: true
-          detect_sections: true
-        description: Extract headings from markdown documentation
-      - name: Academic papers
-        config:
-          extract_numbered_headings: true
-          extract_caps_headings: true
-          min_heading_length: 5
-          generate_toc: true
-        description: Extract structured headings from academic papers
-    path: components/extractors_new/heading_extractor
-    has_implementation: true
-  statistics_extractor:
-    schema:
-      name: statistics_extractor
-      type: extractor
-      class_name: ContentStatisticsExtractor
-      description: Extracts comprehensive content statistics including readability metrics, vocabulary analysis, and structural
-        information
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties:
-          include_readability:
-            type: boolean
-            default: true
-            description: Include readability metrics (Flesch-Kincaid, etc.)
-          include_vocabulary:
-            type: boolean
-            default: true
-            description: Include vocabulary analysis and diversity metrics
-          include_structure:
-            type: boolean
-            default: true
-            description: Include document structure analysis
-          include_sentiment_indicators:
-            type: boolean
-            default: true
-            description: Include basic sentiment indicators
-          language:
-            type: string
-            default: en
-            description: Language for analysis (currently supports 'en')
-          reading_speeds:
-            type: object
-            properties:
-              slow:
-                type: integer
-                default: 150
-              average:
-                type: integer
-                default: 200
-              fast:
-                type: integer
-                default: 300
-            description: Reading speeds in words per minute for time estimation
-      output_schema:
-        type: object
-        properties:
-          word_count:
-            type: integer
-          sentence_count:
-            type: integer
-          paragraph_count:
-            type: integer
-          readability:
-            type: object
-          vocabulary:
-            type: object
-          structure:
-            type: object
-          sentiment_indicators:
-            type: object
-          reading_time:
-            type: object
-      use_cases:
-      - Content quality assessment
-      - Readability analysis
-      - Document complexity evaluation
-      - Vocabulary diversity measurement
-      - Reading time estimation
-      - Content structure analysis
-      examples:
-      - name: Research analysis
-        config:
-          include_readability: true
-          include_vocabulary: true
-          include_structure: true
-          include_sentiment_indicators: false
-        description: Comprehensive analysis for research papers
-      - name: Content marketing
-        config:
-          include_readability: true
-          include_vocabulary: false
-          include_structure: false
-          include_sentiment_indicators: true
-        description: Focus on readability and sentiment for marketing content
-    path: components/extractors_new/statistics_extractor
-    has_implementation: true
-  keyword_extractor:
-    schema:
-      name: keyword_extractor
-      type: extractor
-      class_name: KeywordExtractor
-      description: Extracts keywords and key phrases using RAKE, YAKE, and TF-IDF algorithms
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties:
-          methods:
-            type: array
-            items:
-              type: string
-              enum:
-              - rake
-              - yake
-              - tfidf
-            default:
-            - rake
-            - yake
-            - tfidf
-            description: Keyword extraction methods to use
-          combine_results:
-            type: boolean
-            default: true
-            description: Combine results from all methods into unified output
-          max_combined_keywords:
-            type: integer
-            default: 15
-            description: Maximum number of combined keywords to return
-          rake_config:
-            type: object
-            properties:
-              min_length:
-                type: integer
-                default: 1
-              max_length:
-                type: integer
-                default: 4
-              max_keywords:
-                type: integer
-                default: 10
-              min_frequency:
-                type: integer
-                default: 1
-            description: Configuration for RAKE extractor
-          yake_config:
-            type: object
-            properties:
-              language:
-                type: string
-                default: en
-              max_ngram_size:
-                type: integer
-                default: 3
-              deduplication_threshold:
-                type: number
-                default: 0.9
-              max_keywords:
-                type: integer
-                default: 10
-              window_size:
-                type: integer
-                default: 1
-            description: Configuration for YAKE extractor
-          tfidf_config:
-            type: object
-            properties:
-              max_features:
-                type: integer
-                default: 10
-              min_df:
-                type: integer
-                default: 1
-              max_df:
-                type: number
-                default: 0.95
-              ngram_range:
-                type: array
-                items:
-                  type: integer
-                default:
-                - 1
-                - 2
-            description: Configuration for TF-IDF extractor
-      output_schema:
-        type: object
-        properties:
-          rake_keywords:
-            type: array
-            items:
-              type: object
-              properties:
-                phrase:
-                  type: string
-                score:
-                  type: number
-          yake_keywords:
-            type: array
-            items:
-              type: object
-              properties:
-                phrase:
-                  type: string
-                score:
-                  type: number
-          tfidf_keywords:
-            type: array
-            items:
-              type: object
-              properties:
-                phrase:
-                  type: string
-                score:
-                  type: number
-          combined_keywords:
-            type: array
-            items:
-              type: object
-              properties:
-                phrase:
-                  type: string
-                methods:
-                  type: array
-                  items:
-                    type: string
-                combined_score:
-                  type: number
-      use_cases:
-      - Content summarization
-      - Document indexing and search
-      - Topic modeling preparation
-      - Content categorization
-      - SEO keyword analysis
-      - Research paper analysis
-      - Social media content analysis
-      examples:
-      - name: Academic research
-        config:
-          methods:
-          - rake
-          - tfidf
-          combine_results: true
-          rake_config:
-            max_length: 5
-            max_keywords: 15
-          tfidf_config:
-            max_features: 15
-            ngram_range:
-            - 1
-            - 3
-        description: Optimized for academic and research papers
-      - name: Marketing content
-        config:
-          methods:
-          - rake
-          - yake
-          combine_results: true
-          yake_config:
-            max_ngram_size: 2
-            max_keywords: 12
-        description: Focused on marketing and web content
-    path: components/extractors_new/keyword_extractor
-    has_implementation: true
-defaults_registry:
-  table_extractor:
-    general_purpose:
-      name: General Purpose Table Detection
-      description: Balanced settings for most document types
-      config:
-        min_columns: 2
-        min_rows: 2
-        detect_headers: true
-        table_formats:
-        - pipe
-        - grid
-        - csv
-        max_cell_length: 200
-      recommended_for:
-      - General documents
-      - Mixed content
-      - Standard reports
-    financial_reports:
-      name: Financial Document Table Extraction
-      description: Optimized for financial and business reports
-      config:
-        min_columns: 3
-        min_rows: 2
-        detect_headers: true
-        table_formats:
-        - pipe
-        - grid
-        - csv
-        max_cell_length: 150
-      recommended_for:
-      - Financial reports
-      - Business documents
-      - Accounting data
-    research_papers:
-      name: Academic Research Table Extraction
-      description: Suitable for academic papers and research documents
-      config:
-        min_columns: 2
-        min_rows: 3
-        detect_headers: true
-        table_formats:
-        - pipe
-        - grid
-        max_cell_length: 300
-      recommended_for:
-      - Research papers
-      - Academic documents
-      - Scientific literature
-    data_mining:
-      name: Comprehensive Data Mining
-      description: Extract all possible tabular data including large tables
-      config:
-        min_columns: 1
-        min_rows: 1
-        detect_headers: false
-        table_formats:
-        - pipe
-        - grid
-        - csv
-        - html_marker
-        max_cell_length: 1000
-      recommended_for:
-      - Data extraction
-      - Large datasets
-      - Mixed format documents
-  link_extractor:
-    web_analysis:
-      name: Web Content Analysis
-      description: Comprehensive link extraction for web content
-      config:
-        extract_urls: true
-        extract_emails: true
-        extract_phone_numbers: true
-        extract_mentions: false
-        extract_hashtags: false
-        extract_file_paths: true
-        validate_urls: true
-        categorize_domains: true
-      recommended_for:
-      - Web pages
-      - HTML content
-      - Articles with references
-    social_media:
-      name: Social Media Content
-      description: Optimized for social media posts and content
-      config:
-        extract_urls: true
-        extract_emails: false
-        extract_phone_numbers: false
-        extract_mentions: true
-        extract_hashtags: true
-        extract_file_paths: false
-        validate_urls: true
-        categorize_domains: true
-      recommended_for:
-      - Twitter posts
-      - Social media content
-      - User-generated content
-    documentation:
-      name: Technical Documentation
-      description: Extract links and references from documentation
-      config:
-        extract_urls: true
-        extract_emails: true
-        extract_phone_numbers: false
-        extract_mentions: false
-        extract_hashtags: false
-        extract_file_paths: true
-        validate_urls: true
-        categorize_domains: true
-      recommended_for:
-      - API docs
-      - Technical guides
-      - Software documentation
-    contact_extraction:
-      name: Contact Information
-      description: Focus on extracting contact details
-      config:
-        extract_urls: false
-        extract_emails: true
-        extract_phone_numbers: true
-        extract_mentions: false
-        extract_hashtags: false
-        extract_file_paths: false
-        validate_urls: false
-        categorize_domains: false
-      recommended_for:
-      - Business cards
-      - Contact lists
-      - Directory content
-  pattern_extractor:
-    general_purpose:
-      name: General Pattern Extraction
-      description: Extract common patterns like emails, phones, and URLs
-      config:
-        patterns:
-        - email
-        - phone
-        - url
-        include_context: true
-        context_window: 50
-      recommended_for:
-      - General documents
-      - Contact extraction
-      - Web content
-    compliance_audit:
-      name: Compliance and PII Detection
-      description: Detect sensitive information patterns
-      config:
-        patterns:
-        - email
-        - phone
-        - ssn
-        - credit_card
-        include_context: true
-        context_window: 30
-      recommended_for:
-      - Data auditing
-      - Compliance checks
-      - PII detection
-    web_analysis:
-      name: Web Content Analysis
-      description: Extract web-related patterns and references
-      config:
-        patterns:
-        - url
-        - email
-        - ip_address
-        include_context: false
-        context_window: 0
-      recommended_for:
-      - Web scraping
-      - URL extraction
-      - Network analysis
-    document_processing:
-      name: Document Processing
-      description: Extract structured data from documents
-      config:
-        patterns:
-        - email
-        - phone
-        - date
-        - time
-        include_context: true
-        context_window: 40
-      recommended_for:
-      - Document analysis
-      - Data extraction
-      - Content processing
-  entity_extractor:
-    general_purpose:
-      name: General Purpose Entity Extraction
-      description: Good balance for most document types
-      config:
-        entity_types:
-        - PERSON
-        - ORG
-        - GPE
-        - DATE
-        - PERCENT
-        use_fallback: true
-        min_entity_length: 2
-        confidence_threshold: 0.8
-      recommended_for:
-      - General documents
-      - Customer support
-      - News articles
-    research_papers:
-      name: Academic Research Entity Extraction
-      description: Optimized for academic and research content
-      config:
-        entity_types:
-        - PERSON
-        - ORG
-        - GPE
-        - DATE
-        - WORK_OF_ART
-        - PRODUCT
-        use_fallback: true
-        min_entity_length: 3
-        confidence_threshold: 0.85
-      recommended_for:
-      - Research papers
-      - Academic documents
-      - Scientific literature
-    business_reports:
-      name: Business Document Entity Extraction
-      description: Focused on business and financial entities
-      config:
-        entity_types:
-        - PERSON
-        - ORG
-        - GPE
-        - MONEY
-        - PERCENT
-        - DATE
-        use_fallback: true
-        min_entity_length: 2
-        confidence_threshold: 0.9
-      recommended_for:
-      - Financial reports
-      - Business documents
-      - Market analysis
-    news_analysis:
-      name: News Article Entity Extraction
-      description: Comprehensive entity extraction for news content
-      config:
-        entity_types:
+          - TIME
+          - MONEY
+          - EMAIL
+          - PHONE
+          - URL
+          - LAW
+        default:
         - PERSON
         - ORG
         - GPE
         - DATE
         - TIME
-        - EVENT
-        - PRODUCT
-        use_fallback: true
-        min_entity_length: 2
-        confidence_threshold: 0.75
-      recommended_for:
-      - News articles
-      - Press releases
-      - Media analysis
-  datetime_extractor:
-    event_extraction:
-      name: Event Extraction
-      description: Comprehensive datetime extraction for events and meetings
-      config:
-        fuzzy_parsing: true
-        extract_relative: true
-        extract_times: true
-        default_timezone: UTC
-        date_formats: []
-      recommended_for:
-      - Meeting minutes
-      - Event descriptions
-      - Calendar entries
-      - News articles
-    precise_dates_only:
-      name: Precise Dates Only
-      description: Extract only unambiguous, precise dates
-      config:
-        fuzzy_parsing: false
-        extract_relative: false
-        extract_times: false
-        default_timezone: UTC
-        date_formats:
-        - '%Y-%m-%d'
-        - '%m/%d/%Y'
-        - '%B %d, %Y'
-      recommended_for:
-      - Legal documents
-      - Financial reports
-      - Official records
-    historical_analysis:
-      name: Historical Analysis
-      description: Optimized for historical documents and timelines
-      config:
-        fuzzy_parsing: true
-        extract_relative: false
-        extract_times: false
-        default_timezone: UTC
-        date_formats:
-        - '%B %d, %Y'
-        - '%Y'
-        - '%B %Y'
-      recommended_for:
-      - Historical documents
-      - Biographies
-      - Academic papers
-      - Archives
-    social_media:
-      name: Social Media
-      description: Extract temporal expressions from social media content
-      config:
-        fuzzy_parsing: true
-        extract_relative: true
-        extract_times: true
-        default_timezone: UTC
-        date_formats: []
-      recommended_for:
-      - Social media posts
-      - Comments
-      - Chat logs
-      - Forums
-    business_documents:
-      name: Business Documents
-      description: Focused on business and corporate temporal information
-      config:
-        fuzzy_parsing: true
-        extract_relative: true
-        extract_times: true
-        default_timezone: UTC
-        date_formats:
-        - '%m/%d/%Y'
-        - '%Y-%m-%d'
-        - '%B %d, %Y'
-      recommended_for:
-      - Business reports
-      - Contracts
-      - Emails
-      - Project documents
-  summary_extractor:
-    general_purpose:
-      name: General Purpose Summary
-      description: Balanced summary for most document types
-      config:
-        summary_sentences: 3
-        min_sentence_length: 10
-        max_sentence_length: 500
-        include_key_phrases: true
-        include_statistics: true
-        scoring_method: combined
-      recommended_for:
-      - General documents
-      - Articles
-      - Reports
-    brief_summary:
-      name: Brief Summary
-      description: Short, concise summaries
-      config:
-        summary_sentences: 2
-        min_sentence_length: 15
-        max_sentence_length: 300
-        include_key_phrases: false
-        include_statistics: false
-        scoring_method: position
-      recommended_for:
-      - Quick overviews
-      - Preview text
-      - Social media
-    detailed_summary:
-      name: Detailed Summary
-      description: Comprehensive summaries with metadata
-      config:
-        summary_sentences: 5
-        min_sentence_length: 10
-        max_sentence_length: 600
-        include_key_phrases: true
-        include_statistics: true
-        scoring_method: frequency
-      recommended_for:
-      - Research papers
-      - Long documents
-      - Analysis reports
-    news_summary:
-      name: News Article Summary
-      description: Optimized for news content
-      config:
-        summary_sentences: 3
-        min_sentence_length: 12
-        max_sentence_length: 400
-        include_key_phrases: true
-        include_statistics: false
-        scoring_method: combined
-      recommended_for:
-      - News articles
-      - Press releases
-      - Media content
-  heading_extractor:
-    technical_docs:
-      name: Technical Documentation
-      description: Optimized for technical documentation and API docs
-      config:
-        extract_markdown_headings: true
-        extract_underlined_headings: false
-        extract_numbered_headings: true
-        extract_caps_headings: false
-        min_heading_length: 3
-        max_heading_length: 200
-        generate_toc: true
-        detect_sections: true
-      recommended_for:
-      - API documentation
-      - Technical guides
-      - Software manuals
-    academic_papers:
-      name: Academic Papers
-      description: Optimized for academic and research papers
-      config:
-        extract_markdown_headings: true
-        extract_underlined_headings: true
-        extract_numbered_headings: true
-        extract_caps_headings: true
-        min_heading_length: 5
-        max_heading_length: 150
-        generate_toc: true
-        detect_sections: true
-      recommended_for:
-      - Research papers
-      - Academic articles
-      - Thesis documents
-    general_content:
-      name: General Content
-      description: Balanced settings for general document types
-      config:
-        extract_markdown_headings: true
-        extract_underlined_headings: true
-        extract_numbered_headings: true
-        extract_caps_headings: true
-        min_heading_length: 3
-        max_heading_length: 200
-        generate_toc: true
-        detect_sections: true
-      recommended_for:
-      - General documents
-      - Articles
-      - Reports
-    minimal_extraction:
-      name: Minimal Extraction
-      description: Basic heading extraction without advanced features
-      config:
-        extract_markdown_headings: true
-        extract_underlined_headings: false
-        extract_numbered_headings: false
-        extract_caps_headings: false
-        min_heading_length: 3
-        max_heading_length: 100
-        generate_toc: false
-        detect_sections: false
-      recommended_for:
-      - Simple documents
-      - Quick analysis
-      - Performance-critical applications
-  statistics_extractor:
-    research_analysis:
-      name: Research Paper Analysis
-      description: Comprehensive statistics for academic research
-      config:
-        include_readability: true
-        include_vocabulary: true
-        include_structure: true
-        include_sentiment_indicators: false
-        language: en
-        reading_speeds:
-          slow: 120
-          average: 180
-          fast: 250
-      recommended_for:
-      - Research papers
-      - Academic articles
-      - Technical documentation
-    content_marketing:
-      name: Content Marketing Analysis
-      description: Optimized for marketing and web content
-      config:
-        include_readability: true
-        include_vocabulary: false
-        include_structure: false
-        include_sentiment_indicators: true
-        language: en
-        reading_speeds:
-          slow: 150
-          average: 200
-          fast: 300
-      recommended_for:
-      - Blog posts
-      - Marketing content
-      - Web articles
-    financial_analysis:
-      name: Financial Document Analysis
-      description: Statistics focused on financial and business documents
-      config:
-        include_readability: true
-        include_vocabulary: true
-        include_structure: true
-        include_sentiment_indicators: true
-        language: en
-        reading_speeds:
-          slow: 100
-          average: 150
-          fast: 200
-      recommended_for:
-      - Financial reports
-      - Business documents
-      - Legal texts
-    basic_stats:
-      name: Basic Statistics
-      description: Essential metrics only for performance
-      config:
-        include_readability: true
-        include_vocabulary: false
-        include_structure: false
-        include_sentiment_indicators: false
-        language: en
-        reading_speeds:
-          slow: 150
-          average: 200
-          fast: 300
-      recommended_for:
-      - Quick analysis
-      - Large document batches
-      - Performance-critical applications
-  keyword_extractor:
-    academic_research:
-      name: Academic Research
-      description: Optimized for academic papers and research documents
-      config:
-        methods:
-        - rake
-        - tfidf
-        combine_results: true
-        max_combined_keywords: 20
-        rake_config:
-          min_length: 1
-          max_length: 5
-          max_keywords: 15
-          min_frequency: 1
-        tfidf_config:
-          max_features: 15
-          min_df: 1
-          max_df: 0.8
-          ngram_range:
-          - 1
-          - 3
-      recommended_for:
-      - Research papers
-      - Academic articles
-      - Technical documentation
-      - Scientific journals
-    marketing_content:
-      name: Marketing Content
-      description: Focused on marketing and web content analysis
-      config:
-        methods:
+        - MONEY
+        - EMAIL
+        - PHONE
+        - URL
+        description: Entity types to extract
+      use_fallback:
+        type: boolean
+        default: true
+        description: Use regex fallback
+      min_entity_length:
+        type: integer
+        default: 2
+        minimum: 1
+        description: Minimum entity length
+      merge_entities:
+        type: boolean
+        default: true
+        description: Merge adjacent entities
+      confidence_threshold:
+        type: number
+        default: 0.7
+        minimum: 0.0
+        maximum: 1.0
+        description: Minimum confidence score
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard entity extraction
+        config:
+          model: en_core_web_sm
+          entity_types:
+          - PERSON
+          - ORG
+          - GPE
+          - DATE
+          - TIME
+          - MONEY
+          - EMAIL
+          - PHONE
+          - URL
+          use_fallback: true
+          min_entity_length: 2
+          merge_entities: true
+          confidence_threshold: 0.7
+        recommended_for:
+        - Documents
+        - Articles
+        - Reports
+  PathExtractor:
+    description: Extract file paths
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard path extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  DatetimeExtractor:
+    description: Extract dates and times
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard datetime extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  SummaryExtractor:
+    description: Generate summaries
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard summary extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  HeadingExtractor:
+    description: Extract document headings
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard heading extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  StatisticsExtractor:
+    description: Extract text statistics
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard statistics extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  KeywordExtractor:
+    description: Extract keywords from text using various algorithms
+    config_schema:
+      algorithm:
+        type: string
+        enum:
         - rake
         - yake
-        combine_results: true
-        max_combined_keywords: 12
-        rake_config:
-          min_length: 1
-          max_length: 3
+        - tfidf
+        - textrank
+        default: rake
+        description: Extraction algorithm
+      max_keywords:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 100
+        description: Maximum keywords
+      min_keyword_length:
+        type: integer
+        default: 3
+        minimum: 1
+        description: Minimum keyword length
+      include_scores:
+        type: boolean
+        default: true
+        description: Include relevance scores
+      language:
+        type: string
+        default: english
+        description: Language for stop words
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard keyword extraction
+        config:
+          algorithm: rake
           max_keywords: 10
-          min_frequency: 1
-        yake_config:
-          language: en
-          max_ngram_size: 2
-          deduplication_threshold: 0.8
-          max_keywords: 10
-      recommended_for:
-      - Blog posts
-      - Marketing materials
-      - Website content
-      - Social media posts
-    news_analysis:
-      name: News Analysis
-      description: Optimized for news articles and journalistic content
-      config:
-        methods:
-        - rake
-        - yake
-        - tfidf
-        combine_results: true
-        max_combined_keywords: 15
-        rake_config:
-          min_length: 1
-          max_length: 4
-          max_keywords: 8
-          min_frequency: 1
-        yake_config:
-          language: en
-          max_ngram_size: 3
-          deduplication_threshold: 0.9
-          max_keywords: 8
-        tfidf_config:
-          max_features: 8
-          min_df: 1
-          max_df: 0.9
-          ngram_range:
-          - 1
-          - 2
-      recommended_for:
-      - News articles
-      - Press releases
-      - Journalistic content
-      - Current events
-    business_documents:
-      name: Business Documents
-      description: Tailored for business and corporate documentation
-      config:
-        methods:
-        - rake
-        - tfidf
-        combine_results: true
-        max_combined_keywords: 18
-        rake_config:
-          min_length: 1
-          max_length: 4
-          max_keywords: 12
-          min_frequency: 1
-        tfidf_config:
-          max_features: 12
-          min_df: 1
-          max_df: 0.85
-          ngram_range:
-          - 1
-          - 2
-      recommended_for:
-      - Business reports
-      - Corporate documents
-      - Financial reports
-      - Strategic plans
-    fast_extraction:
-      name: Fast Extraction
-      description: Quick keyword extraction for large document batches
-      config:
-        methods:
-        - rake
-        combine_results: false
-        rake_config:
-          min_length: 1
-          max_length: 3
-          max_keywords: 8
-          min_frequency: 1
-      recommended_for:
-      - Large document collections
-      - Real-time processing
-      - Performance-critical applications
-    comprehensive_analysis:
-      name: Comprehensive Analysis
-      description: Deep keyword analysis using all available methods
-      config:
-        methods:
-        - rake
-        - yake
-        - tfidf
-        combine_results: true
-        max_combined_keywords: 25
-        rake_config:
-          min_length: 1
-          max_length: 6
-          max_keywords: 20
-          min_frequency: 1
-        yake_config:
-          language: en
-          max_ngram_size: 4
-          deduplication_threshold: 0.9
-          max_keywords: 20
-          window_size: 2
-        tfidf_config:
-          max_features: 20
-          min_df: 1
-          max_df: 0.95
-          ngram_range:
-          - 1
-          - 4
-      recommended_for:
-      - Important documents
-      - Detailed analysis
-      - Research projects
-      - Content audit
-use_case_index:
-  Financial report analysis:
-  - table_extractor
-  Data extraction from PDFs:
-  - table_extractor
-  Structured content parsing:
-  - table_extractor
-  Research paper table extraction:
-  - table_extractor
-  CSV content detection:
-  - table_extractor
-  Spreadsheet data mining:
-  - table_extractor
-  Link discovery and validation:
-  - link_extractor
-  Contact information extraction:
-  - link_extractor
-  - pattern_extractor
-  Social media analysis:
-  - link_extractor
-  Reference gathering:
-  - link_extractor
-  URL categorization:
-  - link_extractor
-  Content connectivity analysis:
-  - link_extractor
-  Data validation and extraction:
-  - pattern_extractor
-  PII detection and redaction:
-  - pattern_extractor
-  URL and reference extraction:
-  - pattern_extractor
-  Document analysis and compliance:
-  - pattern_extractor
-  Customer support ticket analysis:
-  - entity_extractor
-  Document classification:
-  - entity_extractor
-  Content categorization:
-  - entity_extractor
-  - keyword_extractor
-  Information extraction from research papers:
-  - entity_extractor
-  News article analysis:
-  - entity_extractor
-  Event extraction from documents:
-  - datetime_extractor
-  Timeline construction:
-  - datetime_extractor
-  Temporal information retrieval:
-  - datetime_extractor
-  Document chronology analysis:
-  - datetime_extractor
-  Meeting and appointment extraction:
-  - datetime_extractor
-  Historical document analysis:
-  - datetime_extractor
-  Document summarization:
-  - summary_extractor
-  Content preview generation:
-  - summary_extractor
-  Research paper abstracts:
-  - summary_extractor
-  News article summaries:
-  - summary_extractor
-  Report executive summaries:
-  - summary_extractor
-  Document structure analysis:
-  - heading_extractor
-  Table of contents generation:
-  - heading_extractor
-  Section detection:
-  - heading_extractor
-  Navigation assistance:
-  - heading_extractor
-  Document outlining:
-  - heading_extractor
-  Technical documentation analysis:
-  - heading_extractor
-  Content quality assessment:
-  - statistics_extractor
-  Readability analysis:
-  - statistics_extractor
-  Document complexity evaluation:
-  - statistics_extractor
-  Vocabulary diversity measurement:
-  - statistics_extractor
-  Reading time estimation:
-  - statistics_extractor
-  Content structure analysis:
-  - statistics_extractor
-  Content summarization:
-  - keyword_extractor
-  Document indexing and search:
-  - keyword_extractor
-  Topic modeling preparation:
-  - keyword_extractor
-  SEO keyword analysis:
-  - keyword_extractor
-  Research paper analysis:
-  - keyword_extractor
-  Social media content analysis:
-  - keyword_extractor
-dependency_graph:
-  entity_extractor:
-    optional:
-    - spacy
-    required: []
-  datetime_extractor:
-    optional:
-    - python-dateutil
-    required: []
+          min_keyword_length: 3
+          include_scores: true
+          language: english
+        recommended_for:
+        - Documents
+        - Articles
+        - Reports

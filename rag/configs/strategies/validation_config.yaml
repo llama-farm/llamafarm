@@ -1,0 +1,152 @@
+# Schema Validation Configuration
+# This configuration is used to validate other configuration files
+# against the RAG system schemas
+
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: "validation_config.yaml"
+title: "Schema Validation Configuration"
+description: "Configuration for validating RAG strategy and component configurations"
+
+validation:
+  # Validation settings
+  settings:
+    strict_mode: true  # Fail on unknown fields
+    allow_extra_properties: false  # Disallow properties not in schema
+    validate_defaults: true  # Check that defaults are valid
+    check_required: true  # Ensure all required fields are present
+    fuzzy_matching: true  # Suggest corrections for typos
+    
+  # Schemas to validate against
+  schemas:
+    main_schema: "../schema.yaml"
+    consolidated_schemas: "../schemas/consolidated.yaml"
+    component_schemas: "../schemas/*.yaml"
+    
+  # Validation rules
+  rules:
+    # Component validation
+    components:
+      parsers:
+        allowed_types:
+          - CSVParser
+          - PDFParser
+          - MarkdownParser
+          - HTMLParser
+          - DocxParser
+          - ExcelParser
+          - PlainTextParser
+          - DirectoryParser
+        required_config: []  # No required config for most parsers
+        
+      extractors:
+        allowed_types:
+          - KeywordExtractor
+          - EntityExtractor
+          - DateTimeExtractor
+          - HeadingExtractor
+          - LinkExtractor
+          - PathExtractor
+          - PatternExtractor
+          - StatisticsExtractor
+          - SummaryExtractor
+          - TableExtractor
+        priority_range: [0, 100]
+        
+      embedders:
+        allowed_types:
+          - OllamaEmbedder
+          - OpenAIEmbedder
+          - HuggingFaceEmbedder
+          - SentenceTransformerEmbedder
+        dimension_range: [128, 4096]
+        
+      stores:
+        allowed_types:
+          - ChromaStore
+          - FAISSStore
+          - PineconeStore
+          - QdrantStore
+        required_for_pinecone: ["api_key", "index_name", "dimension"]
+        required_for_qdrant: ["vector_size"]
+        required_for_faiss: ["dimension"]
+        
+      retrievers:
+        allowed_types:
+          - BasicSimilarityStrategy
+          - MetadataFilteredStrategy
+          - MultiQueryStrategy
+          - RerankedStrategy
+          - HybridUniversalStrategy
+        top_k_range: [1, 1000]
+        
+  # Validation examples for testing
+  examples:
+    valid_strategy:
+      name: "example_strategy"
+      description: "Example strategy for validation testing"
+      components:
+        parser:
+          type: PDFParser
+          config:
+            combine_pages: true
+            extract_metadata: true
+        embedder:
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text
+            dimension: 768
+        vector_store:
+          type: ChromaStore
+          config:
+            collection_name: documents
+        retrieval_strategy:
+          type: BasicSimilarityStrategy
+          config:
+            top_k: 10
+            
+    invalid_strategy:
+      name: "bad strategy"  # Invalid: space in name
+      # Missing description
+      components:
+        parser:
+          type: UnknownParser  # Invalid type
+        embedder:
+          type: OllamaEmbedder
+          config:
+            model: invalid-model  # Invalid model
+            dimension: 10000  # Out of range
+        # Missing vector_store
+        # Missing retrieval_strategy
+        
+  # Error messages and suggestions
+  error_messages:
+    missing_required_field: "Required field '{field}' is missing in {path}"
+    invalid_type: "Invalid type '{value}' for {path}. Allowed types: {allowed}"
+    out_of_range: "Value {value} is out of range [{min}, {max}] for {path}"
+    unknown_field: "Unknown field '{field}' in {path}. Did you mean '{suggestion}'?"
+    invalid_format: "Invalid format for {path}. Expected: {format}"
+    
+  # Suggestions for common mistakes
+  suggestions:
+    typos:
+      "ChromaDB": "ChromaStore"
+      "Chroma": "ChromaStore"
+      "FAISS": "FAISSStore"
+      "Qdrant": "QdrantStore"
+      "BasicSimilarity": "BasicSimilarityStrategy"
+      "MetadataFiltered": "MetadataFilteredStrategy"
+      "MultiQuery": "MultiQueryStrategy"
+      "HybridUniversal": "HybridUniversalStrategy"
+      "PlainText": "PlainTextParser"
+      "Keyword": "KeywordExtractor"
+      "Entity": "EntityExtractor"
+      
+    deprecated:
+      "text_splitter": "Use 'parser' with PlainTextParser and chunk_size config"
+      "embedding_model": "Use 'embedder' with appropriate embedder type"
+      "vector_db": "Use 'vector_store' with appropriate store type"
+      
+# Command to run validation
+# python scripts/smart_schema_validator.py <config_file>
+# or
+# python -m rag.scripts.smart_schema_validator <config_file>

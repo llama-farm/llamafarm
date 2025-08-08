@@ -6,7 +6,7 @@ import tempfile
 import os
 from pathlib import Path
 
-from core.base import Parser, Document
+from core.base import Parser, Document, ProcessingResult
 
 logger = logging.getLogger(__name__)
 
@@ -15,14 +15,16 @@ try:
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
-    logger.warning("pandas not available. Excel parsing will not be available.")
+    pd = None  # Type hint placeholder
+    logger.debug("pandas not available. Excel parsing will not be available.")
 
 try:
     import openpyxl
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
-    logger.warning("openpyxl not available. Excel parsing may be limited.")
+    openpyxl = None  # Type hint placeholder
+    logger.debug("openpyxl not available. Excel parsing may be limited.")
 
 
 class ExcelParser(Parser):
@@ -46,30 +48,25 @@ class ExcelParser(Parser):
             return False
         return True
     
-    def parse(self, content: bytes, **kwargs) -> List[Document]:
+    def parse(self, source: str, **kwargs) -> ProcessingResult:
         """Parse Excel content into documents."""
+        errors = []
+        documents = []
+        
         if not HAS_PANDAS:
             logger.error("pandas package required for Excel parsing")
-            return []
+            errors.append({"error": "pandas package not installed", "source": source})
+            return ProcessingResult(documents=[], errors=errors)
         
         try:
-            # Create temporary file to load Excel
-            suffix = '.xlsx' if kwargs.get('source', '').lower().endswith('.xlsx') else '.xls'
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
-            
-            try:
-                # Load Excel file
-                documents = self._parse_excel_file(temp_file_path, **kwargs)
-                return documents
-            finally:
-                # Clean up temporary file
-                os.unlink(temp_file_path)
+            # Load Excel file directly from path
+            documents = self._parse_excel_file(source, source=source, **kwargs)
             
         except Exception as e:
             logger.error(f"Error parsing Excel: {e}")
-            return []
+            errors.append({"error": str(e), "source": source})
+            
+        return ProcessingResult(documents=documents, errors=errors)
     
     def _parse_excel_file(self, file_path: str, **kwargs) -> List[Document]:
         """Parse the Excel file."""

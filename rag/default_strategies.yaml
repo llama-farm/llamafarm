@@ -552,6 +552,48 @@ custom_template:
 # =============================================================================
 # STRATEGY USAGE NOTES
 # =============================================================================
+
+# =============================================================================
+# TEST STRATEGY FOR CLI TESTING
+# =============================================================================
+test_cli_strategy:
+  name: "test_cli_strategy"
+  description: "Test strategy for automated CLI testing"
+  use_cases: ["CLI testing", "integration_testing"]
+  performance_priority: "speed"
+  resource_usage: "low"
+  complexity: "simple"
+  
+  components:
+    parser:
+      type: "DirectoryParser"
+      config:
+        recursive: false
+        file_extensions: [".txt", ".md"]
+    
+    extractors:
+      - type: "KeywordExtractor"
+        config:
+          max_keywords: 5
+    
+    embedder:
+      type: "OllamaEmbedder"
+      config:
+        model: "nomic-embed-text"
+        batch_size: 4
+        timeout: 60
+    
+    vector_store:
+      type: "ChromaStore"
+      config:
+        collection_name: "test_cli_collection"
+        persist_directory: "./vectordb/test_cli_collection"
+    
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config:
+        distance_metric: "cosine"
+
 usage_notes:
   selecting_strategies: |
     1. **simple**: Best for getting started, testing, small datasets

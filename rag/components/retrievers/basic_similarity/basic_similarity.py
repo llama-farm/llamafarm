@@ -25,6 +25,7 @@ class BasicSimilarityStrategy(RetrievalStrategy):
         self.similarity_threshold = config.get("similarity_threshold", 0.0)
         self.include_metadata = config.get("include_metadata", True)
         self.max_results = config.get("max_results", 100)
+        self.distance_metric = config.get("distance_metric", "cosine")
     
     def retrieve(
         self,
@@ -45,10 +46,10 @@ class BasicSimilarityStrategy(RetrievalStrategy):
         Returns:
             RetrievalResult with retrieved documents and scores
         """
+        # Limit top_k to configured maximum
+        effective_top_k = min(top_k, self.max_results)
+        
         try:
-            # Limit top_k to configured maximum
-            effective_top_k = min(top_k, self.max_results)
-            
             # Search vector store
             documents = vector_store.search(
                 query="",  # Empty query since we provide embedding
@@ -61,22 +62,28 @@ class BasicSimilarityStrategy(RetrievalStrategy):
             filtered_docs = []
             
             for doc in documents:
-                distance = doc.metadata.get('_score', float('inf')) if doc.metadata else float('inf')
+                # Try to get similarity score directly first (for tests and some implementations)
+                similarity_score = None
+                if doc.metadata:
+                    similarity_score = doc.metadata.get('similarity_score')
                 
-                # Convert distance to similarity score (ChromaDB returns distances, lower is better)
-                import math
-                scale_factor = 100.0
-                similarity_score = math.exp(-distance / scale_factor)
-                
-                # Apply similarity threshold (now comparing similarity scores)
-                if similarity_score >= self.similarity_threshold:
-                    scores.append(similarity_score)
+                # If no direct similarity score, convert from distance
+                if similarity_score is None:
+                    distance = doc.metadata.get('_score', float('inf')) if doc.metadata else float('inf')
+                    
+                    # Convert distance to similarity score (ChromaDB returns distances, lower is better)
+                    import math
+                    scale_factor = 100.0
+                    similarity_score = math.exp(-distance / scale_factor)
                     
                     # Update metadata with both distance and similarity score
                     if doc.metadata:
                         doc.metadata['_similarity_score'] = similarity_score
-                        # Keep original distance for reference
                         doc.metadata['_distance'] = distance
+                
+                # Apply similarity threshold
+                if similarity_score >= self.similarity_threshold:
+                    scores.append(similarity_score)
                     
                     # Clean up metadata if requested
                     if not self.include_metadata and doc.metadata:
@@ -92,7 +99,8 @@ class BasicSimilarityStrategy(RetrievalStrategy):
                 documents=filtered_docs,
                 scores=scores,
                 strategy_metadata={
-                    "strategy": "basic_similarity",
+                    "strategy": "BasicSimilarityStrategy",
+                    "version": "1.0.0",
                     "query_embedding_dim": len(query_embedding),
                     "similarity_threshold": self.similarity_threshold,
                     "requested_k": top_k,
@@ -100,30 +108,19 @@ class BasicSimilarityStrategy(RetrievalStrategy):
                 }
             )
             
-            logger.debug(f"Retrieved {len(filtered_docs)} documents using basic similarity")
-            return result
-            
         except Exception as e:
             logger.error(f"Error in basic similarity retrieval: {e}")
-            return RetrievalResult(
-                documents=[],
-                scores=[],
-                strategy_metadata={
-                    "strategy": "basic_similarity",
-                    "error": str(e)
-                }
-            )
+            # Let the exception bubble up for basic strategies
+            raise
+        
+        logger.debug(f"Retrieved {len(filtered_docs)} documents using basic similarity")
+        return result
     
     def supports_vector_store(self, vector_store_type: str) -> bool:
         """Check if this strategy supports the given vector store type."""
         # Basic similarity works with any vector store that supports search
-        supported_stores = [
-            "ChromaStore", 
-            "FAISSStore", 
-            "PineconeStore", 
-            "QdrantStore"
-        ]
-        return vector_store_type in supported_stores
+        # Universal support - works with all vector stores
+        return True
     
     def get_strategy_info(self) -> Dict[str, Any]:
         """Get information about this strategy."""
@@ -151,4 +148,43 @@ class BasicSimilarityStrategy(RetrievalStrategy):
                     "description": "Maximum number of results to return"
                 }
             }
+        }
+    
+    def get_config_schema(self) -> Dict[str, Any]:
+        """Get JSON schema for configuration validation."""
+        return {
+            "type": "object",
+            "properties": {
+                "similarity_threshold": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "description": "Minimum similarity score for results"
+                },
+                "distance_metric": {
+                    "type": "string",
+                    "enum": ["cosine", "euclidean", "manhattan"],
+                    "description": "Distance metric for similarity calculation"
+                },
+                "include_metadata": {
+                    "type": "boolean",
+                    "description": "Include document metadata in results"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Maximum number of results to return"
+                }
+            },
+            "additionalProperties": False
+        }
+    
+    def get_performance_info(self) -> Dict[str, Any]:
+        """Get performance characteristics of this strategy."""
+        return {
+            "speed": "fast",
+            "complexity": "low",
+            "memory_usage": "low",
+            "accuracy": "medium",
+            "use_cases": ["general_search", "prototype", "baseline"]
         }

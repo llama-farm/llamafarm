@@ -1,6 +1,9 @@
-default:
-  name: Default Configuration
-  description: Default settings for multi_query
-  config: {}
+# Multi Query Retriever Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard multi query retrieval
+  config:
+    top_k: 10
   recommended_for:
   - General use

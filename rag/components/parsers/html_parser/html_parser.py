@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import re
 from pathlib import Path
 
-from core.base import Parser, Document
+from core.base import Parser, Document, ProcessingResult
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,8 @@ try:
     HAS_BS4 = True
 except ImportError:
     HAS_BS4 = False
-    logger.warning("BeautifulSoup4 not available. HTML parsing will use regex fallback.")
+    BeautifulSoup = None  # Type hint placeholder
+    logger.debug("BeautifulSoup4 not available. HTML parsing will use regex fallback.")
 
 
 class HtmlParser(Parser):
@@ -34,26 +35,32 @@ class HtmlParser(Parser):
     def validate_config(self) -> bool:
         """Validate parser configuration."""
         if not HAS_BS4:
-            logger.warning("BeautifulSoup4 not available. HTML parsing will be limited.")
+            logger.debug("BeautifulSoup4 not available. HTML parsing will be limited.")
         return True
     
-    def parse(self, content: bytes, **kwargs) -> List[Document]:
+    def parse(self, content: str, **kwargs) -> ProcessingResult:
         """Parse HTML content into documents."""
+        errors = []
+        documents = []
+        
         try:
-            # Decode bytes to string
-            if isinstance(content, bytes):
-                text_content = content.decode('utf-8', errors='ignore')
+            # Handle file path or content string
+            if Path(content).exists():
+                with open(content, 'r', encoding='utf-8', errors='ignore') as f:
+                    text_content = f.read()
             else:
                 text_content = str(content)
             
             if HAS_BS4:
-                return self._parse_with_bs4(text_content, **kwargs)
+                documents = self._parse_with_bs4(text_content, **kwargs)
             else:
-                return self._parse_with_regex(text_content, **kwargs)
+                documents = self._parse_with_regex(text_content, **kwargs)
             
         except Exception as e:
             logger.error(f"Error parsing HTML: {e}")
-            return []
+            errors.append({"error": str(e), "source": content})
+            
+        return ProcessingResult(documents=documents, errors=errors)
     
     def _parse_with_bs4(self, content: str, **kwargs) -> List[Document]:
         """Parse HTML using BeautifulSoup."""

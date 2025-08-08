@@ -1,64 +1,9 @@
+# Table Extractor Default Configurations
+
 general_purpose:
-  name: General Purpose Table Detection
-  description: Balanced settings for most document types
+  name: General Purpose
+  description: Standard table extractor
   config:
-    min_columns: 2
-    min_rows: 2
-    detect_headers: true
-    table_formats:
-    - pipe
-    - grid
-    - csv
-    max_cell_length: 200
+    enabled: true
   recommended_for:
-  - General documents
-  - Mixed content
-  - Standard reports
-financial_reports:
-  name: Financial Document Table Extraction
-  description: Optimized for financial and business reports
-  config:
-    min_columns: 3
-    min_rows: 2
-    detect_headers: true
-    table_formats:
-    - pipe
-    - grid
-    - csv
-    max_cell_length: 150
-  recommended_for:
-  - Financial reports
-  - Business documents
-  - Accounting data
-research_papers:
-  name: Academic Research Table Extraction
-  description: Suitable for academic papers and research documents
-  config:
-    min_columns: 2
-    min_rows: 3
-    detect_headers: true
-    table_formats:
-    - pipe
-    - grid
-    max_cell_length: 300
-  recommended_for:
-  - Research papers
-  - Academic documents
-  - Scientific literature
-data_mining:
-  name: Comprehensive Data Mining
-  description: Extract all possible tabular data including large tables
-  config:
-    min_columns: 1
-    min_rows: 1
-    detect_headers: false
-    table_formats:
-    - pipe
-    - grid
-    - csv
-    - html_marker
-    max_cell_length: 1000
-  recommended_for:
-  - Data extraction
-  - Large datasets
-  - Mixed format documents
+  - General use

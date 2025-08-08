@@ -1,6 +1,16 @@
-default:
-  name: Default Configuration
-  description: Default settings for ollama_embedder
-  config: {}
+# Ollama Embedder Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard Ollama embeddings
+  config:
+    model: nomic-embed-text
+    base_url: http://localhost:11434
+    dimension: 768
+    batch_size: 16
+    timeout: 60
+    auto_pull: true
   recommended_for:
-  - General use
+  - Local deployment
+  - Privacy-focused
+  - Development

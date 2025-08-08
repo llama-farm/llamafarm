@@ -1,58 +1,9 @@
+# Pattern Extractor Default Configurations
+
 general_purpose:
-  name: General Pattern Extraction
-  description: Extract common patterns like emails, phones, and URLs
+  name: General Purpose
+  description: Standard pattern extractor
   config:
-    patterns:
-    - email
-    - phone
-    - url
-    include_context: true
-    context_window: 50
+    enabled: true
   recommended_for:
-  - General documents
-  - Contact extraction
-  - Web content
-compliance_audit:
-  name: Compliance and PII Detection
-  description: Detect sensitive information patterns
-  config:
-    patterns:
-    - email
-    - phone
-    - ssn
-    - credit_card
-    include_context: true
-    context_window: 30
-  recommended_for:
-  - Data auditing
-  - Compliance checks
-  - PII detection
-web_analysis:
-  name: Web Content Analysis
-  description: Extract web-related patterns and references
-  config:
-    patterns:
-    - url
-    - email
-    - ip_address
-    include_context: false
-    context_window: 0
-  recommended_for:
-  - Web scraping
-  - URL extraction
-  - Network analysis
-document_processing:
-  name: Document Processing
-  description: Extract structured data from documents
-  config:
-    patterns:
-    - email
-    - phone
-    - date
-    - time
-    include_context: true
-    context_window: 40
-  recommended_for:
-  - Document analysis
-  - Data extraction
-  - Content processing
+  - General use

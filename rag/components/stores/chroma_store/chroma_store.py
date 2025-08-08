@@ -1,6 +1,8 @@
 """ChromaDB vector store implementation."""
 
+import json
 import logging
+import math
 from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings
@@ -21,6 +23,15 @@ class ChromaStore(VectorStore):
         self.host = config.get("host")
         self.port = config.get("port")
         self.embedding_dimension = max(config.get("embedding_dimension", 768), 1)  # Ensure positive
+        
+        # Get distance metric from config, default to cosine for best compatibility
+        self.distance_metric = config.get("distance_metric", "cosine")
+        
+        # Validate distance metric
+        valid_metrics = ["cosine", "l2", "ip"]
+        if self.distance_metric not in valid_metrics:
+            logger.warning(f"Invalid distance metric '{self.distance_metric}', using 'cosine'")
+            self.distance_metric = "cosine"
 
         # Initialize ChromaDB client
         if self.host and self.port:
@@ -49,9 +60,47 @@ class ChromaStore(VectorStore):
             self.collection = self.client.get_collection(name=self.collection_name)
             logger.info(f"Using existing collection: {self.collection_name}")
         except Exception:
-            # Collection doesn't exist, create it
-            self.collection = self.client.create_collection(name=self.collection_name)
-            logger.info(f"Created new collection: {self.collection_name}")
+            # Collection doesn't exist, create it with configured distance metric
+            # Map our metric names to ChromaDB's HNSW space names
+            metric_map = {
+                "cosine": "cosine",
+                "l2": "l2",
+                "ip": "ip"  # inner product
+            }
+            
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": metric_map.get(self.distance_metric, "cosine")}
+            )
+            logger.info(f"Created new collection: {self.collection_name} with {self.distance_metric} distance")
+    
+    def _parse_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse JSON strings in metadata back to Python objects.
+        
+        ChromaDB stores nested objects as JSON strings, so we need to parse them
+        back when retrieving documents.
+        
+        Args:
+            metadata: Raw metadata from ChromaDB
+            
+        Returns:
+            Parsed metadata with nested objects restored
+        """
+        parsed = {}
+        for key, value in metadata.items():
+            if isinstance(value, str):
+                # Try to parse as JSON if it looks like JSON
+                if value.startswith('{') or value.startswith('['):
+                    try:
+                        parsed[key] = json.loads(value)
+                    except (json.JSONDecodeError, ValueError):
+                        # Not valid JSON, keep as string
+                        parsed[key] = value
+                else:
+                    parsed[key] = value
+            else:
+                parsed[key] = value
+        return parsed
 
     def add_documents(self, documents: List[Document]) -> bool:
         """Add documents to the vector store."""
@@ -143,12 +192,55 @@ class ChromaStore(VectorStore):
                     content = results['documents'][0][i] if results['documents'] and results['documents'][0] else ""
                     metadata = results['metadatas'][0][i] if results['metadatas'] and results['metadatas'][0] else {}
                     
+                    # Parse JSON strings in metadata (ChromaDB stores nested objects as JSON)
+                    metadata = self._parse_metadata(metadata)
+                    
                     # Add distance/score to metadata
+                    # Convert distance to similarity score (ChromaDB returns distances, lower is better)
                     if results['distances'] and results['distances'][0]:
-                        metadata['_score'] = results['distances'][0][i]
+                        distance = results['distances'][0][i]
+                        metadata['_score'] = distance  # Keep original distance for reference
+                        
+                        # Convert distance to similarity score based on metric type
+                        if self.distance_metric == "cosine":
+                            # Cosine distance: 0 = identical, 2 = opposite
+                            # Convert to similarity: 1 - (distance / 2)
+                            if distance == 0:
+                                similarity = 1.0
+                            elif distance >= 2:
+                                similarity = 0.0
+                            else:
+                                similarity = 1.0 - (distance / 2.0)
+                        
+                        elif self.distance_metric == "l2":
+                            # L2 (Euclidean) distance: 0 = identical, larger = more different
+                            # For unnormalized embeddings, distances can be very large
+                            # Use inverse transformation with scaling
+                            if distance == 0:
+                                similarity = 1.0
+                            else:
+                                # Adjust scale based on typical embedding norms
+                                # This maps distances to similarities in range (0, 1]
+                                similarity = 1.0 / (1.0 + distance / 100.0)
+                        
+                        elif self.distance_metric == "ip":
+                            # Inner product: higher = more similar (opposite of distance)
+                            # For normalized embeddings, ranges from -1 to 1
+                            # ChromaDB may return negative of IP as distance
+                            similarity = max(0.0, min(1.0, (1.0 + distance) / 2.0))
+                        
+                        else:
+                            # Fallback for unknown metrics
+                            similarity = 1.0 / (1.0 + distance)
+                        
+                        metadata['similarity_score'] = similarity
 
                     # Preserve source from metadata if available
-                    source = metadata.get('file_path') or metadata.get('source')
+                    # Try multiple fields that might contain the source
+                    source = (metadata.get('file_path') or 
+                             metadata.get('source') or 
+                             metadata.get('file_name') or
+                             'unknown')
                     
                     doc = Document(
                         id=doc_id,
@@ -183,6 +275,9 @@ class ChromaStore(VectorStore):
             if results and results['ids'] and results['ids'][0] == doc_id:
                 content = results['documents'][0] if results['documents'] else ""
                 metadata = results['metadatas'][0] if results['metadatas'] else {}
+                
+                # Parse JSON strings in metadata
+                metadata = self._parse_metadata(metadata)
                 
                 return Document(
                     id=doc_id,

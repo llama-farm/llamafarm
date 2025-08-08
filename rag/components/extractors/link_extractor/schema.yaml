@@ -1,102 +1,13 @@
-name: link_extractor
-type: extractor
-class_name: LinkExtractor
-description: Extracts URLs, email addresses, phone numbers, and various reference types from text
-version: 1.0.0
-dependencies:
-  optional: []
-  required: []
-config_schema:
-  type: object
-  properties:
-    extract_urls:
-      type: boolean
-      default: true
-      description: Extract HTTP/HTTPS URLs from text
-    extract_emails:
-      type: boolean
-      default: true
-      description: Extract email addresses from text
-    extract_phone_numbers:
-      type: boolean
-      default: true
-      description: Extract phone numbers in various formats
-    extract_mentions:
-      type: boolean
-      default: true
-      description: Extract @mentions from text
-    extract_hashtags:
-      type: boolean
-      default: true
-      description: 'Extract #hashtags from text'
-    extract_file_paths:
-      type: boolean
-      default: true
-      description: Extract file paths (Windows, Unix, UNC)
-    validate_urls:
-      type: boolean
-      default: true
-      description: Validate and parse URL components
-    categorize_domains:
-      type: boolean
-      default: true
-      description: Categorize URLs by domain type
-output_schema:
-  type: object
-  properties:
-    urls:
-      type: array
-      items:
-        type: object
-        properties:
-          url:
-            type: string
-          domain:
-            type: string
-          scheme:
-            type: string
-          is_valid:
-            type: boolean
-    emails:
-      type: array
-      items:
-        type: string
-    phone_numbers:
-      type: array
-    mentions:
-      type: array
-      items:
-        type: string
-    hashtags:
-      type: array
-      items:
-        type: string
-    file_paths:
-      type: array
-    total_links:
-      type: integer
-    domain_categories:
-      type: object
-use_cases:
-- Link discovery and validation
-- Contact information extraction
-- Social media analysis
-- Reference gathering
-- URL categorization
-- Content connectivity analysis
-examples:
-- name: Web content analysis
-  config:
-    extract_urls: true
-    extract_emails: true
-    validate_urls: true
-    categorize_domains: true
-  description: Extract and categorize links from web content
-- name: Social media posts
-  config:
-    extract_urls: true
-    extract_mentions: true
-    extract_hashtags: true
-    extract_emails: false
-    extract_file_paths: false
-  description: Extract social media references and links
+# Link Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/link_extractor/schema.yaml
+title: Link Extractor Configuration
+description: Extract URLs and links
+type: object
+additionalProperties: false
+properties:
+  enabled:
+    type: boolean
+    default: true
+    description: Enable this extractor

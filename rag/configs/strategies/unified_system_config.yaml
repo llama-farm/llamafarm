@@ -1,0 +1,717 @@
+# Unified RAG System Configuration
+# Complete system-wide configuration with all strategies, templates, and metadata
+# Uses the schema.yaml JSON Schema format
+
+# ==============================================================================
+# ACTIVE STRATEGIES
+# ==============================================================================
+strategies:
+  # Production-ready strategy for general documents
+  - name: "production_general"
+    description: "Production-grade strategy for mixed document types with high accuracy"
+    tags: ["production", "stable", "general-purpose"]
+    use_cases:
+      - "Enterprise document search"
+      - "Knowledge management"
+      - "Multi-format processing"
+    
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          extract_metadata: true
+          combine_pages: true
+          extract_outline: true
+          ocr_enabled: false
+      
+      extractors:
+        - type: "EntityExtractor"
+          priority: 95
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "MONEY"]
+            use_fallback: true
+            confidence_threshold: 0.75
+        
+        - type: "KeywordExtractor"
+          priority: 85
+          config:
+            algorithm: "yake"
+            max_keywords: 20
+            include_scores: true
+        
+        - type: "SummaryExtractor"
+          priority: 75
+          config:
+            summary_sentences: 3
+            algorithm: "textrank"
+      
+      embedder:
+        type: "OpenAIEmbedder"
+        config:
+          api_key: "${OPENAI_API_KEY}"
+          model: "text-embedding-3-small"
+          batch_size: 100
+      
+      vector_store:
+        type: "PineconeStore"
+        config:
+          api_key: "${PINECONE_API_KEY}"
+          index_name: "production-main"
+          dimension: 1536
+          metric: "cosine"
+          namespace: "general"
+      
+      retrieval_strategy:
+        type: "HybridUniversalStrategy"
+        config:
+          strategies:
+            - type: "BasicSimilarityStrategy"
+              weight: 0.4
+              config:
+                top_k: 30
+                distance_metric: "cosine"
+            
+            - type: "MetadataFilteredStrategy"
+              weight: 0.3
+              config:
+                top_k: 20
+                filter_mode: "pre"
+            
+            - type: "RerankedStrategy"
+              weight: 0.3
+              config:
+                initial_k: 40
+                final_k: 10
+          
+          combination_method: "weighted_average"
+          final_k: 10
+
+  # Development/testing strategy
+  - name: "dev_testing"
+    description: "Lightweight strategy for development and testing"
+    tags: ["development", "testing", "local"]
+    use_cases:
+      - "Local development"
+      - "Unit testing"
+      - "Quick prototyping"
+    
+    components:
+      parser:
+        type: "PlainTextParser"
+        config:
+          chunk_size: 500
+          chunk_overlap: 100
+          split_by: "sentences"
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          base_url: "http://localhost:11434"
+          batch_size: 8
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "dev_test"
+          persist_directory: "./vectordb/dev"
+      
+      retrieval_strategy:
+        type: "BasicSimilarityStrategy"
+        config:
+          top_k: 5
+          distance_metric: "cosine"
+
+# ==============================================================================
+# STRATEGY TEMPLATES
+# ==============================================================================
+strategy_templates:
+  minimal:
+    name: "minimal"
+    description: "Absolute minimum configuration for quick start"
+    tags: ["minimal", "quickstart"]
+    use_cases: ["Testing", "Learning"]
+    
+    components:
+      parser:
+        type: "PlainTextParser"
+        config:
+          chunk_size: 1000
+          chunk_overlap: 200
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 16
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "minimal"
+      
+      retrieval_strategy:
+        type: "BasicSimilarityStrategy"
+        config:
+          top_k: 10
+
+  balanced:
+    name: "balanced"
+    description: "Balanced configuration for general use"
+    tags: ["balanced", "general"]
+    use_cases: ["General documents", "Mixed content"]
+    
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          combine_pages: true
+          extract_metadata: true
+      
+      extractors:
+        - type: "KeywordExtractor"
+          config:
+            algorithm: "rake"
+            max_keywords: 15
+        
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "DATE"]
+      
+      embedder:
+        type: "HuggingFaceEmbedder"
+        config:
+          model_name: "sentence-transformers/all-MiniLM-L6-v2"
+          device: "auto"
+          batch_size: 32
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "balanced"
+          persist_directory: "./vectordb/balanced"
+      
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          top_k: 15
+          filter_mode: "post"
+
+  high_accuracy:
+    name: "high_accuracy"
+    description: "Maximum accuracy configuration for critical applications"
+    tags: ["production", "high-accuracy", "premium"]
+    use_cases: ["Legal documents", "Medical records", "Financial analysis"]
+    
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          extract_metadata: true
+          extract_page_structure: true
+          combine_pages: false
+          extract_outline: true
+          ocr_enabled: true
+      
+      extractors:
+        - type: "EntityExtractor"
+          priority: 100
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "MONEY", "EMAIL", "PHONE"]
+            confidence_threshold: 0.9
+        
+        - type: "PatternExtractor"
+          priority: 95
+          config:
+            predefined_patterns: ["ssn", "phone", "email", "credit_card"]
+        
+        - type: "DateTimeExtractor"
+          priority: 90
+          config:
+            fuzzy_parsing: true
+            extract_relative: true
+        
+        - type: "SummaryExtractor"
+          priority: 85
+          config:
+            summary_sentences: 5
+            algorithm: "textrank"
+        
+        - type: "StatisticsExtractor"
+          priority: 80
+          config:
+            include_readability: true
+            include_language: true
+      
+      embedder:
+        type: "OpenAIEmbedder"
+        config:
+          api_key: "${OPENAI_API_KEY}"
+          model: "text-embedding-3-large"
+          batch_size: 50
+          max_retries: 5
+      
+      vector_store:
+        type: "PineconeStore"
+        config:
+          api_key: "${PINECONE_API_KEY}"
+          index_name: "high-accuracy"
+          dimension: 3072
+          metric: "cosine"
+          replicas: 2
+      
+      retrieval_strategy:
+        type: "HybridUniversalStrategy"
+        config:
+          strategies:
+            - type: "BasicSimilarityStrategy"
+              weight: 0.3
+              config:
+                top_k: 50
+            
+            - type: "MetadataFilteredStrategy"
+              weight: 0.3
+              config:
+                top_k: 40
+            
+            - type: "MultiQueryStrategy"
+              weight: 0.2
+              config:
+                num_queries: 5
+                top_k: 30
+            
+            - type: "RerankedStrategy"
+              weight: 0.2
+              config:
+                initial_k: 60
+                final_k: 15
+          
+          combination_method: "rank_fusion"
+          final_k: 20
+
+# ==============================================================================
+# COMPONENT METADATA
+# ==============================================================================
+component_metadata:
+  parsers:
+    PlainTextParser:
+      description: "Simple text file parser with chunking"
+      class_name: "TextParser"
+      module: "components.parsers.text_parser"
+      use_cases: ["plain text", "logs", "simple documents"]
+      dependencies:
+        required: []
+        optional: []
+    
+    PDFParser:
+      description: "Advanced PDF processing with OCR support"
+      class_name: "PDFParser"
+      module: "components.parsers.pdf_parser"
+      use_cases: ["documents", "reports", "books", "forms"]
+      dependencies:
+        required: ["PyPDF2"]
+        optional: ["pdfplumber", "pymupdf", "pytesseract"]
+    
+    MarkdownParser:
+      description: "Markdown processing with structure extraction"
+      class_name: "MarkdownParser"
+      module: "components.parsers.markdown_parser"
+      use_cases: ["documentation", "README files", "wikis"]
+      dependencies:
+        required: []
+        optional: ["PyYAML", "markdown", "mistune"]
+    
+    HTMLParser:
+      description: "HTML parsing with metadata extraction"
+      class_name: "HTMLParser"
+      module: "components.parsers.html_parser"
+      use_cases: ["web pages", "emails", "archives"]
+      dependencies:
+        required: ["beautifulsoup4"]
+        optional: ["lxml", "html5lib"]
+    
+    CSVParser:
+      description: "CSV processing with flexible field mapping"
+      class_name: "CSVParser"
+      module: "components.parsers.csv_parser"
+      use_cases: ["tabular data", "exports", "reports"]
+      dependencies:
+        required: []
+        optional: ["pandas"]
+    
+    DocxParser:
+      description: "Microsoft Word document processing"
+      class_name: "DocxParser"
+      module: "components.parsers.docx_parser"
+      use_cases: ["office documents", "reports", "letters"]
+      dependencies:
+        required: ["python-docx"]
+        optional: ["docx2txt"]
+    
+    ExcelParser:
+      description: "Excel spreadsheet processing"
+      class_name: "ExcelParser"
+      module: "components.parsers.excel_parser"
+      use_cases: ["spreadsheets", "financial data", "analytics"]
+      dependencies:
+        required: ["openpyxl"]
+        optional: ["xlrd", "pandas"]
+
+  extractors:
+    KeywordExtractor:
+      description: "Multi-algorithm keyword extraction"
+      class_name: "KeywordExtractor"
+      module: "components.extractors.keyword_extractor"
+      use_cases: ["tagging", "indexing", "summarization"]
+      dependencies:
+        required: []
+        optional: ["yake", "rake-nltk", "textrank"]
+    
+    EntityExtractor:
+      description: "Named entity recognition with fallback"
+      class_name: "EntityExtractor"
+      module: "components.extractors.entity_extractor"
+      use_cases: ["people", "organizations", "locations", "dates"]
+      dependencies:
+        required: []
+        optional: ["spacy", "transformers"]
+    
+    DateTimeExtractor:
+      description: "Intelligent date and time extraction"
+      class_name: "DateTimeExtractor"
+      module: "components.extractors.datetime_extractor"
+      use_cases: ["scheduling", "timelines", "temporal analysis"]
+      dependencies:
+        required: []
+        optional: ["python-dateutil", "parsedatetime"]
+    
+    PatternExtractor:
+      description: "Regex-based pattern matching"
+      class_name: "PatternExtractor"
+      module: "components.extractors.pattern_extractor"
+      use_cases: ["PII detection", "format validation", "custom patterns"]
+      dependencies:
+        required: []
+        optional: []
+    
+    SummaryExtractor:
+      description: "Automatic text summarization"
+      class_name: "SummaryExtractor"
+      module: "components.extractors.summary_extractor"
+      use_cases: ["abstracts", "previews", "key points"]
+      dependencies:
+        required: []
+        optional: ["sumy", "gensim"]
+
+  embedders:
+    OllamaEmbedder:
+      description: "Local embeddings via Ollama"
+      class_name: "OllamaEmbedder"
+      module: "components.embedders.ollama_embedder"
+      use_cases: ["local deployment", "privacy-sensitive", "development"]
+      dependencies:
+        required: ["ollama"]
+        optional: []
+    
+    OpenAIEmbedder:
+      description: "OpenAI API embeddings"
+      class_name: "OpenAIEmbedder"
+      module: "components.embedders.openai_embedder"
+      use_cases: ["production", "high quality", "cloud"]
+      dependencies:
+        required: ["openai"]
+        optional: []
+    
+    HuggingFaceEmbedder:
+      description: "HuggingFace transformer models"
+      class_name: "HuggingFaceEmbedder"
+      module: "components.embedders.huggingface_embedder"
+      use_cases: ["custom models", "research", "fine-tuning"]
+      dependencies:
+        required: ["transformers", "torch"]
+        optional: ["sentence-transformers"]
+    
+    SentenceTransformerEmbedder:
+      description: "Sentence transformer models"
+      class_name: "SentenceTransformerEmbedder"
+      module: "components.embedders.sentence_transformer_embedder"
+      use_cases: ["semantic search", "similarity", "local"]
+      dependencies:
+        required: ["sentence-transformers"]
+        optional: []
+
+  vector_stores:
+    ChromaStore:
+      description: "ChromaDB vector database"
+      class_name: "ChromaStore"
+      module: "components.stores.chroma_store"
+      use_cases: ["development", "small-medium scale", "local"]
+      dependencies:
+        required: ["chromadb"]
+        optional: []
+    
+    FAISSStore:
+      description: "Facebook AI Similarity Search"
+      class_name: "FAISSStore"
+      module: "components.stores.faiss_store"
+      use_cases: ["large scale", "GPU acceleration", "research"]
+      dependencies:
+        required: ["faiss-cpu"]
+        optional: ["faiss-gpu"]
+    
+    PineconeStore:
+      description: "Managed cloud vector database"
+      class_name: "PineconeStore"
+      module: "components.stores.pinecone_store"
+      use_cases: ["production", "serverless", "scalable"]
+      dependencies:
+        required: ["pinecone-client"]
+        optional: []
+    
+    QdrantStore:
+      description: "Qdrant vector database"
+      class_name: "QdrantStore"
+      module: "components.stores.qdrant_store"
+      use_cases: ["hybrid search", "filtering", "production"]
+      dependencies:
+        required: ["qdrant-client"]
+        optional: []
+
+  retrieval_strategies:
+    BasicSimilarityStrategy:
+      description: "Simple vector similarity search"
+      class_name: "BasicSimilarityStrategy"
+      module: "components.retrievers.basic_similarity"
+      use_cases: ["baseline", "simple queries", "fast retrieval"]
+      dependencies: []
+    
+    MetadataFilteredStrategy:
+      description: "Vector search with metadata filtering"
+      class_name: "MetadataFilteredStrategy"
+      module: "components.retrievers.metadata_filtered"
+      use_cases: ["filtered search", "categorical data", "multi-tenant"]
+      dependencies: []
+    
+    MultiQueryStrategy:
+      description: "Multiple query variations for better recall"
+      class_name: "MultiQueryStrategy"
+      module: "components.retrievers.multi_query"
+      use_cases: ["complex queries", "ambiguous searches", "improved recall"]
+      dependencies: []
+    
+    RerankedStrategy:
+      description: "Multi-factor relevance reranking"
+      class_name: "RerankedStrategy"
+      module: "components.retrievers.reranked"
+      use_cases: ["high precision", "quality focus", "production"]
+      dependencies: []
+    
+    HybridUniversalStrategy:
+      description: "Combine multiple strategies"
+      class_name: "HybridUniversalStrategy"
+      module: "components.retrievers.hybrid_universal"
+      use_cases: ["balanced results", "complex requirements", "production"]
+      dependencies: []
+
+# ==============================================================================
+# COMPATIBILITY RULES
+# ==============================================================================
+compatibility_rules:
+  component_compatibility:
+    description: "Parser and extractor compatibility matrix"
+    rules:
+      - parsers: ["PDFParser"]
+        recommended_extractors: ["EntityExtractor", "DateTimeExtractor", "TableExtractor"]
+        incompatible_extractors: []
+      
+      - parsers: ["CSVParser", "ExcelParser"]
+        recommended_extractors: ["StatisticsExtractor", "PatternExtractor"]
+        incompatible_extractors: ["HeadingExtractor"]
+      
+      - parsers: ["MarkdownParser", "HTMLParser"]
+        recommended_extractors: ["HeadingExtractor", "LinkExtractor", "SummaryExtractor"]
+        incompatible_extractors: []
+      
+      - parsers: ["PlainTextParser"]
+        recommended_extractors: ["KeywordExtractor", "EntityExtractor", "SummaryExtractor"]
+        incompatible_extractors: ["TableExtractor", "HeadingExtractor"]
+
+  embedder_store_compatibility:
+    description: "Embedder and vector store compatibility"
+    rules:
+      - embedder: "OllamaEmbedder"
+        models:
+          nomic-embed-text:
+            dimension: 768
+            compatible_stores: ["ChromaStore", "FAISSStore", "QdrantStore"]
+          mxbai-embed-large:
+            dimension: 1024
+            compatible_stores: ["ChromaStore", "FAISSStore", "QdrantStore"]
+      
+      - embedder: "OpenAIEmbedder"
+        models:
+          text-embedding-3-small:
+            dimension: 1536
+            compatible_stores: ["all"]
+          text-embedding-3-large:
+            dimension: 3072
+            compatible_stores: ["all"]
+          text-embedding-ada-002:
+            dimension: 1536
+            compatible_stores: ["all"]
+      
+      - embedder: "HuggingFaceEmbedder"
+        dimension: "variable"
+        compatible_stores: ["all"]
+        notes: "Dimension depends on model selection"
+      
+      - embedder: "SentenceTransformerEmbedder"
+        models:
+          all-MiniLM-L6-v2:
+            dimension: 384
+            compatible_stores: ["all"]
+          all-mpnet-base-v2:
+            dimension: 768
+            compatible_stores: ["all"]
+
+  strategy_store_optimization:
+    description: "Optimal retrieval strategies for each vector store"
+    rules:
+      - store: "ChromaStore"
+        optimal_strategies: ["BasicSimilarityStrategy", "MetadataFilteredStrategy"]
+        good_strategies: ["MultiQueryStrategy", "HybridUniversalStrategy"]
+        avoid_strategies: []
+      
+      - store: "FAISSStore"
+        optimal_strategies: ["BasicSimilarityStrategy"]
+        good_strategies: ["MultiQueryStrategy", "RerankedStrategy"]
+        avoid_strategies: ["MetadataFilteredStrategy"]
+        notes: "FAISS doesn't have native metadata filtering"
+      
+      - store: "PineconeStore"
+        optimal_strategies: ["MetadataFilteredStrategy", "HybridUniversalStrategy"]
+        good_strategies: ["all"]
+        avoid_strategies: []
+        notes: "Excellent metadata filtering support"
+      
+      - store: "QdrantStore"
+        optimal_strategies: ["MetadataFilteredStrategy", "HybridUniversalStrategy"]
+        good_strategies: ["all"]
+        avoid_strategies: []
+        notes: "Native hybrid search capabilities"
+
+# ==============================================================================
+# VALIDATION RULES
+# ==============================================================================
+validation_rules:
+  required_fields:
+    strategy:
+      - "name"
+      - "description"
+      - "components.parser"
+      - "components.embedder"
+      - "components.vector_store"
+      - "components.retrieval_strategy"
+    
+    parser:
+      - "type"
+    
+    embedder:
+      - "type"
+    
+    vector_store:
+      - "type"
+    
+    retrieval_strategy:
+      - "type"
+
+  field_constraints:
+    strategy_name:
+      pattern: "^[a-z][a-z0-9_]*$"
+      max_length: 50
+      description: "Lowercase alphanumeric with underscores"
+    
+    version:
+      pattern: "^\\d+\\.\\d+\\.\\d+$"
+      description: "Semantic versioning format"
+    
+    max_extractors: 10
+    max_batch_size: 1000
+    min_batch_size: 1
+    max_top_k: 1000
+    min_top_k: 1
+
+  performance_warnings:
+    - condition: "extractors.length > 5"
+      message: "Using more than 5 extractors may impact processing speed"
+      severity: "warning"
+    
+    - condition: "embedder.config.batch_size > 128"
+      message: "Large batch sizes may cause memory issues"
+      severity: "warning"
+    
+    - condition: "retrieval_strategy.type == 'HybridUniversalStrategy' && strategies.length > 3"
+      message: "Combining more than 3 strategies may impact search latency"
+      severity: "warning"
+    
+    - condition: "vector_store.type == 'FAISSStore' && !gpu_enabled"
+      message: "FAISS performs better with GPU acceleration"
+      severity: "info"
+    
+    - condition: "parser.type == 'PDFParser' && ocr_enabled && !gpu_available"
+      message: "OCR processing without GPU may be slow"
+      severity: "info"
+
+# ==============================================================================
+# BEST PRACTICES
+# ==============================================================================
+best_practices:
+  parser_selection:
+    - "Use PDFParser for unstructured documents with complex layouts"
+    - "Use CSVParser for structured tabular data"
+    - "Use MarkdownParser for documentation and technical content"
+    - "Enable OCR in PDFParser only when necessary (performance impact)"
+    - "Use appropriate chunk sizes based on embedding model context window"
+
+  extractor_configuration:
+    - "Limit extractors to those providing valuable metadata"
+    - "Order extractors by priority for performance optimization"
+    - "Use EntityExtractor with fallback for reliability"
+    - "Configure PatternExtractor for domain-specific patterns"
+    - "Enable StatisticsExtractor only for content quality analysis"
+
+  embedder_optimization:
+    - "Use local embedders (Ollama) for privacy-sensitive data"
+    - "Use OpenAI for highest quality embeddings in production"
+    - "Adjust batch size based on available memory"
+    - "Enable caching for frequently embedded content"
+    - "Consider embedding dimension vs storage trade-offs"
+
+  vector_store_selection:
+    - "ChromaStore for development and small-scale deployment"
+    - "FAISSStore for large-scale with GPU acceleration"
+    - "PineconeStore for managed, serverless deployment"
+    - "QdrantStore for hybrid search requirements"
+    - "Consider persistence requirements and backup strategies"
+
+  retrieval_strategy:
+    - "Start with BasicSimilarityStrategy for baseline"
+    - "Use MetadataFilteredStrategy for categorical filtering"
+    - "Apply RerankedStrategy for quality-critical applications"
+    - "Combine strategies with HybridUniversalStrategy for balanced results"
+    - "Monitor and tune strategy weights based on user feedback"
+
+  production_deployment:
+    - "Use environment variables for sensitive configuration"
+    - "Implement proper error handling and fallback strategies"
+    - "Enable monitoring and logging for observability"
+    - "Regular index optimization and maintenance"
+    - "Implement incremental indexing for growing datasets"
+    - "Use namespaces or separate collections for multi-tenancy"
+
+  security_considerations:
+    - "Never hardcode API keys in configuration files"
+    - "Use local embedders for confidential documents"
+    - "Implement access control at the vector store level"
+    - "Regular security audits of indexed content"
+    - "PII detection and redaction for compliance"

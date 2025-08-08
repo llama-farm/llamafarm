@@ -6,7 +6,7 @@ import tempfile
 import os
 from pathlib import Path
 
-from core.base import Parser, Document
+from core.base import Parser, Document, ProcessingResult
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,8 @@ try:
     HAS_PYTHON_DOCX = True
 except ImportError:
     HAS_PYTHON_DOCX = False
-    logger.warning("python-docx not available. DOCX parsing will not be available.")
+    DocxDocument = None  # Type hint placeholder
+    logger.debug("python-docx not available. DOCX parsing will not be available.")
 
 
 class DocxParser(Parser):
@@ -37,30 +38,26 @@ class DocxParser(Parser):
             return False
         return True
     
-    def parse(self, content: bytes, **kwargs) -> List[Document]:
+    def parse(self, source: str, **kwargs) -> ProcessingResult:
         """Parse DOCX content into documents."""
+        errors = []
+        documents = []
+        
         if not HAS_PYTHON_DOCX:
             logger.error("python-docx package required for DOCX parsing")
-            return []
+            errors.append({"error": "python-docx package not installed", "source": source})
+            return ProcessingResult(documents=[], errors=errors)
         
         try:
-            # Create temporary file to load DOCX
-            with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
-            
-            try:
-                # Load DOCX document
-                doc = DocxDocument(temp_file_path)
-                documents = self._parse_docx_document(doc, **kwargs)
-                return documents
-            finally:
-                # Clean up temporary file
-                os.unlink(temp_file_path)
+            # Load DOCX document directly from file path
+            doc = DocxDocument(source)
+            documents = self._parse_docx_document(doc, source=source, **kwargs)
             
         except Exception as e:
             logger.error(f"Error parsing DOCX: {e}")
-            return []
+            errors.append({"error": str(e), "source": source})
+            
+        return ProcessingResult(documents=documents, errors=errors)
     
     def _parse_docx_document(self, doc: 'DocxDocument', **kwargs) -> List[Document]:
         """Parse the DOCX document object."""

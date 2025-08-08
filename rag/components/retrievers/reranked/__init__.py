@@ -3,9 +3,9 @@
 Component for reranked.
 """
 
-from .reranked import Reranked
+from .reranked import RerankedStrategy
 
-__all__ = ['Reranked']
+__all__ = ['RerankedStrategy']
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "retriever"

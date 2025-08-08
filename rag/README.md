@@ -22,35 +22,43 @@ ollama pull nomic-embed-text  # Download embedding model
 ### 2. Run Your First Demo (30 seconds)
 
 ```bash
-# Option 1: Single impressive demo
-uv run python demos/enhanced_demo.py
+# Option 1: Interactive demo runner with menu
+uv run python demos/run_all_cli_demos.py
 
-# Option 2: All 5 domain-specific demos (15-25 minutes)
-uv run python demos/master_demo.py
-
-# Option 3: Individual domain demos
-uv run python demos/demo1_research_papers.py
-uv run python demos/demo2_customer_support.py
-uv run python demos/demo3_code_documentation.py
+# Option 2: Individual CLI-based demos
+uv run python demos/demo1_research_papers_cli.py
+uv run python demos/demo2_customer_support_cli.py
+uv run python demos/demo3_code_documentation_cli.py
 uv run python demos/demo4_news_analysis.py
 uv run python demos/demo5_business_reports.py
+uv run python demos/demo6_document_management.py
+
+# Option 3: Enhanced demos with rich visualizations
+uv run python demos/demo1_research_papers_cli_enhanced.py
 ```
 
-### 3. Master the CLI (Comprehensive Guide)
+### 3. Master the CLI ([Comprehensive Guide](docs/cli-guide.md))
 
 ```bash
-# List available strategies and get recommendations
-uv run python cli.py strategies list
-uv run python cli.py strategies recommend --use-case customer_support
+# Test the system
+uv run python cli.py test
 
-# Quick start with your data
-uv run python cli.py --strategy simple ingest your_documents.pdf
-uv run python cli.py --strategy simple search "your query here"
+# Ingest documents with verbose output
+uv run python cli.py --verbose ingest --strategy research_papers_demo path/to/docs
+uv run python cli.py --verbose ingest --strategy customer_support_demo data.csv
 
-# Try different strategies
-uv run python cli.py --strategy customer_support ingest support_data.csv
-uv run python cli.py --strategy legal ingest legal_docs/
-uv run python cli.py --strategy research ingest research_papers/
+# Search with different strategies
+uv run python cli.py search --strategy research_papers_demo "transformer architecture"
+uv run python cli.py search --strategy customer_support_demo "password reset" --top-k 5
+
+# Get collection info
+uv run python cli.py info --strategy research_papers_demo
+
+# Delete collection
+uv run python cli.py delete --strategy research_papers_demo
+
+# Quiet mode for scripting
+uv run python cli.py --quiet search --strategy demo "query"
 ```
 
 ### 4. Run Tests (Verify Everything Works)
@@ -93,30 +101,29 @@ uv run pytest tests/
 
 ## 📚 Demo System (Learn by Example)
 
-The RAG system includes 5 comprehensive demos showing different strategies and real-world applications:
+The RAG system includes 6 comprehensive demos showing different strategies and real-world applications:
 
 | Demo | Domain | What It Shows | Runtime |
 |------|--------|---------------|---------|
-| **Research Papers** | Academia | Statistical analysis + entity extraction | 3-5 min |
-| **Customer Support** | Business | Case matching + pattern recognition | 2-4 min |
-| **Code Documentation** | Technical | Structure preservation + cross-references | 2-3 min |
-| **News Analysis** | Media | Sentiment analysis + trend tracking | 3-4 min |
-| **Business Reports** | Finance | Tabular data + financial metrics extraction | 3-5 min |
+| **Research Papers** | Academia | Directory parsing, entity extraction, verbose embeddings | 2-3 min |
+| **Customer Support** | Business | CSV/TXT parsing, priority filtering, metadata search | 2-3 min |
+| **Code Documentation** | Technical | Markdown/Python parsing, hybrid retrieval strategies | 2-3 min |
+| **News Analysis** | Media | Entity extraction, reranking with recency boost | 2-3 min |
+| **Business Reports** | Finance | PDF parsing, financial pattern extraction | 2-3 min |
+| **Document Management** | Operations | Add/delete/replace, deduplication, metadata queries | 3-4 min |
 
-### Run Enhanced Demo (Best Starting Point)
+### Run Interactive Demo Suite (Best Starting Point)
 
 ```bash
-uv run python demos/enhanced_demo.py
+uv run python demos/run_all_cli_demos.py
 ```
 
-This demo showcases:
-- Document ingestion from mixed formats
-- Metadata extraction and enrichment  
-- Pattern-based entity recognition
-- Vector similarity search
-- Metadata-filtered retrieval
-- Multi-query expansion
-- Reranked results with custom scoring
+This provides:
+- Interactive menu to run all demos or select specific ones
+- Visual embedding representations when using --verbose
+- Real document processing with progress indicators
+- Metadata display and search scoring
+- Enter prompts between demos for easy exploration
 
 ## 📊 Component Library
 
@@ -292,11 +299,11 @@ Advanced retrieval strategies for different use cases:
 
 | Strategy | File | Description | When to Use | Example Usage |
 |----------|------|-------------|-------------|---------------|
-| **BasicSimilarityStrategy** | [`retrieval/strategies/`](retrieval/strategies/universal/basic_similarity.py) | Simple cosine similarity | Quick prototypes, baseline | `{"type": "BasicSimilarityStrategy", "config": {"top_k": 10}}` |
-| **MetadataFilteredStrategy** | [`retrieval/strategies/`](retrieval/strategies/universal/metadata_filtered.py) | Filter by metadata before search | Structured data, categories | `{"type": "MetadataFilteredStrategy", "config": {"filters": {...}}}` |
-| **MultiQueryStrategy** | [`retrieval/strategies/`](retrieval/strategies/universal/multi_query.py) | Generate multiple query variants | Improve recall, query expansion | `{"type": "MultiQueryStrategy", "config": {"num_variants": 3}}` |
-| **RerankedStrategy** | [`retrieval/strategies/`](retrieval/strategies/universal/reranked.py) | Re-rank with multiple factors | Precision improvement | `{"type": "RerankedStrategy", "config": {"rerank_factors": {...}}}` |
-| **HybridUniversalStrategy** | [`retrieval/strategies/`](retrieval/strategies/universal/hybrid_universal.py) | Combine multiple strategies | Best of all approaches | `{"type": "HybridUniversalStrategy", "config": {"strategies": [...]}}` |
+| **BasicSimilarityStrategy** | [`components/retrievers/`](components/retrievers/basic_similarity/basic_similarity.py) | Simple cosine similarity | Quick prototypes, baseline | `{"type": "BasicSimilarityStrategy", "config": {"top_k": 10}}` |
+| **MetadataFilteredStrategy** | [`components/retrievers/`](components/retrievers/metadata_filtered/metadata_filtered.py) | Filter by metadata before search | Structured data, categories | `{"type": "MetadataFilteredStrategy", "config": {"filters": {...}}}` |
+| **MultiQueryStrategy** | [`components/retrievers/`](components/retrievers/multi_query/multi_query.py) | Generate multiple query variants | Improve recall, query expansion | `{"type": "MultiQueryStrategy", "config": {"num_variants": 3}}` |
+| **RerankedStrategy** | [`components/retrievers/`](components/retrievers/reranked/reranked.py) | Re-rank with multiple factors | Precision improvement | `{"type": "RerankedStrategy", "config": {"rerank_factors": {...}}}` |
+| **HybridUniversalStrategy** | [`components/retrievers/`](components/retrievers/hybrid_universal/hybrid_universal.py) | Combine multiple strategies | Best of all approaches | `{"type": "HybridUniversalStrategy", "config": {"strategies": [...]}}` |
 
 ## 🛠️ Advanced CLI Usage
 
@@ -323,13 +330,13 @@ uv run python cli.py strategies convert legal config/legal.yaml
 
 ```bash
 # Ingest single file
-uv run python cli.py --strategy simple ingest document.pdf
+uv run python cli.py ingest --strategy simple document.pdf
 
 # Ingest directory
-uv run python cli.py --strategy research ingest papers/ --recursive
+uv run python cli.py ingest --strategy research papers/ --recursive
 
 # Ingest with metadata
-uv run python cli.py --strategy simple ingest data.csv \
+uv run python cli.py ingest --strategy simple data.csv \
   --metadata '{"source": "internal", "department": "sales"}'
 
 # Ingest with custom configuration overrides
@@ -342,14 +349,14 @@ uv run python cli.py --strategy simple \
 
 ```bash
 # Basic search
-uv run python cli.py --strategy simple search "your query"
+uv run python cli.py search --strategy simple "your query"
 
 # Search with filters
-uv run python cli.py --strategy simple search "error logs" \
+uv run python cli.py search --strategy simple "error logs" \
   --filters '{"file_type": "log", "date": {"$gte": "2024-01-01"}}'
 
 # Search with custom top_k
-uv run python cli.py --strategy simple search "machine learning" --top-k 20
+uv run python cli.py search --strategy simple "machine learning" --top-k 20
 
 # Search with specific retrieval strategy
 uv run python cli.py --strategy simple \
@@ -530,7 +537,7 @@ class TestYourParser:
 ### 3. Add to Strategy (Optional)
 
 ```yaml
-# strategies/your_strategy.yaml
+# configs/your_strategy.yaml
 your_strategy:
   description: "Optimized for your use case"
   components:
@@ -547,9 +554,9 @@ The same pattern applies to **Extractors**, **Embedders**, **Stores**, and **Ret
 ### Strategy-Based (Recommended)
 ```bash
 # Use predefined strategies
-uv run python cli.py --strategy simple ingest data.csv
-uv run python cli.py --strategy customer_support ingest tickets.csv
-uv run python cli.py --strategy legal ingest contracts/
+uv run python cli.py ingest --strategy simple data.csv
+uv run python cli.py ingest --strategy customer_support tickets.csv
+uv run python cli.py ingest --strategy legal contracts/
 
 # Customize strategy settings
 uv run python cli.py --strategy simple \
@@ -612,11 +619,16 @@ retrieval_strategy:
 
 ## 📚 Documentation
 
+### Core Documentation
+- **[CLI Guide](docs/cli-guide.md)** - Comprehensive CLI documentation with all commands, options, and examples
 - **[STRUCTURE.md](STRUCTURE.md)** - Detailed codebase structure and patterns
 - **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Comprehensive setup instructions
 - **[CLAUDE.md](CLAUDE.md)** - AI assistant integration guide
+
+### Technical References
 - **[schema.yaml](schema.yaml)** - Complete API schema documentation
-- **[strategies/README.md](strategies/README.md)** - Strategy system documentation
+- **[core/strategies/README.md](core/strategies/README.md)** - Strategy system documentation
+- **[demos/README.md](demos/README.md)** - Demo system documentation and guides
 
 ## 🤝 Contributing
 

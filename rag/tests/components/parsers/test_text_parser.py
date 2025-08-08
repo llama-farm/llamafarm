@@ -92,15 +92,17 @@ The document concludes with this final section that summarizes the content."""
     
     def test_basic_text_parsing(self, default_parser, temp_text_file):
         """Test basic text file parsing."""
-        documents = default_parser.parse(temp_text_file)
+        result = default_parser.parse(temp_text_file)
         
-        # Should return list of documents
-        assert isinstance(documents, list)
-        assert len(documents) > 0
-        assert all(isinstance(doc, Document) for doc in documents)
+        # Should return ProcessingResult
+        from core.base import ProcessingResult
+        assert isinstance(result, ProcessingResult)
+        assert isinstance(result.documents, list)
+        assert len(result.documents) > 0
+        assert all(isinstance(doc, Document) for doc in result.documents)
         
         # Check document content
-        doc = documents[0]
+        doc = result.documents[0]
         assert len(doc.content) > 0
         assert "Sample Document Title" in doc.content
         assert doc.id is not None
@@ -108,8 +110,8 @@ The document concludes with this final section that summarizes the content."""
     
     def test_metadata_extraction(self, default_parser, temp_text_file):
         """Test metadata extraction from parsed file."""
-        documents = default_parser.parse(temp_text_file)
-        doc = documents[0]
+        result = default_parser.parse(temp_text_file)
+        doc = result.documents[0]
         
         # Should have file metadata
         assert "file_path" in doc.metadata
@@ -126,8 +128,8 @@ The document concludes with this final section that summarizes the content."""
     
     def test_structure_detection(self, default_parser, temp_text_file):
         """Test structure detection in text content."""
-        documents = default_parser.parse(temp_text_file)
-        doc = documents[0]
+        result = default_parser.parse(temp_text_file)
+        doc = result.documents[0]
         
         # Should detect structure elements
         if "has_headers" in doc.metadata:
@@ -151,14 +153,14 @@ The document concludes with this final section that summarizes the content."""
             temp_path = f.name
         
         try:
-            documents = chunking_parser.parse(temp_path)
+            result = chunking_parser.parse(temp_path)
             
             # Should create multiple chunks for large content
             if len(sample_text_content) > 200:
-                assert len(documents) > 1
+                assert len(result.documents) > 1
                 
                 # Check chunk metadata
-                for doc in documents:
+                for doc in result.documents:
                     assert "chunk_number" in doc.metadata
                     assert "is_chunk" in doc.metadata
                     assert doc.metadata["is_chunk"] == True
@@ -177,12 +179,12 @@ The document concludes with this final section that summarizes the content."""
             temp_path = f.name
         
         try:
-            documents = default_parser.parse(temp_path)
+            result = default_parser.parse(temp_path)
             
             # Should parse successfully
-            assert len(documents) == 1
-            assert "special characters" in documents[0].content
-            assert "encoding" in documents[0].metadata
+            assert len(result.documents) == 1
+            assert "special characters" in result.documents[0].content
+            assert "encoding" in result.documents[0].metadata
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
@@ -194,13 +196,13 @@ The document concludes with this final section that summarizes the content."""
             temp_path = f.name
         
         try:
-            documents = default_parser.parse(temp_path)
+            result = default_parser.parse(temp_path)
             
             # Should handle gracefully
-            assert isinstance(documents, list)
-            assert len(documents) == 1
-            assert documents[0].content == ""
-            assert documents[0].metadata["word_count"] == 0
+            assert isinstance(result.documents, list)
+            assert len(result.documents) == 1
+            assert result.documents[0].content == ""
+            assert result.documents[0].metadata["word_count"] == 0
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
@@ -252,12 +254,12 @@ The document concludes with this final section that summarizes the content."""
             temp_path = f.name
         
         try:
-            docs_stripped = strip_parser.parse(temp_path)
-            docs_not_stripped = no_strip_parser.parse(temp_path)
+            result_stripped = strip_parser.parse(temp_path)
+            result_not_stripped = no_strip_parser.parse(temp_path)
             
             # Stripped version should have fewer lines
-            stripped_lines = docs_stripped[0].metadata.get("line_count", 0)
-            not_stripped_lines = docs_not_stripped[0].metadata.get("line_count", 0)
+            stripped_lines = result_stripped.documents[0].metadata.get("line_count", 0)
+            not_stripped_lines = result_not_stripped.documents[0].metadata.get("line_count", 0)
             
             assert stripped_lines <= not_stripped_lines
         finally:
@@ -281,16 +283,16 @@ The document concludes with this final section that summarizes the content."""
             temp_path = f.name
         
         try:
-            docs_preserved = preserve_parser.parse(temp_path)
-            docs_not_preserved = no_preserve_parser.parse(temp_path)
+            result_preserved = preserve_parser.parse(temp_path)
+            result_not_preserved = no_preserve_parser.parse(temp_path)
             
             # Should both parse successfully
-            assert len(docs_preserved) > 0
-            assert len(docs_not_preserved) > 0
+            assert len(result_preserved.documents) > 0
+            assert len(result_not_preserved.documents) > 0
             
             # Content should be different
-            preserved_content = docs_preserved[0].content
-            not_preserved_content = docs_not_preserved[0].content
+            preserved_content = result_preserved.documents[0].content
+            not_preserved_content = result_not_preserved.documents[0].content
             
             # Both should contain the main text
             assert "Sample Document Title" in preserved_content

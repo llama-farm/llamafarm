@@ -1,122 +1,117 @@
-type: retriever
-version: 1.0.0
-generated_by: cli_compile.py
-components:
-  basic_similarity:
-    schema:
-      name: basic_similarity
-      type: retriever
-      class_name: BasicSimilarity
-      description: BasicSimilarity component
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties: {}
-      use_cases: []
-    path: components/retrievers_new/basic_similarity
-    has_implementation: true
-  reranked:
-    schema:
-      name: reranked
-      type: retriever
-      class_name: Reranked
-      description: Reranked component
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties: {}
-      use_cases: []
-    path: components/retrievers_new/reranked
-    has_implementation: true
-  metadata_filtered:
-    schema:
-      name: metadata_filtered
-      type: retriever
-      class_name: MetadataFiltered
-      description: MetadataFiltered component
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties: {}
-      use_cases: []
-    path: components/retrievers_new/metadata_filtered
-    has_implementation: true
-  hybrid_universal:
-    schema:
-      name: hybrid_universal
-      type: retriever
-      class_name: HybridUniversal
-      description: HybridUniversal component
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties: {}
-      use_cases: []
-    path: components/retrievers_new/hybrid_universal
-    has_implementation: true
-  multi_query:
-    schema:
-      name: multi_query
-      type: retriever
-      class_name: MultiQuery
-      description: MultiQuery component
-      version: 1.0.0
-      dependencies:
-        optional: []
-        required: []
-      config_schema:
-        type: object
-        properties: {}
-      use_cases: []
-    path: components/retrievers_new/multi_query
-    has_implementation: true
-defaults_registry:
-  basic_similarity:
-    default:
-      name: Default Configuration
-      description: Default settings for basic_similarity
-      config: {}
-      recommended_for:
-      - General use
-  reranked:
-    default:
-      name: Default Configuration
-      description: Default settings for reranked
-      config: {}
-      recommended_for:
-      - General use
-  metadata_filtered:
-    default:
-      name: Default Configuration
-      description: Default settings for metadata_filtered
-      config: {}
-      recommended_for:
-      - General use
-  hybrid_universal:
-    default:
-      name: Default Configuration
-      description: Default settings for hybrid_universal
-      config: {}
-      recommended_for:
-      - General use
-  multi_query:
-    default:
-      name: Default Configuration
-      description: Default settings for multi_query
-      config: {}
-      recommended_for:
-      - General use
-use_case_index: {}
-dependency_graph: {}
+retrievers:
+  BasicSimilarityStrategy:
+    description: Simple vector similarity search
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+      distance_metric:
+        type: string
+        default: cosine
+        enum:
+        - cosine
+        - euclidean
+        - manhattan
+        - dot
+        description: Distance metric
+      score_threshold:
+        type:
+        - number
+        - 'null'
+        default: null
+        minimum: 0.0
+        maximum: 1.0
+        description: Minimum similarity score
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard similarity search
+        config:
+          top_k: 10
+          distance_metric: cosine
+          score_threshold: null
+        recommended_for:
+        - Simple queries
+        - Fast retrieval
+        - Baseline
+      high_precision:
+        name: High Precision
+        description: Higher threshold for better precision
+        config:
+          top_k: 5
+          distance_metric: cosine
+          score_threshold: 0.7
+        recommended_for:
+        - Precise matching
+        - Quality over quantity
+  RerankedStrategy:
+    description: Re-rank results
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard reranked retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use
+  MetadataFilteredStrategy:
+    description: Filter by metadata
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard metadata filtered retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use
+  HybridUniversalStrategy:
+    description: Combine multiple strategies
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard hybrid universal retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use
+  MultiQueryStrategy:
+    description: Multiple query variations
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard multi query retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use

@@ -10,6 +10,7 @@ from components.parsers.docx_parser.docx_parser import DocxParser
 from components.parsers.text_parser.text_parser import PlainTextParser
 from components.parsers.html_parser.html_parser import HtmlParser as HTMLParser
 from components.parsers.excel_parser.excel_parser import ExcelParser
+from components.parsers.directory_parser.directory_parser import DirectoryParser
 
 # Conditional import for PDF parser
 try:
@@ -78,11 +79,11 @@ from components.extractors.heading_extractor.heading_extractor import HeadingExt
 
 # Import retrieval strategies
 from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
-# TODO: Implement remaining retrieval strategies
-# from components.retrievers.hybrid_universal.hybrid_universal import HybridUniversalStrategy
-# from components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
-# from components.retrievers.multi_query.multi_query import MultiQueryStrategy
-# from components.retrievers.reranked.reranked import RerankedStrategy
+
+from components.retrievers.hybrid_universal.hybrid_universal import HybridUniversalStrategy
+from components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
+from components.retrievers.multi_query.multi_query import MultiQueryStrategy
+from components.retrievers.reranked.reranked import RerankedStrategy
 
 
 class ComponentFactory:
@@ -121,6 +122,7 @@ class ParserFactory(ComponentFactory):
         "PlainTextParser": PlainTextParser,
         "HTMLParser": HTMLParser,
         "ExcelParser": ExcelParser,
+        "DirectoryParser": DirectoryParser,
     }
     
     # Add PDF parser conditionally
@@ -183,11 +185,10 @@ class RetrievalStrategyFactory(ComponentFactory):
 
     _registry = {
         "BasicSimilarityStrategy": BasicSimilarityStrategy,
-        # TODO: Add other strategies when implemented
-        # "HybridUniversalStrategy": HybridUniversalStrategy,
-        # "MetadataFilteredStrategy": MetadataFilteredStrategy,
-        # "MultiQueryStrategy": MultiQueryStrategy,
-        # "RerankedStrategy": RerankedStrategy,
+        "HybridUniversalStrategy": HybridUniversalStrategy,
+        "MetadataFilteredStrategy": MetadataFilteredStrategy,
+        "MultiQueryStrategy": MultiQueryStrategy,
+        "RerankedStrategy": RerankedStrategy,
     }
 
 

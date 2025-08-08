@@ -1,164 +1,37 @@
-name: keyword_extractor
-type: extractor
-class_name: KeywordExtractor
-description: Extracts keywords and key phrases using RAKE, YAKE, and TF-IDF algorithms
-version: 1.0.0
-dependencies:
-  optional: []
-  required: []
-config_schema:
-  type: object
-  properties:
-    methods:
-      type: array
-      items:
-        type: string
-        enum:
-        - rake
-        - yake
-        - tfidf
-      default:
-      - rake
-      - yake
-      - tfidf
-      description: Keyword extraction methods to use
-    combine_results:
-      type: boolean
-      default: true
-      description: Combine results from all methods into unified output
-    max_combined_keywords:
-      type: integer
-      default: 15
-      description: Maximum number of combined keywords to return
-    rake_config:
-      type: object
-      properties:
-        min_length:
-          type: integer
-          default: 1
-        max_length:
-          type: integer
-          default: 4
-        max_keywords:
-          type: integer
-          default: 10
-        min_frequency:
-          type: integer
-          default: 1
-      description: Configuration for RAKE extractor
-    yake_config:
-      type: object
-      properties:
-        language:
-          type: string
-          default: en
-        max_ngram_size:
-          type: integer
-          default: 3
-        deduplication_threshold:
-          type: number
-          default: 0.9
-        max_keywords:
-          type: integer
-          default: 10
-        window_size:
-          type: integer
-          default: 1
-      description: Configuration for YAKE extractor
-    tfidf_config:
-      type: object
-      properties:
-        max_features:
-          type: integer
-          default: 10
-        min_df:
-          type: integer
-          default: 1
-        max_df:
-          type: number
-          default: 0.95
-        ngram_range:
-          type: array
-          items:
-            type: integer
-          default:
-          - 1
-          - 2
-      description: Configuration for TF-IDF extractor
-output_schema:
-  type: object
-  properties:
-    rake_keywords:
-      type: array
-      items:
-        type: object
-        properties:
-          phrase:
-            type: string
-          score:
-            type: number
-    yake_keywords:
-      type: array
-      items:
-        type: object
-        properties:
-          phrase:
-            type: string
-          score:
-            type: number
-    tfidf_keywords:
-      type: array
-      items:
-        type: object
-        properties:
-          phrase:
-            type: string
-          score:
-            type: number
-    combined_keywords:
-      type: array
-      items:
-        type: object
-        properties:
-          phrase:
-            type: string
-          methods:
-            type: array
-            items:
-              type: string
-          combined_score:
-            type: number
-use_cases:
-- Content summarization
-- Document indexing and search
-- Topic modeling preparation
-- Content categorization
-- SEO keyword analysis
-- Research paper analysis
-- Social media content analysis
-examples:
-- name: Academic research
-  config:
-    methods:
-    - rake
-    - tfidf
-    combine_results: true
-    rake_config:
-      max_length: 5
-      max_keywords: 15
-    tfidf_config:
-      max_features: 15
-      ngram_range:
-      - 1
-      - 3
-  description: Optimized for academic and research papers
-- name: Marketing content
-  config:
-    methods:
+# Keyword Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/keyword_extractor/schema.yaml
+title: Keyword Extractor Configuration
+description: Extract keywords from text using various algorithms
+type: object
+additionalProperties: false
+properties:
+  algorithm:
+    type: string
+    enum:
     - rake
     - yake
-    combine_results: true
-    yake_config:
-      max_ngram_size: 2
-      max_keywords: 12
-  description: Focused on marketing and web content
+    - tfidf
+    - textrank
+    default: rake
+    description: Extraction algorithm
+  max_keywords:
+    type: integer
+    default: 10
+    minimum: 1
+    maximum: 100
+    description: Maximum keywords
+  min_keyword_length:
+    type: integer
+    default: 3
+    minimum: 1
+    description: Minimum keyword length
+  include_scores:
+    type: boolean
+    default: true
+    description: Include relevance scores
+  language:
+    type: string
+    default: english
+    description: Language for stop words

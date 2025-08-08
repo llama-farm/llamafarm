@@ -1,6 +1,23 @@
-default:
-  name: Default Configuration
-  description: Default settings for basic_similarity
-  config: {}
+# Basic Similarity Retriever Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard similarity search
+  config:
+    top_k: 10
+    distance_metric: cosine
+    score_threshold: null
   recommended_for:
-  - General use
+  - Simple queries
+  - Fast retrieval
+  - Baseline
+high_precision:
+  name: High Precision
+  description: Higher threshold for better precision
+  config:
+    top_k: 5
+    distance_metric: cosine
+    score_threshold: 0.7
+  recommended_for:
+  - Precise matching
+  - Quality over quantity

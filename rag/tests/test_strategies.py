@@ -10,7 +10,7 @@ import json
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from strategies import StrategyManager, StrategyLoader
+from core.strategies import StrategyManager, StrategyLoader
 
 
 def test_strategy_loading():
@@ -22,12 +22,13 @@ def test_strategy_loading():
     
     print(f"✅ Loaded {len(strategies)} strategies")
     
-    # Test specific strategy
-    simple_strategy = loader.get_strategy("simple")
-    if simple_strategy:
-        print(f"✅ Found 'simple' strategy: {simple_strategy.description}")
+    # Test specific strategy (use the actual name from new format)
+    # The strategy names are now the full names, not the keys
+    test_strategy = loader.get_strategy("Simple Document Processing")
+    if test_strategy:
+        print(f"✅ Found 'Simple Document Processing' strategy: {test_strategy.description}")
     else:
-        print("❌ Failed to load 'simple' strategy")
+        print("❌ Failed to load 'Simple Document Processing' strategy")
         return False
     
     return True
@@ -44,9 +45,9 @@ def test_strategy_manager():
     print(f"✅ Found {len(available)} available strategies: {', '.join(available)}")
     
     # Test strategy info
-    info = manager.get_strategy_info("simple")
+    info = manager.get_strategy_info("Simple Document Processing")
     if info:
-        print(f"✅ Retrieved info for 'simple' strategy")
+        print(f"✅ Retrieved info for 'Simple Document Processing' strategy")
         print(f"   Description: {info['description']}")
         print(f"   Use cases: {', '.join(info['use_cases'])}")
     else:
@@ -54,9 +55,9 @@ def test_strategy_manager():
         return False
     
     # Test converting strategy to config
-    config = manager.convert_strategy_to_config("simple")
+    config = manager.convert_strategy_to_config("Simple Document Processing")
     if config:
-        print(f"✅ Converted 'simple' strategy to config")
+        print(f"✅ Converted 'Simple Document Processing' strategy to config")
         required_keys = ["parser", "embedder", "vector_store", "retrieval_strategy"]
         for key in required_keys:
             if key not in config:
@@ -120,7 +121,7 @@ def test_strategy_overrides():
         }
     }
     
-    config = manager.convert_strategy_to_config("simple", overrides)
+    config = manager.convert_strategy_to_config("Simple Document Processing", overrides)
     if config:
         batch_size = config.get("embedder", {}).get("config", {}).get("batch_size")
         if batch_size == 32:
@@ -145,7 +146,7 @@ def test_cli_integration():
     # Simulate CLI arguments
     class MockArgs:
         def __init__(self):
-            self.strategy = "simple"
+            self.strategy = "Simple Document Processing"
             self.strategy_overrides = '{"embedder":{"config":{"batch_size":16}}}'
             self.config = None
     

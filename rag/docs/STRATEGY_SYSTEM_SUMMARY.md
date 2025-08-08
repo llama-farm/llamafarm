@@ -96,14 +96,14 @@ uv run python cli.py strategies test simple
 ### Using Strategies
 ```bash
 # Strategy-based ingestion
-uv run python cli.py --strategy simple ingest samples/data.csv
-uv run python cli.py --strategy legal ingest legal_docs/
+uv run python cli.py ingest --strategy simple samples/data.csv
+uv run python cli.py ingest --strategy legal legal_docs/
 
 # Strategy-based search
-uv run python cli.py --strategy customer_support search \"login problems\"
+uv run python cli.py search --strategy customer_support \"login problems\"
 
 # Strategy with overrides
-uv run python cli.py --strategy simple --strategy-overrides '{\"components\":{\"embedder\":{\"config\":{\"batch_size\":32}}}}' ingest data/
+uv run python cli.py ingest data/ --strategy simple --strategy-overrides '{\"components\":{\"embedder\":{\"config\":{\"batch_size\":32}}}}'
 ```
 
 ## 📊 Component Schema
@@ -166,7 +166,7 @@ Users can gradually migrate to strategies:
 uv run python cli.py strategies convert custom my_custom_strategy.yaml
 
 # Use strategy with overrides
-uv run python cli.py --strategy simple --strategy-overrides '{\"components\":{\"parser\":{\"config\":{\"batch_size\":64}}}}' ingest data/
+uv run python cli.py ingest data/ --strategy simple --strategy-overrides '{\"components\":{\"parser\":{\"config\":{\"batch_size\":64}}}}'
 ```
 
 ## 🚧 Future Enhancements

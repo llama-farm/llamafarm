@@ -1,86 +1,13 @@
-name: statistics_extractor
-type: extractor
-class_name: ContentStatisticsExtractor
-description: Extracts comprehensive content statistics including readability metrics, vocabulary analysis, and structural
-  information
-version: 1.0.0
-dependencies:
-  optional: []
-  required: []
-config_schema:
-  type: object
-  properties:
-    include_readability:
-      type: boolean
-      default: true
-      description: Include readability metrics (Flesch-Kincaid, etc.)
-    include_vocabulary:
-      type: boolean
-      default: true
-      description: Include vocabulary analysis and diversity metrics
-    include_structure:
-      type: boolean
-      default: true
-      description: Include document structure analysis
-    include_sentiment_indicators:
-      type: boolean
-      default: true
-      description: Include basic sentiment indicators
-    language:
-      type: string
-      default: en
-      description: Language for analysis (currently supports 'en')
-    reading_speeds:
-      type: object
-      properties:
-        slow:
-          type: integer
-          default: 150
-        average:
-          type: integer
-          default: 200
-        fast:
-          type: integer
-          default: 300
-      description: Reading speeds in words per minute for time estimation
-output_schema:
-  type: object
-  properties:
-    word_count:
-      type: integer
-    sentence_count:
-      type: integer
-    paragraph_count:
-      type: integer
-    readability:
-      type: object
-    vocabulary:
-      type: object
-    structure:
-      type: object
-    sentiment_indicators:
-      type: object
-    reading_time:
-      type: object
-use_cases:
-- Content quality assessment
-- Readability analysis
-- Document complexity evaluation
-- Vocabulary diversity measurement
-- Reading time estimation
-- Content structure analysis
-examples:
-- name: Research analysis
-  config:
-    include_readability: true
-    include_vocabulary: true
-    include_structure: true
-    include_sentiment_indicators: false
-  description: Comprehensive analysis for research papers
-- name: Content marketing
-  config:
-    include_readability: true
-    include_vocabulary: false
-    include_structure: false
-    include_sentiment_indicators: true
-  description: Focus on readability and sentiment for marketing content
+# Statistics Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/statistics_extractor/schema.yaml
+title: Statistics Extractor Configuration
+description: Extract text statistics
+type: object
+additionalProperties: false
+properties:
+  enabled:
+    type: boolean
+    default: true
+    description: Enable this extractor

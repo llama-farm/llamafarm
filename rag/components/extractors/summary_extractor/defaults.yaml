@@ -1,56 +1,9 @@
+# Summary Extractor Default Configurations
+
 general_purpose:
-  name: General Purpose Summary
-  description: Balanced summary for most document types
+  name: General Purpose
+  description: Standard summary extractor
   config:
-    summary_sentences: 3
-    min_sentence_length: 10
-    max_sentence_length: 500
-    include_key_phrases: true
-    include_statistics: true
-    scoring_method: combined
+    enabled: true
   recommended_for:
-  - General documents
-  - Articles
-  - Reports
-brief_summary:
-  name: Brief Summary
-  description: Short, concise summaries
-  config:
-    summary_sentences: 2
-    min_sentence_length: 15
-    max_sentence_length: 300
-    include_key_phrases: false
-    include_statistics: false
-    scoring_method: position
-  recommended_for:
-  - Quick overviews
-  - Preview text
-  - Social media
-detailed_summary:
-  name: Detailed Summary
-  description: Comprehensive summaries with metadata
-  config:
-    summary_sentences: 5
-    min_sentence_length: 10
-    max_sentence_length: 600
-    include_key_phrases: true
-    include_statistics: true
-    scoring_method: frequency
-  recommended_for:
-  - Research papers
-  - Long documents
-  - Analysis reports
-news_summary:
-  name: News Article Summary
-  description: Optimized for news content
-  config:
-    summary_sentences: 3
-    min_sentence_length: 12
-    max_sentence_length: 400
-    include_key_phrases: true
-    include_statistics: false
-    scoring_method: combined
-  recommended_for:
-  - News articles
-  - Press releases
-  - Media content
+  - General use

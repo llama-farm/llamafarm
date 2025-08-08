@@ -31,29 +31,52 @@ from utils.path_resolver import PathResolver, resolve_paths_in_config
 from core.document_manager import DocumentManager, DeletionStrategy, UpdateStrategy
 from core.extractor_integration import ExtractorIntegrator, apply_extractors_from_cli_args
 from components.extractors import registry
-from strategies import StrategyManager
+from core.strategies import StrategyManager
 
 
-def setup_logging(level: str = "INFO"):
+def setup_logging(level: str = "INFO", quiet: bool = False):
     """Setup logging configuration.
 
     TODO: Replace with global logging module when available.
     """
+    # If quiet mode, only show warnings and errors
+    if quiet:
+        level = "WARNING"
+    
+    # Configure logging - only show time for DEBUG level
+    if level == "DEBUG":
+        format_str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    else:
+        # Simplified format for normal use
+        format_str = "%(message)s"
+    
     logging.basicConfig(
         level=getattr(logging, level.upper()),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format=format_str,
     )
+    
+    # Suppress specific noisy loggers
+    if level != "DEBUG":
+        logging.getLogger("chromadb").setLevel(logging.WARNING)
+        logging.getLogger("chromadb.telemetry").setLevel(logging.ERROR)
+        logging.getLogger("strategies.loader").setLevel(logging.WARNING)
+        logging.getLogger("components.parsers").setLevel(logging.WARNING)
+        logging.getLogger("components.stores").setLevel(logging.WARNING)
 
 
 def detect_file_type(file_path: Path) -> str:
     """Detect file type based on extension and mime type.
     
     Args:
-        file_path: Path to the file
+        file_path: Path to the file or directory
         
     Returns:
-        File type string (e.g., 'csv', 'pdf', 'json')
+        File type string (e.g., 'csv', 'pdf', 'json', 'directory')
     """
+    # Check if it's a directory
+    if file_path.is_dir():
+        return 'directory'
+    
     extension = file_path.suffix.lower()
     mime_type, _ = mimetypes.guess_type(str(file_path))
     
@@ -65,7 +88,11 @@ def detect_file_type(file_path: Path) -> str:
         '.txt': 'text',
         '.md': 'markdown',
         '.docx': 'docx',
-        '.doc': 'doc'
+        '.doc': 'doc',
+        '.html': 'html',
+        '.htm': 'html',
+        '.xls': 'excel',
+        '.xlsx': 'excel'
     }
     
     if extension in extension_map:
@@ -265,7 +292,8 @@ def load_config_with_strategy_support(
     config_path: Optional[str] = None,
     strategy_name: Optional[str] = None, 
     strategy_overrides: Optional[str] = None,
-    base_dir: str = None
+    base_dir: str = None,
+    strategy_file: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Load configuration with strategy support.
@@ -275,13 +303,14 @@ def load_config_with_strategy_support(
         strategy_name: Name of strategy to use
         strategy_overrides: JSON string of strategy overrides
         base_dir: Base directory for path resolution
+        strategy_file: Path to custom strategy YAML file
         
     Returns:
         Configuration dictionary
     """
     if strategy_name:
         # Strategy-based configuration
-        strategy_manager = StrategyManager()
+        strategy_manager = StrategyManager(strategies_file=strategy_file)
         
         # Parse overrides if provided
         overrides = {}
@@ -376,8 +405,8 @@ def create_pipeline_from_config(
 
 def ingest_command(args):
     """Handle the ingest command."""
-    setup_logging(args.log_level)
-    tracker = LlamaProgressTracker()
+    setup_logging(args.log_level, quiet=args.quiet)
+    tracker = LlamaProgressTracker(verbose=args.verbose, quiet=args.quiet)
 
     # Resolve data source path
     resolver = PathResolver(args.base_dir if hasattr(args, "base_dir") else None)
@@ -399,6 +428,7 @@ def ingest_command(args):
         config = load_config_with_strategy_support(
             config_path=args.config,
             strategy_name=getattr(args, 'strategy', None),
+            strategy_file=getattr(args, 'strategy_file', None),
             strategy_overrides=getattr(args, 'strategy_overrides', None),
             base_dir=args.base_dir if hasattr(args, "base_dir") else None
         )
@@ -435,9 +465,51 @@ def ingest_command(args):
         if hasattr(pipeline, "run_with_progress"):
             result = pipeline.run_with_progress(source=str(source_path))
         else:
-            # Fallback to regular pipeline
+            # Show enhanced visual progress
+            if args.verbose:
+                tracker.print_header("📄 Document Processing Pipeline")
+                tracker.print_info(f"📂 Source: {source_path}")
+                
+                # Show pipeline stages
+                print("\n🔧 Pipeline Stages:")
+                print("  1️⃣  Parse documents")
+                print("  2️⃣  Extract metadata")
+                print("  3️⃣  Generate embeddings")
+                print("  4️⃣  Store in vector database")
+                print()
+            
             tracker.print_info(f"📂 Processing documents from: {source_path}")
+            
+            # Run the pipeline
             result = pipeline.run(source=str(source_path))
+            
+            # Show embedding visualization if verbose
+            if args.verbose and result.documents:
+                print("\n🧠 Embedding Generation:")
+                for i, doc in enumerate(result.documents[:5], 1):  # Show first 5
+                    doc_name = Path(doc.source).name if doc.source else f"Document {i}"
+                    print(f"  📄 {doc_name}: ", end="")
+                    # Show mini embedding visualization
+                    if doc.embeddings:
+                        viz = "["
+                        for j in range(min(20, len(doc.embeddings))):
+                            val = doc.embeddings[j]
+                            if val > 0.5:
+                                viz += "█"
+                            elif val > 0:
+                                viz += "▓"
+                            elif val > -0.5:
+                                viz += "░"
+                            else:
+                                viz += "·"
+                        viz += f"...] ({len(doc.embeddings)} dims)"
+                        print(viz)
+                    else:
+                        print("[pending]")
+                
+                if len(result.documents) > 5:
+                    print(f"  ... and {len(result.documents) - 5} more documents")
+            
             tracker.print_success("Processing completed!")
 
         # Apply extractors from both config and CLI
@@ -487,13 +559,30 @@ def ingest_command(args):
             except Exception as e:
                 tracker.print_warning(f"Extractor application failed: {e}")
 
-        # Show final summary
+        # Show final summary with enhanced details
         print(f"\n📊 Final Results:")
         tracker.print_success(f"Documents processed: {len(result.documents)}")
+        
+        # Show document details if verbose
+        if args.verbose and result.documents:
+            print("\n📚 Document Details:")
+            for i, doc in enumerate(result.documents[:3], 1):  # Show first 3
+                doc_name = Path(doc.source).name if doc.source else f"Document {i}"
+                print(f"\n  {i}. {doc_name}")
+                print(f"     • Content: {len(doc.content)} chars")
+                if doc.metadata:
+                    for key, value in list(doc.metadata.items())[:3]:
+                        if not key.startswith('_'):
+                            print(f"     • {key}: {str(value)[:50]}")
+                if doc.embeddings:
+                    print(f"     • Embeddings: {len(doc.embeddings)} dimensions")
+            
+            if len(result.documents) > 3:
+                print(f"\n  ... and {len(result.documents) - 3} more documents")
 
         if result.errors:
             tracker.print_warning(f"Errors encountered: {len(result.errors)}")
-            if args.log_level.upper() in ["DEBUG", "INFO"]:
+            if args.log_level.upper() in ["DEBUG", "INFO"] or args.verbose:
                 print("\n🔍 Error Details:")
                 for i, error in enumerate(result.errors[:5], 1):
                     print(f"   {i}. {error}")
@@ -512,14 +601,15 @@ def ingest_command(args):
 
 def search_command(args):
     """Handle the search command."""
-    setup_logging(args.log_level)
-    tracker = LlamaProgressTracker()
+    setup_logging(args.log_level, quiet=args.quiet)
+    tracker = LlamaProgressTracker(verbose=args.verbose, quiet=args.quiet)
 
     # Load configuration (with strategy support)
     base_dir = getattr(args, "base_dir", None)
     config = load_config_with_strategy_support(
         config_path=args.config,
         strategy_name=getattr(args, 'strategy', None),
+        strategy_file=getattr(args, 'strategy_file', None),
         strategy_overrides=getattr(args, 'strategy_overrides', None),
         base_dir=base_dir
     )
@@ -586,36 +676,199 @@ def search_command(args):
 
         if results:
             tracker.print_success(f"Found {len(results)} llama-nificent matches!")
+            
+            # Show verbose details if requested
+            if args.verbose:
+                tracker.print_verbose_results(results, "Detailed Search Results")
+            
+            # Regular output - create nice boxes for each result
             print(f"\n📋 Search Results:")
 
             for i, doc in enumerate(results, 1):
-                print(f"\n{Fore.CYAN}{'='*50}")
-                print(f"🏆 Result #{i} - Document: {doc.id}")
-                print(f"{'='*50}{Style.RESET_ALL}")
+                # Collect content for the box
+                result_content = []
+                result_content.append(f"🏆 Result #{i}")
+                
+                # Show source if available (shortened)
+                if hasattr(doc, 'source') and doc.source and doc.source != 'unknown':
+                    source_display = doc.source
+                    if len(source_display) > 50:
+                        source_display = "..." + source_display[-47:]
+                    result_content.append(f"📁 {source_display}")
 
-                print(f"📝 Content Preview:")
-                print(
-                    f"   {doc.content[:300]}{'...' if len(doc.content) > 300 else ''}"
-                )
+                # Content preview - show first paragraph or limited chars
+                content_limit = args.content_length
+                
+                if content_limit == -1:
+                    display_content = doc.content
+                else:
+                    # Try to get first paragraph
+                    paragraphs = doc.content.split('\n\n')
+                    first_para = paragraphs[0].strip() if paragraphs else doc.content
+                    
+                    if len(first_para) > content_limit:
+                        # Try to cut at sentence boundary
+                        sentences = first_para[:content_limit].split('. ')
+                        if len(sentences) > 1:
+                            display_content = '. '.join(sentences[:-1]) + '.'
+                        else:
+                            display_content = first_para[:content_limit] + '...'
+                    else:
+                        display_content = first_para
+                
+                # Add content with proper line wrapping
+                result_content.append("📝 Content:")
+                content_words = display_content.split()
+                current_line = ""
+                for word in content_words:
+                    if len(current_line + " " + word) > 68:
+                        if current_line:
+                            result_content.append(f"   {current_line}")
+                            current_line = word
+                        else:
+                            result_content.append(f"   {word}")
+                    else:
+                        current_line = current_line + " " + word if current_line else word
+                
+                if current_line:
+                    result_content.append(f"   {current_line}")
 
                 # Show score
                 score = doc.metadata.get("similarity_score", 0.0)
                 if score is not None:
-                    if score > -100:
-                        print(f"🎯 Similarity: {score:.3f} (Excellent match!)")
-                    elif score > -300:
-                        print(f"🎯 Similarity: {score:.3f} (Good match)")
+                    # Similarity scores range from 0 to 1 (1 being perfect match)
+                    if score > 0.8:
+                        result_content.append(f"🎯 Match: {score:.3f} (Excellent)")
+                    elif score > 0.5:
+                        result_content.append(f"🎯 Match: {score:.3f} (Good)")
+                    elif score > 0.3:
+                        result_content.append(f"🎯 Match: {score:.3f} (Fair)")
                     else:
-                        print(f"🎯 Similarity: {score:.3f} (Partial match)")
+                        result_content.append(f"🎯 Match: {score:.3f} (Weak)")
 
-                if "priority" in doc.metadata:
-                    priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(
-                        doc.metadata["priority"], "⚪"
-                    )
-                    print(f"{priority_emoji} Priority: {doc.metadata['priority']}")
+                # Show useful metadata only
+                useful_metadata = {}
+                if doc.metadata:
+                    # Select only the most useful metadata fields (including business/sentiment)
+                    for key in ['file_name', 'priority', 'tags', 'word_count', 'file_size', 
+                               'sentiment', 'sentiment_score', 'sentiment_confidence',
+                               'entities_extracted', 'patterns_found', 'currency_amounts',
+                               'percentages_found']:
+                        if key in doc.metadata:
+                            useful_metadata[key] = doc.metadata[key]
+                
+                if useful_metadata:
+                    result_content.append("📊 Info:")
+                    for key, value in useful_metadata.items():
+                        if key == 'file_size':
+                            if isinstance(value, int):
+                                if value > 1024:
+                                    value = f"{value/1024:.1f}KB"
+                                else:
+                                    value = f"{value}B"
+                        elif key == 'priority':
+                            priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(str(value).lower(), "⚪")
+                            value = f"{priority_emoji} {value}"
+                        elif key == 'tags' and isinstance(value, list):
+                            value = ', '.join(value[:3])  # First 3 tags
+                            if len(doc.metadata[key]) > 3:
+                                value += '...'
+                        elif key == 'sentiment':
+                            # Show sentiment with emoji
+                            sentiment_emoji = {
+                                "positive": "😊", "negative": "😟", 
+                                "neutral": "😐", "mixed": "🤔"
+                            }.get(str(value).lower(), "❓")
+                            value = f"{sentiment_emoji} {value}"
+                        elif key == 'sentiment_confidence':
+                            # Show confidence as percentage
+                            if isinstance(value, (int, float)):
+                                value = f"{value*100:.1f}%"
+                        elif key == 'sentiment_score':
+                            # Show sentiment score with color indicator
+                            if isinstance(value, (int, float)):
+                                if value > 0.3:
+                                    value = f"📈 {value:.2f} (positive)"
+                                elif value < -0.3:
+                                    value = f"📉 {value:.2f} (negative)"
+                                else:
+                                    value = f"➡️ {value:.2f} (neutral)"
+                        elif key == 'currency_amounts' and isinstance(value, list):
+                            # Show first few currency amounts
+                            if value:
+                                value = ', '.join(str(x) for x in value[:2])
+                                if len(doc.metadata[key]) > 2:
+                                    value += f' (+{len(doc.metadata[key])-2} more)'
+                        elif key == 'percentages_found' and isinstance(value, list):
+                            # Show percentages
+                            if value:
+                                value = ', '.join(str(x) for x in value[:3])
+                        elif key == 'entities_extracted' and isinstance(value, list):
+                            # Show entity count
+                            value = f"{len(value)} entities"
+                        elif isinstance(value, list):
+                            # Generic list handling
+                            value = ', '.join(str(x) for x in value[:3])
+                            if len(doc.metadata[key]) > 3:
+                                value += '...'
+                        
+                        # Truncate long values
+                        value_str = str(value)
+                        if len(value_str) > 40:
+                            value_str = value_str[:37] + "..."
+                        
+                        # Format the key name nicely
+                        display_key = key.replace('_', ' ').title()
+                        if key == 'sentiment_confidence':
+                            display_key = "Confidence"
+                        elif key == 'sentiment_score':
+                            display_key = "Sentiment Score"
+                        elif key == 'currency_amounts':
+                            display_key = "💵 Amounts"
+                        elif key == 'percentages_found':
+                            display_key = "📊 Percentages"
+                        elif key == 'entities_extracted':
+                            display_key = "🏢 Entities"
+                        
+                        result_content.append(f"   {display_key}: {value_str}")
 
-                if "tags" in doc.metadata:
-                    print(f"🏷️  Tags: {doc.metadata['tags']}")
+                # Show verbose metadata if requested
+                if args.verbose and doc.metadata:
+                    # Show extractor results concisely
+                    extractor_results = {}
+                    for key in doc.metadata:
+                        if key.startswith(('entities_', 'keywords_', 'patterns_', 'summary_')):
+                            extractor_results[key] = doc.metadata[key]
+                    
+                    if extractor_results:
+                        result_content.append("🔍 Extracts:")
+                        for key, value in list(extractor_results.items())[:2]:  # Limit to 2
+                            display_key = key.replace('_', ' ').title()
+                            if isinstance(value, list):
+                                if value:
+                                    display_value = ', '.join(str(x) for x in value[:3])
+                                    if len(value) > 3:
+                                        display_value += f' (+{len(value)-3} more)'
+                                else:
+                                    continue
+                            elif isinstance(value, str):
+                                display_value = value[:40] + "..." if len(value) > 40 else value
+                            else:
+                                display_value = str(value)[:40]
+                            
+                            result_content.append(f"   {display_key}: {display_value}")
+
+                # Create a nice bordered box
+                max_width = min(max(len(line) for line in result_content) + 4, 76)
+                
+                print(f"\n{Fore.CYAN}╭{'─' * (max_width - 2)}╮{Style.RESET_ALL}")
+                for line in result_content:
+                    # Ensure line fits in box
+                    if len(line) > max_width - 4:
+                        line = line[:max_width - 7] + "..."
+                    padding = max_width - len(line) - 4
+                    print(f"{Fore.CYAN}│{Style.RESET_ALL} {line}{' ' * padding} {Fore.CYAN}│{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}╰{'─' * (max_width - 2)}╯{Style.RESET_ALL}")
         else:
             tracker.print_warning(
                 "No results found. The llamas are still grazing in other pastures! 🌾"
@@ -634,19 +887,41 @@ def search_command(args):
 
 def info_command(args):
     """Handle the info command."""
-    setup_logging(args.log_level)
+    setup_logging(args.log_level, quiet=args.quiet)
 
-    # Load configuration
-    base_dir = getattr(args, "base_dir", None)
-    config = load_config(args.config, base_dir)
+    # Check if using strategy
+    if hasattr(args, 'strategy') and args.strategy:
+        # Use strategy-based configuration
+        from core.strategies import StrategyManager
+        strategy_manager = StrategyManager(strategies_file=getattr(args, 'strategy_file', None))
+        
+        # Get strategy config
+        config = strategy_manager.convert_strategy_to_config(args.strategy)
+        if not config:
+            print(f"❌ Strategy '{args.strategy}' not found")
+            available = strategy_manager.get_available_strategies()
+            if available:
+                print(f"Available strategies: {', '.join(available)}")
+            sys.exit(1)
+        
+        # Create vector store from strategy config
+        try:
+            store = create_vector_store_from_config(config.get("vector_store", {}))
+        except Exception as e:
+            print(f"Failed to create vector store: {e}")
+            sys.exit(1)
+    else:
+        # Load configuration from file
+        base_dir = getattr(args, "base_dir", None)
+        config = load_config(args.config, base_dir)
 
-    # Create vector store using factory with override
-    try:
-        store_config = select_component_config(config, "vector_stores", getattr(args, 'vector_store', None))
-        store = create_vector_store_from_config(store_config)
-    except Exception as e:
-        print(f"Failed to create vector store: {e}")
-        sys.exit(1)
+        # Create vector store using factory with override
+        try:
+            store_config = select_component_config(config, "vector_stores", getattr(args, 'vector_store', None))
+            store = create_vector_store_from_config(store_config)
+        except Exception as e:
+            print(f"Failed to create vector store: {e}")
+            sys.exit(1)
 
     # Get info
     try:
@@ -661,8 +936,8 @@ def info_command(args):
 
 def test_command(args):
     """Handle the test command."""
-    setup_logging(args.log_level)
-    tracker = LlamaProgressTracker()
+    setup_logging(args.log_level, quiet=args.quiet)
+    tracker = LlamaProgressTracker(verbose=args.verbose, quiet=args.quiet)
 
     tracker.print_header("🧪 RAG System Comprehensive Testing 🧪")
     
@@ -1111,22 +1386,46 @@ def manage_command(args):
     setup_logging(args.log_level)
     tracker = LlamaProgressTracker()
 
-    # Load configuration
-    base_dir = getattr(args, "base_dir", None)
-    config = load_config(args.config, base_dir)
+    # Check if using RAG strategy
+    if hasattr(args, 'rag_strategy') and args.rag_strategy:
+        # Use strategy-based configuration
+        from core.strategies import StrategyManager
+        strategy_manager = StrategyManager(strategies_file=getattr(args, 'strategy_file', None))
+        
+        # Get strategy config
+        config = strategy_manager.convert_strategy_to_config(args.rag_strategy)
+        if not config:
+            print(f"❌ Strategy '{args.rag_strategy}' not found")
+            available = strategy_manager.get_available_strategies()
+            if available:
+                print(f"Available strategies: {', '.join(available)}")
+            sys.exit(1)
+        
+        # Create vector store from strategy config
+        try:
+            store = create_vector_store_from_config(config.get("vector_store", {}))
+            metadata_config = config.get("vector_store", {}).get("config", {}).get("metadata_config", {})
+            doc_manager = DocumentManager(store, metadata_config)
+        except Exception as e:
+            tracker.print_error(f"Failed to create document manager: {e}")
+            sys.exit(1)
+    else:
+        # Load configuration from file
+        base_dir = getattr(args, "base_dir", None)
+        config = load_config(args.config, base_dir)
 
-    # Create vector store and document manager
-    try:
-        store_config = select_component_config(config, "vector_stores", getattr(args, 'vector_store', None))
-        store = create_vector_store_from_config(store_config)
-        
-        # Create document manager with metadata config
-        metadata_config = store_config.get("config", {}).get("metadata_config", {})
-        doc_manager = DocumentManager(store, metadata_config)
-        
-    except Exception as e:
-        tracker.print_error(f"Failed to create document manager: {e}")
-        sys.exit(1)
+        # Create vector store and document manager
+        try:
+            store_config = select_component_config(config, "vector_stores", getattr(args, 'vector_store', None))
+            store = create_vector_store_from_config(store_config)
+            
+            # Create document manager with metadata config
+            metadata_config = store_config.get("config", {}).get("metadata_config", {})
+            doc_manager = DocumentManager(store, metadata_config)
+            
+        except Exception as e:
+            tracker.print_error(f"Failed to create document manager: {e}")
+            sys.exit(1)
 
     # Route to specific management command
     if args.manage_command == "delete":
@@ -1492,7 +1791,7 @@ def test_extractor_command(args):
 
 def strategy_command(args):
     """Handle strategy commands."""
-    strategy_manager = StrategyManager()
+    strategy_manager = StrategyManager(strategies_file=getattr(args, 'strategy_file', None))
     
     if args.strategy_command == "list":
         strategies = strategy_manager.get_available_strategies()
@@ -1622,11 +1921,40 @@ def main():
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level",
     )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress info messages, only show warnings and errors",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show detailed output including document contents and metadata",
+    )
+    parser.add_argument(
+        "--content-length",
+        type=int,
+        default=150,
+        help="Maximum characters to show from document content (default: 150, use -1 for unlimited)",
+    )
+    parser.add_argument(
+        "--strategy-file",
+        help="Path to custom strategy YAML file (defaults to default_strategies.yaml)",
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Ingest command
-    ingest_parser = subparsers.add_parser("ingest", help="Ingest documents with auto file type detection")
+    ingest_parser = subparsers.add_parser(
+        "ingest", 
+        help="Ingest documents with auto file type detection",
+        epilog="Examples:\n"
+               "  python cli.py ingest samples/data.csv --strategy simple\n"
+               "  python cli.py ingest docs/ --strategy research --parser pdf\n"
+               "  python cli.py --verbose ingest data.csv --extractors keywords entities"
+    )
     ingest_parser.add_argument(
         "source", help="Source file or directory (supports relative and absolute paths)"
     )
@@ -1641,7 +1969,14 @@ def main():
     )
 
     # Search command
-    search_parser = subparsers.add_parser("search", help="Search documents with strategy selection")
+    search_parser = subparsers.add_parser(
+        "search", 
+        help="Search documents with strategy selection",
+        epilog="Examples:\n"
+               "  python cli.py search \"machine learning\" --strategy simple --top-k 5\n"
+               "  python cli.py search \"error logs\" --strategy customer_support\n"
+               "  python cli.py --verbose search \"API docs\" --retrieval hybrid"
+    )
     search_parser.add_argument("query", help="Search query")
     search_parser.add_argument(
         "--top-k", type=int, default=5, help="Number of results to return"
@@ -1657,20 +1992,45 @@ def main():
     )
 
     # Info command
-    info_parser = subparsers.add_parser("info", help="Show vector store info")
+    info_parser = subparsers.add_parser(
+        "info", 
+        help="Show vector store info",
+        epilog="Examples:\n"
+               "  python cli.py info --strategy simple\n"
+               "  python cli.py info --vector-store default"
+    )
     info_parser.add_argument(
         "--vector-store", help="Override vector store selection (e.g., 'default', 'dev')"
     )
+    info_parser.add_argument(
+        "--strategy", help="Use a predefined strategy for configuration"
+    )
 
     # Test command
-    test_parser = subparsers.add_parser("test", help="Test system components")
+    test_parser = subparsers.add_parser(
+        "test", 
+        help="Test system components",
+        epilog="Examples:\n"
+               "  python cli.py test --test-file sample.csv\n"
+               "  python cli.py test --all-tests"
+    )
     test_parser.add_argument(
         "--test-file",
         help="File to test parsing (supports CSV, PDF, and more with auto-detection)",
     )
 
     # Document management commands
-    manage_parser = subparsers.add_parser("manage", help="Document management operations")
+    manage_parser = subparsers.add_parser(
+        "manage", 
+        help="Document management operations",
+        epilog="Examples:\n"
+               "  python cli.py manage delete --older-than 30 --dry-run\n"
+               "  python cli.py manage stats --detailed\n"
+               "  python cli.py manage cleanup --duplicates"
+    )
+    manage_parser.add_argument(
+        "--rag-strategy", dest="rag_strategy", help="Use a predefined RAG strategy for configuration"
+    )
     manage_subparsers = manage_parser.add_subparsers(dest="manage_command", help="Management commands")
 
     # Delete commands
@@ -1722,7 +2082,13 @@ def main():
                             help="Regenerate all document hashes")
 
     # Extractor commands
-    extractor_parser = subparsers.add_parser("extractors", help="Extractor operations")
+    extractor_parser = subparsers.add_parser(
+        "extractors", 
+        help="Extractor operations",
+        epilog="Examples:\n"
+               "  python cli.py extractors list --detailed\n"
+               "  python cli.py extractors test --extractor KeywordExtractor --text \"sample text\""
+    )
     extractor_subparsers = extractor_parser.add_subparsers(dest="extractor_command", help="Extractor commands")
     
     # List extractors
@@ -1748,7 +2114,14 @@ def main():
                               help="JSON config for extractors (e.g., '{\"yake\": {\"max_keywords\": 15}}')")
 
     # Strategy commands
-    strategy_parser = subparsers.add_parser("strategies", help="Strategy operations")
+    strategy_parser = subparsers.add_parser(
+        "strategies", 
+        help="Strategy operations",
+        epilog="Examples:\n"
+               "  python cli.py strategies list --detailed\n"
+               "  python cli.py strategies show simple\n"
+               "  python cli.py strategies recommend --use-case research --performance accuracy"
+    )
     strategy_subparsers = strategy_parser.add_subparsers(dest="strategy_command", help="Strategy commands")
     
     # List strategies
@@ -1794,8 +2167,8 @@ def main():
         parser.print_help()
         print("\n💡 Examples:")
         print("  # Use a strategy (recommended)")
-        print("  uv run python cli.py --strategy simple ingest samples/small_sample.csv")
-        print("  uv run python cli.py --strategy customer_support search \"password reset\"")
+        print("  uv run python cli.py ingest samples/small_sample.csv --strategy simple")
+        print("  uv run python cli.py search \"password reset\" --strategy customer_support")
         print("")
         print("  # List available strategies")
         print("  uv run python cli.py strategies list")
@@ -1805,7 +2178,7 @@ def main():
         print("  uv run python cli.py --config config_examples/basic_config.yaml ingest samples/small_sample.csv")
         print("")
         print("  # Override strategy settings")
-        print("  uv run python cli.py --strategy legal --strategy-overrides '{\"embedder\":{\"config\":{\"batch_size\":32}}}' ingest legal_docs/")
+        print("  uv run python cli.py ingest legal_docs/ --strategy legal --strategy-overrides '{\"embedder\":{\"config\":{\"batch_size\":32}}}'")
         sys.exit(1)
 
     if args.command == "ingest":

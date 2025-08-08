@@ -1,159 +1,137 @@
 # RAG System Demos
 
-This directory contains 5 comprehensive demonstrations of the RAG (Retrieval-Augmented Generation) system, each showcasing different strategies and optimizations for specific domains and use cases.
+This directory contains comprehensive demonstrations of the RAG (Retrieval-Augmented Generation) system, showcasing different strategies and optimizations for specific domains and use cases.
 
 ## 🎯 Demo Overview
 
-Each demo is designed to **WOW** and **EDUCATE** by demonstrating:
+Each demo demonstrates:
 - Different parsing strategies for various document formats
 - Specialized extractors optimized for domain-specific content
 - Unique search and retrieval approaches
 - Real-world applications and use cases
 
-## 🔧 100% Configuration-Driven Architecture
+## 🚀 Quick Start
 
-**IMPORTANT**: All demos use the RAG framework with **ZERO hardcoded configuration**:
-- ✅ **100% Strategy-Based**: All configuration comes from `demo_strategies.yaml`
-- ✅ **No Hardcoding**: Search parameters, component configs, extractors - all in YAML
-- ✅ **Real Framework Usage**: Actual RAG components, not simulations
-- ✅ **Production-Ready Code**: Same patterns used in enterprise deployments
-- ✅ **Easy Customization**: Change behavior by editing YAML, not Python code
+### Run All Demos (Interactive Menu)
+```bash
+# Interactive menu to run all demos or select specific ones
+python demos/run_all_cli_demos.py
+
+# Or using uv
+uv run python demos/run_all_cli_demos.py
+```
+
+### Run Individual CLI Demos
+
+```bash
+# Demo 1: Research Papers Analysis (CLI)
+python demos/demo1_research_papers_cli.py
+
+# Demo 2: Customer Support System (CLI)
+python demos/demo2_customer_support_cli.py
+
+# Demo 3: Code Documentation (CLI)
+python demos/demo3_code_documentation_cli.py
+
+# Demo 4: News Article Analysis
+python demos/demo4_news_analysis.py
+
+# Demo 5: Business Reports Analysis
+python demos/demo5_business_reports.py
+
+# Demo 6: Document Management & Vector DB Operations
+python demos/demo6_document_management.py
+```
 
 ## 📚 Available Demos
 
-### 1. Research Paper Analysis (`demo1_research_papers.py`)
-**Domain**: Academic/Scientific Research  
-**Strategy**: Statistical analysis + Citation extraction  
-**Formats**: Plain text research papers  
-**Extractors**: ContentStatisticsExtractor, EntityExtractor, SummaryExtractor  
-**Use Cases**: Literature reviews, research synthesis, evidence discovery
+### Demo 1: Research Papers Analysis
+- **Strategy**: `research_papers_demo`
+- **Features**: Directory parsing, PDF/TXT/MD files, academic search
+- **Highlights**: Shows verbose embeddings, metadata extraction, entity recognition
+- **Key Extractors**: ContentStatisticsExtractor, EntityExtractor, SummaryExtractor
+- **Use Cases**: Literature reviews, research synthesis, evidence discovery
 
-**Configuration from `demo_strategies.yaml`:**
-- PlainTextParser: 2000 char chunks with 300 overlap, preserves structure
-- ContentStatisticsExtractor: Readability metrics, vocabulary analysis, sentiment indicators
-- EntityExtractor: PERSON, ORG, GPE, DATE, PERCENT, PRODUCT entities
-- SummaryExtractor: 3-sentence summaries with key phrases and statistics
-- OllamaEmbedder: nomic-embed-text model, batch size 3
-- ChromaStore: Persisted to `./demos/vectordb/research_papers`
-- BasicSimilarityStrategy: Cosine similarity, top-k=3 results
+### Demo 2: Customer Support System
+- **Strategy**: `customer_support_demo`
+- **Features**: CSV & TXT parsing, ticket analysis, priority detection
+- **Highlights**: Metadata filtering, sentiment analysis, knowledge base integration
+- **Key Extractors**: EntityExtractor, PatternExtractor, SummaryExtractor
+- **Use Cases**: Support case resolution, knowledge base search, agent assistance
 
-**Why use this approach:**
-- Extracts quantitative data automatically from research content
-- Identifies key researchers, institutions, and methodologies
-- Optimized for academic terminology and scientific concepts
-- Enables semantic search across research corpus
+### Demo 3: Code Documentation Analysis
+- **Strategy**: `code_documentation_demo`
+- **Features**: Markdown/Python parsing, code extraction, technical search
+- **Highlights**: HybridUniversalStrategy, code pattern extraction
+- **Key Extractors**: HeadingExtractor, LinkExtractor, PatternExtractor
+- **Use Cases**: API documentation, developer guides, code examples
 
-### 2. Customer Support System (`demo2_customer_support.py`)
-**Domain**: Business/Customer Service  
-**Strategy**: Case matching + Resolution pattern recognition  
-**Formats**: CSV (tickets) + Text (knowledge base)  
-**Extractors**: EntityExtractor, PatternExtractor, SummaryExtractor  
-**Use Cases**: Support case resolution, knowledge base search, agent assistance
+### Demo 4: News Article Analysis
+- **Strategy**: `news_analysis_demo`
+- **Features**: HTML/TXT parsing, entity extraction, temporal analysis
+- **Highlights**: RerankedStrategy with recency boost, entity recognition
+- **Key Extractors**: EntityExtractor, SummaryExtractor, LinkExtractor
+- **Use Cases**: News analysis, trend identification, content insights
 
-**Configuration from `demo_strategies.yaml`:**
-- CustomerSupportCSVParser: Extracts ticket metadata (id, customer, priority, category)
-- Priority mapping: Critical=1, High=2, Medium=3, Low=4
-- EntityExtractor: Customer names, products, dates mentioned
-- PatternExtractor: Email, phone, URL, IP address patterns with context
-- SummaryExtractor: 3-sentence issue summaries with key phrases
-- OllamaEmbedder: Batch size 4 for faster processing
-- ChromaStore: Persisted to `./demos/vectordb/customer_support`
+### Demo 5: Business Reports Analysis
+- **Strategy**: `business_reports_demo`
+- **Features**: PDF parsing, financial metrics extraction
+- **Highlights**: Pattern extraction for financial data, MultiQueryStrategy
+- **Key Extractors**: TableExtractor, ContentStatisticsExtractor, EntityExtractor
+- **Use Cases**: Financial analysis, KPI tracking, business intelligence
 
-**Why use this approach:**
-- Automatic similar case detection and matching
-- Resolution pattern recognition for consistent solutions
-- Entity-aware issue categorization and routing
-- Support analytics and trend identification
+### Demo 6: Document Management & Vector DB
+- **Features**: Add/search/delete/replace operations, metadata queries
+- **Highlights**: Document lifecycle, deduplication, hashing, collection management
+- **Use Cases**: Collection management, document operations, metadata handling
 
-### 3. Code Documentation (`demo3_code_documentation.py`)
-**Domain**: Technical/Software Development  
-**Strategy**: Structure preservation + Cross-reference linking  
-**Formats**: Markdown technical documentation  
-**Extractors**: HeadingExtractor, LinkExtractor, PatternExtractor  
-**Use Cases**: API documentation, developer guides, code examples
+## 🎨 CLI Commands Reference
 
-**Configuration from `demo_strategies.yaml`:**
-- MarkdownParser: Preserves structure, extracts headers, handles code blocks
-- HeadingExtractor: All heading levels (1-6) with content preview and hierarchy
-- LinkExtractor: Internal/external links with anchor text (no validation)
-- PatternExtractor: URL, email, and code reference patterns with context
-- OllamaEmbedder: Standard batch processing for documentation
-- ChromaStore: Persisted to `./demos/vectordb/code_documentation`
-
-**Why use this approach:**
-- Preserves code formatting and technical structure
-- Maintains cross-reference relationships and navigation
-- Optimized for technical terminology and concepts
-- Context-aware code pattern matching
-
-### 4. News Article Analysis (`demo4_news_analysis.py`)
-**Domain**: Media/Journalism  
-**Strategy**: Entity recognition + Trend tracking  
-**Formats**: HTML news articles  
-**Extractors**: Entity, Summary, Link  
-**Use Cases**: News analysis, trend identification, content insights
-
-**Configuration from `demo_strategies.yaml`:**
-- HTMLParser: Configured to extract clean text, preserve links
-- EntityExtractor: Recognizes PERSON, ORG, GPE, DATE, EVENT, MONEY entities
-- SummaryExtractor: 2-sentence summaries with key phrases
-- LinkExtractor: Captures both internal and external links with anchor text
-
-**Why use this approach:**
-- Identifies key entities and their relationships in news
-- Maintains source verification and credibility links
-- Enables topic clustering and trend analysis
-- Ready for sentiment analysis when SentimentExtractor is added
-
-**Note**: While the README mentioned sentiment analysis, the current `demo_strategies.yaml` uses EntityExtractor, SummaryExtractor, and LinkExtractor. A SentimentExtractor could be easily added to the configuration to enable sentiment tracking.
-
-### 5. Business Reports Analysis (`demo5_business_reports.py`)
-**Domain**: Financial/Corporate Intelligence  
-**Strategy**: Multi-format processing + Metrics extraction  
-**Formats**: Excel, PDF, CSV (mixed business data)  
-**Extractors**: TableExtractor, ContentStatisticsExtractor, EntityExtractor, SummaryExtractor  
-**Use Cases**: Financial analysis, KPI tracking, business intelligence
-
-**Configuration from `demo_strategies.yaml`:**
-- PDFParser: Extracts metadata, page structure, combines pages
-- TableExtractor: Extracts tables with headers (min 2x2 size)
-- ContentStatisticsExtractor: Readability, structure, and vocabulary metrics
-- EntityExtractor: ORG, PERSON, MONEY, DATE, PERCENT entities
-- SummaryExtractor: 3-sentence summaries with key phrases and statistics
-- ChromaStore: Persisted to `./demos/vectordb/business_reports`
-
-**Why use this approach:**
-- Automatic financial metrics and KPI extraction
-- Handles multiple business document formats
-- Business trend identification through entity analysis
-- Cross-report insights and correlation analysis
-
-## 🚀 Quick Start
-
-### Run Individual Demos
-
+### Basic Commands
 ```bash
-# Research paper analysis
-uv run python demos/demo1_research_papers.py
+# Initialize a collection
+python cli.py --strategy-file demos/demo_strategies.yaml init --strategy <strategy_name>
 
-# Customer support system
-uv run python demos/demo2_customer_support.py
+# Ingest documents
+python cli.py --strategy-file demos/demo_strategies.yaml ingest <path> --strategy <strategy_name>
 
-# Code documentation
-uv run python demos/demo3_code_documentation.py
+# Search with verbose output
+python cli.py --strategy-file demos/demo_strategies.yaml --verbose search "query" --strategy <strategy_name> --top-k 5
 
-# News article analysis  
-uv run python demos/demo4_news_analysis.py
+# Get collection info
+python cli.py --strategy-file demos/demo_strategies.yaml info --strategy <strategy_name>
 
-# Business reports analysis
-uv run python demos/demo5_business_reports.py
+# Manage documents
+python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy <strategy_name> stats
+python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy <strategy_name> delete --doc-ids <id1> <id2>
+
+# List available strategies
+python cli.py strategies list
+
+# Show strategy details
+python cli.py strategies show <strategy_name>
+
+# List available extractors
+python cli.py extractors list
+
+# Test system
+python cli.py test
 ```
 
-### Run All Demos (Master Showcase)
+### Command Syntax Examples
 
 ```bash
-# Run the complete showcase (15-25 minutes)
-uv run python demos/master_demo.py
+# NOTE: Command syntax follows this pattern:
+# python cli.py [global-options] <command> [positional-args] [command-options]
+
+# Correct: Search query comes directly after 'search' command
+python cli.py --strategy-file demos/demo_strategies.yaml search "transformer architecture" --strategy research_papers_demo
+
+# Correct: Verbose is a global option (before command)
+python cli.py --strategy-file demos/demo_strategies.yaml --verbose search "AI breakthrough" --strategy news_analysis_demo
+
+# Correct: Quiet mode with custom content length
+python cli.py --strategy-file demos/demo_strategies.yaml --quiet --content-length 200 search "revenue" --strategy business_reports_demo
 ```
 
 ## 📋 Prerequisites
@@ -181,65 +159,74 @@ curl http://localhost:11434/api/tags
 ```
 demos/
 ├── README.md                          # This file
-├── master_demo.py                     # Runs all 5 demos
-├── demo1_research_papers.py           # Research paper analysis
-├── demo2_customer_support.py          # Customer support system
-├── demo3_code_documentation.py        # Code documentation
-├── demo4_news_analysis.py             # News article analysis
-├── demo5_business_reports.py          # Business reports analysis
-├── static_samples/                    # Sample data for demos
-│   ├── research_papers/               # Academic research content
-│   ├── customer_support/              # Support tickets and knowledge base
-│   ├── code_documentation/            # Technical documentation
-│   ├── news_articles/                 # News and media content
-│   └── business_reports/              # Financial and business data
-└── vectordb/                          # Generated vector databases
-    ├── research_papers/               # Research paper embeddings
-    ├── customer_support/              # Support case embeddings
-    ├── code_documentation/            # Documentation embeddings
-    ├── news_analysis/                 # News article embeddings
-    └── business_reports/              # Business data embeddings
+├── DEMO_README.md                     # Legacy documentation
+├── run_all_cli_demos.py              # Interactive demo runner
+├── demo1_research_papers_cli.py      # Research paper analysis
+├── demo2_customer_support_cli.py     # Customer support system
+├── demo3_code_documentation_cli.py   # Code documentation
+├── demo4_news_analysis.py            # News article analysis
+├── demo5_business_reports.py         # Business reports analysis
+├── demo6_document_management.py      # Document management operations
+├── demo_strategies.yaml              # All demo strategy configurations
+├── static_samples/                   # Sample data for demos
+│   ├── research_papers/              # Academic research content
+│   ├── customer_support/             # Support tickets and knowledge base
+│   ├── code_documentation/           # Technical documentation
+│   ├── news_articles/                # News and media content
+│   └── business_reports/             # Financial and business data
+└── archive/                          # Archived demo files
 ```
 
-## 🎨 Demo Features
+## 🔧 100% Configuration-Driven Architecture
 
-### Visual Experience
-- Rich terminal output with colors and formatting
-- Progress bars and real-time status updates
-- Beautiful tables and panels for data presentation
-- Emoji indicators for different content types
+**IMPORTANT**: All demos use the RAG framework with **ZERO hardcoded configuration**:
+- ✅ **100% Strategy-Based**: All configuration comes from `demo_strategies.yaml`
+- ✅ **No Hardcoding**: Search parameters, component configs, extractors - all in YAML
+- ✅ **Real Framework Usage**: Actual RAG components, not simulations
+- ✅ **Production-Ready Code**: Same patterns used in enterprise deployments
+- ✅ **Easy Customization**: Change behavior by editing YAML, not Python code
 
-### Educational Content
-- Detailed explanations of each strategy and approach
-- Real-world use case demonstrations
-- Performance metrics and analytics
-- Comparative analysis across domains
+### How Configuration Works
 
-### Technical Depth
-- Shows actual embedding vectors and dimensions
-- Demonstrates real retrieval with similarity scores
-- Explains extractor results and data analysis
-- Provides insights into RAG architecture decisions
+All demos load their configuration from `demo_strategies.yaml`:
+
+```python
+# Example from demo code (NOT hardcoded values!)
+from strategies import StrategyManager
+
+# Load strategy configuration
+strategy_manager = StrategyManager()
+config = strategy_manager.convert_strategy_to_config("research_papers_demo")
+
+# The RAG system uses this configuration for ALL components
+rag_system = RAGSystem(config)
+```
+
+To modify demo behavior:
+1. Edit `demo_strategies.yaml` - change extractors, parsers, retrieval settings
+2. No Python code changes needed - all behavior is configuration-driven
+3. Add new extractors by listing them in the YAML configuration
+4. Adjust search parameters (top_k, distance_metric) in the strategy config
 
 ## 🔍 Querying Demo Databases
 
-After running demos, you can query the created databases:
+After running demos, you can query the created databases using the CLI:
 
 ```bash
 # Research papers
-uv run python cli.py search "transformer architecture performance" --collection research_papers
+python cli.py --strategy-file demos/demo_strategies.yaml search "transformer architecture" --strategy research_papers_demo
 
 # Customer support
-uv run python cli.py search "login issues password reset" --collection customer_support
+python cli.py --strategy-file demos/demo_strategies.yaml search "login issues" --strategy customer_support_demo
 
 # Code documentation  
-uv run python cli.py search "parser implementation examples" --collection code_documentation
+python cli.py --strategy-file demos/demo_strategies.yaml search "parser implementation" --strategy code_documentation_demo
 
 # News analysis
-uv run python cli.py search "AI quantum computing trends" --collection news_articles
+python cli.py --strategy-file demos/demo_strategies.yaml search "AI quantum computing" --strategy news_analysis_demo
 
 # Business reports
-uv run python cli.py search "quarterly revenue growth trends" --collection business_reports
+python cli.py --strategy-file demos/demo_strategies.yaml search "quarterly revenue" --strategy business_reports_demo
 ```
 
 ## 📊 What Each Demo Demonstrates
@@ -272,7 +259,7 @@ uv run python cli.py search "quarterly revenue growth trends" --collection busin
 **Demo fails to start:**
 - Ensure Ollama is running: `ollama serve`
 - Check model is loaded: `ollama list`
-- Verify Python dependencies: `uv sync`
+- Verify Python dependencies: `uv sync` or `pip install -r requirements.txt`
 
 **Embedding errors:**
 - Restart Ollama service
@@ -282,7 +269,7 @@ uv run python cli.py search "quarterly revenue growth trends" --collection busin
 **Sample data not found:**
 - Ensure all files in `static_samples/` directories exist
 - Check file permissions are readable
-- Verify working directory is correct
+- Verify working directory is correct (should be in `rag/` directory)
 
 **Slow performance:**
 - Reduce batch sizes in demo configurations
@@ -296,30 +283,6 @@ uv run python cli.py search "quarterly revenue growth trends" --collection busin
 - **Use SSD storage** for better vector database performance
 - **Monitor system resources** during execution
 
-## 🔧 How Configuration Works
-
-All demos load their configuration from `demo_strategies.yaml`:
-
-```python
-# Example from demo code (NOT hardcoded values!)
-from rag.core.config_loader import ConfigLoader
-
-# Load strategy configuration
-config = ConfigLoader.from_strategy("research_papers_demo")
-
-# Or from the YAML directly
-config = ConfigLoader.from_file("demos/demo_strategies.yaml", strategy="research_papers_demo")
-
-# The RAG system uses this configuration for ALL components
-rag_system = RAGSystem(config)
-```
-
-To modify demo behavior:
-1. Edit `demo_strategies.yaml` - change extractors, parsers, retrieval settings
-2. No Python code changes needed - all behavior is configuration-driven
-3. Add new extractors by listing them in the YAML configuration
-4. Adjust search parameters (top_k, distance_metric) in the strategy config
-
 ## 🎓 Learning Outcomes
 
 After running these demos, you'll understand:
@@ -330,28 +293,49 @@ After running these demos, you'll understand:
 4. **Performance Optimization**: Techniques for efficient processing and retrieval
 5. **Real-world Applications**: Practical use cases across multiple industries
 6. **Configuration-First Development**: How to build systems where behavior is defined in YAML, not code
+7. **CLI Design**: How to build intuitive command-line interfaces for RAG systems
 
-## 💡 Adding Sentiment Analysis
+## 💡 Extending the Demos
 
-To add sentiment analysis to Demo 4 (or any demo), simply update `demo_strategies.yaml`:
+### Adding New Extractors
+
+To add new extractors to any demo, update `demo_strategies.yaml`:
 
 ```yaml
-news_analysis_demo:
+strategy_name:
   components:
     extractors:
-      - type: "EntityExtractor"
-        config: { ... }
-      - type: "SentimentExtractor"  # Add this!
+      - type: "YourExtractor"
         config:
-          model: "local"  # or "api-based"
-          granularity: "sentence"  # or "paragraph", "document"
-          categories: ["positive", "negative", "neutral"]
-          confidence_threshold: 0.7
-      - type: "SummaryExtractor"
-        config: { ... }
+          setting1: value1
+          setting2: value2
 ```
 
 The framework's factory pattern automatically loads any configured extractor. No code changes needed!
+
+### Creating New Strategies
+
+Add a new strategy to `demo_strategies.yaml`:
+
+```yaml
+your_new_strategy:
+  description: "Your strategy description"
+  use_cases: ["Use case 1", "Use case 2"]
+  components:
+    parser:
+      type: "YourParser"
+      config: {}
+    extractors: []
+    embedder:
+      type: "OllamaEmbedder"
+      config: {}
+    vector_store:
+      type: "ChromaStore"
+      config: {}
+    retrieval_strategy:
+      type: "BasicSimilarityStrategy"
+      config: {}
+```
 
 ## 🤝 Contributing
 
@@ -364,6 +348,10 @@ Want to add more demos or improve existing ones?
 5. **Include educational content**: Explain why this strategy works
 6. **Test thoroughly**: Ensure demos run reliably
 7. **No hardcoding**: Keep all configuration in YAML files
+
+## 📖 Further Documentation
+
+For comprehensive CLI documentation, see [CLI Documentation](../docs/cli-guide.md).
 
 ## 📝 License
 

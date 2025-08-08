@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import re
 from pathlib import Path
 
-from core.base import Parser, Document
+from core.base import Parser, Document, ProcessingResult
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +25,18 @@ class MarkdownParser(Parser):
         """Validate parser configuration."""
         return True  # Markdown parser has no external dependencies to validate
     
-    def parse(self, content: bytes, **kwargs) -> List[Document]:
+    def parse(self, content: str, **kwargs) -> ProcessingResult:
         """Parse markdown content into documents."""
+        errors = []
+        documents = []
+        
         try:
-            # Decode bytes to string
-            if isinstance(content, bytes):
-                text_content = content.decode('utf-8', errors='ignore')
+            # Handle file path or content string
+            if Path(content).exists():
+                with open(content, 'r', encoding='utf-8', errors='ignore') as f:
+                    text_content = f.read()
             else:
                 text_content = str(content)
-            
-            documents = []
             
             if self.preserve_structure:
                 # Split by headers to create separate documents
@@ -43,11 +45,11 @@ class MarkdownParser(Parser):
                 # Create single document
                 documents = [self._create_single_document(text_content, **kwargs)]
             
-            return documents
-            
         except Exception as e:
             logger.error(f"Error parsing markdown: {e}")
-            return []
+            errors.append({"error": str(e), "source": content})
+            
+        return ProcessingResult(documents=documents, errors=errors)
     
     def _parse_by_sections(self, content: str, **kwargs) -> List[Document]:
         """Parse markdown by sections (headers)."""
