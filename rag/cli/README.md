@@ -8,18 +8,17 @@ A comprehensive guide to the RAG command-line interface (CLI) for document proce
 2. [Command Overview](#command-overview)
 3. [Global Options](#global-options)
 4. [Core Commands](#core-commands)
+   - [Test](#test-command)
    - [Ingest](#ingest-command)
    - [Search](#search-command)
    - [Info](#info-command)
    - [Manage](#manage-command)
    - [Strategies](#strategies-command)
    - [Extractors](#extractors-command)
-   - [Test](#test-command)
 5. [Strategy System](#strategy-system)
 6. [Advanced Usage](#advanced-usage)
 7. [Examples & Workflows](#examples--workflows)
 8. [Troubleshooting](#troubleshooting)
-9. [Command Reference](#command-reference)
 
 ---
 
@@ -48,568 +47,652 @@ A comprehensive guide to the RAG command-line interface (CLI) for document proce
    python cli.py test
    ```
 
+---
+
 ## Command Overview
 
-The RAG CLI follows this general syntax pattern:
+The RAG CLI provides a comprehensive set of commands for document management:
 
 ```bash
-python cli.py [global-options] <command> [positional-args] [command-options]
+python cli.py [global-options] <command> [command-options]
 ```
 
 ### Available Commands
 
 | Command | Description |
 |---------|-------------|
-| `ingest` | Process and index documents into vector database |
-| `search` | Search indexed documents using semantic similarity |
-| `info` | Display collection information and statistics |
-| `manage` | Manage documents (delete, replace, stats, cleanup) |
-| `strategies` | List, show, and manage RAG strategies |
-| `extractors` | List available document extractors |
 | `test` | Test system components and configuration |
+| `ingest` | Add documents to the vector database |
+| `search` | Search for documents using various strategies |
+| `info` | Display collection and system information |
+| `manage` | Manage documents and collections |
+| `strategies` | List and inspect available strategies |
+| `extractors` | List available extractors |
+
+---
 
 ## Global Options
 
-Global options must come **before** the command:
+These options can be used with any command:
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `--config <path>` | Configuration file path | `--config myconfig.json` |
-| `--base-dir <path>` | Base directory for operations | `--base-dir /data` |
-| `--log-level <level>` | Logging level (DEBUG, INFO, WARNING, ERROR) | `--log-level DEBUG` |
+| `--config` | Path to configuration file | `--config config.json` |
+| `--strategy-file` | Path to strategies YAML file | `--strategy-file strategies.yaml` |
+| `--strategy` | Name of strategy to use | `--strategy research_papers_demo` |
+| `--base-dir` | Base directory for relative paths | `--base-dir /path/to/project` |
+| `--log-level` | Logging level (DEBUG, INFO, WARNING, ERROR) | `--log-level DEBUG` |
+| `--verbose` | Enable verbose output | `--verbose` |
 | `--quiet` | Suppress non-essential output | `--quiet` |
-| `--verbose` | Show detailed output | `--verbose` |
-| `--content-length <n>` | Maximum content length in search results | `--content-length 500` |
-| `--strategy-file <path>` | Custom strategy file path | `--strategy-file custom_strategies.yaml` |
+
+### Examples
+
+```bash
+# Use custom strategy file with verbose output
+python cli.py --strategy-file my_strategies.yaml --verbose ingest documents/
+
+# Use specific strategy with debug logging
+python cli.py --strategy research_papers_demo --log-level DEBUG search "query"
+
+# Quiet mode for scripting
+python cli.py --quiet ingest data.csv
+```
+
+---
 
 ## Core Commands
 
-### Ingest Command
+### Test Command
 
-Process and index documents into the vector database.
+Test system components and verify configuration.
 
-#### Syntax
 ```bash
-python cli.py ingest <path> [options]
+python cli.py test
 ```
 
-#### Options
+**Output:**
+- ✅ Configuration validation
+- ✅ Ollama connectivity
+- ✅ Vector store accessibility
+- ✅ Component availability
+
+### Ingest Command
+
+Add documents to the vector database with automatic parsing and extraction.
+
+```bash
+python cli.py ingest [options] <path>
+```
+
+**Arguments:**
+- `path`: File or directory to ingest
+
+**Options:**
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--strategy <name>` | Use predefined strategy | None |
-| `--parser <type>` | Override parser type | Auto-detect |
-| `--embedder <type>` | Override embedder | From config |
-| `--vector-store <type>` | Override vector store | From config |
-| `--extractors <list>` | Extractors to use | From config |
-| `--batch-size <n>` | Processing batch size | 10 |
-| `--recursive` | Process directories recursively | False |
-| `--file-filter <pattern>` | File pattern filter | None |
+| `--strategy` | Strategy to use for ingestion | Required |
+| `--recursive` | Recursively process directories | False |
+| `--file-pattern` | File pattern to match (glob) | `*` |
+| `--batch-size` | Number of files to process at once | 10 |
+| `--continue-on-error` | Continue if individual files fail | False |
 
-#### Examples
+**Examples:**
+
 ```bash
-# Ingest with strategy
-python cli.py ingest ./documents --strategy research_papers_demo
+# Ingest single file
+python cli.py ingest document.pdf --strategy research_papers_demo
 
-# Ingest specific file types recursively
-python cli.py ingest ./data --recursive --file-filter "*.pdf"
+# Ingest directory recursively
+python cli.py ingest docs/ --strategy code_documentation_demo --recursive
 
-# Custom configuration
-python cli.py ingest ./docs --parser PDFParser --embedder OllamaEmbedder
+# Ingest specific file types
+python cli.py ingest data/ --strategy news_analysis_demo --file-pattern "*.html"
 
-# Use custom strategy file
-python cli.py --strategy-file my_strategies.yaml ingest ./docs --strategy my_custom_strategy
+# Batch processing with error handling
+python cli.py ingest large_dataset/ --strategy business_reports_demo \
+    --batch-size 50 --continue-on-error
 ```
 
 ### Search Command
 
-Search indexed documents using semantic similarity.
+Search documents using various retrieval strategies.
 
-#### Syntax
 ```bash
-python cli.py search "query" [options]
+python cli.py search [options] <query>
 ```
 
-#### Options
+**Arguments:**
+- `query`: Search query string
+
+**Options:**
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--strategy <name>` | Use predefined strategy | None |
-| `--top-k <n>` | Number of results | 5 |
-| `--retrieval <type>` | Retrieval strategy | From config |
-| `--embedder <type>` | Override embedder | From config |
-| `--vector-store <type>` | Override vector store | From config |
+| `--strategy` | Strategy to use for search | Required |
+| `--top-k` | Number of results to return | 5 |
+| `--threshold` | Minimum similarity score | 0.0 |
+| `--format` | Output format (text, json, table) | text |
+| `--show-metadata` | Display document metadata | False |
+| `--show-content` | Display full content | False |
 
-#### Examples
+**Examples:**
+
 ```bash
 # Basic search
-python cli.py search "machine learning algorithms"
-
-# Search with strategy
 python cli.py search "transformer architecture" --strategy research_papers_demo
 
-# Verbose search with more results
-python cli.py --verbose search "quantum computing" --top-k 10
+# Get more results with metadata
+python cli.py search "customer complaint" --strategy customer_support_demo \
+    --top-k 10 --show-metadata
 
-# Quiet search with limited content
-python cli.py --quiet --content-length 200 search "financial reports"
+# JSON output for integration
+python cli.py search "API authentication" --strategy code_documentation_demo \
+    --format json > results.json
+
+# Filtered search with threshold
+python cli.py search "quarterly revenue" --strategy business_reports_demo \
+    --threshold 0.7 --top-k 3
 ```
 
 ### Info Command
 
-Display information about the vector database collection.
+Display information about collections and system status.
 
-#### Syntax
 ```bash
 python cli.py info [options]
 ```
 
-#### Options
+**Options:**
 | Option | Description |
 |--------|-------------|
-| `--strategy <name>` | Use strategy configuration |
-| `--vector-store <type>` | Override vector store |
+| `--strategy` | Show info for specific strategy |
+| `--detailed` | Show detailed statistics |
+| `--format` | Output format (text, json) |
 
-#### Examples
+**Examples:**
+
 ```bash
-# Get info using strategy
+# Basic collection info
 python cli.py info --strategy research_papers_demo
 
-# Get info with specific vector store
-python cli.py info --vector-store ChromaStore
+# Detailed statistics
+python cli.py info --strategy customer_support_demo --detailed
+
+# JSON format for monitoring
+python cli.py info --strategy news_analysis_demo --format json
 ```
+
+**Output includes:**
+- Collection name and size
+- Document count
+- Storage location
+- Index statistics
+- Last update time
 
 ### Manage Command
 
-Manage documents in the collection.
+Comprehensive document and collection management.
 
-#### Syntax
 ```bash
-python cli.py manage [--rag-strategy <name>] <subcommand> [options]
+python cli.py manage [options] <subcommand>
 ```
 
 #### Subcommands
 
-##### stats
-Display collection statistics.
+##### Delete
+Remove documents from the collection.
+
 ```bash
-python cli.py manage --rag-strategy research_papers_demo stats
+python cli.py manage delete [options] --strategy <strategy>
 ```
 
-##### delete
-Delete documents from collection.
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--all` | Delete ALL documents in collection |
+| `--older-than DAYS` | Delete documents older than N days |
+| `--doc-ids ID [ID...]` | Delete specific document IDs |
+| `--document-hashes HASH [HASH...]` | Delete by document hash |
+| `--source-paths PATH [PATH...]` | Delete by source file path |
+| `--expired` | Delete expired documents |
+| `--delete-strategy` | Deletion strategy (soft, hard, archive) |
+| `--dry-run` | Preview what would be deleted |
+
+**Examples:**
+
 ```bash
-# Delete by document IDs
-python cli.py manage delete --doc-ids doc1 doc2 doc3
+# Delete all documents (with confirmation)
+python cli.py manage delete --all --strategy research_papers_demo
 
-# Delete documents older than N days
-python cli.py manage delete --older-than 30
+# Delete old documents
+python cli.py manage delete --older-than 30 --strategy news_analysis_demo
 
-# Delete by filename
-python cli.py manage delete --filenames "report.pdf" "data.csv"
+# Delete specific documents
+python cli.py manage delete --doc-ids doc1 doc2 --strategy customer_support_demo
 
-# Soft delete (mark as deleted)
-python cli.py manage delete --strategy soft --doc-ids doc1
+# Dry run to preview
+python cli.py manage delete --all --strategy business_reports_demo --dry-run
 
-# Hard delete (permanent removal)
-python cli.py manage delete --strategy hard --doc-ids doc1
+# Delete by source file
+python cli.py manage delete --source-paths /path/to/file.pdf --strategy research_papers_demo
 ```
 
-##### replace
-Replace document content while preserving ID.
+##### Stats
+Show collection statistics.
+
 ```bash
-python cli.py manage replace --doc-id doc1 --new-content "Updated content"
+python cli.py manage stats --strategy <strategy> [--detailed]
 ```
 
-##### cleanup
-Clean up orphaned or duplicate documents.
+##### Cleanup
+Perform maintenance operations.
+
 ```bash
-python cli.py manage cleanup --remove-duplicates
+python cli.py manage cleanup --strategy <strategy> [options]
 ```
 
-##### hash
-Generate or verify document hashes.
-```bash
-python cli.py manage hash --verify
-```
+**Options:**
+- `--duplicates`: Remove duplicate documents
+- `--expired`: Clean up expired documents
+- `--old-versions KEEP`: Keep only N latest versions
 
 ### Strategies Command
 
-Manage and explore RAG strategies.
+List and inspect available strategies.
 
-#### Syntax
 ```bash
-python cli.py strategies <subcommand> [options]
+python cli.py strategies [subcommand]
 ```
 
 #### Subcommands
 
-##### list
-List all available strategies.
+##### List
+Show all available strategies.
+
 ```bash
+python cli.py strategies list [--strategy-file path/to/strategies.yaml]
+```
+
+##### Show
+Display detailed strategy configuration.
+
+```bash
+python cli.py strategies show <strategy-name> [--strategy-file path/to/strategies.yaml]
+```
+
+**Examples:**
+
+```bash
+# List all strategies
 python cli.py strategies list
-```
 
-##### show
-Show details of a specific strategy.
-```bash
+# Show specific strategy details
 python cli.py strategies show research_papers_demo
-```
 
-##### recommend
-Get strategy recommendations based on criteria.
-```bash
-python cli.py strategies recommend --use-case "academic research"
-```
-
-##### convert
-Convert strategy to configuration file.
-```bash
-python cli.py strategies convert research_papers_demo --output config.yaml
-```
-
-##### test
-Test a strategy configuration.
-```bash
-python cli.py strategies test research_papers_demo
+# Use custom strategy file
+python cli.py strategies list --strategy-file custom_strategies.yaml
 ```
 
 ### Extractors Command
 
-Manage document extractors.
+List available metadata extractors.
 
-#### Syntax
-```bash
-python cli.py extractors <subcommand> [options]
-```
-
-#### Subcommands
-
-##### list
-List available extractors.
 ```bash
 python cli.py extractors list
 ```
 
-##### test
-Test an extractor on a file.
-```bash
-python cli.py extractors test EntityExtractor --file sample.txt
-```
+**Output:**
+- Extractor name
+- Description
+- Supported file types
+- Configuration options
 
-### Test Command
-
-Test system components and configuration.
-
-#### Syntax
-```bash
-python cli.py test [options]
-```
-
-#### Options
-| Option | Description |
-|--------|-------------|
-| `--test-file <path>` | Test parsing a specific file |
-
-#### Examples
-```bash
-# Basic system test
-python cli.py test
-
-# Test file parsing
-python cli.py test --test-file documents/sample.pdf
-```
+---
 
 ## Strategy System
 
-Strategies are predefined configurations that optimize the RAG pipeline for specific use cases.
+Strategies define complete processing pipelines including parsers, extractors, embedders, and stores.
 
-### Available Demo Strategies
-
-| Strategy | Use Case | Key Features |
-|----------|----------|--------------|
-| `research_papers_demo` | Academic research | Citation extraction, statistical analysis |
-| `customer_support_demo` | Support tickets | Priority detection, sentiment analysis |
-| `code_documentation_demo` | Technical docs | Code extraction, API references |
-| `news_analysis_demo` | News articles | Entity recognition, temporal analysis |
-| `business_reports_demo` | Financial docs | Metrics extraction, table processing |
-
-### Strategy Configuration
-
-Strategies are defined in YAML files. By default, the CLI uses `default_strategies.yaml`, but you can specify custom strategy files:
+### Using Strategies
 
 ```bash
-# Use default strategy file
-python cli.py search "query" --strategy research
-
-# Use custom strategy file
-python cli.py --strategy-file demos/demo_strategies.yaml search "query" --strategy research_papers_demo
+# Specify strategy for any operation
+python cli.py --strategy research_papers_demo ingest documents/
+python cli.py --strategy research_papers_demo search "query"
 ```
 
-Strategies are defined in YAML files:
+### Strategy File Format
 
 ```yaml
 strategy_name:
   description: "Strategy description"
-  use_cases: ["Use case 1", "Use case 2"]
-  components:
-    parser:
-      type: "ParserType"
+  
+  # Document parsers
+  parsers:
+    - type: PDFParser
       config:
-        setting1: value1
-    extractors:
-      - type: "ExtractorType"
-        config:
-          setting1: value1
-    embedder:
-      type: "EmbedderType"
+        extract_images: false
+    - type: TextParser
       config:
-        model: "model-name"
-    vector_store:
-      type: "VectorStoreType"
+        encoding: utf-8
+  
+  # Metadata extractors
+  extractors:
+    - type: KeywordExtractor
       config:
-        collection_name: "collection"
-    retrieval_strategy:
-      type: "RetrievalType"
+        max_keywords: 10
+    - type: EntityExtractor
       config:
-        top_k: 5
+        entities: ["PERSON", "ORG"]
+  
+  # Embedding configuration
+  embedder:
+    type: OllamaEmbedder
+    config:
+      model: nomic-embed-text
+      dimension: 768
+  
+  # Vector store configuration
+  vector_store:
+    type: ChromaStore
+    config:
+      collection_name: my_collection
+      persist_directory: ./vectordb
+  
+  # Retrieval configuration
+  retrieval:
+    type: RerankedStrategy
+    config:
+      initial_k: 20
+      final_k: 5
 ```
+
+### Built-in Strategies
+
+The system includes several pre-configured strategies:
+
+1. **research_papers_demo** - Academic papers with citations
+2. **customer_support_demo** - Support tickets with priority
+3. **code_documentation_demo** - Technical docs with code blocks
+4. **news_analysis_demo** - News articles with entities
+5. **business_reports_demo** - Financial documents with tables
+6. **document_management_demo** - General document processing
+
+---
 
 ## Advanced Usage
 
 ### Batch Processing
 
-Process multiple directories or files:
+Process multiple queries or files efficiently:
 
 ```bash
-# Process multiple directories
-for dir in data1 data2 data3; do
-    python cli.py ingest $dir --strategy research_papers_demo
-done
+# Batch ingest with progress
+find documents/ -name "*.pdf" | \
+  xargs -I {} python cli.py ingest {} --strategy research_papers_demo
 
-# Process files matching pattern
-find . -name "*.pdf" -exec python cli.py ingest {} \;
+# Batch search from file
+cat queries.txt | while read query; do
+  python cli.py search "$query" --strategy customer_support_demo
+done
+```
+
+### Integration with Scripts
+
+```bash
+#!/bin/bash
+# backup_and_reingest.sh
+
+# Backup current collection
+python cli.py info --strategy my_strategy --format json > backup_info.json
+
+# Clean collection
+python cli.py manage delete --all --strategy my_strategy
+
+# Reingest with new configuration
+python cli.py ingest /data/documents --strategy my_strategy --recursive
+
+# Verify
+python cli.py info --strategy my_strategy
+```
+
+### Monitoring and Logging
+
+```bash
+# Enable debug logging
+export LOG_LEVEL=DEBUG
+python cli.py ingest documents/ --strategy research_papers_demo
+
+# Log to file
+python cli.py search "query" --strategy news_analysis_demo 2> search.log
+
+# Monitor collection growth
+watch -n 60 'python cli.py info --strategy business_reports_demo'
 ```
 
 ### Pipeline Automation
 
-Create automated pipelines:
+```python
+#!/usr/bin/env python
+# automated_pipeline.py
 
-```bash
-#!/bin/bash
-# Automated RAG pipeline
+import subprocess
+import json
 
-# 1. Clean previous data
-python cli.py manage cleanup --remove-all
+def run_cli_command(command):
+    """Execute CLI command and return output."""
+    result = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    return result.stdout, result.returncode
 
-# 2. Ingest new documents
-python cli.py ingest ./new_docs --strategy business_reports_demo
+# Ingest new documents
+stdout, code = run_cli_command(
+    "python cli.py ingest new_docs/ --strategy research_papers_demo"
+)
 
-# 3. Generate statistics
-python cli.py manage stats > stats.txt
-
-# 4. Run test queries
-python cli.py search "quarterly revenue" --top-k 10 > results.txt
+if code == 0:
+    # Search for specific content
+    stdout, code = run_cli_command(
+        'python cli.py search "machine learning" --strategy research_papers_demo --format json'
+    )
+    
+    results = json.loads(stdout)
+    print(f"Found {len(results)} relevant documents")
 ```
 
-### Custom Configuration Files
-
-Create custom configuration files:
-
-```json
-{
-  "parser": {
-    "type": "PDFParser",
-    "config": {
-      "extract_images": true,
-      "extract_metadata": true
-    }
-  },
-  "embedder": {
-    "type": "OllamaEmbedder",
-    "config": {
-      "model": "nomic-embed-text",
-      "batch_size": 32
-    }
-  },
-  "vector_store": {
-    "type": "ChromaStore",
-    "config": {
-      "collection_name": "my_collection",
-      "persist_directory": "./my_vectordb"
-    }
-  }
-}
-```
-
-Use custom configuration:
-```bash
-python cli.py --config my_config.json ingest ./documents
-```
+---
 
 ## Examples & Workflows
 
-### Academic Research Workflow
+### Research Workflow
 
 ```bash
-# 1. Initialize collection for research papers
-python cli.py ingest ./papers --strategy research_papers_demo
+# 1. Setup collection
+python cli.py manage delete --all --strategy research_papers_demo
 
-# 2. Search for specific topics
-python cli.py search "transformer architecture attention mechanism" --top-k 10
+# 2. Ingest papers
+python cli.py ingest papers/ --strategy research_papers_demo --recursive
 
-# 3. Get collection statistics
+# 3. Verify ingestion
 python cli.py info --strategy research_papers_demo
 
-# 4. Export relevant papers
-python cli.py search "neural networks 2023" --top-k 20 > relevant_papers.txt
+# 4. Search for topics
+python cli.py search "transformer architecture" --strategy research_papers_demo --top-k 10
+
+# 5. Export results
+python cli.py search "attention mechanism" --strategy research_papers_demo \
+    --format json > attention_papers.json
 ```
 
 ### Customer Support Workflow
 
 ```bash
-# 1. Ingest support tickets and knowledge base
-python cli.py ingest ./tickets.csv --strategy customer_support_demo
-python cli.py ingest ./knowledge_base.txt --strategy customer_support_demo
+# 1. Ingest support tickets
+python cli.py ingest tickets.csv --strategy customer_support_demo
 
 # 2. Search for similar issues
-python cli.py search "login authentication failed" --top-k 5
+python cli.py search "password reset problem" --strategy customer_support_demo \
+    --show-metadata --top-k 5
 
-# 3. Get high-priority tickets
-python cli.py search "priority:critical" --strategy customer_support_demo
+# 3. Analyze patterns
+python cli.py manage stats --strategy customer_support_demo --detailed
 
-# 4. Clean up old tickets
-python cli.py manage delete --older-than 90
+# 4. Clean old tickets
+python cli.py manage delete --older-than 90 --strategy customer_support_demo
 ```
 
-### Document Management Workflow
+### Documentation Management
 
 ```bash
-# 1. Check collection status
-python cli.py manage --rag-strategy document_management_demo stats
+# 1. Index documentation
+python cli.py ingest docs/ --strategy code_documentation_demo \
+    --recursive --file-pattern "*.md"
 
-# 2. Remove duplicates
-python cli.py manage cleanup --remove-duplicates
+# 2. Search API docs
+python cli.py search "authentication API" --strategy code_documentation_demo \
+    --show-content
 
-# 3. Update specific document
-python cli.py manage replace --doc-id doc123 --new-content "Updated content"
+# 3. Update documentation
+python cli.py manage delete --source-paths docs/old_api.md --strategy code_documentation_demo
+python cli.py ingest docs/new_api.md --strategy code_documentation_demo
 
-# 4. Verify document integrity
-python cli.py manage hash --verify
+# 4. Verify updates
+python cli.py info --strategy code_documentation_demo --detailed
 ```
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-#### "Strategy not found" Error
-**Problem:** The specified strategy doesn't exist.
-**Solution:** 
-- List available strategies: `python cli.py strategies list`
-- Check strategy name spelling
-- Ensure strategy file is in correct location
-
-#### "Ollama connection failed" Error
-**Problem:** Cannot connect to Ollama embedding service.
-**Solution:**
-- Start Ollama: `ollama serve`
-- Check Ollama is running: `curl http://localhost:11434/api/tags`
-- Verify model is installed: `ollama list`
-
-#### "No documents found" Error
-**Problem:** Search returns no results.
-**Solution:**
-- Verify documents were ingested: `python cli.py info`
-- Check collection name matches
-- Try broader search terms
-- Increase `--top-k` value
-
-#### "Out of memory" Error
-**Problem:** System runs out of memory during processing.
-**Solution:**
-- Reduce batch size: `--batch-size 5`
-- Process files individually
-- Use smaller embedding model
-- Increase system swap space
-
-#### Slow Performance
-**Problem:** Operations take too long.
-**Solution:**
-- Use appropriate batch sizes
-- Enable caching in configuration
-- Use faster embedding models
-- Process files in parallel
-
-### Debug Mode
-
-Enable debug logging for detailed information:
-
-```bash
-python cli.py --log-level DEBUG search "test query"
-```
-
-### Configuration Validation
-
-Test configuration before use:
-
-```bash
-python cli.py test --config my_config.json
-```
-
-## Command Reference
-
-### Quick Reference Table
-
-| Command | Common Usage | Purpose |
-|---------|-------------|---------|
-| `ingest <path>` | `ingest ./docs --strategy demo` | Index documents |
-| `search "query"` | `search "AI" --top-k 10` | Search documents |
-| `info` | `info --strategy demo` | Show statistics |
-| `manage stats` | `manage --rag-strategy demo stats` | Collection stats |
-| `manage delete` | `manage delete --doc-ids id1` | Remove documents |
-| `strategies list` | `strategies list` | List strategies |
-| `extractors list` | `extractors list` | List extractors |
-| `test` | `test --test-file doc.pdf` | Test system |
-
-### Environment Variables
-
-You can set these environment variables to customize behavior:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RAG_CONFIG_PATH` | Default config file path | `./config.json` |
-| `RAG_BASE_DIR` | Default base directory | Current directory |
-| `RAG_LOG_LEVEL` | Default log level | `INFO` |
-| `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
-
-### Exit Codes
-
-The CLI uses standard exit codes:
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Invalid arguments |
-| 3 | Configuration error |
-| 4 | Connection error |
-| 5 | File not found |
-
-## Best Practices
-
-1. **Always use strategies** for consistent configuration
-2. **Test configurations** before production use
-3. **Monitor performance** with verbose mode during development
-4. **Clean up regularly** to maintain optimal performance
-5. **Backup vector databases** before major operations
-6. **Use appropriate batch sizes** based on system resources
-7. **Document custom strategies** for team collaboration
-
-## Further Resources
-
-- [Main README](../README.md) - Project overview and setup
-- [Demo Guide](../demos/README.md) - Interactive demonstrations
-- [API Documentation](./api-guide.md) - Programmatic usage
-- [Strategy Guide](./strategy-guide.md) - Creating custom strategies
 
 ---
 
-*Last updated: 2024*
+## Troubleshooting
+
+### Common Issues
+
+#### Ollama Connection Error
+```
+Error: Failed to connect to Ollama at http://localhost:11434
+```
+**Solution:**
+```bash
+# Start Ollama service
+ollama serve
+
+# Verify it's running
+curl http://localhost:11434/api/tags
+```
+
+#### Collection Not Found
+```
+Error: Collection 'my_collection' does not exist
+```
+**Solution:**
+```bash
+# Create collection by ingesting first document
+python cli.py ingest sample.txt --strategy my_strategy
+```
+
+#### Memory Issues with Large Files
+```
+Error: Out of memory while processing large file
+```
+**Solution:**
+```bash
+# Use smaller batch size
+python cli.py ingest large_files/ --strategy my_strategy --batch-size 5
+
+# Or process files individually
+find large_files/ -type f -exec python cli.py ingest {} --strategy my_strategy \;
+```
+
+#### Duplicate Documents
+```
+Warning: Document already exists in collection
+```
+**Solution:**
+The system automatically handles duplicates via content hashing. To force re-ingestion:
+```bash
+# Clean and re-ingest
+python cli.py manage delete --source-paths file.pdf --strategy my_strategy
+python cli.py ingest file.pdf --strategy my_strategy
+```
+
+### Debug Mode
+
+Enable detailed debugging information:
+
+```bash
+# Set environment variable
+export LOG_LEVEL=DEBUG
+
+# Or use command line
+python cli.py --log-level DEBUG ingest documents/ --strategy my_strategy
+
+# Save debug output
+python cli.py --log-level DEBUG search "query" --strategy my_strategy 2> debug.log
+```
+
+### Performance Optimization
+
+```bash
+# Increase batch size for faster ingestion
+python cli.py ingest large_dataset/ --strategy my_strategy --batch-size 100
+
+# Use multiple workers (if supported)
+export WORKERS=4
+python cli.py ingest documents/ --strategy my_strategy
+
+# Optimize search with caching
+export ENABLE_CACHE=true
+python cli.py search "common query" --strategy my_strategy
+```
+
+---
+
+## Environment Variables
+
+Configure the CLI behavior with environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
+| `CHROMA_PERSIST_DIR` | ChromaDB storage directory | `./chromadb` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `BATCH_SIZE` | Default batch size | `10` |
+| `WORKERS` | Number of parallel workers | `1` |
+| `ENABLE_CACHE` | Enable result caching | `false` |
+
+---
+
+## Command Reference Card
+
+### Quick Reference
+
+```bash
+# System
+python cli.py test                                    # Test setup
+python cli.py strategies list                         # List strategies
+python cli.py extractors list                         # List extractors
+
+# Ingestion
+python cli.py ingest <path> --strategy <name>         # Basic ingest
+python cli.py ingest <dir> --strategy <name> --recursive  # Recursive
+
+# Search
+python cli.py search "query" --strategy <name>        # Basic search
+python cli.py search "query" --strategy <name> --top-k 10  # More results
+
+# Management
+python cli.py info --strategy <name>                  # Collection info
+python cli.py manage stats --strategy <name>          # Statistics
+python cli.py manage delete --all --strategy <name>   # Clean collection
+
+# Advanced
+python cli.py --verbose <command>                     # Verbose output
+python cli.py --quiet <command>                       # Quiet mode
+python cli.py --log-level DEBUG <command>            # Debug mode
+```
+
+---
+
+**Need more help?** Check the [main documentation](../README.md) or run `python cli.py <command> --help` for command-specific options.

@@ -8,6 +8,7 @@ import chromadb
 from chromadb.config import Settings
 
 from core.base import VectorStore, Document
+from utils.hash_utils import DeduplicationTracker
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,10 @@ class ChromaStore(VectorStore):
 
         self.collection = None
         self._setup_collection()
+        
+        # Initialize deduplication tracker
+        self.deduplication_enabled = config.get("enable_deduplication", True)
+        self.dedup_tracker = DeduplicationTracker() if self.deduplication_enabled else None
 
     def validate_config(self) -> bool:
         """Validate configuration."""
@@ -103,7 +108,7 @@ class ChromaStore(VectorStore):
         return parsed
 
     def add_documents(self, documents: List[Document]) -> bool:
-        """Add documents to the vector store."""
+        """Add documents to the vector store with deduplication support."""
         try:
             if not documents:
                 return True
@@ -113,11 +118,40 @@ class ChromaStore(VectorStore):
             embeddings = []
             metadatas = []
             documents_content = []
+            skipped_duplicates = 0
 
             for doc in documents:
                 if not doc.embeddings:
                     logger.warning(f"Document {doc.id} has no embeddings, skipping")
                     continue
+
+                # Check for duplicates if deduplication is enabled
+                if self.deduplication_enabled and self.dedup_tracker and doc.metadata:
+                    document_hash = doc.metadata.get('document_hash')
+                    chunk_hash = doc.metadata.get('chunk_hash')
+                    source_hash = doc.metadata.get('source_hash')
+                    
+                    # Check if this document or chunk already exists
+                    is_duplicate_doc = document_hash and self.dedup_tracker.is_duplicate_document(document_hash)
+                    is_duplicate_chunk = chunk_hash and self.dedup_tracker.is_duplicate_chunk(chunk_hash)
+                    is_duplicate_source = source_hash and self.dedup_tracker.is_duplicate_source(source_hash)
+                    
+                    if is_duplicate_doc or is_duplicate_chunk or is_duplicate_source:
+                        logger.debug(f"Skipping duplicate document {doc.id}")
+                        skipped_duplicates += 1
+                        continue
+                    
+                    # Check if document already exists in ChromaDB by ID
+                    if self._document_exists(doc.id):
+                        logger.debug(f"Document {doc.id} already exists in collection, skipping")
+                        skipped_duplicates += 1
+                        continue
+                    
+                    # Register in dedup tracker
+                    if document_hash:
+                        self.dedup_tracker.register_document(document_hash, doc.id, source_hash or "")
+                    if chunk_hash:
+                        self.dedup_tracker.register_chunk(chunk_hash, doc.id)
 
                 ids.append(doc.id or f"doc_{len(ids)}")
                 embeddings.append(doc.embeddings)
@@ -131,24 +165,34 @@ class ChromaStore(VectorStore):
                 
                 if doc.metadata:
                     for key, value in doc.metadata.items():
-                        if isinstance(value, (str, int, float, bool)) or value is None:
+                        if value is None:
+                            # Skip None values as ChromaDB doesn't accept them
+                            continue
+                        elif isinstance(value, (str, int, float, bool)):
                             cleaned_metadata[key] = value
                         elif isinstance(value, list):
                             # Convert lists to comma-separated strings (no spaces after commas for test compatibility)
-                            cleaned_metadata[key] = ",".join(str(v) for v in value)
+                            # Filter out None values from lists
+                            filtered_list = [str(v) for v in value if v is not None]
+                            if filtered_list:  # Only add if list is not empty after filtering
+                                cleaned_metadata[key] = ",".join(filtered_list)
                         elif isinstance(value, dict):
-                            # Convert dicts to JSON string
+                            # Convert dicts to JSON string, filtering out None values
                             import json
-                            cleaned_metadata[key] = json.dumps(value)
+                            filtered_dict = {k: v for k, v in value.items() if v is not None}
+                            if filtered_dict:  # Only add if dict is not empty after filtering
+                                cleaned_metadata[key] = json.dumps(filtered_dict)
                         else:
                             # Convert other types to string
-                            cleaned_metadata[key] = str(value)
+                            str_value = str(value)
+                            if str_value != 'None':  # Don't add string representations of None
+                                cleaned_metadata[key] = str_value
                 
                 metadatas.append(cleaned_metadata)
                 documents_content.append(doc.content)
 
             if not ids:
-                logger.warning("No valid documents with embeddings to add")
+                logger.warning("No valid documents with embeddings to add (all may be duplicates)")
                 return True
 
             # Add to ChromaDB
@@ -159,7 +203,10 @@ class ChromaStore(VectorStore):
                 documents=documents_content
             )
 
-            logger.info(f"Added {len(ids)} documents to ChromaDB collection")
+            if skipped_duplicates > 0:
+                logger.info(f"Added {len(ids)} documents, skipped {skipped_duplicates} duplicates")
+            else:
+                logger.info(f"Added {len(ids)} documents to ChromaDB collection")
             return True
 
         except Exception as e:
@@ -297,6 +344,73 @@ class ChromaStore(VectorStore):
             return True
         except Exception as e:
             logger.error(f"Failed to delete documents: {e}")
+            return False
+            
+    def delete_by_document_hash(self, document_hash: str) -> bool:
+        """Delete all chunks belonging to a specific document by its hash."""
+        try:
+            # Find all documents with this document hash
+            results = self.collection.get(
+                where={"document_hash": document_hash},
+                include=["metadatas"]
+            )
+            
+            if results and results['ids']:
+                doc_ids = results['ids']
+                self.collection.delete(ids=doc_ids)
+                logger.info(f"Deleted {len(doc_ids)} documents with hash {document_hash[:12]}...")
+                return True
+            else:
+                logger.info(f"No documents found with hash {document_hash[:12]}...")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to delete documents by hash: {e}")
+            return False
+            
+    def delete_by_source(self, source_path: str) -> bool:
+        """Delete all documents from a specific source file."""
+        try:
+            # Try both exact match and path-based matching
+            where_conditions = [
+                {"source": source_path},
+                {"file_path": source_path}
+            ]
+            
+            total_deleted = 0
+            for where_condition in where_conditions:
+                try:
+                    results = self.collection.get(
+                        where=where_condition,
+                        include=["metadatas"]
+                    )
+                    
+                    if results and results['ids']:
+                        doc_ids = results['ids']
+                        self.collection.delete(ids=doc_ids)
+                        total_deleted += len(doc_ids)
+                        
+                except Exception:
+                    # Continue to next condition if this one fails
+                    continue
+                    
+            if total_deleted > 0:
+                logger.info(f"Deleted {total_deleted} documents from source {source_path}")
+                return True
+            else:
+                logger.info(f"No documents found from source {source_path}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to delete documents by source: {e}")
+            return False
+            
+    def _document_exists(self, doc_id: str) -> bool:
+        """Check if a document with the given ID already exists."""
+        try:
+            results = self.collection.get(ids=[doc_id], include=[])
+            return bool(results and results['ids'] and doc_id in results['ids'])
+        except Exception:
             return False
 
     def get_collection_info(self) -> Dict[str, Any]:

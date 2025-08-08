@@ -123,7 +123,7 @@ def demonstrate_news_analysis_cli():
     print_section_header("Database Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy news_analysis_demo delete --dry-run",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_analysis_demo delete --all",
         "Cleaning up any existing news collection (dry run first)"
     )
     
@@ -210,7 +210,7 @@ def demonstrate_news_analysis_cli():
         ("Batch process multiple queries:",
          "python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo --batch queries.txt"),
         ("Monitor collection growth:",
-         "python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy news_analysis_demo stats"),
+         "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_analysis_demo stats"),
         ("API endpoint for integration:",
          "python cli.py --strategy-file demos/demo_strategies.yaml serve --strategy news_analysis_demo --port 8000")
     ]
@@ -253,8 +253,8 @@ def demonstrate_news_analysis_cli():
     print_section_header("Final Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy news_analysis_demo delete --dry-run",
-        "Cleaning up demo collection"
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_analysis_demo delete --all",
+        "Cleaning up ALL documents in the collection"
     )
 
 

@@ -6,6 +6,12 @@ import re
 from pathlib import Path
 
 from core.base import Parser, Document, ProcessingResult
+# Import hash utilities for deduplication
+from utils.hash_utils import (
+    generate_document_metadata,
+    generate_chunk_metadata,
+    DeduplicationTracker
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,12 +150,16 @@ class HtmlParser(Parser):
         text_content = soup.get_text()
         clean_content = self._clean_text_content(text_content)
         
-        # Extract metadata
-        metadata = {
+        # Generate comprehensive metadata with hash utilities
+        base_metadata = generate_document_metadata(source, clean_content)
+        
+        # Add HTML-specific metadata
+        metadata = base_metadata.copy()
+        metadata.update({
             "type": "html_document",
-            "source": source,
-            "content_type": "text/html"
-        }
+            "content_type": "text/html",
+            "parser_type": "HtmlParser"
+        })
         
         # Extract title
         title_tag = soup.find('title')
@@ -182,7 +192,8 @@ class HtmlParser(Parser):
             if tables:
                 metadata["table_count"] = len(tables)
         
-        doc_id = f"html_doc_{hash(clean_content) % 10000}"
+        # Use hash-based ID from metadata
+        doc_id = f"doc_{metadata['document_hash'][:12]}_full"
         
         return Document(
             id=doc_id,
@@ -195,20 +206,32 @@ class HtmlParser(Parser):
         self, content: str, header: str, section_num: int, source: str, soup: 'BeautifulSoup'
     ) -> Document:
         """Create section document using BeautifulSoup."""
-        metadata = {
-            "type": "html_section",
-            "source": source,
-            "section": section_num,
-            "header": header,
-            "content_type": "text/html"
-        }
+        # Generate base metadata with hash utilities
+        base_metadata = generate_document_metadata(source, content)
         
-        doc_id = f"html_section_{section_num}_{hash(content) % 10000}"
+        # Generate chunk metadata for section
+        chunk_metadata = generate_chunk_metadata(
+            base_metadata,
+            content,
+            section_num,
+            1  # We'll update total_chunks later if needed
+        )
+        
+        # Add HTML section-specific metadata
+        chunk_metadata.update({
+            "type": "html_section",
+            "header": header,
+            "content_type": "text/html",
+            "parser_type": "HtmlParser"
+        })
+        
+        # Use chunk ID from metadata
+        doc_id = chunk_metadata["chunk_id"]
         
         return Document(
             id=doc_id,
             content=content,
-            metadata=metadata,
+            metadata=chunk_metadata,
             source=source
         )
     
@@ -291,12 +314,17 @@ class HtmlParser(Parser):
         # Basic HTML cleaning with regex
         clean_content = self._clean_html_with_regex(content)
         
-        metadata = {
+        # Generate comprehensive metadata with hash utilities
+        base_metadata = generate_document_metadata(source, clean_content)
+        
+        # Add HTML-specific metadata
+        metadata = base_metadata.copy()
+        metadata.update({
             "type": "html_document",
-            "source": source,
             "content_type": "text/html",
+            "parser_type": "HtmlParser",
             "parser_method": "regex_fallback"
-        }
+        })
         
         # Extract basic metadata with regex
         title_match = re.search(r'<title[^>]*>([^<]+)</title>', content, re.IGNORECASE)
@@ -310,7 +338,8 @@ class HtmlParser(Parser):
                 metadata["links"] = links
                 metadata["link_count"] = len(links)
         
-        doc_id = f"html_doc_{hash(clean_content) % 10000}"
+        # Use hash-based ID from metadata
+        doc_id = f"doc_{metadata['document_hash'][:12]}_full"
         
         return [Document(
             id=doc_id,

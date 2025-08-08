@@ -1,661 +1,314 @@
-# RAG System - Developer Quick Start Guide
+# RAG System - Complete Documentation
 
-A powerful, extensible RAG (Retrieval-Augmented Generation) system featuring **strategy-first configuration** and modular architecture. Built for developers who want to get started quickly and extend easily.
+A powerful, extensible RAG (Retrieval-Augmented Generation) system featuring **strategy-first configuration**, **hash-based deduplication**, and **modular architecture**. Built for developers who want production-ready document processing with minimal setup.
 
-## 🚀 Quick Start for Developers
+## 🌟 Key Features
+
+- **🎯 Strategy-First Design**: Configure entire pipelines through YAML strategies
+- **🔍 Advanced Retrieval**: Multiple retrieval strategies (similarity, reranked, filtered, hybrid)
+- **🚫 Deduplication System**: Hash-based document and chunk deduplication
+- **📊 Document Management**: Full CRUD operations with version tracking
+- **🔧 Modular Components**: Pluggable parsers, extractors, embedders, and stores
+- **💻 CLI-First**: Comprehensive command-line interface for all operations
+- **🧹 Automatic Cleanup**: Built-in collection management and cleanup
+
+## 📚 Documentation Structure
+
+- **[Quick Start](#-quick-start)** - Get running in 2 minutes
+- **[CLI Guide](cli/README.md)** - Complete CLI documentation
+- **[Demos Guide](demos/README.md)** - Interactive demonstrations
+- **[Strategy System](docs/STRATEGY_SYSTEM.md)** - Configuration and strategies
+- **[Advanced Usage](docs/ADVANCED_USAGE.md)** - Production deployment
+- **[API Reference](docs/API_REFERENCE.md)** - Programmatic usage
+- **[Component Guide](docs/COMPONENTS.md)** - Parsers, extractors, stores
+
+## 🚀 Quick Start
 
 ### Prerequisites
 - **Python 3.8+**
-- **UV** (fast Python package manager) - [Installation guide](https://docs.astral.sh/uv/getting-started/installation/)
+- **UV** (recommended) or pip - [UV Installation](https://docs.astral.sh/uv/getting-started/installation/)
 - **Ollama** (for local embeddings) - [Download](https://ollama.com/download)
 
 ### 1. Installation (1 minute)
 
 ```bash
-# Clone and setup
+# Clone the repository
+git clone <repository-url>
 cd rag/
-uv sync                    # Install all dependencies
-ollama serve               # Start Ollama (in separate terminal)
-ollama pull nomic-embed-text  # Download embedding model
-```
 
-### 2. Run Your First Demo (30 seconds)
-
-```bash
-# Option 1: Interactive demo runner with menu
-uv run python demos/run_all_cli_demos.py
-
-# Option 2: Individual CLI-based demos
-uv run python demos/demo1_research_papers_cli.py
-uv run python demos/demo2_customer_support_cli.py
-uv run python demos/demo3_code_documentation_cli.py
-uv run python demos/demo4_news_analysis.py
-uv run python demos/demo5_business_reports.py
-uv run python demos/demo6_document_management.py
-
-# Option 3: Enhanced demos with rich visualizations
-uv run python demos/demo1_research_papers_cli_enhanced.py
-```
-
-### 3. Master the CLI ([Comprehensive Guide](docs/cli-guide.md))
-
-```bash
-# Test the system
-uv run python cli.py test
-
-# Ingest documents with verbose output
-uv run python cli.py --verbose ingest --strategy research_papers_demo path/to/docs
-uv run python cli.py --verbose ingest --strategy customer_support_demo data.csv
-
-# Search with different strategies
-uv run python cli.py search --strategy research_papers_demo "transformer architecture"
-uv run python cli.py search --strategy customer_support_demo "password reset" --top-k 5
-
-# Get collection info
-uv run python cli.py info --strategy research_papers_demo
-
-# Delete collection
-uv run python cli.py delete --strategy research_papers_demo
-
-# Quiet mode for scripting
-uv run python cli.py --quiet search --strategy demo "query"
-```
-
-### 4. Run Tests (Verify Everything Works)
-
-```bash
-# Quick validation
-uv run python -m pytest tests/ -v
-
-# Comprehensive component testing
-uv run python tests/test_new_parsers.py
-uv run python tests/test_new_extractors.py  
-uv run python tests/test_new_embedders.py
-uv run python tests/test_new_stores.py
-
-# All tests (215+ tests)
-uv run pytest tests/
-```
-
-## 🎯 Key Features for Developers
-
-### Strategy-First Architecture
-- **8+ Predefined Strategies**: `simple`, `customer_support`, `legal`, `research`, `news_analysis`, etc.
-- **One-Command Setup**: `--strategy simple` gets you running immediately
-- **Easy Customization**: Override specific settings while keeping strategy benefits
-- **Smart Recommendations**: CLI suggests strategies based on your use case
-
-### Modular Component System
-- **8+ Parsers**: CSV, PDF, Markdown, Word, Excel, HTML, Plain Text
-- **11+ Extractors**: Keywords, entities, tables, links, headings, summaries (all local, no APIs needed)
-- **4+ Embedders**: Ollama, OpenAI, HuggingFace, SentenceTransformers
-- **4+ Vector Stores**: ChromaDB, FAISS, Pinecone, Qdrant
-- **5+ Retrieval Strategies**: From basic similarity to advanced hybrid approaches
-
-### Developer Experience
-- **Factory Pattern**: Easy component registration and creation
-- **Comprehensive Schema**: Complete API documentation in `schema.yaml`
-- **Full Test Coverage**: 215+ tests passing, comprehensive mocking
-- **Rich CLI**: Beautiful terminal output with progress bars and tables
-- **Extensible**: Add new components without changing core code
-
-## 📚 Demo System (Learn by Example)
-
-The RAG system includes 6 comprehensive demos showing different strategies and real-world applications:
-
-| Demo | Domain | What It Shows | Runtime |
-|------|--------|---------------|---------|
-| **Research Papers** | Academia | Directory parsing, entity extraction, verbose embeddings | 2-3 min |
-| **Customer Support** | Business | CSV/TXT parsing, priority filtering, metadata search | 2-3 min |
-| **Code Documentation** | Technical | Markdown/Python parsing, hybrid retrieval strategies | 2-3 min |
-| **News Analysis** | Media | Entity extraction, reranking with recency boost | 2-3 min |
-| **Business Reports** | Finance | PDF parsing, financial pattern extraction | 2-3 min |
-| **Document Management** | Operations | Add/delete/replace, deduplication, metadata queries | 3-4 min |
-
-### Run Interactive Demo Suite (Best Starting Point)
-
-```bash
-uv run python demos/run_all_cli_demos.py
-```
-
-This provides:
-- Interactive menu to run all demos or select specific ones
-- Visual embedding representations when using --verbose
-- Real document processing with progress indicators
-- Metadata display and search scoring
-- Enter prompts between demos for easy exploration
-
-## 📊 Component Library
-
-### 📄 Document Parsers
-
-Complete list of available parsers for document ingestion:
-
-| Parser | File | Formats | Dependencies | When to Use | Example Usage |
-|--------|------|---------|--------------|-------------|---------------|
-| **PlainTextParser** | [`text_parser.py`](components/parsers/text_parser/text_parser.py) | `.txt`, `.log`, `.md` | None | Simple text files, logs, READMEs | `PlainTextParser(name="text", config={"chunk_size": 512})` |
-| **CSVParser** | [`csv_parser.py`](components/parsers/csv_parser/csv_parser.py) | `.csv`, `.tsv` | pandas (optional) | Structured tabular data, databases exports | `CSVParser(name="csv", config={"delimiter": ","})` |
-| **PDFParser** | [`pdf_parser.py`](components/parsers/pdf_parser/pdf_parser.py) | `.pdf` | PyMuPDF | Documents, reports, papers | `PDFParser(name="pdf", config={"combine_pages": true})` |
-| **MarkdownParser** | [`markdown_parser.py`](components/parsers/markdown_parser/markdown_parser.py) | `.md`, `.markdown` | markdown2 | Documentation, READMEs, notes | `MarkdownParser(name="md", config={"extract_headers": true})` |
-| **HTMLParser** | [`html_parser.py`](components/parsers/html_parser/html_parser.py) | `.html`, `.htm` | BeautifulSoup4 | Web pages, scraped content | `HTMLParser(name="html", config={"extract_links": true})` |
-| **DocxParser** | [`docx_parser.py`](components/parsers/docx_parser/docx_parser.py) | `.docx` | python-docx | Word documents, reports | `DocxParser(name="docx", config={"extract_tables": true})` |
-| **ExcelParser** | [`excel_parser.py`](components/parsers/excel_parser/excel_parser.py) | `.xlsx`, `.xls` | pandas, openpyxl | Spreadsheets, financial data | `ExcelParser(name="excel", config={"parse_all_sheets": true})` |
-| **CustomerSupportCSVParser** | [`csv_parser.py`](parsers/csv_parser.py) | `.csv` | None | Support tickets, CRM exports | Specialized for customer support data |
-
-#### Parser Configuration Examples
-
-```python
-# Basic text parsing
-parser = PlainTextParser(name="text_parser", config={
-    "chunk_size": 1000,
-    "chunk_overlap": 100,
-    "encoding": "utf-8",
-    "preserve_line_breaks": True
-})
-
-# PDF with metadata extraction
-parser = PDFParser(name="pdf_parser", config={
-    "combine_pages": False,  # Each page as separate document
-    "extract_metadata": True,
-    "include_page_numbers": True,
-    "min_text_length": 50
-})
-
-# Markdown with structure preservation
-parser = MarkdownParser(name="md_parser", config={
-    "extract_frontmatter": True,
-    "chunk_by_headings": True,
-    "preserve_code_blocks": True,
-    "extract_links": True
-})
-```
-
-### 🔍 Metadata Extractors
-
-Components for enriching documents with additional metadata:
-
-| Extractor | File | Extracts | Dependencies | When to Use | Example Usage |
-|-----------|------|----------|--------------|-------------|---------------|
-| **PathExtractor** | [`path_extractor.py`](components/extractors/path_extractor/path_extractor.py) | File paths, directories, extensions | None | File organization, categorization | `PathExtractor("path", {"store_full_path": true})` |
-| **KeywordExtractor** | [`keyword_extractor.py`](components/extractors/keyword_extractor/keyword_extractor.py) | Keywords, key phrases | YAKE, spaCy (optional) | SEO, tagging, summarization | `KeywordExtractor("keywords", {"method": "yake", "max_keywords": 10})` |
-| **EntityExtractor** | [`entity_extractor.py`](components/extractors/entity_extractor/entity_extractor.py) | Named entities (people, orgs, locations) | spaCy | Information extraction, analytics | `EntityExtractor("entities", {"model": "en_core_web_sm"})` |
-| **LinkExtractor** | [`link_extractor.py`](components/extractors/link_extractor/link_extractor.py) | URLs, email addresses | None | Web scraping, reference tracking | `LinkExtractor("links", {"include_external": true})` |
-| **HeadingExtractor** | [`heading_extractor.py`](components/extractors/heading_extractor/heading_extractor.py) | Document headings, structure | None | Navigation, TOC generation | `HeadingExtractor("headings", {"extract_hierarchy": true})` |
-| **TableExtractor** | [`table_extractor.py`](components/extractors/table_extractor/table_extractor.py) | Tables, structured data | pandas (optional) | Data analysis, reporting | `TableExtractor("tables", {"format": "markdown"})` |
-| **DateTimeExtractor** | [`datetime_extractor.py`](components/extractors/datetime_extractor/datetime_extractor.py) | Dates, times, durations | dateutil | Timeline analysis, scheduling | `DateTimeExtractor("dates", {"extract_relative": true})` |
-| **StatisticsExtractor** | [`statistics_extractor.py`](components/extractors/statistics_extractor/statistics_extractor.py) | Word count, readability scores | textstat (optional) | Content analysis, complexity | `StatisticsExtractor("stats", {"calculate_readability": true})` |
-| **SummaryExtractor** | [`summary_extractor.py`](components/extractors/summary_extractor/summary_extractor.py) | Text summaries, abstracts | sumy, transformers (optional) | Summarization, preview generation | `SummaryExtractor("summary", {"method": "textrank", "sentences": 3})` |
-| **PatternExtractor** | [`pattern_extractor.py`](components/extractors/pattern_extractor/pattern_extractor.py) | Custom regex patterns | None | Domain-specific extraction | `PatternExtractor("patterns", {"patterns": {"email": r"\S+@\S+"}})` |
-
-#### Extractor Configuration Examples
-
-```python
-# Extract keywords with YAKE
-extractor = KeywordExtractor("keyword_extractor", config={
-    "method": "yake",
-    "language": "en",
-    "max_keywords": 15,
-    "deduplication_threshold": 0.7
-})
-
-# Extract named entities
-extractor = EntityExtractor("entity_extractor", config={
-    "model": "en_core_web_lg",
-    "entity_types": ["PERSON", "ORG", "GPE", "DATE"],
-    "confidence_threshold": 0.8
-})
-
-# Extract custom patterns
-extractor = PatternExtractor("pattern_extractor", config={
-    "patterns": {
-        "phone": r"\+?\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}",
-        "ssn": r"\d{3}-\d{2}-\d{4}",
-        "email": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-    }
-})
-```
-
-### 🧠 Embedding Models
-
-Components for generating vector embeddings:
-
-| Embedder | File | Models | API/Local | When to Use | Example Usage |
-|----------|------|--------|-----------|-------------|---------------|
-| **OllamaEmbedder** | [`ollama_embedder.py`](components/embedders/ollama_embedder/ollama_embedder.py) | nomic-embed-text, mxbai-embed-large | Local | Privacy-first, offline usage | `OllamaEmbedder(name="ollama", config={"model": "nomic-embed-text"})` |
-| **OpenAIEmbedder** | [`openai_embedder.py`](components/embedders/openai_embedder/openai_embedder.py) | text-embedding-3-small/large | API | High quality, cloud-based | `OpenAIEmbedder(name="openai", config={"model": "text-embedding-3-small"})` |
-| **HuggingFaceEmbedder** | [`huggingface_embedder.py`](components/embedders/huggingface_embedder/huggingface_embedder.py) | Any HF model | Local/API | Custom models, research | `HuggingFaceEmbedder(name="hf", config={"model": "BAAI/bge-small-en"})` |
-| **SentenceTransformerEmbedder** | [`sentence_transformer_embedder.py`](components/embedders/sentence_transformer_embedder/sentence_transformer_embedder.py) | all-MiniLM-L6-v2, etc. | Local | Fast, efficient, multilingual | `SentenceTransformerEmbedder(name="st", config={"model": "all-mpnet-base-v2"})` |
-
-#### Embedder Configuration Examples
-
-```python
-# Local embeddings with Ollama
-embedder = OllamaEmbedder(name="ollama_embedder", config={
-    "model": "nomic-embed-text",
-    "api_base": "http://localhost:11434",
-    "batch_size": 32,
-    "timeout": 30
-})
-
-# OpenAI embeddings
-embedder = OpenAIEmbedder(name="openai_embedder", config={
-    "model": "text-embedding-3-small",
-    "api_key": "${OPENAI_API_KEY}",  # From environment
-    "dimensions": 1536,
-    "batch_size": 100
-})
-
-# Sentence Transformers
-embedder = SentenceTransformerEmbedder(name="st_embedder", config={
-    "model": "all-MiniLM-L6-v2",
-    "device": "cuda",  # or "cpu"
-    "normalize_embeddings": True,
-    "batch_size": 64
-})
-```
-
-### 🗄️ Vector Stores
-
-Components for storing and retrieving embeddings:
-
-| Store | File | Type | Scale | When to Use | Example Usage |
-|-------|------|------|-------|-------------|---------------|
-| **ChromaStore** | [`chroma_store.py`](components/stores/chroma_store.py) | Local/Server | <1M docs | Prototyping, small-medium datasets | `ChromaStore(name="chroma", config={"persist_directory": "./chroma_db"})` |
-| **FAISSStore** | [`faiss_store.py`](components/stores/faiss_store.py) | Local | Any size | High-performance similarity search | `FAISSStore(name="faiss", config={"index_type": "IVF"})` |
-| **PineconeStore** | [`pinecone_store.py`](components/stores/pinecone_store.py) | Cloud | Any size | Managed service, production | `PineconeStore(name="pinecone", config={"api_key": "..."})` |
-| **QdrantStore** | [`qdrant_store.py`](components/stores/qdrant_store.py) | Local/Cloud | >1M docs | Production, advanced filtering | `QdrantStore(name="qdrant", config={"host": "localhost"})` |
-
-#### Vector Store Configuration Examples
-
-```python
-# ChromaDB for local development
-store = ChromaStore(name="chroma_store", config={
-    "persist_directory": "./chroma_db",
-    "collection_name": "documents",
-    "distance_metric": "cosine"
-})
-
-# FAISS for high-performance
-store = FAISSStore(name="faiss_store", config={
-    "index_type": "IVF",
-    "nlist": 100,
-    "nprobe": 10,
-    "use_gpu": False
-})
-
-# Qdrant for production
-store = QdrantStore(name="qdrant_store", config={
-    "host": "localhost",
-    "port": 6333,
-    "collection_name": "documents",
-    "vector_size": 768,
-    "distance": "Cosine"
-})
-```
-
-### 🎯 Retrieval Strategies
-
-Advanced retrieval strategies for different use cases:
-
-| Strategy | File | Description | When to Use | Example Usage |
-|----------|------|-------------|-------------|---------------|
-| **BasicSimilarityStrategy** | [`components/retrievers/`](components/retrievers/basic_similarity/basic_similarity.py) | Simple cosine similarity | Quick prototypes, baseline | `{"type": "BasicSimilarityStrategy", "config": {"top_k": 10}}` |
-| **MetadataFilteredStrategy** | [`components/retrievers/`](components/retrievers/metadata_filtered/metadata_filtered.py) | Filter by metadata before search | Structured data, categories | `{"type": "MetadataFilteredStrategy", "config": {"filters": {...}}}` |
-| **MultiQueryStrategy** | [`components/retrievers/`](components/retrievers/multi_query/multi_query.py) | Generate multiple query variants | Improve recall, query expansion | `{"type": "MultiQueryStrategy", "config": {"num_variants": 3}}` |
-| **RerankedStrategy** | [`components/retrievers/`](components/retrievers/reranked/reranked.py) | Re-rank with multiple factors | Precision improvement | `{"type": "RerankedStrategy", "config": {"rerank_factors": {...}}}` |
-| **HybridUniversalStrategy** | [`components/retrievers/`](components/retrievers/hybrid_universal/hybrid_universal.py) | Combine multiple strategies | Best of all approaches | `{"type": "HybridUniversalStrategy", "config": {"strategies": [...]}}` |
-
-## 🛠️ Advanced CLI Usage
-
-### Strategy Operations
-
-```bash
-# List all available strategies with descriptions
-uv run python cli.py strategies list
-
-# Get detailed information about a strategy
-uv run python cli.py strategies show customer_support --detailed
-
-# Get strategy recommendations for your use case
-uv run python cli.py strategies recommend --use-case "analyzing legal contracts"
-
-# Test a strategy configuration
-uv run python cli.py strategies test simple --sample-file test.pdf
-
-# Convert traditional config to strategy
-uv run python cli.py strategies convert legal config/legal.yaml
-```
-
-### Data Ingestion
-
-```bash
-# Ingest single file
-uv run python cli.py ingest --strategy simple document.pdf
-
-# Ingest directory
-uv run python cli.py ingest --strategy research papers/ --recursive
-
-# Ingest with metadata
-uv run python cli.py ingest --strategy simple data.csv \
-  --metadata '{"source": "internal", "department": "sales"}'
-
-# Ingest with custom configuration overrides
-uv run python cli.py --strategy simple \
-  --strategy-overrides '{"components":{"parser":{"config":{"chunk_size":256}}}}' \
-  ingest documents/
-```
-
-### Search Operations
-
-```bash
-# Basic search
-uv run python cli.py search --strategy simple "your query"
-
-# Search with filters
-uv run python cli.py search --strategy simple "error logs" \
-  --filters '{"file_type": "log", "date": {"$gte": "2024-01-01"}}'
-
-# Search with custom top_k
-uv run python cli.py search --strategy simple "machine learning" --top-k 20
-
-# Search with specific retrieval strategy
-uv run python cli.py --strategy simple \
-  --strategy-overrides '{"components":{"retrieval_strategy":{"type":"RerankedStrategy"}}}' \
-  search "important document"
-```
-
-### Performance Optimization
-
-```bash
-# Memory-constrained environment
-uv run python cli.py --strategy simple \
-  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":4}}}}' \
-  ingest documents/
-
-# Speed-optimized search (disable complex retrievers)
-uv run python cli.py --strategy simple \
-  --strategy-overrides '{"components":{"retrieval_strategy":{"type":"BasicSimilarityStrategy"}}}' \
-  search "quick query"
-```
-
-### Debugging and Development
-
-#### 1. Verbose Output and Debugging
-```bash
-# Enable debug logging
-uv run python cli.py --log-level DEBUG --strategy simple ingest test.csv
-
-# Detailed strategy information
-uv run python cli.py strategies show production --detailed
-
-# Test strategy with verbose output
-uv run python cli.py --log-level INFO strategies test customer_support --sample-file test_tickets.csv
-```
-
-#### 2. Configuration Validation
-```bash
-# Validate strategy configuration
-uv run python cli.py strategies test simple
-
-# Test overrides syntax
-uv run python cli.py strategies test customer_support \
-  --overrides '{"components":{"embedder":{"config":{"batch_size":16}}}}'
-
-# Convert and validate traditional config
-uv run python cli.py strategies convert legal legal_config.yaml
-uv run python cli.py --config legal_config.yaml test
-```
-
-## 🛠️ Development Commands
-
-### Everyday Development
-```bash
-# Install dependencies
+# Option 1: Using UV (recommended)
 uv sync
 
-# Add new dependency
-uv add package-name
+# Option 2: Using pip
+pip install -r requirements.txt
 
-# Run with UV (recommended)
-uv run python cli.py --help
-uv run python your_script.py
-
-# Traditional activation (alternative)
-source .venv/bin/activate
-python cli.py --help
+# Setup Ollama
+ollama serve                     # Start in separate terminal
+ollama pull nomic-embed-text     # Download embedding model
 ```
 
-### Testing & Quality
-```bash
-# Run all tests (215+ tests)
-uv run python -m pytest tests/
+### 2. Test Installation
 
-# Test specific components
-uv run python -m pytest tests/components/parsers/
-uv run python -m pytest tests/components/extractors/
+```bash
+# Run system test
+python cli.py test
+
+# Expected output:
+# ✅ CLI is working!
+# ✅ Configuration loaded successfully
+# ✅ Ollama embedder is accessible
+```
+
+### 3. Run Your First Demo (30 seconds)
+
+```bash
+# Interactive demo menu
+python demos/run_all_cli_demos.py
+
+# Or run a specific demo
+python demos/demo1_research_papers_cli.py
+```
+
+### 4. Basic CLI Usage
+
+```bash
+# Ingest documents
+python cli.py ingest path/to/documents --strategy research_papers_demo
+
+# Search
+python cli.py search "your query" --strategy research_papers_demo
+
+# View collection info
+python cli.py info --strategy research_papers_demo
+
+# Clean up
+python cli.py manage delete --all --strategy research_papers_demo
+```
+
+## 📖 Core Concepts
+
+### Strategy System
+The RAG system uses a **strategy-first** approach where entire pipelines are configured through YAML files:
+
+```yaml
+research_papers_demo:
+  description: "Optimized for academic papers"
+  parsers:
+    - type: PDFParser
+    - type: TextParser
+  extractors:
+    - type: HeadingExtractor
+    - type: KeywordExtractor
+  embedder:
+    type: OllamaEmbedder
+    model: nomic-embed-text
+  vector_store:
+    type: ChromaStore
+    collection_name: research_papers
+```
+
+[Learn more about strategies →](docs/STRATEGY_SYSTEM.md)
+
+### Deduplication System
+Built-in hash-based deduplication prevents duplicate storage:
+
+- **Document-level hashing**: Entire documents tracked by content hash
+- **Chunk-level hashing**: Individual chunks have unique IDs
+- **Source tracking**: Files tracked to prevent re-ingestion
+
+[Learn more about deduplication →](docs/DEDUPLICATION.md)
+
+### Component Architecture
+
+```
+Input → Parser → Extractor → Embedder → Vector Store → Retriever
+         ↓          ↓           ↓            ↓             ↓
+     [Documents] [Metadata] [Vectors]  [Storage]    [Results]
+```
+
+[Learn more about components →](docs/COMPONENTS.md)
+
+## 🎯 Common Use Cases
+
+### 1. Research Paper Analysis
+```bash
+# Configure for academic papers
+python cli.py ingest papers/ --strategy research_papers_demo
+python cli.py search "transformer architecture" --strategy research_papers_demo
+```
+
+### 2. Customer Support System
+```bash
+# Process support tickets
+python cli.py ingest tickets.csv --strategy customer_support_demo
+python cli.py search "password reset" --strategy customer_support_demo
+```
+
+### 3. Code Documentation
+```bash
+# Index code documentation
+python cli.py ingest docs/ --strategy code_documentation_demo
+python cli.py search "API authentication" --strategy code_documentation_demo
+```
+
+### 4. Document Management
+```bash
+# Manage collections
+python cli.py manage stats --strategy my_strategy
+python cli.py manage delete --older-than 30 --strategy my_strategy
+python cli.py manage delete --all --strategy my_strategy
+```
+
+## 🔧 CLI Commands Overview
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `test` | Test system setup | `python cli.py test` |
+| `ingest` | Add documents to collection | `python cli.py ingest path/ --strategy demo` |
+| `search` | Search documents | `python cli.py search "query" --strategy demo` |
+| `info` | Show collection information | `python cli.py info --strategy demo` |
+| `manage` | Collection management | `python cli.py manage delete --all --strategy demo` |
+| `strategies` | List/show strategies | `python cli.py strategies list` |
+
+[Complete CLI Reference →](cli/README.md)
+
+## 📊 Demos
+
+The system includes 6 comprehensive demos:
+
+1. **Research Papers** - Academic document processing
+2. **Customer Support** - Ticket analysis and routing
+3. **Code Documentation** - Technical documentation search
+4. **News Analysis** - News article processing with entity extraction
+5. **Business Reports** - Financial document analysis
+6. **Document Management** - Advanced collection operations
+
+[Run Demos →](demos/README.md)
+
+## 🏗️ Project Structure
+
+```
+rag/
+├── cli.py                  # Main CLI entry point
+├── core/                   # Core abstractions
+│   ├── base.py            # Base classes
+│   ├── config.py          # Configuration management
+│   ├── document_manager.py # Document lifecycle
+│   └── strategies.py      # Strategy system
+├── components/            # Pluggable components
+│   ├── parsers/          # Document parsers
+│   ├── extractors/       # Metadata extractors
+│   ├── embedders/        # Embedding models
+│   ├── stores/           # Vector databases
+│   └── retrievers/       # Search strategies
+├── demos/                # Demo applications
+│   ├── demo_strategies.yaml # Demo configurations
+│   └── static_samples/   # Sample data
+├── utils/                # Utilities
+│   └── hash_utils.py     # Deduplication system
+└── docs/                 # Documentation
+```
+
+## 🔌 Programmatic Usage
+
+```python
+from core.strategies import StrategyManager
+from core.config import load_config
+
+# Load strategy
+manager = StrategyManager(strategies_file="demo_strategies.yaml")
+config = manager.get_strategy_config("research_papers_demo")
+
+# Create pipeline
+pipeline = create_pipeline_from_config(config)
+
+# Process documents
+results = pipeline.ingest("path/to/documents")
+
+# Search
+search_results = pipeline.search("your query", top_k=5)
+```
+
+[API Reference →](docs/API_REFERENCE.md)
+
+## 🛠️ Configuration
+
+### Environment Variables
+```bash
+export OLLAMA_HOST=http://localhost:11434
+export CHROMA_PERSIST_DIR=./vectordb
+export LOG_LEVEL=INFO
+```
+
+### Custom Strategies
+Create your own strategies in YAML:
+
+```yaml
+my_custom_strategy:
+  description: "My custom configuration"
+  parsers:
+    - type: PDFParser
+      config:
+        extract_images: true
+  extractors:
+    - type: CustomExtractor
+      config:
+        patterns: ["\\d{4}-\\d{2}-\\d{2}"]
+  # ... more configuration
+```
+
+[Configuration Guide →](docs/CONFIGURATION.md)
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test categories
+pytest tests/unit/
+pytest tests/integration/
+pytest tests/e2e/
 
 # Test with coverage
-uv run python -m pytest --cov=components --cov-report=html
-
-# Integration tests
-uv run python tests/test_retrieval_system.py
+pytest --cov=. --cov-report=html
 ```
-
-### Code Quality
-```bash
-# Format code
-uv run black .
-uv run isort .
-
-# Type checking
-uv run mypy .
-
-# Linting
-uv run ruff check .
-```
-
-## 🏗️ Architecture Overview
-
-The system uses a **modular, strategy-first architecture**:
-
-```
-📦 Components (Extensible)
-├── 📄 Parsers: PlainTextParser, CSVParser, PDFParser, MarkdownParser...
-├── 🔍 Extractors: YAKEExtractor, EntityExtractor, TableExtractor...
-├── 🧠 Embedders: OllamaEmbedder, OpenAIEmbedder, HuggingFaceEmbedder...
-├── 🗄️ Stores: ChromaStore, FAISSStore, PineconeStore, QdrantStore...
-└── 🎯 Retrievers: BasicSimilarity, MetadataFiltered, MultiQuery, Hybrid...
-
-🏭 Core System
-├── 🏗️ Factories: Component creation and registration
-├── 📋 Strategies: Pre-configured combinations for common use cases
-├── 🔄 Pipeline: Document processing workflow
-└── 📊 Schema: Configuration validation and API documentation
-
-🎭 User Interface
-├── 🖥️ CLI: Full-featured command-line interface
-├── 🎬 Demos: 5 comprehensive domain-specific showcases
-└── 🧪 Tests: 215+ tests with mocking and validation
-```
-
-### Key Patterns
-
-1. **Factory Pattern**: All components register with factories for dynamic creation
-2. **Strategy System**: Pre-configured combinations optimized for specific use cases
-3. **Configuration-Driven**: Everything configurable via YAML with Pydantic validation
-4. **Local-First**: Prioritize local execution with optional cloud providers
-
-## 🔧 Adding New Components
-
-The system is designed for easy extension. Here's how to add new components:
-
-### 1. Add a New Parser
-
-```bash
-# Create structure
-mkdir -p components/parsers/your_parser/
-touch components/parsers/your_parser/{__init__.py,your_parser.py,schema.py}
-```
-
-```python
-# components/parsers/your_parser/your_parser.py
-from typing import List, Dict, Any
-from core.base import BaseParser, Document
-
-class YourParser(BaseParser):
-    """Parser for your specific format."""
-    
-    def parse(self, content: bytes, metadata: Dict[str, Any] = None) -> List[Document]:
-        # Your parsing logic here
-        return [Document(content=text, metadata=metadata or {})]
-```
-
-```python
-# Register in core/factories.py
-from components.parsers.your_parser.your_parser import YourParser
-
-class ParserFactory(ComponentFactory):
-    _registry = {
-        # ... existing parsers
-        "YourParser": YourParser,
-    }
-```
-
-### 2. Add Tests
-
-```python
-# tests/components/parsers/test_your_parser.py
-import pytest
-from components.parsers.your_parser.your_parser import YourParser
-
-class TestYourParser:
-    def test_basic_parsing(self):
-        parser = YourParser(name="YourParser", config={})
-        # Test your parsing logic
-```
-
-### 3. Add to Strategy (Optional)
-
-```yaml
-# configs/your_strategy.yaml
-your_strategy:
-  description: "Optimized for your use case"
-  components:
-    parser:
-      type: "YourParser"
-      config:
-        option1: true
-```
-
-The same pattern applies to **Extractors**, **Embedders**, **Stores**, and **Retrievers**. See [`STRUCTURE.md`](STRUCTURE.md) for detailed developer guidance.
-
-## 📖 Configuration Examples
-
-### Strategy-Based (Recommended)
-```bash
-# Use predefined strategies
-uv run python cli.py ingest --strategy simple data.csv
-uv run python cli.py ingest --strategy customer_support tickets.csv
-uv run python cli.py ingest --strategy legal contracts/
-
-# Customize strategy settings
-uv run python cli.py --strategy simple \
-  --strategy-overrides '{"components":{"embedder":{"config":{"batch_size":32}}}}' \
-  ingest data/
-```
-
-### Traditional Configuration
-```yaml
-# config/custom.yaml
-version: "v1"
-parser:
-  type: "PDFParser"
-  config:
-    combine_pages: true
-    extract_metadata: true
-
-embedder:
-  type: "OllamaEmbedder"
-  config:
-    model: "nomic-embed-text"
-    batch_size: 32
-
-vector_store:
-  type: "ChromaStore"
-  config:
-    persist_directory: "./chroma_db"
-    collection_name: "documents"
-
-retrieval_strategy:
-  type: "HybridUniversalStrategy"
-  config:
-    strategies:
-      - type: "BasicSimilarityStrategy"
-        weight: 0.5
-      - type: "MetadataFilteredStrategy"
-        weight: 0.5
-```
-
-## 🚨 Troubleshooting
-
-### Common Issues and Solutions
-
-| Issue | Solution |
-|-------|----------|
-| **Ollama not running** | Start with `ollama serve` in a separate terminal |
-| **Model not found** | Pull the model: `ollama pull nomic-embed-text` |
-| **Import errors** | Run `uv sync` to install all dependencies |
-| **ChromaDB errors** | Delete `./chroma_db` directory and retry |
-| **PDF parsing fails** | Install: `uv add pymupdf` |
-| **Entity extraction fails** | Install spaCy model: `python -m spacy download en_core_web_sm` |
-
-### Performance Tips
-
-1. **Batch Processing**: Use larger batch sizes for embeddings (32-128)
-2. **Chunking**: Adjust chunk size based on your use case (256-2048)
-3. **Caching**: Enable caching for repeated queries
-4. **GPU**: Use GPU for embeddings when available
-5. **Indexing**: Use appropriate index types (IVF for large datasets)
-
-## 📚 Documentation
-
-### Core Documentation
-- **[CLI Guide](docs/cli-guide.md)** - Comprehensive CLI documentation with all commands, options, and examples
-- **[STRUCTURE.md](STRUCTURE.md)** - Detailed codebase structure and patterns
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Comprehensive setup instructions
-- **[CLAUDE.md](CLAUDE.md)** - AI assistant integration guide
-
-### Technical References
-- **[schema.yaml](schema.yaml)** - Complete API schema documentation
-- **[core/strategies/README.md](core/strategies/README.md)** - Strategy system documentation
-- **[demos/README.md](demos/README.md)** - Demo system documentation and guides
 
 ## 🤝 Contributing
 
-We welcome contributions! To add new components:
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-1. Follow the patterns in existing components
-2. Add comprehensive tests
-3. Update documentation
-4. Submit a pull request
+### Development Setup
+```bash
+# Install dev dependencies
+uv sync --dev
 
-See [STRUCTURE.md](STRUCTURE.md) for detailed contribution guidelines.
+# Run pre-commit hooks
+pre-commit install
+
+# Run linting
+ruff check .
+black .
+```
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## 🆘 Support
+
+- **Documentation**: [Full Docs](docs/)
+- **Issues**: [GitHub Issues](https://github.com/...)
+- **Discussions**: [GitHub Discussions](https://github.com/...)
+
+## 🎉 Acknowledgments
 
 Built with:
-- **Ollama** for local embeddings
-- **ChromaDB** for vector storage
-- **Rich** for beautiful CLI output
-- **Pydantic** for configuration validation
-- **PyMuPDF** for PDF parsing
-- **BeautifulSoup4** for HTML parsing
-- **YAKE** for keyword extraction
+- [ChromaDB](https://www.trychroma.com/) - Vector database
+- [Ollama](https://ollama.com/) - Local LLM embeddings
+- [LangChain](https://langchain.com/) - Optional framework support
+- [Rich](https://github.com/Textualize/rich) - Terminal formatting
 
 ---
 
-**Ready to build?** Start with `uv run python demos/enhanced_demo.py` to see the full system in action!
+**Ready to build?** Start with the [CLI Guide](cli/README.md) or jump into the [Demos](demos/README.md)!

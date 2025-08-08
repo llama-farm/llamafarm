@@ -293,7 +293,7 @@ def demonstrate_document_management():
     
     console.print("[bold]Adding multiple documents at once...[/bold]")
     run_cli_command(
-        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy document_management_demo {test_dir}/",
+        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy document_management_demo {test_dir}/*",
         "Bulk ingesting entire directory"
     )
     
@@ -348,10 +348,10 @@ def demonstrate_document_management():
 
 [bold cyan]Key CLI Commands:[/bold cyan]
 • ingest - Add documents to the database
-• search - Query with text and metadata filters
-• manage delete-doc - Remove specific documents
-• manage stats - View database health
-• manage export/import - Backup operations
+• search - Query with text and advanced filtering  
+• manage delete - Remove documents with various strategies
+• manage stats - View database health and analytics
+• manage cleanup - Database maintenance operations
 
 [bold yellow]Production Tips:[/bold yellow]
 • Use --verbose for detailed operation logs
@@ -374,11 +374,19 @@ def demonstrate_document_management():
         shutil.rmtree(test_dir)
         console.print(f"✅ Cleaned up test directory: {test_dir}")
     
-    # Note: Collection persists for further testing
-    console.print("[dim]Collection remains for further testing.[/dim]")
+    # Clean up the database collection
+    console.print("\n🗑️ Cleaning up database collection...")
+    returncode, stdout, stderr = run_cli_command(
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy document_management_demo delete --all"
+    )
+    
+    if returncode == 0:
+        console.print("✅ [bold green]Database collection cleaned up successfully![/bold green]")
+    else:
+        console.print("⚠️ [bold yellow]Database cleanup had issues[/bold yellow]")
     
     console.print("\n[bold green]Demo 6 Complete![/bold green]")
-    console.print("[dim]This collection has been cleaned up. Other demo collections remain intact.[/dim]")
+    console.print("[dim]All demo data has been cleaned up.[/dim]")
 
 if __name__ == "__main__":
     try:

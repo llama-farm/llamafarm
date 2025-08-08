@@ -321,7 +321,7 @@ def demonstrate_customer_support_cli():
     console.print("[dim]💡 Removing demo data to keep your system clean[/dim]")
     
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy customer_support_demo delete --delete-strategy hard --older-than 0"
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy customer_support_demo delete --all"
     )
     
     if returncode == 0:

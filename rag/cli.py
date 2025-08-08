@@ -1484,9 +1484,42 @@ def handle_delete_command(args, doc_manager: DocumentManager, tracker: LlamaProg
                 content_hashes=args.content_hashes,
                 strategy=strategy
             )
+        elif hasattr(args, 'document_hashes') and args.document_hashes:
+            tracker.print_info(f"📋 Deleting all chunks by document hash: {len(args.document_hashes)} documents")
+            results = doc_manager.deletion_manager.delete_by_document_hash(
+                document_hashes=args.document_hashes,
+                strategy=strategy
+            )
+        elif hasattr(args, 'source_paths') and args.source_paths:
+            tracker.print_info(f"📁 Deleting all documents by source path: {len(args.source_paths)} paths")
+            results = doc_manager.deletion_manager.delete_by_source_path(
+                source_paths=args.source_paths,
+                strategy=strategy
+            )
         elif args.expired:
             tracker.print_info("⏰ Deleting expired documents")
             results = doc_manager.deletion_manager.delete_expired_documents(strategy=strategy)
+        elif hasattr(args, 'all') and args.all:
+            tracker.print_warning("⚠️  DELETING ALL DOCUMENTS IN COLLECTION")
+            if not args.dry_run:
+                # For actual deletion, delete the entire collection
+                if hasattr(doc_manager.vector_store, 'delete_collection'):
+                    doc_manager.vector_store.delete_collection()
+                    results = {"deleted_count": "ALL", "errors": []}
+                    tracker.print_success("✅ Successfully deleted entire collection")
+                else:
+                    # Fallback: use deletion manager with broad criteria
+                    # This will delete all documents regardless of age
+                    results = doc_manager.deletion_manager.delete_by_time(
+                        older_than_days=0,  # 0 means all documents
+                        strategy=DeletionStrategy.HARD_DELETE  # Force hard delete for --all
+                    )
+            else:
+                # For dry run, just indicate what would happen
+                collection_info = doc_manager.vector_store.get_collection_info()
+                doc_count = collection_info.get("count", 0)
+                results = {"deleted_count": doc_count, "errors": []}
+                tracker.print_info(f"📊 Would delete {doc_count} documents (entire collection)")
         else:
             tracker.print_error("No deletion criteria specified")
             return
@@ -2045,8 +2078,14 @@ def main():
                               help="Delete documents by filename")
     delete_parser.add_argument("--content-hashes", nargs="+", metavar="HASH",
                               help="Delete documents by content hash")
+    delete_parser.add_argument("--document-hashes", nargs="+", metavar="DOC_HASH",
+                              help="Delete all chunks belonging to specific documents by hash")
+    delete_parser.add_argument("--source-paths", nargs="+", metavar="PATH",
+                              help="Delete all documents from specific source files")
     delete_parser.add_argument("--expired", action="store_true",
                               help="Delete expired documents")
+    delete_parser.add_argument("--all", action="store_true",
+                              help="Delete ALL documents in the collection (use with caution!)")
     delete_parser.add_argument("--dry-run", action="store_true",
                               help="Show what would be deleted without actually deleting")
 

@@ -7,6 +7,13 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
 
+# Import hash utilities for deduplication
+from utils.hash_utils import (
+    generate_document_metadata,
+    generate_chunk_metadata,
+    DeduplicationTracker
+)
+
 try:
     import chardet
     CHARDET_AVAILABLE = True
@@ -83,26 +90,26 @@ class PlainTextParser(Parser):
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
         
-        # Basic metadata
-        metadata = {
-            "file_path": str(file_path),
-            "file_name": file_path.name,
-            "file_size": file_path.stat().st_size,
+        # Process content first
+        processed_content = self._process_content(content)
+        
+        # Generate comprehensive metadata with hash utilities
+        base_metadata = generate_document_metadata(str(file_path), processed_content)
+        
+        # Add parser-specific metadata
+        base_metadata.update({
             "parser_type": "PlainTextParser",
             "encoding": encoding
-        }
-        
-        # Process content
-        processed_content = self._process_content(content)
+        })
         
         # Detect structure if enabled
         if self.detect_structure:
             structure_info = self._detect_structure(processed_content)
-            metadata.update(structure_info)
+            base_metadata.update(structure_info)
         
         # Add content statistics
         lines = processed_content.split('\n')
-        metadata.update({
+        base_metadata.update({
             "line_count": len(lines),
             "character_count": len(processed_content),
             "word_count": len(processed_content.split()) if processed_content else 0,
@@ -111,12 +118,14 @@ class PlainTextParser(Parser):
         
         # Split into chunks if specified
         if self.chunk_size and len(processed_content) > self.chunk_size:
-            documents = self._create_chunked_documents(processed_content, metadata)
+            documents = self._create_chunked_documents(processed_content, base_metadata)
         else:
+            # Create single document with hash-based ID
+            document_id = f"doc_{base_metadata['document_hash'][:12]}_full"
             documents = [Document(
                 content=processed_content,
-                metadata=metadata,
-                id=f"txt_{file_path.stem}_{hash(processed_content) % 1000000}",
+                metadata=base_metadata,
+                id=document_id,
                 source=str(file_path)
             )]
         
@@ -204,14 +213,21 @@ class PlainTextParser(Parser):
         else:  # characters (with boundary protection)
             chunks = self._chunk_by_characters(content)
         
-        # Create documents from chunks
+        # Create documents from chunks with hash-based metadata
+        total_chunks = len([c for c in chunks if len(c.strip()) >= self.min_chunk_size])
+        
         for chunk_num, chunk_content in enumerate(chunks, 1):
             if len(chunk_content.strip()) >= self.min_chunk_size:
-                chunk_metadata = base_metadata.copy()
+                # Generate chunk metadata with hash utilities
+                chunk_metadata = generate_chunk_metadata(
+                    base_metadata,
+                    chunk_content.strip(),
+                    chunk_num - 1,  # 0-based index for hash generation
+                    total_chunks
+                )
+                
+                # Add parser-specific chunk metadata
                 chunk_metadata.update({
-                    "chunk_number": chunk_num,
-                    "chunk_size": len(chunk_content),
-                    "is_chunk": True,
                     "chunk_strategy": self.chunk_strategy,
                     "has_overlap": self.chunk_overlap > 0 and chunk_num > 1,
                     "respects_sentences": self.respect_sentence_boundaries,
@@ -221,7 +237,7 @@ class PlainTextParser(Parser):
                 documents.append(Document(
                     content=chunk_content.strip(),
                     metadata=chunk_metadata,
-                    id=f"txt_{Path(base_metadata['file_path']).stem}_chunk_{chunk_num}_{hash(chunk_content) % 1000000}",
+                    id=chunk_metadata["chunk_id"],
                     source=base_metadata['file_path']
                 ))
         

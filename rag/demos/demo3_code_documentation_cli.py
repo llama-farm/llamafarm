@@ -352,6 +352,33 @@ python cli.py --quiet search "TODO FIXME" | grep -q "Result" && exit 1
     console.print("🔄 Continue using these commands in your development workflow:")
     console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search 'your question' --strategy code_documentation_demo[/dim]")
     console.print("[dim]$ alias docsearch='python cli.py --strategy-file demos/demo_strategies.yaml search --strategy code_documentation_demo'[/dim]")
+    
+    # Clean up the database after demo
+    console.print("\n🧹 [bold cyan]Cleaning up demo database...[/bold cyan]")
+    console.print("[dim]💡 Removing demo data to keep your system clean[/dim]")
+    
+    returncode, stdout, stderr = run_cli_command(
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy code_documentation_demo delete --all"
+    )
+    
+    if returncode == 0:
+        console.print("✅ [bold green]Demo database cleaned up successfully![/bold green]")
+    else:
+        console.print("⚠️ [bold yellow]Database cleanup had issues, trying direct cleanup...[/bold yellow]")
+        # Fallback to direct cleanup if manage command fails
+        import shutil
+        from pathlib import Path
+        
+        db_path = Path("./demos/vectordb/code_documentation")
+        try:
+            if db_path.exists():
+                shutil.rmtree(db_path)
+                console.print("✅ [bold green]Fallback cleanup successful![/bold green]")
+            else:
+                console.print("ℹ️ [bold blue]Database directory not found (already clean)[/bold blue]")
+        except Exception as e:
+            console.print(f"⚠️ [bold yellow]All cleanup methods failed: {e}[/bold yellow]")
+            console.print("[dim]💡 You can manually delete ./demos/vectordb/code_documentation/ if needed[/dim]")
 
 
 if __name__ == "__main__":

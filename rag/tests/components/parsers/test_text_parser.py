@@ -159,11 +159,22 @@ The document concludes with this final section that summarizes the content."""
             if len(sample_text_content) > 200:
                 assert len(result.documents) > 1
                 
-                # Check chunk metadata
-                for doc in result.documents:
-                    assert "chunk_number" in doc.metadata
-                    assert "is_chunk" in doc.metadata
-                    assert doc.metadata["is_chunk"] == True
+                # Check chunk metadata - updated for new hash-based system
+                for i, doc in enumerate(result.documents):
+                    # New system uses chunk_index (0-based) and chunk_id
+                    assert "chunk_index" in doc.metadata
+                    assert "chunk_id" in doc.metadata
+                    assert "chunk_hash" in doc.metadata
+                    assert "total_chunks" in doc.metadata
+                    
+                    # Verify chunk_index is 0-based
+                    assert doc.metadata["chunk_index"] == i
+                    
+                    # Verify chunk_id format: doc_{doc_hash}_chunk_{index}_{content_hash}
+                    assert doc.metadata["chunk_id"].startswith("doc_")
+                    assert f"_chunk_{i}_" in doc.metadata["chunk_id"]
+                    
+                    # Check content size
                     assert len(doc.content) <= 250  # Allow some flexibility
         finally:
             if os.path.exists(temp_path):

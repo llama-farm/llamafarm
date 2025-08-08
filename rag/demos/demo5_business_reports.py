@@ -127,7 +127,7 @@ def demonstrate_business_reports_cli():
     print_section_header("Database Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy business_reports_demo delete --dry-run",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy business_reports_demo delete --all",
         "Cleaning up any existing business reports collection"
     )
     
@@ -298,8 +298,8 @@ def demonstrate_business_reports_cli():
     print_section_header("Final Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy business_reports_demo delete --dry-run",
-        "Cleaning up demo collection"
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy business_reports_demo delete --all",
+        "Cleaning up ALL documents in the collection"
     )
 
 
