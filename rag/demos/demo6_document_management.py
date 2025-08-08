@@ -306,32 +306,29 @@ def demonstrate_document_management():
     )
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy document_management_demo stats",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy document_management_demo stats",
         "Detailed database statistics"
     )
     
-    # Step 10: Advanced filtering
-    print_section_header("Step 10: Complex Query with Filters", "🎯")
+    # Step 10: Advanced search with top-k limit
+    print_section_header("Step 10: Advanced Query with Result Limiting", "🎯")
     
-    console.print("[bold]Combining text search with metadata filters:[/bold]")
-    
-    run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy document_management_demo "API authentication" '
-        '--filter-extension ".md" '
-        '--filter-size-max 5000 '
-        '--top-k 5',
-        "Search markdown files under 5KB about API authentication"
-    )
-    
-    # Step 11: Export and backup
-    print_section_header("Step 11: Export & Backup Operations", "💾")
+    console.print("[bold]Advanced search with result limiting:[/bold]")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --rag-strategy document_management_demo export --output document_backup.json",
-        "Exporting collection for backup"
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy document_management_demo "API authentication" --top-k 3',
+        "Search for API authentication content (limited to top 3 results)"
     )
     
-    console.print("[dim]Backup can be restored using: cli.py manage import document_backup.json[/dim]")
+    # Step 11: Database cleanup operations
+    print_section_header("Step 11: Database Management Operations", "💾")
+    
+    run_cli_command(
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy document_management_demo cleanup --dry-run",
+        "Running database cleanup (dry-run mode)"
+    )
+    
+    console.print("[dim]Cleanup operations help maintain database health and performance[/dim]")
     
     # Summary
     print_section_header("Demo Summary", "🎯")

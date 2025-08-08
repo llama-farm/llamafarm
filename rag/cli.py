@@ -1451,10 +1451,10 @@ def handle_delete_command(args, doc_manager: DocumentManager, tracker: LlamaProg
         "archive": DeletionStrategy.ARCHIVE_DELETE
     }
     
-    strategy = strategy_map[args.strategy]
+    strategy = strategy_map[args.delete_strategy]
     results = None
     
-    tracker.print_header(f"🗑️  Document Deletion ({args.strategy.upper()}) 🗑️")
+    tracker.print_header(f"🗑️  Document Deletion ({args.delete_strategy.upper()}) 🗑️")
     
     if args.dry_run:
         tracker.print_info("🔍 DRY RUN MODE - No actual deletions will occur")
@@ -1517,7 +1517,7 @@ def handle_replace_command(args, doc_manager: DocumentManager, tracker: LlamaPro
     tracker.print_header(f"🔄 Document Replacement 🔄")
     tracker.print_info(f"📄 Replacing document: {args.target_doc_id}")
     tracker.print_info(f"📂 With source file: {args.source}")
-    tracker.print_info(f"🔧 Strategy: {args.strategy}")
+    tracker.print_info(f"🔧 Strategy: {args.replace_strategy}")
     
     # TODO: Implement document replacement logic
     tracker.print_warning("Document replacement functionality coming soon!")
@@ -2029,13 +2029,13 @@ def main():
                "  python cli.py manage cleanup --duplicates"
     )
     manage_parser.add_argument(
-        "--rag-strategy", dest="rag_strategy", help="Use a predefined RAG strategy for configuration"
+        "--strategy", dest="rag_strategy", help="Use a predefined RAG strategy for configuration"
     )
     manage_subparsers = manage_parser.add_subparsers(dest="manage_command", help="Management commands")
 
     # Delete commands
     delete_parser = manage_subparsers.add_parser("delete", help="Delete documents with various strategies")
-    delete_parser.add_argument("--strategy", choices=["soft", "hard", "archive"], default="soft",
+    delete_parser.add_argument("--delete-strategy", choices=["soft", "hard", "archive"], default="soft",
                               help="Deletion strategy")
     delete_parser.add_argument("--older-than", type=int, metavar="DAYS",
                               help="Delete documents older than N days")
@@ -2055,7 +2055,7 @@ def main():
     replace_parser.add_argument("source", help="Source file to replace with")
     replace_parser.add_argument("--target-doc-id", required=True,
                                help="Document ID to replace")
-    replace_parser.add_argument("--strategy", choices=["replace_all", "incremental", "versioning"], 
+    replace_parser.add_argument("--replace-strategy", choices=["replace_all", "incremental", "versioning"], 
                                default="versioning", help="Replacement strategy")
 
     # Stats commands

@@ -263,15 +263,15 @@ def demonstrate_customer_support_cli():
     
     integration_table.add_row(
         "Ticket Auto-Response",
-        "cli.py --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo --quiet search '<ticket_content>'"
+        "cli.py search --quiet --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<ticket_content>'"
     )
     integration_table.add_row(
         "Priority Detection",
-        "cli.py --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo --verbose search '<ticket>'"
+        "cli.py search --verbose --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<ticket>'"
     )
     integration_table.add_row(
         "Knowledge Base Lookup",
-        "cli.py --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo search '<customer_question>'"
+        "cli.py search --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<customer_question>'"
     )
     integration_table.add_row(
         "Batch Processing",
@@ -305,16 +305,43 @@ def demonstrate_customer_support_cli():
     console.print("🔄 Continuous learning from new tickets")
     
     console.print(f"\n[bold]CLI Commands for Support Teams:[/bold]")
-    console.print("📥 `cli.py --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo ingest tickets.csv`")
-    console.print("🔍 `cli.py --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo search '<issue>'`")
-    console.print("📊 `cli.py --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo info`")
+    console.print("📥 `cli.py ingest --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo tickets.csv`")
+    console.print("🔍 `cli.py search --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<issue>'`")
+    console.print("📊 `cli.py info --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo`")
     console.print("🔇 `cli.py --quiet` for integration with other systems")
     console.print("📝 `cli.py --verbose` for detailed analysis")
     
     console.print(f"\n📁 Support database saved to: [bold]./demos/vectordb/customer_support[/bold]")
     console.print("🔄 Continue using these commands to manage your support system:")
-    console.print("[dim]$ python cli.py search 'customer issue' --strategy customer_support_demo[/dim]")
-    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml ingest new_tickets.csv --strategy customer_support_demo[/dim]")
+    console.print("[dim]$ python cli.py search --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo 'customer issue'[/dim]")
+    console.print("[dim]$ python cli.py ingest --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo new_tickets.csv[/dim]")
+    
+    # Clean up the database after demo
+    console.print("\n🧹 [bold cyan]Cleaning up demo database...[/bold cyan]")
+    console.print("[dim]💡 Removing demo data to keep your system clean[/dim]")
+    
+    returncode, stdout, stderr = run_cli_command(
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy customer_support_demo delete --delete-strategy hard --older-than 0"
+    )
+    
+    if returncode == 0:
+        console.print("✅ [bold green]Demo database cleaned up successfully![/bold green]")
+    else:
+        console.print("⚠️ [bold yellow]Database cleanup had issues, trying direct cleanup...[/bold yellow]")
+        # Fallback to direct cleanup if manage command fails
+        import shutil
+        from pathlib import Path
+        
+        db_path = Path("./demos/vectordb/customer_support")
+        try:
+            if db_path.exists():
+                shutil.rmtree(db_path)
+                console.print("✅ [bold green]Fallback cleanup successful![/bold green]")
+            else:
+                console.print("ℹ️ [bold blue]Database directory not found (already clean)[/bold blue]")
+        except Exception as e:
+            console.print(f"⚠️ [bold yellow]All cleanup methods failed: {e}[/bold yellow]")
+            console.print("[dim]💡 You can manually delete ./demos/vectordb/customer_support/ if needed[/dim]")
 
 
 if __name__ == "__main__":

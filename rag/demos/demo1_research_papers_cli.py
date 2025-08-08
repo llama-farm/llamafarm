@@ -123,7 +123,7 @@ def demonstrate_research_paper_rag_cli():
     
     # Run ingestion with verbose output
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy research_papers_demo demos/static_samples/research_papers/"
+        "python cli.py --verbose --strategy-file demos/demo_strategies.yaml ingest --strategy research_papers_demo demos/static_samples/research_papers/"
     )
     
     if returncode == 0:
@@ -179,7 +179,7 @@ def demonstrate_research_paper_rag_cli():
         
         # Run search with verbose output
         returncode, stdout, stderr = run_cli_command(
-            f'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy research_papers_demo "{query}"'
+            f'python cli.py --verbose --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo "{query}"'
         )
         
         if returncode == 0:
@@ -198,7 +198,7 @@ def demonstrate_research_paper_rag_cli():
     console.print("[dim]💡 Useful for parsing output in scripts[/dim]")
     
     returncode, stdout, stderr = run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --quiet search --strategy research_papers_demo "transformer performance"'
+        'python cli.py --quiet --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo "transformer performance"'
     )
     
     console.print("\n[bold]Quiet mode output (structured for scripts):[/bold]")
@@ -260,11 +260,11 @@ def demonstrate_research_paper_rag_cli():
     console.print("✅ Collection management and statistics")
     
     console.print(f"\n[bold]CLI Commands Used:[/bold]")
-    console.print("📋 `cli.py --strategy-file demos/demo_strategies.yaml --strategy <name> ingest <path>` - Ingest documents")
-    console.print("🔍 `cli.py --strategy-file demos/demo_strategies.yaml --strategy <name> search '<query>'` - Search documents")
-    console.print("📊 `cli.py --strategy-file demos/demo_strategies.yaml --strategy <name> info` - Show collection info")
-    console.print("🔧 `cli.py --verbose` - Show detailed output")
-    console.print("🤫 `cli.py --quiet` - Suppress decorative output")
+    console.print("📋 `cli.py --strategy-file demos/demo_strategies.yaml ingest --strategy <name> <path>` - Ingest documents")
+    console.print("🔍 `cli.py --strategy-file demos/demo_strategies.yaml search --strategy <name> '<query>'` - Search documents")  
+    console.print("📊 `cli.py --strategy-file demos/demo_strategies.yaml info --strategy <name>` - Show collection info")
+    console.print("🔧 `cli.py --verbose --strategy-file <file> <command>` - Show detailed output")
+    console.print("🤫 `cli.py --quiet --strategy-file <file> <command>` - Suppress decorative output")
     
     console.print(f"\n[bold]Platform Benefits Shown:[/bold]")
     console.print("🎯 No need to write custom code for RAG operations")
@@ -274,8 +274,35 @@ def demonstrate_research_paper_rag_cli():
     
     console.print(f"\n📁 Research database saved to: [bold]./demos/vectordb/research_papers[/bold]")
     console.print("🔄 You can continue using these CLI commands to query the database:")
-    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search 'your query here' --strategy research_papers_demo[/dim]")
-    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml --verbose search 'detailed results' --strategy research_papers_demo[/dim]")
+    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo 'your query here'[/dim]")
+    console.print("[dim]$ python cli.py --verbose --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo 'detailed results'[/dim]")
+    
+    # Clean up the database after demo
+    console.print("\n🧹 [bold cyan]Cleaning up demo database...[/bold cyan]")
+    console.print("[dim]💡 Removing demo data to keep your system clean[/dim]")
+    
+    returncode, stdout, stderr = run_cli_command(
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy research_papers_demo delete --delete-strategy hard --older-than 0"
+    )
+    
+    if returncode == 0:
+        console.print("✅ [bold green]Demo database cleaned up successfully![/bold green]")
+    else:
+        console.print("⚠️ [bold yellow]Database cleanup had issues, trying direct cleanup...[/bold yellow]")
+        # Fallback to direct cleanup if manage command fails
+        import shutil
+        from pathlib import Path
+        
+        db_path = Path("./demos/vectordb/research_papers")
+        try:
+            if db_path.exists():
+                shutil.rmtree(db_path)
+                console.print("✅ [bold green]Fallback cleanup successful![/bold green]")
+            else:
+                console.print("ℹ️ [bold blue]Database directory not found (already clean)[/bold blue]")
+        except Exception as e:
+            console.print(f"⚠️ [bold yellow]All cleanup methods failed: {e}[/bold yellow]")
+            console.print("[dim]💡 You can manually delete ./demos/vectordb/research_papers/ if needed[/dim]")
 
 
 if __name__ == "__main__":

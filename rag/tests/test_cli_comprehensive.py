@@ -498,10 +498,10 @@ strategy_templates:
         """Test manage commands."""
         print(f"\n{BOLD}{BLUE}🗂️ Testing Manage Commands{RESET}")
         
-        # Test manage stats (valid command)
+        # Test manage stats (valid command) - using new --strategy argument
         strategy_file_path = self.test_dir / "test_strategies.yaml"
         success, output = self.run_command(
-            f"python cli.py --strategy-file {strategy_file_path} manage --rag-strategy {self.test_strategy} stats",
+            f"python cli.py --strategy-file {strategy_file_path} manage --strategy {self.test_strategy} stats",
             "Manage stats"
         )
         
@@ -511,7 +511,50 @@ strategy_templates:
         else:
             self.failed_tests.append("Manage stats")
             
-        # Note: We're not testing delete as it might not be implemented
+        # Test manage delete with dry-run (safe to test)
+        success, output = self.run_command(
+            f"python cli.py --strategy-file {strategy_file_path} manage --strategy {self.test_strategy} delete --delete-strategy soft --dry-run",
+            "Manage delete (dry-run)"
+        )
+        
+        # Should succeed even with no documents (dry-run mode)
+        if success or "DRY RUN" in output or "No documents" in output:
+            self.passed_tests.append("Manage delete dry-run")
+        else:
+            self.failed_tests.append("Manage delete dry-run")
+            
+        # Test manage delete with older-than filter (dry-run)
+        success, output = self.run_command(
+            f"python cli.py --strategy-file {strategy_file_path} manage --strategy {self.test_strategy} delete --delete-strategy hard --older-than 0 --dry-run",
+            "Manage delete older-than (dry-run)"
+        )
+        
+        if success or "DRY RUN" in output or "No documents" in output:
+            self.passed_tests.append("Manage delete older-than")
+        else:
+            self.failed_tests.append("Manage delete older-than")
+            
+        # Test manage help
+        success, output = self.run_command(
+            "python cli.py manage --help",
+            "Manage help"
+        )
+        
+        if success and "delete" in output and "stats" in output:
+            self.passed_tests.append("Manage help")
+        else:
+            self.failed_tests.append("Manage help")
+            
+        # Test delete subcommand help
+        success, output = self.run_command(
+            "python cli.py manage delete --help",
+            "Manage delete help"
+        )
+        
+        if success and "--delete-strategy" in output and "--older-than" in output:
+            self.passed_tests.append("Manage delete help")
+        else:
+            self.failed_tests.append("Manage delete help")
         
     def test_error_cases(self):
         """Test error handling."""
