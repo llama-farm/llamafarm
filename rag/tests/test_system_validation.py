@@ -232,13 +232,13 @@ class TestCLICommands:
                     cmd,
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=30,  # Increased timeout for CI environment
                     cwd=Path(__file__).parent.parent
                 )
                 assert result.returncode == 0, f"Command {' '.join(cmd)} failed"
                 assert "usage:" in result.stdout.lower() or "usage:" in result.stderr.lower()
             except subprocess.TimeoutExpired:
-                pytest.fail(f"Command {' '.join(cmd)} timed out")
+                pytest.fail(f"Command {' '.join(cmd)} timed out after 30 seconds")
     
     def test_cli_strategies_list(self):
         """Test that CLI can list strategies."""
@@ -246,7 +246,7 @@ class TestCLICommands:
             ["python", "cli.py", "strategies", "list"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=30,  # Increased timeout for CI environment
             cwd=Path(__file__).parent.parent
         )
         
