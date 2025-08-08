@@ -42,7 +42,7 @@ class BaseAnalysisStrategy(ABC):
     """Base class for analysis strategies"""
     
     @abstractmethod
-    def analyze(self, message: str, context: dict = None) -> dict:
+    def analyze(self, message: str, context: dict | None = None) -> dict:
         """Analyze a message and return analysis results"""
         pass
 
@@ -65,15 +65,35 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
                 "confidence_threshold": rules_config["confidence_threshold"]
             }
         else:
-            # Use provided config (for testing or custom setups)
-            self.config = config
-            self.namespace_rules = config.get("namespace_rules", [])
-            self.action_rules = config.get("action_rules", [])
-            self.excluded_namespaces = set(config.get("excluded_namespaces", []))
+            # Use provided config (for testing or custom setups),
+            # but merge with sane defaults
+            config_loader = get_config_loader()
+            defaults_full = config_loader.load_config()
+            defaults_rules = config_loader.create_analysis_rules(defaults_full)
+
+            self.namespace_rules = config.get(
+                "namespace_rules", defaults_rules["namespace_rules"]
+            )
+            self.action_rules = config.get(
+                "action_rules", defaults_rules["action_rules"]
+            )
+            self.excluded_namespaces = set(
+                config.get(
+                    "excluded_namespaces", defaults_rules["excluded_namespaces"]
+                )
+            )
+            self.config = {
+                "default_namespace": config.get(
+                    "default_namespace", defaults_rules["default_namespace"]
+                ),
+                "confidence_threshold": config.get(
+                    "confidence_threshold", defaults_rules["confidence_threshold"]
+                ),
+            }
     
 
     
-    def analyze(self, message: str, context: dict = None) -> dict:
+    def analyze(self, message: str, context: dict | None = None) -> dict:
         """Analyze message using rule-based approach"""
         context = context or {}
         message_lower = message.lower()
@@ -148,6 +168,16 @@ class RuleBasedAnalysisStrategy(BaseAnalysisStrategy):
                 if match := re.search(pattern, message_lower):
                     return match.group(1)
         
+        # Fallback regex coverage to catch common phrasing when rules miss
+        fallback_patterns = [
+            r"create\s+(?:project\s+)?(?:called\s+)?['\"]?([A-Za-z0-9._-]+)['\"]?",
+            r"new\s+project\s+['\"]?([A-Za-z0-9._-]+)['\"]?",
+            r"project\s+['\"]?([A-Za-z0-9._-]+)['\"]?",
+        ]
+        for pattern in fallback_patterns:
+            if match := re.search(pattern, message_lower):
+                return match.group(1)
+
         return None
     
     def _calculate_confidence(
@@ -177,13 +207,40 @@ class ResponseValidationStrategy:
     """
     
     def __init__(self, config: ResponseValidationConfig | None = None):
+        # Load defaults from file
+        config_loader = get_config_loader()
+        full_config = config_loader.load_config()
+        defaults = config_loader.create_validation_config(full_config)
+
         if config is None:
-            # Load configuration from file
-            config_loader = get_config_loader()
-            full_config = config_loader.load_config()
-            self.config = config_loader.create_validation_config(full_config)
+            self.config = defaults
         else:
-            self.config = config
+            # Merge provided config with defaults to ensure all fields are populated
+            self.config = ResponseValidationConfig(
+                template_indicators=(
+                    config.template_indicators or defaults.template_indicators
+                ),
+                inability_phrases=(
+                    config.inability_phrases or defaults.inability_phrases
+                ),
+                hallucination_indicators=(
+                    config.hallucination_indicators
+                    or defaults.hallucination_indicators
+                ),
+                min_response_length=(
+                    config.min_response_length or defaults.min_response_length
+                ),
+                enable_hallucination_detection=(
+                    config.enable_hallucination_detection
+                    if config.enable_hallucination_detection is not None
+                    else defaults.enable_hallucination_detection
+                ),
+                enable_count_query_validation=(
+                    config.enable_count_query_validation
+                    if config.enable_count_query_validation is not None
+                    else defaults.enable_count_query_validation
+                ),
+            )
     
 
     
