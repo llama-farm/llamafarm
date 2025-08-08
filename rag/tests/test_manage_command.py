@@ -317,7 +317,7 @@ class TestManageCommandIntegration:
         # Test main manage help
         result = subprocess.run([
             sys.executable, str(cli_path), 'manage', '--help'
-        ], capture_output=True, text=True)
+        ], capture_output=True, text=True, timeout=30)
         
         assert result.returncode == 0
         assert '--strategy' in result.stdout
@@ -327,7 +327,7 @@ class TestManageCommandIntegration:
         # Test delete subcommand help
         result = subprocess.run([
             sys.executable, str(cli_path), 'manage', 'delete', '--help'
-        ], capture_output=True, text=True)
+        ], capture_output=True, text=True, timeout=30)
         
         assert result.returncode == 0
         assert '--delete-strategy' in result.stdout
@@ -344,7 +344,7 @@ class TestManageCommandIntegration:
         # Test with invalid subcommand
         result = subprocess.run([
             sys.executable, str(cli_path), 'manage', 'invalid_subcommand'
-        ], capture_output=True, text=True)
+        ], capture_output=True, text=True, timeout=30)
         
         assert result.returncode != 0  # Should fail with invalid subcommand
 
@@ -360,7 +360,7 @@ class TestManageCommandIntegration:
             sys.executable, str(cli_path), 
             'manage', '--strategy', 'simple', 
             'delete', '--delete-strategy', 'soft', '--dry-run'
-        ], capture_output=True, text=True)
+        ], capture_output=True, text=True, timeout=30)
         
         # Should not fail, even if no documents exist
         # The command should handle empty collections gracefully
