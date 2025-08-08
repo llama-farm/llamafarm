@@ -1,0 +1,31 @@
+# DOCX Parser Default Configurations
+# These provide ready-to-use configurations for common use cases
+
+general_purpose:
+  name: General Purpose DOCX
+  description: Standard Word document parsing
+  config:
+    extract_metadata: true
+    extract_headers_footers: true
+    extract_comments: true
+    extract_tables: true
+    extract_images: false
+    preserve_formatting: false
+  recommended_for:
+  - Reports
+  - Letters
+  - General documents
+with_comments:
+  name: Documents with Comments
+  description: Extract documents with review comments
+  config:
+    extract_metadata: true
+    extract_headers_footers: true
+    extract_comments: true
+    extract_tables: true
+    extract_images: false
+    preserve_formatting: true
+  recommended_for:
+  - Reviewed documents
+  - Collaborative docs
+  - Draft documents

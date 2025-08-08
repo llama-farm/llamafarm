@@ -1,0 +1,546 @@
+# RAG System Strategy Schema
+# Version: 1.0.0
+# This schema defines how to create and configure strategies that combine components
+
+version: "1.0.0"
+schema_type: "strategy"
+description: "Schema for defining RAG system strategies that combine parsers, extractors, embedders, stores, and retrieval strategies"
+
+# ==============================================================================
+# STRATEGY DEFINITION SCHEMA
+# ==============================================================================
+
+strategy_schema:
+  type: "object"
+  required: ["name", "description", "components"]
+  properties:
+    name:
+      type: "string"
+      pattern: "^[a-z][a-z0-9_]*$"
+      description: "Unique strategy identifier (lowercase, underscores)"
+      examples: ["simple", "customer_support", "legal_documents"]
+    
+    description:
+      type: "string"
+      minLength: 10
+      maxLength: 500
+      description: "Clear description of the strategy's purpose and use cases"
+    
+    version:
+      type: "string"
+      pattern: "^\\d+\\.\\d+\\.\\d+$"
+      default: "1.0.0"
+      description: "Strategy version (semantic versioning)"
+    
+    tags:
+      type: "array"
+      items:
+        type: "string"
+      description: "Tags for categorization and discovery"
+      examples: [["production", "optimized"], ["development", "testing"]]
+    
+    use_cases:
+      type: "array"
+      items:
+        type: "string"
+      minItems: 1
+      description: "Specific use cases this strategy is designed for"
+      examples: [
+        ["customer_support", "helpdesk", "ticket_analysis"],
+        ["legal_research", "contract_analysis", "compliance"],
+        ["academic_research", "literature_review", "paper_analysis"]
+      ]
+    
+    components:
+      type: "object"
+      required: ["parser", "embedder", "vector_store", "retrieval_strategy"]
+      properties:
+        parser:
+          type: "object"
+          required: ["type"]
+          properties:
+            type:
+              type: "string"
+              enum: ["CSVParser", "PDFParser", "MarkdownParser", "PlainTextParser", "HTMLParser", "DocxParser", "ExcelParser", "CustomerSupportCSVParser"]
+              description: "Parser component to use"
+            config:
+              type: "object"
+              description: "Parser-specific configuration"
+              additionalProperties: true
+        
+        extractors:
+          type: "array"
+          items:
+            type: "object"
+            required: ["type"]
+            properties:
+              type:
+                type: "string"
+                enum: ["RAKEExtractor", "YAKEExtractor", "TFIDFExtractor", "EntityExtractor", "DateTimeExtractor", "ContentStatisticsExtractor", "SummaryExtractor", "PatternExtractor", "PathExtractor", "KeywordExtractor", "LinkExtractor", "HeadingExtractor", "TableExtractor", "StatisticsExtractor"]
+                description: "Extractor component to use"
+              config:
+                type: "object"
+                description: "Extractor-specific configuration"
+                additionalProperties: true
+              enabled:
+                type: "boolean"
+                default: true
+                description: "Whether this extractor is enabled"
+              priority:
+                type: "integer"
+                minimum: 0
+                maximum: 100
+                default: 50
+                description: "Processing priority (higher = earlier)"
+        
+        embedder:
+          type: "object"
+          required: ["type"]
+          properties:
+            type:
+              type: "string"
+              enum: ["OllamaEmbedder", "OpenAIEmbedder", "HuggingFaceEmbedder", "SentenceTransformerEmbedder"]
+              description: "Embedder component to use"
+            config:
+              type: "object"
+              description: "Embedder-specific configuration"
+              additionalProperties: true
+        
+        vector_store:
+          type: "object"
+          required: ["type"]
+          properties:
+            type:
+              type: "string"
+              enum: ["ChromaStore", "PineconeStore", "FAISSStore", "QdrantStore"]
+              description: "Vector store component to use"
+            config:
+              type: "object"
+              description: "Vector store-specific configuration"
+              additionalProperties: true
+        
+        retrieval_strategy:
+          type: "object"
+          required: ["type"]
+          properties:
+            type:
+              type: "string"
+              enum: ["BasicSimilarityStrategy", "MetadataFilteredStrategy", "MultiQueryStrategy", "RerankedStrategy", "HybridUniversalStrategy", "ChromaBasicStrategy"]
+              description: "Retrieval strategy to use"
+            config:
+              type: "object"
+              description: "Strategy-specific configuration"
+              additionalProperties: true
+    
+    optimization:
+      type: "object"
+      description: "Performance and resource optimization settings"
+      properties:
+        performance_priority:
+          type: "string"
+          enum: ["speed", "accuracy", "balanced", "cost"]
+          default: "balanced"
+          description: "Primary optimization goal"
+        
+        resource_constraints:
+          type: "object"
+          properties:
+            max_memory_mb:
+              type: "integer"
+              minimum: 128
+              description: "Maximum memory usage in MB"
+            max_cpu_cores:
+              type: "integer"
+              minimum: 1
+              description: "Maximum CPU cores to use"
+            gpu_enabled:
+              type: "boolean"
+              default: false
+              description: "Whether GPU acceleration is available"
+        
+        batch_settings:
+          type: "object"
+          properties:
+            parser_batch_size:
+              type: "integer"
+              minimum: 1
+              default: 10
+              description: "Batch size for document parsing"
+            embedder_batch_size:
+              type: "integer"
+              minimum: 1
+              default: 32
+              description: "Batch size for embedding generation"
+            indexing_batch_size:
+              type: "integer"
+              minimum: 1
+              default: 100
+              description: "Batch size for vector indexing"
+        
+        caching:
+          type: "object"
+          properties:
+            enable_embedding_cache:
+              type: "boolean"
+              default: true
+              description: "Cache generated embeddings"
+            enable_search_cache:
+              type: "boolean"
+              default: false
+              description: "Cache search results"
+            cache_ttl_seconds:
+              type: "integer"
+              minimum: 0
+              default: 3600
+              description: "Cache time-to-live in seconds"
+    
+    validation:
+      type: "object"
+      description: "Input validation and quality checks"
+      properties:
+        min_document_length:
+          type: "integer"
+          minimum: 0
+          default: 10
+          description: "Minimum document length in characters"
+        max_document_length:
+          type: "integer"
+          minimum: 0
+          default: 1000000
+          description: "Maximum document length in characters"
+        required_metadata:
+          type: "array"
+          items:
+            type: "string"
+          description: "Required metadata fields for documents"
+        content_filters:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              type:
+                type: "string"
+                enum: ["regex", "keyword", "language"]
+              pattern:
+                type: "string"
+              action:
+                type: "string"
+                enum: ["reject", "warn", "tag"]
+    
+    monitoring:
+      type: "object"
+      description: "Monitoring and observability settings"
+      properties:
+        enable_metrics:
+          type: "boolean"
+          default: true
+          description: "Enable performance metrics collection"
+        enable_tracing:
+          type: "boolean"
+          default: false
+          description: "Enable distributed tracing"
+        log_level:
+          type: "string"
+          enum: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+          default: "INFO"
+          description: "Logging verbosity level"
+        metrics_export:
+          type: "object"
+          properties:
+            type:
+              type: "string"
+              enum: ["console", "file", "prometheus", "datadog"]
+            endpoint:
+              type: "string"
+              description: "Metrics export endpoint"
+
+# ==============================================================================
+# PREDEFINED STRATEGY TEMPLATES
+# ==============================================================================
+
+strategy_templates:
+  minimal:
+    name: "minimal"
+    description: "Minimal configuration for quick prototyping"
+    components:
+      parser:
+        type: "PlainTextParser"
+        config:
+          chunk_size: 1000
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "minimal_docs"
+      retrieval_strategy:
+        type: "BasicSimilarityStrategy"
+        config:
+          top_k: 10
+  
+  balanced:
+    name: "balanced"
+    description: "Balanced configuration for general use"
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          combine_pages: true
+          extract_metadata: true
+      extractors:
+        - type: "YAKEExtractor"
+          config:
+            max_keywords: 10
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "DATE"]
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 32
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "balanced_docs"
+          persist_directory: "./chroma_db"
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          top_k: 15
+    optimization:
+      performance_priority: "balanced"
+      batch_settings:
+        embedder_batch_size: 32
+        indexing_batch_size: 100
+  
+  production:
+    name: "production"
+    description: "Production-ready configuration with monitoring"
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          combine_pages: false
+          extract_metadata: true
+          min_text_length: 50
+      extractors:
+        - type: "YAKEExtractor"
+          config:
+            max_keywords: 15
+          priority: 80
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "MONEY"]
+          priority: 70
+        - type: "ContentStatisticsExtractor"
+          config:
+            include_readability: true
+          priority: 60
+      embedder:
+        type: "OpenAIEmbedder"
+        config:
+          model: "text-embedding-3-small"
+          batch_size: 100
+      vector_store:
+        type: "PineconeStore"
+        config:
+          index_name: "production"
+          dimension: 1536
+      retrieval_strategy:
+        type: "HybridUniversalStrategy"
+        config:
+          strategies:
+            - type: "BasicSimilarityStrategy"
+              weight: 0.4
+            - type: "MetadataFilteredStrategy"
+              weight: 0.3
+            - type: "RerankedStrategy"
+              weight: 0.3
+    optimization:
+      performance_priority: "accuracy"
+      resource_constraints:
+        max_memory_mb: 8192
+        gpu_enabled: true
+      caching:
+        enable_embedding_cache: true
+        enable_search_cache: true
+        cache_ttl_seconds: 7200
+    monitoring:
+      enable_metrics: true
+      enable_tracing: true
+      log_level: "INFO"
+      metrics_export:
+        type: "prometheus"
+        endpoint: "http://localhost:9090"
+
+# ==============================================================================
+# STRATEGY COMPOSITION RULES
+# ==============================================================================
+
+composition_rules:
+  component_dependencies:
+    PDFParser:
+      recommended_extractors: ["EntityExtractor", "DateTimeExtractor"]
+      compatible_embedders: ["all"]
+    
+    CSVParser:
+      recommended_extractors: ["ContentStatisticsExtractor", "PatternExtractor"]
+      compatible_embedders: ["all"]
+    
+    CustomerSupportCSVParser:
+      recommended_extractors: ["RAKEExtractor", "EntityExtractor"]
+      recommended_retrieval: ["MetadataFilteredStrategy", "RerankedStrategy"]
+    
+    MarkdownParser:
+      recommended_extractors: ["YAKEExtractor", "SummaryExtractor"]
+      compatible_embedders: ["all"]
+  
+  performance_recommendations:
+    high_volume:
+      description: "Recommendations for high-volume processing"
+      parser_batch_size: [50, 100]
+      embedder_batch_size: [64, 128]
+      vector_store: ["FAISSStore", "PineconeStore"]
+      retrieval_strategy: ["BasicSimilarityStrategy", "ChromaBasicStrategy"]
+    
+    high_accuracy:
+      description: "Recommendations for maximum accuracy"
+      extractors: ["YAKEExtractor", "EntityExtractor", "ContentStatisticsExtractor"]
+      embedder: ["OpenAIEmbedder", "SentenceTransformerEmbedder"]
+      retrieval_strategy: ["HybridUniversalStrategy", "RerankedStrategy"]
+    
+    low_latency:
+      description: "Recommendations for minimum latency"
+      parser_config:
+        combine_pages: true
+        skip_metadata: true
+      embedder_batch_size: [8, 16]
+      vector_store: ["ChromaStore", "FAISSStore"]
+      retrieval_strategy: ["BasicSimilarityStrategy"]
+  
+  compatibility_matrix:
+    embedder_vector_store:
+      OllamaEmbedder:
+        dimension: 768
+        compatible_stores: ["ChromaStore", "FAISSStore", "QdrantStore"]
+      OpenAIEmbedder:
+        text-embedding-3-small:
+          dimension: 1536
+          compatible_stores: ["all"]
+        text-embedding-3-large:
+          dimension: 3072
+          compatible_stores: ["all"]
+      HuggingFaceEmbedder:
+        dimension: "variable"
+        compatible_stores: ["all"]
+    
+    retrieval_store_optimization:
+      ChromaStore:
+        optimal_strategies: ["ChromaBasicStrategy", "MetadataFilteredStrategy"]
+        good_strategies: ["BasicSimilarityStrategy", "HybridUniversalStrategy"]
+      PineconeStore:
+        optimal_strategies: ["MetadataFilteredStrategy", "HybridUniversalStrategy"]
+        good_strategies: ["all"]
+
+# ==============================================================================
+# VALIDATION AND TESTING
+# ==============================================================================
+
+validation_rules:
+  required_fields:
+    - "name"
+    - "description"
+    - "components.parser"
+    - "components.embedder"
+    - "components.vector_store"
+    - "components.retrieval_strategy"
+  
+  naming_conventions:
+    strategy_name:
+      pattern: "^[a-z][a-z0-9_]*$"
+      max_length: 50
+    version:
+      pattern: "^\\d+\\.\\d+\\.\\d+$"
+  
+  configuration_limits:
+    max_extractors: 10
+    max_batch_size: 1000
+    min_batch_size: 1
+    max_top_k: 1000
+    min_top_k: 1
+  
+  performance_warnings:
+    - condition: "extractors.length > 5"
+      message: "Using more than 5 extractors may impact processing speed"
+    - condition: "embedder.config.batch_size > 128"
+      message: "Large batch sizes may cause memory issues"
+    - condition: "retrieval_strategy.type == 'HybridUniversalStrategy' && strategies.length > 3"
+      message: "Combining more than 3 strategies may significantly impact search latency"
+
+# ==============================================================================
+# STRATEGY CLI INTEGRATION
+# ==============================================================================
+
+cli_integration:
+  commands:
+    create:
+      description: "Create a new strategy from template or scratch"
+      usage: "cli.py strategies create <name> [--template <template_name>] [--interactive]"
+      examples:
+        - "cli.py strategies create my_strategy --template balanced"
+        - "cli.py strategies create custom_legal --interactive"
+    
+    validate:
+      description: "Validate a strategy configuration"
+      usage: "cli.py strategies validate <strategy_file>"
+      examples:
+        - "cli.py strategies validate my_strategy.yaml"
+    
+    test:
+      description: "Test a strategy with sample data"
+      usage: "cli.py strategies test <strategy_name> --sample-data <file>"
+      examples:
+        - "cli.py strategies test customer_support --sample-data test.csv"
+    
+    optimize:
+      description: "Optimize a strategy for specific goals"
+      usage: "cli.py strategies optimize <strategy_name> --goal <goal>"
+      examples:
+        - "cli.py strategies optimize my_strategy --goal speed"
+        - "cli.py strategies optimize production --goal accuracy"
+    
+    benchmark:
+      description: "Benchmark strategy performance"
+      usage: "cli.py strategies benchmark <strategy_name> --dataset <dataset>"
+      examples:
+        - "cli.py strategies benchmark production --dataset benchmark_data/"
+
+# ==============================================================================
+# MIGRATION GUIDE
+# ==============================================================================
+
+migration:
+  from_v1_to_v2:
+    description: "Migration guide from strategy format v1 to v2"
+    changes:
+      - field: "components.parser"
+        change: "Now requires explicit type field"
+        example:
+          before: "parser: CSVParser"
+          after: "parser: { type: 'CSVParser', config: {} }"
+      - field: "components.extractors"
+        change: "Now an array with priority support"
+        example:
+          before: "extractors: { YAKEExtractor: {} }"
+          after: "extractors: [{ type: 'YAKEExtractor', config: {}, priority: 50 }]"
+  
+  deprecations:
+    - field: "components.chunker"
+      replacement: "components.parser.config.chunk_size"
+      version_removed: "2.0.0"
+    - field: "components.filter"
+      replacement: "components.retrieval_strategy.config.filters"
+      version_removed: "2.0.0"

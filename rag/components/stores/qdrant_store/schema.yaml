@@ -1,0 +1,40 @@
+# Qdrant Store Component Schema - WIP
+# JSON Schema draft-07 format  
+# Status: Work In Progress - Implementation coming soon
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/stores/qdrant_store/schema.yaml
+title: Qdrant Store Configuration (WIP)
+description: Qdrant vector database - Implementation in progress
+type: object
+additionalProperties: false
+properties:
+  host:
+    type: string
+    default: localhost
+    description: Server host
+  port:
+    type: integer
+    default: 6333
+    minimum: 1
+    maximum: 65535
+    description: Server port
+  collection_name:
+    type: string
+    default: documents
+    pattern: ^[a-zA-Z0-9_-]+$
+    description: Collection name
+  vector_size:
+    type: integer
+    minimum: 1
+    maximum: 65536
+    description: Vector dimension
+  distance:
+    type: string
+    enum:
+    - Cosine
+    - Euclid
+    - Dot
+    default: Cosine
+    description: Distance metric
+required:
+- vector_size

@@ -1,0 +1,42 @@
+# OpenAI Embedder Component Schema - WIP
+# JSON Schema draft-07 format
+# Status: Work In Progress - Implementation coming soon
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/embedders/openai_embedder/schema.yaml
+title: OpenAI Embedder Configuration (WIP)
+description: Generate embeddings using OpenAI API - Implementation in progress
+type: object
+additionalProperties: false
+properties:
+  api_key:
+    type: string
+    description: OpenAI API key
+  model:
+    type: string
+    default: text-embedding-3-small
+    enum:
+    - text-embedding-3-small
+    - text-embedding-3-large
+    - text-embedding-ada-002
+    description: OpenAI model
+  dimension:
+    type:
+    - integer
+    - 'null'
+    minimum: 256
+    maximum: 3072
+    description: Override dimension
+  batch_size:
+    type: integer
+    default: 100
+    minimum: 1
+    maximum: 2048
+    description: Batch size
+  max_retries:
+    type: integer
+    default: 3
+    minimum: 0
+    maximum: 10
+    description: Max retry attempts
+required:
+- api_key

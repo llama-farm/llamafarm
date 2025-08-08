@@ -1,0 +1,9 @@
+# Pattern Extractor Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard pattern extractor
+  config:
+    enabled: true
+  recommended_for:
+  - General use

@@ -1320,7 +1320,7 @@ from indexers import ChromaIndexer
 # Build pipeline programmatically
 pipeline = Pipeline("Simple Document Processing")
 
-pipeline.add(PDFParser())
+pipeline.add(PDFParser(name="PDFParser"))
 pipeline.add(SentenceSplitter(config={"chunk_size": 512}))
 pipeline.add(KeywordExtractor(config={"method": "yake", "max_keywords": 10}))
 pipeline.add(ChromaIndexer(config={"collection": "documents"}))

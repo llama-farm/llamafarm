@@ -1,0 +1,117 @@
+retrievers:
+  BasicSimilarityStrategy:
+    description: Simple vector similarity search
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+      distance_metric:
+        type: string
+        default: cosine
+        enum:
+        - cosine
+        - euclidean
+        - manhattan
+        - dot
+        description: Distance metric
+      score_threshold:
+        type:
+        - number
+        - 'null'
+        default: null
+        minimum: 0.0
+        maximum: 1.0
+        description: Minimum similarity score
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard similarity search
+        config:
+          top_k: 10
+          distance_metric: cosine
+          score_threshold: null
+        recommended_for:
+        - Simple queries
+        - Fast retrieval
+        - Baseline
+      high_precision:
+        name: High Precision
+        description: Higher threshold for better precision
+        config:
+          top_k: 5
+          distance_metric: cosine
+          score_threshold: 0.7
+        recommended_for:
+        - Precise matching
+        - Quality over quantity
+  RerankedStrategy:
+    description: Re-rank results
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard reranked retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use
+  MetadataFilteredStrategy:
+    description: Filter by metadata
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard metadata filtered retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use
+  HybridUniversalStrategy:
+    description: Combine multiple strategies
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard hybrid universal retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use
+  MultiQueryStrategy:
+    description: Multiple query variations
+    config_schema:
+      top_k:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 1000
+        description: Number of results
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard multi query retrieval
+        config:
+          top_k: 10
+        recommended_for:
+        - General use

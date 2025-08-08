@@ -1,0 +1,13 @@
+# Summary Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/summary_extractor/schema.yaml
+title: Summary Extractor Configuration
+description: Generate summaries
+type: object
+additionalProperties: false
+properties:
+  enabled:
+    type: boolean
+    default: true
+    description: Enable this extractor

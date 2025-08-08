@@ -1,0 +1,74 @@
+# PDF Parser Default Configurations
+# These provide ready-to-use configurations for common use cases
+
+general_purpose:
+  name: "General Purpose PDF"
+  description: "Standard PDF parsing with text extraction"
+  config:
+    extract_metadata: true
+    extract_page_structure: true
+    combine_pages: true
+    page_separator: "\n\n--- Page Break ---\n\n"
+    min_text_length: 10
+    include_page_numbers: true
+    extract_outline: true
+    extract_images: false
+    ocr_enabled: false
+  recommended_for:
+    - "General documents"
+    - "Reports"
+    - "Articles"
+
+research_papers:
+  name: "Research Papers"
+  description: "Academic papers with metadata and structure"
+  config:
+    extract_metadata: true
+    extract_page_structure: true
+    combine_pages: true
+    page_separator: "\n\n"
+    min_text_length: 50
+    include_page_numbers: true
+    extract_outline: true
+    extract_images: false
+    ocr_enabled: false
+  recommended_for:
+    - "Academic papers"
+    - "Research documents"
+    - "Scientific publications"
+
+legal_documents:
+  name: "Legal Documents"
+  description: "Legal documents with page-by-page processing"
+  config:
+    extract_metadata: true
+    extract_page_structure: true
+    combine_pages: false
+    page_separator: "\n\n[NEW PAGE]\n\n"
+    min_text_length: 20
+    include_page_numbers: true
+    extract_outline: true
+    extract_images: false
+    ocr_enabled: false
+  recommended_for:
+    - "Contracts"
+    - "Legal briefs"
+    - "Court documents"
+
+scanned_documents:
+  name: "Scanned Documents"
+  description: "Scanned PDFs requiring OCR"
+  config:
+    extract_metadata: true
+    extract_page_structure: false
+    combine_pages: true
+    page_separator: "\n\n--- Page ---\n\n"
+    min_text_length: 5
+    include_page_numbers: true
+    extract_outline: false
+    extract_images: true
+    ocr_enabled: true
+  recommended_for:
+    - "Scanned documents"
+    - "Image-based PDFs"
+    - "Historical documents"

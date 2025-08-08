@@ -1,0 +1,15 @@
+# Keyword Extractor Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard keyword extraction
+  config:
+    algorithm: rake
+    max_keywords: 10
+    min_keyword_length: 3
+    include_scores: true
+    language: english
+  recommended_for:
+  - Documents
+  - Articles
+  - Reports

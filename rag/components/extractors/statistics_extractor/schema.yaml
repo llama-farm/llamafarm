@@ -1,0 +1,13 @@
+# Statistics Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/statistics_extractor/schema.yaml
+title: Statistics Extractor Configuration
+description: Extract text statistics
+type: object
+additionalProperties: false
+properties:
+  enabled:
+    type: boolean
+    default: true
+    description: Enable this extractor

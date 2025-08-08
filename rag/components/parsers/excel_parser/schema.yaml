@@ -1,0 +1,43 @@
+# Excel Parser Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/parsers/excel_parser/schema.yaml
+title: Excel Parser Configuration
+description: Parses Excel spreadsheets
+type: object
+additionalProperties: false
+properties:
+  sheet_names:
+    type:
+    - array
+    - 'null'
+    items:
+      type: string
+    default: null
+    description: Specific sheets to parse
+  combine_sheets:
+    type: boolean
+    default: false
+    description: Combine all sheets
+  extract_formulas:
+    type: boolean
+    default: false
+    description: Extract cell formulas
+  extract_charts:
+    type: boolean
+    default: false
+    description: Extract chart metadata
+  table_format:
+    type: string
+    enum:
+    - csv
+    - markdown
+    - json
+    - text
+    default: markdown
+    description: Table output format
+  header_row:
+    type: integer
+    default: 0
+    minimum: 0
+    description: Header row index

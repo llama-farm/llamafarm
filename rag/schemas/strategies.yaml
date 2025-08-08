@@ -1,0 +1,101 @@
+version: 1.0.0
+strategies:
+  research_papers:
+    name: Research Paper Analysis
+    description: Optimized for academic and research content
+    components:
+      parser: text_parser
+      extractors:
+      - entity_extractor
+      - summary_extractor
+      - statistics_extractor
+      embedder: ollama_embedder
+      store: chroma_store
+    configs:
+      entity_extractor: research_papers
+      summary_extractor: detailed_summary
+      statistics_extractor: research_analysis
+  customer_support:
+    name: Customer Support System
+    description: Optimized for support tickets and knowledge base
+    components:
+      parser:
+      - csv_parser
+      - text_parser
+      extractors:
+      - entity_extractor
+      - pattern_extractor
+      - summary_extractor
+      embedder: ollama_embedder
+      store: chroma_store
+    configs:
+      entity_extractor: general_purpose
+      pattern_extractor: document_processing
+      summary_extractor: brief_summary
+  news_analysis:
+    name: News Article Analysis
+    description: Optimized for news and media content
+    components:
+      parser: html_parser
+      extractors:
+      - entity_extractor
+      - summary_extractor
+      - link_extractor
+      embedder: ollama_embedder
+      store: chroma_store
+    configs:
+      entity_extractor: news_analysis
+      summary_extractor: news_summary
+      link_extractor: web_analysis
+  business_reports:
+    name: Business Report Analysis
+    description: Optimized for business and financial documents
+    components:
+      parser:
+      - csv_parser
+      - text_parser
+      extractors:
+      - entity_extractor
+      - summary_extractor
+      - statistics_extractor
+      - table_extractor
+      embedder: ollama_embedder
+      store: chroma_store
+    configs:
+      entity_extractor: business_reports
+      summary_extractor: detailed_summary
+      statistics_extractor: financial_analysis
+      table_extractor: financial_tables
+  code_documentation:
+    name: Code Documentation Analysis
+    description: Optimized for technical documentation
+    components:
+      parser: markdown_parser
+      extractors:
+      - link_extractor
+      - heading_extractor
+      - pattern_extractor
+      embedder: ollama_embedder
+      store: chroma_store
+    configs:
+      link_extractor: web_analysis
+      heading_extractor: technical_docs
+      pattern_extractor: web_analysis
+use_case_mapping:
+  Document summarization:
+  - research_papers
+  - business_reports
+  Customer service:
+  - customer_support
+  Content analysis:
+  - news_analysis
+  Technical documentation:
+  - code_documentation
+  Entity extraction:
+  - research_papers
+  - customer_support
+  - news_analysis
+  - business_reports
+  Pattern recognition:
+  - customer_support
+  - code_documentation

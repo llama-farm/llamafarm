@@ -252,26 +252,29 @@ embeddings_cache/
 tokenizer_cache/
 
 # ==============================================================================
-# Data Files (excluding samples and examples)
+# Data Files - INCLUDE datasets for users, exclude user uploads only
 # ==============================================================================
 
-# Large datasets in data directories
-data/*.csv
-data/*.json
-data/*.jsonl
-data/*.parquet
-data/*.xlsx
-data/*.xls
-data/*.tsv
-data/*.txt
-data/*.pdf
-data/*.docx
-data/*.doc
+# NOTE: We WANT to include dataset files so users can train models!
+# Only exclude user-specific uploads and temporary data
 
-# User uploads and ingestion staging
+# Keep training datasets (commented out - we want these in git)
+# data/*.csv      # KEEP - training data
+# data/*.json     # KEEP - training data
+# data/*.jsonl    # KEEP - training data
+# datasets/       # KEEP - all datasets for users
+
+# RAG data directories
+rag/data/
+**/data/*_chroma_db/
+**/data/vector_store/
+
+# User uploads and ingestion staging (EXCLUDE these)
 uploads/
 ingestion_staging/
 user_data/
+user_uploads/
+temp_uploads/
 
 # Compressed archives
 *.zip
@@ -550,6 +553,108 @@ index_snapshots/
 processing_queue/
 temp_embeddings/
 batch_processing/
+
+# ==============================================================================
+# LlamaFarm Models System Specific
+# ==============================================================================
+
+# IMPORTANT: What we INCLUDE vs EXCLUDE:
+# ✅ INCLUDE: All datasets (users need these for training!)
+#    - demos/datasets/medical/*.jsonl
+#    - demos/datasets/code/*.json
+#    - Any training data files
+# ❌ EXCLUDE: Only model weights and training outputs
+#    - fine_tuned_models/
+#    - checkpoint files
+#    - .gguf, .bin, .safetensors files
+
+# Fine-tuned models and checkpoints
+fine_tuned_models/
+model_cache/
+*/fine_tuned_models/
+*/model_cache/
+checkpoint-*/
+*/checkpoint-*/
+
+# Training outputs
+training_outputs/
+training_logs/
+runs/
+wandb/
+tensorboard/
+
+# Model files (various formats)
+*.ckpt
+*.safetensors
+*.gguf
+*.ggml
+*.bin
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.h5
+*.pkl
+*.joblib
+*.model
+
+# Ollama models
+.ollama/
+ollama_models/
+*.ollama
+
+# HuggingFace cache
+.cache/
+huggingface_hub/
+~/.cache/huggingface/
+
+# LlamaFactory specific
+output_dir/
+saves/
+cache_dir/
+
+# Adapter models (LoRA, QLoRA)
+adapter_model/
+adapter_config.json
+adapter_model.bin
+adapter_model.safetensors
+
+# Quantized models
+quantized_models/
+*.q4_0.gguf
+*.q4_k_m.gguf
+*.q5_k_m.gguf
+*.q8_0.gguf
+
+# Model conversion temp files
+convert_temp/
+ggml-model-*.gguf
+consolidated.*.pth
+
+# Training datasets - INCLUDE ALL (users need these!)
+# Keep all dataset files for users to train with
+# datasets/*.json   # COMMENTED OUT - we want to include these
+# datasets/*.jsonl  # COMMENTED OUT - we want to include these  
+# datasets/*.csv    # COMMENTED OUT - we want to include these
+
+# Model evaluation results
+eval_results/
+benchmark_results/
+test_outputs/
+
+# API keys and configs with secrets
+.env
+.env.*
+!.env.template
+!.env.example
+config/secrets/
+*_api_key.txt
+*_token.txt
+
+# Temporary test files
+test_fixed_model_output/
+test_*.log
+temp_test_*
 
 # ==============================================================================
 # IDE and Tool Specific

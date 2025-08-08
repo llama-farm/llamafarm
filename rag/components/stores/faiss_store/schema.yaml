@@ -1,0 +1,47 @@
+# FAISS Store Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/stores/faiss_store/schema.yaml
+title: FAISS Store Configuration
+description: FAISS vector index configuration
+type: object
+additionalProperties: false
+properties:
+  dimension:
+    type: integer
+    minimum: 1
+    maximum: 4096
+    description: Vector dimension
+  index_type:
+    type: string
+    enum:
+    - Flat
+    - IVF
+    - HNSW
+    - LSH
+    default: Flat
+    description: Index type
+  metric:
+    type: string
+    enum:
+    - L2
+    - IP
+    - Cosine
+    default: L2
+    description: Distance metric
+  nlist:
+    type: integer
+    default: 100
+    minimum: 1
+    description: Number of clusters (IVF)
+  nprobe:
+    type: integer
+    default: 10
+    minimum: 1
+    description: Clusters to search (IVF)
+  use_gpu:
+    type: boolean
+    default: false
+    description: Enable GPU acceleration
+required:
+- dimension

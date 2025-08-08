@@ -1,0 +1,58 @@
+# Entity Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/entity_extractor/schema.yaml
+title: Entity Extractor Configuration
+description: Extract named entities using NER
+type: object
+additionalProperties: false
+properties:
+  model:
+    type: string
+    default: en_core_web_sm
+    description: NER model name
+  entity_types:
+    type: array
+    items:
+      type: string
+      enum:
+      - PERSON
+      - ORG
+      - GPE
+      - DATE
+      - TIME
+      - MONEY
+      - EMAIL
+      - PHONE
+      - URL
+      - LAW
+    default:
+    - PERSON
+    - ORG
+    - GPE
+    - DATE
+    - TIME
+    - MONEY
+    - EMAIL
+    - PHONE
+    - URL
+    description: Entity types to extract
+  use_fallback:
+    type: boolean
+    default: true
+    description: Use regex fallback
+  min_entity_length:
+    type: integer
+    default: 2
+    minimum: 1
+    description: Minimum entity length
+  merge_entities:
+    type: boolean
+    default: true
+    description: Merge adjacent entities
+  confidence_threshold:
+    type: number
+    default: 0.7
+    minimum: 0.0
+    maximum: 1.0
+    description: Minimum confidence score

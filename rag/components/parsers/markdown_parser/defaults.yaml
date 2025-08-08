@@ -1,0 +1,33 @@
+# Markdown Parser Default Configurations
+# These provide ready-to-use configurations for common use cases
+
+general_purpose:
+  name: General Purpose Markdown
+  description: Standard Markdown parsing
+  config:
+    extract_metadata: true
+    extract_headings: true
+    extract_links: true
+    extract_code_blocks: true
+    chunk_by_headings: false
+    preserve_formatting: false
+    heading_level_split: 2
+  recommended_for:
+  - Documentation
+  - README files
+  - Blog posts
+technical_docs:
+  name: Technical Documentation
+  description: Technical docs with code blocks
+  config:
+    extract_metadata: true
+    extract_headings: true
+    extract_links: true
+    extract_code_blocks: true
+    chunk_by_headings: true
+    preserve_formatting: true
+    heading_level_split: 2
+  recommended_for:
+  - API documentation
+  - Technical guides
+  - Developer docs

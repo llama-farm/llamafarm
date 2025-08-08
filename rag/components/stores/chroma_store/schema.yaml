@@ -1,0 +1,44 @@
+# Chroma Store Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/stores/chroma_store/schema.yaml
+title: Chroma Store Configuration
+description: ChromaDB vector database configuration
+type: object
+additionalProperties: false
+properties:
+  collection_name:
+    type: string
+    default: documents
+    pattern: ^[a-zA-Z0-9_-]+$
+    description: Collection name
+  persist_directory:
+    type: string
+    default: ./data/chroma_db
+    description: Persistence directory
+  host:
+    type:
+    - string
+    - 'null'
+    default: null
+    description: Server host
+  port:
+    type: integer
+    default: 8000
+    minimum: 1
+    maximum: 65535
+    description: Server port
+  distance_function:
+    type: string
+    enum:
+    - cosine
+    - l2
+    - ip
+    default: cosine
+    description: Distance metric
+  embedding_function:
+    type:
+    - string
+    - 'null'
+    default: null
+    description: Built-in embedding function

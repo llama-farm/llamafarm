@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from core.base import Document
-from stores.chroma_store import ChromaStore
+from components.stores.chroma_store import ChromaStore
 
 
 class TestChromaStore:

@@ -1,0 +1,79 @@
+# HTML Parser Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/parsers/html_parser/schema.yaml
+title: HTML Parser Configuration
+description: Parses HTML documents and web pages
+type: object
+additionalProperties: false
+properties:
+  extract_metadata:
+    type: boolean
+    default: true
+    description: Extract meta tags
+  extract_links:
+    type: boolean
+    default: true
+    description: Extract hyperlinks
+  extract_images:
+    type: boolean
+    default: true
+    description: Extract image sources
+  preserve_structure:
+    type: boolean
+    default: false
+    description: Preserve HTML structure
+  remove_scripts:
+    type: boolean
+    default: true
+    description: Remove JavaScript
+  remove_styles:
+    type: boolean
+    default: true
+    description: Remove CSS
+  text_only:
+    type: boolean
+    default: false
+    description: Extract only text
+    
+  # Chunking configuration
+  chunk_size:
+    type: [integer, "null"]
+    default: null
+    minimum: 100
+    maximum: 50000
+    description: "Chunk size in characters (null for no chunking)"
+    
+  chunk_overlap:
+    type: integer
+    default: 0
+    minimum: 0
+    maximum: 5000
+    description: "Overlap between chunks in characters"
+    
+  chunk_strategy:
+    type: string
+    enum:
+    - characters
+    - sentences
+    - paragraphs
+    - elements
+    default: elements
+    description: "Chunking strategy - elements uses HTML semantic structure"
+    
+  respect_sentence_boundaries:
+    type: boolean
+    default: true
+    description: "Avoid splitting sentences in the middle when using character chunking"
+    
+  respect_paragraph_boundaries:
+    type: boolean
+    default: true
+    description: "Avoid splitting paragraphs in the middle"
+    
+  min_chunk_size:
+    type: integer
+    default: 100
+    minimum: 10
+    maximum: 1000
+    description: "Minimum chunk size to avoid creating tiny chunks"

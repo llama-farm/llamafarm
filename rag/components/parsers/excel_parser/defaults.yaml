@@ -1,0 +1,31 @@
+# Excel Parser Default Configurations
+# These provide ready-to-use configurations for common use cases
+
+general_purpose:
+  name: General Purpose Excel
+  description: Standard Excel parsing
+  config:
+    sheet_names: null
+    combine_sheets: false
+    extract_formulas: false
+    extract_charts: false
+    table_format: markdown
+    header_row: 0
+  recommended_for:
+  - Spreadsheets
+  - Data tables
+  - Reports
+financial_data:
+  name: Financial Data
+  description: Financial spreadsheets with formulas
+  config:
+    sheet_names: null
+    combine_sheets: true
+    extract_formulas: true
+    extract_charts: true
+    table_format: markdown
+    header_row: 0
+  recommended_for:
+  - Financial reports
+  - Budget sheets
+  - Accounting data

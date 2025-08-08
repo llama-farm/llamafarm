@@ -1,0 +1,77 @@
+# CSV Parser Default Configurations
+# These provide ready-to-use configurations for common use cases
+
+general_purpose:
+  name: "General Purpose CSV Parsing"
+  description: "Basic CSV parsing with flexible field configuration"
+  config:
+    content_fields: ["text", "content", "description"]
+    metadata_fields: []
+    combine_content: true
+    content_separator: "\n\n"
+    encoding: "utf-8"
+    delimiter: ","
+  recommended_for:
+    - "General CSV files"
+    - "Simple tabular data"
+    - "Mixed content"
+customer_support:
+  name: "Customer Support Tickets"
+  description: "Optimized for customer support ticket CSV files"
+  config:
+    content_fields: ["subject", "body", "answer"]
+    metadata_fields: ["type", "queue", "priority", "language", "status"]
+    combine_content: true
+    content_separator: "\n\n---\n\n"
+    id_field: "ticket_id"
+    encoding: "utf-8"
+    delimiter: ","
+  recommended_for:
+    - "Support tickets"
+    - "Help desk data"
+    - "Customer inquiries"
+survey_responses:
+  name: "Survey Response Analysis"
+  description: "Parse survey responses with rating and demographic data"
+  config:
+    content_fields: ["response_text", "comments", "feedback"]
+    metadata_fields: ["respondent_id", "survey_date", "rating", "age_group", "location"]
+    combine_content: true
+    content_separator: " "
+    id_field: "response_id"
+    encoding: "utf-8"
+    delimiter: ","
+  recommended_for:
+    - "Survey data"
+    - "Feedback forms"
+    - "Market research"
+product_catalog:
+  name: "Product Catalog Processing"
+  description: "Parse product information with structured metadata"
+  config:
+    content_fields: ["name", "description", "features"]
+    metadata_fields: ["category", "price", "brand", "sku", "availability"]
+    combine_content: true
+    content_separator: "\n"
+    id_field: "sku"
+    encoding: "utf-8"
+    delimiter: ","
+  recommended_for:
+    - "E-commerce catalogs"
+    - "Product databases"
+    - "Inventory lists"
+contact_management:
+  name: "Contact and CRM Data"
+  description: "Process contact lists and CRM exports"
+  config:
+    content_fields: ["notes", "description", "bio"]
+    metadata_fields: ["name", "email", "phone", "company", "role", "tags"]
+    combine_content: false
+    content_separator: "\n\n"
+    id_field: "contact_id"
+    encoding: "utf-8"
+    delimiter: ","
+  recommended_for:
+    - "Contact lists"
+    - "CRM exports"
+    - "Lead databases"
