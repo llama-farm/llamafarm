@@ -6,42 +6,39 @@ from .components import list_components
 from .compile import compile_components
 from core.factories import create_embedder_from_config, create_vector_store_from_config
 
-# Import CLI command functions for testing
-# These are imported from the main cli.py module in the parent directory
-try:
-    import sys
-    from pathlib import Path
+# Import CLI command functions by importing from the parent cli.py module
+# We need to import the module at the parent level, not the cli package
+import sys
+import importlib.util
+from pathlib import Path
+
+# Get the path to the parent cli.py file
+cli_py_path = Path(__file__).parent.parent / "cli.py"
+
+if cli_py_path.exists():
+    # Load the cli.py module directly
+    spec = importlib.util.spec_from_file_location("_cli_module", cli_py_path)
+    _cli_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_cli_module)
     
-    # Add parent directory to Python path temporarily
-    parent_dir = str(Path(__file__).parent.parent)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    
-    # Import the CLI commands from cli.py
-    from cli import (
-        ingest_command,
-        search_command,
-        info_command,
-        test_command,
-        manage_command
-    )
-    
-    # Clean up sys.path
-    if parent_dir in sys.path:
-        sys.path.remove(parent_dir)
-        
-except ImportError:
-    # If import fails, define placeholder functions
+    # Import the command functions
+    ingest_command = _cli_module.ingest_command
+    search_command = _cli_module.search_command
+    info_command = _cli_module.info_command
+    test_command = _cli_module.test_command
+    manage_command = _cli_module.manage_command
+else:
+    # Fallback functions if cli.py doesn't exist
     def ingest_command(args):
-        raise NotImplementedError("CLI commands not available")
+        raise NotImplementedError("CLI commands not available - cli.py not found")
     def search_command(args):
-        raise NotImplementedError("CLI commands not available")
+        raise NotImplementedError("CLI commands not available - cli.py not found")
     def info_command(args):
-        raise NotImplementedError("CLI commands not available")
+        raise NotImplementedError("CLI commands not available - cli.py not found")
     def test_command(args):
-        raise NotImplementedError("CLI commands not available")
+        raise NotImplementedError("CLI commands not available - cli.py not found")
     def manage_command(args):
-        raise NotImplementedError("CLI commands not available")
+        raise NotImplementedError("CLI commands not available - cli.py not found")
 
 __all__ = [
     "list_components", 
