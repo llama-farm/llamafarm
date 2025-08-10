@@ -66,7 +66,7 @@ class ProjectUtils:
         Returns:
             List of file paths that would be/were deleted
         """
-        deleted_files = []
+        deleted_files: List[str] = []
 
         if not directory.exists():
             return deleted_files
@@ -80,7 +80,7 @@ class ProjectUtils:
             return deleted_files
 
         # Walk through all files and directories
-        for root, dirs, files in os.walk(directory, topdown=False):
+        for root, dirs, files in os.walk(directory, topdown=False, followlinks=False):
             root_path = Path(root)
 
             # Delete files
@@ -88,19 +88,37 @@ class ProjectUtils:
                 file_path = root_path / file
                 deleted_files.append(str(file_path))
                 if not dry_run:
-                    file_path.unlink()
+                    try:
+                        # If it's a symlink, unlink only
+                        if file_path.is_symlink():
+                            file_path.unlink()
+                        else:
+                            file_path.unlink()
+                    except PermissionError:
+                        # Skip files we cannot delete
+                        pass
 
             # Delete directories
             for dir_name in dirs:
                 dir_path = root_path / dir_name
                 deleted_files.append(str(dir_path))
                 if not dry_run:
-                    dir_path.rmdir()
+                    try:
+                        if dir_path.is_symlink():
+                            dir_path.unlink()
+                        else:
+                            dir_path.rmdir()
+                    except PermissionError:
+                        # Skip directories we cannot delete
+                        pass
 
         # Finally delete the root directory
         deleted_files.append(str(directory))
         if not dry_run:
-            directory.rmdir()
+            try:
+                directory.rmdir()
+            except PermissionError:
+                pass
 
         return deleted_files
 
@@ -119,12 +137,16 @@ class ProjectUtils:
         if backup_dir is None:
             backup_dir = source.parent
 
-        # Generate a unique backup name
-        backup_name = f"{source.name}_backup_{uuid.uuid4().hex[:8]}"
-        backup_path = backup_dir / backup_name
+        # Generate a unique backup name and avoid collisions
+        base_name = f"{source.name}_backup"
+        backup_path = backup_dir / f"{base_name}_{uuid.uuid4().hex[:8]}"
+        attempt = 0
+        while backup_path.exists():
+            attempt += 1
+            backup_path = backup_dir / f"{base_name}_{attempt}_{uuid.uuid4().hex[:8]}"
 
         # Create the backup
-        shutil.copytree(source, backup_path)
+        shutil.copytree(source, backup_path, symlinks=True)
 
         return backup_path
 
@@ -241,7 +263,7 @@ class ProjectUtils:
 
         # Import yaml for writing config
         try:
-            import yaml
+            import yaml  # type: ignore
             with open(config_file, 'w') as f:
                 yaml.dump(config_data, f, default_flow_style=False)
         except ImportError:

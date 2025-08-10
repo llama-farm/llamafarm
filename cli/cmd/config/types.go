@@ -266,3 +266,44 @@ func GetServerConfig(configPath string, serverURL string, namespace string, proj
 		Project:   finalProject,
 	}, nil
 }
+
+// GetServerConfigLenient returns server configuration, allowing empty namespace/project.
+// It attempts to populate from config if available but will not error if missing.
+func GetServerConfigLenient(configPath string, serverURL string, namespace string, project string) (*ServerConfig, error) {
+    // Load configuration if available
+    var cfg *LlamaFarmConfig
+    var err error
+    if configPath != "" {
+        cfg, err = LoadConfig(configPath)
+        if err != nil {
+            return nil, fmt.Errorf("failed to load config: %w", err)
+        }
+    } else {
+        cfg, _ = LoadConfig("")
+    }
+
+    finalServerURL := serverURL
+    if finalServerURL == "" {
+        finalServerURL = "http://localhost:8000"
+    }
+
+    finalNamespace := namespace
+    finalProject := project
+
+    if cfg != nil && (finalNamespace == "" || finalProject == "") {
+        if projectInfo, err := cfg.GetProjectInfo(); err == nil {
+            if finalNamespace == "" {
+                finalNamespace = projectInfo.Namespace
+            }
+            if finalProject == "" {
+                finalProject = projectInfo.Project
+            }
+        }
+    }
+
+    return &ServerConfig{
+        URL:       finalServerURL,
+        Namespace: finalNamespace,
+        Project:   finalProject,
+    }, nil
+}

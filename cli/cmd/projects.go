@@ -112,8 +112,8 @@ Examples:
 		// Get the config file path from the flag
 		configPath, _ := cmd.Flags().GetString("config")
 
-		// Get server configuration with defaults applied
-		serverConfig, err := config.GetServerConfig(configPath, serverURL, namespace, projectID)
+        // Get server configuration (lenient: namespace/project optional)
+        serverConfig, err := config.GetServerConfigLenient(configPath, serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -131,7 +131,11 @@ Examples:
 func startChatSession() {
 	fmt.Printf("🌾 Starting LlamaFarm chat session...\n")
 	fmt.Printf("📡 Server: %s\n", serverURL)
-	fmt.Printf("📁 Project: %s/%s\n", namespace, projectID)
+        if namespace != "" || projectID != "" {
+            fmt.Printf("📁 Project: %s/%s\n", namespace, projectID)
+        } else {
+            fmt.Printf("📁 Project: (not specified)\n")
+        }
 	if sessionID != "" {
 		fmt.Printf("🆔 Session: %s\n", sessionID)
 	}
@@ -211,13 +215,14 @@ func sendChatRequest(messages []ChatMessage) (*ChatResponse, error) {
         strings.TrimSuffix(serverURL, "/"))
 
     // Create request payload (OpenAI-compatible) and pass routing via metadata
-    request := ChatRequest{
-        Messages: messages,
-        Metadata: map[string]string{
-            "namespace":  namespace,
-            "project_id": projectID,
-        },
+    meta := map[string]string{}
+    if namespace != "" {
+        meta["namespace"] = namespace
     }
+    if projectID != "" {
+        meta["project_id"] = projectID
+    }
+    request := ChatRequest{Messages: messages, Metadata: meta}
 
 	// Add optional parameters if provided
 	if temperature >= 0 {
@@ -284,14 +289,14 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
     url := fmt.Sprintf("%s/v1/inference/chat", strings.TrimSuffix(serverURL, "/"))
 
     streamTrue := true
-    request := ChatRequest{
-        Messages: messages,
-        Metadata: map[string]string{
-            "namespace":  namespace,
-            "project_id": projectID,
-        },
-        Stream: &streamTrue,
+    meta := map[string]string{}
+    if namespace != "" {
+        meta["namespace"] = namespace
     }
+    if projectID != "" {
+        meta["project_id"] = projectID
+    }
+    request := ChatRequest{Messages: messages, Metadata: meta, Stream: &streamTrue}
 
     jsonData, err := json.Marshal(request)
     if err != nil {
@@ -303,12 +308,15 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
         return "", fmt.Errorf("failed to create request: %w", err)
     }
     req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Accept", "text/event-stream")
+    req.Header.Set("Cache-Control", "no-cache")
+    req.Header.Set("Connection", "keep-alive")
     if sessionID != "" {
         req.Header.Set("X-Session-ID", sessionID)
     }
 
     // We want to stream the response; do not set a short timeout.
-    hc := &http.Client{Timeout: 0}
+    hc := &http.Client{Timeout: 0, Transport: &http.Transport{DisableCompression: true}}
     resp, err := hc.Do(req)
     if err != nil {
         return "", fmt.Errorf("failed to send request: %w", err)
@@ -326,6 +334,8 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
 
     // SSE parsing: lines in form "data: {json}\n" and a blank line between events.
     reader := bufio.NewReader(resp.Body)
+    writer := bufio.NewWriter(os.Stdout)
+    defer writer.Flush()
     var builder strings.Builder
     for {
         line, err := reader.ReadString('\n')
@@ -366,7 +376,9 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
         }
         delta := chunk.Choices[0].Delta
         if delta.Content != "" {
-            fmt.Print(delta.Content)
+            // Write and flush immediately so the user sees streaming output
+            _, _ = writer.WriteString(delta.Content)
+            _ = writer.Flush()
             builder.WriteString(delta.Content)
         }
     }

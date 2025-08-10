@@ -96,10 +96,19 @@ class RAGService:
         """
         # Get RAG config section
         rag_cfg = project_config.get("rag", {})
+        defaults = rag_cfg.get("defaults", {})
         # Get dataset pipeline components (parser, embedder, vector_store, etc.)
-        parser_name = dataset_config.get("parser", rag_cfg.get("defaults", {}).get("parser", "auto"))
-        embedder_name = dataset_config.get("embedder", rag_cfg.get("defaults", {}).get("embedder", "default"))
-        vector_store_name = dataset_config.get("vector_store", rag_cfg.get("defaults", {}).get("vector_store", "default"))
+        parser_name = dataset_config.get("parser", defaults.get("parser"))
+        embedder_name = dataset_config.get("embedder", defaults.get("embedder"))
+        vector_store_name = dataset_config.get("vector_store", defaults.get("vector_store"))
+
+        # Validate defaults exist in config when used
+        if not parser_name:
+            raise ValueError("No parser specified and no default parser configured")
+        if not embedder_name:
+            raise ValueError("No embedder specified and no default embedder configured")
+        if not vector_store_name:
+            raise ValueError("No vector_store specified and no default vector_store configured")
         # retrieval_strategy_name = dataset_config.get("retrieval_strategy", rag_cfg.get("defaults", {}).get("retrieval_strategy", "default"))
 
         # --- Instantiate components using helper methods ---
@@ -116,10 +125,15 @@ class RAGService:
         pipeline.add_component(vector_store)
 
         # --- Run pipeline for each file in dataset ---
+        import logging
         results = []
         for file_path in dataset_config.get("files", []):
-            result = pipeline.run(source=file_path)
-            results.append(result)
+            try:
+                result = pipeline.run(source=file_path)
+                results.append(result)
+            except Exception as e:
+                logging.error(f"Failed to process file '{file_path}': {e}")
+                results.append({"file": file_path, "error": str(e)})
         return results
 
     # --- Retrieval Example Usage ---
@@ -174,11 +188,4 @@ class RAGService:
         # for result in results:
         #     print(f"Score: {result.score:.3f} - {result.content[:100]}...")
 
-        # Advanced usage: get collection info
-        def get_collection_info():
-            """
-            Get information about the current vector store collection.
-            """
-            if hasattr(vector_store, "get_collection_info"):
-                return vector_store.get_collection_info()
-            return {}
+        # Note: Removed unused inner function get_collection_info

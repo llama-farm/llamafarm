@@ -1,40 +1,22 @@
+import time
 import uuid
-from typing import Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel
+from typing import Optional, Dict
+from fastapi import APIRouter, HTTPException, Header, Response
 from atomic_agents.lib.components.agent_memory import AgentMemory
 from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgentInputSchema, BaseAgentOutputSchema
 import instructor
 from openai import OpenAI
 from core.config import settings
+from api.routers.inference.models import ChatMessage, ChatRequest, ChatChoice, ChatResponse
 
 router = APIRouter(
     prefix="/projects/{namespace}/{project_id}",
     tags=["project_chat"],
 )
 
-class ChatRequest(BaseModel):
-    model: Optional[str] = None
-    messages: List[Dict[str, str]]
-    metadata: Optional[Dict[str, str]] = None
-    modalities: Optional[List[str]] = ["text"]
-    response_format: Optional[Dict[str, str]] = {"type": "text"}
-    stream: Optional[bool] = False
-    temperature: Optional[float] = 0.7
-    top_p: Optional[float] = 1.0
-    top_k: Optional[int] = 40
-    max_tokens: Optional[int] = 1000
-    stop: Optional[List[str]] = None
-    frequency_penalty: Optional[float] = 0.0
-    presence_penalty: Optional[float] = 0.0
-    logit_bias: Optional[Dict[str, float]] = None
-
-class ChatResponse(BaseModel):
-    id: str
-    object: str = "chat.completion"
-    created: int
-    model: str
-    choices: List[Dict[str, str]]
+"""
+Project-scoped chat endpoint that uses the same OpenAI-style models as inference.
+"""
 
 
 # Store agent instances to maintain conversation context
@@ -74,6 +56,7 @@ async def chat(
     request: ChatRequest,
     namespace: str,
     project_id: str,
+    response: Response,
     session_id: Optional[str] = Header(None, alias="X-Session-ID")
 ):
     """Send a message to the chat agent"""
@@ -88,8 +71,21 @@ async def chat(
             # Use existing agent to maintain conversation context
             agent = agent_sessions[session_id]
 
+        # Attach routing to metadata for downstream consistency
+        request.metadata["namespace"] = namespace
+        request.metadata["project_id"] = project_id
+
+        # Extract the latest user message
+        latest_user_message = None
+        for msg in reversed(request.messages):
+            if msg.role == "user" and msg.content:
+                latest_user_message = msg.content
+                break
+        if latest_user_message is None:
+            raise HTTPException(status_code=400, detail="No user message provided")
+
         # Process the user's input through the agent and get the response
-        input_schema = BaseAgentInputSchema(chat_message=request.message)
+        input_schema = BaseAgentInputSchema(chat_message=latest_user_message)
         response = agent.run(input_schema)
 
         # Extract the message from the response
@@ -99,7 +95,24 @@ async def chat(
             # Fallback if the response structure is different
             response_message = str(response)
 
-        return ChatResponse(message=response_message, session_id=session_id)
+        # Set session header
+        if response is not None and session_id:
+            response.headers["X-Session-ID"] = session_id
+
+        # Return OpenAI-compatible response
+        return ChatResponse(
+            id=f"chat-{uuid.uuid4()}",
+            object="chat.completion",
+            created=int(time.time()),
+            model=request.model or settings.ollama_model,
+            choices=[
+                ChatChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=response_message),
+                    finish_reason="stop",
+                )
+            ],
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")

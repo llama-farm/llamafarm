@@ -1,8 +1,8 @@
-from collections.abc import AsyncIterator
 import json
+import asyncio
 import time
 import uuid
-from types import SimpleNamespace
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Header, HTTPException, Response
 from starlette.responses import StreamingResponse
@@ -27,26 +27,9 @@ async def chat(
         if not session_id:
             session_id = str(uuid.uuid4())
 
-        # Extract the latest user message from OpenAI-style messages
-        latest_user_message = None
-        for msg in reversed(request.messages):
-            if msg.role == "user" and msg.content:
-                latest_user_message = msg.content
-                break
-        if latest_user_message is None and request.messages:
-            latest_user_message = request.messages[-1].content
-
-        # Build a small compatibility object expected by ChatProcessor
-        compat_request = SimpleNamespace()
-        compat_request.message = latest_user_message or ""
-        # Pass optional routing context via metadata if provided
-        metadata = request.metadata or {}
-        compat_request.namespace = metadata.get("namespace")
-        compat_request.project_id = metadata.get("project_id")
-
-        # Use ChatProcessor which includes tool execution logic
+        # Use ChatProcessor directly with the full OpenAI-style request
         response_message, _tool_info = ChatProcessor.process_chat(
-            compat_request, session_id
+            request, session_id
         )
 
         # Set session header for client continuity if response object is available
@@ -73,11 +56,36 @@ async def chat(
                     ],
                 }
                 yield f"data: {json.dumps(preface)}\n\n".encode()
+                await asyncio.sleep(0)
 
-                # Stream content in chunks
-                chunk_size = 40
-                for i in range(0, len(response_message), chunk_size):
-                    piece = response_message[i : i + chunk_size]
+                # Stream content in unicode- and word-boundary-safe chunks
+                max_chars = 80
+                def generate_chunks(text: str, limit: int) -> list[str]:
+                    # Split on whitespace when possible; otherwise hard split
+                    words = text.split()
+                    if not words:
+                        return []
+                    chunks: list[str] = []
+                    current: str = ""
+                    for word in words:
+                        to_add = word if current == "" else f" {word}"
+                        if len(current) + len(to_add) <= limit:
+                            current += to_add
+                        else:
+                            if current:
+                                chunks.append(current)
+                            # If word longer than limit, split that word safely
+                            if len(word) > limit:
+                                for i in range(0, len(word), limit):
+                                    chunks.append(word[i:i+limit])
+                                current = ""
+                            else:
+                                current = word
+                    if current:
+                        chunks.append(current)
+                    return chunks
+
+                for piece in generate_chunks(response_message, max_chars):
                     payload = {
                         "id": f"chat-{uuid.uuid4()}",
                         "object": "chat.completion.chunk",
@@ -92,6 +100,7 @@ async def chat(
                         ],
                     }
                     yield f"data: {json.dumps(payload)}\n\n".encode()
+                    await asyncio.sleep(0)
 
                 # Final done signal
                 done_payload = {
@@ -108,12 +117,18 @@ async def chat(
                     ],
                 }
                 yield f"data: {json.dumps(done_payload)}\n\n".encode()
+                await asyncio.sleep(0)
                 yield b"data: [DONE]\n\n"
 
             return StreamingResponse(
                 event_stream(),
                 media_type="text/event-stream",
-                headers={"X-Session-ID": session_id},
+                headers={
+                    "X-Session-ID": session_id,
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
             )
 
         # Return OpenAI-compatible response
