@@ -1,0 +1,16 @@
+{
+    "root": "server/",
+    "targets": {
+        "start": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "{workspaceRoot}/server",
+                "command": "uv run python main.py"
+            }
+        },
+        "build": {
+            "cwd": "..",
+            "command": "docker build -t llamafarm-api -f server/Dockerfile ."
+        }
+    }
+}
