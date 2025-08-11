@@ -53,15 +53,38 @@ jobs:
           go test ./... -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
           go tool cover -func=coverage.out | tee coverage.txt
 
-      - name: Publish CLI coverage to job summary
-        run: |
-          {
-            echo '## CLI Coverage'
-            echo ''
-            echo '```'
-            cat cli/coverage.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish CLI coverage (markdown table) to job summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const lines = fs.readFileSync('cli/coverage.txt','utf8').trim().split('\n');
+            const rows = [];
+            let total = null;
+            for (const l of lines) {
+              const line = l.trim();
+              if (!line) continue;
+              if (line.startsWith('total:')) {
+                const parts = line.split(/\s+/);
+                const pct = parts[parts.length-1];
+                total = { file: 'total', func: parts[1]?.replace(/[()]/g,'') || 'statements', cov: pct };
+                continue;
+              }
+              let m = line.match(/^(.+?):(\d+):\s+([^\t]+)\s+([\d.]+)%$/);
+              if (m) {
+                rows.push({ file: `${m[1]}:${m[2]}`, func: m[3], cov: `${m[4]}%` });
+                continue;
+              }
+              m = line.match(/^(.+?):\s*([^\t]+)\s+([\d.]+)%$/);
+              if (m) {
+                rows.push({ file: m[1], func: m[2], cov: `${m[3]}%` });
+              }
+            }
+            let md = '## CLI Coverage\n\n';
+            md += '| File | Function | Coverage |\n|---|---|---|\n';
+            for (const r of rows) md += `| ${r.file} | ${r.func} | ${r.cov} |\n`;
+            if (total) md += `| ${total.file} | ${total.func} | ${total.cov} |\n`;
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
 
       - name: Upload CLI coverage artifact
         uses: actions/upload-artifact@v4
@@ -71,7 +94,7 @@ jobs:
             cli/coverage.out
             cli/coverage.txt
 
-      - name: Update PR description with CLI coverage
+      - name: Update PR description with CLI coverage (markdown table)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
         uses: actions/github-script@v7
         with:
@@ -80,10 +103,34 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pull_number = context.payload.pull_request.number;
-            const coverageText = fs.readFileSync('cli/coverage.txt', 'utf8');
+            const lines = fs.readFileSync('cli/coverage.txt','utf8').trim().split('\n');
+            const rows = [];
+            let total = null;
+            for (const l of lines) {
+              const line = l.trim();
+              if (!line) continue;
+              if (line.startsWith('total:')) {
+                const parts = line.split(/\s+/);
+                const pct = parts[parts.length-1];
+                total = { file: 'total', func: parts[1]?.replace(/[()]/g,'') || 'statements', cov: pct };
+                continue;
+              }
+              let m = line.match(/^(.+?):(\d+):\s+([^\t]+)\s+([\d.]+)%$/);
+              if (m) {
+                rows.push({ file: `${m[1]}:${m[2]}`, func: m[3], cov: `${m[4]}%` });
+                continue;
+              }
+              m = line.match(/^(.+?):\s*([^\t]+)\s+([\d.]+)%$/);
+              if (m) {
+                rows.push({ file: m[1], func: m[2], cov: `${m[3]}%` });
+              }
+            }
+            let table = '| File | Function | Coverage |\n|---|---|---|\n';
+            for (const r of rows) table += `| ${r.file} | ${r.func} | ${r.cov} |\n`;
+            if (total) table += `| ${total.file} | ${total.func} | ${total.cov} |\n`;
             const start = '<!-- CLI_COVERAGE_START -->';
             const end = '<!-- CLI_COVERAGE_END -->';
-            const block = `${start}\n\n\n### CLI Coverage\n\n\n\`\`\`\n${coverageText}\n\`\`\`\n\n${end}`;
+            const block = `${start}\n\n### CLI Coverage\n\n${table}\n${end}`;
 
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
             let body = pr.body || '';
