@@ -114,9 +114,11 @@ class DatasetService:
                 # Dict form: prefer 'strategies' item names; fallback to legacy 'rag_strategies'
                 dict_strategies = rag_config.get("strategies")
                 if isinstance(dict_strategies, list):
-                    for s in dict_strategies:
-                        if isinstance(s, dict) and isinstance(s.get("name"), str):
-                            custom_rag_strategies.append(s["name"])
+                    custom_rag_strategies.extend(
+                        s["name"]
+                        for s in dict_strategies
+                        if isinstance(s, dict) and isinstance(s.get("name"), str)
+                    )
                 else:
                     custom_rag_strategies = rag_config.get("rag_strategies", []) or []
         except Exception:
