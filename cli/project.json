@@ -8,7 +8,7 @@
             "executor": "nx:run-commands",
             "options": {
                 "cwd": "{workspaceRoot}/cli",
-                "command": "go build -o lf ."
+                "command": "go build -o ../dist/lf ."
             }
         },
         "test": {
@@ -29,7 +29,7 @@
             "executor": "nx:run-commands",
             "options": {
                 "cwd": "{workspaceRoot}/cli",
-                "command": "go test ./... -coverpkg=./... -covermode=atomic -coverprofile=coverage.out && go build ./tools/cover2lcov && ./cover2lcov -in coverage.out -out coverage.lcov && go build ./tools/coverreport && ./coverreport -in coverage.out -format=markdown > coverage.md"
+                "command": "go test ./... -coverpkg=./... -covermode=atomic -coverprofile=coverage.out && go build -o ../dist/cover2lcov ./tools/cover2lcov && ./../dist/cover2lcov -in coverage.out -out coverage.lcov && go build -o ../dist/coverreport ./tools/coverreport && ./../dist/coverreport -in coverage.out -format=markdown > coverage.md"
             },
             "outputs": [
                 "{projectRoot}/coverage.out",
