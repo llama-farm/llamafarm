@@ -1,6 +1,7 @@
 package cmd
 
 import (
+    "context"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -8,7 +9,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+    "os/signal"
 	"strings"
+    "syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -129,6 +132,19 @@ Examples:
 }
 
 func startChatSession() {
+    // Handle Ctrl+C gracefully
+    sigCh := make(chan os.Signal, 1)
+    signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+    go func() {
+        <-sigCh
+        fmt.Print("\n^C\n")
+        // Try to end the server session gracefully (best-effort)
+        if sessionID != "" {
+            _ = deleteChatSession()
+        }
+        fmt.Println("👋 You have left the pasture. Safe travels, little llama!")
+        os.Exit(0)
+    }()
 	fmt.Printf("🌾 Starting LlamaFarm chat session...\n")
 	fmt.Printf("📡 Server: %s\n", serverURL)
         if namespace != "" || projectID != "" {
@@ -303,7 +319,10 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
         return "", fmt.Errorf("failed to marshal request: %w", err)
     }
 
-    req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    // Allow cancellation if the process is interrupted
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
     if err != nil {
         return "", fmt.Errorf("failed to create request: %w", err)
     }
@@ -384,6 +403,28 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
     }
 
     return builder.String(), nil
+}
+
+// deleteChatSession attempts to close the current server-side session.
+// It is best-effort and returns nil on failure to avoid blocking shutdown.
+func deleteChatSession() error {
+    if sessionID == "" {
+        return nil
+    }
+    url := fmt.Sprintf("%s/v1/inference/chat/session/%s", strings.TrimSuffix(serverURL, "/"), sessionID)
+    ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+    defer cancel()
+    req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+    if err != nil {
+        return nil
+    }
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return nil
+    }
+    io.Copy(io.Discard, resp.Body)
+    resp.Body.Close()
+    return nil
 }
 
 func printChatHelp() {

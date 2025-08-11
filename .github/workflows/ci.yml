@@ -44,9 +44,53 @@ jobs:
         working-directory: cli
         run: go build -v ./...
 
-      - name: Run Go tests
+      - name: Run Go tests with coverage
         working-directory: cli
-        run: go test -v ./...
+        run: |
+          go test ./... -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
+          go tool cover -func=coverage.out | tee coverage.txt
+
+      - name: Publish CLI coverage to job summary
+        run: |
+          {
+            echo '## CLI Coverage'
+            echo ''
+            echo '```'
+            cat cli/coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload CLI coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-coverage
+          path: |
+            cli/coverage.out
+            cli/coverage.txt
+
+      - name: Update PR description with CLI coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+            const coverageText = fs.readFileSync('cli/coverage.txt', 'utf8');
+            const start = '<!-- CLI_COVERAGE_START -->';
+            const end = '<!-- CLI_COVERAGE_END -->';
+            const block = `${start}\n\n\n### CLI Coverage\n\n\n\`\`\`\n${coverageText}\n\`\`\`\n\n${end}`;
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+            let body = pr.body || '';
+            if (body.includes(start) && body.includes(end)) {
+              const regex = new RegExp(`${start}[\s\S]*?${end}`);
+              body = body.replace(regex, block);
+            } else {
+              body = `${body}\n\n${block}`.trim();
+            }
+            await github.rest.pulls.update({ owner, repo, pull_number, body });
 
   # Test Python components
   test-python:
