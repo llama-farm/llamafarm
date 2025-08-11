@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock, mock_open, patch
 import pytest
 from fastapi import UploadFile
 
+from config.datamodel import Dataset, LlamaFarmConfig, Version
 from services.data_service import (
     DataService,
     FileExistsInAnotherDatasetError,
@@ -39,17 +40,23 @@ class TestDataService:
             resolved_file_name="test_1640995200.0.pdf",
             size=len(self.test_file_content),
             mime_type="application/pdf",
-            hash=self.test_file_hash
+            hash=self.test_file_hash,
+            timestamp=1640995200.0
         )
         
-        # Mock project with datasets
+        # Mock project with datasets  
         self.mock_project = Mock()
-        self.mock_project.config = {
-            "datasets": [
-                {"name": "dataset1", "files": [self.test_file_hash]},
-                {"name": "dataset2", "files": ["other_hash"]}
-            ]
-        }
+        self.mock_project.config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={},
+            datasets=[
+                Dataset(name="dataset1", rag_strategy="auto", files=[self.test_file_hash]),
+                Dataset(name="dataset2", rag_strategy="auto", files=["other_hash"])
+            ],
+            models=[]
+        )
 
     @patch('services.data_service.os.makedirs')
     @patch('services.data_service.ProjectService.get_project_dir')
@@ -233,11 +240,16 @@ class TestDataService:
         
         # Mock project with datasets where no other dataset exists
         mock_project = Mock()
-        mock_project.config = {
-            "datasets": [
-                {"name": "target_dataset", "files": [self.test_file_hash]}
-            ]
-        }
+        mock_project.config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={},
+            datasets=[
+                Dataset(name="target_dataset", rag_strategy="auto", files=[self.test_file_hash])
+            ],
+            models=[]
+        )
         mock_get_project.return_value = mock_project
         
         # Execute
@@ -273,12 +285,17 @@ class TestDataService:
         # Mock project with datasets where another dataset exists
         # Note: Current logic just checks if ANY other dataset exists, not if file is in use
         mock_project = Mock()
-        mock_project.config = {
-            "datasets": [
-                {"name": "target_dataset", "files": [self.test_file_hash]},
-                {"name": "other_dataset", "files": ["other_hash", self.test_file_hash]}
-            ]
-        }
+        mock_project.config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={},
+            datasets=[
+                Dataset(name="target_dataset", rag_strategy="auto", files=[self.test_file_hash]),
+                Dataset(name="other_dataset", rag_strategy="auto", files=["other_hash", self.test_file_hash])
+            ],
+            models=[]
+        )
         mock_get_project.return_value = mock_project
         
         # Execute and verify exception
@@ -304,11 +321,16 @@ class TestDataService:
         
         # Mock project with only the target dataset
         mock_project = Mock()
-        mock_project.config = {
-            "datasets": [
-                {"name": "target_dataset", "files": [self.test_file_hash]}
-            ]
-        }
+        mock_project.config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={},
+            datasets=[
+                Dataset(name="target_dataset", rag_strategy="auto", files=[self.test_file_hash])
+            ],
+            models=[]
+        )
         mock_get_project.return_value = mock_project
         
         with patch('services.data_service.os.remove') as mock_remove, \
@@ -370,7 +392,8 @@ class TestDataServiceIntegration:
             resolved_file_name="test_1640995200.0.pdf",
             size=1024,
             mime_type="application/pdf",
-            hash="abcd1234"
+            hash="abcd1234",
+            timestamp=1640995200.0
         )
         
         # Serialize to JSON

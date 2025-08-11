@@ -35,9 +35,9 @@ function Header() {
           {isBuilding && (
             <div className="flex items-center gap-4 w-2/3">
               <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-blue-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
                   isSelected === 'dashboard'
-                    ? 'bg-gray-100 dark:bg-blue-600'
+                    ? 'bg-blue-50 dark:bg-blue-600'
                     : ''
                 }`}
                 onClick={() => navigate('/chat/dashboard')}
@@ -49,8 +49,8 @@ function Header() {
                 <span className="text-gray-700 dark:text-white">Dashboard</span>
               </button>
               <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
-                  isSelected === 'data' ? 'bg-gray-100 dark:bg-blue-600' : ''
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-blue-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
+                  isSelected === 'data' ? 'bg-blue-50 dark:bg-blue-600' : ''
                 }`}
                 onClick={() => navigate('/chat/data')}
               >
@@ -61,8 +61,8 @@ function Header() {
                 <span className="text-gray-700 dark:text-white">Data</span>
               </button>
               <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
-                  isSelected === 'prompt' ? 'bg-gray-100 dark:bg-blue-600' : ''
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-blue-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
+                  isSelected === 'prompt' ? 'bg-blue-50 dark:bg-blue-600' : ''
                 }`}
                 onClick={() => navigate('/chat/prompt')}
               >
@@ -73,8 +73,8 @@ function Header() {
                 <span className="text-gray-700 dark:text-white">Prompt</span>
               </button>
               <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
-                  isSelected === 'test' ? 'bg-gray-100 dark:bg-blue-600' : ''
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 hover:bg-blue-100 dark:hover:bg-blue-600 dark:hover:opacity-80 ${
+                  isSelected === 'test' ? 'bg-blue-50 dark:bg-blue-600' : ''
                 }`}
                 onClick={() => navigate('/chat/test')}
               >
@@ -88,15 +88,15 @@ function Header() {
           )}
 
           <div className="flex items-center gap-3 justify-end">
-            <div className="flex rounded-lg border overflow-hidden border-gray-300 dark:border-blue-400/50">
+            <div className="flex rounded-lg overflow-hidden border-gray-300 dark:border-blue-400/50 dark:border">
               <button
-                className={`w-8 h-7 flex items-center justify-center transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-blue-600 dark:text-blue-100 dark:hover:bg-blue-700`}
+                className={`w-8 h-7 flex items-center justify-center transition-colors bg-blue-100 text-white hover:bg-gray-200 dark:bg-transparent dark:text-blue-100 dark:hover:bg-blue-700`}
                 onClick={() => setTheme('light')}
               >
                 <FontIcon type="sun" className="w-4 h-4" />
               </button>
               <button
-                className={`w-8 h-7 flex items-center justify-center transition-colors text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-blue-800/50`}
+                className={`w-8 h-7 flex items-center justify-center transition-colors text-gray-100 bg-[#F4F4F4] hover:text-white hover:bg-gray-100 dark:text-white dark:bg-blue-400  dark:hover:bg-blue-800/50`}
                 onClick={() => setTheme('dark')}
               >
                 <FontIcon type="moon-filled" className="w-4 h-4" />

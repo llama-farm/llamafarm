@@ -1,0 +1,9 @@
+# Hybrid Universal Retriever Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard hybrid universal retrieval
+  config:
+    top_k: 10
+  recommended_for:
+  - General use

@@ -1,0 +1,26 @@
+{
+    "name": "cli",
+    "targets": {
+        "build": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "{workspaceRoot}/cli",
+                "command": "go build -o lf ."
+            }
+        },
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "{workspaceRoot}/cli",
+                "command": "go test ./..."
+            }
+        },
+        "test-install": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "{workspaceRoot}",
+                "command": "cli/hack/test-install.sh"
+            }
+        }
+    }
+}

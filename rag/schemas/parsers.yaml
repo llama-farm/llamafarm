@@ -1,0 +1,613 @@
+parsers:
+  HTMLParser:
+    description: Parses HTML documents and web pages
+    config_schema:
+      extract_metadata:
+        type: boolean
+        default: true
+        description: Extract meta tags
+      extract_links:
+        type: boolean
+        default: true
+        description: Extract hyperlinks
+      extract_images:
+        type: boolean
+        default: true
+        description: Extract image sources
+      preserve_structure:
+        type: boolean
+        default: false
+        description: Preserve HTML structure
+      remove_scripts:
+        type: boolean
+        default: true
+        description: Remove JavaScript
+      remove_styles:
+        type: boolean
+        default: true
+        description: Remove CSS
+      text_only:
+        type: boolean
+        default: false
+        description: Extract only text
+    defaults:
+      general_purpose:
+        name: General Purpose HTML
+        description: Standard HTML parsing
+        config:
+          extract_metadata: true
+          extract_links: true
+          extract_images: true
+          preserve_structure: false
+          remove_scripts: true
+          remove_styles: true
+          text_only: false
+        recommended_for:
+        - Web pages
+        - HTML documents
+        - Email templates
+      text_extraction:
+        name: Text Only Extraction
+        description: Extract only text content
+        config:
+          extract_metadata: false
+          extract_links: false
+          extract_images: false
+          preserve_structure: false
+          remove_scripts: true
+          remove_styles: true
+          text_only: true
+        recommended_for:
+        - Content extraction
+        - Text analysis
+        - Simplified parsing
+  DocxParser:
+    description: Parses Microsoft Word documents
+    config_schema:
+      extract_metadata:
+        type: boolean
+        default: true
+        description: Extract document properties
+      extract_headers_footers:
+        type: boolean
+        default: true
+        description: Include headers and footers
+      extract_comments:
+        type: boolean
+        default: true
+        description: Extract comments
+      extract_tables:
+        type: boolean
+        default: true
+        description: Extract tables
+      extract_images:
+        type: boolean
+        default: false
+        description: Extract images
+      preserve_formatting:
+        type: boolean
+        default: false
+        description: Preserve text formatting
+    defaults:
+      general_purpose:
+        name: General Purpose DOCX
+        description: Standard Word document parsing
+        config:
+          extract_metadata: true
+          extract_headers_footers: true
+          extract_comments: true
+          extract_tables: true
+          extract_images: false
+          preserve_formatting: false
+        recommended_for:
+        - Reports
+        - Letters
+        - General documents
+      with_comments:
+        name: Documents with Comments
+        description: Extract documents with review comments
+        config:
+          extract_metadata: true
+          extract_headers_footers: true
+          extract_comments: true
+          extract_tables: true
+          extract_images: false
+          preserve_formatting: true
+        recommended_for:
+        - Reviewed documents
+        - Collaborative docs
+        - Draft documents
+  PlainTextParser:
+    description: Parses plain text files
+    config_schema:
+      encoding:
+        type: string
+        default: utf-8
+        description: Text encoding
+      chunk_size:
+        type: integer
+        default: 1000
+        minimum: 100
+        maximum: 10000
+        description: Chunk size in characters
+      chunk_overlap:
+        type: integer
+        default: 200
+        minimum: 0
+        maximum: 1000
+        description: Overlap between chunks
+      split_by:
+        type: string
+        enum:
+        - characters
+        - words
+        - sentences
+        - paragraphs
+        - lines
+        default: characters
+        description: Splitting method
+      preserve_whitespace:
+        type: boolean
+        default: false
+        description: Preserve whitespace
+    defaults:
+      general_purpose:
+        name: General Purpose Text
+        description: Standard text parsing
+        config:
+          encoding: utf-8
+          chunk_size: 1000
+          chunk_overlap: 200
+          split_by: characters
+          preserve_whitespace: false
+        recommended_for:
+        - Text files
+        - Log files
+        - Plain documents
+      large_documents:
+        name: Large Documents
+        description: Large text files with overlap
+        config:
+          encoding: utf-8
+          chunk_size: 2000
+          chunk_overlap: 400
+          split_by: paragraphs
+          preserve_whitespace: false
+        recommended_for:
+        - Books
+        - Large reports
+        - Long articles
+  MarkdownParser:
+    description: Parses Markdown files with structure extraction
+    config_schema:
+      extract_metadata:
+        type: boolean
+        default: true
+        description: Extract YAML frontmatter
+      extract_headings:
+        type: boolean
+        default: true
+        description: Extract heading structure
+      extract_links:
+        type: boolean
+        default: true
+        description: Extract all links
+      extract_code_blocks:
+        type: boolean
+        default: true
+        description: Extract code blocks
+      chunk_by_headings:
+        type: boolean
+        default: false
+        description: Split by headings
+      preserve_formatting:
+        type: boolean
+        default: false
+        description: Preserve Markdown formatting
+      heading_level_split:
+        type: integer
+        default: 2
+        minimum: 1
+        maximum: 6
+        description: Heading level for splitting
+    defaults:
+      general_purpose:
+        name: General Purpose Markdown
+        description: Standard Markdown parsing
+        config:
+          extract_metadata: true
+          extract_headings: true
+          extract_links: true
+          extract_code_blocks: true
+          chunk_by_headings: false
+          preserve_formatting: false
+          heading_level_split: 2
+        recommended_for:
+        - Documentation
+        - README files
+        - Blog posts
+      technical_docs:
+        name: Technical Documentation
+        description: Technical docs with code blocks
+        config:
+          extract_metadata: true
+          extract_headings: true
+          extract_links: true
+          extract_code_blocks: true
+          chunk_by_headings: true
+          preserve_formatting: true
+          heading_level_split: 2
+        recommended_for:
+        - API documentation
+        - Technical guides
+        - Developer docs
+  CSVParser:
+    description: Parser for CSV files with configurable field mapping
+    config_schema:
+      content_fields:
+        type: array
+        items:
+          type: string
+        default:
+        - subject
+        - body
+        description: CSV columns to use as document content
+      metadata_fields:
+        type: array
+        items:
+          type: string
+        default: []
+        description: CSV columns to include as metadata
+      id_field:
+        type:
+        - string
+        - 'null'
+        default: null
+        description: CSV column to use as document ID
+      combine_content:
+        type: boolean
+        default: true
+        description: Combine multiple content fields into one document
+      content_separator:
+        type: string
+        default: '
+
+
+          '
+        description: Separator when combining content fields
+      encoding:
+        type: string
+        default: utf-8
+        description: CSV file encoding
+      delimiter:
+        type: string
+        default: ','
+        maxLength: 1
+        description: CSV delimiter character
+    defaults:
+      general_purpose:
+        name: General Purpose CSV Parsing
+        description: Basic CSV parsing with flexible field configuration
+        config:
+          content_fields:
+          - text
+          - content
+          - description
+          metadata_fields: []
+          combine_content: true
+          content_separator: '
+
+
+            '
+          encoding: utf-8
+          delimiter: ','
+        recommended_for:
+        - General CSV files
+        - Simple tabular data
+        - Mixed content
+      customer_support:
+        name: Customer Support Tickets
+        description: Optimized for customer support ticket CSV files
+        config:
+          content_fields:
+          - subject
+          - body
+          - answer
+          metadata_fields:
+          - type
+          - queue
+          - priority
+          - language
+          - status
+          combine_content: true
+          content_separator: '
+
+
+            ---
+
+
+            '
+          id_field: ticket_id
+          encoding: utf-8
+          delimiter: ','
+        recommended_for:
+        - Support tickets
+        - Help desk data
+        - Customer inquiries
+      survey_responses:
+        name: Survey Response Analysis
+        description: Parse survey responses with rating and demographic data
+        config:
+          content_fields:
+          - response_text
+          - comments
+          - feedback
+          metadata_fields:
+          - respondent_id
+          - survey_date
+          - rating
+          - age_group
+          - location
+          combine_content: true
+          content_separator: ' '
+          id_field: response_id
+          encoding: utf-8
+          delimiter: ','
+        recommended_for:
+        - Survey data
+        - Feedback forms
+        - Market research
+      product_catalog:
+        name: Product Catalog Processing
+        description: Parse product information with structured metadata
+        config:
+          content_fields:
+          - name
+          - description
+          - features
+          metadata_fields:
+          - category
+          - price
+          - brand
+          - sku
+          - availability
+          combine_content: true
+          content_separator: '
+
+            '
+          id_field: sku
+          encoding: utf-8
+          delimiter: ','
+        recommended_for:
+        - E-commerce catalogs
+        - Product databases
+        - Inventory lists
+      contact_management:
+        name: Contact and CRM Data
+        description: Process contact lists and CRM exports
+        config:
+          content_fields:
+          - notes
+          - description
+          - bio
+          metadata_fields:
+          - name
+          - email
+          - phone
+          - company
+          - role
+          - tags
+          combine_content: false
+          content_separator: '
+
+
+            '
+          id_field: contact_id
+          encoding: utf-8
+          delimiter: ','
+        recommended_for:
+        - Contact lists
+        - CRM exports
+        - Lead databases
+  ExcelParser:
+    description: Parses Excel spreadsheets
+    config_schema:
+      sheet_names:
+        type:
+        - array
+        - 'null'
+        items:
+          type: string
+        default: null
+        description: Specific sheets to parse
+      combine_sheets:
+        type: boolean
+        default: false
+        description: Combine all sheets
+      extract_formulas:
+        type: boolean
+        default: false
+        description: Extract cell formulas
+      extract_charts:
+        type: boolean
+        default: false
+        description: Extract chart metadata
+      table_format:
+        type: string
+        enum:
+        - csv
+        - markdown
+        - json
+        - text
+        default: markdown
+        description: Table output format
+      header_row:
+        type: integer
+        default: 0
+        minimum: 0
+        description: Header row index
+    defaults:
+      general_purpose:
+        name: General Purpose Excel
+        description: Standard Excel parsing
+        config:
+          sheet_names: null
+          combine_sheets: false
+          extract_formulas: false
+          extract_charts: false
+          table_format: markdown
+          header_row: 0
+        recommended_for:
+        - Spreadsheets
+        - Data tables
+        - Reports
+      financial_data:
+        name: Financial Data
+        description: Financial spreadsheets with formulas
+        config:
+          sheet_names: null
+          combine_sheets: true
+          extract_formulas: true
+          extract_charts: true
+          table_format: markdown
+          header_row: 0
+        recommended_for:
+        - Financial reports
+        - Budget sheets
+        - Accounting data
+  PDFParser:
+    description: Extracts text, metadata, and structure from PDF documents
+    config_schema:
+      extract_metadata:
+        type: boolean
+        default: true
+        description: Extract PDF metadata (title, author, creation date, etc.)
+      extract_page_structure:
+        type: boolean
+        default: true
+        description: Extract page-level structure information
+      combine_pages:
+        type: boolean
+        default: true
+        description: Combine all pages into single document
+      page_separator:
+        type: string
+        default: '
+
+
+          --- Page Break ---
+
+
+          '
+        description: Separator between pages when combining
+      min_text_length:
+        type: integer
+        default: 10
+        minimum: 0
+        description: Minimum text length to include page
+      include_page_numbers:
+        type: boolean
+        default: true
+        description: Include page numbers in text
+      extract_outline:
+        type: boolean
+        default: true
+        description: Extract document outline/bookmarks
+      extract_images:
+        type: boolean
+        default: false
+        description: Extract embedded images
+      ocr_enabled:
+        type: boolean
+        default: false
+        description: Enable OCR for scanned documents
+    defaults:
+      general_purpose:
+        name: General Purpose PDF
+        description: Standard PDF parsing with text extraction
+        config:
+          extract_metadata: true
+          extract_page_structure: true
+          combine_pages: true
+          page_separator: '
+
+
+            --- Page Break ---
+
+
+            '
+          min_text_length: 10
+          include_page_numbers: true
+          extract_outline: true
+          extract_images: false
+          ocr_enabled: false
+        recommended_for:
+        - General documents
+        - Reports
+        - Articles
+      research_papers:
+        name: Research Papers
+        description: Academic papers with metadata and structure
+        config:
+          extract_metadata: true
+          extract_page_structure: true
+          combine_pages: true
+          page_separator: '
+
+
+            '
+          min_text_length: 50
+          include_page_numbers: true
+          extract_outline: true
+          extract_images: false
+          ocr_enabled: false
+        recommended_for:
+        - Academic papers
+        - Research documents
+        - Scientific publications
+      legal_documents:
+        name: Legal Documents
+        description: Legal documents with page-by-page processing
+        config:
+          extract_metadata: true
+          extract_page_structure: true
+          combine_pages: false
+          page_separator: '
+
+
+            [NEW PAGE]
+
+
+            '
+          min_text_length: 20
+          include_page_numbers: true
+          extract_outline: true
+          extract_images: false
+          ocr_enabled: false
+        recommended_for:
+        - Contracts
+        - Legal briefs
+        - Court documents
+      scanned_documents:
+        name: Scanned Documents
+        description: Scanned PDFs requiring OCR
+        config:
+          extract_metadata: true
+          extract_page_structure: false
+          combine_pages: true
+          page_separator: '
+
+
+            --- Page ---
+
+
+            '
+          min_text_length: 5
+          include_page_numbers: true
+          extract_outline: false
+          extract_images: true
+          ocr_enabled: true
+        recommended_for:
+        - Scanned documents
+        - Image-based PDFs
+        - Historical documents

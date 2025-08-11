@@ -1,0 +1,37 @@
+# Keyword Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/keyword_extractor/schema.yaml
+title: Keyword Extractor Configuration
+description: Extract keywords from text using various algorithms
+type: object
+additionalProperties: false
+properties:
+  algorithm:
+    type: string
+    enum:
+    - rake
+    - yake
+    - tfidf
+    - textrank
+    default: rake
+    description: Extraction algorithm
+  max_keywords:
+    type: integer
+    default: 10
+    minimum: 1
+    maximum: 100
+    description: Maximum keywords
+  min_keyword_length:
+    type: integer
+    default: 3
+    minimum: 1
+    description: Minimum keyword length
+  include_scores:
+    type: boolean
+    default: true
+    description: Include relevance scores
+  language:
+    type: string
+    default: english
+    description: Language for stop words

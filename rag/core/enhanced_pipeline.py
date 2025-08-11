@@ -35,8 +35,13 @@ class EnhancedPipeline(Pipeline):
             # Parse with progress
             parser = self.components[0]
             result = parser.parse(source)
-            current_docs = result.documents
-            all_errors = result.errors
+            # Normalize parser outputs that may return List[Document]
+            if isinstance(result, ProcessingResult):
+                current_docs = result.documents
+                all_errors = result.errors
+            else:
+                current_docs = result
+                all_errors = []
 
             self.tracker.print_success(f"Parsed {len(current_docs)} documents!")
             if all_errors:

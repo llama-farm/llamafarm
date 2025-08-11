@@ -36,202 +36,9 @@ properties:
     default: []
 
   rag:
+    # $ref: "../rag/schema.yaml"
     type: object
-    description: RAG (Retrieval-Augmented Generation) configuration
-    required:
-      - parsers
-      - embedders
-      - vector_stores
-      - retrieval_strategies
-      - defaults
-    properties:
-      description:
-        type: string
-        description: Configuration description
-      parsers:
-        type: object
-        description: Parser configurations for different file types
-        patternProperties:
-          "^[a-zA-Z_][a-zA-Z0-9_]*$":
-            type: object
-            required:
-              - type
-              - config
-              - file_extensions
-              - mime_types
-            properties:
-              type:
-                type: string
-                description: Parser class name
-              config:
-                type: object
-                description: Parser-specific configuration
-                properties:
-                  chunk_metadata:
-                    type: object
-                    properties:
-                      generate_summary:
-                        type: boolean
-                      extract_keywords:
-                        type: boolean
-                      include_statistics:
-                        type: boolean
-                      custom_fields:
-                        type: object
-                        additionalProperties: true
-                    additionalProperties: true
-                additionalProperties: true
-              file_extensions:
-                type: array
-                items:
-                  type: string
-                description: Supported file extensions
-              mime_types:
-                type: array
-                items:
-                  type: string
-                description: Supported MIME types
-              priority:
-                type: integer
-                description: Parser priority (higher numbers = higher priority)
-        additionalProperties: false
-      embedders:
-        type: object
-        description: Embedder configurations
-        patternProperties:
-          "^[a-zA-Z_][a-zA-Z0-9_]*$":
-            type: object
-            required:
-              - type
-              - config
-            properties:
-              type:
-                type: string
-                description: Embedder class name
-              config:
-                type: object
-                description: Embedder-specific configuration
-                additionalProperties: true
-        additionalProperties: false
-      vector_stores:
-        type: object
-        description: Vector store configurations
-        patternProperties:
-          "^[a-zA-Z_][a-zA-Z0-9_]*$":
-            type: object
-            required:
-              - type
-              - config
-            properties:
-              type:
-                type: string
-                description: Vector store class name
-              config:
-                type: object
-                description: Store-specific configuration
-                properties:
-                  collection_name:
-                    type: string
-                  persist_directory:
-                    type: string
-                  metadata_config:
-                    type: object
-                    properties:
-                      enable_versioning:
-                        type: boolean
-                      enable_soft_delete:
-                        type: boolean
-                      hash_algorithm:
-                        type: string
-                        enum: ["md5", "sha1", "sha256", "sha512"]
-                      retention_policy:
-                        type: object
-                        properties:
-                          default_ttl_days:
-                            type: integer
-                            minimum: 1
-                          max_versions:
-                            type: integer
-                            minimum: 1
-                          cleanup_schedule:
-                            type: string
-                            enum: ["daily", "weekly", "monthly"]
-                          archive_before_delete:
-                            type: boolean
-                          archive_location:
-                            type: string
-                        additionalProperties: true
-                      required_metadata:
-                        type: array
-                        items:
-                          type: string
-                      indexed_metadata:
-                        type: array
-                        items:
-                          type: string
-                      audit_config:
-                        type: object
-                        properties:
-                          enable_audit_log:
-                            type: boolean
-                          audit_retention_days:
-                            type: integer
-                            minimum: 1
-                          track_access:
-                            type: boolean
-                          track_modifications:
-                            type: boolean
-                        additionalProperties: true
-                    additionalProperties: true
-                additionalProperties: true
-        additionalProperties: false
-      retrieval_strategies:
-        type: object
-        description: Retrieval strategy configurations
-        patternProperties:
-          "^[a-zA-Z_][a-zA-Z0-9_]*$":
-            type: object
-            required:
-              - type
-              - config
-            properties:
-              type:
-                type: string
-                description: Strategy class name
-              config:
-                type: object
-                description: Strategy-specific configuration
-                additionalProperties: true
-              description:
-                type: string
-                description: Strategy description
-        additionalProperties: false
-      defaults:
-        type: object
-        description: Default component selections
-        required:
-          - parser
-          - embedder
-          - vector_store
-          - retrieval_strategy
-        properties:
-          parser:
-            type: string
-            description: Default parser to use
-            default: auto
-          embedder:
-            type: string
-            description: Default embedder to use
-            default: default
-          vector_store:
-            type: string
-            description: Default vector store to use
-            default: default
-          retrieval_strategy:
-            type: string
-            description: Default retrieval strategy to use
-            default: default
-        additionalProperties: false
+    additionalProperties: true
 
   datasets:
     type: array
@@ -245,16 +52,16 @@ properties:
         name:
           type: string
           description: Dataset name
-        parser:
+        rag_strategy:
           type: string
-          description: Parser to use for the dataset
+          description: RAG strategy to use for the dataset
           default: auto
         files:
           type: array
-          description: List of file paths (e.g., "data/mydoc.pdf")
+          description: List of file hashes
           items:
             type: string
-            description: File path (e.g., "data/mydoc.pdf")
+            description: sha256 of the file content (e.g., "2b3e321d021e5c625a4a003f0624801fa46faab59b530caddcd65a5c106b8a17")
           default: []
     default: []
 

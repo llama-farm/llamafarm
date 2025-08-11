@@ -24,16 +24,18 @@ RUN cd rag && uv sync --locked
 RUN cd models && uv sync --locked
 
 # Copy server dependency files and README
-COPY server/pyproject.toml server/uv.lock server/README.md ./
+COPY server/pyproject.toml server/uv.lock server/README.md ./server/
 
 # Install server dependencies
-RUN uv sync --locked
+RUN cd server && uv sync --locked
 
 # Copy server source code
-COPY server/ ./
+COPY server/ ./server/
 
 # Expose port
 EXPOSE 8000
+
+WORKDIR /app/server
 
 # Run the application
 CMD ["uv", "run", "python", "main.py"]

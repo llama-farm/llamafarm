@@ -11,8 +11,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config_types import LlamaFarmConfig, ModelConfig, PromptConfig, RAGConfig
-from loader import load_config
+from config import LlamaFarmConfig, load_config_dict
 
 
 class TestModuleIntegration:
@@ -26,10 +25,10 @@ class TestModuleIntegration:
     def test_rag_module_usage(self, sample_config_dir):
         """Test how a RAG module would use the configuration."""
         config_path = sample_config_dir / "sample_config.yaml"
-        config: LlamaFarmConfig = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         # Simulate RAG module extracting its configuration
-        rag_config: RAGConfig = config["rag"]
+        rag_config = config["rag"]
 
         # Parser configuration extraction
         parser_type = rag_config["parsers"]["csv"]["type"]
@@ -69,13 +68,13 @@ class TestModuleIntegration:
     def test_model_manager_usage(self, sample_config_dir):
         """Test how a model manager module would use the configuration."""
         config_path = sample_config_dir / "sample_config.yaml"
-        config: LlamaFarmConfig = load_config(config_path=config_path)
+        config: LlamaFarmConfig = load_config_dict(config_path=config_path)
 
         # Simulate model manager extracting model configurations
-        models: list[ModelConfig] = config["models"]
+        models = config["models"]
 
         # Group models by provider (common pattern)
-        models_by_provider: dict[str, list[ModelConfig]] = {}
+        models_by_provider = {}
         for model in models:
             provider = model["provider"]
             if provider not in models_by_provider:
@@ -108,13 +107,13 @@ class TestModuleIntegration:
     def test_prompt_manager_usage(self, sample_config_dir):
         """Test how a prompt manager module would use the configuration."""
         config_path = sample_config_dir / "sample_config.yaml"
-        config: LlamaFarmConfig = load_config(config_path=config_path)
+        config: LlamaFarmConfig = load_config_dict(config_path=config_path)
 
         # Handle optional prompts field
         prompts = config.get("prompts", [])
         if prompts:
             # Simulate prompt manager creating a lookup dictionary
-            prompt_lookup: dict[str, PromptConfig] = {}
+            prompt_lookup = {}
             for prompt in prompts:
                 if "name" in prompt:
                     prompt_lookup[prompt["name"]] = prompt
@@ -151,7 +150,7 @@ class TestModuleIntegration:
             config_path = sample_config_dir / config_file
             if config_path.exists():
                 # Validate configuration loads successfully
-                config = load_config(config_path=config_path)
+                config = load_config_dict(config_path=config_path)
 
                 # Perform validation checks that a service might do
                 assert config["version"] == "v1", f"Invalid version in {config_file}"
@@ -186,11 +185,11 @@ class TestModuleIntegration:
         config_path = sample_config_dir / "sample_config.yaml"
 
         # Initial load
-        config1 = load_config(config_path=config_path)
+        config1 = load_config_dict(config_path=config_path)
         initial_model_count = len(config1["models"])
 
         # Reload (simulating runtime configuration reload)
-        config2 = load_config(config_path=config_path)
+        config2 = load_config_dict(config_path=config_path)
         reloaded_model_count = len(config2["models"])
 
         # Should be identical
@@ -326,7 +325,7 @@ prompts:
         prod_path = temp_config_file(prod_config, ".yaml")
 
         # Load development config
-        dev_cfg = load_config(config_path=dev_path)
+        dev_cfg = load_config_dict(config_path=dev_path)
         assert dev_cfg["rag"]["embedders"]["default"]["config"]["batch_size"] == 8
         assert (
             dev_cfg["rag"]["vector_stores"]["default"]["config"]["collection_name"]
@@ -335,7 +334,7 @@ prompts:
         assert len(dev_cfg["models"]) == 1
 
         # Load production config
-        prod_cfg = load_config(config_path=prod_path)
+        prod_cfg = load_config_dict(config_path=prod_path)
         assert prod_cfg["rag"]["embedders"]["default"]["config"]["batch_size"] == 64
         assert (
             prod_cfg["rag"]["vector_stores"]["default"]["config"]["collection_name"]
@@ -346,10 +345,10 @@ prompts:
     def test_config_driven_component_initialization(self, sample_config_dir):
         """Test how components would be initialized based on configuration."""
         config_path = sample_config_dir / "sample_config.yaml"
-        config: LlamaFarmConfig = load_config(config_path=config_path)
+        config: LlamaFarmConfig = load_config_dict(config_path=config_path)
 
         # Simulate component factory pattern based on config
-        def create_parser_from_config(rag_config: RAGConfig):
+        def create_parser_from_config(rag_config):
             """Simulate parser factory."""
             parser_type = rag_config["parsers"]["csv"]["type"]
             parser_config = rag_config["parsers"]["csv"]["config"]
@@ -363,7 +362,7 @@ prompts:
             else:
                 raise ValueError(f"Unknown parser type: {parser_type}")
 
-        def create_embedder_from_config(rag_config: RAGConfig):
+        def create_embedder_from_config(rag_config):
             """Simulate embedder factory."""
             embedder_type = rag_config["embedders"]["default"]["type"]
             embedder_config = rag_config["embedders"]["default"]["config"]
@@ -411,7 +410,7 @@ def test_cross_module_config_sharing():
     # Create a shared config instance
     test_dir = Path(__file__).parent
     config_path = test_dir / "sample_config.yaml"
-    shared_config = load_config(config_path=config_path)
+    shared_config = load_config_dict(config_path=config_path)
 
     # Module 1: RAG Service
     class RAGService:

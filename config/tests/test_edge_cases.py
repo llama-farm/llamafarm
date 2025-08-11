@@ -13,7 +13,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from loader import ConfigError, find_config_file, load_config
+from config import ConfigError, find_config_file, load_config_dict
 
 
 class TestEdgeCases:
@@ -24,7 +24,7 @@ class TestEdgeCases:
         temp_path = temp_config_file("", ".yaml")
 
         with pytest.raises(ConfigError):
-            load_config(config_path=temp_path)
+            load_config_dict(config_path=temp_path)
 
     def test_malformed_yaml(self, temp_config_file):
         """Test loading malformed YAML."""
@@ -38,7 +38,7 @@ models:
         temp_path = temp_config_file(malformed_yaml, ".yaml")
 
         with pytest.raises(ConfigError):
-            load_config(config_path=temp_path)
+            load_config_dict(config_path=temp_path)
 
     def test_malformed_toml(self, temp_config_file):
         """Test loading malformed TOML."""
@@ -50,12 +50,12 @@ invalid toml syntax
         temp_path = temp_config_file(malformed_toml, ".toml")
 
         with pytest.raises(ConfigError):
-            load_config(config_path=temp_path)
+            load_config_dict(config_path=temp_path)
 
     def test_nonexistent_file(self):
         """Test loading a nonexistent file."""
         with pytest.raises(ConfigError, match="Configuration file not found"):
-            load_config(config_path="/nonexistent/path/config.yaml")
+            load_config_dict(config_path="/nonexistent/path/config.yaml")
 
     def test_nonexistent_directory(self):
         """Test searching in a nonexistent directory."""
@@ -67,7 +67,7 @@ invalid toml syntax
         with tempfile.TemporaryDirectory() as temp_dir, pytest.raises(
             ConfigError, match="No configuration file found in"
         ):
-            load_config(config_path=temp_dir)
+            load_config_dict(config_path=temp_dir)
 
     def test_permission_denied(self):
         """Test handling permission denied errors."""
@@ -81,7 +81,7 @@ invalid toml syntax
             os.chmod(temp_path, 0o000)
 
             with pytest.raises(ConfigError):
-                load_config(config_path=temp_path)
+                load_config_dict(config_path=temp_path)
         finally:
             # Restore permissions for cleanup
             os.chmod(temp_path, 0o644)
@@ -161,7 +161,7 @@ prompts:
         temp_path = temp_config_file(large_config, ".yaml")
 
         # Should load successfully despite size
-        config = load_config(config_path=temp_path)
+        config = load_config_dict(config_path=temp_path)
         assert len(config["prompts"]) == 100
         assert len(config["models"]) == 50
 
@@ -228,7 +228,7 @@ datasets:
 
         temp_path = temp_config_file(unicode_config, ".yaml")
 
-        config = load_config(config_path=temp_path)
+        config = load_config_dict(config_path=temp_path)
         assert "你好" in config["prompts"][0]["prompt"]
         assert "café" in config["prompts"][0]["description"]
         assert (
@@ -299,7 +299,7 @@ prompts:
 
         temp_path = temp_config_file(deep_path_config, ".yaml")
 
-        config = load_config(config_path=temp_path)
+        config = load_config_dict(config_path=temp_path)
         persist_dir = config["rag"]["vector_stores"]["default"]["config"]["persist_directory"]
         assert (
             persist_dir
@@ -369,7 +369,7 @@ datasets:
 
         temp_path = temp_config_file(special_chars_config, ".yaml")
 
-        config = load_config(config_path=temp_path)
+        config = load_config_dict(config_path=temp_path)
         assert "@#$%^&*" in config["prompts"][0]["prompt"]
         assert config["rag"]["embedders"]["default"]["config"]["model"] == "model@version:1.0"
         assert (

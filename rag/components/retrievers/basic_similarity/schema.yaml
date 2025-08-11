@@ -1,0 +1,32 @@
+# Basic Similarity Retriever Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/retrievers/basic_similarity/schema.yaml
+title: Basic Similarity Retriever Configuration
+description: Simple vector similarity search
+type: object
+additionalProperties: false
+properties:
+  top_k:
+    type: integer
+    default: 10
+    minimum: 1
+    maximum: 1000
+    description: Number of results
+  distance_metric:
+    type: string
+    default: cosine
+    enum:
+    - cosine
+    - euclidean
+    - manhattan
+    - dot
+    description: Distance metric
+  score_threshold:
+    type:
+    - number
+    - 'null'
+    default: null
+    minimum: 0.0
+    maximum: 1.0
+    description: Minimum similarity score

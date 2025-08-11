@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from embedders.ollama_embedder import OllamaEmbedder
+from components.embedders.ollama_embedder import OllamaEmbedder
 
 
 class TestOllamaEmbedder:
@@ -58,8 +58,9 @@ class TestOllamaEmbedder:
 
             embedder = OllamaEmbedder()
 
-            with pytest.raises(ValueError, match="Ollama not available"):
-                embedder.validate_config()
+            # Should return False instead of raising an exception
+            result = embedder.validate_config()
+            assert result is False
 
     def test_embed_mock(self, mock_ollama_available):
         """Test embedding generation with mocked Ollama."""

@@ -5,8 +5,8 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 from core.base import Document, ProcessingResult
-from extractors.base import ExtractorPipeline, create_pipeline_from_config
-from extractors import registry
+from components.extractors.base import ExtractorPipeline, create_pipeline_from_config
+from components.extractors import registry
 
 logger = logging.getLogger(__name__)
 
@@ -130,12 +130,12 @@ def enhance_processing_result(
         # Update result
         result.documents = enhanced_documents
         
-        # Add extractor info to metadata
-        if "extractors" not in result.metadata:
-            result.metadata["extractors"] = {}
+        # Add extractor info to metrics
+        if "extractors" not in result.metrics:
+            result.metrics["extractors"] = {}
         
-        result.metadata["extractors"]["pipeline_info"] = integrator.get_extractor_info()
-        result.metadata["extractors"]["applied"] = True
+        result.metrics["extractors"]["pipeline_info"] = integrator.get_extractor_info()
+        result.metrics["extractors"]["applied"] = True
         
         return result
         

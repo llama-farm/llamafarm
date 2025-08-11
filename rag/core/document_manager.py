@@ -11,6 +11,7 @@ from enum import Enum
 import logging
 
 from core.base import Document
+from utils.hash_utils import extract_document_hash_from_chunk_id
 
 logger = logging.getLogger(__name__)
 
@@ -492,6 +493,80 @@ class DocumentDeletionManager:
             filter_criteria["is_active"] = True
         
         return self._execute_deletion(filter_criteria, strategy)
+        
+    def delete_by_document_hash(
+        self, 
+        document_hashes: List[str], 
+        strategy: DeletionStrategy = DeletionStrategy.HARD_DELETE
+    ) -> Dict[str, Any]:
+        """Delete all chunks belonging to specific documents by their hashes."""
+        results = {
+            "strategy": strategy.value,
+            "document_hashes": document_hashes,
+            "deleted_count": 0,
+            "errors": []
+        }
+        
+        try:
+            total_deleted = 0
+            for doc_hash in document_hashes:
+                # Use vector store's hash-based deletion if available
+                if hasattr(self.vector_store, 'delete_by_document_hash'):
+                    success = self.vector_store.delete_by_document_hash(doc_hash)
+                    if success:
+                        # We don't get exact count, so estimate
+                        total_deleted += 1  # At least one document group deleted
+                else:
+                    # Fallback: try to delete by metadata filter
+                    filter_criteria = {"document_hash": doc_hash}
+                    delete_result = self._execute_deletion(filter_criteria, strategy)
+                    total_deleted += delete_result.get("deleted_count", 0)
+                    
+            results["deleted_count"] = total_deleted
+            
+        except Exception as e:
+            error_msg = f"Failed to delete documents by hash: {e}"
+            results["errors"].append(error_msg)
+            logger.error(error_msg)
+            
+        return results
+        
+    def delete_by_source_path(
+        self, 
+        source_paths: List[str], 
+        strategy: DeletionStrategy = DeletionStrategy.HARD_DELETE
+    ) -> Dict[str, Any]:
+        """Delete all documents from specific source files."""
+        results = {
+            "strategy": strategy.value,
+            "source_paths": source_paths,
+            "deleted_count": 0,
+            "errors": []
+        }
+        
+        try:
+            total_deleted = 0
+            for source_path in source_paths:
+                # Use vector store's source-based deletion if available
+                if hasattr(self.vector_store, 'delete_by_source'):
+                    success = self.vector_store.delete_by_source(source_path)
+                    if success:
+                        total_deleted += 1  # At least one source group deleted
+                else:
+                    # Fallback: try multiple metadata fields
+                    for field in ['source', 'file_path', 'filepath']:
+                        filter_criteria = {field: source_path}
+                        delete_result = self._execute_deletion(filter_criteria, strategy)
+                        total_deleted += delete_result.get("deleted_count", 0)
+                        
+            results["deleted_count"] = total_deleted
+            
+        except Exception as e:
+            error_msg = f"Failed to delete documents by source: {e}"
+            results["errors"].append(error_msg)
+            logger.error(error_msg)
+            
+        return results
     
     def delete_expired_documents(
         self, 
@@ -614,6 +689,66 @@ class DocumentManager:
             enhanced_documents.append(enhanced_doc)
         
         return enhanced_documents
+    
+    def delete_documents(
+        self, 
+        doc_ids: List[str] = None,
+        filenames: List[str] = None,
+        content_hashes: List[str] = None,
+        document_hashes: List[str] = None,
+        source_paths: List[str] = None,
+        older_than: int = None,
+        expired: bool = False,
+        strategy: DeletionStrategy = DeletionStrategy.SOFT_DELETE
+    ) -> Dict[str, Any]:
+        """Delete documents based on various criteria with enhanced hash-based support."""
+        
+        if doc_ids:
+            # Check if any doc_ids are actually chunk IDs that we can extract document hashes from
+            document_hashes_from_ids = []
+            regular_doc_ids = []
+            
+            for doc_id in doc_ids:
+                doc_hash = extract_document_hash_from_chunk_id(doc_id)
+                if doc_hash:
+                    document_hashes_from_ids.append(doc_hash)
+                else:
+                    regular_doc_ids.append(doc_id)
+            
+            # Delete by document hash first (more efficient)
+            results = {"deleted_count": 0, "errors": []}
+            if document_hashes_from_ids:
+                hash_result = self.deletion_manager.delete_by_document_hash(
+                    document_hashes_from_ids, strategy
+                )
+                results["deleted_count"] += hash_result.get("deleted_count", 0)
+                results["errors"].extend(hash_result.get("errors", []))
+            
+            # Delete remaining regular IDs
+            if regular_doc_ids:
+                regular_result = self.deletion_manager.delete_by_document(regular_doc_ids, strategy)
+                results["deleted_count"] += regular_result.get("deleted_count", 0)
+                results["errors"].extend(regular_result.get("errors", []))
+            
+            return results
+            
+        elif document_hashes:
+            return self.deletion_manager.delete_by_document_hash(document_hashes, strategy)
+        elif source_paths:
+            return self.deletion_manager.delete_by_source_path(source_paths, strategy)
+        elif filenames:
+            return self.deletion_manager.delete_by_filename(filenames, strategy)
+        elif content_hashes:
+            return self.deletion_manager.delete_by_hash(content_hashes, strategy)
+        elif older_than is not None:
+            return self.deletion_manager.delete_by_time(older_than, strategy)
+        elif expired:
+            return self.deletion_manager.delete_expired_documents(strategy)
+        else:
+            return {
+                "error": "No deletion criteria specified",
+                "deleted_count": 0
+            }
     
     def find_duplicates(self, documents: List[Document]) -> Dict[str, List[str]]:
         """Find duplicate documents based on content hash."""

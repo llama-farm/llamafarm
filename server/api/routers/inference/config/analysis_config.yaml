@@ -1,0 +1,93 @@
+# Configuration for analysis strategies
+analysis:
+  default_namespace: "test"
+  confidence_threshold: 0.7
+  enable_fuzzy_matching: true
+
+# Response validation configuration
+response_validation:
+  min_response_length: 50
+  enable_hallucination_detection: true
+  enable_count_query_validation: true
+  
+  template_indicators:
+    - "[number of projects]"
+    - "[project list]"
+    - "[namespace]"
+    - "[projects]"
+    - "{{"
+    - "}}"
+    - "${"
+    - "[total]"
+    - "[count]"
+    - "**[list of projects"
+    - "**[projects"
+    - "[list of projects"
+    - "I will use the project tool"
+    - "To view the list, I will"
+    - "**[namespace"
+    - "currently **["
+
+  inability_phrases:
+    - "i don't have access"
+    - "cannot directly"
+    - "i will use the project tool"
+    - "let me check"
+    - "i'll need to"
+    - "i need to check"
+
+  hallucination_indicators:
+    - "project 1"
+    - "project 2"
+    - "project 3"
+    - "example project"
+    - "sample project"
+    - "test project"
+    - "your projects:"
+    - "following projects:"
+    - "* project"
+    - "you have the following"
+    - "here are your projects"
+
+# Rule-based analysis patterns
+rules:
+  namespace_patterns:
+    - name: "in_namespace"
+      patterns:
+        - "in\\s+(\\w+)\\s+namespace"
+        - "(\\w+)\\s+namespace"
+      keywords: ["namespace", "in"]
+      weight: 1.0
+      enabled: true
+    
+    - name: "from_namespace"
+      patterns:
+        - "from\\s+(\\w+)(?:\\s|$)"
+        - "in\\s+(\\w+)(?:\\s|$)"
+      keywords: ["from", "in"]
+      weight: 0.8
+      enabled: true
+
+  action_patterns:
+    - name: "create_action"
+      patterns:
+        - "create\\s+(?:project\\s+)?(?:called\\s+)?['\"]?(\\w+)['\"]?"
+        - "new\\s+project\\s+['\"]?(\\w+)['\"]?"
+        - "project\\s+['\"]?(\\w+)['\"]?"
+      keywords: ["create", "new", "add", "make"]
+      weight: 1.0
+      enabled: true
+    
+    - name: "list_action"
+      patterns: []
+      keywords: ["list", "show", "display", "view", "get", "how many", "count"]
+      weight: 1.0
+      enabled: true
+
+  excluded_namespaces:
+    - "the"
+    - "a"
+    - "an"
+    - "my"
+    - "projects"
+    - "project"

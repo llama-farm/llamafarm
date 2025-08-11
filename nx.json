@@ -3,5 +3,7 @@
     "version": "21.3.11"
   },
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
-  "nxCloudId": "6890fca1e55dc20a336b5529"
+  "nxCloudId": "6890fca1e55dc20a336b5529",
+  "targets": {
+  }
 }

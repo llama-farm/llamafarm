@@ -1,0 +1,28 @@
+# OpenAI Embedder Default Configurations
+
+small_model:
+  name: Small Model
+  description: Fast and cost-effective
+  config:
+    api_key: ${OPENAI_API_KEY}
+    model: text-embedding-3-small
+    dimension: null
+    batch_size: 100
+    max_retries: 3
+  recommended_for:
+  - Production
+  - High throughput
+  - Cost optimization
+large_model:
+  name: Large Model
+  description: Higher quality embeddings
+  config:
+    api_key: ${OPENAI_API_KEY}
+    model: text-embedding-3-large
+    dimension: null
+    batch_size: 50
+    max_retries: 3
+  recommended_for:
+  - High accuracy
+  - Research
+  - Quality focus

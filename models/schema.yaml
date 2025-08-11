@@ -359,7 +359,7 @@ examples:
     description: "Production deployment with cloud API"
     components:
       cloud_api:
-        type: "openai"
+        type: "openai_compatible"
         config:
           default_model: "gpt-4-turbo-preview"
           timeout: 120
@@ -383,7 +383,7 @@ examples:
     description: "Cloud with local fallback"
     components:
       cloud_api:
-        type: "openai"
+        type: "openai_compatible"
         config:
           default_model: "gpt-4"
       model_app:

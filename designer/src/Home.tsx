@@ -30,7 +30,6 @@ function Home() {
           </p>
 
           <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-gray-900 dark:text-white">
-
             What are you building?
           </h1>
         </div>
@@ -44,7 +43,7 @@ function Home() {
             />
             <button
               onClick={handleSendClick}
-              className="absolute bottom-2 right-2 w-8 h-8 bg-blue-600 hover:bg-blue-500 rounded-md flex items-center justify-center text-white transition-colors duration-200 shadow-sm hover:shadow-md"
+              className="absolute bottom-2 right-2 w-8 h-8 bg-blue-100 dark:text-blue-100 dark:bg-blue-800 hover:bg-blue-500 rounded-md flex items-center justify-center text-white transition-colors duration-200 shadow-sm hover:shadow-md"
             >
               <svg
                 className="w-4 h-4"
@@ -62,7 +61,6 @@ function Home() {
             </button>
           </div>
         </div>
-
 
         <p className="max-w-2xl mx-auto text-sm sm:text-base leading-relaxed text-gray-600 dark:text-white/90">
           We'll help you bring your AI project dreams to life, all while showing

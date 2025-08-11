@@ -1,0 +1,81 @@
+# Markdown Parser Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/parsers/markdown_parser/schema.yaml
+title: Markdown Parser Configuration
+description: Parses Markdown files with structure extraction
+type: object
+additionalProperties: false
+properties:
+  extract_metadata:
+    type: boolean
+    default: true
+    description: Extract YAML frontmatter
+  extract_headings:
+    type: boolean
+    default: true
+    description: Extract heading structure
+  extract_links:
+    type: boolean
+    default: true
+    description: Extract all links
+  extract_code_blocks:
+    type: boolean
+    default: true
+    description: Extract code blocks
+  chunk_by_headings:
+    type: boolean
+    default: false
+    description: Split by headings
+  preserve_formatting:
+    type: boolean
+    default: false
+    description: Preserve Markdown formatting
+  heading_level_split:
+    type: integer
+    default: 2
+    minimum: 1
+    maximum: 6
+    description: Heading level for splitting
+    
+  # Advanced chunking configuration
+  chunk_size:
+    type: [integer, "null"]
+    default: null
+    minimum: 100
+    maximum: 50000
+    description: "Chunk size in characters (null for no chunking, overrides chunk_by_headings)"
+    
+  chunk_overlap:
+    type: integer
+    default: 0
+    minimum: 0
+    maximum: 5000
+    description: "Overlap between chunks in characters"
+    
+  chunk_strategy:
+    type: string
+    enum:
+    - characters
+    - sentences
+    - paragraphs
+    - headings
+    default: headings
+    description: "Chunking strategy - headings preserves markdown structure"
+    
+  respect_sentence_boundaries:
+    type: boolean
+    default: true
+    description: "Avoid splitting sentences in the middle when using character chunking"
+    
+  respect_paragraph_boundaries:
+    type: boolean
+    default: true
+    description: "Avoid splitting paragraphs in the middle"
+    
+  min_chunk_size:
+    type: integer
+    default: 100
+    minimum: 10
+    maximum: 1000
+    description: "Minimum chunk size to avoid creating tiny chunks"

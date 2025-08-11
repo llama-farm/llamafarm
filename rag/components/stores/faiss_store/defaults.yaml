@@ -1,0 +1,30 @@
+# FAISS Store Default Configurations
+
+flat_index:
+  name: Flat Index
+  description: Exact search, best for small datasets
+  config:
+    dimension: 768
+    index_type: Flat
+    metric: L2
+    nlist: 100
+    nprobe: 10
+    use_gpu: false
+  recommended_for:
+  - Small datasets
+  - Exact search
+  - High accuracy
+ivf_index:
+  name: IVF Index
+  description: Approximate search for larger datasets
+  config:
+    dimension: 768
+    index_type: IVF
+    metric: Cosine
+    nlist: 1000
+    nprobe: 50
+    use_gpu: false
+  recommended_for:
+  - Large datasets
+  - Fast search
+  - Trade-off accuracy

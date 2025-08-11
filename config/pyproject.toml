@@ -12,27 +12,22 @@ description = "Configuration loader for LlamaFarm with JSON schema validation"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
+    "jsonschema>=4.23.0",
     "PyYAML>=6.0",
-    "jsonschema>=4.0.0",
     "tomli>=2.0.0; python_version<'3.11'",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "datamodel-code-generator>=0.27.3",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "mypy>=1.0.0",
-    "ruff>=0.3.0",
-    "isort>=5.10.0",
+    "ruff>=0.12.7"
 ]
 
 [project.scripts]
 generate-types = "config.generate_types:main"
-
-[dependency-groups]
-dev = [
-    "jsonschema-gentypes>=2.3.0",
-]
 
 [tool.ruff]
 line-length = 100
@@ -45,7 +40,7 @@ fix = true
 lint.select = ["E", "F", "I", "B", "UP", "SIM"]
 
 # Exclude some files
-exclude = ["migrations", ".venv", "venv", "build", "dist"]
+exclude = ["migrations", ".venv", "venv", "build", "dist", "datamodel.py"]
 
 [tool.mypy]
 python_version = "3.8"

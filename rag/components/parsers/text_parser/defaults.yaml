@@ -1,0 +1,159 @@
+# Text Parser Default Configurations
+# These provide ready-to-use configurations for common use cases
+
+# Basic configurations
+no_chunking:
+  name: No Chunking
+  description: Process entire document as single unit
+  config:
+    encoding: auto
+    chunk_size: null
+    detect_structure: true
+    preserve_line_breaks: true
+    strip_empty_lines: true
+  recommended_for:
+  - Small documents
+  - Single articles
+  - Short reports
+
+# Character-based chunking with sentence protection
+general_purpose:
+  name: General Purpose Text
+  description: Standard text parsing with sentence protection
+  config:
+    encoding: auto
+    chunk_size: 1000
+    chunk_overlap: 100
+    chunk_strategy: characters
+    respect_sentence_boundaries: true
+    respect_paragraph_boundaries: false
+    min_chunk_size: 50
+    preserve_line_breaks: true
+    strip_empty_lines: true
+    detect_structure: true
+  recommended_for:
+  - General text files
+  - Documentation
+  - Articles and blogs
+
+# Sentence-based chunking
+sentence_aware:
+  name: Sentence-Aware Chunking
+  description: Chunk by complete sentences
+  config:
+    encoding: auto
+    chunk_size: 1200
+    chunk_overlap: 200
+    chunk_strategy: sentences
+    min_chunk_size: 100
+    preserve_line_breaks: true
+    strip_empty_lines: true
+    detect_structure: true
+  recommended_for:
+  - Academic papers
+  - Legal documents
+  - Technical documentation
+  - FAQ content
+
+# Paragraph-based chunking
+paragraph_aware:
+  name: Paragraph-Aware Chunking
+  description: Chunk by complete paragraphs
+  config:
+    encoding: auto
+    chunk_size: 2000
+    chunk_overlap: 300
+    chunk_strategy: paragraphs
+    min_chunk_size: 150
+    preserve_line_breaks: true
+    strip_empty_lines: true
+    detect_structure: true
+  recommended_for:
+  - Books and novels
+  - Long-form articles
+  - Research papers
+  - Policy documents
+
+# Large documents
+large_documents:
+  name: Large Documents
+  description: Optimized for large text files
+  config:
+    encoding: auto
+    chunk_size: 1500
+    chunk_overlap: 200
+    chunk_strategy: characters
+    respect_sentence_boundaries: true
+    respect_paragraph_boundaries: false
+    min_chunk_size: 100
+    preserve_line_breaks: true
+    strip_empty_lines: true
+    detect_structure: true
+  recommended_for:
+  - Large reports
+  - Books
+  - Long articles
+  - Manuals
+
+# Customer support knowledge base
+customer_support:
+  name: Customer Support Knowledge Base
+  description: Optimized for support documentation
+  config:
+    encoding: auto
+    chunk_size: 800
+    chunk_overlap: 100
+    chunk_strategy: characters
+    respect_sentence_boundaries: true
+    respect_paragraph_boundaries: false
+    min_chunk_size: 50
+    preserve_line_breaks: true
+    strip_empty_lines: true
+    detect_structure: true
+  recommended_for:
+  - Knowledge base articles
+  - FAQ documents
+  - Support documentation
+  - Troubleshooting guides
+
+# Code documentation
+code_documentation:
+  name: Code Documentation
+  description: Optimized for technical documentation
+  config:
+    encoding: auto
+    chunk_size: 1200
+    chunk_overlap: 150
+    chunk_strategy: characters
+    respect_sentence_boundaries: true
+    respect_paragraph_boundaries: true
+    min_chunk_size: 80
+    preserve_line_breaks: true
+    strip_empty_lines: false
+    detect_structure: true
+  recommended_for:
+  - API documentation
+  - Code comments
+  - Technical specifications
+  - README files
+
+# Conversational content
+conversational:
+  name: Conversational Content
+  description: For chat logs and conversations
+  config:
+    encoding: auto
+    chunk_size: 600
+    chunk_overlap: 50
+    chunk_strategy: characters
+    respect_sentence_boundaries: true
+    respect_paragraph_boundaries: true
+    min_chunk_size: 30
+    preserve_line_breaks: true
+    strip_empty_lines: false
+    detect_structure: false
+  recommended_for:
+  - Chat logs
+  - Interview transcripts
+  - Meeting notes
+  - Customer conversations

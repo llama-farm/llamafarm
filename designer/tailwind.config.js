@@ -8,6 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        'blue-50': '#D3DDFF',
         'blue-100': '#85B1FF',
         'blue-200': '#017BF7',
         'blue-300': '#007FFF',
@@ -20,6 +21,10 @@ export default {
         'green-100': '#48FFE4',
 
         'gray-100': '#C6C6C6',
+        'gray-200': '#F4F4F4',
+        'gray-700': '#616161',
+
+        // 'gray-50': '#F4F4F4',
       },
       animation: {
         'scroll-up': 'scroll-up 10s linear infinite',

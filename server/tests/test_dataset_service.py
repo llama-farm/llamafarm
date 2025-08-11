@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from services.dataset_service import DEFAULT_PARSERS, DatasetService
+from config.datamodel import LlamaFarmConfig, Dataset, Version
+from services.dataset_service import DEFAULT_RAG_STRATEGIES, DatasetService
 from services.project_service import ProjectService
 
 
@@ -19,33 +20,35 @@ class TestDatasetService:
     def setup_method(self):
         """Set up test fixtures before each test method."""
         # Mock project config with datasets
-        self.mock_project_config = {
-            "name": "test_project",
-            "datasets": [
-                {
-                    "name": "dataset1",
-                    "parser": "pdf",
-                    "files": ["file1.pdf", "file2.pdf"]
-                },
-                {
-                    "name": "dataset2", 
-                    "parser": "csv",
-                    "files": ["data.csv"]
-                }
+        self.mock_project_config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={"rag_strategies": ["custom_strategy"]},
+            datasets=[
+                Dataset(
+                    name="dataset1",
+                    rag_strategy="auto",
+                    files=["file1.pdf", "file2.pdf"]
+                ),
+                Dataset(
+                    name="dataset2", 
+                    rag_strategy="custom_strategy",
+                    files=["data.csv"]
+                )
             ],
-            "rag": {
-                "parsers": ["custom_parser"]
-            }
-        }
+            models=[]
+        )
 
         # Mock project config without datasets
-        self.mock_empty_project_config = {
-            "name": "empty_project",
-            "datasets": [],
-            "rag": {
-                "parsers": []
-            }
-        }
+        self.mock_empty_project_config = LlamaFarmConfig(
+            version=Version.v1,
+            name="empty_project",
+            prompts=[],
+            rag={"rag_strategies": []},
+            datasets=[],
+            models=[]
+        )
 
     @patch.object(ProjectService, 'load_config')
     def test_list_datasets_success(self, mock_load_config):
@@ -55,12 +58,12 @@ class TestDatasetService:
         datasets = DatasetService.list_datasets("test_namespace", "test_project")
         
         assert len(datasets) == 2
-        assert datasets[0]["name"] == "dataset1"
-        assert datasets[0]["parser"] == "pdf"
-        assert datasets[0]["files"] == ["file1.pdf", "file2.pdf"]
-        assert datasets[1]["name"] == "dataset2"
-        assert datasets[1]["parser"] == "csv"
-        assert datasets[1]["files"] == ["data.csv"]
+        assert datasets[0].name == "dataset1"
+        assert datasets[0].rag_strategy == "auto"
+        assert datasets[0].files == ["file1.pdf", "file2.pdf"]
+        assert datasets[1].name == "dataset2"
+        assert datasets[1].rag_strategy == "custom_strategy"
+        assert datasets[1].files == ["data.csv"]
         
         mock_load_config.assert_called_once_with("test_namespace", "test_project")
 
@@ -76,8 +79,15 @@ class TestDatasetService:
 
     @patch.object(ProjectService, 'load_config')
     def test_list_datasets_no_datasets_key(self, mock_load_config):
-        """Test listing datasets when datasets key doesn't exist in config."""
-        config_without_datasets = {"name": "test_project"}
+        """Test listing datasets when datasets list is empty."""
+        config_without_datasets = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={},
+            datasets=[],
+            models=[]
+        )
         mock_load_config.return_value = config_without_datasets
         
         datasets = DatasetService.list_datasets("test_namespace", "test_project")
@@ -89,19 +99,19 @@ class TestDatasetService:
     @patch.object(ProjectService, 'load_config')
     def test_create_dataset_success(self, mock_load_config, mock_save_config):
         """Test creating a dataset successfully."""
-        mock_load_config.return_value = self.mock_project_config.copy()
+        mock_load_config.return_value = self.mock_project_config.model_copy()
         mock_save_config.return_value = None
         
         dataset = DatasetService.create_dataset(
             "test_namespace", 
             "test_project", 
             "new_dataset", 
-            "pdf"
+            "auto"
         )
         
-        assert dataset["name"] == "new_dataset"
-        assert dataset["parser"] == "pdf"
-        assert dataset["files"] == []
+        assert dataset.name == "new_dataset"
+        assert dataset.rag_strategy == "auto"
+        assert dataset.files == []
         
         # Verify save_config was called with updated config
         mock_save_config.assert_called_once()
@@ -109,8 +119,8 @@ class TestDatasetService:
         assert call_args[0] == "test_namespace"
         assert call_args[1] == "test_project"
         updated_config = call_args[2]
-        assert len(updated_config["datasets"]) == 3
-        assert updated_config["datasets"][-1]["name"] == "new_dataset"
+        assert len(updated_config.datasets) == 3
+        assert updated_config.datasets[-1].name == "new_dataset"
 
     @patch.object(ProjectService, 'load_config')
     def test_create_dataset_duplicate_name(self, mock_load_config):
@@ -122,44 +132,44 @@ class TestDatasetService:
                 "test_namespace",
                 "test_project", 
                 "dataset1",  # This name already exists
-                "pdf"
+                "auto"
             )
 
     @patch.object(ProjectService, 'load_config')
-    def test_create_dataset_unsupported_parser(self, mock_load_config):
-        """Test creating a dataset with an unsupported parser."""
+    def test_create_dataset_unsupported_rag_strategy(self, mock_load_config):
+        """Test creating a dataset with an unsupported RAG strategy."""
         mock_load_config.return_value = self.mock_project_config
         
-        with pytest.raises(ValueError, match="Parser unsupported_parser not supported"):
+        with pytest.raises(ValueError, match="RAG strategy unsupported_strategy not supported"):
             DatasetService.create_dataset(
                 "test_namespace",
                 "test_project",
                 "new_dataset",
-                "unsupported_parser"
+                "unsupported_strategy"
             )
 
     @patch.object(ProjectService, 'save_config')
     @patch.object(ProjectService, 'load_config')
-    def test_create_dataset_with_custom_parser(self, mock_load_config, mock_save_config):
-        """Test creating a dataset with a custom parser."""
-        mock_load_config.return_value = self.mock_project_config.copy()
+    def test_create_dataset_with_custom_strategy(self, mock_load_config, mock_save_config):
+        """Test creating a dataset with a custom RAG strategy."""
+        mock_load_config.return_value = self.mock_project_config.model_copy()
         
         dataset = DatasetService.create_dataset(
             "test_namespace",
             "test_project",
             "custom_dataset",
-            "custom_parser"  # This is in the custom parsers list
+            "custom_strategy"  # This is in the custom rag strategies list
         )
         
-        assert dataset["name"] == "custom_dataset"
-        assert dataset["parser"] == "custom_parser"
+        assert dataset.name == "custom_dataset"
+        assert dataset.rag_strategy == "custom_strategy"
         mock_save_config.assert_called_once()
 
     @patch.object(ProjectService, 'save_config')
     @patch.object(ProjectService, 'load_config')
     def test_delete_dataset_success(self, mock_load_config, mock_save_config):
         """Test deleting a dataset successfully."""
-        mock_load_config.return_value = self.mock_project_config.copy()
+        mock_load_config.return_value = self.mock_project_config.model_copy()
         mock_save_config.return_value = None
         
         deleted_dataset = DatasetService.delete_dataset(
@@ -168,16 +178,16 @@ class TestDatasetService:
             "dataset1"
         )
         
-        assert deleted_dataset["name"] == "dataset1"
-        assert deleted_dataset["parser"] == "pdf"
-        assert deleted_dataset["files"] == ["file1.pdf", "file2.pdf"]
+        assert deleted_dataset.name == "dataset1"
+        assert deleted_dataset.rag_strategy == "auto"
+        assert deleted_dataset.files == ["file1.pdf", "file2.pdf"]
         
         # Verify save_config was called with updated config
         mock_save_config.assert_called_once()
         call_args = mock_save_config.call_args[0]
         updated_config = call_args[2]
-        assert len(updated_config["datasets"]) == 1
-        assert updated_config["datasets"][0]["name"] == "dataset2"
+        assert len(updated_config.datasets) == 1
+        assert updated_config.datasets[0].name == "dataset2"
 
     @patch.object(ProjectService, 'load_config')
     def test_delete_dataset_not_found(self, mock_load_config):
@@ -204,57 +214,74 @@ class TestDatasetService:
             )
 
     @patch.object(ProjectService, 'load_config')
-    def test_get_supported_parsers_with_custom_parsers(self, mock_load_config):
-        """Test getting supported parsers including custom ones."""
+    def test_get_supported_rag_strategies_with_custom_strategies(self, mock_load_config):
+        """Test getting supported RAG strategies including custom ones."""
         mock_load_config.return_value = self.mock_project_config
         
-        parsers = DatasetService.get_supported_parsers("test_namespace", "test_project")
+        strategies = DatasetService.get_supported_rag_strategies("test_namespace", "test_project")
         
-        expected_parsers = DEFAULT_PARSERS + ["custom_parser"]
-        assert parsers == expected_parsers
+        expected_strategies = DEFAULT_RAG_STRATEGIES + ["custom_strategy"]
+        assert strategies == expected_strategies
 
     @patch.object(ProjectService, 'load_config')
-    def test_get_supported_parsers_default_only(self, mock_load_config):
-        """Test getting supported parsers with only default parsers."""
-        config_no_custom = self.mock_project_config.copy()
-        config_no_custom["rag"]["parsers"] = []
+    def test_get_supported_rag_strategies_default_only(self, mock_load_config):
+        """Test getting supported RAG strategies with only default strategies."""
+        config_no_custom = self.mock_project_config.model_copy()
+        config_no_custom.rag["rag_strategies"] = []
         mock_load_config.return_value = config_no_custom
         
-        parsers = DatasetService.get_supported_parsers("test_namespace", "test_project")
+        strategies = DatasetService.get_supported_rag_strategies("test_namespace", "test_project")
         
-        expected_parsers = DEFAULT_PARSERS
-        assert parsers == expected_parsers
+        expected_strategies = DEFAULT_RAG_STRATEGIES
+        assert strategies == expected_strategies
 
     @patch.object(ProjectService, 'load_config')
-    def test_get_supported_parsers_no_rag_config(self, mock_load_config):
-        """Test getting supported parsers when RAG config is missing."""
-        config_no_rag = {"name": "test_project", "datasets": []}
+    def test_get_supported_rag_strategies_no_rag_config(self, mock_load_config):
+        """Test getting supported RAG strategies when RAG config is missing."""
+        config_no_rag = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={},
+            datasets=[],
+            models=[]
+        )
         mock_load_config.return_value = config_no_rag
         
-        parsers = DatasetService.get_supported_parsers("test_namespace", "test_project")
+        strategies = DatasetService.get_supported_rag_strategies("test_namespace", "test_project")
         
-        expected_parsers = DEFAULT_PARSERS
-        assert parsers == expected_parsers
+        expected_strategies = DEFAULT_RAG_STRATEGIES
+        assert strategies == expected_strategies
 
     @patch.object(ProjectService, 'load_config')
-    def test_get_supported_parsers_no_parsers_key(self, mock_load_config):
-        """Test getting supported parsers when parsers key is missing from RAG config."""
-        config_no_parsers_key = {
-            "name": "test_project",
-            "datasets": [],
-            "rag": {}
-        }
-        mock_load_config.return_value = config_no_parsers_key
+    def test_get_supported_rag_strategies_no_strategies_key(self, mock_load_config):
+        """Test getting supported RAG strategies when rag_strategies key is missing from RAG config."""
+        config_no_strategies_key = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={},
+            datasets=[],
+            models=[]
+        )
+        mock_load_config.return_value = config_no_strategies_key
         
-        parsers = DatasetService.get_supported_parsers("test_namespace", "test_project")
+        strategies = DatasetService.get_supported_rag_strategies("test_namespace", "test_project")
         
-        expected_parsers = DEFAULT_PARSERS
-        assert parsers == expected_parsers
+        expected_strategies = DEFAULT_RAG_STRATEGIES
+        assert strategies == expected_strategies
 
     @patch.object(ProjectService, 'load_config')
     def test_create_dataset_no_existing_datasets(self, mock_load_config):
         """Test creating a dataset when no datasets exist yet."""
-        config_no_datasets = {"name": "test_project", "rag": {"parsers": []}}
+        config_no_datasets = LlamaFarmConfig(
+            version=Version.v1,
+            name="test_project",
+            prompts=[],
+            rag={"rag_strategies": []},
+            datasets=[],
+            models=[]
+        )
         mock_load_config.return_value = config_no_datasets
         
         with patch.object(ProjectService, 'save_config') as mock_save_config:
@@ -262,18 +289,18 @@ class TestDatasetService:
                 "test_namespace",
                 "test_project",
                 "first_dataset",
-                "pdf"
+                "auto"
             )
             
-            assert dataset["name"] == "first_dataset"
-            assert dataset["parser"] == "pdf"
-            assert dataset["files"] == []
+            assert dataset.name == "first_dataset"
+            assert dataset.rag_strategy == "auto"
+            assert dataset.files == []
             
             # Verify the config was updated correctly
             call_args = mock_save_config.call_args[0]
             updated_config = call_args[2]
-            assert len(updated_config["datasets"]) == 1
-            assert updated_config["datasets"][0]["name"] == "first_dataset"
+            assert len(updated_config.datasets) == 1
+            assert updated_config.datasets[0].name == "first_dataset"
 
 
 # Integration test for the full workflow
@@ -290,15 +317,18 @@ class TestDatasetServiceIntegration:
             current_datasets = []
             
             def mock_load_side_effect(namespace, project):
-                return {
-                    "name": "test_project",
-                    "datasets": current_datasets.copy(),
-                    "rag": {"parsers": ["custom_parser"]}
-                }
+                return LlamaFarmConfig(
+                    version=Version.v1,
+                    name="test_project",
+                    prompts=[],
+                    rag={"rag_strategies": ["custom_strategy"]},
+                    datasets=current_datasets.copy(),
+                    models=[]
+                )
             
             def mock_save_side_effect(namespace, project, config):
                 nonlocal current_datasets
-                current_datasets = config["datasets"].copy()
+                current_datasets = config.datasets.copy()
                 
             mock_load_config.side_effect = mock_load_side_effect
             mock_save_config.side_effect = mock_save_side_effect
@@ -308,17 +338,17 @@ class TestDatasetServiceIntegration:
             assert len(datasets) == 0
             
             # 2. Create dataset
-            dataset = DatasetService.create_dataset("ns", "proj", "test_dataset", "pdf")
-            assert dataset["name"] == "test_dataset"
+            dataset = DatasetService.create_dataset("ns", "proj", "test_dataset", "auto")
+            assert dataset.name == "test_dataset"
             
             # 3. List datasets (should have one)
             datasets = DatasetService.list_datasets("ns", "proj") 
             assert len(datasets) == 1
-            assert datasets[0]["name"] == "test_dataset"
+            assert datasets[0].name == "test_dataset"
             
             # 4. Delete dataset
             deleted = DatasetService.delete_dataset("ns", "proj", "test_dataset")
-            assert deleted["name"] == "test_dataset"
+            assert deleted.name == "test_dataset"
             
             # 5. List datasets (should be empty again)
             datasets = DatasetService.list_datasets("ns", "proj")

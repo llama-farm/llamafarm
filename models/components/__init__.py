@@ -28,11 +28,13 @@ def register_essential_components():
         pass
     
     try:
-        # Register OpenAI cloud API
-        from .cloud_apis.openai.openai_api import OpenAIAPI
-        CloudAPIFactory.register('openai', OpenAIAPI)
+        # Register OpenAI-compatible cloud API
+        from .cloud_apis.openai_compatible.openai_compatible_api import OpenAICompatibleAPI
+        CloudAPIFactory.register('openai_compatible', OpenAICompatibleAPI)
+        # Also register as 'openai' for backward compatibility
+        CloudAPIFactory.register('openai', OpenAICompatibleAPI)
     except ImportError as e:
-        print(f"Failed to register OpenAI: {e}")
+        print(f"Failed to register OpenAI-Compatible API: {e}")
         pass
 
 # Register components on import

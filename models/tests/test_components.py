@@ -312,34 +312,35 @@ class TestOllamaApp:
         mock_post.assert_called_once()
 
 
-class TestOpenAIAPI:
-    """Test OpenAI cloud API component."""
+class TestOpenAICompatibleAPI:
+    """Test OpenAI-compatible cloud API component."""
     
     @pytest.fixture
     def openai_config(self):
-        """Provide OpenAI configuration."""
+        """Provide OpenAI-compatible configuration."""
         return {
+            "provider": "openai",
             "api_key": "test-key",
             "default_model": "gpt-3.5-turbo",
             "timeout": 60
         }
     
-    @patch('components.cloud_apis.openai.openai_api.OPENAI_AVAILABLE', False)
+    @patch('components.cloud_apis.openai_compatible.openai_compatible_api.OPENAI_AVAILABLE', False)
     def test_openai_unavailable(self):
         """Test handling when OpenAI package is not available."""
         with pytest.raises(ImportError):
-            from components.cloud_apis.openai.openai_api import OpenAIAPI
-            api = OpenAIAPI({})
+            from components.cloud_apis.openai_compatible.openai_compatible_api import OpenAICompatibleAPI
+            api = OpenAICompatibleAPI({})
     
-    @patch('components.cloud_apis.openai.openai_api.OPENAI_AVAILABLE', True)
-    @patch('components.cloud_apis.openai.openai_api.OpenAI')
-    @patch('components.cloud_apis.openai.openai_api.os.environ', {})
+    @patch('components.cloud_apis.openai_compatible.openai_compatible_api.OPENAI_AVAILABLE', True)
+    @patch('components.cloud_apis.openai_compatible.openai_compatible_api.OpenAI')
+    @patch('components.cloud_apis.openai_compatible.openai_compatible_api.os.environ', {})
     def test_openai_initialization(self, mock_openai_class, openai_config):
-        """Test OpenAI initialization."""
-        from components.cloud_apis.openai.openai_api import OpenAIAPI
+        """Test OpenAI-compatible initialization."""
+        from components.cloud_apis.openai_compatible.openai_compatible_api import OpenAICompatibleAPI
         
-        api = OpenAIAPI(openai_config)
-        # The OpenAI client should be called with api_key and organization=None
+        api = OpenAICompatibleAPI(openai_config)
+        # The OpenAI client should be called with api_key and organization=None for OpenAI provider
         mock_openai_class.assert_called_once_with(api_key="test-key", organization=None)
 
 

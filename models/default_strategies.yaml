@@ -14,8 +14,9 @@ local_development:
 cloud_production:
   description: "Production deployment with OpenAI API"
   cloud_api:
-    type: "openai"
+    type: "openai_compatible"
     config:
+      provider: "openai"
       api_key: "${OPENAI_API_KEY}"
       default_model: "gpt-3.5-turbo"
       timeout: 60
@@ -24,8 +25,9 @@ cloud_production:
 hybrid_with_fallback:
   description: "Cloud API with comprehensive local fallback chain"
   cloud_api:
-    type: "openai"
+    type: "openai_compatible"
     config:
+      provider: "openai"
       api_key: "${OPENAI_API_KEY}"
       default_model: "gpt-4"
       timeout: 30
@@ -64,8 +66,9 @@ hybrid_with_fallback:
 multi_cloud:
   description: "Multiple cloud providers for flexibility"
   cloud_api:
-    type: "openai"
+    type: "openai_compatible"
     config:
+      provider: "openai"
       api_key: "${OPENAI_API_KEY}"
       default_model: "gpt-3.5-turbo"
 
@@ -313,8 +316,9 @@ lightweight_mobile:
 enterprise_production:
   description: "Enterprise-grade with maximum reliability"
   cloud_api:
-    type: "openai"
+    type: "openai_compatible"
     config:
+      provider: "openai"
       api_key: "${OPENAI_API_KEY}"
       default_model: "gpt-4"
       timeout: 30

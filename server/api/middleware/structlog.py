@@ -63,7 +63,7 @@ class StructLogMiddleware:
             client_host, client_port = scope["client"]
             http_method = scope["method"]
             http_version = scope["http_version"]
-            url = get_path_with_query_string(scope)
+            url = get_path_with_query_string(scope) # type: ignore
 
             # Recreate the Uvicorn access log format, but add all parameters as structured information
             access_logger.info(

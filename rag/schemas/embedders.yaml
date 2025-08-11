@@ -1,0 +1,181 @@
+embedders:
+  OllamaEmbedder:
+    description: Generate embeddings using Ollama models
+    config_schema:
+      model:
+        type: string
+        default: nomic-embed-text
+        enum:
+        - nomic-embed-text
+        - mxbai-embed-large
+        description: Ollama model name
+      base_url:
+        type: string
+        format: uri
+        default: http://localhost:11434
+        description: Ollama API endpoint
+      dimension:
+        type: integer
+        default: 768
+        minimum: 128
+        maximum: 4096
+        description: Embedding dimension
+      batch_size:
+        type: integer
+        default: 16
+        minimum: 1
+        maximum: 128
+        description: Batch processing size
+      timeout:
+        type: integer
+        default: 60
+        minimum: 10
+        description: Request timeout (seconds)
+      auto_pull:
+        type: boolean
+        default: true
+        description: Auto-pull missing models
+    required: []
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard Ollama embeddings
+        config:
+          model: nomic-embed-text
+          base_url: http://localhost:11434
+          dimension: 768
+          batch_size: 16
+          timeout: 60
+          auto_pull: true
+        recommended_for:
+        - Local deployment
+        - Privacy-focused
+        - Development
+  HuggingFaceEmbedder:
+    description: HuggingFace model embeddings
+    config_schema:
+      model_name:
+        type: string
+        default: sentence-transformers/all-MiniLM-L6-v2
+        description: Model name
+      device:
+        type: string
+        default: cpu
+        enum:
+        - cpu
+        - cuda
+        - mps
+        description: Computation device
+      batch_size:
+        type: integer
+        default: 32
+        minimum: 1
+        maximum: 256
+        description: Batch size
+    required: []
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard configuration
+        config:
+          model_name: sentence-transformers/all-MiniLM-L6-v2
+          device: cpu
+          batch_size: 32
+        recommended_for:
+        - General use
+        - CPU inference
+  OpenAIEmbedder:
+    description: Generate embeddings using OpenAI API
+    config_schema:
+      api_key:
+        type: string
+        description: OpenAI API key
+      model:
+        type: string
+        default: text-embedding-3-small
+        enum:
+        - text-embedding-3-small
+        - text-embedding-3-large
+        - text-embedding-ada-002
+        description: OpenAI model
+      dimension:
+        type:
+        - integer
+        - 'null'
+        minimum: 256
+        maximum: 3072
+        description: Override dimension
+      batch_size:
+        type: integer
+        default: 100
+        minimum: 1
+        maximum: 2048
+        description: Batch size
+      max_retries:
+        type: integer
+        default: 3
+        minimum: 0
+        maximum: 10
+        description: Max retry attempts
+    required:
+    - api_key
+    defaults:
+      small_model:
+        name: Small Model
+        description: Fast and cost-effective
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: text-embedding-3-small
+          dimension: null
+          batch_size: 100
+          max_retries: 3
+        recommended_for:
+        - Production
+        - High throughput
+        - Cost optimization
+      large_model:
+        name: Large Model
+        description: Higher quality embeddings
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: text-embedding-3-large
+          dimension: null
+          batch_size: 50
+          max_retries: 3
+        recommended_for:
+        - High accuracy
+        - Research
+        - Quality focus
+  SentencetransformerEmbedder:
+    description: Sentence transformer embeddings
+    config_schema:
+      model_name:
+        type: string
+        default: sentence-transformers/all-MiniLM-L6-v2
+        description: Model name
+      device:
+        type: string
+        default: cpu
+        enum:
+        - cpu
+        - cuda
+        - mps
+        description: Computation device
+      batch_size:
+        type: integer
+        default: 32
+        minimum: 1
+        maximum: 256
+        description: Batch size
+    required: []
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard configuration
+        config:
+          model_name: sentence-transformers/all-MiniLM-L6-v2
+          device: cpu
+          batch_size: 32
+        recommended_for:
+        - General use
+        - CPU inference

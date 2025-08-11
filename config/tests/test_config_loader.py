@@ -13,8 +13,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config_types import LlamaFarmConfig
-from loader import ConfigError, find_config_file, load_config
+from config import ConfigError, LlamaFarmConfig, find_config_file, load_config_dict
 
 
 class TestConfigLoader:
@@ -25,10 +24,10 @@ class TestConfigLoader:
         """Return the path to test data directory."""
         return Path(__file__).parent
 
-    def test_load_yaml_sample_config(self, test_data_dir):
+    def test_load_yaml_sample_config(self, test_data_dir: Path):
         """Test loading the comprehensive YAML sample configuration."""
         config_path = test_data_dir / "sample_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         # Verify basic structure
         assert config["version"] == "v1"
@@ -91,7 +90,7 @@ class TestConfigLoader:
     def test_load_toml_sample_config(self, test_data_dir):
         """Test loading the comprehensive TOML sample configuration."""
         config_path = test_data_dir / "sample_config.toml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         # Should have same structure as YAML version
         assert config["version"] == "v1"
@@ -106,7 +105,7 @@ class TestConfigLoader:
     def test_load_minimal_config(self, test_data_dir):
         """Test loading minimal valid configuration."""
         config_path = test_data_dir / "minimal_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         assert config["version"] == "v1"
         assert len(config["models"]) == 1
@@ -128,14 +127,14 @@ class TestConfigLoader:
         config_path = test_data_dir / "invalid_config.yaml"
 
         with pytest.raises(ConfigError):
-            load_config(config_path=config_path, validate=True)
+            load_config_dict(config_path=config_path, validate=True)
 
     def test_load_without_validation(self, test_data_dir):
         """Test loading invalid config without validation."""
         config_path = test_data_dir / "invalid_config.yaml"
 
         # Should load without error when validation is disabled
-        config = load_config(config_path=config_path, validate=False)
+        config = load_config_dict(config_path=config_path, validate=False)
         assert config["version"] == "v2"  # Invalid version but loaded anyway
 
     def test_find_config_file(self, test_data_dir):
@@ -162,7 +161,7 @@ class TestConfigLoader:
         with tempfile.TemporaryDirectory() as temp_dir, pytest.raises(
             ConfigError, match="No configuration file found"
         ):
-            load_config(directory=temp_dir)
+            load_config_dict(directory=temp_dir)
 
     def test_unsupported_file_format(self):
         """Test error handling for unsupported file formats."""
@@ -172,7 +171,7 @@ class TestConfigLoader:
 
         try:
             with pytest.raises(ConfigError, match="Unsupported file format"):
-                load_config(config_path=temp_path)
+                load_config_dict(config_path=temp_path)
         finally:
             os.unlink(temp_path)
 
@@ -191,14 +190,14 @@ models:
 
         try:
             with pytest.raises(ConfigError):
-                load_config(config_path=temp_path)
+                load_config_dict(config_path=temp_path)
         finally:
             os.unlink(temp_path)
 
     def test_all_provider_types(self, test_data_dir):
         """Test that all provider types from schema are covered in sample config."""
         config_path = test_data_dir / "sample_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         providers = {m["provider"] for m in config["models"]}
         expected_providers = {"openai", "anthropic", "google", "local", "custom"}
@@ -210,7 +209,7 @@ models:
     def test_type_safety(self, test_data_dir):
         """Test that loaded config matches expected types."""
         config_path = test_data_dir / "sample_config.yaml"
-        config: LlamaFarmConfig = load_config(config_path=config_path)
+        config: LlamaFarmConfig = load_config_dict(config_path=config_path)
 
         # These should pass type checking
         version: str = config["version"]
@@ -233,7 +232,7 @@ models:
     def test_config_with_no_prompts(self, test_data_dir):
         """Test configuration loading with minimal prompts section."""
         config_path = test_data_dir / "minimal_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         # Should load successfully with minimal prompts (required field)
         assert "prompts" in config
@@ -255,10 +254,10 @@ models:
                 shutil.copy(sample_config, temp_path / "llamafarm.yaml")
 
             # Load by directory (should find llamafarm.yaml)
-            config1 = load_config(directory=temp_path)
+            config1 = load_config_dict(directory=temp_path)
 
             # Load by explicit file path
-            config2 = load_config(config_path=test_data_dir / "sample_config.yaml")
+            config2 = load_config_dict(config_path=test_data_dir / "sample_config.yaml")
 
             # Both should succeed and have same version
             assert config1["version"] == "v1"
@@ -271,13 +270,14 @@ def test_integration_usage():
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
     # Test package-style import
-    from config import LlamaFarmConfig, load_config
+    from config import load_config
+    from config.datamodel import LlamaFarmConfig
 
     test_dir = Path(__file__).parent
     config_path = test_dir / "sample_config.yaml"
 
     # Load config as other modules would
-    config: LlamaFarmConfig = load_config(config_path=config_path)
+    config: LlamaFarmConfig = load_config_dict(config_path=config_path)
 
     # Verify typical usage patterns
     assert config["version"] == "v1"

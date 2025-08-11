@@ -77,23 +77,23 @@ deploy:
     host: 0.0.0.0
     port: 8080
     workers: 4
-    
+
     # GPU settings
     gpu:
       enable: true
       device: cuda:0
       memory_fraction: 0.8
-      
-    # CPU settings  
+
+    # CPU settings
     cpu:
       threads: 8
       enable_mkl: true
-      
+
     # Memory settings
     memory:
       model_cache: 4GB
       max_batch_size: 32
-      
+
     # Development features
     development:
       debug: true
@@ -127,36 +127,36 @@ llamafarm up --device cpu
 deploy:
   aws:
     region: us-east-1
-    
+
     # Instance configuration
     ec2:
       instance_type: g4dn.xlarge
       ami: ami-0abcdef1234567890  # LlamaFarm AMI
       key_pair: my-keypair
-      
+
       # Auto-scaling
       auto_scaling:
         min: 1
         max: 10
         target_cpu: 70
-        
+
       # Storage
       storage:
         type: gp3
         size: 100
         iops: 3000
-        
+
     # Networking
     vpc:
       create_new: true
       cidr: 10.0.0.0/16
-      
+
     security_group:
       ingress:
         - port: 8080
           protocol: tcp
           source: 0.0.0.0/0
-          
+
     # Load balancer
     load_balancer:
       type: application
@@ -179,11 +179,11 @@ deploy:
     ecs:
       cluster: llamafarm-cluster
       service: llamafarm-service
-      
+
       task_definition:
         cpu: 4096
         memory: 30720
-        
+
       fargate:
         platform_version: LATEST
         assign_public_ip: true
@@ -199,7 +199,7 @@ deploy:
       runtime: python3.9
       memory: 10240
       timeout: 900
-      
+
       # Use container image for large models
       package_type: Image
       image_uri: ${ECR_URI}/llamafarm:latest
@@ -214,7 +214,7 @@ deploy:
   azure:
     resource_group: llamafarm-rg
     location: eastus
-    
+
     container_instance:
       name: llamafarm-aci
       cpu: 4
@@ -222,7 +222,7 @@ deploy:
       gpu:
         count: 1
         sku: K80
-        
+
     # Azure ML Integration
     ml_workspace:
       name: llamafarm-ml
@@ -243,7 +243,7 @@ deploy:
   gcp:
     project: my-project
     region: us-central1
-    
+
     gke:
       cluster_name: llamafarm-cluster
       node_pools:
@@ -251,7 +251,7 @@ deploy:
           machine_type: n2-standard-8
           min_nodes: 1
           max_nodes: 10
-          
+
         - name: gpu-pool
           machine_type: n1-standard-8
           accelerator:
@@ -325,11 +325,11 @@ helm install llamafarm ./charts/llamafarm \
 deploy:
   edge:
     device_type: raspberry-pi
-    
+
     optimization:
       quantization: int4
       cpu_threads: 4
-      
+
     models:
       - name: tiny-llama
         type: llama2-1b
@@ -342,11 +342,11 @@ deploy:
 deploy:
   edge:
     device_type: jetson-nano
-    
+
     optimization:
       use_tensorrt: true
       precision: fp16
-      
+
     models:
       - name: efficient-llama
         type: llama2-7b
@@ -374,7 +374,7 @@ deploy:
     regions:
       primary: us-east-1
       secondary: eu-west-1
-      
+
     # Database replication
     database:
       type: postgres
@@ -382,7 +382,7 @@ deploy:
       backup:
         enabled: true
         schedule: "0 2 * * *"
-        
+
     # Model caching
     cache:
       type: redis
@@ -398,25 +398,25 @@ monitoring:
   prometheus:
     enabled: true
     scrape_interval: 15s
-    
+
   # Logging
   logging:
     driver: fluentd
     options:
       fluentd-address: localhost:24224
-      
+
   # Tracing
   tracing:
     enabled: true
     sampling_rate: 0.1
     exporter: jaeger
-    
+
   # Alerts
   alerts:
     - name: high-latency
       condition: response_time > 2s
       action: scale_up
-      
+
     - name: error-rate
       condition: error_rate > 0.05
       action: notify_oncall
@@ -431,20 +431,20 @@ security:
     vpc_isolation: true
     private_subnets: true
     nat_gateway: true
-    
+
   # Encryption
   encryption:
     at_rest: true
     in_transit: true
     kms_key: alias/llamafarm
-    
+
   # Access control
   iam:
     role: llamafarm-role
     policies:
       - AmazonS3ReadOnlyAccess
       - CloudWatchLogsFullAccess
-      
+
   # Secrets management
   secrets:
     provider: aws-secrets-manager
@@ -464,13 +464,13 @@ scaling:
         target: 80
       - type: requests_per_second
         target: 1000
-        
+
   # Vertical scaling
   vertical:
     enabled: true
     max_cpu: 16
     max_memory: 64Gi
-    
+
   # Predictive scaling
   predictive:
     enabled: true
@@ -489,12 +489,12 @@ cost_optimization:
     enabled: true
     max_price: 0.50
     fallback: on-demand
-    
+
   # Reserved capacity
   reserved:
     term: 1_year
     payment: partial_upfront
-    
+
   # Auto-shutdown
   schedules:
     - name: development
@@ -513,13 +513,13 @@ optimization:
     enabled: true
     bits: 4
     group_size: 128
-    
+
   # Batch processing
   batching:
     enabled: true
     max_batch_size: 32
     timeout: 100ms
-    
+
   # Caching
   cache:
     enabled: true
@@ -543,19 +543,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      
+
       - name: Build
         run: llamafarm build
-        
+
       - name: Test
         run: llamafarm test
-        
+
       - name: Deploy to Staging
         run: llamafarm deploy staging
-        
+
       - name: Run E2E Tests
         run: llamafarm test:e2e
-        
+
       - name: Deploy to Production
         if: success()
         run: llamafarm deploy production
@@ -566,14 +566,14 @@ jobs:
 ```hcl title="terraform/main.tf"
 module "llamafarm" {
   source = "./modules/llamafarm"
-  
+
   environment = "production"
   region      = "us-east-1"
-  
+
   instance_type = "g4dn.xlarge"
   min_instances = 2
   max_instances = 10
-  
+
   model_config = {
     type = "llama2-13b"
     quantization = "int8"
@@ -610,6 +610,6 @@ curl http://localhost:8080/health
 
 ## Next Steps
 
-- Set up [Monitoring](./monitoring) for your deployment
-- Configure [Security](./security) best practices
-- Optimize [Performance](./performance) for your use case
+- Set up [Monitoring](#) for your deployment
+- Configure [Security](#) best practices
+- Optimize [Performance](#) for your use case

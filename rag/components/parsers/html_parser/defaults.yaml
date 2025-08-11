@@ -1,0 +1,33 @@
+# HTML Parser Default Configurations
+# These provide ready-to-use configurations for common use cases
+
+general_purpose:
+  name: General Purpose HTML
+  description: Standard HTML parsing
+  config:
+    extract_metadata: true
+    extract_links: true
+    extract_images: true
+    preserve_structure: false
+    remove_scripts: true
+    remove_styles: true
+    text_only: false
+  recommended_for:
+  - Web pages
+  - HTML documents
+  - Email templates
+text_extraction:
+  name: Text Only Extraction
+  description: Extract only text content
+  config:
+    extract_metadata: false
+    extract_links: false
+    extract_images: false
+    preserve_structure: false
+    remove_scripts: true
+    remove_styles: true
+    text_only: true
+  recommended_for:
+  - Content extraction
+  - Text analysis
+  - Simplified parsing
