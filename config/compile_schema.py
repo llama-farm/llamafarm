@@ -19,8 +19,7 @@ def load_text_from_uri(uri: str) -> str:
     parsed = urlparse(uri)
     if parsed.scheme in ("", "file"):
         path = Path(parsed.path or uri)
-        content = path.read_text(encoding="utf-8")
-        return content
+        return path.read_text(encoding="utf-8")
     raise ValueError(f"Unsupported URI scheme in $ref: {uri}")
 
 
