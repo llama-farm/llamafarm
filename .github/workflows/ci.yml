@@ -52,38 +52,42 @@ jobs:
         run: |
           go test ./... -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
           go tool cover -func=coverage.out | tee coverage.txt
+          echo "Installing go2lcov..." && go install github.com/k1LoW/go2lcov@latest
+          "$(go env GOPATH)"/bin/go2lcov -in coverage.out -out coverage.lcov
 
-      - name: Publish CLI coverage (markdown table) to job summary
+      - name: Publish CLI coverage (markdown table from LCOV) to job summary
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const lines = fs.readFileSync('cli/coverage.txt','utf8').trim().split('\n');
-            const rows = [];
-            let total = null;
-            for (const l of lines) {
-              const line = l.trim();
-              if (!line) continue;
-              if (line.startsWith('total:')) {
-                const parts = line.split(/\s+/);
-                const pct = parts[parts.length-1];
-                total = { file: 'total', func: parts[1]?.replace(/[()]/g,'') || 'statements', cov: pct };
-                continue;
-              }
-              let m = line.match(/^(.+?):(\d+):\s+([^\t]+)\s+([\d.]+)%$/);
-              if (m) {
-                rows.push({ file: `${m[1]}:${m[2]}`, func: m[3], cov: `${m[4]}%` });
-                continue;
-              }
-              m = line.match(/^(.+?):\s*([^\t]+)\s+([\d.]+)%$/);
-              if (m) {
-                rows.push({ file: m[1], func: m[2], cov: `${m[3]}%` });
+            const lcov = fs.readFileSync('cli/coverage.lcov','utf8');
+            const lines = lcov.split('\n');
+            const files = [];
+            let current = null;
+            for (const raw of lines) {
+              const line = raw.trim();
+              if (line.startsWith('SF:')) {
+                if (current) files.push(current);
+                current = { file: line.slice(3), total: 0, covered: 0 };
+              } else if (line.startsWith('DA:') && current) {
+                const [,ln, hits] = line.match(/^DA:(\d+),(\d+)/) || [];
+                if (ln) {
+                  current.total += 1;
+                  if (parseInt(hits,10) > 0) current.covered += 1;
+                }
+              } else if (line === 'end_of_record') {
+                if (current) { files.push(current); current = null; }
               }
             }
-            let md = '## CLI Coverage\n\n';
-            md += '| File | Function | Coverage |\n|---|---|---|\n';
-            for (const r of rows) md += `| ${r.file} | ${r.func} | ${r.cov} |\n`;
-            if (total) md += `| ${total.file} | ${total.func} | ${total.cov} |\n`;
+            const percent = (c,t)=> t===0? '0.0%': ((c*100/t).toFixed(1)+'%');
+            let md = '## CLI Coverage (LCOV)\n\n';
+            md += '| File | Lines | Covered | Coverage |\n|---|---:|---:|---:|\n';
+            let totalLines=0, totalCovered=0;
+            for (const f of files) {
+              totalLines += f.total; totalCovered += f.covered;
+              md += `| ${f.file.replace(/^.*?llamafarm\//,'')} | ${f.total} | ${f.covered} | ${percent(f.covered,f.total)} |\n`;
+            }
+            md += `| total | ${totalLines} | ${totalCovered} | ${percent(totalCovered,totalLines)} |\n`;
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
 
       - name: Upload CLI coverage artifact
@@ -94,43 +98,45 @@ jobs:
             cli/coverage.out
             cli/coverage.txt
 
-      - name: Update PR description with CLI coverage (markdown table)
+      - name: Update PR description with CLI coverage (markdown table from LCOV)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
+            const lcov = fs.readFileSync('cli/coverage.lcov','utf8');
+            const lines = lcov.split('\n');
+            const files = [];
+            let current = null;
+            for (const raw of lines) {
+              const line = raw.trim();
+              if (line.startsWith('SF:')) {
+                if (current) files.push(current);
+                current = { file: line.slice(3), total: 0, covered: 0 };
+              } else if (line.startsWith('DA:') && current) {
+                const [,ln, hits] = line.match(/^DA:(\d+),(\d+)/) || [];
+                if (ln) {
+                  current.total += 1;
+                  if (parseInt(hits,10) > 0) current.covered += 1;
+                }
+              } else if (line === 'end_of_record') {
+                if (current) { files.push(current); current = null; }
+              }
+            }
+            const percent = (c,t)=> t===0? '0.0%': ((c*100/t).toFixed(1)+'%');
+            let table = '| File | Lines | Covered | Coverage |\n|---|---:|---:|---:|\n';
+            let totalLines=0, totalCovered=0;
+            for (const f of files) {
+              totalLines += f.total; totalCovered += f.covered;
+              table += `| ${f.file.replace(/^.*?llamafarm\//,'')} | ${f.total} | ${f.covered} | ${percent(f.covered,f.total)} |\n`;
+            }
+            table += `| total | ${totalLines} | ${totalCovered} | ${percent(totalCovered,totalLines)} |\n`;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pull_number = context.payload.pull_request.number;
-            const lines = fs.readFileSync('cli/coverage.txt','utf8').trim().split('\n');
-            const rows = [];
-            let total = null;
-            for (const l of lines) {
-              const line = l.trim();
-              if (!line) continue;
-              if (line.startsWith('total:')) {
-                const parts = line.split(/\s+/);
-                const pct = parts[parts.length-1];
-                total = { file: 'total', func: parts[1]?.replace(/[()]/g,'') || 'statements', cov: pct };
-                continue;
-              }
-              let m = line.match(/^(.+?):(\d+):\s+([^\t]+)\s+([\d.]+)%$/);
-              if (m) {
-                rows.push({ file: `${m[1]}:${m[2]}`, func: m[3], cov: `${m[4]}%` });
-                continue;
-              }
-              m = line.match(/^(.+?):\s*([^\t]+)\s+([\d.]+)%$/);
-              if (m) {
-                rows.push({ file: m[1], func: m[2], cov: `${m[3]}%` });
-              }
-            }
-            let table = '| File | Function | Coverage |\n|---|---|---|\n';
-            for (const r of rows) table += `| ${r.file} | ${r.func} | ${r.cov} |\n`;
-            if (total) table += `| ${total.file} | ${total.func} | ${total.cov} |\n`;
             const start = '<!-- CLI_COVERAGE_START -->';
             const end = '<!-- CLI_COVERAGE_END -->';
-            const block = `${start}\n\n### CLI Coverage\n\n${table}\n${end}`;
+            const block = `${start}\n\n### CLI Coverage (LCOV)\n\n${table}\n${end}`;
 
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
             let body = pr.body || '';
