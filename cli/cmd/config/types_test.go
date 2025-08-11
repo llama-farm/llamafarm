@@ -64,4 +64,14 @@ func TestGetServerConfig_Lenient(t *testing.T) {
     if sc.URL != "http://x" || sc.Namespace != "ns" || sc.Project != "proj" {
         t.Fatalf("unexpected server config: %+v", sc)
     }
+
+    // Config file missing 'name' field, should fallback to empty namespace/project
+    pathMissingName := writeTempConfig(t, "version: v1\n")
+    sc, err = GetServerConfigLenient(pathMissingName, "", "", "")
+    if err != nil {
+        t.Fatalf("unexpected err: %v", err)
+    }
+    if sc.Namespace != "" || sc.Project != "" {
+        t.Fatalf("expected empty namespace/project for missing name, got: %+v", sc)
+    }
 }

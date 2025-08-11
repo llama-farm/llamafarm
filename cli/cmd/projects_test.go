@@ -42,4 +42,7 @@ func TestSendChatRequestStream_SSE(t *testing.T) {
     if got != "Hello world" {
         t.Fatalf("unexpected assembled text: %q", got)
     }
+    if sessionID != "test-session" {
+        t.Fatalf("expected sessionID to be 'test-session', got %q", sessionID)
+    }
 }

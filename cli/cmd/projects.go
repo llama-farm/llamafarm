@@ -28,6 +28,31 @@ var (
     streaming   bool
 )
 
+// ChatSessionContext encapsulates CLI session and connection state.
+type ChatSessionContext struct {
+    ServerURL   string
+    Namespace   string
+    ProjectID   string
+    SessionID   string
+    Temperature float64
+    MaxTokens   int
+    Streaming   bool
+    HTTPClient  HTTPClient
+}
+
+func newDefaultContextFromGlobals() *ChatSessionContext {
+    return &ChatSessionContext{
+        ServerURL:   serverURL,
+        Namespace:   namespace,
+        ProjectID:   projectID,
+        SessionID:   sessionID,
+        Temperature: temperature,
+        MaxTokens:   maxTokens,
+        Streaming:   streaming,
+        HTTPClient:  httpClient,
+    }
+}
+
 // projectsCmd represents the projects command
 var projectsCmd = &cobra.Command{
 	Use:   "projects",
@@ -226,91 +251,113 @@ func startChatSession() {
 }
 
 func sendChatRequest(messages []ChatMessage) (*ChatResponse, error) {
-	// Construct the API URL
+    // Use a context wrapper to avoid hidden global state and aid testability
+    ctx := newDefaultContextFromGlobals()
+    resp, err := sendChatRequestWithContext(messages, ctx)
+    // Sync session back to global for backward compatibility
+    sessionID = ctx.SessionID
+    return resp, err
+}
+
+func sendChatRequestWithContext(messages []ChatMessage, ctx *ChatSessionContext) (*ChatResponse, error) {
+    // Construct the API URL
     url := fmt.Sprintf("%s/v1/inference/chat",
-        strings.TrimSuffix(serverURL, "/"))
+        strings.TrimSuffix(ctx.ServerURL, "/"))
 
     // Create request payload (OpenAI-compatible) and pass routing via metadata
     meta := map[string]string{}
-    if namespace != "" {
-        meta["namespace"] = namespace
+    if ctx.Namespace != "" {
+        meta["namespace"] = ctx.Namespace
     }
-    if projectID != "" {
-        meta["project_id"] = projectID
+    if ctx.ProjectID != "" {
+        meta["project_id"] = ctx.ProjectID
     }
     request := ChatRequest{Messages: messages, Metadata: meta}
 
-	// Add optional parameters if provided
-	if temperature >= 0 {
-		request.Temperature = &temperature
-	}
-	if maxTokens > 0 {
-		request.MaxTokens = &maxTokens
-	}
+    // Add optional parameters if provided
+    if ctx.Temperature >= 0 {
+        request.Temperature = &ctx.Temperature
+    }
+    if ctx.MaxTokens > 0 {
+        request.MaxTokens = &ctx.MaxTokens
+    }
 
-	// Marshal request to JSON
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
+    // Marshal request to JSON
+    jsonData, err := json.Marshal(request)
+    if err != nil {
+        return nil, fmt.Errorf("failed to marshal request: %w", err)
+    }
 
-	// Create HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
+    // Create HTTP request
+    req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        return nil, fmt.Errorf("failed to create request: %w", err)
+    }
 
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	if sessionID != "" {
-		req.Header.Set("X-Session-ID", sessionID)
-	}
+    // Set headers
+    req.Header.Set("Content-Type", "application/json")
+    if ctx.SessionID != "" {
+        req.Header.Set("X-Session-ID", ctx.SessionID)
+    }
 
-	// Send request
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
+    // Send request
+    client := ctx.HTTPClient
+    if client == nil {
+        client = &DefaultHTTPClient{}
+    }
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("failed to send request: %w", err)
+    }
+    defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
+    // Read response body
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read response: %w", err)
+    }
 
-	// Check for error status codes
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned error %d: %s", resp.StatusCode, string(body))
-	}
+    // Check for error status codes
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("server returned error %d: %s", resp.StatusCode, string(body))
+    }
 
-	// Parse response
-	var chatResponse ChatResponse
-	if err := json.Unmarshal(body, &chatResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
+    // Parse response
+    var chatResponse ChatResponse
+    if err := json.Unmarshal(body, &chatResponse); err != nil {
+        return nil, fmt.Errorf("failed to parse response: %w", err)
+    }
 
-	// Extract session ID from response if available
-	if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
-		sessionID = sessionIDHeader
-	}
+    // Extract session ID from response if available
+    if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
+        ctx.SessionID = sessionIDHeader
+    }
 
-	return &chatResponse, nil
+    return &chatResponse, nil
 }
 
 // sendChatRequestStream connects to the server with stream=true and
 // consumes Server-Sent Events, printing deltas as they arrive.
 // It returns the full assistant message that was streamed.
 func sendChatRequestStream(messages []ChatMessage) (string, error) {
-    url := fmt.Sprintf("%s/v1/inference/chat", strings.TrimSuffix(serverURL, "/"))
+    // Use a context wrapper to avoid hidden global state and aid testability
+    ctx := newDefaultContextFromGlobals()
+    out, err := sendChatRequestStreamWithContext(messages, ctx)
+    // Sync session back to global for backward compatibility
+    sessionID = ctx.SessionID
+    return out, err
+}
+
+func sendChatRequestStreamWithContext(messages []ChatMessage, ctx *ChatSessionContext) (string, error) {
+    url := fmt.Sprintf("%s/v1/inference/chat", strings.TrimSuffix(ctx.ServerURL, "/"))
 
     streamTrue := true
     meta := map[string]string{}
-    if namespace != "" {
-        meta["namespace"] = namespace
+    if ctx.Namespace != "" {
+        meta["namespace"] = ctx.Namespace
     }
-    if projectID != "" {
-        meta["project_id"] = projectID
+    if ctx.ProjectID != "" {
+        meta["project_id"] = ctx.ProjectID
     }
     request := ChatRequest{Messages: messages, Metadata: meta, Stream: &streamTrue}
 
@@ -320,9 +367,9 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
     }
 
     // Allow cancellation if the process is interrupted
-    ctx, cancel := context.WithCancel(context.Background())
+    reqCtx, cancel := context.WithCancel(context.Background())
     defer cancel()
-    req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+    req, err := http.NewRequestWithContext(reqCtx, "POST", url, bytes.NewBuffer(jsonData))
     if err != nil {
         return "", fmt.Errorf("failed to create request: %w", err)
     }
@@ -330,8 +377,8 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
     req.Header.Set("Accept", "text/event-stream")
     req.Header.Set("Cache-Control", "no-cache")
     req.Header.Set("Connection", "keep-alive")
-    if sessionID != "" {
-        req.Header.Set("X-Session-ID", sessionID)
+    if ctx.SessionID != "" {
+        req.Header.Set("X-Session-ID", ctx.SessionID)
     }
 
     // We want to stream the response; do not set a short timeout.
@@ -348,7 +395,7 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
     }
 
     if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
-        sessionID = sessionIDHeader
+        ctx.SessionID = sessionIDHeader
     }
 
     // SSE parsing: lines in form "data: {json}\n" and a blank line between events.

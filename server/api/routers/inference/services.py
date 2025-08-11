@@ -1,3 +1,4 @@
+import threading
 from typing import Any
 
 from atomic_agents import BasicChatInputSchema  # type: ignore
@@ -12,7 +13,9 @@ from .models import ChatMessage, ChatRequest, IntegrationType, ProjectAction, To
 logger = FastAPIStructLogger()
 
 # Store agent instances to maintain conversation context
+# Protected by a re-entrant lock for thread-safety across workers
 agent_sessions: dict[str, Any] = {}
+_agent_sessions_lock = threading.RLock()
 
 class ToolExecutor:
     """Handles tool execution (both native and manual)"""
@@ -174,13 +177,14 @@ class ChatProcessor:
             logger.info("Starting chat processing", session_id=session_id)
 
             # Get or create agent
-            if session_id not in agent_sessions:
-                agent = AgentFactory.create_agent()
-                agent_sessions[session_id] = agent
-                logger.info("Created new agent session", session_id=session_id)
-            else:
-                agent = agent_sessions[session_id]
-                logger.info("Using existing agent session", session_id=session_id)
+            with _agent_sessions_lock:
+                if session_id not in agent_sessions:
+                    agent = AgentFactory.create_agent()
+                    agent_sessions[session_id] = agent
+                    logger.info("Created new agent session", session_id=session_id)
+                else:
+                    agent = agent_sessions[session_id]
+                    logger.info("Using existing agent session", session_id=session_id)
 
             # Extract latest user message
             latest_user_message: str | None = None
@@ -290,28 +294,36 @@ class AgentSessionManager:
     @staticmethod
     def get_session(session_id: str) -> Any:
         """Get existing session or create new one"""
-        if session_id not in agent_sessions:
-                    agent = AgentFactory.create_agent()
-        agent_sessions[session_id] = agent
-        logger.info("Created new agent session", session_id=session_id)
-        return agent_sessions[session_id]
+        with _agent_sessions_lock:
+            if session_id not in agent_sessions:
+                agent = AgentFactory.create_agent()
+                agent_sessions[session_id] = agent
+                logger.info("Created new agent session", session_id=session_id)
+            return agent_sessions[session_id]
 
     @staticmethod
     def delete_session(session_id: str) -> bool:
         """Delete a chat session"""
-        if session_id in agent_sessions:
-            agent_sessions[session_id].reset_history()
-            del agent_sessions[session_id]
-            logger.info("Deleted session", session_id=session_id)
-            return True
-        return False
+        with _agent_sessions_lock:
+            if session_id in agent_sessions:
+                try:
+                    agent_sessions[session_id].reset_history()
+                except Exception:
+                    # Best-effort reset; proceed with deletion
+                    pass
+                del agent_sessions[session_id]
+                logger.info("Deleted session", session_id=session_id)
+                return True
+            return False
 
     @staticmethod
     def get_session_count() -> int:
         """Get number of active sessions"""
-        return len(agent_sessions)
+        with _agent_sessions_lock:
+            return len(agent_sessions)
 
     @staticmethod
     def get_session_ids() -> list[str]:
         """Get list of active session IDs"""
-        return list(agent_sessions.keys())
+        with _agent_sessions_lock:
+            return list(agent_sessions.keys())

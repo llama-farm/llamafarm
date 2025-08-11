@@ -36,6 +36,12 @@ class ProjectUtils:
             if char in name:
                 return False, f"Project name contains invalid character: {char}"
 
+        # Reject non-printable or control characters
+        for ch in name:
+            # str.isprintable() rejects most control characters; ensure ASCII control too
+            if not ch.isprintable() or ord(ch) < 32:
+                return False, "Project name contains non-printable or control characters"
+
         # Check for reserved names (Windows)
         reserved_names = [
             'CON', 'PRN', 'AUX', 'NUL',
@@ -55,13 +61,15 @@ class ProjectUtils:
         return True, None
 
     @staticmethod
-    def safe_delete_directory(directory: Path, dry_run: bool = False) -> List[str]:
+    def safe_delete_directory(directory: Path, dry_run: bool = False, *, follow_symlinks: bool = False) -> List[str]:
         """
         Safely delete a directory and return a list of files that would be/were deleted.
 
         Args:
             directory: The directory to delete
             dry_run: If True, only return what would be deleted without actually deleting
+            follow_symlinks: If True, os.walk will follow symlinked directories. Defaults to False.
+                Note: Following symlinks can cause unexpected deletions outside the target tree.
 
         Returns:
             List of file paths that would be/were deleted
@@ -80,7 +88,8 @@ class ProjectUtils:
             return deleted_files
 
         # Walk through all files and directories
-        for root, dirs, files in os.walk(directory, topdown=False, followlinks=False):
+        # followlinks default is False to avoid traversing out of tree via symlinks
+        for root, dirs, files in os.walk(directory, topdown=False, followlinks=follow_symlinks):
             root_path = Path(root)
 
             # Delete files
