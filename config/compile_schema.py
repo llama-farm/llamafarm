@@ -59,10 +59,7 @@ def load_and_deref_schema(path: Path):
         loader=yaml_json_loader,
     )
 
-    # Convert jsonref proxy objects to plain Python objects
-    plain_dict = jsonref_to_dict(deref)
-
-    return plain_dict
+    return jsonref_to_dict(deref)
 
 
 def get_dereferenced_schema() -> dict:
