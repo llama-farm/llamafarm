@@ -50,7 +50,19 @@ class TestDataService:
             version=Version.v1,
             name="test_project",
             prompts=[],
-            rag={},
+            rag={"strategies": [
+                {
+                    "name": "default",
+                    "description": "Default strategy configuration",
+                    "components": {
+                        "parser": {"type": "CSVParser", "config": {}},
+                        "extractors": [],
+                        "embedder": {"type": "OllamaEmbedder", "config": {"model": "nomic-embed-text"}},
+                        "vector_store": {"type": "ChromaStore", "config": {}},
+                        "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
+                    }
+                }
+            ]},
             datasets=[
                 Dataset(name="dataset1", rag_strategy="auto", files=[self.test_file_hash]),
                 Dataset(name="dataset2", rag_strategy="auto", files=["other_hash"])
@@ -244,7 +256,19 @@ class TestDataService:
             version=Version.v1,
             name="test_project",
             prompts=[],
-            rag={},
+            rag={"strategies": [
+                {
+                    "name": "default",
+                    "description": "Default strategy configuration",
+                    "components": {
+                        "parser": {"type": "CSVParser", "config": {}},
+                        "extractors": [],
+                        "embedder": {"type": "OllamaEmbedder", "config": {"model": "nomic-embed-text"}},
+                        "vector_store": {"type": "ChromaStore", "config": {}},
+                        "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
+                    }
+                }
+            ]},
             datasets=[
                 Dataset(name="target_dataset", rag_strategy="auto", files=[self.test_file_hash])
             ],
@@ -289,7 +313,19 @@ class TestDataService:
             version=Version.v1,
             name="test_project",
             prompts=[],
-            rag={},
+            rag={"strategies": [
+                {
+                    "name": "default",
+                    "description": "Default strategy configuration",
+                    "components": {
+                        "parser": {"type": "CSVParser", "config": {}},
+                        "extractors": [],
+                        "embedder": {"type": "OllamaEmbedder", "config": {"model": "nomic-embed-text"}},
+                        "vector_store": {"type": "ChromaStore", "config": {}},
+                        "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
+                    }
+                }
+            ]},
             datasets=[
                 Dataset(name="target_dataset", rag_strategy="auto", files=[self.test_file_hash]),
                 Dataset(name="other_dataset", rag_strategy="auto", files=["other_hash", self.test_file_hash])
@@ -325,7 +361,19 @@ class TestDataService:
             version=Version.v1,
             name="test_project",
             prompts=[],
-            rag={},
+            rag={"strategies": [
+                {
+                    "name": "default",
+                    "description": "Default strategy configuration",
+                    "components": {
+                        "parser": {"type": "CSVParser", "config": {}},
+                        "extractors": [],
+                        "embedder": {"type": "OllamaEmbedder", "config": {"model": "nomic-embed-text"}},
+                        "vector_store": {"type": "ChromaStore", "config": {}},
+                        "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
+                    }
+                }
+            ]},
             datasets=[
                 Dataset(name="target_dataset", rag_strategy="auto", files=[self.test_file_hash])
             ],

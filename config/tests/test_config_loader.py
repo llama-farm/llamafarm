@@ -44,32 +44,32 @@ class TestConfigLoader:
 
         # Verify RAG configuration
         rag = config["rag"]
-        assert rag["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
-        assert rag["embedders"]["default"]["type"] == "OllamaEmbedder"
-        assert rag["vector_stores"]["default"]["type"] == "ChromaStore"
+        # New strict schema: strategies array
+        assert isinstance(rag["strategies"], list) and len(rag["strategies"]) >= 1
+        strat = rag["strategies"][0]
+        assert strat["components"]["parser"]["type"] == "CSVParser"
+        assert strat["components"]["embedder"]["type"] == "OllamaEmbedder"
+        assert strat["components"]["vector_store"]["type"] == "ChromaStore"
 
         # Verify parser config
-        parser_config = rag["parsers"]["csv"]["config"]
+        parser_config = strat["components"]["parser"]["config"]
         assert "question" in parser_config["content_fields"]
         assert "answer" in parser_config["content_fields"]
         assert "category" in parser_config["metadata_fields"]
         assert "timestamp" in parser_config["metadata_fields"]
 
         # Verify embedder config
-        embedder_config = rag["embedders"]["default"]["config"]
+        embedder_config = strat["components"]["embedder"]["config"]
         assert embedder_config["model"] == "mxbai-embed-large"
         assert embedder_config["batch_size"] == 32
 
         # Verify vector store config
-        vector_config = rag["vector_stores"]["default"]["config"]
+        vector_config = strat["components"]["vector_store"]["config"]
         assert vector_config["collection_name"] == "customer_support_knowledge_base"
         assert vector_config["persist_directory"] == "./data/vector_store/chroma"
 
         # Verify defaults section
-        assert rag["defaults"]["parser"] == "auto"
-        assert rag["defaults"]["embedder"] == "default"
-        assert rag["defaults"]["vector_store"] == "default"
-        assert rag["defaults"]["retrieval_strategy"] == "default"
+        # Defaults removed in strict schema version; strategies govern components
 
         # Verify models
         assert len(config["models"]) == 8
@@ -98,8 +98,9 @@ class TestConfigLoader:
         assert len(config["models"]) == 8
 
         # Verify TOML-specific parsing worked correctly
-        assert config["rag"]["embedders"]["default"]["config"]["batch_size"] == 32
-        assert isinstance(config["rag"]["parsers"]["csv"]["config"]["content_fields"], list)
+        strat = config["rag"]["strategies"][0]
+        assert strat["components"]["embedder"]["config"]["batch_size"] == 32
+        assert isinstance(strat["components"]["parser"]["config"]["content_fields"], list)
         assert isinstance(config["models"], list)
 
     def test_load_minimal_config(self, test_data_dir):
@@ -119,8 +120,9 @@ class TestConfigLoader:
         assert config["prompts"][0]["name"] == "minimal_prompt"
 
         # RAG should be properly configured
-        assert config["rag"]["parsers"]["csv"]["config"]["content_fields"] == ["question"]
-        assert config["rag"]["embedders"]["default"]["config"]["model"] == "nomic-embed-text"
+        strat = config["rag"]["strategies"][0]
+        assert strat["components"]["parser"]["config"]["content_fields"] == ["question"]
+        assert strat["components"]["embedder"]["config"]["model"] == "nomic-embed-text"
 
     def test_validation_with_invalid_config(self, test_data_dir):
         """Test that validation catches invalid configurations."""
@@ -225,9 +227,10 @@ models:
             assert isinstance(model["provider"], str)
             assert isinstance(model["model"], str)
 
-        # Test RAG structure
-        assert isinstance(rag["parsers"]["csv"]["config"]["content_fields"], list)
-        assert isinstance(rag["embedders"]["default"]["config"]["batch_size"], int)
+        # Test RAG structure (strict schema)
+        strat = rag["strategies"][0]
+        assert isinstance(strat["components"]["parser"]["config"]["content_fields"], list)
+        assert isinstance(strat["components"]["embedder"]["config"]["batch_size"], int)
 
     def test_config_with_no_prompts(self, test_data_dir):
         """Test configuration loading with minimal prompts section."""
@@ -283,11 +286,12 @@ def test_integration_usage():
     assert config["version"] == "v1"
 
     # Test accessing RAG configuration (common use case)
-    parser_type = config["rag"]["parsers"]["csv"]["type"]
-    embedder_model = config["rag"]["embedders"]["default"]["config"]["model"]
-    collection_name = config["rag"]["vector_stores"]["default"]["config"]["collection_name"]
+    strat = config["rag"]["strategies"][0]
+    parser_type = strat["components"]["parser"]["type"]
+    embedder_model = strat["components"]["embedder"]["config"]["model"]
+    collection_name = strat["components"]["vector_store"]["config"]["collection_name"]
 
-    assert parser_type == "CustomerSupportCSVParser"
+    assert parser_type == "CSVParser"
     assert embedder_model == "mxbai-embed-large"
     assert collection_name == "customer_support_knowledge_base"
 

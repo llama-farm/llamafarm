@@ -705,3 +705,6 @@ Temporary Items
 
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
+
+# generated file when running `uv run python config/compile_schema.py`
+config/schema.deref.yaml

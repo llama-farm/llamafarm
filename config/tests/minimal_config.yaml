@@ -4,44 +4,34 @@ name: minimal_config
 namespace: test
 
 rag:
-  parsers:
-    csv:
-      type: "CustomerSupportCSVParser"
-      config:
-        content_fields: ["question"]
-        metadata_fields: ["category"]
-        id_field: "id"
-        combine_content: true
-      file_extensions: [".csv"]
-      mime_types: ["text/csv"]
-
-  embedders:
-    default:
-      type: "OllamaEmbedder"
-      config:
-        model: "nomic-embed-text"
-        base_url: "http://localhost:11434"
-        batch_size: 16
-        timeout: 30
-
-  vector_stores:
-    default:
-      type: "ChromaStore"
-      config:
-        collection_name: "minimal_collection"
-        persist_directory: "./data/minimal"
-
-  retrieval_strategies:
-    default:
-      type: "BasicSimilarityStrategy"
-      config:
-        distance_metric: "cosine"
-
-  defaults:
-    parser: "auto"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+  strategies:
+    - name: "default"
+      description: "Minimal strategy for testing"
+      components:
+        parser:
+          type: "CSVParser"
+          config:
+            content_fields: ["question"]
+            metadata_fields: ["category"]
+            id_field: "id"
+            combine_content: true
+        extractors: []
+        embedder:
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+            base_url: "http://localhost:11434"
+            batch_size: 16
+            timeout: 30
+        vector_store:
+          type: "ChromaStore"
+          config:
+            collection_name: "minimal_collection"
+            persist_directory: "./data/minimal"
+        retrieval_strategy:
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
 
 models:
   - provider: "local"
@@ -50,10 +40,7 @@ models:
 datasets:
   - name: "minimal_dataset"
     files: ["test_file.csv"]
-    parser: "csv"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+    rag_strategy: "default"
 
 prompts:
   - name: "minimal_prompt"

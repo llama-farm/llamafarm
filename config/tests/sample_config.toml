@@ -19,65 +19,43 @@ prompt = "You are a code review assistant. Analyze code for best practices, pote
 description = "Prompt for conducting code reviews and providing feedback"
 
 [rag]
-description = "Customer support RAG configuration for testing"
 
-[rag.parsers.csv]
-type = "CustomerSupportCSVParser"
-file_extensions = [".csv"]
-mime_types = ["text/csv", "application/csv"]
+[[rag.strategies]]
+name = "default"
+description = "Customer support strategy for testing"
 
-[rag.parsers.csv.config]
+[rag.strategies.components.parser]
+type = "CSVParser"
+
+[rag.strategies.components.parser.config]
 content_fields = ["question", "answer", "solution", "explanation"]
 metadata_fields = ["category", "timestamp", "priority", "tags", "author"]
 id_field = "id"
 combine_content = true
 content_separator = "\n\n"
 
-[rag.parsers.csv.config.chunk_metadata]
-generate_summary = true
-extract_keywords = true
-include_statistics = true
 
-[rag.embedders.default]
+[rag.strategies.components.embedder]
 type = "OllamaEmbedder"
 
-[rag.embedders.default.config]
+[rag.strategies.components.embedder.config]
 model = "mxbai-embed-large"
 base_url = "http://localhost:11434"
 batch_size = 32
 timeout = 60
 
-[rag.vector_stores.default]
+[rag.strategies.components.vector_store]
 type = "ChromaStore"
 
-[rag.vector_stores.default.config]
+[rag.strategies.components.vector_store.config]
 collection_name = "customer_support_knowledge_base"
 persist_directory = "./data/vector_store/chroma"
 
-[rag.vector_stores.default.config.metadata_config]
-enable_versioning = true
-enable_soft_delete = true
-hash_algorithm = "sha256"
-required_metadata = ["doc_id", "chunk_id", "filename", "created_at", "updated_at"]
-indexed_metadata = ["doc_id", "filename", "created_at"]
-
-[rag.vector_stores.default.config.metadata_config.retention_policy]
-default_ttl_days = 365
-max_versions = 10
-cleanup_schedule = "weekly"
-
-[rag.retrieval_strategies.default]
+[rag.strategies.components.retrieval_strategy]
 type = "BasicSimilarityStrategy"
-description = "Basic similarity search"
 
-[rag.retrieval_strategies.default.config]
+[rag.strategies.components.retrieval_strategy.config]
 distance_metric = "cosine"
-
-[rag.defaults]
-parser = "auto"
-embedder = "default"
-vector_store = "default"
-retrieval_strategy = "default"
 
 [[models]]
 provider = "local"
@@ -114,7 +92,4 @@ model = "custom-fine-tuned-model-v1"
 [[datasets]]
 name = "sample_dataset"
 files = ["test_file.csv"]
-parser = "csv"
-embedder = "default"
-vector_store = "default"
-retrieval_strategy = "default"
+rag_strategy = "default"

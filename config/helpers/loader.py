@@ -8,6 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+# urllib.parse imports removed - no longer needed for $ref resolution
 
 try:
     import yaml  # type: ignore
@@ -20,7 +21,7 @@ try:
     else:
         import tomli as tomllib
 except ImportError:
-    tomllib = None # type: ignore
+    tomllib = None  # type: ignore
 
 try:
     import tomli_w  # type: ignore
@@ -31,6 +32,7 @@ try:
     import jsonschema  # type: ignore
 except ImportError:
     jsonschema = None
+# Removed complex referencing imports - using compile_schema.py instead
 
 # Handle both relative and absolute imports
 try:
@@ -55,30 +57,39 @@ class ConfigError(Exception):
 
 
 def _load_schema() -> dict:
-    """Load the JSON schema from schema.yaml."""
-    schema_path = Path(__file__).parent.parent / "schema.yaml"
-
-    if not schema_path.exists():
-        raise ConfigError(f"Schema file not found: {schema_path}")
-
-    if yaml is None:
-        raise ConfigError("PyYAML is required to load the schema.")
-
+    """Load the JSON schema with all $refs dereferenced using compile_schema.py."""
     try:
-        with open(schema_path) as f:
-            return yaml.safe_load(f)
+        # Import the dereferencing function from our compile_schema module
+        import sys
+        from pathlib import Path
+
+        # Add the config directory to the path if needed
+        config_dir = Path(__file__).parent.parent
+        if str(config_dir) not in sys.path:
+            sys.path.insert(0, str(config_dir))
+
+        # Import and use the dereferencing function
+        import importlib.util
+
+        compile_schema_path = config_dir / "compile_schema.py"
+        spec = importlib.util.spec_from_file_location("compile_schema", compile_schema_path)
+        compile_schema = importlib.util.module_from_spec(spec)  # type: ignore
+        spec.loader.exec_module(compile_schema)  # type: ignore
+
+        return compile_schema.get_dereferenced_schema()
     except Exception as e:
-        raise ConfigError(f"Error loading schema: {e}") from e
+        raise ConfigError(f"Error loading dereferenced schema: {e}") from e
 
 
 def _validate_config(config: dict, schema: dict) -> None:
-    """Validate configuration against JSON schema."""
+    """Validate configuration against JSON schema (schema is already dereferenced)."""
     if jsonschema is None:
         # If jsonschema is not available, skip validation but warn
         print("Warning: jsonschema not installed. Skipping validation.")
         return
 
     try:
+        # Simple validation since schema is already fully dereferenced by compile_schema.py
         jsonschema.validate(config, schema)
     except jsonschema.ValidationError as e:
         raise ConfigError(f"Configuration validation error: {e.message}") from e
@@ -187,6 +198,7 @@ def load_config_dict(
 
     return config
 
+
 def _resolve_config_file(
     config_path: str | Path | None = None,
     directory: str | Path | None = None,
@@ -212,6 +224,7 @@ def _resolve_config_file(
             raise ConfigError(f"No configuration file found in {directory}")
 
     return config_path_resolved
+
 
 def load_config(
     config_path: str | Path | None = None,
@@ -351,7 +364,7 @@ def save_config(
                 config_file = config_path / "llamafarm.yaml"
 
     # Validate configuration before saving
-    config_dict = config.model_dump(mode="json")
+    config_dict = config.model_dump(mode="json", exclude_none=True)
 
     # Create backup if requested and file exists
     backup_path = None
@@ -401,7 +414,7 @@ def update_config(
     config_path: str | Path,
     updates: dict,
     create_backup: bool = True,
-) -> LlamaFarmConfig:
+) -> tuple[Path, LlamaFarmConfig]:
     """
     Update an existing configuration file with new values.
 
@@ -433,7 +446,9 @@ def update_config(
             if config_file is None:
                 raise ConfigError(f"No configuration file found in directory: {config_path}")
         except ConfigError as e:
-            raise ConfigError(f"Directory does not exist or contains no config file: {config_path}") from e # noqa: E501
+            raise ConfigError(
+                f"Directory does not exist or contains no config file: {config_path}"
+            ) from e  # noqa: E501
 
     # Load existing configuration
     config = load_config(config_file, validate=False)
@@ -448,12 +463,13 @@ def update_config(
                 base[key] = value
         return base
 
-    config_dict = config.model_dump(mode="json")
+    config_dict = config.model_dump(mode="json", exclude_none=True)
     updated_config_dict = deep_update(config_dict, updates)
 
     # Save updated configuration (preserves original format)
-    return save_config(
+    saved_path, cfg = save_config(
         LlamaFarmConfig(**updated_config_dict),
         config_file,
         create_backup=create_backup,
     )
+    return saved_path, cfg

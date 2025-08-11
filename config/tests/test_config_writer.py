@@ -4,12 +4,13 @@ Tests for configuration writing functionality.
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 # Import the functions we want to test
 from config import ConfigError, load_config_dict, save_config, update_config
-from config.datamodel import Dataset, LlamaFarmConfig, Prompt, Version
+from config.datamodel import LlamaFarmConfig, Version
 
 
 class TestConfigWriter:
@@ -18,38 +19,63 @@ class TestConfigWriter:
     @pytest.fixture
     def sample_config(self) -> LlamaFarmConfig:
         """Sample configuration for testing."""
-        return LlamaFarmConfig(
-            version=Version.v1,
-            name="sample_config",
-            prompts=[
-                Prompt(
-                    name="test_prompt",
-                    prompt="This is a test prompt for configuration testing.",
-                    description="A sample prompt for testing purposes"
-                )
+        config: dict[str, Any] = {
+            "version": Version.v1,
+            "name": "sample_config",
+            "prompts": [
+                {
+                    "name": "test_prompt",
+                    "prompt": "This is a test prompt for configuration testing.",
+                    "description": "A sample prompt for testing purposes"
+                }
             ],
-            rag={
-                "embedders": {
-                    "default": {
-                        "type": "OllamaEmbedder",
-                        "config": {
-                            "model": "nomic-embed-text",
-                            "base_url": "http://localhost:11434",
-                            "batch_size": 16,
-                            "timeout": 30
+            "rag": {
+                "strategies": [
+                    {
+                        "name": "default",
+                        "description": "Default strategy",
+                        "components": {
+                            "parser": {
+                                "type": "CSVParser",
+                                "config": {
+                                    "content_fields": ["question"],
+                                    "metadata_fields": ["category"],
+                                    "id_field": "id",
+                                    "combine_content": True
+                                }
+                            },
+                            "extractors": [],
+                            "embedder": {
+                                "type": "OllamaEmbedder",
+                                "config": {
+                                    "model": "nomic-embed-text",
+                                    "base_url": "http://localhost:11434",
+                                    "batch_size": 16,
+                                    "timeout": 30
+                                }
+                            },
+                            "vector_store": {
+                                "type": "ChromaStore",
+                                "config": {}
+                            },
+                            "retrieval_strategy": {
+                                "type": "BasicSimilarityStrategy",
+                                "config": {}
+                            }
                         }
                     }
-                }
+                ]
             },
-            datasets=[
-                Dataset(
-                    name="test_dataset",
-                    files=["test_file.csv"],
-                    rag_strategy="auto"
-                )
+            "datasets": [
+                {
+                    "name": "test_dataset",
+                    "files": ["test_file.csv"],
+                    "rag_strategy": "auto"
+                }
             ],
-            models=[]
-        )
+            "models": []
+        }
+        return LlamaFarmConfig(**config)
 
     def test_save_config_yaml(self, sample_config):
         """Test saving configuration to YAML format."""
@@ -174,13 +200,21 @@ class TestConfigWriter:
             # Update configuration
             updates = {
                 "rag": {
-                    "embedders": {
-                        "default": {
-                            "config": {
-                                "batch_size": 32  # Change from 16 to 32
+                    "strategies": [
+                        {
+                            "name": "default",
+                            "description": "Default strategy",
+                            "components": {
+                                "embedder": {
+                                    "type": "OllamaEmbedder",
+                                    "config": {"batch_size": 32}
+                                },
+                                "parser": {"type": "CSVParser", "config": {}},
+                                "vector_store": {"type": "ChromaStore", "config": {}},
+                                "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
                             }
                         }
-                    }
+                    ]
                 },
                 "models": [
                     {
@@ -202,7 +236,10 @@ class TestConfigWriter:
 
             # Load and verify changes
             loaded_config = load_config_dict(config_path)
-            assert loaded_config["rag"]["embedders"]["default"]["config"]["batch_size"] == 32
+            assert (
+                loaded_config["rag"]["strategies"][0]["components"]["embedder"]["config"]["batch_size"]
+                == 32
+            )
             assert len(loaded_config["models"]) == 2
             assert loaded_config["models"][1]["provider"] == "openai"
 
@@ -220,14 +257,21 @@ class TestConfigWriter:
             # Update only nested values
             updates = {
                 "rag": {
-                    "embedders": {
-                        "default": {
-                            "config": {
-                                "batch_size": 64,
-                                "new_field": "test_value"
+                    "strategies": [
+                        {
+                            "name": "default",
+                            "description": "Default strategy",
+                            "components": {
+                                "embedder": {
+                                    "type": "OllamaEmbedder",
+                                    "config": {"batch_size": 64, "timeout": 45}
+                                },
+                                "parser": {"type": "CSVParser", "config": {}},
+                                "vector_store": {"type": "ChromaStore", "config": {}},
+                                "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
                             }
                         }
-                    }
+                    ]
                 }
             }
 
@@ -235,16 +279,15 @@ class TestConfigWriter:
 
             # Load and verify deep merge worked
             loaded_config = load_config_dict(config_path)
-            embedder_config = loaded_config["rag"]["embedders"]["default"]["config"]
+            embedder_config = loaded_config["rag"]["strategies"][0]["components"]["embedder"]["config"]
 
             # Updated values
             assert embedder_config["batch_size"] == 64
-            assert embedder_config["new_field"] == "test_value"
+            assert embedder_config["timeout"] == 45
 
             # Preserved values
             assert embedder_config["model"] == "nomic-embed-text"
             assert embedder_config["base_url"] == "http://localhost:11434"
-            assert embedder_config["timeout"] == 30
 
     def test_update_nonexistent_file(self):
         """Test updating a file that doesn't exist."""
