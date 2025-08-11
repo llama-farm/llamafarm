@@ -199,7 +199,7 @@ func startChatSession() {
                 fmt.Printf("%s\n\n", assistantMessage)
                 conversationHistory = append(conversationHistory, ChatMessage{Role: "assistant", Content: assistantMessage})
             } else {
-                fmt.Println("No response received.\n")
+                fmt.Println("No response received.")
             }
         }
 	}
