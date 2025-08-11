@@ -119,8 +119,6 @@ class DatasetService:
                         for s in dict_strategies
                         if isinstance(s, dict) and isinstance(s.get("name"), str)
                     )
-                else:
-                    custom_rag_strategies = rag_config.get("rag_strategies", []) or []
         except Exception:
             # Be resilient and fall back to defaults only
             custom_rag_strategies = []
