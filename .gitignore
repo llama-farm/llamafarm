@@ -707,3 +707,6 @@ Temporary Items
 .github/instructions/nx.instructions.md
 coverage*
 cli/lf*
+
+# generated file when running `uv run python config/compile_schema.py`
+config/schema.deref.yaml

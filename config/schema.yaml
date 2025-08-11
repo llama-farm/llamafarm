@@ -36,9 +36,7 @@ properties:
     default: []
 
   rag:
-    # $ref: "../rag/schema.yaml"
-    type: object
-    additionalProperties: true
+    $ref: "../rag/schema.yaml"
 
   datasets:
     type: array
