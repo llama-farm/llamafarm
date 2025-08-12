@@ -12,7 +12,7 @@ repo_root = Path(__file__).parent.parent.parent
 if str(repo_root) not in sys.path:
   sys.path.insert(0, str(repo_root))
 
-from config import load_config, save_config  # noqa: E402
+from config import ConfigError, load_config, save_config  # noqa: E402
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 from config.helpers.generator import generate_base_config_from_schema  # noqa: E402
 
@@ -114,10 +114,38 @@ class ProjectService:
 
     projects = []
     for project_name in dirs:
-      cfg = load_config(
-        directory=os.path.join(namespace_dir, project_name),
-        validate=False,
-      )
+      project_path = os.path.join(namespace_dir, project_name)
+
+      # Skip non-directories and hidden/system entries (e.g., .DS_Store)
+      if not os.path.isdir(project_path) or project_name.startswith("."):
+        logger.warning(
+          "Skipping non-project entry",
+          entry=project_name,
+          path=project_path,
+        )
+        continue
+
+      # Attempt to load project config; skip if invalid/missing
+      try:
+        cfg = load_config(
+          directory=project_path,
+          validate=False,
+        )
+      except ConfigError as e:
+        logger.warning(
+          "Skipping project without valid config",
+          entry=project_name,
+          error=str(e),
+        )
+        continue
+      except Exception as e:
+        logger.warning(
+          "Skipping project due to unexpected error",
+          entry=project_name,
+          error=str(e),
+        )
+        continue
+
       projects.append(Project(
         namespace=namespace,
         name=project_name,
