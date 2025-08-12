@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import FontIcon from '../common/FontIcon'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
@@ -9,6 +9,21 @@ function Header() {
   const isSelected = useLocation().pathname.split('/')[2]
   const { setTheme } = useTheme()
 
+  // Project dropdown state
+  const [isProjectOpen, setIsProjectOpen] = useState(false)
+  const [projects, setProjects] = useState<string[]>([
+    'aircraft-mx-flow',
+    'Option 1',
+    'Option 2',
+    'Option 3',
+    'Option 4',
+  ])
+  const [activeProject, setActiveProject] = useState<string>('aircraft-mx-flow')
+  const projectRef = useRef<HTMLDivElement>(null)
+
+  // Page switching overlay (fade only)
+  const [isSwitching, setIsSwitching] = useState(false)
+
   useEffect(() => {
     if (window.location.pathname !== '/') {
       setIsBuilding(true)
@@ -17,14 +32,105 @@ function Header() {
     }
   }, [window.location.pathname])
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!projectRef.current) return
+      if (!projectRef.current.contains(e.target as Node)) {
+        setIsProjectOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  const handleCreateProject = () => {
+    const base = 'New project'
+    let name = base
+    let i = 1
+    while (projects.includes(name)) {
+      name = `${base} ${i++}`
+    }
+    setProjects(prev => [...prev, name])
+    setActiveProject(name)
+    setIsProjectOpen(false)
+  }
+
+  const handleSelectProject = (name: string) => {
+    const isDifferent = name !== activeProject
+    setActiveProject(name)
+    setIsProjectOpen(false)
+    if (isDifferent) {
+      setIsSwitching(true)
+      setTimeout(() => setIsSwitching(false), 900)
+    }
+  }
+
   return (
     <header className="fixed top-0 left-0 z-50 w-full border-b transition-colors bg-white border-gray-200 dark:bg-blue-700 dark:border-blue-400/30">
+      {/* Fade overlay (below header) */}
+      {isSwitching && (
+        <div className="fixed z-40 top-12 left-0 right-0 bottom-0 bg-white/60 dark:bg-blue-800/60 backdrop-blur-[2px] page-fade-overlay"></div>
+      )}
+
       <div className="w-full flex items-center h-12">
-        <div
-          className="w-1/4 pl-4 font-serif text-base font-medium cursor-pointer transition-colors text-gray-900 dark:text-white"
-          onClick={() => navigate('/')}
-        >
-          🦙 LlaMaFarm
+        <div className="w-1/4 pl-4 flex items-center gap-2">
+          <div
+            className="font-serif text-base font-medium select-none text-gray-900 dark:text-white"
+            aria-hidden
+          >
+            🦙
+          </div>
+          <div className="relative" ref={projectRef}>
+            <button
+              className="flex items-center gap-2 px-3 h-8 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-blue-500/40 dark:text-white dark:hover:bg-blue-500/60"
+              onClick={() => setIsProjectOpen(p => !p)}
+              aria-haspopup="listbox"
+              aria-expanded={isProjectOpen}
+            >
+              <span className="font-serif text-base whitespace-nowrap">
+                {activeProject}
+              </span>
+              <FontIcon
+                type="chevron-down"
+                className={`w-4 h-4 ${isProjectOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {isProjectOpen && (
+              <div className="absolute mt-2 w-72 max-h-[60vh] overflow-auto rounded-lg shadow-lg border border-blue-400/30 bg-white text-gray-900 dark:bg-blue-700 dark:text-white">
+                {/* Options */}
+                {projects.map(name => (
+                  <button
+                    key={name}
+                    className={`w-full text-left px-4 py-3 transition-colors hover:bg-blue-600/20 dark:hover:bg-blue-600/40 ${
+                      name === activeProject ? 'opacity-100' : 'opacity-90'
+                    }`}
+                    onClick={() => handleSelectProject(name)}
+                  >
+                    <div className="border-b border-blue-400/20 pb-3 last:border-b-0">
+                      {name}
+                    </div>
+                  </button>
+                ))}
+                <div className="px-4 py-3 border-t border-blue-400/20">
+                  <button
+                    className="w-full flex items-center justify-center gap-2 rounded-md border border-green-100 text-green-100 hover:bg-green-100 hover:text-blue-700 transition-colors px-3 py-2"
+                    onClick={handleCreateProject}
+                  >
+                    <FontIcon type="add" className="w-4 h-4" />
+                    <span>Create new project</span>
+                  </button>
+                  <button
+                    className="w-full mt-2 flex items-center justify-center gap-2 rounded-md text-blue-100 hover:bg-blue-600/30 px-3 py-2"
+                    type="button"
+                  >
+                    View all projects
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div
