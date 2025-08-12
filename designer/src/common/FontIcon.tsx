@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback } from 'react'
 
 const Add = lazy(() => import('../assets/icons/Add'))
 const ArrowFilled = lazy(() => import('../assets/icons/ArrowFilled'))
+const ArrowRight = lazy(() => import('../assets/icons/ArrowRight'))
 const ChevronDown = lazy(() => import('../assets/icons/ChevronDown'))
 const CheckmarkFilled = lazy(() => import('../assets/icons/CheckmarkFilled'))
 const CheckmarkOutline = lazy(() => import('../assets/icons/CheckmarkOutline'))
@@ -31,6 +32,7 @@ const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
 type FontIconTypes =
   | 'add'
   | 'arrow-filled'
+  | 'arrow-right'
   | 'chevron-down'
   | 'checkmark-filled'
   | 'checkmark-outline'
@@ -78,6 +80,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Add />
       case 'arrow-filled':
         return <ArrowFilled />
+      case 'arrow-right':
+        return <ArrowRight />
       case 'chevron-down':
         return <ChevronDown />
       case 'checkmark-filled':
@@ -85,7 +89,7 @@ const FontIcon: React.FC<FontIconProps> = ({
       case 'checkmark-outline':
         return <CheckmarkOutline />
       case 'close':
-          return <Close />
+        return <Close />
       case 'close-panel':
         return <ClosePanel />
       case 'code':
