@@ -1,7 +1,7 @@
 const DataCards = () => {
   return (
-    <div className="w-full flex flex-row gap-2">
-      <div className="w-1/3 h-[103px] flex flex-col rounded-lg p-4 bg-white dark:bg-blue-500">
+    <div className="w-full flex flex-row gap-4">
+      <div className="w-1/3 min-h-[103px] flex flex-col rounded-lg p-6 pb-8 bg-white dark:bg-blue-500">
         <div className="text-sm text-gray-700 dark:text-white">
           Model accuracy
         </div>
@@ -11,7 +11,7 @@ const DataCards = () => {
           </div>
         </div>
       </div>
-      <div className="w-1/3 h-[103px] flex flex-col rounded-lg p-4 bg-white dark:bg-blue-500">
+      <div className="w-1/3 min-h-[103px] flex flex-col rounded-lg p-6 pb-8 bg-white dark:bg-blue-500">
         <div className="text-sm text-gray-700 dark:text-white">
           Response time
         </div>
@@ -21,7 +21,7 @@ const DataCards = () => {
           </div>
         </div>
       </div>
-      <div className="w-1/3 h-[103px] flex flex-col rounded-lg p-4 bg-white dark:bg-blue-500">
+      <div className="w-1/3 min-h-[103px] flex flex-col rounded-lg p-6 pb-8 bg-white dark:bg-blue-500">
         <div className="text-sm text-gray-700 dark:text-white">
           Monthly queries
         </div>
