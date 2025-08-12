@@ -30,6 +30,7 @@ dependencies = [
     "requests>=2.25.0",
     "structlog>=25.4.0",
     "asgi-correlation-id>=4.3.4",
+    "jsonref>=1.1.0",
 ]
 
 [project.optional-dependencies]

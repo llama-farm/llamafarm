@@ -5,6 +5,7 @@ def generate_base_config():
     return LlamaFarmConfig(
         version=Version.v1,
         name="llamafarm",
+        namespace="llamafarm",
         rag={},
         prompts=[],
         datasets=[],

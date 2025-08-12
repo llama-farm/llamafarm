@@ -26,6 +26,7 @@ var (
 	temperature float64
 	maxTokens   int
     streaming   bool
+    verbose     bool
 )
 
 // ChatSessionContext encapsulates CLI session and connection state.
@@ -49,7 +50,7 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
         Temperature: temperature,
         MaxTokens:   maxTokens,
         Streaming:   streaming,
-        HTTPClient:  httpClient,
+        HTTPClient:  getHTTPClient(),
     }
 }
 
@@ -107,21 +108,7 @@ type ChatResponse struct {
 	Choices []ChatChoice `json:"choices"`
 }
 
-// HTTPClient interface for testing
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// DefaultHTTPClient is the default HTTP client
-type DefaultHTTPClient struct{}
-
-// Do implements the HTTPClient interface
-func (c *DefaultHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	return client.Do(req)
-}
-
-var httpClient HTTPClient = &DefaultHTTPClient{}
+// HTTP client types and helpers are centralized in httpclient.go
 
 // chatCmd represents the chat command
 var chatCmd = &cobra.Command{
@@ -303,7 +290,7 @@ func sendChatRequestWithContext(messages []ChatMessage, ctx *ChatSessionContext)
     // Send request
     client := ctx.HTTPClient
     if client == nil {
-        client = &DefaultHTTPClient{}
+        client = getHTTPClient()
     }
     resp, err := client.Do(req)
     if err != nil {
@@ -380,6 +367,11 @@ func sendChatRequestStreamWithContext(messages []ChatMessage, ctx *ChatSessionCo
     if ctx.SessionID != "" {
         req.Header.Set("X-Session-ID", ctx.SessionID)
     }
+    _ = addLocalhostCWDHeader(req)
+    if verbose {
+        fmt.Fprintf(os.Stderr, "HTTP %s %s\n", req.Method, req.URL.String())
+        logHeaders("request", req.Header)
+    }
 
     // We want to stream the response; do not set a short timeout.
     hc := &http.Client{Timeout: 0, Transport: &http.Transport{DisableCompression: true}}
@@ -392,6 +384,10 @@ func sendChatRequestStreamWithContext(messages []ChatMessage, ctx *ChatSessionCo
     if resp.StatusCode != http.StatusOK {
         body, _ := io.ReadAll(resp.Body)
         return "", fmt.Errorf("server returned error %d: %s", resp.StatusCode, string(body))
+    }
+    if verbose {
+        fmt.Fprintf(os.Stderr, "  -> %d %s\n", resp.StatusCode, http.StatusText(resp.StatusCode))
+        logHeaders("response", resp.Header)
     }
 
     if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
@@ -465,7 +461,8 @@ func deleteChatSession() error {
     if err != nil {
         return nil
     }
-    resp, err := http.DefaultClient.Do(req)
+    _ = addLocalhostCWDHeader(req)
+    resp, err := getHTTPClient().Do(req)
     if err != nil {
         return nil
     }
@@ -503,6 +500,7 @@ func init() {
 	chatCmd.Flags().Float64Var(&temperature, "temperature", 0.7, "Sampling temperature (0.0 to 2.0)")
 	chatCmd.Flags().IntVar(&maxTokens, "max-tokens", 1000, "Maximum number of tokens to generate")
     chatCmd.Flags().BoolVar(&streaming, "stream", true, "Stream assistant responses")
+    chatCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Verbose HTTP logging")
 
 	// No flags are required now - they can come from config file
 
@@ -512,3 +510,5 @@ func init() {
 	// Add the projects command to root
 	rootCmd.AddCommand(projectsCmd)
 }
+
+//

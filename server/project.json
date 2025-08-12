@@ -5,7 +5,8 @@
             "executor": "nx:run-commands",
             "options": {
                 "cwd": "{workspaceRoot}/server",
-                "command": "uv run python main.py"
+                "command": "uv run python main.py",
+                "output": "inherit"
             }
         },
         "build": {

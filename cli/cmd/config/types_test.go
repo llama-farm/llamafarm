@@ -17,14 +17,17 @@ func writeTempConfig(t *testing.T, content string) string {
 }
 
 func TestGetProjectInfo(t *testing.T) {
+    // Legacy name split
     cfg := &LlamaFarmConfig{Name: "acme/shop"}
     pi, err := cfg.GetProjectInfo()
-    if err != nil {
-        t.Fatalf("unexpected err: %v", err)
-    }
-    if pi.Namespace != "acme" || pi.Project != "shop" {
-        t.Fatalf("unexpected project info: %+v", pi)
-    }
+    if err != nil { t.Fatalf("unexpected err: %v", err) }
+    if pi.Namespace != "acme" || pi.Project != "shop" { t.Fatalf("unexpected project info: %+v", pi) }
+
+    // Explicit fields preferred
+    cfg = &LlamaFarmConfig{Name: "shop", Namespace: "acme"}
+    pi, err = cfg.GetProjectInfo()
+    if err != nil { t.Fatalf("unexpected err: %v", err) }
+    if pi.Namespace != "acme" || pi.Project != "shop" { t.Fatalf("unexpected project info: %+v", pi) }
 }
 
 func TestGetServerConfig_Strict(t *testing.T) {
@@ -34,8 +37,8 @@ func TestGetServerConfig_Strict(t *testing.T) {
         t.Fatalf("expected error when namespace/project missing")
     }
 
-    // With config file containing name
-    path := writeTempConfig(t, "name: acme/shop\nversion: v1\n")
+    // With config file containing explicit fields
+    path := writeTempConfig(t, "name: shop\nnamespace: acme\nversion: v1\n")
     sc, err := GetServerConfig(path, "", "", "")
     if err != nil {
         t.Fatalf("unexpected err: %v", err)
@@ -56,7 +59,7 @@ func TestGetServerConfig_Lenient(t *testing.T) {
     }
 
     // With config file and overrides
-    path := writeTempConfig(t, "name: acme/shop\nversion: v1\n")
+    path := writeTempConfig(t, "name: shop\nnamespace: acme\nversion: v1\n")
     sc, err = GetServerConfigLenient(path, "http://x", "ns", "proj")
     if err != nil {
         t.Fatalf("unexpected err: %v", err)
@@ -65,7 +68,7 @@ func TestGetServerConfig_Lenient(t *testing.T) {
         t.Fatalf("unexpected server config: %+v", sc)
     }
 
-    // Config file missing 'name' field, should fallback to empty namespace/project
+    // Config file missing project fields, should fallback to empty namespace/project
     pathMissingName := writeTempConfig(t, "version: v1\n")
     sc, err = GetServerConfigLenient(pathMissingName, "", "", "")
     if err != nil {

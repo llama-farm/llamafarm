@@ -5,6 +5,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from api.errors import NamespaceNotFoundError
+from api.middleware.client_cwd import current_client_cwd
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
@@ -34,10 +35,14 @@ class ProjectService:
 
   @classmethod
   def get_project_dir(cls, namespace: str, project_id: str):
+    if not settings.lf_use_data_dir:
+      # Prefer client CWD (localhost CLI) when available; fallback to server CWD
+      client_dir = current_client_cwd.get()
+      # Keep line-length within style limit by splitting expression
+      return client_dir or os.getcwd()
     if settings.lf_project_dir is None:
       return os.path.join(settings.lf_data_dir, "projects", namespace, project_id)
-    else:
-      return settings.lf_project_dir
+    return settings.lf_project_dir
 
   @classmethod
   def create_project(cls, namespace: str, project_id: str) -> LlamaFarmConfig:

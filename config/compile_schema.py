@@ -7,9 +7,8 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
-import jsonref
-import yaml
-
+import jsonref  # type: ignore[import-untyped]
+import yaml  # type: ignore[import-untyped]
 
 ROOT = Path(__file__).parent / "schema.yaml"
 
@@ -80,6 +79,14 @@ if __name__ == "__main__":
         # Write to file
         output_file = Path("./schema.deref.yaml")
         output_file.write_text(compiled, encoding="utf-8")
+        print(f"Schema compiled to {output_file}")
+
+        # Copy the dereferenced schema to cli/cmd/config directory
+        dest_dir = Path(__file__).parent.parent / "cli" / "cmd" / "config"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_file = dest_dir / "schema.yaml"
+        dest_file.write_text(compiled, encoding="utf-8")
+        print(f"Schema also copied to {dest_file}")
 
     except Exception as e:
         print(f"Error during schema compilation: {e}")

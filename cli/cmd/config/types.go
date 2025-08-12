@@ -1,18 +1,19 @@
 package config
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
+    "fmt"
+    "os"
+    "path/filepath"
+    "strings"
 
-	"gopkg.in/yaml.v2"
+    yaml "gopkg.in/yaml.v2"
 )
 
 // LlamaFarmConfig represents the complete llamafarm.yaml configuration
 type LlamaFarmConfig struct {
 	Version  string     `yaml:"version"`
-	Name     string     `yaml:"name,omitempty"`
+    Name     string     `yaml:"name,omitempty"`
+    Namespace string    `yaml:"namespace,omitempty"`
 	Prompts  []Prompt   `yaml:"prompts,omitempty"`
 	RAG      RAGConfig  `yaml:"rag,omitempty"`
 	Datasets []Dataset  `yaml:"datasets,omitempty"`
@@ -183,27 +184,29 @@ type ProjectInfo struct {
 
 // GetProjectInfo extracts namespace and project from the config name field
 func (c *LlamaFarmConfig) GetProjectInfo() (*ProjectInfo, error) {
-	if c.Name == "" {
-		return nil, fmt.Errorf("project name not set in configuration")
-	}
+    // Preferred: explicit fields
+    if strings.TrimSpace(c.Name) != "" && strings.TrimSpace(c.Namespace) != "" {
+        return &ProjectInfo{Namespace: strings.TrimSpace(c.Namespace), Project: strings.TrimSpace(c.Name)}, nil
+    }
 
-	// Split name by forward slash to get namespace/project
-	parts := strings.Split(c.Name, "/")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("project name must be in format 'namespace/project', got: %s", c.Name)
-	}
+    // Backward compatibility: support legacy 'name: namespace/project'
+    if strings.TrimSpace(c.Name) != "" {
+        parts := strings.Split(c.Name, "/")
+        if len(parts) == 2 {
+            ns := strings.TrimSpace(parts[0])
+            proj := strings.TrimSpace(parts[1])
+            if ns != "" && proj != "" {
+                return &ProjectInfo{Namespace: ns, Project: proj}, nil
+            }
+        }
+        // If namespace provided via field, pair it with name as project
+        if strings.TrimSpace(c.Namespace) != "" {
+            return &ProjectInfo{Namespace: strings.TrimSpace(c.Namespace), Project: strings.TrimSpace(c.Name)}, nil
+        }
+        return nil, fmt.Errorf("namespace is required (set 'namespace' in llamafarm.yaml or provide --namespace)")
+    }
 
-	namespace := strings.TrimSpace(parts[0])
-	project := strings.TrimSpace(parts[1])
-
-	if namespace == "" || project == "" {
-		return nil, fmt.Errorf("namespace and project cannot be empty in name: %s", c.Name)
-	}
-
-	return &ProjectInfo{
-		Namespace: namespace,
-		Project:   project,
-	}, nil
+    return nil, fmt.Errorf("project name not set in configuration")
 }
 
 // ServerConfig represents server connection configuration
