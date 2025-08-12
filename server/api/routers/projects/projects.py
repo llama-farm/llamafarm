@@ -1,11 +1,8 @@
-from contextlib import contextmanager
-
 from config.datamodel import LlamaFarmConfig
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from api.models import ErrorResponse
-from core.settings import settings as global_settings
 from services.project_service import ProjectService
 
 
@@ -37,16 +34,6 @@ class UpdateProjectRequest(BaseModel):
 
 class UpdateProjectResponse(BaseModel):
     project: Project
-
-@contextmanager
-def override_schema_template(template: str | None):
-    original = getattr(global_settings, "lf_schema_template", "default")
-    try:
-        if template:
-            global_settings.lf_schema_template = template
-        yield
-    finally:
-        global_settings.lf_schema_template = original
 
 router = APIRouter(
   prefix="/projects",
@@ -83,13 +70,14 @@ async def list_projects(namespace: str):
     },
 )
 async def create_project(namespace: str, request: CreateProjectRequest):
-    with override_schema_template(request.schema_template):
-        project = ProjectService.create_project(namespace, request.name)
+    cfg = ProjectService.create_project(
+        namespace, request.name, request.schema_template
+    )
     return CreateProjectResponse(
       project=Project(
         namespace=namespace,
         name=request.name,
-        config=project,
+        config=cfg,
       ),
     )
 

@@ -12,6 +12,10 @@ from core.settings import settings
 
 logger = FastAPIStructLogger()
 
+class SchemaNotFoundError(Exception):
+  """Raised when the specified schema template cannot be located on disk."""
+  pass
+
 class Project(BaseModel):
   namespace: str
   name: str
@@ -42,7 +46,12 @@ class ProjectService:
       return settings.lf_project_dir
 
   @classmethod
-  def create_project(cls, namespace: str, project_id: str) -> LlamaFarmConfig:
+  def create_project(
+    cls,
+    namespace: str,
+    project_id: str,
+    schema_template: str | None = "default",
+  ) -> LlamaFarmConfig:
     """
     Create a new project.
     @param project_id: The ID of the project to create. (e.g. MyNamespace/MyProject)
@@ -50,8 +59,8 @@ class ProjectService:
     project_dir = cls.get_project_dir(namespace, project_id)
     os.makedirs(project_dir, exist_ok=True)
 
-    # Determine schema path from settings; support template selection
-    schema_template = getattr(settings, "lf_schema_template", "default")
+    # Determine schema path from provided template (do not mutate global settings)
+    schema_template = schema_template or "default"
     schema_dir = getattr(settings, "lf_schema_dir", None)
 
     if schema_dir is None:
@@ -73,7 +82,7 @@ class ProjectService:
         break
 
     if schema_path is None:
-      raise FileNotFoundError(
+      raise SchemaNotFoundError(
         f"No schema file found for template '{schema_template}'. "
         f"Searched: {', '.join(str(p) for p in candidate_paths)}"
       )
@@ -132,9 +141,9 @@ class ProjectService:
           error=str(e),
         )
         continue
-      except Exception as e:
+      except OSError as e:
         logger.warning(
-          "Skipping project due to unexpected error",
+          "Skipping project due to filesystem error",
           entry=project_name,
           error=str(e),
         )
@@ -162,15 +171,15 @@ class ProjectService:
 
     # Ensure a config file exists inside the directory
     try:
-      config_file = None
-      try:
-        # find_config_file raises ConfigError when directory missing config
-        from config.helpers.loader import find_config_file
-        config_file = find_config_file(project_dir)
-      except Exception:
-        config_file = None
-
-      if config_file is None:
+      from config.helpers.loader import find_config_file
+      config_file = find_config_file(project_dir)
+      if not config_file:
+        logger.warning(
+          "Config file not found in project directory",
+          namespace=namespace,
+          project_id=project_id,
+          path=project_dir,
+        )
         raise ProjectConfigError(
           namespace,
           project_id,
@@ -195,10 +204,10 @@ class ProjectService:
         project_id,
         message="Invalid project configuration",
       ) from e
-    except Exception as e:
-      # Unexpected loader errors
+    except OSError as e:
+      # Filesystem-related errors
       logger.error(
-        "Unexpected error loading project config",
+        "Filesystem error loading project config",
         namespace=namespace,
         project_id=project_id,
         error=str(e),
