@@ -77,10 +77,10 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
         uses: ./.github/actions/update-pr-coverage
         with:
-          coverage-path: cli/coverage.md
-          section-title: CLI Coverage
-          start-marker: '<!-- CLI_COVERAGE_START -->'
-          end-marker: '<!-- CLI_COVERAGE_END -->'
+          coverage_path: cli/coverage.md
+          section_title: CLI Coverage
+          start_marker: '<!-- CLI_COVERAGE_START -->'
+          end_marker: '<!-- CLI_COVERAGE_END -->'
 
       - name: Skipping PR description update (fork PR)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
