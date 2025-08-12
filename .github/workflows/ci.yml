@@ -11,6 +11,9 @@ jobs:
   test-cli:
     name: Test CLI (Go)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,9 +47,45 @@ jobs:
         working-directory: cli
         run: go build -v ./...
 
-      - name: Run Go tests
+      - name: Run Go tests with coverage
         working-directory: cli
-        run: go test -v ./...
+        run: |
+          go test ./... -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
+          go tool cover -func=coverage.out | tee coverage.txt
+          go build ./tools/cover2lcov
+          ./cover2lcov -in coverage.out -out coverage.lcov
+          go build ./tools/coverreport
+          ./coverreport -in coverage.out -format=markdown > coverage.md
+
+      - name: Publish CLI coverage to job summary
+        run: |
+          {
+            echo '## CLI Coverage';
+            echo;
+            cat cli/coverage.md;
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload CLI coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-coverage
+          path: |
+            cli/coverage.out
+            cli/coverage.txt
+
+      - name: Update PR description with CLI coverage
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+        uses: ./.github/actions/update-pr-coverage
+        with:
+          coverage_path: cli/coverage.md
+          section_title: CLI Coverage
+          start_marker: '<!-- CLI_COVERAGE_START -->'
+          end_marker: '<!-- CLI_COVERAGE_END -->'
+
+      - name: Skipping PR description update (fork PR)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
+        run: |
+          echo "PR is from a fork; cannot update PR description with GITHUB_TOKEN. Coverage is available in the job summary and as artifacts." >> "$GITHUB_STEP_SUMMARY"
 
   # Test Python components
   test-python:

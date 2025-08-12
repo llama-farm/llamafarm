@@ -1,11 +1,14 @@
 {
+    "$schema": "https://json.schemastore.org/nx-project",
     "name": "cli",
+    "projectType": "application",
+    "root": "cli",
     "targets": {
         "build": {
             "executor": "nx:run-commands",
             "options": {
                 "cwd": "{workspaceRoot}/cli",
-                "command": "go build -o lf ."
+                "command": "go build -o ../dist/lf ."
             }
         },
         "test": {
@@ -21,6 +24,31 @@
                 "cwd": "{workspaceRoot}",
                 "command": "cli/hack/test-install.sh"
             }
+        },
+        "coverage": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "{workspaceRoot}/cli",
+                "command": "go test ./... -coverpkg=./... -covermode=atomic -coverprofile=coverage.out && go build -o ../dist/cover2lcov ./tools/cover2lcov && ./../dist/cover2lcov -in coverage.out -out coverage.lcov && go build -o ../dist/coverreport ./tools/coverreport && ./../dist/coverreport -in coverage.out -format=markdown > coverage.md"
+            },
+            "outputs": [
+                "{projectRoot}/coverage.out",
+                "{projectRoot}/coverage.lcov",
+                "{projectRoot}/coverage.md"
+            ]
+        },
+        "coverage:html": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "{workspaceRoot}/cli",
+                "command": "genhtml coverage.lcov -o coverage-html"
+            },
+            "outputs": [
+                "{projectRoot}/coverage-html"
+            ],
+            "dependsOn": [
+                "coverage"
+            ]
         }
     }
 }

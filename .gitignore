@@ -653,7 +653,7 @@ consolidated.*.pth
 # Training datasets - INCLUDE ALL (users need these!)
 # Keep all dataset files for users to train with
 # datasets/*.json   # COMMENTED OUT - we want to include these
-# datasets/*.jsonl  # COMMENTED OUT - we want to include these  
+# datasets/*.jsonl  # COMMENTED OUT - we want to include these
 # datasets/*.csv    # COMMENTED OUT - we want to include these
 
 # Model evaluation results
@@ -724,3 +724,8 @@ Temporary Items
 
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
+coverage*
+cli/lf*
+
+# generated file when running `uv run python config/compile_schema.py`
+config/schema.deref.yaml

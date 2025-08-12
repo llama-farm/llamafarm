@@ -12,7 +12,9 @@ description = "Configuration loader for LlamaFarm with JSON schema validation"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
+    "jsonref>=1.1.0",
     "jsonschema>=4.23.0",
+    "jsonschema-path>=0.3.4",
     "PyYAML>=6.0",
     "tomli>=2.0.0; python_version<'3.11'",
 ]
@@ -23,7 +25,8 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "mypy>=1.0.0",
-    "ruff>=0.12.7"
+    "ruff>=0.12.7",
+    "jsonref>=1.1.0",
 ]
 
 [project.scripts]

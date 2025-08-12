@@ -11,13 +11,14 @@ properties:
     description: Array of strategy configurations
     minItems: 1
     items:
-      $ref: '#/definitions/strategyDefinition'
+      $ref: "#/definitions/strategyDefinition"
   strategy_templates:
     type: object
     title: Predefined Strategy Templates
     description: Ready-to-use strategy configurations
+    default: {}
     additionalProperties:
-      $ref: '#/definitions/strategyDefinition'
+      $ref: "#/definitions/strategyDefinition"
   component_metadata:
     type: object
     title: Component Metadata
@@ -98,16 +99,16 @@ properties:
       items:
         type: string
 required:
-- strategies
+  - strategies
 definitions:
   strategyDefinition:
     type: object
     title: Strategy Definition
     description: Defines a complete RAG strategy configuration
     required:
-    - name
-    - description
-    - components
+      - name
+      - description
+      - components
     additionalProperties: false
     properties:
       name:
@@ -117,9 +118,9 @@ definitions:
         maxLength: 50
         description: Unique strategy identifier
         examples:
-        - simple
-        - customer_support
-        - legal_documents
+          - simple
+          - customer_support
+          - legal_documents
       description:
         type: string
         minLength: 10
@@ -133,10 +134,10 @@ definitions:
           pattern: ^[a-z0-9_-]+$
         description: Tags for categorization
         examples:
-        - - production
-          - optimized
-        - - development
-          - testing
+          - - production
+            - optimized
+          - - development
+            - testing
       use_cases:
         type: array
         minItems: 1
@@ -146,59 +147,56 @@ definitions:
           minLength: 3
         description: Specific use cases
       components:
-        $ref: '#/definitions/strategyComponents'
+        $ref: "#/definitions/strategyComponents"
   strategyComponents:
     type: object
     title: Strategy Components
     required:
-    - parser
-    - embedder
-    - vector_store
-    - retrieval_strategy
+      - parser
+      - embedder
+      - vector_store
+      - retrieval_strategy
     additionalProperties: false
     properties:
       parser:
-        $ref: '#/definitions/parserConfig'
+        $ref: "#/definitions/parserConfig"
       extractors:
         type: array
         maxItems: 10
         items:
-          $ref: '#/definitions/extractorConfig'
+          $ref: "#/definitions/extractorConfig"
       embedder:
-        $ref: '#/definitions/embedderConfig'
+        $ref: "#/definitions/embedderConfig"
       vector_store:
-        $ref: '#/definitions/vectorStoreConfig'
+        $ref: "#/definitions/vectorStoreConfig"
       retrieval_strategy:
-        $ref: '#/definitions/retrievalStrategyConfig'
+        $ref: "#/definitions/retrievalStrategyConfig"
   parserConfig:
-    type: object
     title: Parser Configuration
-    required:
-    - type
+    description: Parser configuration
+    required: [type, config]
     additionalProperties: false
     properties:
       type:
         type: string
         enum:
-        - CSVParser
-        - PDFParser
-        - MarkdownParser
-        - HTMLParser
-        - DocxParser
-        - ExcelParser
-        - PlainTextParser
-        description: Parser type identifier
+          - CSVParser
+          - PDFParser
+          - MarkdownParser
+          - HTMLParser
+          - DocxParser
+          - ExcelParser
+          - PlainTextParser
       config:
         type: object
-        description: Parser-specific configuration
         oneOf:
-        - $ref: '#/definitions/parsers/csvParserConfig'
-        - $ref: '#/definitions/parsers/pdfParserConfig'
-        - $ref: '#/definitions/parsers/markdownParserConfig'
-        - $ref: '#/definitions/parsers/htmlParserConfig'
-        - $ref: '#/definitions/parsers/docxParserConfig'
-        - $ref: '#/definitions/parsers/excelParserConfig'
-        - $ref: '#/definitions/parsers/plainTextParserConfig'
+          - $ref: "#/definitions/parsers/csvParserConfig"
+          - $ref: "#/definitions/parsers/pdfParserConfig"
+          - $ref: "#/definitions/parsers/markdownParserConfig"
+          - $ref: "#/definitions/parsers/htmlParserConfig"
+          - $ref: "#/definitions/parsers/docxParserConfig"
+          - $ref: "#/definitions/parsers/excelParserConfig"
+          - $ref: "#/definitions/parsers/plainTextParserConfig"
   parsers:
     csvParserConfig:
       type: object
@@ -210,8 +208,8 @@ definitions:
           items:
             type: string
           default:
-          - subject
-          - body
+            - subject
+            - body
           description: Fields to use as document content
         metadata_fields:
           type: array
@@ -229,7 +227,7 @@ definitions:
           description: Whether to combine multiple content fields
         content_separator:
           type: string
-          default: ' '
+          default: " "
           description: Separator for combined content
         encoding:
           type: string
@@ -237,7 +235,7 @@ definitions:
           description: CSV file encoding
         delimiter:
           type: string
-          default: ','
+          default: ","
           maxLength: 1
           description: CSV delimiter character
     pdfParserConfig:
@@ -259,13 +257,13 @@ definitions:
           description: Combine all pages into single document
         page_separator:
           type: string
-          default: '
+          default: "
 
 
             --- Page Break ---
 
 
-            '
+            "
           description: Separator between pages
         min_text_length:
           type: integer
@@ -392,8 +390,8 @@ definitions:
       properties:
         sheet_names:
           type:
-          - array
-          - 'null'
+            - array
+            - "null"
           items:
             type: string
           default: null
@@ -413,10 +411,10 @@ definitions:
         table_format:
           type: string
           enum:
-          - csv
-          - markdown
-          - json
-          - text
+            - csv
+            - markdown
+            - json
+            - text
           default: markdown
           description: Table output format
         header_row:
@@ -448,9 +446,9 @@ definitions:
         chunk_strategy:
           type: string
           enum:
-          - characters
-          - sentences
-          - paragraphs
+            - characters
+            - sentences
+            - paragraphs
           default: characters
           description: Chunking strategy - how to split the text
         respect_sentence_boundaries:
@@ -510,7 +508,7 @@ definitions:
           type: boolean
           default: false
           description: Extract only text
-        
+
         # Chunking configuration
         chunk_size:
           type: [integer, "null"]
@@ -527,10 +525,10 @@ definitions:
         chunk_strategy:
           type: string
           enum:
-          - characters
-          - sentences
-          - paragraphs
-          - elements
+            - characters
+            - sentences
+            - paragraphs
+            - elements
           default: elements
           description: "Chunking strategy - elements uses HTML semantic structure"
         respect_sentence_boundaries:
@@ -560,9 +558,9 @@ definitions:
             remove_styles: true
             text_only: false
           recommended_for:
-          - Web pages
-          - HTML documents
-          - Email templates
+            - Web pages
+            - HTML documents
+            - Email templates
         text_extraction:
           name: Text Only Extraction
           description: Extract only text content
@@ -575,9 +573,9 @@ definitions:
             remove_styles: true
             text_only: true
           recommended_for:
-          - Content extraction
-          - Text analysis
-          - Simplified parsing
+            - Content extraction
+            - Text analysis
+            - Simplified parsing
     DocxParser:
       description: Parses Microsoft Word documents
       config_schema:
@@ -605,7 +603,7 @@ definitions:
           type: boolean
           default: false
           description: Preserve text formatting
-        
+
         # Chunking configuration
         chunk_size:
           type: [integer, "null"]
@@ -622,10 +620,10 @@ definitions:
         chunk_strategy:
           type: string
           enum:
-          - characters
-          - sentences
-          - paragraphs
-          - sections
+            - characters
+            - sentences
+            - paragraphs
+            - sections
           default: paragraphs
           description: "Chunking strategy - sections uses Word's built-in structure"
         respect_sentence_boundaries:
@@ -654,9 +652,9 @@ definitions:
             extract_images: false
             preserve_formatting: false
           recommended_for:
-          - Reports
-          - Letters
-          - General documents
+            - Reports
+            - Letters
+            - General documents
         with_comments:
           name: Documents with Comments
           description: Extract documents with review comments
@@ -668,9 +666,9 @@ definitions:
             extract_images: false
             preserve_formatting: true
           recommended_for:
-          - Reviewed documents
-          - Collaborative docs
-          - Draft documents
+            - Reviewed documents
+            - Collaborative docs
+            - Draft documents
     PlainTextParser:
       description: Parses plain text files
       config_schema:
@@ -693,11 +691,11 @@ definitions:
         split_by:
           type: string
           enum:
-          - characters
-          - words
-          - sentences
-          - paragraphs
-          - lines
+            - characters
+            - words
+            - sentences
+            - paragraphs
+            - lines
           default: characters
           description: Splitting method
         preserve_whitespace:
@@ -715,9 +713,9 @@ definitions:
             split_by: characters
             preserve_whitespace: false
           recommended_for:
-          - Text files
-          - Log files
-          - Plain documents
+            - Text files
+            - Log files
+            - Plain documents
         large_documents:
           name: Large Documents
           description: Large text files with overlap
@@ -728,9 +726,9 @@ definitions:
             split_by: paragraphs
             preserve_whitespace: false
           recommended_for:
-          - Books
-          - Large reports
-          - Long articles
+            - Books
+            - Large reports
+            - Long articles
     MarkdownParser:
       description: Parses Markdown files with structure extraction
       config_schema:
@@ -764,7 +762,7 @@ definitions:
           minimum: 1
           maximum: 6
           description: Heading level for splitting
-        
+
         # Advanced chunking configuration
         chunk_size:
           type: [integer, "null"]
@@ -781,10 +779,10 @@ definitions:
         chunk_strategy:
           type: string
           enum:
-          - characters
-          - sentences
-          - paragraphs
-          - headings
+            - characters
+            - sentences
+            - paragraphs
+            - headings
           default: headings
           description: "Chunking strategy - headings preserves markdown structure"
         respect_sentence_boundaries:
@@ -814,9 +812,9 @@ definitions:
             preserve_formatting: false
             heading_level_split: 2
           recommended_for:
-          - Documentation
-          - README files
-          - Blog posts
+            - Documentation
+            - README files
+            - Blog posts
         technical_docs:
           name: Technical Documentation
           description: Technical docs with code blocks
@@ -829,9 +827,9 @@ definitions:
             preserve_formatting: true
             heading_level_split: 2
           recommended_for:
-          - API documentation
-          - Technical guides
-          - Developer docs
+            - API documentation
+            - Technical guides
+            - Developer docs
     CSVParser:
       description: Parser for CSV files with configurable field mapping
       config_schema:
@@ -840,8 +838,8 @@ definitions:
           items:
             type: string
           default:
-          - subject
-          - body
+            - subject
+            - body
           description: CSV columns to use as document content
         metadata_fields:
           type: array
@@ -851,8 +849,8 @@ definitions:
           description: CSV columns to include as metadata
         id_field:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
           default: null
           description: CSV column to use as document ID
         combine_content:
@@ -861,10 +859,10 @@ definitions:
           description: Combine multiple content fields into one document
         content_separator:
           type: string
-          default: '
+          default: "
 
 
-            '
+            "
           description: Separator when combining content fields
         encoding:
           type: string
@@ -872,7 +870,7 @@ definitions:
           description: CSV file encoding
         delimiter:
           type: string
-          default: ','
+          default: ","
           maxLength: 1
           description: CSV delimiter character
       defaults:
@@ -881,132 +879,132 @@ definitions:
           description: Basic CSV parsing with flexible field configuration
           config:
             content_fields:
-            - text
-            - content
-            - description
+              - text
+              - content
+              - description
             metadata_fields: []
             combine_content: true
-            content_separator: '
+            content_separator: "
 
 
-              '
+              "
             encoding: utf-8
-            delimiter: ','
+            delimiter: ","
           recommended_for:
-          - General CSV files
-          - Simple tabular data
-          - Mixed content
+            - General CSV files
+            - Simple tabular data
+            - Mixed content
         customer_support:
           name: Customer Support Tickets
           description: Optimized for customer support ticket CSV files
           config:
             content_fields:
-            - subject
-            - body
-            - answer
+              - subject
+              - body
+              - answer
             metadata_fields:
-            - type
-            - queue
-            - priority
-            - language
-            - status
+              - type
+              - queue
+              - priority
+              - language
+              - status
             combine_content: true
-            content_separator: '
+            content_separator: "
 
 
               ---
 
 
-              '
+              "
             id_field: ticket_id
             encoding: utf-8
-            delimiter: ','
+            delimiter: ","
           recommended_for:
-          - Support tickets
-          - Help desk data
-          - Customer inquiries
+            - Support tickets
+            - Help desk data
+            - Customer inquiries
         survey_responses:
           name: Survey Response Analysis
           description: Parse survey responses with rating and demographic data
           config:
             content_fields:
-            - response_text
-            - comments
-            - feedback
+              - response_text
+              - comments
+              - feedback
             metadata_fields:
-            - respondent_id
-            - survey_date
-            - rating
-            - age_group
-            - location
+              - respondent_id
+              - survey_date
+              - rating
+              - age_group
+              - location
             combine_content: true
-            content_separator: ' '
+            content_separator: " "
             id_field: response_id
             encoding: utf-8
-            delimiter: ','
+            delimiter: ","
           recommended_for:
-          - Survey data
-          - Feedback forms
-          - Market research
+            - Survey data
+            - Feedback forms
+            - Market research
         product_catalog:
           name: Product Catalog Processing
           description: Parse product information with structured metadata
           config:
             content_fields:
-            - name
-            - description
-            - features
+              - name
+              - description
+              - features
             metadata_fields:
-            - category
-            - price
-            - brand
-            - sku
-            - availability
+              - category
+              - price
+              - brand
+              - sku
+              - availability
             combine_content: true
-            content_separator: '
+            content_separator: "
 
-              '
+              "
             id_field: sku
             encoding: utf-8
-            delimiter: ','
+            delimiter: ","
           recommended_for:
-          - E-commerce catalogs
-          - Product databases
-          - Inventory lists
+            - E-commerce catalogs
+            - Product databases
+            - Inventory lists
         contact_management:
           name: Contact and CRM Data
           description: Process contact lists and CRM exports
           config:
             content_fields:
-            - notes
-            - description
-            - bio
+              - notes
+              - description
+              - bio
             metadata_fields:
-            - name
-            - email
-            - phone
-            - company
-            - role
-            - tags
+              - name
+              - email
+              - phone
+              - company
+              - role
+              - tags
             combine_content: false
-            content_separator: '
+            content_separator: "
 
 
-              '
+              "
             id_field: contact_id
             encoding: utf-8
-            delimiter: ','
+            delimiter: ","
           recommended_for:
-          - Contact lists
-          - CRM exports
-          - Lead databases
+            - Contact lists
+            - CRM exports
+            - Lead databases
     ExcelParser:
       description: Parses Excel spreadsheets
       config_schema:
         sheet_names:
           type:
-          - array
-          - 'null'
+            - array
+            - "null"
           items:
             type: string
           default: null
@@ -1026,10 +1024,10 @@ definitions:
         table_format:
           type: string
           enum:
-          - csv
-          - markdown
-          - json
-          - text
+            - csv
+            - markdown
+            - json
+            - text
           default: markdown
           description: Table output format
         header_row:
@@ -1049,9 +1047,9 @@ definitions:
             table_format: markdown
             header_row: 0
           recommended_for:
-          - Spreadsheets
-          - Data tables
-          - Reports
+            - Spreadsheets
+            - Data tables
+            - Reports
         financial_data:
           name: Financial Data
           description: Financial spreadsheets with formulas
@@ -1063,9 +1061,9 @@ definitions:
             table_format: markdown
             header_row: 0
           recommended_for:
-          - Financial reports
-          - Budget sheets
-          - Accounting data
+            - Financial reports
+            - Budget sheets
+            - Accounting data
     PDFParser:
       description: Extracts text, metadata, and structure from PDF documents
       config_schema:
@@ -1083,13 +1081,13 @@ definitions:
           description: Combine all pages into single document
         page_separator:
           type: string
-          default: '
+          default: "
 
 
             --- Page Break ---
 
 
-            '
+            "
           description: Separator between pages when combining
         min_text_length:
           type: integer
@@ -1112,7 +1110,7 @@ definitions:
           type: boolean
           default: false
           description: Enable OCR for scanned documents
-        
+
         # Chunking configuration
         chunk_size:
           type: [integer, "null"]
@@ -1129,10 +1127,10 @@ definitions:
         chunk_strategy:
           type: string
           enum:
-          - characters
-          - sentences
-          - paragraphs
-          - pages
+            - characters
+            - sentences
+            - paragraphs
+            - pages
           default: characters
           description: "Chunking strategy - pages splits at PDF page boundaries"
         respect_sentence_boundaries:
@@ -1157,22 +1155,22 @@ definitions:
             extract_metadata: true
             extract_page_structure: true
             combine_pages: true
-            page_separator: '
+            page_separator: "
 
 
               --- Page Break ---
 
 
-              '
+              "
             min_text_length: 10
             include_page_numbers: true
             extract_outline: true
             extract_images: false
             ocr_enabled: false
           recommended_for:
-          - General documents
-          - Reports
-          - Articles
+            - General documents
+            - Reports
+            - Articles
         research_papers:
           name: Research Papers
           description: Academic papers with metadata and structure
@@ -1180,19 +1178,19 @@ definitions:
             extract_metadata: true
             extract_page_structure: true
             combine_pages: true
-            page_separator: '
+            page_separator: "
 
 
-              '
+              "
             min_text_length: 50
             include_page_numbers: true
             extract_outline: true
             extract_images: false
             ocr_enabled: false
           recommended_for:
-          - Academic papers
-          - Research documents
-          - Scientific publications
+            - Academic papers
+            - Research documents
+            - Scientific publications
         legal_documents:
           name: Legal Documents
           description: Legal documents with page-by-page processing
@@ -1200,22 +1198,22 @@ definitions:
             extract_metadata: true
             extract_page_structure: true
             combine_pages: false
-            page_separator: '
+            page_separator: "
 
 
               [NEW PAGE]
 
 
-              '
+              "
             min_text_length: 20
             include_page_numbers: true
             extract_outline: true
             extract_images: false
             ocr_enabled: false
           recommended_for:
-          - Contracts
-          - Legal briefs
-          - Court documents
+            - Contracts
+            - Legal briefs
+            - Court documents
         scanned_documents:
           name: Scanned Documents
           description: Scanned PDFs requiring OCR
@@ -1223,63 +1221,55 @@ definitions:
             extract_metadata: true
             extract_page_structure: false
             combine_pages: true
-            page_separator: '
+            page_separator: "
 
 
               --- Page ---
 
 
-              '
+              "
             min_text_length: 5
             include_page_numbers: true
             extract_outline: false
             extract_images: true
             ocr_enabled: true
           recommended_for:
-          - Scanned documents
-          - Image-based PDFs
-          - Historical documents
+            - Scanned documents
+            - Image-based PDFs
+            - Historical documents
   extractorConfig:
     type: object
     title: Extractor Configuration
-    required:
-    - type
     additionalProperties: false
+    required: [type, config]
     properties:
       type:
         type: string
+        description: Extractor type identifier
         enum:
-        - KeywordExtractor
-        - EntityExtractor
-        - DateTimeExtractor
-        - HeadingExtractor
-        - LinkExtractor
-        - PathExtractor
-        - PatternExtractor
-        - StatisticsExtractor
-        - SummaryExtractor
-        - TableExtractor
-        description: Extractor type
-      priority:
-        type: integer
-        minimum: 0
-        maximum: 100
-        default: 50
-        description: Processing priority
+          - KeywordExtractor
+          - EntityExtractor
+          - DateTimeExtractor
+          - HeadingExtractor
+          - LinkExtractor
+          - PathExtractor
+          - PatternExtractor
+          - StatisticsExtractor
+          - SummaryExtractor
+          - TableExtractor
       config:
         type: object
-        description: Extractor-specific configuration
         oneOf:
-        - $ref: '#/definitions/extractors/keywordExtractorConfig'
-        - $ref: '#/definitions/extractors/entityExtractorConfig'
-        - $ref: '#/definitions/extractors/dateTimeExtractorConfig'
-        - $ref: '#/definitions/extractors/headingExtractorConfig'
-        - $ref: '#/definitions/extractors/linkExtractorConfig'
-        - $ref: '#/definitions/extractors/pathExtractorConfig'
-        - $ref: '#/definitions/extractors/patternExtractorConfig'
-        - $ref: '#/definitions/extractors/statisticsExtractorConfig'
-        - $ref: '#/definitions/extractors/summaryExtractorConfig'
-        - $ref: '#/definitions/extractors/tableExtractorConfig'
+          - $ref: "#/definitions/extractors/keywordExtractorConfig"
+          - $ref: "#/definitions/extractors/entityExtractorConfig"
+          - $ref: "#/definitions/extractors/dateTimeExtractorConfig"
+          - $ref: "#/definitions/extractors/headingExtractorConfig"
+          - $ref: "#/definitions/extractors/linkExtractorConfig"
+          - $ref: "#/definitions/extractors/pathExtractorConfig"
+          - $ref: "#/definitions/extractors/patternExtractorConfig"
+          - $ref: "#/definitions/extractors/statisticsExtractorConfig"
+          - $ref: "#/definitions/extractors/summaryExtractorConfig"
+          - $ref: "#/definitions/extractors/tableExtractorConfig"
   extractors:
     keywordExtractorConfig:
       type: object
@@ -1289,10 +1279,10 @@ definitions:
         algorithm:
           type: string
           enum:
-          - rake
-          - yake
-          - tfidf
-          - textrank
+            - rake
+            - yake
+            - tfidf
+            - textrank
           default: rake
           description: Extraction algorithm
         max_keywords:
@@ -1328,6 +1318,17 @@ definitions:
           items:
             type: string
             enum:
+              - PERSON
+              - ORG
+              - GPE
+              - DATE
+              - TIME
+              - MONEY
+              - EMAIL
+              - PHONE
+              - URL
+              - LAW
+          default:
             - PERSON
             - ORG
             - GPE
@@ -1337,17 +1338,6 @@ definitions:
             - EMAIL
             - PHONE
             - URL
-            - LAW
-          default:
-          - PERSON
-          - ORG
-          - GPE
-          - DATE
-          - TIME
-          - MONEY
-          - EMAIL
-          - PHONE
-          - URL
           description: Entity types to extract
         use_fallback:
           type: boolean
@@ -1400,9 +1390,9 @@ definitions:
         prefer_dates_from:
           type: string
           enum:
-          - past
-          - future
-          - current
+            - past
+            - future
+            - current
           default: current
           description: Preference for ambiguous dates
     headingExtractorConfig:
@@ -1489,13 +1479,13 @@ definitions:
           items:
             type: string
             enum:
-            - email
-            - phone
-            - url
-            - ip
-            - ssn
-            - credit_card
-            - zip_code
+              - email
+              - phone
+              - url
+              - ip
+              - ssn
+              - credit_card
+              - zip_code
           default: []
           description: Predefined patterns
         custom_patterns:
@@ -1503,8 +1493,8 @@ definitions:
           items:
             type: object
             required:
-            - name
-            - pattern
+              - name
+              - pattern
             additionalProperties: false
             properties:
               name:
@@ -1565,10 +1555,10 @@ definitions:
         algorithm:
           type: string
           enum:
-          - textrank
-          - lsa
-          - luhn
-          - lexrank
+            - textrank
+            - lsa
+            - luhn
+            - lexrank
           default: textrank
           description: Summarization algorithm
         include_key_phrases:
@@ -1587,10 +1577,10 @@ definitions:
         output_format:
           type: string
           enum:
-          - dict
-          - list
-          - csv
-          - markdown
+            - dict
+            - list
+            - csv
+            - markdown
           default: dict
           description: Output format
         extract_headers:
@@ -1620,7 +1610,7 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     LinkExtractor:
       description: Extract URLs and links
       config_schema:
@@ -1635,7 +1625,7 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     PatternExtractor:
       description: Extract regex patterns
       config_schema:
@@ -1650,7 +1640,7 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     EntityExtractor:
       description: Extract named entities using NER
       config_schema:
@@ -1663,6 +1653,17 @@ definitions:
           items:
             type: string
             enum:
+              - PERSON
+              - ORG
+              - GPE
+              - DATE
+              - TIME
+              - MONEY
+              - EMAIL
+              - PHONE
+              - URL
+              - LAW
+          default:
             - PERSON
             - ORG
             - GPE
@@ -1672,17 +1673,6 @@ definitions:
             - EMAIL
             - PHONE
             - URL
-            - LAW
-          default:
-          - PERSON
-          - ORG
-          - GPE
-          - DATE
-          - TIME
-          - MONEY
-          - EMAIL
-          - PHONE
-          - URL
           description: Entity types to extract
         use_fallback:
           type: boolean
@@ -1710,23 +1700,23 @@ definitions:
           config:
             model: en_core_web_sm
             entity_types:
-            - PERSON
-            - ORG
-            - GPE
-            - DATE
-            - TIME
-            - MONEY
-            - EMAIL
-            - PHONE
-            - URL
+              - PERSON
+              - ORG
+              - GPE
+              - DATE
+              - TIME
+              - MONEY
+              - EMAIL
+              - PHONE
+              - URL
             use_fallback: true
             min_entity_length: 2
             merge_entities: true
             confidence_threshold: 0.7
           recommended_for:
-          - Documents
-          - Articles
-          - Reports
+            - Documents
+            - Articles
+            - Reports
     PathExtractor:
       description: Extract file paths
       config_schema:
@@ -1741,7 +1731,7 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     DatetimeExtractor:
       description: Extract dates and times
       config_schema:
@@ -1756,7 +1746,7 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     SummaryExtractor:
       description: Generate summaries
       config_schema:
@@ -1771,7 +1761,7 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     HeadingExtractor:
       description: Extract document headings
       config_schema:
@@ -1786,7 +1776,7 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     StatisticsExtractor:
       description: Extract text statistics
       config_schema:
@@ -1801,17 +1791,17 @@ definitions:
           config:
             enabled: true
           recommended_for:
-          - General use
+            - General use
     KeywordExtractor:
       description: Extract keywords from text using various algorithms
       config_schema:
         algorithm:
           type: string
           enum:
-          - rake
-          - yake
-          - tfidf
-          - textrank
+            - rake
+            - yake
+            - tfidf
+            - textrank
           default: rake
           description: Extraction algorithm
         max_keywords:
@@ -1844,32 +1834,26 @@ definitions:
             include_scores: true
             language: english
           recommended_for:
-          - Documents
-          - Articles
-          - Reports
+            - Documents
+            - Articles
+            - Reports
   embedderConfig:
-    type: object
     title: Embedder Configuration
-    required:
-    - type
-    additionalProperties: false
+    required: [type, config]
     properties:
       type:
         type: string
         enum:
-        - OllamaEmbedder
-        - OpenAIEmbedder
-        - HuggingFaceEmbedder
-        - SentenceTransformerEmbedder
-        description: Embedder type
+          - OllamaEmbedder
+          - OpenAIEmbedder
+          - HuggingFaceEmbedder
+          - SentenceTransformerEmbedder
       config:
-        type: object
-        description: Embedder-specific configuration
         oneOf:
-        - $ref: '#/definitions/embedders/ollamaEmbedderConfig'
-        - $ref: '#/definitions/embedders/openaiEmbedderConfig'
-        - $ref: '#/definitions/embedders/huggingfaceEmbedderConfig'
-        - $ref: '#/definitions/embedders/sentenceTransformerConfig'
+          - $ref: "#/definitions/embedders/ollamaEmbedderConfig"
+          - $ref: "#/definitions/embedders/openaiEmbedderConfig"
+          - $ref: "#/definitions/embedders/huggingfaceEmbedderConfig"
+          - $ref: "#/definitions/embedders/sentenceTransformerConfig"
   embedders:
     ollamaEmbedderConfig:
       type: object
@@ -1880,8 +1864,8 @@ definitions:
           type: string
           default: nomic-embed-text
           enum:
-          - nomic-embed-text
-          - mxbai-embed-large
+            - nomic-embed-text
+            - mxbai-embed-large
           description: Ollama model name
         base_url:
           type: string
@@ -1913,7 +1897,7 @@ definitions:
       type: object
       title: OpenAI Embedder Configuration
       required:
-      - api_key
+        - api_key
       additionalProperties: false
       properties:
         api_key:
@@ -1923,14 +1907,14 @@ definitions:
           type: string
           default: text-embedding-3-small
           enum:
-          - text-embedding-3-small
-          - text-embedding-3-large
-          - text-embedding-ada-002
+            - text-embedding-3-small
+            - text-embedding-3-large
+            - text-embedding-ada-002
           description: OpenAI model
         dimension:
           type:
-          - integer
-          - 'null'
+            - integer
+            - "null"
           minimum: 256
           maximum: 3072
           description: Override dimension
@@ -1958,10 +1942,10 @@ definitions:
         device:
           type: string
           enum:
-          - cpu
-          - cuda
-          - mps
-          - auto
+            - cpu
+            - cuda
+            - mps
+            - auto
           default: auto
           description: Computation device
         batch_size:
@@ -1980,8 +1964,8 @@ definitions:
           description: Show progress bar
         cache_folder:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
           default: null
           description: Model cache directory
     sentenceTransformerConfig:
@@ -1997,9 +1981,9 @@ definitions:
           type: string
           default: cpu
           enum:
-          - cpu
-          - cuda
-          - mps
+            - cpu
+            - cuda
+            - mps
           description: Computation device
         batch_size:
           type: integer
@@ -2014,9 +1998,9 @@ definitions:
         pooling_strategy:
           type: string
           enum:
-          - mean
-          - max
-          - cls
+            - mean
+            - max
+            - cls
           default: mean
           description: Token pooling strategy
     OllamaEmbedder:
@@ -2026,8 +2010,8 @@ definitions:
           type: string
           default: nomic-embed-text
           enum:
-          - nomic-embed-text
-          - mxbai-embed-large
+            - nomic-embed-text
+            - mxbai-embed-large
           description: Ollama model name
         base_url:
           type: string
@@ -2068,9 +2052,9 @@ definitions:
             timeout: 60
             auto_pull: true
           recommended_for:
-          - Local deployment
-          - Privacy-focused
-          - Development
+            - Local deployment
+            - Privacy-focused
+            - Development
     HuggingFaceEmbedder:
       description: HuggingFace model embeddings
       config_schema:
@@ -2082,9 +2066,9 @@ definitions:
           type: string
           default: cpu
           enum:
-          - cpu
-          - cuda
-          - mps
+            - cpu
+            - cuda
+            - mps
           description: Computation device
         batch_size:
           type: integer
@@ -2102,8 +2086,8 @@ definitions:
             device: cpu
             batch_size: 32
           recommended_for:
-          - General use
-          - CPU inference
+            - General use
+            - CPU inference
     OpenAIEmbedder:
       description: Generate embeddings using OpenAI API
       config_schema:
@@ -2114,14 +2098,14 @@ definitions:
           type: string
           default: text-embedding-3-small
           enum:
-          - text-embedding-3-small
-          - text-embedding-3-large
-          - text-embedding-ada-002
+            - text-embedding-3-small
+            - text-embedding-3-large
+            - text-embedding-ada-002
           description: OpenAI model
         dimension:
           type:
-          - integer
-          - 'null'
+            - integer
+            - "null"
           minimum: 256
           maximum: 3072
           description: Override dimension
@@ -2138,7 +2122,7 @@ definitions:
           maximum: 10
           description: Max retry attempts
       required:
-      - api_key
+        - api_key
       defaults:
         small_model:
           name: Small Model
@@ -2150,9 +2134,9 @@ definitions:
             batch_size: 100
             max_retries: 3
           recommended_for:
-          - Production
-          - High throughput
-          - Cost optimization
+            - Production
+            - High throughput
+            - Cost optimization
         large_model:
           name: Large Model
           description: Higher quality embeddings
@@ -2163,9 +2147,9 @@ definitions:
             batch_size: 50
             max_retries: 3
           recommended_for:
-          - High accuracy
-          - Research
-          - Quality focus
+            - High accuracy
+            - Research
+            - Quality focus
     SentencetransformerEmbedder:
       description: Sentence transformer embeddings
       config_schema:
@@ -2177,9 +2161,9 @@ definitions:
           type: string
           default: cpu
           enum:
-          - cpu
-          - cuda
-          - mps
+            - cpu
+            - cuda
+            - mps
           description: Computation device
         batch_size:
           type: integer
@@ -2197,31 +2181,25 @@ definitions:
             device: cpu
             batch_size: 32
           recommended_for:
-          - General use
-          - CPU inference
+            - General use
+            - CPU inference
   vectorStoreConfig:
-    type: object
     title: Vector Store Configuration
-    required:
-    - type
-    additionalProperties: false
+    required: [type, config]
     properties:
       type:
         type: string
         enum:
-        - ChromaStore
-        - FAISSStore
-        - PineconeStore
-        - QdrantStore
-        description: Vector store type
+          - ChromaStore
+          - FAISSStore
+          - PineconeStore
+          - QdrantStore
       config:
-        type: object
-        description: Store-specific configuration
         oneOf:
-        - $ref: '#/definitions/vectorStores/chromaStoreConfig'
-        - $ref: '#/definitions/vectorStores/faissStoreConfig'
-        - $ref: '#/definitions/vectorStores/pineconeStoreConfig'
-        - $ref: '#/definitions/vectorStores/qdrantStoreConfig'
+          - $ref: "#/definitions/vectorStores/chromaStoreConfig"
+          - $ref: "#/definitions/vectorStores/faissStoreConfig"
+          - $ref: "#/definitions/vectorStores/pineconeStoreConfig"
+          - $ref: "#/definitions/vectorStores/qdrantStoreConfig"
   vectorStores:
     chromaStoreConfig:
       type: object
@@ -2239,8 +2217,8 @@ definitions:
           description: Persistence directory
         host:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
           default: null
           description: Server host
         port:
@@ -2252,22 +2230,22 @@ definitions:
         distance_function:
           type: string
           enum:
-          - cosine
-          - l2
-          - ip
+            - cosine
+            - l2
+            - ip
           default: cosine
           description: Distance metric
         embedding_function:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
           default: null
           description: Built-in embedding function
     faissStoreConfig:
       type: object
       title: FAISS Store Configuration
       required:
-      - dimension
+        - dimension
       additionalProperties: false
       properties:
         dimension:
@@ -2278,18 +2256,18 @@ definitions:
         index_type:
           type: string
           enum:
-          - Flat
-          - IVF
-          - HNSW
-          - LSH
+            - Flat
+            - IVF
+            - HNSW
+            - LSH
           default: Flat
           description: Index type
         metric:
           type: string
           enum:
-          - L2
-          - IP
-          - Cosine
+            - L2
+            - IP
+            - Cosine
           default: L2
           description: Distance metric
         nlist:
@@ -2310,9 +2288,9 @@ definitions:
       type: object
       title: Pinecone Store Configuration
       required:
-      - api_key
-      - index_name
-      - dimension
+        - api_key
+        - index_name
+        - dimension
       additionalProperties: false
       properties:
         api_key:
@@ -2334,14 +2312,14 @@ definitions:
         metric:
           type: string
           enum:
-          - euclidean
-          - cosine
-          - dotproduct
+            - euclidean
+            - cosine
+            - dotproduct
           default: cosine
           description: Distance metric
         namespace:
           type: string
-          default: ''
+          default: ""
           description: Namespace for isolation
         replicas:
           type: integer
@@ -2353,7 +2331,7 @@ definitions:
       type: object
       title: Qdrant Store Configuration
       required:
-      - vector_size
+        - vector_size
       additionalProperties: false
       properties:
         host:
@@ -2374,8 +2352,8 @@ definitions:
           description: gRPC port
         api_key:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
           default: null
           description: API key
         collection_name:
@@ -2391,9 +2369,9 @@ definitions:
         distance:
           type: string
           enum:
-          - Cosine
-          - Euclid
-          - Dot
+            - Cosine
+            - Euclid
+            - Dot
           default: Cosine
           description: Distance metric
         on_disk:
@@ -2401,30 +2379,50 @@ definitions:
           default: false
           description: Store vectors on disk
   retrievalStrategyConfig:
-    type: object
     title: Retrieval Strategy Configuration
-    required:
-    - type
-    additionalProperties: false
-    properties:
-      type:
-        type: string
-        enum:
-        - BasicSimilarityStrategy
-        - MetadataFilteredStrategy
-        - MultiQueryStrategy
-        - RerankedStrategy
-        - HybridUniversalStrategy
-        description: Strategy type
-      config:
-        type: object
-        description: Strategy-specific configuration
-        oneOf:
-        - $ref: '#/definitions/retrievalStrategies/basicSimilarityConfig'
-        - $ref: '#/definitions/retrievalStrategies/metadataFilteredConfig'
-        - $ref: '#/definitions/retrievalStrategies/multiQueryConfig'
-        - $ref: '#/definitions/retrievalStrategies/rerankedConfig'
-        - $ref: '#/definitions/retrievalStrategies/hybridUniversalConfig'
+    oneOf:
+      - type: object
+        title: RetrivalStrategyConfigBasicSimilarity
+        required: [type, config]
+        properties:
+          type:
+            type: string
+            const: BasicSimilarityStrategy
+            description: Retrieval strategy type identifier
+          config:
+            $ref: "#/definitions/retrievalStrategies/basicSimilarityConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: MetadataFilteredStrategy
+            description: Retrieval strategy type identifier
+          config:
+            $ref: "#/definitions/retrievalStrategies/metadataFilteredConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: MultiQueryStrategy
+            description: Retrieval strategy type identifier
+          config:
+            $ref: "#/definitions/retrievalStrategies/multiQueryConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: RerankedStrategy
+            description: Retrieval strategy type identifier
+          config:
+            $ref: "#/definitions/retrievalStrategies/rerankedConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: HybridUniversalStrategy
+            description: Retrieval strategy type identifier
+          config:
+            $ref: "#/definitions/retrievalStrategies/hybridUniversalConfig"
   retrievalStrategies:
     basicSimilarityConfig:
       type: object
@@ -2441,15 +2439,15 @@ definitions:
           type: string
           default: cosine
           enum:
-          - cosine
-          - euclidean
-          - manhattan
-          - dot
+            - cosine
+            - euclidean
+            - manhattan
+            - dot
           description: Distance metric
         score_threshold:
           type:
-          - number
-          - 'null'
+            - number
+            - "null"
           default: null
           minimum: 0.0
           maximum: 1.0
@@ -2471,20 +2469,20 @@ definitions:
           description: Metadata filters
           additionalProperties:
             oneOf:
-            - type: string
-            - type: number
-            - type: boolean
-            - type: array
-              items:
-                oneOf:
-                - type: string
-                - type: number
-                - type: boolean
+              - type: string
+              - type: number
+              - type: boolean
+              - type: array
+                items:
+                  oneOf:
+                    - type: string
+                    - type: number
+                    - type: boolean
         filter_mode:
           type: string
           enum:
-          - pre
-          - post
+            - pre
+            - post
           default: pre
           description: When to apply filters
         fallback_multiplier:
@@ -2514,15 +2512,15 @@ definitions:
           type: string
           default: weighted
           enum:
-          - max
-          - mean
-          - weighted
-          - reciprocal_rank
+            - max
+            - mean
+            - weighted
+            - reciprocal_rank
           description: Result aggregation method
         query_weights:
           type:
-          - array
-          - 'null'
+            - array
+            - "null"
           items:
             type: number
             minimum: 0.0
@@ -2587,16 +2585,16 @@ definitions:
           items:
             type: object
             required:
-            - type
+              - type
             additionalProperties: false
             properties:
               type:
                 type: string
                 enum:
-                - BasicSimilarityStrategy
-                - MetadataFilteredStrategy
-                - MultiQueryStrategy
-                - RerankedStrategy
+                  - BasicSimilarityStrategy
+                  - MetadataFilteredStrategy
+                  - MultiQueryStrategy
+                  - RerankedStrategy
               weight:
                 type: number
                 default: 1.0
@@ -2609,9 +2607,9 @@ definitions:
           type: string
           default: weighted_average
           enum:
-          - weighted_average
-          - rank_fusion
-          - score_fusion
+            - weighted_average
+            - rank_fusion
+            - score_fusion
           description: Combination method
         final_k:
           type: integer
@@ -2646,13 +2644,13 @@ definitions:
         distance:
           type: string
           enum:
-          - Cosine
-          - Euclid
-          - Dot
+            - Cosine
+            - Euclid
+            - Dot
           default: Cosine
           description: Distance metric
       required:
-      - vector_size
+        - vector_size
       defaults:
         general_purpose:
           name: General Purpose
@@ -2677,15 +2675,15 @@ definitions:
             distance:
               type: string
               enum:
-              - Cosine
-              - Euclid
-              - Dot
+                - Cosine
+                - Euclid
+                - Dot
               default: Cosine
               description: Distance metric
           recommended_for:
-          - Production
-          - Scalable
-          - Cloud
+            - Production
+            - Scalable
+            - Cloud
     ChromaStore:
       description: ChromaDB vector database configuration
       config_schema:
@@ -2700,8 +2698,8 @@ definitions:
           description: Persistence directory
         host:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
           default: null
           description: Server host
         port:
@@ -2713,15 +2711,15 @@ definitions:
         distance_function:
           type: string
           enum:
-          - cosine
-          - l2
-          - ip
+            - cosine
+            - l2
+            - ip
           default: cosine
           description: Distance metric
         embedding_function:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
           default: null
           description: Built-in embedding function
       required: []
@@ -2737,9 +2735,9 @@ definitions:
             distance_function: cosine
             embedding_function: null
           recommended_for:
-          - Development
-          - Small scale
-          - Local deployment
+            - Development
+            - Small scale
+            - Local deployment
         client_server:
           name: Client-Server
           description: Connect to Chroma server
@@ -2751,9 +2749,9 @@ definitions:
             distance_function: cosine
             embedding_function: null
           recommended_for:
-          - Production
-          - Distributed
-          - Scalable
+            - Production
+            - Distributed
+            - Scalable
     FAISSStore:
       description: FAISS vector index configuration
       config_schema:
@@ -2765,18 +2763,18 @@ definitions:
         index_type:
           type: string
           enum:
-          - Flat
-          - IVF
-          - HNSW
-          - LSH
+            - Flat
+            - IVF
+            - HNSW
+            - LSH
           default: Flat
           description: Index type
         metric:
           type: string
           enum:
-          - L2
-          - IP
-          - Cosine
+            - L2
+            - IP
+            - Cosine
           default: L2
           description: Distance metric
         nlist:
@@ -2794,7 +2792,7 @@ definitions:
           default: false
           description: Enable GPU acceleration
       required:
-      - dimension
+        - dimension
       defaults:
         flat_index:
           name: Flat Index
@@ -2807,9 +2805,9 @@ definitions:
             nprobe: 10
             use_gpu: false
           recommended_for:
-          - Small datasets
-          - Exact search
-          - High accuracy
+            - Small datasets
+            - Exact search
+            - High accuracy
         ivf_index:
           name: IVF Index
           description: Approximate search for larger datasets
@@ -2821,9 +2819,9 @@ definitions:
             nprobe: 50
             use_gpu: false
           recommended_for:
-          - Large datasets
-          - Fast search
-          - Trade-off accuracy
+            - Large datasets
+            - Fast search
+            - Trade-off accuracy
     PineconeStore:
       description: Pinecone vector database
       config_schema:
@@ -2846,15 +2844,15 @@ definitions:
         metric:
           type: string
           enum:
-          - euclidean
-          - cosine
-          - dotproduct
+            - euclidean
+            - cosine
+            - dotproduct
           default: cosine
           description: Distance metric
       required:
-      - api_key
-      - index_name
-      - dimension
+        - api_key
+        - index_name
+        - dimension
       defaults:
         general_purpose:
           name: General Purpose
@@ -2870,15 +2868,15 @@ definitions:
             metric:
               type: string
               enum:
-              - euclidean
-              - cosine
-              - dotproduct
+                - euclidean
+                - cosine
+                - dotproduct
               default: cosine
               description: Distance metric
           recommended_for:
-          - Production
-          - Scalable
-          - Cloud
+            - Production
+            - Scalable
+            - Cloud
   retrievers:
     BasicSimilarityStrategy:
       description: Simple vector similarity search
@@ -2893,15 +2891,15 @@ definitions:
           type: string
           default: cosine
           enum:
-          - cosine
-          - euclidean
-          - manhattan
-          - dot
+            - cosine
+            - euclidean
+            - manhattan
+            - dot
           description: Distance metric
         score_threshold:
           type:
-          - number
-          - 'null'
+            - number
+            - "null"
           default: null
           minimum: 0.0
           maximum: 1.0
@@ -2915,9 +2913,9 @@ definitions:
             distance_metric: cosine
             score_threshold: null
           recommended_for:
-          - Simple queries
-          - Fast retrieval
-          - Baseline
+            - Simple queries
+            - Fast retrieval
+            - Baseline
         high_precision:
           name: High Precision
           description: Higher threshold for better precision
@@ -2926,8 +2924,8 @@ definitions:
             distance_metric: cosine
             score_threshold: 0.7
           recommended_for:
-          - Precise matching
-          - Quality over quantity
+            - Precise matching
+            - Quality over quantity
     RerankedStrategy:
       description: Re-rank results
       config_schema:
@@ -2944,7 +2942,7 @@ definitions:
           config:
             top_k: 10
           recommended_for:
-          - General use
+            - General use
     MetadataFilteredStrategy:
       description: Filter by metadata
       config_schema:
@@ -2961,7 +2959,7 @@ definitions:
           config:
             top_k: 10
           recommended_for:
-          - General use
+            - General use
     HybridUniversalStrategy:
       description: Combine multiple strategies
       config_schema:
@@ -2978,7 +2976,7 @@ definitions:
           config:
             top_k: 10
           recommended_for:
-          - General use
+            - General use
     MultiQueryStrategy:
       description: Multiple query variations
       config_schema:
@@ -2995,4 +2993,4 @@ definitions:
           config:
             top_k: 10
           recommended_for:
-          - General use
+            - General use

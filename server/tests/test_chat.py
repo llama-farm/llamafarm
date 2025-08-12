@@ -63,7 +63,7 @@ def test_chat_endpoint():
             print(f"❌ Error testing chat endpoint: {e}")
             all_tests_passed = False
     
-    return all_tests_passed
+    assert all_tests_passed
 
 def test_agent_status():
     """Test the agent status endpoint"""
@@ -205,7 +205,7 @@ def test_chat_endpoint_negative_cases():
             print(f"❌ Error in negative test: {e}")
             all_tests_passed = False
     
-    return all_tests_passed
+    assert all_tests_passed
 
 
 def test_chat_endpoint_edge_cases():
@@ -274,7 +274,7 @@ def test_chat_endpoint_edge_cases():
             print(f"❌ Error in edge case test: {e}")
             all_tests_passed = False
     
-    return all_tests_passed
+    assert all_tests_passed
 
 
 if __name__ == "__main__":
