@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from parsers.pdf_parser import PDFParser
+from components.parsers.pdf_parser import PDFParser
 from core.base import Document
 
 
@@ -83,12 +83,12 @@ class TestPDFParser:
         finally:
             Path(temp_file).unlink()
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available")
     def test_parse_real_pdf(self):
         """Test parsing a real PDF file."""
         parser = PDFParser()
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         # Should successfully parse the PDF
         assert len(result.documents) > 0
@@ -97,16 +97,16 @@ class TestPDFParser:
         doc = result.documents[0]
         assert isinstance(doc, Document)
         assert len(doc.content) > 0
-        assert doc.source == "samples/test_document.pdf"
+        assert doc.source == "samples/pdfs/test_document.pdf"
         assert "parser_type" in doc.metadata
         assert doc.metadata["parser_type"] == "PDFParser"
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available") 
     def test_parse_pdf_separate_pages(self):
         """Test parsing PDF with separate page documents."""
         parser = PDFParser(config={"combine_pages": False})
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         # Should create separate documents for each page
         assert len(result.documents) > 1  # Multi-page PDF
@@ -116,12 +116,12 @@ class TestPDFParser:
             assert doc.metadata["page_number"] == i + 1
             assert "total_pages" in doc.metadata
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available")
     def test_parse_pdf_combined_pages(self):
         """Test parsing PDF with combined page content."""
         parser = PDFParser(config={"combine_pages": True})
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         # Should create single document with all pages
         assert len(result.documents) == 1
@@ -131,12 +131,12 @@ class TestPDFParser:
         assert doc.metadata["total_pages"] > 1
         assert "--- Page Break ---" in doc.content or "[Page " in doc.content
 
-    @pytest.mark.skipif(not Path("samples/test_document.pdf").exists(), 
+    @pytest.mark.skipif(not Path("samples/pdfs/test_document.pdf").exists(), 
                        reason="Test PDF not available")
     def test_pdf_metadata_extraction(self):
         """Test PDF metadata extraction."""
         parser = PDFParser(config={"extract_metadata": True})
-        result = parser.parse("samples/test_document.pdf")
+        result = parser.parse("samples/pdfs/test_document.pdf")
         
         assert len(result.documents) > 0
         doc = result.documents[0]
@@ -157,7 +157,7 @@ class TestPDFParser:
         parser = PDFParser(config={"extract_metadata": False})
         
         # Mock PyPDF2 for this test
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             mock_reader.pages = [MagicMock()]
             mock_reader.pages[0].extract_text.return_value = "Sample text content"
@@ -188,7 +188,7 @@ class TestPDFParser:
         """Test filtering of pages with insufficient text."""
         parser = PDFParser(config={"min_text_length": 50})
         
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             # Create pages with different text lengths
             mock_page1 = MagicMock()
@@ -221,7 +221,7 @@ class TestPDFParser:
         """Test inclusion of page numbers in text."""
         parser = PDFParser(config={"include_page_numbers": True, "combine_pages": False})
         
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "Sample page content"
@@ -249,7 +249,7 @@ class TestPDFParser:
         """Test PDF outline/bookmark extraction."""
         parser = PDFParser(config={"extract_outline": True})
         
-        with patch("parsers.pdf_parser.PyPDF2") as mock_pypdf2:
+        with patch("components.parsers.pdf_parser.pdf_parser.PyPDF2") as mock_pypdf2:
             mock_reader = MagicMock()
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "Sample content"

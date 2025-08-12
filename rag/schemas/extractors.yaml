@@ -1,0 +1,242 @@
+extractors:
+  TableExtractor:
+    description: Extract tables
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard table extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  LinkExtractor:
+    description: Extract URLs and links
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard link extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  PatternExtractor:
+    description: Extract regex patterns
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard pattern extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  EntityExtractor:
+    description: Extract named entities using NER
+    config_schema:
+      model:
+        type: string
+        default: en_core_web_sm
+        description: NER model name
+      entity_types:
+        type: array
+        items:
+          type: string
+          enum:
+          - PERSON
+          - ORG
+          - GPE
+          - DATE
+          - TIME
+          - MONEY
+          - EMAIL
+          - PHONE
+          - URL
+          - LAW
+        default:
+        - PERSON
+        - ORG
+        - GPE
+        - DATE
+        - TIME
+        - MONEY
+        - EMAIL
+        - PHONE
+        - URL
+        description: Entity types to extract
+      use_fallback:
+        type: boolean
+        default: true
+        description: Use regex fallback
+      min_entity_length:
+        type: integer
+        default: 2
+        minimum: 1
+        description: Minimum entity length
+      merge_entities:
+        type: boolean
+        default: true
+        description: Merge adjacent entities
+      confidence_threshold:
+        type: number
+        default: 0.7
+        minimum: 0.0
+        maximum: 1.0
+        description: Minimum confidence score
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard entity extraction
+        config:
+          model: en_core_web_sm
+          entity_types:
+          - PERSON
+          - ORG
+          - GPE
+          - DATE
+          - TIME
+          - MONEY
+          - EMAIL
+          - PHONE
+          - URL
+          use_fallback: true
+          min_entity_length: 2
+          merge_entities: true
+          confidence_threshold: 0.7
+        recommended_for:
+        - Documents
+        - Articles
+        - Reports
+  PathExtractor:
+    description: Extract file paths
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard path extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  DatetimeExtractor:
+    description: Extract dates and times
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard datetime extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  SummaryExtractor:
+    description: Generate summaries
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard summary extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  HeadingExtractor:
+    description: Extract document headings
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard heading extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  StatisticsExtractor:
+    description: Extract text statistics
+    config_schema:
+      enabled:
+        type: boolean
+        default: true
+        description: Enable this extractor
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard statistics extractor
+        config:
+          enabled: true
+        recommended_for:
+        - General use
+  KeywordExtractor:
+    description: Extract keywords from text using various algorithms
+    config_schema:
+      algorithm:
+        type: string
+        enum:
+        - rake
+        - yake
+        - tfidf
+        - textrank
+        default: rake
+        description: Extraction algorithm
+      max_keywords:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 100
+        description: Maximum keywords
+      min_keyword_length:
+        type: integer
+        default: 3
+        minimum: 1
+        description: Minimum keyword length
+      include_scores:
+        type: boolean
+        default: true
+        description: Include relevance scores
+      language:
+        type: string
+        default: english
+        description: Language for stop words
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard keyword extraction
+        config:
+          algorithm: rake
+          max_keywords: 10
+          min_keyword_length: 3
+          include_scores: true
+          language: english
+        recommended_for:
+        - Documents
+        - Articles
+        - Reports

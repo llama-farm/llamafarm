@@ -1,0 +1,30 @@
+# Chroma Store Default Configurations
+
+local_persistent:
+  name: Local Persistent
+  description: Local persistent storage
+  config:
+    collection_name: documents
+    persist_directory: ./data/chroma_db
+    host: null
+    port: 8000
+    distance_function: cosine
+    embedding_function: null
+  recommended_for:
+  - Development
+  - Small scale
+  - Local deployment
+client_server:
+  name: Client-Server
+  description: Connect to Chroma server
+  config:
+    collection_name: documents
+    persist_directory: null
+    host: localhost
+    port: 8000
+    distance_function: cosine
+    embedding_function: null
+  recommended_for:
+  - Production
+  - Distributed
+  - Scalable

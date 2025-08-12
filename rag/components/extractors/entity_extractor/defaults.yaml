@@ -1,0 +1,25 @@
+# Entity Extractor Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard entity extraction
+  config:
+    model: en_core_web_sm
+    entity_types:
+    - PERSON
+    - ORG
+    - GPE
+    - DATE
+    - TIME
+    - MONEY
+    - EMAIL
+    - PHONE
+    - URL
+    use_fallback: true
+    min_entity_length: 2
+    merge_entities: true
+    confidence_threshold: 0.7
+  recommended_for:
+  - Documents
+  - Articles
+  - Reports

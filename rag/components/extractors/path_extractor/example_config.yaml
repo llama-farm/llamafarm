@@ -1,0 +1,65 @@
+# Example configurations for PathExtractor
+
+# Basic configuration - stores all path information
+basic:
+  type: "PathExtractor"
+  config:
+    store_full_path: true
+    store_filename: true
+    store_directory: true
+    store_extension: true
+
+# Minimal configuration - just filenames
+minimal:
+  type: "PathExtractor"
+  config:
+    store_full_path: false
+    store_filename: true
+    store_directory: false
+    store_extension: false
+
+# Cross-platform configuration
+cross_platform:
+  type: "PathExtractor"
+  config:
+    store_full_path: true
+    store_filename: true
+    store_directory: true
+    store_extension: true
+    normalize_paths: true
+
+# Relative paths for portable projects
+portable:
+  type: "PathExtractor"
+  config:
+    store_full_path: true
+    store_filename: true
+    store_directory: true
+    store_extension: true
+    normalize_paths: true
+    relative_to: "./"
+
+# Usage in a RAG pipeline
+example_pipeline:
+  parsers:
+    - type: "PDFParser"
+      config:
+        extract_images: false
+  
+  extractors:
+    # PathExtractor should be first to ensure source info is available
+    - type: "PathExtractor"
+      config:
+        store_full_path: true
+        store_filename: true
+        store_directory: true
+        store_extension: true
+    
+    # Other extractors follow
+    - type: "EntityExtractor"
+      config:
+        entity_types: ["PERSON", "ORG", "GPE"]
+    
+    - type: "SummaryExtractor"
+      config:
+        summary_sentences: 3

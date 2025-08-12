@@ -1,0 +1,15 @@
+# Metadata Filtered Retriever Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/retrievers/metadata_filtered/schema.yaml
+title: Metadata Filtered Retriever Configuration
+description: Filter by metadata
+type: object
+additionalProperties: false
+properties:
+  top_k:
+    type: integer
+    default: 10
+    minimum: 1
+    maximum: 1000
+    description: Number of results

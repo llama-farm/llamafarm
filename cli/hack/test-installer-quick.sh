@@ -76,20 +76,20 @@ test_cli_build() {
     fi
 
     # Test basic build
-    if go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-quick-1.0.0'" -o lf-test .; then
+    if go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-quick-1.0.0'" -o ../dist/lf-test .; then
         success "CLI build successful"
     else
         error "CLI build failed"
     fi
 
     # Test binary execution
-    if ./lf-test version; then
+    if ./../dist/lf-test version; then
         success "CLI binary executes correctly"
     else
         error "CLI binary execution failed"
     fi
 
-    if ./lf-test help > /dev/null; then
+    if ./../dist/lf-test help > /dev/null; then
         success "CLI help command works"
     else
         error "CLI help command failed"
@@ -98,13 +98,13 @@ test_cli_build() {
     # Test cross-compilation (quick test)
     info "Testing cross-compilation..."
 
-    if GOOS=linux GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o lf-linux .; then
+    if GOOS=linux GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o ../dist/lf-linux .; then
         success "Linux cross-compilation works"
     else
         error "Linux cross-compilation failed"
     fi
 
-    if GOOS=windows GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o lf-windows.exe .; then
+    if GOOS=windows GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o ../dist/lf-windows.exe .; then
         success "Windows cross-compilation works"
     else
         error "Windows cross-compilation failed"
@@ -112,10 +112,10 @@ test_cli_build() {
 
     # Show binary sizes
     info "Binary sizes:"
-    ls -lh lf-* | awk '{print "  " $5 " " $9}'
+    ls -lh ../dist/lf-* | awk '{print "  " $5 " " $9}'
 
     # Cleanup
-    rm -f lf-test lf-linux lf-windows.exe
+    rm -f ../dist/lf-test ../dist/lf-linux ../dist/lf-windows.exe
 
     cd ..
     success "CLI build and cross-compilation tests passed"

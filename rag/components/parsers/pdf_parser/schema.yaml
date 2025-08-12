@@ -1,0 +1,97 @@
+# PDF Parser Component Schema
+# JSON Schema draft-07 format
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: "components/parsers/pdf_parser/schema.yaml"
+title: "PDF Parser Configuration"
+description: "Extracts text, metadata, and structure from PDF documents"
+type: "object"
+additionalProperties: false
+
+properties:
+  extract_metadata:
+    type: "boolean"
+    default: true
+    description: "Extract PDF metadata (title, author, creation date, etc.)"
+    
+  extract_page_structure:
+    type: "boolean"
+    default: true
+    description: "Extract page-level structure information"
+    
+  combine_pages:
+    type: "boolean"
+    default: true
+    description: "Combine all pages into single document"
+    
+  page_separator:
+    type: "string"
+    default: "\n\n--- Page Break ---\n\n"
+    description: "Separator between pages when combining"
+    
+  min_text_length:
+    type: "integer"
+    default: 10
+    minimum: 0
+    description: "Minimum text length to include page"
+    
+  include_page_numbers:
+    type: "boolean"
+    default: true
+    description: "Include page numbers in text"
+    
+  extract_outline:
+    type: "boolean"
+    default: true
+    description: "Extract document outline/bookmarks"
+    
+  extract_images:
+    type: "boolean"
+    default: false
+    description: "Extract embedded images"
+    
+  ocr_enabled:
+    type: "boolean"
+    default: false
+    description: "Enable OCR for scanned documents"
+    
+  # Chunking configuration
+  chunk_size:
+    type: [integer, "null"]
+    default: null
+    minimum: 100
+    maximum: 50000
+    description: "Chunk size in characters (null for no chunking)"
+    
+  chunk_overlap:
+    type: integer
+    default: 0
+    minimum: 0
+    maximum: 5000
+    description: "Overlap between chunks in characters"
+    
+  chunk_strategy:
+    type: string
+    enum:
+    - characters
+    - sentences
+    - paragraphs
+    - pages
+    default: characters
+    description: "Chunking strategy - how to split the text"
+    
+  respect_sentence_boundaries:
+    type: boolean
+    default: true
+    description: "Avoid splitting sentences in the middle when using character chunking"
+    
+  respect_paragraph_boundaries:
+    type: boolean
+    default: false
+    description: "Avoid splitting paragraphs in the middle (overrides sentence boundaries)"
+    
+  min_chunk_size:
+    type: integer
+    default: 50
+    minimum: 10
+    maximum: 1000
+    description: "Minimum chunk size to avoid creating tiny chunks"

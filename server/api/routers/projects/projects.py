@@ -1,7 +1,15 @@
+import sys
+from pathlib import Path
+
 from fastapi import APIRouter
 from pydantic import BaseModel
+
 from services.project_service import ProjectService
-from config import LlamaFarmConfig
+
+repo_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(repo_root))
+from config.datamodel import LlamaFarmConfig  # noqa: E402
+
 
 class Project(BaseModel):
     namespace: str;

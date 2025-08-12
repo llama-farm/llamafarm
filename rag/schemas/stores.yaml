@@ -1,0 +1,260 @@
+stores:
+  QdrantStore:
+    description: Qdrant vector database
+    config_schema:
+      host:
+        type: string
+        default: localhost
+        description: Server host
+      port:
+        type: integer
+        default: 6333
+        minimum: 1
+        maximum: 65535
+        description: Server port
+      collection_name:
+        type: string
+        default: documents
+        pattern: ^[a-zA-Z0-9_-]+$
+        description: Collection name
+      vector_size:
+        type: integer
+        minimum: 1
+        maximum: 65536
+        description: Vector dimension
+      distance:
+        type: string
+        enum:
+        - Cosine
+        - Euclid
+        - Dot
+        default: Cosine
+        description: Distance metric
+    required:
+    - vector_size
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard qdrant store configuration
+        config:
+          host:
+            type: string
+            default: localhost
+            description: Server host
+          port:
+            type: integer
+            default: 6333
+            minimum: 1
+            maximum: 65535
+            description: Server port
+          collection_name:
+            type: string
+            default: documents
+            pattern: ^[a-zA-Z0-9_-]+$
+            description: Collection name
+          vector_size: 768
+          distance:
+            type: string
+            enum:
+            - Cosine
+            - Euclid
+            - Dot
+            default: Cosine
+            description: Distance metric
+        recommended_for:
+        - Production
+        - Scalable
+        - Cloud
+  ChromaStore:
+    description: ChromaDB vector database configuration
+    config_schema:
+      collection_name:
+        type: string
+        default: documents
+        pattern: ^[a-zA-Z0-9_-]+$
+        description: Collection name
+      persist_directory:
+        type: string
+        default: ./data/chroma_db
+        description: Persistence directory
+      host:
+        type:
+        - string
+        - 'null'
+        default: null
+        description: Server host
+      port:
+        type: integer
+        default: 8000
+        minimum: 1
+        maximum: 65535
+        description: Server port
+      distance_function:
+        type: string
+        enum:
+        - cosine
+        - l2
+        - ip
+        default: cosine
+        description: Distance metric
+      embedding_function:
+        type:
+        - string
+        - 'null'
+        default: null
+        description: Built-in embedding function
+    required: []
+    defaults:
+      local_persistent:
+        name: Local Persistent
+        description: Local persistent storage
+        config:
+          collection_name: documents
+          persist_directory: ./data/chroma_db
+          host: null
+          port: 8000
+          distance_function: cosine
+          embedding_function: null
+        recommended_for:
+        - Development
+        - Small scale
+        - Local deployment
+      client_server:
+        name: Client-Server
+        description: Connect to Chroma server
+        config:
+          collection_name: documents
+          persist_directory: null
+          host: localhost
+          port: 8000
+          distance_function: cosine
+          embedding_function: null
+        recommended_for:
+        - Production
+        - Distributed
+        - Scalable
+  FAISSStore:
+    description: FAISS vector index configuration
+    config_schema:
+      dimension:
+        type: integer
+        minimum: 1
+        maximum: 4096
+        description: Vector dimension
+      index_type:
+        type: string
+        enum:
+        - Flat
+        - IVF
+        - HNSW
+        - LSH
+        default: Flat
+        description: Index type
+      metric:
+        type: string
+        enum:
+        - L2
+        - IP
+        - Cosine
+        default: L2
+        description: Distance metric
+      nlist:
+        type: integer
+        default: 100
+        minimum: 1
+        description: Number of clusters (IVF)
+      nprobe:
+        type: integer
+        default: 10
+        minimum: 1
+        description: Clusters to search (IVF)
+      use_gpu:
+        type: boolean
+        default: false
+        description: Enable GPU acceleration
+    required:
+    - dimension
+    defaults:
+      flat_index:
+        name: Flat Index
+        description: Exact search, best for small datasets
+        config:
+          dimension: 768
+          index_type: Flat
+          metric: L2
+          nlist: 100
+          nprobe: 10
+          use_gpu: false
+        recommended_for:
+        - Small datasets
+        - Exact search
+        - High accuracy
+      ivf_index:
+        name: IVF Index
+        description: Approximate search for larger datasets
+        config:
+          dimension: 768
+          index_type: IVF
+          metric: Cosine
+          nlist: 1000
+          nprobe: 50
+          use_gpu: false
+        recommended_for:
+        - Large datasets
+        - Fast search
+        - Trade-off accuracy
+  PineconeStore:
+    description: Pinecone vector database
+    config_schema:
+      api_key:
+        type: string
+        description: Pinecone API key
+      environment:
+        type: string
+        default: us-east-1-aws
+        description: Pinecone environment
+      index_name:
+        type: string
+        pattern: ^[a-z0-9-]+$
+        description: Index name
+      dimension:
+        type: integer
+        minimum: 1
+        maximum: 20000
+        description: Vector dimension
+      metric:
+        type: string
+        enum:
+        - euclidean
+        - cosine
+        - dotproduct
+        default: cosine
+        description: Distance metric
+    required:
+    - api_key
+    - index_name
+    - dimension
+    defaults:
+      general_purpose:
+        name: General Purpose
+        description: Standard pinecone store configuration
+        config:
+          api_key: ${PINECONE_API_KEY}
+          environment:
+            type: string
+            default: us-east-1-aws
+            description: Pinecone environment
+          index_name: documents
+          dimension: 768
+          metric:
+            type: string
+            enum:
+            - euclidean
+            - cosine
+            - dotproduct
+            default: cosine
+            description: Distance metric
+        recommended_for:
+        - Production
+        - Scalable
+        - Cloud

@@ -1,0 +1,75 @@
+# DOCX Parser Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/parsers/docx_parser/schema.yaml
+title: DOCX Parser Configuration
+description: Parses Microsoft Word documents
+type: object
+additionalProperties: false
+properties:
+  extract_metadata:
+    type: boolean
+    default: true
+    description: Extract document properties
+  extract_headers_footers:
+    type: boolean
+    default: true
+    description: Include headers and footers
+  extract_comments:
+    type: boolean
+    default: true
+    description: Extract comments
+  extract_tables:
+    type: boolean
+    default: true
+    description: Extract tables
+  extract_images:
+    type: boolean
+    default: false
+    description: Extract images
+  preserve_formatting:
+    type: boolean
+    default: false
+    description: Preserve text formatting
+    
+  # Chunking configuration
+  chunk_size:
+    type: [integer, "null"]
+    default: null
+    minimum: 100
+    maximum: 50000
+    description: "Chunk size in characters (null for no chunking)"
+    
+  chunk_overlap:
+    type: integer
+    default: 0
+    minimum: 0
+    maximum: 5000
+    description: "Overlap between chunks in characters"
+    
+  chunk_strategy:
+    type: string
+    enum:
+    - characters
+    - sentences
+    - paragraphs
+    - sections
+    default: paragraphs
+    description: "Chunking strategy - sections uses Word's built-in structure"
+    
+  respect_sentence_boundaries:
+    type: boolean
+    default: true
+    description: "Avoid splitting sentences in the middle when using character chunking"
+    
+  respect_paragraph_boundaries:
+    type: boolean
+    default: true
+    description: "Avoid splitting paragraphs in the middle"
+    
+  min_chunk_size:
+    type: integer
+    default: 100
+    minimum: 10
+    maximum: 1000
+    description: "Minimum chunk size to avoid creating tiny chunks"

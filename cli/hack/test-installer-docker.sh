@@ -183,11 +183,11 @@ test_cli_build() {
             go mod tidy
 
             # Test basic build
-            go build -buildvcs=false -ldflags='-X llamafarm-cli/cmd.Version=docker-test-1.0.0' -o lf-test .
+            go build -buildvcs=false -ldflags='-X llamafarm-cli/cmd.Version=docker-test-1.0.0' -o ../dist/lf-test .
 
             # Test binary execution
-            ./lf-test version
-            ./lf-test help > /dev/null
+            ./../dist/lf-test version
+            ./../dist/lf-test help > /dev/null
 
             echo '✅ CLI build test passed'
         " || error "CLI build test failed"

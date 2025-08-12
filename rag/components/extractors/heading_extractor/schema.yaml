@@ -1,0 +1,13 @@
+# Heading Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/heading_extractor/schema.yaml
+title: Heading Extractor Configuration
+description: Extract document headings
+type: object
+additionalProperties: false
+properties:
+  enabled:
+    type: boolean
+    default: true
+    description: Enable this extractor

@@ -1,0 +1,13 @@
+# Link Extractor Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/extractors/link_extractor/schema.yaml
+title: Link Extractor Configuration
+description: Extract URLs and links
+type: object
+additionalProperties: false
+properties:
+  enabled:
+    type: boolean
+    default: true
+    description: Enable this extractor

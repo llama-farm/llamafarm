@@ -6,9 +6,8 @@ from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, asdict
 
 from core.base import Document
-from core.factories import create_embedder_from_config, create_vector_store_from_config
+from core.factories import create_embedder_from_config, create_vector_store_from_config, create_retrieval_strategy_from_config
 from utils.path_resolver import PathResolver, resolve_paths_in_config
-from retrieval.factory import create_retrieval_strategy_from_config
 
 
 @dataclass
@@ -85,7 +84,7 @@ class SearchAPI:
                 )
             else:
                 # Fallback to basic universal strategy
-                from retrieval.strategies.universal import BasicSimilarityStrategy
+                from components.retrievers.strategies.universal import BasicSimilarityStrategy
                 self.retrieval_strategy = BasicSimilarityStrategy()
                 
         except Exception as e:

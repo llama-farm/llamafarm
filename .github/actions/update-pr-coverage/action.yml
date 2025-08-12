@@ -1,0 +1,58 @@
+name: "Update PR Coverage Section"
+description: "Read a coverage markdown file and upsert a section in the PR description between markers"
+inputs:
+  coverage_path:
+    description: "Path to the markdown file to insert"
+    required: true
+  section_title:
+    description: "Section title to display"
+    required: true
+    default: "CLI Coverage"
+  start_marker:
+    description: "Unique start marker in PR body"
+    required: true
+    default: "<!-- CLI_COVERAGE_START -->"
+  end_marker:
+    description: "Unique end marker in PR body"
+    required: true
+    default: "<!-- CLI_COVERAGE_END -->"
+runs:
+  using: "composite"
+  steps:
+    - name: Update PR description with coverage
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/github-script@v7
+      env:
+        COVERAGE_PATH: ${{ inputs.coverage_path }}
+        SECTION_TITLE: ${{ inputs.section_title }}
+        START_MARKER: ${{ inputs.start_marker }}
+        END_MARKER: ${{ inputs.end_marker }}
+      with:
+        script: |
+          const fs = require('fs');
+          const path = process.env.COVERAGE_PATH;
+          const title = process.env.SECTION_TITLE;
+          const start = process.env.START_MARKER;
+          const end = process.env.END_MARKER;
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const pull_number = context.payload.pull_request.number;
+
+          let table = '';
+          try {
+            table = fs.readFileSync(path, 'utf8');
+          } catch (e) {
+            core.warning(`Could not read coverage file at ${path}: ${e.message}`);
+            table = '_No coverage report found._';
+          }
+          const block = `${start}\n\n### ${title}\n\n${table}\n${end}`;
+
+          const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+          let body = pr.body || '';
+          if (body.includes(start) && body.includes(end)) {
+            const regex = new RegExp(`${start}[\\s\\S]*?${end}`);
+            body = body.replace(regex, block);
+          } else {
+            body = `${body}\n\n${block}`.trim();
+          }
+          await github.rest.pulls.update({ owner, repo, pull_number, body });

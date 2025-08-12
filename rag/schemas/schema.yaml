@@ -1,0 +1,659 @@
+# RAG System Comprehensive Schema
+# This schema defines all available components and their configurations
+
+# =============================================================================
+# PARSERS - Document Processing Components
+# =============================================================================
+parsers:
+  CSVParser:
+    description: "Parses CSV files with flexible field mapping"
+    inputs: ["csv"]
+    outputs: ["documents"]
+    config_schema:
+      content_fields:
+        type: array
+        default: ["subject", "body"]
+        description: "Fields to use as document content"
+      metadata_fields:
+        type: array
+        default: []
+        description: "Fields to store as metadata"
+      id_field:
+        type: string
+        default: "id"
+        description: "Field to use as document ID"
+      combine_content:
+        type: boolean
+        default: false
+        description: "Whether to combine multiple content fields"
+      content_separator:
+        type: string
+        default: " "
+        description: "Separator for combined content"
+    use_cases: ["customer_support", "structured_data", "business_records"]
+    dependencies: []
+
+  CustomerSupportCSVParser:
+    description: "Specialized CSV parser for customer support tickets"
+    inputs: ["csv"]
+    outputs: ["documents"]
+    extends: CSVParser
+    config_schema:
+      tag_fields:
+        type: array
+        default: ["tag_1", "tag_2", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7", "tag_8"]
+        description: "Tag fields to parse and combine"
+      priority_mapping:
+        type: object
+        default: {"high": 3, "medium": 2, "low": 1}
+        description: "Priority field numeric mapping"
+    use_cases: ["customer_support", "ticket_analysis", "helpdesk_data"]
+    dependencies: []
+
+  PDFParser:
+    description: "Extracts text, metadata, and structure from PDF documents"
+    inputs: ["pdf"]
+    outputs: ["documents"]
+    config_schema:
+      extract_metadata:
+        type: boolean
+        default: true
+        description: "Extract PDF metadata (title, author, etc.)"
+      extract_page_structure:
+        type: boolean
+        default: true
+        description: "Extract page-level structure information"
+      combine_pages:
+        type: boolean
+        default: false
+        description: "Combine pages into single document vs separate documents"
+      page_separator:
+        type: string
+        default: "\n--- PAGE ---\n"
+        description: "Separator for combined pages"
+      min_text_length:
+        type: integer
+        default: 20
+        description: "Minimum text length for page inclusion"
+      include_page_numbers:
+        type: boolean
+        default: true
+        description: "Include page numbers in content"
+      extract_outline:
+        type: boolean
+        default: true
+        description: "Extract document outline/bookmarks"
+    use_cases: ["legal_documents", "research_papers", "reports", "manuals"]
+    dependencies: ["PyPDF2"]
+
+  MarkdownParser:
+    description: "Parses Markdown files with structure extraction"
+    inputs: ["markdown"]
+    outputs: ["documents"]
+    config_schema:
+      extract_metadata:
+        type: boolean
+        default: true
+        description: "Extract YAML frontmatter and Markdown metadata"
+      extract_headings:
+        type: boolean
+        default: true
+        description: "Extract heading structure and hierarchy"
+      extract_links:
+        type: boolean
+        default: true
+        description: "Extract all links from the document"
+      extract_code_blocks:
+        type: boolean
+        default: true
+        description: "Extract code blocks with language detection"
+      chunk_by_headings:
+        type: boolean
+        default: false
+        description: "Split document into chunks based on headings"
+      preserve_formatting:
+        type: boolean
+        default: false
+        description: "Preserve Markdown formatting in content"
+    use_cases: ["documentation", "technical_writing", "knowledge_bases", "wikis"]
+    dependencies: ["PyYAML (optional)"]
+
+# =============================================================================
+# EXTRACTORS - Content Analysis Components
+# =============================================================================
+extractors:
+  RAKEExtractor:
+    description: "RAKE (Rapid Automatic Keyword Extraction) algorithm"
+    inputs: ["text"]
+    outputs: ["keywords"]
+    config_schema:
+      min_length:
+        type: integer
+        default: 1
+        description: "Minimum phrase length"
+      max_length:
+        type: integer
+        default: 4
+        description: "Maximum phrase length"
+      max_keywords:
+        type: integer
+        default: 10
+        description: "Maximum keywords to extract"
+      stop_words:
+        type: array
+        default: null
+        description: "Custom stop words list"
+    use_cases: ["keyword_analysis", "content_tagging", "search_optimization"]
+    dependencies: []
+
+  YAKEExtractor:
+    description: "YAKE (Yet Another Keyword Extractor) with position analysis"
+    inputs: ["text"]
+    outputs: ["keywords"]
+    config_schema:
+      max_ngram_size:
+        type: integer
+        default: 3
+        description: "Maximum n-gram size"
+      deduplication_threshold:
+        type: float
+        default: 0.9
+        description: "Similarity threshold for deduplication"
+      max_keywords:
+        type: integer
+        default: 10
+        description: "Maximum keywords to extract"
+      window_size:
+        type: integer
+        default: 1
+        description: "Context window size"
+    use_cases: ["single_document_analysis", "blog_posts", "articles"]
+    dependencies: []
+
+  TFIDFExtractor:
+    description: "TF-IDF statistical keyword extraction"
+    inputs: ["text_collection"]
+    outputs: ["keywords"]
+    config_schema:
+      max_features:
+        type: integer
+        default: 100
+        description: "Maximum keywords to extract"
+      min_df:
+        type: integer
+        default: 1
+        description: "Minimum document frequency"
+      max_df:
+        type: float
+        default: 0.95
+        description: "Maximum document frequency ratio"
+      ngram_range:
+        type: array
+        default: [1, 2]
+        description: "N-gram range for terms"
+    use_cases: ["document_collections", "corpus_analysis", "content_clustering"]
+    dependencies: []
+
+  EntityExtractor:
+    description: "Named Entity Recognition (NER) with spaCy or regex fallback"
+    inputs: ["text"]
+    outputs: ["entities"]
+    config_schema:
+      model:
+        type: string
+        default: "en_core_web_sm"
+        description: "spaCy model name"
+      entity_types:
+        type: array
+        default: ["PERSON", "ORG", "GPE", "DATE", "TIME", "MONEY", "EMAIL", "PHONE", "URL"]
+        description: "Entity types to extract"
+      use_fallback:
+        type: boolean
+        default: true
+        description: "Enable regex fallback if spaCy unavailable"
+      min_entity_length:
+        type: integer
+        default: 2
+        description: "Minimum entity length"
+    use_cases: ["legal_documents", "business_documents", "contact_extraction"]
+    dependencies: ["spaCy (optional)"]
+
+  DateTimeExtractor:
+    description: "Date and time extraction with fuzzy parsing"
+    inputs: ["text"]
+    outputs: ["dates", "times"]
+    config_schema:
+      fuzzy_parsing:
+        type: boolean
+        default: true
+        description: "Enable fuzzy date parsing"
+      extract_relative:
+        type: boolean
+        default: true
+        description: "Extract relative dates (yesterday, next week)"
+      extract_times:
+        type: boolean
+        default: true
+        description: "Extract time expressions"
+      default_timezone:
+        type: string
+        default: "UTC"
+        description: "Default timezone for parsing"
+    use_cases: ["scheduling", "temporal_analysis", "event_extraction"]
+    dependencies: ["python-dateutil (optional)"]
+
+  ContentStatisticsExtractor:
+    description: "Comprehensive content analysis and readability metrics"
+    inputs: ["text"]
+    outputs: ["statistics", "metrics"]
+    config_schema:
+      include_readability:
+        type: boolean
+        default: true
+        description: "Calculate Flesch scores, reading time"
+      include_vocabulary:
+        type: boolean
+        default: true
+        description: "Analyze vocabulary complexity"
+      include_structure:
+        type: boolean
+        default: true
+        description: "Analyze document structure"
+      include_sentiment_indicators:
+        type: boolean
+        default: false
+        description: "Basic sentiment analysis"
+    use_cases: ["content_optimization", "readability_analysis", "quality_metrics"]
+    dependencies: []
+
+  SummaryExtractor:
+    description: "Statistical text summarization without LLMs"
+    inputs: ["text"]
+    outputs: ["extractive_summary", "key_phrases", "text_statistics"]
+    config_schema:
+      summary_sentences:
+        type: integer
+        default: 3
+        description: "Number of sentences to include in summary"
+      include_key_phrases:
+        type: boolean
+        default: true
+        description: "Extract key phrases from text"
+      include_statistics:
+        type: boolean
+        default: true
+        description: "Include comprehensive text statistics"
+    use_cases: ["document_previews", "content_analysis", "metadata_enrichment"]
+    dependencies: []
+
+  PatternExtractor:
+    description: "Regex-based pattern extraction for structured data"
+    inputs: ["text"]
+    outputs: ["patterns", "structured_data"] 
+    config_schema:
+      predefined_patterns:
+        type: array
+        default: []
+        description: "List of predefined patterns (email, phone, url, etc.)"
+      custom_patterns:
+        type: array
+        default: []
+        description: "Custom regex patterns with names and descriptions"
+      case_sensitive:
+        type: boolean
+        default: false
+        description: "Whether pattern matching is case sensitive"
+    use_cases: ["data_extraction", "pii_detection", "contact_extraction"]
+    dependencies: []
+
+# =============================================================================
+# RETRIEVAL STRATEGIES - Search and Ranking Components
+# =============================================================================
+retrieval_strategies:
+  # Universal Strategies (work with any vector store)
+  BasicSimilarityStrategy:
+    description: "Simple vector similarity search"
+    compatibility: ["universal"]
+    performance: "fast"
+    complexity: "low"
+    config_schema:
+      distance_metric:
+        type: string
+        default: "cosine"
+        enum: ["cosine", "euclidean", "manhattan", "dot"]
+        description: "Distance metric for similarity calculation"
+    use_cases: ["simple_queries", "baseline_testing", "getting_started"]
+    dependencies: []
+
+  MetadataFilteredStrategy:
+    description: "Vector search with metadata filtering"
+    compatibility: ["universal"]
+    performance: "medium"
+    complexity: "medium"
+    config_schema:
+      default_filters:
+        type: object
+        default: {}
+        description: "Default metadata filters to apply"
+      fallback_multiplier:
+        type: integer
+        default: 3
+        description: "Multiplier for post-search filtering fallback"
+      filter_operators:
+        type: array
+        default: ["$eq", "$ne", "$in", "$nin", "$gt", "$lt", "$gte", "$lte"]
+        description: "Supported filter operators"
+    use_cases: ["domain_specific", "multi_tenant", "filtered_search"]
+    dependencies: []
+
+  MultiQueryStrategy:
+    description: "Enhanced recall through query variations"
+    compatibility: ["universal"]
+    performance: "medium"
+    complexity: "medium"
+    config_schema:
+      num_queries:
+        type: integer
+        default: 3
+        description: "Number of query variations to generate"
+      aggregation_method:
+        type: string
+        default: "weighted"
+        enum: ["max", "mean", "weighted"]
+        description: "Method for aggregating results"
+      search_multiplier:
+        type: integer
+        default: 2
+        description: "Results multiplier per query"
+    use_cases: ["ambiguous_queries", "recall_optimization", "complex_questions"]
+    dependencies: []
+
+  RerankedStrategy:
+    description: "Multi-factor relevance scoring and re-ranking"
+    compatibility: ["universal"]
+    performance: "slow"
+    complexity: "high"
+    config_schema:
+      initial_k:
+        type: integer
+        default: 20
+        description: "Initial candidates to retrieve"
+      rerank_factors:
+        type: object
+        default:
+          recency_boost: 0.1
+          length_boost: 0.05
+          metadata_boost: 0.2
+        description: "Weights for different ranking factors"
+      length_normalization:
+        type: boolean
+        default: true
+        description: "Normalize scores by content length"
+    use_cases: ["production_systems", "time_sensitive", "sophisticated_ranking"]
+    dependencies: []
+
+  HybridUniversalStrategy:
+    description: "Combines multiple strategies with weighting or rank fusion"
+    compatibility: ["universal"]
+    performance: "slow"
+    complexity: "high"
+    config_schema:
+      strategies:
+        type: array
+        description: "List of sub-strategies with weights"
+        items:
+          type: object
+          properties:
+            type: { type: string }
+            weight: { type: float, default: 1.0 }
+            config: { type: object }
+      combination_method:
+        type: string
+        default: "weighted_average"
+        enum: ["weighted_average", "rank_fusion"]
+        description: "Method for combining strategy results"
+      diversity_boost:
+        type: float
+        default: 0.0
+        description: "Boost factor for result diversity"
+    use_cases: ["complex_requirements", "balanced_precision_recall", "production"]
+    dependencies: []
+
+  # Database-Specific Strategies
+  ChromaBasicStrategy:
+    description: "ChromaDB-optimized basic similarity search"
+    compatibility: ["chroma"]
+    performance: "very_fast"
+    complexity: "low"
+    config_schema:
+      distance_metric:
+        type: string
+        default: "cosine"
+        enum: ["cosine", "euclidean", "manhattan"]
+        description: "ChromaDB distance metric"
+    use_cases: ["chroma_optimization", "high_performance"]
+    dependencies: ["chromadb"]
+
+# =============================================================================
+# VECTOR STORES - Storage and Indexing Components
+# =============================================================================
+vector_stores:
+  ChromaStore:
+    description: "ChromaDB vector database integration"
+    capabilities: 
+      - "native_metadata_filtering"
+      - "batch_operations"
+      - "persistent_storage"
+      - "http_client"
+    performance: "high"
+    scalability: "medium"
+    config_schema:
+      collection_name:
+        type: string
+        default: "documents"
+        description: "Collection name for storing vectors"
+      persist_directory:
+        type: string
+        default: "./data/chroma_db"
+        description: "Directory for persistent storage"
+      host:
+        type: string
+        default: null
+        description: "ChromaDB server host (for HTTP client)"
+      port:
+        type: integer
+        default: 8000
+        description: "ChromaDB server port"
+      distance_metrics:
+        type: array
+        default: ["cosine", "euclidean", "manhattan"]
+        description: "Supported distance metrics"
+      max_batch_size:
+        type: integer
+        default: 1000
+        description: "Maximum batch size for operations"
+    use_cases: ["development", "small_to_medium_scale", "local_deployment"]
+    dependencies: ["chromadb"]
+
+  PineconeStore:
+    description: "Managed Pinecone vector database"
+    capabilities:
+      - "managed_service"
+      - "high_performance"
+      - "metadata_filtering"
+      - "serverless_scaling"
+    performance: "very_high"
+    scalability: "very_high"
+    config_schema:
+      api_key:
+        type: string
+        required: true
+        description: "Pinecone API key"
+      environment:
+        type: string
+        required: true
+        description: "Pinecone environment"
+      index_name:
+        type: string
+        required: true
+        description: "Pinecone index name"
+      dimension:
+        type: integer
+        required: true
+        description: "Vector dimension"
+    use_cases: ["production", "large_scale", "managed_service"]
+    dependencies: ["pinecone-client"]
+
+# =============================================================================
+# EMBEDDERS - Vector Generation Components
+# =============================================================================
+embedders:
+  OllamaEmbedder:
+    description: "Local embeddings via Ollama API"
+    privacy: "high"
+    cost: "free"
+    performance: "medium"
+    config_schema:
+      model:
+        type: string
+        default: "nomic-embed-text"
+        description: "Ollama embedding model name"
+      base_url:
+        type: string
+        default: "http://localhost:11434"
+        description: "Ollama API endpoint"
+      batch_size:
+        type: integer
+        default: 16
+        description: "Batch processing size"
+      timeout:
+        type: integer
+        default: 60
+        description: "Request timeout in seconds"
+      auto_pull:
+        type: boolean
+        default: true
+        description: "Automatically pull missing models"
+    use_cases: ["privacy_focused", "local_deployment", "development"]
+    dependencies: ["ollama_server"]
+
+  OpenAIEmbedder:
+    description: "OpenAI embedding models via API"
+    privacy: "low"
+    cost: "paid"
+    performance: "high"
+    config_schema:
+      api_key:
+        type: string
+        required: true
+        description: "OpenAI API key"
+      model:
+        type: string
+        default: "text-embedding-3-small"
+        enum: ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"]
+        description: "OpenAI embedding model"
+      batch_size:
+        type: integer
+        default: 100
+        description: "Batch processing size"
+    use_cases: ["production", "high_quality", "cloud_deployment"]
+    dependencies: ["openai"]
+
+# =============================================================================
+# STRATEGY DEFINITIONS - Pre-configured Component Combinations
+# =============================================================================
+strategies:
+  description: "Pre-configured combinations of components for specific use cases"
+  schema:
+    name:
+      type: string
+      description: "Strategy name"
+    description:
+      type: string
+      description: "Strategy description and use cases"
+    components:
+      type: object
+      properties:
+        parsers:
+          type: array
+          description: "List of parsers to use"
+        extractors:
+          type: array
+          description: "List of extractors to apply"
+        embedder:
+          type: object
+          description: "Embedder configuration"
+        vector_store:
+          type: object
+          description: "Vector store configuration"
+        retrieval_strategy:
+          type: object
+          description: "Retrieval strategy configuration"
+    optimization:
+      type: object
+      properties:
+        performance_priority:
+          type: string
+          enum: ["speed", "accuracy", "balanced"]
+        resource_usage:
+          type: string
+          enum: ["low", "medium", "high"]
+        complexity:
+          type: string
+          enum: ["simple", "moderate", "complex"]
+
+# =============================================================================
+# CONFIGURATION VALIDATION AND OPTIMIZATION
+# =============================================================================
+validation:
+  description: "Schema validation and configuration optimization rules"
+  compatibility_matrix:
+    description: "Component compatibility relationships"
+    parser_extractor: "many_to_many"
+    extractor_embedder: "many_to_one"
+    embedder_vector_store: "one_to_one"
+    vector_store_retrieval_strategy: "one_to_many"
+  
+  optimization_rules:
+    performance:
+      - "ChromaDB strategies perform better with ChromaStore"
+      - "Local embedders reduce API costs but may sacrifice quality"
+      - "Simple strategies are faster but less sophisticated"
+    accuracy:
+      - "Hybrid strategies generally provide better recall"
+      - "Re-ranking improves precision but increases latency"
+      - "Multiple extractors provide richer metadata for filtering"
+    resource_usage:
+      - "Large batch sizes improve throughput but increase memory usage"
+      - "More extractors increase processing time"
+      - "Complex strategies require more computational resources"
+
+# =============================================================================
+# EXAMPLES AND TEMPLATES
+# =============================================================================
+examples:
+  simple_csv_processing:
+    description: "Basic CSV document processing and search"
+    components:
+      parser: "CSVParser"
+      embedder: "OllamaEmbedder"
+      vector_store: "ChromaStore"
+      retrieval_strategy: "BasicSimilarityStrategy"
+  
+  legal_document_analysis:
+    description: "Comprehensive legal document processing with entity extraction"
+    components:
+      parser: "PDFParser"
+      extractors: ["EntityExtractor", "DateTimeExtractor", "YAKEExtractor"]
+      embedder: "OpenAIEmbedder"
+      vector_store: "PineconeStore"
+      retrieval_strategy: "HybridUniversalStrategy"
+  
+  customer_support_optimization:
+    description: "Customer support ticket processing with advanced retrieval"
+    components:
+      parser: "CustomerSupportCSVParser"
+      extractors: ["RAKEExtractor", "EntityExtractor", "ContentStatisticsExtractor"]
+      embedder: "OllamaEmbedder"
+      vector_store: "ChromaStore"
+      retrieval_strategy: "MetadataFilteredStrategy"

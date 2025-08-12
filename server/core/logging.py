@@ -83,7 +83,8 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
         for handler in uvicorn_logger.handlers[:]:
             uvicorn_logger.removeHandler(handler)
         # Let logs propagate to root logger (which has our structlog handler)
-        uvicorn_logger.propagate = True
+        # uvicorn_logger.propagate = True
+        uvicorn_logger.name = "uvicorn"
         uvicorn_logger.setLevel(log_level.upper())
 
 class FastAPIStructLogger:

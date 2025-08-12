@@ -51,6 +51,22 @@ dependencies = [
     "pypdf2>=3.0.0",
     "reportlab>=4.4.3",
     "pyyaml>=6.0.2",
+    "rich>=14.1.0",
+    # Excel parsing dependencies
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.2",
+    "xlrd>=2.0.1",
+    # HTML parsing dependencies
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    # Document parsing dependencies
+    "python-docx>=1.0.0",
+    # Character encoding detection
+    "chardet>=5.0.0",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-mock>=3.14.1",
 ]
 
 [project.optional-dependencies]
@@ -282,6 +298,10 @@ per-file-ignores = [
 dev-dependencies = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0", 
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    "responses>=0.23.0",
+    "requests-mock>=1.10.0",
     "black>=23.0.0",
     "isort>=5.12.0",
     "mypy>=1.0.0",

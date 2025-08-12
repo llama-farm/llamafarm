@@ -1,0 +1,42 @@
+# Ollama Embedder Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/embedders/ollama_embedder/schema.yaml
+title: Ollama Embedder Configuration
+description: Generate embeddings using Ollama models
+type: object
+additionalProperties: false
+properties:
+  model:
+    type: string
+    default: nomic-embed-text
+    enum:
+    - nomic-embed-text
+    - mxbai-embed-large
+    description: Ollama model name
+  base_url:
+    type: string
+    format: uri
+    default: http://localhost:11434
+    description: Ollama API endpoint
+  dimension:
+    type: integer
+    default: 768
+    minimum: 128
+    maximum: 4096
+    description: Embedding dimension
+  batch_size:
+    type: integer
+    default: 16
+    minimum: 1
+    maximum: 128
+    description: Batch processing size
+  timeout:
+    type: integer
+    default: 60
+    minimum: 10
+    description: Request timeout (seconds)
+  auto_pull:
+    type: boolean
+    default: true
+    description: Auto-pull missing models

@@ -1,0 +1,15 @@
+# Reranked Retriever Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/retrievers/reranked/schema.yaml
+title: Reranked Retriever Configuration
+description: Re-rank results
+type: object
+additionalProperties: false
+properties:
+  top_k:
+    type: integer
+    default: 10
+    minimum: 1
+    maximum: 1000
+    description: Number of results

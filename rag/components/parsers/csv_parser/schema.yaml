@@ -1,0 +1,49 @@
+# CSV Parser Component Schema
+# JSON Schema draft-07 format
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: "components/parsers/csv_parser/schema.yaml"
+title: "CSV Parser Configuration"
+description: "Parser for CSV files with configurable field mapping"
+type: "object"
+additionalProperties: false
+
+properties:
+  content_fields:
+    type: "array"
+    items:
+      type: "string"
+    default: ["subject", "body"]
+    description: "CSV columns to use as document content"
+    
+  metadata_fields:
+    type: "array"
+    items:
+      type: "string"
+    default: []
+    description: "CSV columns to include as metadata"
+    
+  id_field:
+    type: ["string", "null"]
+    default: null
+    description: "CSV column to use as document ID"
+    
+  combine_content:
+    type: "boolean"
+    default: true
+    description: "Combine multiple content fields into one document"
+    
+  content_separator:
+    type: "string"
+    default: "\n\n"
+    description: "Separator when combining content fields"
+    
+  encoding:
+    type: "string"
+    default: "utf-8"
+    description: "CSV file encoding"
+    
+  delimiter:
+    type: "string"
+    default: ","
+    maxLength: 1
+    description: "CSV delimiter character"

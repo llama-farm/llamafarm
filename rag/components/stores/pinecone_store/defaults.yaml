@@ -1,0 +1,25 @@
+# Pinecone Store Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard pinecone store configuration
+  config:
+    api_key: ${PINECONE_API_KEY}
+    environment:
+      type: string
+      default: us-east-1-aws
+      description: Pinecone environment
+    index_name: documents
+    dimension: 768
+    metric:
+      type: string
+      enum:
+      - euclidean
+      - cosine
+      - dotproduct
+      default: cosine
+      description: Distance metric
+  recommended_for:
+  - Production
+  - Scalable
+  - Cloud

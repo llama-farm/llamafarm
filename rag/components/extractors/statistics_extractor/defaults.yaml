@@ -1,0 +1,9 @@
+# Statistics Extractor Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard statistics extractor
+  config:
+    enabled: true
+  recommended_for:
+  - General use

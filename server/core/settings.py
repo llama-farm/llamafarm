@@ -9,8 +9,8 @@ default_data_dir = user_data_dir("LlamaFarm", "LlamaFarm")
 class Settings(BaseSettings, env_file=".env"):
     LOG_JSON_FORMAT: bool = False
     LOG_LEVEL: str = "INFO"
-    LOG_NAME: str = "default"
-    LOG_ACCESS_NAME: str = "access"
+    LOG_NAME: str = "server"
+    LOG_ACCESS_NAME: str = "server.access"
 
     lf_project_dir: str | None = None
     lf_data_dir: str = default_data_dir

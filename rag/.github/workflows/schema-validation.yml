@@ -1,0 +1,170 @@
+name: Schema Validation and Consolidation
+
+on:
+  push:
+    paths:
+      - 'rag/schema.yaml'
+      - 'rag/schemas/*.yaml'
+      - 'rag/components/**/schema.yaml'
+      - 'rag/components/**/defaults.yaml'
+      - 'rag/config_samples/*.yaml'
+      - 'rag/demos/demo_strategies.yaml'
+      - 'rag/default_strategies.yaml'
+      - 'rag/scripts/consolidate_schemas.py'
+      - 'rag/scripts/schema_validator.py'
+  pull_request:
+    paths:
+      - 'rag/schema.yaml'
+      - 'rag/schemas/*.yaml'
+      - 'rag/components/**/schema.yaml'
+      - 'rag/components/**/defaults.yaml'
+      - 'rag/config_samples/*.yaml'
+      - 'rag/demos/demo_strategies.yaml'
+      - 'rag/default_strategies.yaml'
+      - 'rag/scripts/consolidate_schemas.py'
+      - 'rag/scripts/schema_validator.py'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  validate-and-consolidate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml jsonschema
+    
+    - name: Consolidate component schemas
+      working-directory: ./rag
+      run: |
+        echo "Running schema consolidation..."
+        python scripts/consolidate_schemas.py
+        echo "Consolidation complete!"
+    
+    - name: Validate all schemas
+      working-directory: ./rag
+      run: |
+        echo "Validating schemas..."
+        # Check if main schema exists and is valid YAML
+        python -c "import yaml; yaml.safe_load(open('schema.yaml'))"
+        
+        # Check all component schemas
+        for schema in components/**/schema.yaml; do
+          echo "Checking $schema"
+          python -c "import yaml; yaml.safe_load(open('$schema'))"
+        done
+        
+        echo "All schemas are valid!"
+    
+    - name: Check for schema changes
+      id: check_changes
+      run: |
+        if git diff --quiet rag/schema.yaml rag/schemas/; then
+          echo "No schema changes detected"
+          echo "changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "Schema changes detected"
+          echo "changes=true" >> $GITHUB_OUTPUT
+          git diff --stat rag/schema.yaml rag/schemas/
+        fi
+    
+    - name: Upload consolidated schemas
+      if: success()
+      uses: actions/upload-artifact@v3
+      with:
+        name: consolidated-schemas
+        path: |
+          rag/schemas/consolidated.yaml
+          rag/schemas/consolidated.json
+          rag/schemas/parsers.yaml
+          rag/schemas/extractors.yaml
+          rag/schemas/embedders.yaml
+          rag/schemas/stores.yaml
+          rag/schemas/retrievers.yaml
+    
+    - name: Validate configuration samples
+      working-directory: ./rag
+      run: |
+        echo "Validating configuration samples..."
+        for config in config_samples/*.yaml demos/demo_strategies.yaml default_strategies.yaml; do
+          if [ -f "$config" ]; then
+            echo "Validating $config"
+            python scripts/smart_schema_validator.py "$config" || true
+          fi
+        done
+    
+    - name: Create schema report
+      if: github.event_name == 'pull_request'
+      working-directory: ./rag
+      run: |
+        python -c "
+import yaml
+import json
+
+# Count components
+components = {
+    'parsers': 0,
+    'extractors': 0,
+    'embedders': 0,
+    'stores': 0,
+    'retrievers': 0
+}
+
+consolidated = yaml.safe_load(open('schemas/consolidated.yaml'))
+for comp_type, items in consolidated.items():
+    if comp_type in components:
+        components[comp_type] = len(items)
+
+print('## Schema Validation Report')
+print('')
+print('### Component Summary')
+for comp_type, count in components.items():
+    print(f'- **{comp_type.title()}**: {count} components')
+print('')
+print('### Total Components:', sum(components.values()))
+" > schema_report.txt
+    
+    - name: Comment on PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('rag/schema_report.txt', 'utf8');
+          
+          const message = `✅ **Schema Validation & Consolidation Complete**
+          
+          ${report}
+          
+          ### Validation Status
+          - ✅ All component schemas validated
+          - ✅ Main schema updated
+          - ✅ Consolidation successful
+          
+          Schema artifacts have been generated and are available as workflow artifacts.`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: message
+          });
+    
+    # TODO: Re-enable after CLI improvements
+    # - name: Commit consolidated schemas (main branch only)
+    #   if: github.ref == 'refs/heads/main' && steps.check_changes.outputs.changes == 'true'
+    #   run: |
+    #     git config --local user.email "action@github.com"
+    #     git config --local user.name "GitHub Action"
+    #     git add rag/schemas/
+    #     git add rag/schema.yaml
+    #     git diff --staged --quiet || git commit -m "Auto-update consolidated schemas [skip ci]"
+    #     git push

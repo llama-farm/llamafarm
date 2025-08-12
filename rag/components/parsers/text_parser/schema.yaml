@@ -1,0 +1,59 @@
+# Text Parser Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/parsers/text_parser/schema.yaml
+title: Text Parser Configuration
+description: Parses plain text files with intelligent chunking
+type: object
+additionalProperties: false
+properties:
+  encoding:
+    type: string
+    default: auto
+    description: Text encoding (auto-detect or specify like utf-8, latin1, etc.)
+  chunk_size:
+    type: [integer, "null"]
+    default: null
+    minimum: 100
+    maximum: 50000
+    description: Chunk size in characters (null for no chunking)
+  chunk_overlap:
+    type: integer
+    default: 0
+    minimum: 0
+    maximum: 5000
+    description: Overlap between chunks in characters
+  chunk_strategy:
+    type: string
+    enum:
+    - characters
+    - sentences
+    - paragraphs
+    default: characters
+    description: Chunking strategy - how to split the text
+  respect_sentence_boundaries:
+    type: boolean
+    default: true
+    description: Avoid splitting sentences in the middle when using character chunking
+  respect_paragraph_boundaries:
+    type: boolean
+    default: false
+    description: Avoid splitting paragraphs in the middle (overrides sentence boundaries)
+  min_chunk_size:
+    type: integer
+    default: 50
+    minimum: 10
+    maximum: 1000
+    description: Minimum chunk size to avoid creating tiny chunks
+  preserve_line_breaks:
+    type: boolean
+    default: true
+    description: Preserve line breaks in the text
+  strip_empty_lines:
+    type: boolean
+    default: true
+    description: Remove empty lines while preserving paragraph structure
+  detect_structure:
+    type: boolean
+    default: true
+    description: Detect and extract structural elements (headers, lists, code blocks)

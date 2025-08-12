@@ -1,0 +1,28 @@
+# Sentence Transformer Component Schema - WIP
+# JSON Schema draft-07 format
+# Status: Work In Progress - Implementation coming soon
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/embedders/sentence_transformer_embedder/schema.yaml
+title: Sentence Transformer Configuration (WIP)
+description: Sentence transformer embeddings - Implementation in progress
+type: object
+additionalProperties: false
+properties:
+  model_name:
+    type: string
+    default: sentence-transformers/all-MiniLM-L6-v2
+    description: Model name
+  device:
+    type: string
+    default: cpu
+    enum:
+    - cpu
+    - cuda
+    - mps
+    description: Computation device
+  batch_size:
+    type: integer
+    default: 32
+    minimum: 1
+    maximum: 256
+    description: Batch size

@@ -13,8 +13,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config_types import LlamaFarmConfig
-from loader import ConfigError, find_config_file, load_config
+from config import ConfigError, LlamaFarmConfig, find_config_file, load_config_dict
 
 
 class TestConfigLoader:
@@ -25,10 +24,10 @@ class TestConfigLoader:
         """Return the path to test data directory."""
         return Path(__file__).parent
 
-    def test_load_yaml_sample_config(self, test_data_dir):
+    def test_load_yaml_sample_config(self, test_data_dir: Path):
         """Test loading the comprehensive YAML sample configuration."""
         config_path = test_data_dir / "sample_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         # Verify basic structure
         assert config["version"] == "v1"
@@ -45,32 +44,32 @@ class TestConfigLoader:
 
         # Verify RAG configuration
         rag = config["rag"]
-        assert rag["parsers"]["csv"]["type"] == "CustomerSupportCSVParser"
-        assert rag["embedders"]["default"]["type"] == "OllamaEmbedder"
-        assert rag["vector_stores"]["default"]["type"] == "ChromaStore"
+        # New strict schema: strategies array
+        assert isinstance(rag["strategies"], list) and len(rag["strategies"]) >= 1
+        strat = rag["strategies"][0]
+        assert strat["components"]["parser"]["type"] == "CSVParser"
+        assert strat["components"]["embedder"]["type"] == "OllamaEmbedder"
+        assert strat["components"]["vector_store"]["type"] == "ChromaStore"
 
         # Verify parser config
-        parser_config = rag["parsers"]["csv"]["config"]
+        parser_config = strat["components"]["parser"]["config"]
         assert "question" in parser_config["content_fields"]
         assert "answer" in parser_config["content_fields"]
         assert "category" in parser_config["metadata_fields"]
         assert "timestamp" in parser_config["metadata_fields"]
 
         # Verify embedder config
-        embedder_config = rag["embedders"]["default"]["config"]
+        embedder_config = strat["components"]["embedder"]["config"]
         assert embedder_config["model"] == "mxbai-embed-large"
         assert embedder_config["batch_size"] == 32
 
         # Verify vector store config
-        vector_config = rag["vector_stores"]["default"]["config"]
+        vector_config = strat["components"]["vector_store"]["config"]
         assert vector_config["collection_name"] == "customer_support_knowledge_base"
         assert vector_config["persist_directory"] == "./data/vector_store/chroma"
 
         # Verify defaults section
-        assert rag["defaults"]["parser"] == "auto"
-        assert rag["defaults"]["embedder"] == "default"
-        assert rag["defaults"]["vector_store"] == "default"
-        assert rag["defaults"]["retrieval_strategy"] == "default"
+        # Defaults removed in strict schema version; strategies govern components
 
         # Verify models
         assert len(config["models"]) == 8
@@ -91,7 +90,7 @@ class TestConfigLoader:
     def test_load_toml_sample_config(self, test_data_dir):
         """Test loading the comprehensive TOML sample configuration."""
         config_path = test_data_dir / "sample_config.toml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         # Should have same structure as YAML version
         assert config["version"] == "v1"
@@ -99,14 +98,15 @@ class TestConfigLoader:
         assert len(config["models"]) == 8
 
         # Verify TOML-specific parsing worked correctly
-        assert config["rag"]["embedders"]["default"]["config"]["batch_size"] == 32
-        assert isinstance(config["rag"]["parsers"]["csv"]["config"]["content_fields"], list)
+        strat = config["rag"]["strategies"][0]
+        assert strat["components"]["embedder"]["config"]["batch_size"] == 32
+        assert isinstance(strat["components"]["parser"]["config"]["content_fields"], list)
         assert isinstance(config["models"], list)
 
     def test_load_minimal_config(self, test_data_dir):
         """Test loading minimal valid configuration."""
         config_path = test_data_dir / "minimal_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         assert config["version"] == "v1"
         assert len(config["models"]) == 1
@@ -120,22 +120,23 @@ class TestConfigLoader:
         assert config["prompts"][0]["name"] == "minimal_prompt"
 
         # RAG should be properly configured
-        assert config["rag"]["parsers"]["csv"]["config"]["content_fields"] == ["question"]
-        assert config["rag"]["embedders"]["default"]["config"]["model"] == "nomic-embed-text"
+        strat = config["rag"]["strategies"][0]
+        assert strat["components"]["parser"]["config"]["content_fields"] == ["question"]
+        assert strat["components"]["embedder"]["config"]["model"] == "nomic-embed-text"
 
     def test_validation_with_invalid_config(self, test_data_dir):
         """Test that validation catches invalid configurations."""
         config_path = test_data_dir / "invalid_config.yaml"
 
         with pytest.raises(ConfigError):
-            load_config(config_path=config_path, validate=True)
+            load_config_dict(config_path=config_path, validate=True)
 
     def test_load_without_validation(self, test_data_dir):
         """Test loading invalid config without validation."""
         config_path = test_data_dir / "invalid_config.yaml"
 
         # Should load without error when validation is disabled
-        config = load_config(config_path=config_path, validate=False)
+        config = load_config_dict(config_path=config_path, validate=False)
         assert config["version"] == "v2"  # Invalid version but loaded anyway
 
     def test_find_config_file(self, test_data_dir):
@@ -162,7 +163,7 @@ class TestConfigLoader:
         with tempfile.TemporaryDirectory() as temp_dir, pytest.raises(
             ConfigError, match="No configuration file found"
         ):
-            load_config(directory=temp_dir)
+            load_config_dict(directory=temp_dir)
 
     def test_unsupported_file_format(self):
         """Test error handling for unsupported file formats."""
@@ -172,7 +173,7 @@ class TestConfigLoader:
 
         try:
             with pytest.raises(ConfigError, match="Unsupported file format"):
-                load_config(config_path=temp_path)
+                load_config_dict(config_path=temp_path)
         finally:
             os.unlink(temp_path)
 
@@ -191,14 +192,14 @@ models:
 
         try:
             with pytest.raises(ConfigError):
-                load_config(config_path=temp_path)
+                load_config_dict(config_path=temp_path)
         finally:
             os.unlink(temp_path)
 
     def test_all_provider_types(self, test_data_dir):
         """Test that all provider types from schema are covered in sample config."""
         config_path = test_data_dir / "sample_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         providers = {m["provider"] for m in config["models"]}
         expected_providers = {"openai", "anthropic", "google", "local", "custom"}
@@ -210,7 +211,7 @@ models:
     def test_type_safety(self, test_data_dir):
         """Test that loaded config matches expected types."""
         config_path = test_data_dir / "sample_config.yaml"
-        config: LlamaFarmConfig = load_config(config_path=config_path)
+        config: LlamaFarmConfig = load_config_dict(config_path=config_path)
 
         # These should pass type checking
         version: str = config["version"]
@@ -226,14 +227,15 @@ models:
             assert isinstance(model["provider"], str)
             assert isinstance(model["model"], str)
 
-        # Test RAG structure
-        assert isinstance(rag["parsers"]["csv"]["config"]["content_fields"], list)
-        assert isinstance(rag["embedders"]["default"]["config"]["batch_size"], int)
+        # Test RAG structure (strict schema)
+        strat = rag["strategies"][0]
+        assert isinstance(strat["components"]["parser"]["config"]["content_fields"], list)
+        assert isinstance(strat["components"]["embedder"]["config"]["batch_size"], int)
 
     def test_config_with_no_prompts(self, test_data_dir):
         """Test configuration loading with minimal prompts section."""
         config_path = test_data_dir / "minimal_config.yaml"
-        config = load_config(config_path=config_path)
+        config = load_config_dict(config_path=config_path)
 
         # Should load successfully with minimal prompts (required field)
         assert "prompts" in config
@@ -255,10 +257,10 @@ models:
                 shutil.copy(sample_config, temp_path / "llamafarm.yaml")
 
             # Load by directory (should find llamafarm.yaml)
-            config1 = load_config(directory=temp_path)
+            config1 = load_config_dict(directory=temp_path)
 
             # Load by explicit file path
-            config2 = load_config(config_path=test_data_dir / "sample_config.yaml")
+            config2 = load_config_dict(config_path=test_data_dir / "sample_config.yaml")
 
             # Both should succeed and have same version
             assert config1["version"] == "v1"
@@ -271,23 +273,25 @@ def test_integration_usage():
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
     # Test package-style import
-    from config import LlamaFarmConfig, load_config
+    from config import load_config
+    from config.datamodel import LlamaFarmConfig
 
     test_dir = Path(__file__).parent
     config_path = test_dir / "sample_config.yaml"
 
     # Load config as other modules would
-    config: LlamaFarmConfig = load_config(config_path=config_path)
+    config: LlamaFarmConfig = load_config_dict(config_path=config_path)
 
     # Verify typical usage patterns
     assert config["version"] == "v1"
 
     # Test accessing RAG configuration (common use case)
-    parser_type = config["rag"]["parsers"]["csv"]["type"]
-    embedder_model = config["rag"]["embedders"]["default"]["config"]["model"]
-    collection_name = config["rag"]["vector_stores"]["default"]["config"]["collection_name"]
+    strat = config["rag"]["strategies"][0]
+    parser_type = strat["components"]["parser"]["type"]
+    embedder_model = strat["components"]["embedder"]["config"]["model"]
+    collection_name = strat["components"]["vector_store"]["config"]["collection_name"]
 
-    assert parser_type == "CustomerSupportCSVParser"
+    assert parser_type == "CSVParser"
     assert embedder_model == "mxbai-embed-large"
     assert collection_name == "customer_support_knowledge_base"
 

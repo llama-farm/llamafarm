@@ -1,5 +1,3 @@
-import re
-
 import instructor
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -17,31 +15,7 @@ from .strategies import (
 logger = FastAPIStructLogger()
 
 # Constants
-TEMPLATE_INDICATORS = [
-    "[number of projects]", "[project list]", "[namespace]", "[projects]",
-    "{{", "}}", "${", "[total]", "[count]", "**[list of projects",
-    "**[projects", "[list of projects", "I will use the project tool",
-    "To view the list, I will", "**[namespace", "currently **[",
-]
-
 PROJECT_KEYWORDS = ["project", "list", "create", "show", "namespace"]
-
-NAMESPACE_PATTERNS = [
-    r"in\s+(\w+)\s+namespace",
-    r"namespace\s+(\w+)",
-    r"in\s+(\w+)(?:\s|$)",
-    r"from\s+(\w+)(?:\s|$)",
-    r"(\w+)\s+namespace"
-]
-
-PROJECT_ID_PATTERNS = [
-    r"create\s+(?:project\s+)?(?:called\s+)?['\"]?(\w+)['\"]?",
-    r"new\s+project\s+['\"]?(\w+)['\"]?",
-    r"project\s+['\"]?(\w+)['\"]?"
-]
-
-CREATE_KEYWORDS = ["create", "new", "add", "make"]
-EXCLUDED_NAMESPACES = ["the", "a", "an", "my", "projects", "project"]
 
 # Structured output models for LLM-based analysis
 class ProjectAnalysis(BaseModel):
@@ -186,37 +160,7 @@ class MessageAnalyzer:
         
         return analysis
     
-    @staticmethod
-    def extract_namespace(message: str) -> str:
-        """Extract namespace from user message or return default (legacy method)"""
-        message_lower = message.lower()
-        
-       # Look for explicit namespace mentions
-        for pattern in NAMESPACE_PATTERNS:
-            if match := re.search(pattern, message_lower):
-                namespace = match[1]
-                if namespace not in EXCLUDED_NAMESPACES:
-                    return namespace
-        
-        return "test"
 
-    @staticmethod
-    def extract_project_id(message: str) -> str | None:
-        """Extract project ID from create project messages (legacy method)"""
-        message_lower = message.lower()
-        
-        for pattern in PROJECT_ID_PATTERNS:
-            if match := re.search(pattern, message_lower):
-                return match[1]
-        
-        return None
-
-    @staticmethod
-    def determine_action_legacy(message: str) -> ProjectAction:
-        """Determine if user wants to create or list projects (legacy method)"""
-        message_lower = message.lower()
-        return ProjectAction.CREATE if any(
-            word in message_lower for word in CREATE_KEYWORDS) else ProjectAction.LIST
     
     @staticmethod
     def determine_action(message: str) -> ProjectAction:

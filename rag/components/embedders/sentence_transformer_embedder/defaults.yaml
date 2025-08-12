@@ -1,0 +1,12 @@
+# Sentence Transformer Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Standard configuration
+  config:
+    model_name: sentence-transformers/all-MiniLM-L6-v2
+    device: cpu
+    batch_size: 32
+  recommended_for:
+  - General use
+  - CPU inference
