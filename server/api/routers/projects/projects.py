@@ -31,6 +31,13 @@ class GetProjectResponse(BaseModel):
 class DeleteProjectResponse(BaseModel):
     project: Project
 
+class UpdateProjectRequest(BaseModel):
+    # Full replacement update of the project's configuration
+    config: LlamaFarmConfig
+
+class UpdateProjectResponse(BaseModel):
+    project: Project
+
 @contextmanager
 def override_schema_template(template: str | None):
     original = getattr(global_settings, "lf_schema_template", "default")
@@ -103,6 +110,33 @@ async def get_project(namespace: str, project_id: str):
         name=project.name,
         config=project.config,
       ),
+    )
+
+@router.put(
+    "/{namespace}/{project_id}",
+    response_model=UpdateProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+async def update_project(
+    namespace: str,
+    project_id: str,
+    request: UpdateProjectRequest,
+):
+    updated_config = ProjectService.update_project(
+        namespace,
+        project_id,
+        request.config,
+    )
+    return UpdateProjectResponse(
+        project=Project(
+            namespace=namespace,
+            name=project_id,
+            config=updated_config,
+        )
     )
 
 @router.delete(

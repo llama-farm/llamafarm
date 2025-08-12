@@ -1,15 +1,14 @@
 import os
 from pathlib import Path
 
+from config import ConfigError, load_config, save_config
+from config.datamodel import LlamaFarmConfig
+from config.helpers.generator import generate_base_config_from_schema
 from pydantic import BaseModel
 
 from api.errors import NamespaceNotFoundError, ProjectConfigError, ProjectNotFoundError
 from core.logging import FastAPIStructLogger
 from core.settings import settings
-
-from config import ConfigError, load_config, save_config
-from config.datamodel import LlamaFarmConfig
-from config.helpers.generator import generate_base_config_from_schema
 
 logger = FastAPIStructLogger()
 
@@ -226,3 +225,31 @@ class ProjectService:
     file_path, cfg = save_config(config, cls.get_project_dir(namespace, project_id))
     logger.debug("Saved project config", config=config, file_path=file_path)
     return cfg
+
+  @classmethod
+  def update_project(
+    cls,
+    namespace: str,
+    project_id: str,
+    updated_config: LlamaFarmConfig,
+  ) -> LlamaFarmConfig:
+    """
+    Full-replacement update of a project's configuration.
+    - Ensures the project exists
+    - Validates config via the datamodel when saving
+    - Enforces immutable fields (namespace, name alignment)
+    - Performs atomic save with backup via loader.save_config
+    """
+    # Ensure project exists and has a config file
+    _ = cls.get_project(namespace, project_id)
+
+    # Enforce immutable name: align to path project_id regardless of payload
+    config_dict = updated_config.model_dump(mode="json", exclude_none=True)
+    config_dict["name"] = project_id
+
+    # Validate by reconstructing model
+    cfg_model = LlamaFarmConfig(**config_dict)
+
+    # Persist (will create a backup and preserve format)
+    saved_cfg = cls.save_config(namespace, project_id, cfg_model)
+    return saved_cfg
