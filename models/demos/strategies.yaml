@@ -511,13 +511,6 @@ strategies:
         config:
           base_url: "builtin://mock"
           default_model: "mock-gpt-4"
-    
-    test_queries:
-      - "What is machine learning?"
-      - "Write a Python function to sort a list"
-      - "Explain quantum computing"
-      - "Create a haiku about programming"
-      - "What are the benefits of mock testing?"
           response_delay: 0.2
           templates:
             default: |
@@ -527,35 +520,7 @@ strategies:
               
               This is a mock response for development/testing. In a real implementation, 
               this would be processed by: {model}
-              
-              Estimated tokens: ~{estimated_tokens}
-              Response time: {response_time}ms
-              
-              💡 Tip: Switch to real models when ready for production!
-            error: "❌ Mock Error [{timestamp}]: {error_type} - This is simulated for testing"
-          models:
-            - name: "mock-gpt-4"
-              capabilities: ["chat", "completion", "function_calling"]
-            - name: "mock-claude-3" 
-              capabilities: ["chat", "completion", "vision"]
-            - name: "mock-llama-70b"
-              capabilities: ["chat", "completion"]
-            - name: "mock-tiny"
-              capabilities: ["chat"]
-          mock_config:
-            behavior:
-              echo_query: true
-              add_timestamp: true
-              simulate_thinking: false
-            responses:
-              include_metadata: true
-              show_model_name: true
-              estimate_tokens: true
-            development:
-              log_requests: true
-              validate_schemas: true
-              
-    # Test queries for mock demonstration
+    
     test_queries:
       - "What is machine learning?"
       - "Write a Python function to sort a list"
