@@ -28,8 +28,8 @@ def test_basic_setup():
     
     # Test config file existence
     config_files = [
-        "config_examples/basic_with_retrieval_config.json",
-        "config_examples/advanced_retrieval_config.json"
+        "config_examples/basic_with_retrieval_config.yaml",
+        "config_examples/advanced_retrieval_config.yaml"
     ]
     
     for config_file in config_files:
@@ -55,7 +55,7 @@ def test_sample_data_ingestion():
     
     # Try to ingest data using CLI (we'll simulate this by checking if we can create the API)
     try:
-        api = SearchAPI(config_path="config_examples/basic_with_retrieval_config.json")
+        api = SearchAPI(config_path="config_examples/basic_with_retrieval_config.yaml")
         print("✅ Successfully initialized SearchAPI with retrieval config")
         
         # Get collection info
@@ -65,7 +65,7 @@ def test_sample_data_ingestion():
         
         if doc_count == 0:
             print("⚠️  No documents in collection. You may need to ingest data first.")
-            print("   Run: uv run python cli.py --config config_examples/basic_with_retrieval_config.json ingest samples/small_sample.csv")
+            print("   Run: uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml ingest samples/small_sample.csv")
             return False
         
         strategy_info = info.get('retrieval_strategy', {})
@@ -91,8 +91,8 @@ def test_search_functionality():
     ]
     
     configs_to_test = [
-        ("Basic Strategy", "config_examples/basic_with_retrieval_config.json"),
-        ("Advanced Strategy", "config_examples/advanced_retrieval_config.json")
+        ("Basic Strategy", "config_examples/basic_with_retrieval_config.yaml"),
+        ("Advanced Strategy", "config_examples/advanced_retrieval_config.yaml")
     ]
     
     results_summary = {}
@@ -143,8 +143,8 @@ def test_strategy_comparison():
     test_query = "password reset issues"
     
     configs = [
-        ("Basic", "config_examples/basic_with_retrieval_config.json"),
-        ("Advanced", "config_examples/advanced_retrieval_config.json")
+        ("Basic", "config_examples/basic_with_retrieval_config.yaml"),
+        ("Advanced", "config_examples/advanced_retrieval_config.yaml")
     ]
     
     comparison_results = {}
@@ -226,7 +226,7 @@ def test_convenience_search_function():
         # Test simple search function
         results = search(
             query="authentication error",
-            config_path="config_examples/basic_with_retrieval_config.json",
+            config_path="config_examples/basic_with_retrieval_config.yaml",
             top_k=2
         )
         
@@ -275,7 +275,7 @@ def run_comprehensive_test():
         print("\n💡 Troubleshooting Tips:")
         print("1. Make sure Ollama is running: ollama serve")
         print("2. Ensure the embedding model is available: ollama pull nomic-embed-text")
-        print("3. Ingest sample data first: uv run python cli.py --config config_examples/basic_with_retrieval_config.json ingest samples/small_sample.csv")
+        print("3. Ingest sample data first: uv run python cli.py --config config_examples/basic_with_retrieval_config.yaml ingest samples/small_sample.csv")
         print("4. Check that all config files exist in config_examples/")
     
     return passed == total
