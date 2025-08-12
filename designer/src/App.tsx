@@ -6,6 +6,7 @@ import Data from './components/Data/Data'
 import Prompt from './components/Prompt/Prompt'
 import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
+import Projects from './components/Projects'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
       <div className="h-full w-full">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/projects" element={<Projects />} />
           <Route path="/chat" element={<Chat />}>
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="data" element={<Data />} />
