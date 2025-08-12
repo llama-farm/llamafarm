@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Union, Generator
 from pathlib import Path
+from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 class BaseFineTuner(ABC):
@@ -165,8 +167,77 @@ class BaseCloudAPI(ABC):
     def count_tokens(self, text: str, model: Optional[str] = None) -> int:
         """Count tokens in text for the specified model."""
         pass
+
+
+class FineTuningConfig(BaseModel):
+    """Configuration model for fine-tuning operations."""
     
-    @abstractmethod
-    def get_usage(self) -> Dict[str, Any]:
-        """Get API usage statistics."""
-        pass
+    # Base model configuration
+    base_model: Dict[str, Any] = Field(..., description="Base model configuration")
+    
+    # Fine-tuning method configuration
+    method: Dict[str, Any] = Field(..., description="Fine-tuning method configuration")
+    
+    # Framework configuration
+    framework: Dict[str, Any] = Field(..., description="Framework configuration")
+    
+    # Training arguments
+    training_args: Dict[str, Any] = Field(..., description="Training arguments")
+    
+    # Dataset configuration
+    dataset: Dict[str, Any] = Field(..., description="Dataset configuration")
+    
+    # Environment configuration
+    environment: Dict[str, Any] = Field(default_factory=dict, description="Environment settings")
+    
+    # Output configuration
+    output: Dict[str, Any] = Field(default_factory=dict, description="Output settings")
+    
+    # Hardware optimizations
+    hardware_optimizations: Dict[str, Any] = Field(default_factory=dict, description="Hardware optimizations")
+    
+    # Advanced configuration
+    advanced: Dict[str, Any] = Field(default_factory=dict, description="Advanced settings")
+    
+    class Config:
+        extra = "allow"  # Allow additional fields for flexibility
+
+
+class TrainingJob(BaseModel):
+    """Represents a fine-tuning job."""
+    
+    job_id: str = Field(..., description="Unique job identifier")
+    name: Optional[str] = Field(None, description="Human-readable job name")
+    status: str = Field("pending", description="Job status")
+    config: FineTuningConfig = Field(..., description="Job configuration")
+    
+    # Timing information
+    created_at: datetime = Field(default_factory=datetime.now)
+    started_at: Optional[datetime] = Field(None)
+    completed_at: Optional[datetime] = Field(None)
+    
+    # Progress information
+    current_epoch: int = Field(default=0, description="Current training epoch")
+    total_epochs: int = Field(default=1, description="Total training epochs")
+    current_step: int = Field(default=0, description="Current training step")
+    total_steps: int = Field(default=0, description="Total training steps")
+    
+    # Results and metrics
+    metrics: Dict[str, Any] = Field(default_factory=dict, description="Training metrics")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    
+    # Output paths
+    output_dir: Optional[Path] = Field(None, description="Output directory")
+    checkpoint_dir: Optional[Path] = Field(None, description="Checkpoint directory")
+    
+    def is_complete(self) -> bool:
+        """Check if the job is complete."""
+        return self.status in ["completed", "failed", "cancelled"]
+    
+    def get_progress(self) -> float:
+        """Get training progress as a percentage."""
+        if self.total_steps > 0:
+            return (self.current_step / self.total_steps) * 100
+        elif self.total_epochs > 0:
+            return (self.current_epoch / self.total_epochs) * 100
+        return 0.0

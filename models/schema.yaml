@@ -1,393 +1,605 @@
-# Models System Comprehensive Schema
-# This schema defines all available components and their configurations
+# Models System Schema - RAG-style configuration
+# Version: 2.0.0
+# Schema: draft-07
+$schema: http://json-schema.org/draft-07/schema#
 
-# =============================================================================
-# CLOUD APIS - Cloud-based model providers
-# =============================================================================
-cloud_apis:
-  OpenAI:
-    description: "OpenAI API integration for GPT models"
-    capabilities: ["text_generation", "chat", "embeddings", "function_calling"]
-    cost: "paid"
-    privacy: "cloud"
-    config_schema:
-      api_key:
-        type: string
-        required: true
-        description: "OpenAI API key (can use ${OPENAI_API_KEY} for env var)"
-      organization:
-        type: string
-        description: "OpenAI organization ID (optional)"
-      default_model:
-        type: string
-        default: "gpt-3.5-turbo"
-        enum: 
-          - "gpt-4-turbo-preview"
-          - "gpt-4"
-          - "gpt-4-32k"
-          - "gpt-3.5-turbo"
-          - "gpt-3.5-turbo-16k"
-          - "text-embedding-ada-002"
-          - "text-embedding-3-small"
-          - "text-embedding-3-large"
-        description: "Default model to use"
-      timeout:
-        type: integer
-        minimum: 1
-        default: 60
-        description: "Request timeout in seconds"
-      max_retries:
-        type: integer
-        minimum: 0
-        default: 3
-        description: "Maximum number of retry attempts"
-      base_url:
-        type: string
-        default: "https://api.openai.com/v1"
-        description: "API base URL (for proxies or custom endpoints)"
-    use_cases: ["production", "rapid_prototyping", "advanced_reasoning"]
-    
-# =============================================================================
-# MODEL APPS - Local model serving applications
-# =============================================================================
-model_apps:
-  Ollama:
-    description: "Local model serving with Ollama"
-    capabilities: ["text_generation", "chat", "embeddings", "model_management"]
-    cost: "free"
-    privacy: "local"
-    config_schema:
-      base_url:
-        type: string
-        default: "http://localhost:11434"
-        description: "Ollama API base URL"
-      default_model:
-        type: string
-        default: "llama3.2"
-        description: "Default model to use"
-      timeout:
-        type: integer
-        minimum: 1
-        default: 300
-        description: "Request timeout in seconds"
-      auto_start:
-        type: boolean
-        default: true
-        description: "Automatically start Ollama service if not running"
-      gpu_layers:
-        type: integer
-        minimum: 0
-        description: "Number of layers to offload to GPU"
-      num_thread:
-        type: integer
-        minimum: 1
-        description: "Number of CPU threads to use"
-      models:
+title: Models System Configuration Schema
+description: Comprehensive schema for model management, fine-tuning, and deployment strategies
+version: 2.0.0
+
+type: object
+properties:
+  # =====================================
+  # STRATEGIES - Top-level strategy definitions
+  # =====================================
+  strategies:
+    type: object
+    description: Named strategy configurations combining components for specific use cases
+    additionalProperties:
+      type: object
+      required: [name, description, components]
+      properties:
+        name:
+          type: string
+          description: Human-readable strategy name
+          
+        description:
+          type: string
+          description: Detailed description of strategy purpose and use case
+          
+        components:
+          type: object
+          description: Component configuration for this strategy
+          properties:
+            cloud_api:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [openai_compatible, anthropic, custom]
+                config:
+                  type: object
+                  
+            model_app:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [ollama, llamacpp, vllm, custom]
+                config:
+                  type: object
+                  
+            fine_tuner:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [pytorch, llamafactory, custom]
+                config:
+                  type: object
+                  
+            repository:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [huggingface, modelscope, custom]
+                config:
+                  type: object
+                  
+        fallback_chain:
+          type: array
+          description: Ordered list of fallback options
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+              config:
+                type: object
+                
+        routing_rules:
+          type: array
+          description: Conditional routing based on input characteristics
+          items:
+            type: object
+            properties:
+              condition:
+                type: string
+              target:
+                type: string
+              priority:
+                type: string
+                enum: [low, normal, high, critical]
+                
+        optimization:
+          type: object
+          description: Performance optimization settings
+          properties:
+            cache_enabled:
+              type: boolean
+              default: true
+            batch_size:
+              type: integer
+              minimum: 1
+            timeout_seconds:
+              type: integer
+              minimum: 1
+            retry_policy:
+              type: object
+              properties:
+                max_attempts:
+                  type: integer
+                  minimum: 1
+                backoff_multiplier:
+                  type: number
+                  minimum: 1.0
+                  
+        monitoring:
+          type: object
+          description: Monitoring and observability configuration
+          properties:
+            metrics_enabled:
+              type: boolean
+              default: true
+            log_level:
+              type: string
+              enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+            trace_enabled:
+              type: boolean
+              default: false
+              
+        constraints:
+          type: object
+          description: Resource and policy constraints
+          properties:
+            max_tokens:
+              type: integer
+              minimum: 1
+            max_cost_per_request:
+              type: number
+              minimum: 0
+            allowed_models:
+              type: array
+              items:
+                type: string
+            requires_gpu:
+              type: boolean
+            privacy_mode:
+              type: string
+              enum: [public, private, local_only]
+
+  # =====================================
+  # COMPONENT DEFINITIONS
+  # =====================================
+  components:
+    type: object
+    description: Available components and their schemas
+    properties:
+      
+      # Cloud API Components
+      cloud_apis:
+        type: object
+        description: Cloud-based model API providers
+        properties:
+          
+          openai_compatible:
+            type: object
+            description: OpenAI-compatible API providers (OpenAI, Together, Groq, etc.)
+            properties:
+              schema:
+                type: object
+                properties:
+                  provider:
+                    type: string
+                    description: Provider name
+                    enum: [openai, together, anyscale, perplexity, groq, mistral, deepseek, grok, fireworks, openrouter, custom]
+                  api_key:
+                    type: string
+                    description: API key for authentication
+                  base_url:
+                    type: string
+                    description: Custom base URL for the API
+                  default_model:
+                    type: string
+                    description: Default model to use
+                  timeout:
+                    type: integer
+                    minimum: 1
+                    default: 60
+                  max_retries:
+                    type: integer
+                    minimum: 0
+                    default: 3
+                  organization:
+                    type: string
+                    description: Organization ID (OpenAI specific)
+                required: [provider]
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [chat, completion, embeddings, function_calling, vision, streaming]
+              providers:
+                type: object
+                description: Provider-specific configurations
+                
+      # Model App Components
+      model_apps:
+        type: object
+        description: Local model serving applications
+        properties:
+          
+          ollama:
+            type: object
+            description: Ollama local model server
+            properties:
+              schema:
+                type: object
+                properties:
+                  base_url:
+                    type: string
+                    default: http://localhost:11434
+                  default_model:
+                    type: string
+                    default: llama3.2:3b
+                  auto_start:
+                    type: boolean
+                    default: true
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        pull_on_start:
+                          type: boolean
+                  gpu_layers:
+                    type: integer
+                    minimum: 0
+                  num_thread:
+                    type: integer
+                    minimum: 1
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [chat, embeddings, model_management, quantization]
+                  
+      # Fine-tuner Components  
+      fine_tuners:
+        type: object
+        description: Model fine-tuning frameworks
+        properties:
+          
+          pytorch:
+            type: object
+            description: PyTorch-based fine-tuning
+            properties:
+              schema:
+                type: object
+                properties:
+                  # Hardware configuration - CRITICAL for cross-platform support
+                  hardware:
+                    type: object
+                    description: Hardware-specific settings for optimal performance
+                    properties:
+                      device:
+                        type: string
+                        enum: [auto, cuda, mps, cpu]
+                        default: auto
+                        description: |
+                          Device selection:
+                          - auto: Automatically detect best available (recommended)
+                          - cuda: NVIDIA GPU (Windows/Linux with CUDA)
+                          - mps: Apple Silicon GPU (M1/M2/M3 Macs)
+                          - cpu: CPU only (slowest but universal)
+                      
+                      memory_gb:
+                        type: integer
+                        minimum: 2
+                        description: |
+                          Available memory in GB:
+                          - 4-8 GB: Use batch_size=1-2, gradient_checkpointing=true
+                          - 8-16 GB: Use batch_size=2-4, standard settings
+                          - 16+ GB: Use batch_size=4-8, can disable gradient_checkpointing
+                      
+                      precision:
+                        type: object
+                        description: Precision settings per hardware type
+                        properties:
+                          cuda:
+                            type: object
+                            properties:
+                              use_fp16:
+                                type: boolean
+                                default: true
+                                description: Use FP16 on CUDA (faster, less memory)
+                              use_bf16:
+                                type: boolean
+                                default: false
+                                description: Use BF16 if GPU supports it (A100, RTX 30xx+)
+                              use_tf32:
+                                type: boolean
+                                default: true
+                                description: Use TF32 on Ampere+ GPUs
+                          mps:
+                            type: object
+                            properties:
+                              use_fp16:
+                                type: boolean
+                                default: false
+                                description: FP16 not well supported on MPS
+                              use_bf16:
+                                type: boolean
+                                default: false
+                                description: BF16 not supported on MPS
+                          cpu:
+                            type: object
+                            properties:
+                              use_fp16:
+                                type: boolean
+                                default: false
+                                description: Keep FP32 on CPU for stability
+                      
+                      optimization:
+                        type: object
+                        description: Memory and speed optimizations
+                        properties:
+                          gradient_checkpointing:
+                            type: boolean
+                            default: true
+                            description: |
+                              Trade compute for memory:
+                              - Enable for <8GB memory
+                              - Disable for faster training with >16GB
+                          gradient_accumulation_steps:
+                            type: integer
+                            minimum: 1
+                            default: 1
+                            description: |
+                              Simulate larger batches:
+                              - Use 4-8 for <8GB memory
+                              - Use 1-2 for >16GB memory
+                          mixed_precision:
+                            type: string
+                            enum: [no, fp16, bf16]
+                            default: no
+                            description: |
+                              Mixed precision training:
+                              - fp16: NVIDIA GPUs, saves memory
+                              - bf16: Newer GPUs (A100, RTX 30xx+)
+                              - no: CPU or compatibility mode
+                  
+                  base_model:
+                    type: object
+                    properties:
+                      huggingface_id:
+                        type: string
+                      cache_dir:
+                        type: string
+                      torch_dtype:
+                        type: string
+                        enum: [auto, float32, float16, bfloat16]
+                        description: |
+                          Model loading precision:
+                          - auto: Let PyTorch decide
+                          - float32: Full precision (most memory)
+                          - float16: Half precision (CUDA/MPS)
+                          - bfloat16: Brain float (newer GPUs)
+                  method:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [lora, qlora, full_finetune]
+                      r:
+                        type: integer
+                        minimum: 1
+                        maximum: 512
+                      alpha:
+                        type: integer
+                        minimum: 1
+                      dropout:
+                        type: number
+                        minimum: 0
+                        maximum: 1
+                  training:
+                    type: object
+                    properties:
+                      batch_size:
+                        type: integer
+                        minimum: 1
+                      learning_rate:
+                        type: number
+                        minimum: 0
+                      num_epochs:
+                        type: integer
+                        minimum: 1
+                      gradient_accumulation_steps:
+                        type: integer
+                        minimum: 1
+                      warmup_ratio:
+                        type: number
+                        minimum: 0
+                        maximum: 1
+                      
+          llamafactory:
+            type: object
+            description: LlamaFactory fine-tuning framework
+            properties:
+              schema:
+                type: object
+                properties:
+                  model_name_or_path:
+                    type: string
+                  dataset:
+                    type: string
+                  template:
+                    type: string
+                  finetuning_type:
+                    type: string
+                    enum: [lora, qlora, full]
+                  output_dir:
+                    type: string
+                    
+      # Repository Components
+      repositories:
+        type: object
+        description: Model repository integrations
+        properties:
+          
+          huggingface:
+            type: object
+            description: HuggingFace Hub integration
+            properties:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: HuggingFace API token
+                  cache_dir:
+                    type: string
+                    description: Local cache directory
+                  repo_id:
+                    type: string
+                    description: Repository identifier
+                  private:
+                    type: boolean
+                    default: false
+
+  # =====================================
+  # STRATEGY TEMPLATES
+  # =====================================
+  strategy_templates:
+    type: object
+    description: Pre-defined strategy templates for common use cases
+    properties:
+      
+      local_development:
+        type: object
+        description: Optimized for local development with Ollama
+        
+      cloud_production:
+        type: object
+        description: Production deployment with cloud APIs
+        
+      hybrid_fallback:
+        type: object
+        description: Cloud primary with local fallback
+        
+      fine_tuning_pipeline:
+        type: object
+        description: Complete fine-tuning workflow
+        
+      multi_provider:
+        type: object
+        description: Load-balanced multi-provider setup
+        
+      cost_optimized:
+        type: object
+        description: Minimize costs while maintaining quality
+        
+      privacy_first:
+        type: object
+        description: Local-only processing for sensitive data
+        
+      research_experimentation:
+        type: object
+        description: Flexible setup for model research
+
+  # =====================================
+  # USE CASE MAPPINGS
+  # =====================================
+  use_case_mapping:
+    type: object
+    description: Maps use cases to recommended strategies
+    properties:
+      
+      chatbot:
         type: array
+        items:
+          type: string
+        default: [hybrid_fallback, cloud_production]
+        
+      code_generation:
+        type: array
+        items:
+          type: string
+        default: [cloud_production, specialized_models]
+        
+      document_analysis:
+        type: array
+        items:
+          type: string
+        default: [local_development, privacy_first]
+        
+      creative_writing:
+        type: array
+        items:
+          type: string
+        default: [cloud_production, fine_tuned_models]
+        
+      translation:
+        type: array
+        items:
+          type: string
+        default: [multi_lingual, cloud_production]
+        
+      summarization:
+        type: array
+        items:
+          type: string
+        default: [cost_optimized, hybrid_fallback]
+
+  # =====================================
+  # VALIDATION RULES
+  # =====================================
+  validation_rules:
+    type: object
+    description: System-wide validation constraints
+    properties:
+      
+      required_components:
+        type: array
+        description: Components required for valid configuration
+        items:
+          type: string
+          
+      incompatible_combinations:
+        type: array
+        description: Component combinations that are not allowed
         items:
           type: object
           properties:
-            name:
+            components:
+              type: array
+              items:
+                type: string
+            reason:
               type: string
-              description: "Model name"
-            pull_on_start:
-              type: boolean
-              default: false
-              description: "Pull model on initialization"
-        description: "Models to manage"
-    use_cases: ["local_development", "privacy_sensitive", "offline_deployment"]
-    dependencies: ["ollama_server"]
-
-# =============================================================================
-# FINE TUNERS - Model fine-tuning frameworks
-# =============================================================================
-fine_tuners:
-  PyTorch:
-    description: "PyTorch-based fine-tuning with LoRA/QLoRA support"
-    capabilities: ["lora", "qlora", "full_finetune", "distributed_training"]
-    performance: "high"
-    config_schema:
-      base_model:
+              
+      performance_thresholds:
         type: object
-        required: true
         properties:
-          name:
-            type: string
-            description: "Human-readable name for the model"
-          huggingface_id:
-            type: string
-            description: "HuggingFace model identifier"
-          cache_dir:
-            type: string
-            description: "Directory to cache downloaded models"
-          torch_dtype:
-            type: string
-            enum: ["auto", "float32", "float16", "bfloat16"]
-            default: "auto"
-            description: "PyTorch data type for model"
-          device_map:
-            type: ["string", "object"]
-            default: "auto"
-            description: "Device placement strategy"
-          trust_remote_code:
-            type: boolean
-            default: false
-            description: "Trust remote code in model repository"
-      method:
-        type: object
-        required: true
-        properties:
-          type:
-            type: string
-            enum: ["lora", "qlora", "full_finetune"]
-            description: "Fine-tuning method"
-          r:
+          max_latency_ms:
             type: integer
             minimum: 1
-            maximum: 512
-            default: 16
-            description: "LoRA rank"
-          alpha:
-            type: integer
-            minimum: 1
-            default: 32
-            description: "LoRA scaling parameter"
-          dropout:
+          min_throughput_rps:
+            type: number
+            minimum: 0
+          max_error_rate:
             type: number
             minimum: 0
             maximum: 1
-            default: 0.1
-            description: "LoRA dropout rate"
-          target_modules:
-            type: array
-            default: ["q_proj", "v_proj"]
-            description: "Modules to apply LoRA to"
-          bias:
-            type: string
-            enum: ["none", "all", "lora_only"]
-            default: "none"
-            description: "Bias training strategy"
-      dataset:
-        type: object
-        properties:
-          path:
-            type: string
-            description: "Path to local dataset file"
-          dataset_name:
-            type: string
-            description: "HuggingFace dataset name"
-          train_split:
-            type: string
-            default: "train"
-            description: "Split to use for training"
-          preprocessing_num_workers:
-            type: integer
-            default: 4
-            description: "Number of workers for preprocessing"
-      training_args:
-        type: object
-        required: true
-        properties:
-          output_dir:
-            type: string
-            description: "Directory to save model and checkpoints"
-          num_train_epochs:
-            type: number
-            default: 3
-            description: "Number of training epochs"
-          per_device_train_batch_size:
-            type: integer
-            default: 4
-            description: "Batch size per GPU/CPU"
-          learning_rate:
-            type: number
-            default: 0.0002
-            description: "Initial learning rate"
-          max_seq_length:
-            type: integer
-            default: 512
-            description: "Maximum sequence length"
-    use_cases: ["model_customization", "domain_adaptation", "task_specific_tuning"]
-    dependencies: ["torch", "transformers", "peft"]
 
-  LlamaFactory:
-    description: "Unified fine-tuning framework for LLMs"
-    capabilities: ["multi_method", "web_ui", "quantization", "export"]
-    performance: "high"
-    config_schema:
-      llama_factory_path:
+  # =====================================
+  # METADATA
+  # =====================================
+  metadata:
+    type: object
+    description: Schema metadata and versioning
+    properties:
+      version:
         type: string
-        default: "~/LLaMA-Factory"
-        description: "Path to LLaMA-Factory installation"
-      model_name_or_path:
+        pattern: ^\d+\.\d+\.\d+$
+      last_updated:
         type: string
-        required: true
-        description: "Model identifier or path"
-      stage:
-        type: string
-        enum: ["pt", "sft", "rm", "ppo", "dpo"]
-        default: "sft"
-        description: "Training stage"
-      finetuning_type:
-        type: string
-        enum: ["lora", "qlora", "full", "freeze"]
-        default: "lora"
-        description: "Fine-tuning method"
-      dataset:
-        type: string
-        required: true
-        description: "Dataset identifier"
-      output_dir:
-        type: string
-        required: true
-        description: "Output directory for model"
-      quantization_bit:
-        type: integer
-        enum: [4, 8]
-        description: "Quantization bits for QLoRA"
-      template:
-        type: string
-        description: "Prompt template to use"
-      use_web_ui:
-        type: boolean
-        default: false
-        description: "Launch web UI for monitoring"
-    use_cases: ["simplified_finetuning", "multi_stage_training", "model_export"]
-    dependencies: ["llamafactory"]
-
-# =============================================================================
-# MODEL REPOSITORIES - Model storage and retrieval
-# =============================================================================
-model_repositories:
-  HuggingFace:
-    description: "HuggingFace Hub integration for model management"
-    capabilities: ["download", "upload", "search", "version_control"]
-    config_schema:
-      token:
-        type: string
-        description: "HuggingFace API token (can use ${HF_TOKEN})"
-      cache_dir:
-        type: string
-        default: "~/.cache/huggingface"
-        description: "Local cache directory"
-      endpoint:
-        type: string
-        default: "https://huggingface.co"
-        description: "HuggingFace Hub endpoint"
-    use_cases: ["model_sharing", "version_management", "collaboration"]
-    dependencies: ["huggingface_hub"]
-
-# =============================================================================
-# STRATEGY DEFINITIONS - Pre-configured component combinations
-# =============================================================================
-strategies:
-  description: "Pre-configured combinations of components for specific use cases"
-  schema:
-    name:
-      type: string
-      description: "Strategy name"
-    description:
-      type: string
-      description: "Strategy description and use cases"
-    components:
-      type: object
-      properties:
-        cloud_api:
-          type: object
-          description: "Cloud API configuration"
-        model_app:
-          type: object
-          description: "Local model app configuration"
-        fine_tuner:
-          type: object
-          description: "Fine-tuning configuration"
-        repository:
-          type: object
-          description: "Model repository configuration"
-    optimization:
-      type: object
-      properties:
-        cost_priority:
+        format: date-time
+      maintainers:
+        type: array
+        items:
           type: string
-          enum: ["low", "medium", "high"]
-        performance_priority:
-          type: string
-          enum: ["speed", "quality", "balanced"]
-        privacy_level:
-          type: string
-          enum: ["local", "cloud", "hybrid"]
+      documentation_url:
+        type: string
+        format: uri
 
-# =============================================================================
-# CONFIGURATION VALIDATION AND OPTIMIZATION
-# =============================================================================
-validation:
-  description: "Schema validation and configuration optimization rules"
-  compatibility_matrix:
-    description: "Component compatibility relationships"
-    cloud_api_model_app: "mutually_exclusive_or_fallback"
-    fine_tuner_repository: "complementary"
-    model_app_fine_tuner: "independent"
-  
-  optimization_rules:
-    performance:
-      - "Ollama provides fastest local inference"
-      - "Cloud APIs offer better quality but higher latency"
-      - "GPU offloading significantly improves local performance"
-    cost:
-      - "Local models have no per-request cost"
-      - "OpenAI GPT-3.5 is most cost-effective cloud option"
-      - "Fine-tuning requires upfront compute cost"
-    privacy:
-      - "Ollama keeps all data local"
-      - "Cloud APIs process data externally"
-      - "Consider hybrid approach for sensitive data"
+# Required top-level properties
+required: [strategies, components]
 
-# =============================================================================
-# EXAMPLES AND TEMPLATES
-# =============================================================================
-examples:
-  local_development:
-    description: "Local-only development setup"
-    components:
-      model_app:
-        type: "ollama"
-        config:
-          default_model: "llama3.2"
-          auto_start: true
-  
-  production_cloud:
-    description: "Production deployment with cloud API"
-    components:
-      cloud_api:
-        type: "openai_compatible"
-        config:
-          default_model: "gpt-4-turbo-preview"
-          timeout: 120
-  
-  fine_tuning_pipeline:
-    description: "Complete fine-tuning workflow"
-    components:
-      fine_tuner:
-        type: "pytorch"
-        config:
-          method:
-            type: "lora"
-            r: 16
-            alpha: 32
-      repository:
-        type: "huggingface"
-        config:
-          cache_dir: "./models"
-  
-  hybrid_deployment:
-    description: "Cloud with local fallback"
-    components:
-      cloud_api:
-        type: "openai_compatible"
-        config:
-          default_model: "gpt-4"
-      model_app:
-        type: "ollama"
-        config:
-          default_model: "llama3.2"
-          auto_start: false
+# Additional schema constraints
+additionalProperties: false

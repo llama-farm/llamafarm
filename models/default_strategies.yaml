@@ -1,457 +1,445 @@
-# Default strategies for the models system
+# Models System Default Strategies
+# Version: 2.0.0
+# This file defines pre-configured strategies for common use cases
 
-local_development:
-  description: "Local development with Ollama - perfect for testing and development"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "llama3.2:3b"
-      auto_start: true
-      models:
-        - name: "llama3.2:3b"
-          pull_on_start: true
+version: 2.0.0
 
-cloud_production:
-  description: "Production deployment with OpenAI API"
-  cloud_api:
-    type: "openai_compatible"
-    config:
-      provider: "openai"
-      api_key: "${OPENAI_API_KEY}"
-      default_model: "gpt-3.5-turbo"
-      timeout: 60
-      max_retries: 3
+strategies:
+  # =====================================
+  # LOCAL DEVELOPMENT
+  # =====================================
+  local_development:
+    name: Local Development Environment
+    description: Optimized for local development with Ollama, no external dependencies
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          auto_start: true
+          models:
+            - name: llama3.2:3b
+              pull_on_start: true
+            - name: mistral:7b
+              pull_on_start: false
+    optimization:
+      cache_enabled: true
+      batch_size: 1
+      timeout_seconds: 300
+    monitoring:
+      log_level: DEBUG
+      metrics_enabled: false
+    constraints:
+      privacy_mode: local_only
+      max_tokens: 2048
 
-hybrid_with_fallback:
-  description: "Cloud API with comprehensive local fallback chain"
-  cloud_api:
-    type: "openai_compatible"
-    config:
-      provider: "openai"
-      api_key: "${OPENAI_API_KEY}"
-      default_model: "gpt-4"
-      timeout: 30
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "llama3.2:3b"
-      auto_start: false
-  fallback_chain: "general_chain"
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "llama3.2:3b"
-        models:
-          - name: "llama3.2:3b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "mistral:7b"
-        models:
-          - name: "mistral:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "phi3.5:3.8b"
-        models:
-          - name: "phi3.5:3.8b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "tinyllama:1.1b"
-        models:
-          - name: "tinyllama:1.1b"
-            pull_on_start: true
+  # =====================================
+  # CLOUD PRODUCTION
+  # =====================================
+  cloud_production:
+    name: Production Cloud Deployment
+    description: High-availability production setup with OpenAI API
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o-mini
+          timeout: 60
+          max_retries: 3
+    optimization:
+      cache_enabled: true
+      batch_size: 10
+      timeout_seconds: 60
+      retry_policy:
+        max_attempts: 3
+        backoff_multiplier: 2.0
+    monitoring:
+      log_level: WARNING
+      metrics_enabled: true
+      trace_enabled: true
+    constraints:
+      max_tokens: 4096
+      max_cost_per_request: 0.1
+      allowed_models:
+        - gpt-4o-mini
+        - gpt-4o
+        - gpt-3.5-turbo
 
-multi_cloud:
-  description: "Multiple cloud providers for flexibility"
-  cloud_api:
-    type: "openai_compatible"
-    config:
-      provider: "openai"
-      api_key: "${OPENAI_API_KEY}"
-      default_model: "gpt-3.5-turbo"
+  # =====================================
+  # HYBRID WITH FALLBACK
+  # =====================================
+  hybrid_fallback:
+    name: Hybrid Cloud-Local with Fallback
+    description: Cloud API primary with automatic local fallback for resilience
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o-mini
+          timeout: 30
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          auto_start: false
+    fallback_chain:
+      - name: OpenAI GPT-3.5
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-3.5-turbo
+          timeout: 20
+      - name: Groq Fast
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-8b-instant
+          timeout: 15
+      - name: Local Llama
+        type: ollama
+        config:
+          default_model: llama3.2:3b
+      - name: Local Mistral
+        type: ollama
+        config:
+          default_model: mistral:7b
+    optimization:
+      cache_enabled: true
+      batch_size: 5
+      timeout_seconds: 30
+    monitoring:
+      log_level: INFO
+      metrics_enabled: true
 
-research_hub:
-  description: "Research setup with HuggingFace integration"
-  repository:
-    type: "huggingface"
-    config:
-      token: "${HUGGINGFACE_TOKEN}"
-      cache_dir: "~/.cache/huggingface"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "llama3.2:3b"
+  # =====================================
+  # MULTI-PROVIDER LOAD BALANCED
+  # =====================================
+  multi_provider:
+    name: Multi-Provider Load Balanced
+    description: Distribute load across multiple cloud providers for resilience and cost optimization
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-3.5-turbo
+    routing_rules:
+      - condition: input.length > 2000
+        target: groq_provider
+        priority: high
+      - condition: input.requires_vision
+        target: openai_provider
+        priority: normal
+      - condition: input.is_code
+        target: deepseek_provider
+        priority: normal
+    fallback_chain:
+      - name: groq_provider
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-70b-versatile
+      - name: together_provider
+        type: openai_compatible
+        config:
+          provider: together
+          api_key: ${TOGETHER_API_KEY}
+          default_model: meta-llama/Llama-3-70b-chat-hf
+      - name: deepseek_provider
+        type: openai_compatible
+        config:
+          provider: deepseek
+          api_key: ${DEEPSEEK_API_KEY}
+          default_model: deepseek-coder
+    optimization:
+      cache_enabled: true
+      batch_size: 20
+      timeout_seconds: 45
 
-# =============================================================================
-# MEDICAL AI STRATEGIES
-# =============================================================================
+  # =====================================
+  # COST OPTIMIZED
+  # =====================================
+  cost_optimized:
+    name: Cost-Optimized Configuration
+    description: Minimize costs while maintaining acceptable quality
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-8b-instant
+    fallback_chain:
+      - name: DeepSeek Cheap
+        type: openai_compatible
+        config:
+          provider: deepseek
+          api_key: ${DEEPSEEK_API_KEY}
+          default_model: deepseek-chat
+      - name: Local Small Model
+        type: ollama
+        config:
+          default_model: tinyllama:1.1b
+    optimization:
+      cache_enabled: true
+      batch_size: 50
+      timeout_seconds: 120
+    constraints:
+      max_tokens: 1024
+      max_cost_per_request: 0.001
 
-medical_specialist:
-  description: "Medical domain specialist with DeepSeek-R1-Medicalai model"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
-      models:
-        - name: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
-          pull_on_start: true
-          alias: "deepseek-medical"
-      auto_start: true
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "llama3.2:3b"
-        models:
-          - name: "llama3.2:3b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "mistral:7b"
-        models:
-          - name: "mistral:7b"
-            pull_on_start: true
+  # =====================================
+  # PRIVACY FIRST
+  # =====================================
+  privacy_first:
+    name: Privacy-First Local Only
+    description: All processing done locally, no data leaves the system
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          auto_start: true
+          models:
+            - name: llama3.2:3b
+              pull_on_start: true
+            - name: mistral:7b
+              pull_on_start: true
+            - name: phi3:medium
+              pull_on_start: false
+    optimization:
+      cache_enabled: false  # Disable caching for sensitive data
+      batch_size: 1
+      timeout_seconds: 600
+    monitoring:
+      log_level: ERROR  # Minimal logging
+      metrics_enabled: false
+      trace_enabled: false
+    constraints:
+      privacy_mode: local_only
+      max_tokens: 4096
+      requires_gpu: false
 
-medical_ai_advanced:
-  description: "Advanced medical AI with comprehensive fallback chain"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
-      models:
-        - name: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
-          pull_on_start: true
-          alias: "deepseek-medical"
-      auto_start: true
-  fallback_chain: "medical_chain"
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "meditron:7b"
-        models:
-          - name: "meditron:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "biomistral:7b"
-        models:
-          - name: "biomistral:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "llama3.1:8b"
-        models:
-          - name: "llama3.1:8b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "llama3.2:3b"
-        models:
-          - name: "llama3.2:3b"
-            pull_on_start: true
+  # =====================================
+  # FINE-TUNING PIPELINE
+  # =====================================
+  fine_tuning_pipeline:
+    name: Complete Fine-Tuning Workflow
+    description: End-to-end fine-tuning pipeline with PyTorch
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          base_model:
+            huggingface_id: meta-llama/Llama-2-7b-hf
+            cache_dir: ./model_cache
+            torch_dtype: float16
+          method:
+            type: lora
+            r: 16
+            alpha: 32
+            dropout: 0.1
+          training:
+            batch_size: 4
+            learning_rate: 0.0002
+            num_epochs: 3
+            gradient_accumulation_steps: 4
+            warmup_ratio: 0.1
+      repository:
+        type: huggingface
+        config:
+          token: ${HF_TOKEN}
+          cache_dir: ./hf_cache
+          private: false
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: custom-finetuned
+    optimization:
+      cache_enabled: true
+      batch_size: 4
+    monitoring:
+      log_level: INFO
+      metrics_enabled: true
+    constraints:
+      requires_gpu: true
 
-# =============================================================================
-# CODE GENERATION STRATEGIES
-# =============================================================================
+  # =====================================
+  # RESEARCH EXPERIMENTATION
+  # =====================================
+  research_experimentation:
+    name: Research and Experimentation
+    description: Flexible setup for testing multiple models and configurations
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          models:
+            - name: llama3.2:3b
+              pull_on_start: true
+            - name: llama3.2:1b
+              pull_on_start: true
+            - name: mistral:7b
+              pull_on_start: true
+            - name: mixtral:8x7b
+              pull_on_start: false
+            - name: phi3:medium
+              pull_on_start: false
+      fine_tuner:
+        type: llamafactory
+        config:
+          model_name_or_path: meta-llama/Llama-2-7b-hf
+          dataset: alpaca
+          template: llama2
+          finetuning_type: lora
+          output_dir: ./experiments
+    fallback_chain:
+      - name: Try Anthropic
+        type: openai_compatible
+        config:
+          provider: anthropic
+          api_key: ${ANTHROPIC_API_KEY}
+          default_model: claude-3-haiku
+      - name: Try Mistral
+        type: openai_compatible
+        config:
+          provider: mistral
+          api_key: ${MISTRAL_API_KEY}
+          default_model: mistral-small-latest
+    optimization:
+      cache_enabled: true
+      batch_size: 1
+      timeout_seconds: 300
+    monitoring:
+      log_level: DEBUG
+      metrics_enabled: true
+      trace_enabled: true
 
-code_assistant:
-  description: "Code generation with comprehensive fallback chain"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "codellama:13b"
-      models:
-        - name: "codellama:13b"
-          pull_on_start: true
-      auto_start: true
-  fallback_chain: "code_chain"
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "codellama:7b"
-        models:
-          - name: "codellama:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "deepseek-coder:6.7b"
-        models:
-          - name: "deepseek-coder:6.7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "codeqwen:7b"
-        models:
-          - name: "codeqwen:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "starcoder2:3b"
-        models:
-          - name: "starcoder2:3b"
-            pull_on_start: true
+  # =====================================
+  # SPECIALIZED CODE GENERATION
+  # =====================================
+  code_generation:
+    name: Specialized Code Generation
+    description: Optimized for code generation and analysis
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: deepseek
+          api_key: ${DEEPSEEK_API_KEY}
+          default_model: deepseek-coder
+    fallback_chain:
+      - name: OpenAI GPT-4
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o
+      - name: Mistral Codestral
+        type: openai_compatible
+        config:
+          provider: mistral
+          api_key: ${MISTRAL_API_KEY}
+          default_model: codestral-latest
+      - name: Local Code Model
+        type: ollama
+        config:
+          default_model: codellama:7b
+    optimization:
+      cache_enabled: true
+      batch_size: 1
+      timeout_seconds: 120
+    constraints:
+      max_tokens: 8192
+      allowed_models:
+        - deepseek-coder
+        - gpt-4o
+        - codestral-latest
+        - codellama
 
-# =============================================================================
-# MULTILINGUAL STRATEGIES
-# =============================================================================
+  # =====================================
+  # FAST INFERENCE
+  # =====================================
+  fast_inference:
+    name: Ultra-Fast Inference
+    description: Optimized for lowest latency using Groq LPU
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-8b-instant
+          timeout: 10
+    fallback_chain:
+      - name: Groq Larger Model
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-70b-versatile
+          timeout: 15
+    optimization:
+      cache_enabled: true
+      batch_size: 100
+      timeout_seconds: 10
+    monitoring:
+      log_level: WARNING
+      metrics_enabled: true
+    constraints:
+      max_tokens: 2048
 
-multilingual_expert:
-  description: "Multilingual processing with regional fallbacks"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "qwen2.5:14b"
-      models:
-        - name: "qwen2.5:14b"
-          pull_on_start: true
-      auto_start: true
-  fallback_chain: "multilingual_chain"
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "qwen2.5:7b"
-        models:
-          - name: "qwen2.5:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "mistral:7b"
-        models:
-          - name: "mistral:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "gemma2:9b"
-        models:
-          - name: "gemma2:9b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "llama3.2:3b"
-        models:
-          - name: "llama3.2:3b"
-            pull_on_start: true
-
-# =============================================================================
-# REASONING STRATEGIES
-# =============================================================================
-
-reasoning_powerhouse:
-  description: "Complex reasoning with quality-focused fallbacks"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "deepseek-r1:32b"
-      models:
-        - name: "deepseek-r1:32b"
-          pull_on_start: true
-      auto_start: true
-  fallback_chain: "reasoning_chain"
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "deepseek-r1:7b"
-        models:
-          - name: "deepseek-r1:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "llama3.1:8b"
-        models:
-          - name: "llama3.1:8b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "wizard-math:7b"
-        models:
-          - name: "wizard-math:7b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "llama3.2:3b"
-        models:
-          - name: "llama3.2:3b"
-            pull_on_start: true
-
-# =============================================================================
-# MOBILE/LIGHTWEIGHT STRATEGIES
-# =============================================================================
-
-lightweight_mobile:
-  description: "Optimized for mobile and edge devices"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "phi3.5:3.8b"
-      models:
-        - name: "phi3.5:3.8b"
-          pull_on_start: true
-      auto_start: true
-  fallback_chain: "lightweight_chain"
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "phi3:mini"
-        models:
-          - name: "phi3:mini"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "llama3.2:1b"
-        models:
-          - name: "llama3.2:1b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "tinyllama:1.1b"
-        models:
-          - name: "tinyllama:1.1b"
-            pull_on_start: true
-
-# =============================================================================
-# ENTERPRISE STRATEGIES
-# =============================================================================
-
-enterprise_production:
-  description: "Enterprise-grade with maximum reliability"
-  cloud_api:
-    type: "openai_compatible"
-    config:
-      provider: "openai"
-      api_key: "${OPENAI_API_KEY}"
-      default_model: "gpt-4"
-      timeout: 30
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "llama3.1:70b"
-      models:
-        - name: "llama3.1:70b"
-          pull_on_start: false  # Too large for auto-pull
-      auto_start: true
-  fallback_chain: "general_chain"
-  fallbacks:
-    - type: "ollama"
-      config:
-        default_model: "llama3.1:8b"
-        models:
-          - name: "llama3.1:8b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "llama3.2:3b"
-        models:
-          - name: "llama3.2:3b"
-            pull_on_start: true
-    - type: "ollama"
-      config:
-        default_model: "mistral:7b"
-        models:
-          - name: "mistral:7b"
-            pull_on_start: true
-
-# =============================================================================
-# FINE-TUNING STRATEGIES FOR DIFFERENT ENVIRONMENTS
-# =============================================================================
-
-m1_fine_tuning:
-  description: "M1/M2 Mac optimized fine-tuning with MPS backend"
-  model_app:
-    type: "ollama"
-    config:
-      default_model: "llama3.2:3b"
-      models:
-        - name: "llama3.2:3b"
-          pull_on_start: true
-      auto_start: true
-  fine_tuner:
-    type: "pytorch"
-    config:
-      base_model:
-        name: "llama3.2-3b"
-        huggingface_id: "meta-llama/Llama-3.2-3B"
-      method:
-        type: "lora"
-        r: 8  # Smaller for M1
-        alpha: 16
-        dropout: 0.1
-        target_modules: ["q_proj", "v_proj"]
-      training_args:
-        num_train_epochs: 2  # Fewer epochs for M1
-        per_device_train_batch_size: 1  # Smaller batch for M1
-        learning_rate: 3e-4
-        fp16: false  # M1 doesn't support fp16
-        bf16: false  # Use fp32 on M1
-        device: "mps"  # M1 Metal Performance Shaders
-      fallback_to_cpu: true
-
-cuda_fine_tuning:
-  description: "NVIDIA GPU optimized fine-tuning with CUDA"
-  fine_tuner:
-    type: "pytorch"
-    config:
-      base_model:
-        name: "llama3.1-8b"
-        huggingface_id: "meta-llama/Llama-3.1-8B"
-      method:
-        type: "qlora"  # More memory efficient
-        r: 64
-        alpha: 128
-        dropout: 0.1
-        target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
-      training_args:
-        num_train_epochs: 3
-        per_device_train_batch_size: 4
-        gradient_accumulation_steps: 4
-        learning_rate: 2e-4
-        bf16: true  # Better on modern GPUs
-        device: "cuda"
-      memory_optimization: true
-
-cpu_fine_tuning:
-  description: "CPU-only fine-tuning for systems without GPU"
-  fine_tuner:
-    type: "pytorch"
-    config:
-      base_model:
-        name: "tinyllama-1.1b"
-        huggingface_id: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-      method:
-        type: "lora"
-        r: 4  # Very small for CPU
-        alpha: 8
-        dropout: 0.1
-        target_modules: ["q_proj", "v_proj"]
-      training_args:
-        num_train_epochs: 1  # Minimal for CPU
-        per_device_train_batch_size: 1
-        learning_rate: 5e-4
-        fp16: false  # CPU doesn't support fp16
-        bf16: false
-        device: "cpu"
-      patience: true  # CPU training is slow
-
-llamafactory_advanced:
-  description: "Advanced fine-tuning with LlamaFactory (all platforms)"
-  fine_tuner:
-    type: "llamafactory"
-    config:
-      base_model:
-        name: "llama3.2-3b"
-      method:
-        type: "qlora"
-        r: 32
-        alpha: 64
-        dropout: 0.05
-      training_args:
-        num_train_epochs: 3
-        per_device_train_batch_size: 2
-        gradient_accumulation_steps: 8
-        learning_rate: 1e-4
-        max_seq_length: 2048
-      dataset:
-        conversation_template: "medical"
-      optimization:
-        gradient_checkpointing: true
-        dataloader_num_workers: 4
+# =====================================
+# USE CASE MAPPINGS
+# =====================================
+use_case_mapping:
+  chatbot:
+    - hybrid_fallback
+    - cloud_production
+  code_generation:
+    - code_generation
+    - cloud_production
+  document_analysis:
+    - local_development
+    - privacy_first
+  creative_writing:
+    - cloud_production
+    - research_experimentation
+  translation:
+    - multi_provider
+    - cloud_production
+  summarization:
+    - cost_optimized
+    - fast_inference
+  research:
+    - research_experimentation
+    - fine_tuning_pipeline
+  prototyping:
+    - local_development
+    - cost_optimized
+  production:
+    - cloud_production
+    - multi_provider
+  enterprise:
+    - hybrid_fallback
+    - privacy_first

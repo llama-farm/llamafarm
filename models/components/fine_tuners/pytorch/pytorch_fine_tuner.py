@@ -13,6 +13,10 @@ from typing import Dict, Any, Optional, List, Union
 from pathlib import Path
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 try:
     import torch
@@ -67,7 +71,7 @@ class TrainingJob:
 class PyTorchFineTuner:
     """PyTorch-based fine-tuning implementation."""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], verbose: bool = False):
         """Initialize PyTorch fine-tuner."""
         if not PYTORCH_AVAILABLE:
             raise ImportError(f"PyTorch dependencies not available: {IMPORT_ERROR}")
@@ -79,6 +83,7 @@ class PyTorchFineTuner:
         self.dataset = None
         self._training_stopped = False
         self._current_job = None
+        self._verbose_mode = verbose
         
     def validate_config(self) -> List[str]:
         """Validate the PyTorch configuration."""
@@ -133,12 +138,21 @@ class PyTorchFineTuner:
         
         # Load tokenizer
         logger.info(f"Loading tokenizer: {huggingface_id}")
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            huggingface_id,
-            cache_dir=model_config.get("cache_dir"),
-            trust_remote_code=model_config.get("trust_remote_code", False),
-            use_fast=self.config.get("framework", {}).get("use_fast_tokenizer", True)
-        )
+        
+        # Get HF token from environment (only use if available)
+        hf_token = os.getenv('HF_TOKEN') or os.getenv('HUGGING_FACE_HUB_TOKEN')
+        
+        tokenizer_kwargs = {
+            "cache_dir": model_config.get("cache_dir"),
+            "trust_remote_code": model_config.get("trust_remote_code", False),
+            "use_fast": self.config.get("framework", {}).get("use_fast_tokenizer", True)
+        }
+        
+        # Only add token if it's actually set
+        if hf_token and hf_token != "your_hf_token_here":
+            tokenizer_kwargs["token"] = hf_token
+            
+        self.tokenizer = AutoTokenizer.from_pretrained(huggingface_id, **tokenizer_kwargs)
         
         # Add padding token if missing
         if self.tokenizer.pad_token is None:
@@ -146,14 +160,45 @@ class PyTorchFineTuner:
         
         # Load model
         logger.info(f"Loading model: {huggingface_id}")
+        # Get HF token from environment (only use if available)
+        hf_token = os.getenv('HF_TOKEN') or os.getenv('HUGGING_FACE_HUB_TOKEN')
+        
+        # Determine torch dtype based on hardware
+        hardware_config = self.config.get("hardware", {})
+        device = hardware_config.get("device", "auto")
+        
+        # Auto-detect device if needed
+        if device == "auto":
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+        
+        # Set dtype based on device
+        if model_config.get("torch_dtype") and model_config.get("torch_dtype") != "auto":
+            torch_dtype = getattr(torch, model_config.get("torch_dtype"), torch.float32)
+        else:
+            # Auto-select dtype based on device
+            if device == "cuda":
+                torch_dtype = torch.float16  # Good default for CUDA
+            elif device == "mps":
+                torch_dtype = torch.float32  # MPS is more stable with float32
+            else:
+                torch_dtype = torch.float32  # CPU needs float32
+        
         model_kwargs = {
             "cache_dir": model_config.get("cache_dir"),
             "trust_remote_code": model_config.get("trust_remote_code", False),
-            "torch_dtype": getattr(torch, model_config.get("torch_dtype", "auto"))
-            if model_config.get("torch_dtype") != "auto" else "auto",
-            "device_map": model_config.get("device_map", "auto"),
-            "low_cpu_mem_usage": self.config.get("environment", {}).get("low_cpu_mem_usage", True)
+            "torch_dtype": torch_dtype,
+            "device_map": "auto" if device != "cpu" else None,  # Auto device map for GPU
+            "low_cpu_mem_usage": True
         }
+        
+        # Only add token if it's actually set and not placeholder
+        if hf_token and hf_token != "your_hf_token_here":
+            model_kwargs["token"] = hf_token
         
         # Add quantization settings if using QLoRA
         method = self.config.get("method", {})
@@ -272,11 +317,11 @@ class PyTorchFineTuner:
             else:
                 raise ValueError("Unsupported dataset format")
             
-            # Tokenize
+            # Tokenize with proper padding for batched processing
             tokenized = self.tokenizer(
                 texts,
                 truncation=True,
-                padding=False,
+                padding="max_length",  # Pad to max_length for consistent tensor sizes
                 max_length=max_length,
                 return_tensors=None
             )
@@ -288,10 +333,12 @@ class PyTorchFineTuner:
         
         # Apply tokenization
         dataset_config = self.config.get("dataset", {})
+        # Use num_proc=1 for stability, especially on macOS
+        num_workers = dataset_config.get("preprocessing_num_workers", 1)
         tokenized_dataset = dataset.map(
             tokenize_function,
             batched=True,
-            num_proc=dataset_config.get("preprocessing_num_workers", 4),
+            num_proc=num_workers,
             remove_columns=dataset.column_names
         )
         
@@ -344,7 +391,7 @@ class PyTorchFineTuner:
             )
             
             # Add callback to track progress
-            self.trainer.add_callback(self._create_progress_callback())
+            self.trainer.add_callback(self._create_progress_callback(verbose=getattr(self, '_verbose_mode', False)))
             
             # Start training
             logger.info("Starting training...")
@@ -355,12 +402,23 @@ class PyTorchFineTuner:
             job.completed_at = datetime.now()
             job.metrics = train_result.metrics
             
-            # Save model
-            output_dir = Path(training_args.output_dir)
-            job.output_dir = output_dir
-            job.checkpoint_dir = output_dir / "final_checkpoint"
+            # Save final model to dedicated directory
+            base_output_dir = Path(self.config.get("training_args", {}).get("output_dir", "./fine_tuned_models"))
+            final_model_dir = base_output_dir / "final_model"
+            
+            logger.info(f"Saving final model to: {final_model_dir}")
+            self.trainer.save_model(str(final_model_dir))
+            
+            # Save tokenizer too
+            self.tokenizer.save_pretrained(str(final_model_dir))
+            
+            # Update job info
+            job.output_dir = final_model_dir
+            job.checkpoint_dir = Path(training_args.output_dir)
             
             logger.info(f"Training completed successfully: {job_id}")
+            logger.info(f"Final model saved to: {final_model_dir}")
+            logger.info(f"Checkpoints saved to: {training_args.output_dir}")
             
         except Exception as e:
             logger.error(f"Training failed: {e}")
@@ -373,15 +431,70 @@ class PyTorchFineTuner:
     
     def _create_training_arguments(self):
         """Create TrainingArguments from configuration."""
+        import torch
         config = self.config.get("training_args", {})
+        hardware_config = self.config.get("hardware", {})
+        
+        # Ensure output directory exists
+        output_dir = Path(config["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create subdirectories for organization
+        (output_dir / "checkpoints").mkdir(exist_ok=True)
+        (output_dir / "logs").mkdir(exist_ok=True)
+        (output_dir / "final_model").mkdir(exist_ok=True)
+        
+        logger.info(f"Training output directory: {output_dir}")
+        logger.info(f"Checkpoints will be saved to: {output_dir / 'checkpoints'}")
+        
+        # Detect device if set to auto
+        device = hardware_config.get("device", "auto")
+        if device == "auto":
+            if torch.cuda.is_available():
+                device = "cuda"
+                logger.info("Detected CUDA device")
+            elif torch.backends.mps.is_available():
+                device = "mps"
+                logger.info("Detected Apple Silicon (MPS) device")
+            else:
+                device = "cpu"
+                logger.info("Using CPU (no GPU detected)")
+        
+        # Get precision settings for the detected/specified device
+        precision_config = hardware_config.get("precision", {}).get(device, {})
+        optimization_config = hardware_config.get("optimization", {})
+        
+        # Set precision based on hardware
+        if device == "cuda":
+            fp16 = precision_config.get("use_fp16", True)
+            bf16 = precision_config.get("use_bf16", False)
+            tf32 = precision_config.get("use_tf32", True)
+        elif device == "mps":
+            fp16 = precision_config.get("use_fp16", False)  # Not stable on MPS
+            bf16 = precision_config.get("use_bf16", False)  # Not supported
+            tf32 = False  # Not applicable to MPS
+        else:  # CPU
+            fp16 = precision_config.get("use_fp16", False)
+            bf16 = False
+            tf32 = False
         
         # Base arguments
+        eval_strategy = config.get("eval_strategy", "no")
+        save_strategy = config.get("save_strategy", "steps")
+        
+        # If load_best_model_at_end is requested but eval is disabled, disable it
+        # since we can't load best model without evaluation
+        load_best_model = config.get("load_best_model_at_end", False)
+        if load_best_model and eval_strategy == "no":
+            logger.warning("load_best_model_at_end requires evaluation dataset. Disabling.")
+            load_best_model = False
+            
         args = TrainingArguments(
-            output_dir=config["output_dir"],
+            output_dir=str(output_dir / "checkpoints"),
             num_train_epochs=config.get("num_train_epochs", 3),
             per_device_train_batch_size=config.get("per_device_train_batch_size", 4),
             per_device_eval_batch_size=config.get("per_device_eval_batch_size", 4),
-            gradient_accumulation_steps=config.get("gradient_accumulation_steps", 1),
+            gradient_accumulation_steps=optimization_config.get("gradient_accumulation_steps", 1),
             learning_rate=config.get("learning_rate", 2e-4),
             lr_scheduler_type=config.get("lr_scheduler_type", "linear"),
             warmup_ratio=config.get("warmup_ratio", 0.03),
@@ -391,16 +504,16 @@ class PyTorchFineTuner:
             adam_beta1=config.get("adam_beta1", 0.9),
             adam_beta2=config.get("adam_beta2", 0.999),
             adam_epsilon=config.get("adam_epsilon", 1e-8),
-            fp16=config.get("fp16", False),
-            bf16=config.get("bf16", True),
-            tf32=config.get("tf32", True),
-            logging_steps=config.get("logging_steps", 10),
-            eval_strategy=config.get("eval_strategy", "no"),
-            eval_steps=config.get("eval_steps", 100) if config.get("eval_strategy") == "steps" else None,
-            save_strategy=config.get("save_strategy", "steps"),
-            save_steps=config.get("save_steps", 500) if config.get("save_strategy") == "steps" else None,
+            fp16=fp16,
+            bf16=bf16,
+            tf32=tf32,
+            logging_steps=config.get("logging_steps", 1),  # Log every step for immediate feedback
+            eval_strategy=eval_strategy,
+            eval_steps=config.get("eval_steps", 500) if eval_strategy == "steps" else None,
+            save_strategy=save_strategy,
+            save_steps=config.get("save_steps", 500),
             save_total_limit=config.get("save_total_limit", 3),
-            load_best_model_at_end=config.get("load_best_model_at_end", True),
+            load_best_model_at_end=load_best_model,
             metric_for_best_model=config.get("metric_for_best_model", "loss"),
             greater_is_better=config.get("greater_is_better", False),
             report_to=config.get("report_to", []),
@@ -408,29 +521,71 @@ class PyTorchFineTuner:
             seed=self.config.get("environment", {}).get("seed", 42),
             dataloader_num_workers=config.get("dataloader_num_workers", 0),
             remove_unused_columns=config.get("remove_unused_columns", False),
-            gradient_checkpointing=self.config.get("framework", {}).get("gradient_checkpointing", True),
+            # Disable gradient checkpointing on MPS due to compatibility issues
+            gradient_checkpointing=optimization_config.get("gradient_checkpointing", False) if device != "mps" else False,
         )
         
         return args
     
-    def _create_progress_callback(self):
+    def _create_progress_callback(self, verbose=False):
         """Create callback to track training progress."""
         class ProgressCallback(transformers.TrainerCallback):
-            def __init__(self, job: TrainingJob):
+            def __init__(self, job: TrainingJob, verbose: bool = False):
                 self.job = job
+                self.verbose = verbose
+                self.last_logged_step = 0
+            
+            def on_train_begin(self, args, state, control, **kwargs):
+                if self.verbose:
+                    print(f"\n{'='*60}")
+                    print(f"🏋️  TRAINING STARTED")
+                    print(f"{'='*60}")
+                    print(f"📊 Total Steps: {state.max_steps}")
+                    print(f"📊 Epochs: {args.num_train_epochs}")
+                    print(f"📊 Batch Size: {args.per_device_train_batch_size}")
+                    print(f"📊 Learning Rate: {args.learning_rate}")
+                    print(f"{'='*60}\n")
             
             def on_epoch_begin(self, args, state, control, **kwargs):
-                self.job.current_epoch = int(state.epoch)
+                epoch = int(state.epoch) + 1  # 1-indexed for display
+                self.job.current_epoch = epoch
+                if self.verbose:
+                    print(f"\n📊 Epoch {epoch}/{args.num_train_epochs} started")
             
             def on_step_end(self, args, state, control, **kwargs):
                 self.job.current_step = state.global_step
                 self.job.total_steps = state.max_steps
+                
+                # Show progress EVERY step for immediate feedback in verbose mode
+                if self.verbose:
+                    progress_pct = (state.global_step / state.max_steps) * 100
+                    # Use \r for updating the same line
+                    print(f"\r   Step {state.global_step}/{state.max_steps} ({progress_pct:.1f}%) ", end='', flush=True)
+                    
+                    # Print newline every 5 steps to show loss
+                    if state.global_step % 5 == 0 or state.global_step == state.max_steps:
+                        print()  # New line to preserve the progress
             
             def on_log(self, args, state, control, logs=None, **kwargs):
                 if logs:
+                    # Update job metrics
+                    if not hasattr(self.job, 'metrics'):
+                        self.job.metrics = {}
                     self.job.metrics.update(logs)
+                    
+                    # Show training metrics immediately for verbose mode
+                    if self.verbose and 'loss' in logs:
+                        print(f"\n   📉 Training Loss: {logs['loss']:.4f}", flush=True)
+                        if 'learning_rate' in logs:
+                            print(f"   🎯 Learning Rate: {logs['learning_rate']:.2e}", flush=True)
+            
+            def on_epoch_end(self, args, state, control, **kwargs):
+                epoch = int(state.epoch)
+                if self.verbose:
+                    loss_info = f" - Loss: {self.job.metrics.get('loss', 'N/A')}" if hasattr(self.job, 'metrics') else ""
+                    print(f"✅ Epoch {epoch} completed{loss_info}")
         
-        return ProgressCallback(self._current_job)
+        return ProgressCallback(self._current_job, verbose=getattr(self, '_verbose_mode', False))
     
     def stop_training(self) -> None:
         """Stop the current training process."""

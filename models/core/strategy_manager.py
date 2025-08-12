@@ -1,486 +1,341 @@
 """
 Strategy Manager for model system configurations.
 
-This module manages predefined strategies and configurations for different
-use cases and scenarios.
+This module manages strategies defined in the new RAG-style schema format.
 """
 
 import yaml
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 import logging
+from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
 
 class StrategyManager:
-    """Manages predefined strategies for model operations."""
+    """Manages strategies for model operations using the new schema format."""
     
-    def __init__(self, strategies_dir: Optional[Path] = None):
+    def __init__(self, strategies_file: Optional[Path] = None):
         """Initialize strategy manager.
         
         Args:
-            strategies_dir: Directory containing strategy files
+            strategies_file: Path to strategies YAML file
         """
-        if strategies_dir:
-            self.strategies_dir = Path(strategies_dir)
+        if strategies_file:
+            self.strategies_file = Path(strategies_file)
         else:
-            # Default to models/strategies directory
-            self.strategies_dir = Path(__file__).parent.parent / "strategies"
+            # Default to models/default_strategies.yaml
+            self.strategies_file = Path(__file__).parent.parent / "default_strategies.yaml"
         
-        self.strategies_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Load default strategies
-        self._default_strategies = self._load_default_strategies()
+        # Load strategies
+        self.strategies = self._load_strategies()
+        self.use_case_mapping = self._load_use_case_mapping()
     
-    def _load_default_strategies(self) -> Dict[str, Dict[str, Any]]:
-        """Load default strategies from file."""
-        default_strategies_file = self.strategies_dir.parent / "default_strategies.yaml"
+    def _load_strategies(self) -> Dict[str, Dict[str, Any]]:
+        """Load strategies from YAML file."""
+        if not self.strategies_file.exists():
+            logger.warning(f"Strategies file not found: {self.strategies_file}")
+            return {}
         
-        if default_strategies_file.exists():
-            with open(default_strategies_file) as f:
-                return yaml.safe_load(f) or {}
-        
-        # Return hardcoded defaults if file doesn't exist
-        return {
-            "local_development": {
-                "description": "Local development with Ollama",
-                "model_app": {
-                    "type": "ollama",
-                    "config": {
-                        "default_model": "llama3.2:3b",
-                        "auto_start": True
-                    }
-                }
-            },
-            "cloud_production": {
-                "description": "Production with OpenAI API",
-                "cloud_api": {
-                    "type": "openai",
-                    "config": {
-                        "default_model": "gpt-3.5-turbo",
-                        "timeout": 60
-                    }
-                }
-            },
-            "fine_tuning_lora": {
-                "description": "LoRA fine-tuning with PyTorch",
-                "fine_tuner": {
-                    "type": "pytorch",
-                    "config": {
-                        "method": {
-                            "type": "lora",
-                            "r": 16,
-                            "alpha": 32
-                        },
-                        "training_args": {
-                            "num_train_epochs": 3,
-                            "per_device_train_batch_size": 4
-                        }
-                    }
-                }
-            },
-            "hybrid_with_fallback": {
-                "description": "Cloud API with local fallback",
-                "cloud_api": {
-                    "type": "openai",
-                    "config": {
-                        "api_key": "${OPENAI_API_KEY}",
-                        "default_model": "gpt-3.5-turbo"
-                    }
-                },
-                "model_app": {
-                    "type": "ollama",
-                    "config": {
-                        "default_model": "llama3.2:3b",
-                        "auto_start": False
-                    }
-                }
-            }
-        }
+        try:
+            with open(self.strategies_file) as f:
+                data = yaml.safe_load(f) or {}
+                return data.get("strategies", {})
+        except Exception as e:
+            logger.error(f"Failed to load strategies: {e}")
+            return {}
     
-    def list_strategies(self) -> List[Dict[str, Any]]:
-        """List all available strategies."""
-        strategies = []
+    def _load_use_case_mapping(self) -> Dict[str, List[str]]:
+        """Load use case to strategy mappings."""
+        if not self.strategies_file.exists():
+            return {}
         
-        # Add default strategies
-        for name, config in self._default_strategies.items():
-            strategies.append({
-                "name": name,
-                "description": config.get("description", ""),
-                "source": "default",
-                "components": list(k for k in config.keys() if k != "description")
-            })
-        
-        # Add custom strategies from directory
-        for file in self.strategies_dir.glob("*.yaml"):
-            try:
-                with open(file) as f:
-                    strategy = yaml.safe_load(f)
-                    if strategy:
-                        strategies.append({
-                            "name": file.stem,
-                            "description": strategy.get("description", ""),
-                            "source": "custom",
-                            "components": list(k for k in strategy.keys() if k != "description")
-                        })
-            except Exception as e:
-                logger.warning(f"Failed to load strategy {file}: {e}")
-        
-        return strategies
+        try:
+            with open(self.strategies_file) as f:
+                data = yaml.safe_load(f) or {}
+                return data.get("use_case_mapping", {})
+        except Exception as e:
+            logger.error(f"Failed to load use case mappings: {e}")
+            return {}
     
-    def get_strategy_info(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get detailed information about a strategy.
+    def get_strategy(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a specific strategy by name.
         
         Args:
             name: Strategy name
             
         Returns:
-            Strategy information dict or None if not found
+            Strategy configuration or None if not found
         """
-        # Check default strategies first
-        if name in self._default_strategies:
-            strategy = self._default_strategies[name]
-            return {
-                "name": name,
-                "description": strategy.get("description", ""),
-                "source": "default",
-                "components": list(k for k in strategy.keys() if k != "description"),
-                "use_cases": self._infer_use_cases(strategy),
-                "hardware_requirements": self._infer_hardware_requirements(strategy),
-                "resource_usage": self._infer_resource_usage(strategy),
-                "complexity": self._infer_complexity(strategy)
-            }
+        return deepcopy(self.strategies.get(name))
+    
+    def list_strategies(self) -> List[str]:
+        """List all available strategy names.
         
-        # Check custom strategies
-        strategy_file = self.strategies_dir / f"{name}.yaml"
-        if strategy_file.exists():
-            try:
-                with open(strategy_file) as f:
-                    strategy = yaml.safe_load(f)
-                    return {
-                        "name": name,
-                        "description": strategy.get("description", ""),
-                        "source": "custom",
-                        "components": list(k for k in strategy.keys() if k != "description"),
-                        "use_cases": self._infer_use_cases(strategy),
-                        "hardware_requirements": self._infer_hardware_requirements(strategy),
-                        "resource_usage": self._infer_resource_usage(strategy),
-                        "complexity": self._infer_complexity(strategy)
-                    }
-            except Exception as e:
-                logger.error(f"Failed to load strategy {name}: {e}")
+        Returns:
+            List of strategy names
+        """
+        return list(self.strategies.keys())
+    
+    def get_strategies_for_use_case(self, use_case: str) -> List[str]:
+        """Get recommended strategies for a use case.
+        
+        Args:
+            use_case: Use case name
+            
+        Returns:
+            List of recommended strategy names
+        """
+        return self.use_case_mapping.get(use_case, [])
+    
+    def build_component_config(self, strategy_name: str, component_type: str) -> Optional[Dict[str, Any]]:
+        """Build component configuration from strategy.
+        
+        Args:
+            strategy_name: Strategy name
+            component_type: Component type (cloud_api, model_app, fine_tuner, repository)
+            
+        Returns:
+            Component configuration or None
+        """
+        strategy = self.get_strategy(strategy_name)
+        if not strategy:
+            return None
+        
+        components = strategy.get("components", {})
+        component_config = components.get(component_type)
+        
+        if component_config:
+            # Expand environment variables in config
+            return self._expand_env_vars(component_config)
         
         return None
     
-    def _infer_use_cases(self, strategy: Dict[str, Any]) -> List[str]:
-        """Infer use cases from strategy configuration."""
-        use_cases = []
-        if "fine_tuner" in strategy:
-            use_cases.append("model fine-tuning")
-            if "medical" in str(strategy).lower():
-                use_cases.append("medical AI")
-            if "code" in str(strategy).lower():
-                use_cases.append("code generation")
-        if "cloud_api" in strategy:
-            use_cases.append("cloud deployment")
-        if "model_app" in strategy:
-            use_cases.append("local deployment")
-        return use_cases
-    
-    def _infer_hardware_requirements(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
-        """Infer hardware requirements from strategy configuration."""
-        reqs = {"type": "Unknown", "minimum_ram": "Unknown"}
-        
-        if "fine_tuner" in strategy:
-            config = strategy["fine_tuner"].get("config", {})
-            device = config.get("training_args", {}).get("device", "")
-            
-            if device == "mps":
-                reqs = {"type": "M1/M2 Mac", "minimum_ram": "8GB"}
-            elif device == "cuda":
-                reqs = {"type": "NVIDIA GPU", "minimum_ram": "16GB"}
-            elif device == "cpu":
-                reqs = {"type": "CPU only", "minimum_ram": "4GB"}
-        
-        return reqs
-    
-    def _infer_resource_usage(self, strategy: Dict[str, Any]) -> str:
-        """Infer resource usage from strategy configuration."""
-        if "fine_tuner" in strategy:
-            config = strategy["fine_tuner"].get("config", {})
-            batch_size = config.get("training_args", {}).get("per_device_train_batch_size", 1)
-            if batch_size == 1:
-                return "Low"
-            elif batch_size <= 4:
-                return "Medium"
-            else:
-                return "High"
-        return "Unknown"
-    
-    def _infer_complexity(self, strategy: Dict[str, Any]) -> str:
-        """Infer complexity from strategy configuration."""
-        component_count = len([k for k in strategy.keys() if k != "description"])
-        if component_count <= 2:
-            return "Simple"
-        elif component_count <= 4:
-            return "Medium"
-        else:
-            return "Complex"
-    
-    def load_strategy(self, name: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Load a strategy configuration.
+    def get_fallback_chain(self, strategy_name: str) -> List[Dict[str, Any]]:
+        """Get fallback chain for a strategy.
         
         Args:
-            name: Strategy name
-            overrides: Optional configuration overrides
+            strategy_name: Strategy name
             
         Returns:
-            Complete configuration dict
+            List of fallback configurations
         """
-        # Check default strategies first
-        if name in self._default_strategies:
-            config = self._default_strategies[name].copy()
-        else:
-            # Check custom strategies
-            strategy_file = self.strategies_dir / f"{name}.yaml"
-            if not strategy_file.exists():
-                raise ValueError(f"Strategy not found: {name}")
-            
-            with open(strategy_file) as f:
-                config = yaml.safe_load(f) or {}
+        strategy = self.get_strategy(strategy_name)
+        if not strategy:
+            return []
         
-        # Remove description from config
-        config.pop("description", None)
-        
-        # Apply overrides
-        if overrides:
-            config = self._merge_configs(config, overrides)
-        
-        # Process environment variables
-        config = self._process_env_vars(config)
-        
-        # Add strategy metadata
-        config["strategy"] = name
-        
-        return config
+        fallback_chain = strategy.get("fallback_chain", [])
+        return [self._expand_env_vars(fb) for fb in fallback_chain]
     
-    def save_strategy(self, name: str, config: Dict[str, Any], 
-                     description: Optional[str] = None) -> bool:
-        """Save a custom strategy.
+    def get_optimization_config(self, strategy_name: str) -> Dict[str, Any]:
+        """Get optimization configuration for a strategy.
         
         Args:
-            name: Strategy name
-            config: Strategy configuration
-            description: Optional description
+            strategy_name: Strategy name
             
         Returns:
-            Success status
+            Optimization configuration
         """
-        try:
-            strategy_file = self.strategies_dir / f"{name}.yaml"
-            
-            # Add description if provided
-            save_config = config.copy()
-            if description:
-                save_config["description"] = description
-            
-            with open(strategy_file, "w") as f:
-                yaml.dump(save_config, f, default_flow_style=False)
-            
-            logger.info(f"Saved strategy: {name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to save strategy: {e}")
-            return False
+        strategy = self.get_strategy(strategy_name)
+        if not strategy:
+            return {}
+        
+        return strategy.get("optimization", {})
     
-    def delete_strategy(self, name: str) -> bool:
-        """Delete a custom strategy.
+    def get_monitoring_config(self, strategy_name: str) -> Dict[str, Any]:
+        """Get monitoring configuration for a strategy.
         
         Args:
-            name: Strategy name
+            strategy_name: Strategy name
             
         Returns:
-            Success status
+            Monitoring configuration
         """
-        # Can't delete default strategies
-        if name in self._default_strategies:
-            logger.error(f"Cannot delete default strategy: {name}")
-            return False
+        strategy = self.get_strategy(strategy_name)
+        if not strategy:
+            return {}
         
-        strategy_file = self.strategies_dir / f"{name}.yaml"
-        if not strategy_file.exists():
-            logger.error(f"Strategy not found: {name}")
-            return False
-        
-        try:
-            strategy_file.unlink()
-            logger.info(f"Deleted strategy: {name}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete strategy: {e}")
-            return False
+        return strategy.get("monitoring", {})
     
-    def validate_strategy(self, config: Dict[str, Any]) -> List[str]:
+    def get_constraints(self, strategy_name: str) -> Dict[str, Any]:
+        """Get constraints for a strategy.
+        
+        Args:
+            strategy_name: Strategy name
+            
+        Returns:
+            Constraints configuration
+        """
+        strategy = self.get_strategy(strategy_name)
+        if not strategy:
+            return {}
+        
+        return strategy.get("constraints", {})
+    
+    def validate_strategy(self, strategy_name: str) -> List[str]:
         """Validate a strategy configuration.
         
         Args:
-            config: Strategy configuration
+            strategy_name: Strategy name
             
         Returns:
-            List of validation errors
+            List of validation errors (empty if valid)
         """
         errors = []
         
-        # Check for at least one component
-        components = ["fine_tuner", "model_app", "repository", "cloud_api"]
-        if not any(comp in config for comp in components):
-            errors.append("Strategy must contain at least one component")
+        strategy = self.get_strategy(strategy_name)
+        if not strategy:
+            return [f"Strategy '{strategy_name}' not found"]
         
-        # Validate component configurations
-        for comp in components:
-            if comp in config:
-                if not isinstance(config[comp], dict):
-                    errors.append(f"{comp} must be a dictionary")
-                elif "type" not in config[comp]:
-                    errors.append(f"{comp} must specify a type")
+        # Check required fields
+        if "name" not in strategy:
+            errors.append("Strategy missing 'name' field")
+        if "description" not in strategy:
+            errors.append("Strategy missing 'description' field")
+        if "components" not in strategy:
+            errors.append("Strategy missing 'components' field")
+        
+        # Validate component types
+        components = strategy.get("components", {})
+        valid_component_types = ["cloud_api", "model_app", "fine_tuner", "repository"]
+        
+        for comp_type, comp_config in components.items():
+            if comp_type not in valid_component_types:
+                errors.append(f"Invalid component type: {comp_type}")
+            
+            if not isinstance(comp_config, dict):
+                errors.append(f"Component {comp_type} configuration must be a dictionary")
+            elif "type" not in comp_config:
+                errors.append(f"Component {comp_type} missing 'type' field")
+        
+        # Validate fallback chain
+        fallback_chain = strategy.get("fallback_chain", [])
+        for i, fallback in enumerate(fallback_chain):
+            if "type" not in fallback:
+                errors.append(f"Fallback {i} missing 'type' field")
+            if "config" not in fallback:
+                errors.append(f"Fallback {i} missing 'config' field")
         
         return errors
     
-    def _merge_configs(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-        """Deep merge two configurations.
+    def _expand_env_vars(self, config: Union[Dict, List, str, Any]) -> Union[Dict, List, str, Any]:
+        """Recursively expand environment variables in configuration.
         
         Args:
-            base: Base configuration
-            override: Override configuration
+            config: Configuration to expand
             
         Returns:
-            Merged configuration
+            Configuration with expanded environment variables
         """
-        result = base.copy()
-        
-        for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                # Recursive merge for nested dicts
-                result[key] = self._merge_configs(result[key], value)
-            else:
-                # Direct override
-                result[key] = value
-        
-        return result
-    
-    def export_strategy(self, name: str, format: str = "yaml") -> str:
-        """Export a strategy to string format.
-        
-        Args:
-            name: Strategy name
-            format: Export format (yaml or json)
-            
-        Returns:
-            Exported strategy string
-        """
-        config = self.load_strategy(name)
-        
-        if format == "json":
-            return json.dumps(config, indent=2)
+        if isinstance(config, dict):
+            return {k: self._expand_env_vars(v) for k, v in config.items()}
+        elif isinstance(config, list):
+            return [self._expand_env_vars(item) for item in config]
+        elif isinstance(config, str):
+            # Expand ${VAR_NAME} format
+            if config.startswith("${") and config.endswith("}"):
+                var_name = config[2:-1]
+                return os.getenv(var_name, config)
+            return config
         else:
-            return yaml.dump(config, default_flow_style=False)
+            return config
     
-    def import_strategy(self, name: str, data: str, format: str = "yaml") -> bool:
-        """Import a strategy from string format.
+    def merge_strategies(self, base_strategy: str, overrides: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge a base strategy with custom overrides.
         
         Args:
-            name: Strategy name
-            data: Strategy data
-            format: Data format (yaml or json)
+            base_strategy: Base strategy name
+            overrides: Custom configuration overrides
             
         Returns:
-            Success status
+            Merged strategy configuration
+        """
+        base = self.get_strategy(base_strategy)
+        if not base:
+            return overrides
+        
+        # Deep merge overrides into base
+        merged = deepcopy(base)
+        self._deep_merge(merged, overrides)
+        
+        return merged
+    
+    def _deep_merge(self, base: Dict, override: Dict) -> None:
+        """Deep merge override dictionary into base dictionary.
+        
+        Args:
+            base: Base dictionary (modified in place)
+            override: Override dictionary
+        """
+        for key, value in override.items():
+            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                self._deep_merge(base[key], value)
+            else:
+                base[key] = value
+    
+    def export_strategy(self, strategy_name: str, output_path: Path, format: str = "yaml") -> bool:
+        """Export a strategy to a file.
+        
+        Args:
+            strategy_name: Strategy name
+            output_path: Output file path
+            format: Output format (yaml or json)
+            
+        Returns:
+            True if successful
+        """
+        strategy = self.get_strategy(strategy_name)
+        if not strategy:
+            logger.error(f"Strategy '{strategy_name}' not found")
+            return False
+        
+        try:
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            if format == "json":
+                with open(output_path, "w") as f:
+                    json.dump(strategy, f, indent=2)
+            else:  # yaml
+                with open(output_path, "w") as f:
+                    yaml.dump(strategy, f, default_flow_style=False, sort_keys=False)
+            
+            logger.info(f"Exported strategy '{strategy_name}' to {output_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to export strategy: {e}")
+            return False
+    
+    def import_strategy(self, name: str, config_path: Path) -> bool:
+        """Import a strategy from a file.
+        
+        Args:
+            name: Strategy name to use
+            config_path: Path to configuration file
+            
+        Returns:
+            True if successful
         """
         try:
-            if format == "json":
-                config = json.loads(data)
-            else:
-                config = yaml.safe_load(data)
+            config_path = Path(config_path)
             
-            # Validate before saving
-            errors = self.validate_strategy(config)
-            if errors:
-                logger.error(f"Strategy validation failed: {errors}")
-                return False
+            if config_path.suffix == ".json":
+                with open(config_path) as f:
+                    config = json.load(f)
+            else:  # yaml
+                with open(config_path) as f:
+                    config = yaml.safe_load(f)
             
-            return self.save_strategy(name, config)
+            # Add to strategies
+            self.strategies[name] = config
+            
+            logger.info(f"Imported strategy '{name}' from {config_path}")
+            return True
             
         except Exception as e:
             logger.error(f"Failed to import strategy: {e}")
             return False
-    
-    def _process_env_vars(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Process environment variables in configuration.
-        
-        Args:
-            config: Configuration dictionary
-            
-        Returns:
-            Configuration with environment variables resolved
-        """
-        def process_value(value):
-            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
-                # Extract environment variable name
-                env_var = value[2:-1]
-                # Get value from environment or return original if not found
-                return os.getenv(env_var, value)
-            elif isinstance(value, dict):
-                return {k: process_value(v) for k, v in value.items()}
-            elif isinstance(value, list):
-                return [process_value(item) for item in value]
-            else:
-                return value
-        
-        return process_value(config)
-    
-    def load_model_catalog(self) -> Dict[str, Any]:
-        """Load model catalog with fallback chains."""
-        catalog_file = self.strategies_dir.parent / "model_catalog.yaml"
-        
-        if catalog_file.exists():
-            with open(catalog_file) as f:
-                return yaml.safe_load(f) or {}
-        
-        return {}
-    
-    def get_fallback_chain(self, chain_name: str) -> List[str]:
-        """Get fallback chain for a given use case.
-        
-        Args:
-            chain_name: Name of the fallback chain
-            
-        Returns:
-            List of model names in fallback order
-        """
-        catalog = self.load_model_catalog()
-        fallback_chains = catalog.get("fallback_chains", {})
-        
-        if chain_name in fallback_chains:
-            chain = fallback_chains[chain_name]
-            models = [chain["primary"]] + chain.get("fallbacks", [])
-            return models
-        
-        return []
-    
-    def get_models_by_category(self, category: str) -> List[Dict[str, Any]]:
-        """Get models by category from catalog.
-        
-        Args:
-            category: Model category (e.g., 'medical', 'code_generation')
-            
-        Returns:
-            List of model information dictionaries
-        """
-        catalog = self.load_model_catalog()
-        categories = catalog.get("categories", {})
-        
-        return categories.get(category, [])

@@ -125,7 +125,7 @@ class TestDemoConfigurations:
     def test_demo1_cloud_fallback_config(self):
         """Test cloud with fallback configuration."""
         config = {
-            "strategy": "hybrid_with_fallback",
+            "strategy": "hybrid_fallback",
             "cloud_api": {
                 "type": "openai",
                 "config": {
@@ -142,7 +142,7 @@ class TestDemoConfigurations:
             }
         }
         
-        assert config["strategy"] == "hybrid_with_fallback"
+        assert config["strategy"] == "hybrid_fallback"
         assert "cloud_api" in config
         assert "model_app" in config
     

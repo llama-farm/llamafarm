@@ -1,8 +1,8 @@
 """
 Model Manager for coordinating all model operations.
 
-This module provides a unified interface for model operations including
-fine-tuning, inference, and model management.
+This module provides a unified interface for model operations using
+the new strategy-based configuration system.
 """
 
 import logging
@@ -16,37 +16,45 @@ from components import (
     CloudAPIFactory
 )
 from core.strategy_manager import StrategyManager
-from core.config_loader import ConfigLoader
 
 logger = logging.getLogger(__name__)
 
 
 class ModelManager:
-    """Central manager for all model operations."""
+    """Central manager for all model operations using strategies."""
     
-    def __init__(self, config: Optional[Union[str, Path, Dict[str, Any]]] = None):
-        """Initialize Model Manager.
+    def __init__(self, strategy: Optional[str] = None, strategy_file: Optional[Path] = None):
+        """Initialize Model Manager with a strategy.
         
         Args:
-            config: Configuration file path, dict, or None for defaults
+            strategy: Strategy name to use
+            strategy_file: Custom strategy file path
         """
-        self.config_loader = ConfigLoader()
+        self.strategy_manager = StrategyManager(strategy_file)
         
-        if config:
-            if isinstance(config, (str, Path)):
-                self.config = self.config_loader.load_config(config)
-            else:
-                self.config = config
-        else:
-            self.config = self.config_loader.get_default_config()
+        # Set default strategy if not provided
+        self.current_strategy = strategy or "local_development"
         
-        self.strategy_manager = StrategyManager()
+        # Validate strategy exists
+        if self.current_strategy not in self.strategy_manager.list_strategies():
+            available = ", ".join(self.strategy_manager.list_strategies())
+            raise ValueError(f"Strategy '{self.current_strategy}' not found. Available: {available}")
         
         # Component instances
-        self._fine_tuner = None
-        self._model_app = None
-        self._repository = None
-        self._cloud_api = None
+        self._components = {}
+        self._fallback_chain = []
+        
+        # Load strategy configuration
+        self._load_strategy()
+    
+    def _load_strategy(self):
+        """Load the current strategy configuration."""
+        strategy_config = self.strategy_manager.get_strategy(self.current_strategy)
+        if not strategy_config:
+            raise ValueError(f"Failed to load strategy: {self.current_strategy}")
+        
+        self.strategy_config = strategy_config
+        self._fallback_chain = self.strategy_manager.get_fallback_chain(self.current_strategy)
     
     @classmethod
     def from_strategy(cls, strategy_name: str, overrides: Optional[Dict[str, Any]] = None):
@@ -56,216 +64,262 @@ class ModelManager:
             strategy_name: Name of the strategy to use
             overrides: Optional configuration overrides
         """
+        manager = cls(strategy=strategy_name)
+        
+        if overrides:
+            # Apply overrides to strategy config
+            manager.strategy_config = manager.strategy_manager.merge_strategies(
+                strategy_name, overrides
+            )
+        
+        return manager
+    
+    @classmethod
+    def for_use_case(cls, use_case: str):
+        """Create ModelManager for a specific use case.
+        
+        Args:
+            use_case: Use case name (e.g., 'chatbot', 'code_generation')
+        """
         strategy_manager = StrategyManager()
-        config = strategy_manager.load_strategy(strategy_name, overrides)
-        return cls(config)
+        strategies = strategy_manager.get_strategies_for_use_case(use_case)
+        
+        if not strategies:
+            raise ValueError(f"No strategies found for use case: {use_case}")
+        
+        # Use the first recommended strategy
+        return cls(strategy=strategies[0])
     
-    def get_fine_tuner(self) -> Optional[Any]:
-        """Get or create fine-tuner instance."""
-        if not self._fine_tuner and "fine_tuner" in self.config:
-            self._fine_tuner = FineTunerFactory.create(self.config["fine_tuner"])
-        return self._fine_tuner
-    
-    def get_model_app(self) -> Optional[Any]:
-        """Get or create model app instance."""
-        if not self._model_app and "model_app" in self.config:
-            self._model_app = ModelAppFactory.create(self.config["model_app"])
-        return self._model_app
-    
-    def get_repository(self) -> Optional[Any]:
-        """Get or create repository instance."""
-        if not self._repository and "repository" in self.config:
-            self._repository = ModelRepositoryFactory.create(self.config["repository"])
-        return self._repository
+    def get_component(self, component_type: str) -> Optional[Any]:
+        """Get or create a component instance.
+        
+        Args:
+            component_type: Type of component (cloud_api, model_app, fine_tuner, repository)
+        """
+        if component_type in self._components:
+            return self._components[component_type]
+        
+        # Get component config from strategy
+        component_config = self.strategy_manager.build_component_config(
+            self.current_strategy, component_type
+        )
+        
+        if not component_config:
+            return None
+        
+        # Create component based on type
+        component = None
+        
+        if component_type == "cloud_api":
+            component = CloudAPIFactory.create(component_config)
+        elif component_type == "model_app":
+            component = ModelAppFactory.create(component_config)
+        elif component_type == "fine_tuner":
+            component = FineTunerFactory.create(component_config)
+        elif component_type == "repository":
+            component = ModelRepositoryFactory.create(component_config)
+        
+        if component:
+            self._components[component_type] = component
+        
+        return component
     
     def get_cloud_api(self) -> Optional[Any]:
-        """Get or create cloud API instance."""
-        if not self._cloud_api and "cloud_api" in self.config:
-            self._cloud_api = CloudAPIFactory.create(self.config["cloud_api"])
-        return self._cloud_api
+        """Get cloud API component."""
+        return self.get_component("cloud_api")
+    
+    def get_model_app(self) -> Optional[Any]:
+        """Get model app component."""
+        return self.get_component("model_app")
+    
+    def get_fine_tuner(self) -> Optional[Any]:
+        """Get fine-tuner component."""
+        return self.get_component("fine_tuner")
+    
+    def get_repository(self) -> Optional[Any]:
+        """Get repository component."""
+        return self.get_component("repository")
+    
+    # Inference operations
+    def generate(self, prompt: str, **kwargs) -> str:
+        """Generate text using configured model with fallback support.
+        
+        Args:
+            prompt: Input prompt
+            **kwargs: Additional generation parameters
+        """
+        # Try primary cloud API
+        cloud_api = self.get_cloud_api()
+        if cloud_api:
+            try:
+                return self._generate_with_component(cloud_api, prompt, **kwargs)
+            except Exception as e:
+                logger.warning(f"Primary cloud API failed: {e}")
+        
+        # Try model app
+        model_app = self.get_model_app()
+        if model_app:
+            try:
+                return self._generate_with_component(model_app, prompt, **kwargs)
+            except Exception as e:
+                logger.warning(f"Model app failed: {e}")
+        
+        # Try fallback chain
+        for fallback in self._fallback_chain:
+            try:
+                component = self._create_fallback_component(fallback)
+                if component:
+                    return self._generate_with_component(component, prompt, **kwargs)
+            except Exception as e:
+                logger.warning(f"Fallback {fallback.get('name', 'unnamed')} failed: {e}")
+        
+        raise RuntimeError("All model sources failed")
+    
+    def _generate_with_component(self, component: Any, prompt: str, **kwargs) -> str:
+        """Generate text using a specific component.
+        
+        Args:
+            component: Component instance
+            prompt: Input prompt
+            **kwargs: Additional parameters
+        """
+        # Apply strategy constraints
+        constraints = self.strategy_manager.get_constraints(self.current_strategy)
+        
+        if "max_tokens" in constraints and "max_tokens" not in kwargs:
+            kwargs["max_tokens"] = constraints["max_tokens"]
+        
+        # Apply optimization settings
+        optimization = self.strategy_manager.get_optimization_config(self.current_strategy)
+        
+        if "timeout_seconds" in optimization and "timeout" not in kwargs:
+            kwargs["timeout"] = optimization["timeout_seconds"]
+        
+        # Generate based on component type
+        if hasattr(component, "generate"):
+            return component.generate(prompt, **kwargs)
+        elif hasattr(component, "chat"):
+            messages = [{"role": "user", "content": prompt}]
+            return component.chat(messages, **kwargs)
+        else:
+            raise ValueError(f"Component {type(component).__name__} doesn't support generation")
+    
+    def _create_fallback_component(self, fallback_config: Dict[str, Any]) -> Optional[Any]:
+        """Create a component from fallback configuration.
+        
+        Args:
+            fallback_config: Fallback component configuration
+        """
+        comp_type = fallback_config.get("type")
+        config = fallback_config.get("config", {})
+        
+        if comp_type == "openai_compatible":
+            return CloudAPIFactory.create("openai_compatible", config)
+        elif comp_type == "ollama":
+            return ModelAppFactory.create("ollama", config)
+        
+        return None
     
     # Fine-tuning operations
     def fine_tune(self, dataset_path: str, output_dir: str, **kwargs) -> Dict[str, Any]:
-        """Start fine-tuning process."""
+        """Start fine-tuning process.
+        
+        Args:
+            dataset_path: Path to training dataset
+            output_dir: Output directory for fine-tuned model
+            **kwargs: Additional training parameters
+        """
         fine_tuner = self.get_fine_tuner()
         if not fine_tuner:
-            raise ValueError("No fine-tuner configured")
+            raise ValueError("No fine-tuner configured in strategy")
         
-        # Update configuration
-        if "dataset" not in fine_tuner.config:
-            fine_tuner.config["dataset"] = {}
-        fine_tuner.config["dataset"]["path"] = dataset_path
+        # Apply strategy-specific training config
+        training_config = self.strategy_config.get("components", {}).get("fine_tuner", {}).get("config", {})
         
-        if "training_args" not in fine_tuner.config:
-            fine_tuner.config["training_args"] = {}
-        fine_tuner.config["training_args"]["output_dir"] = output_dir
-        
-        # Apply any additional kwargs
-        for key, value in kwargs.items():
-            if key in ["method", "training_args", "base_model"]:
-                fine_tuner.config[key].update(value)
-        
-        # Validate configuration
-        errors = fine_tuner.validate_config()
-        if errors:
-            raise ValueError(f"Configuration errors: {errors}")
+        # Merge with provided kwargs
+        merged_config = {**training_config, **kwargs}
+        merged_config["dataset_path"] = dataset_path
+        merged_config["output_dir"] = output_dir
         
         # Start training
-        job = fine_tuner.start_training()
-        return {
-            "job_id": job.job_id,
-            "status": job.status,
-            "started_at": str(job.started_at)
-        }
+        return fine_tuner.train(merged_config)
     
-    def get_training_status(self) -> Optional[Dict[str, Any]]:
-        """Get current training status."""
-        fine_tuner = self.get_fine_tuner()
-        if not fine_tuner:
-            return None
-        
-        status = fine_tuner.get_training_status()
-        if status:
-            return {
-                "job_id": status.job_id,
-                "status": status.status,
-                "current_epoch": status.current_epoch,
-                "total_epochs": status.total_epochs,
-                "metrics": status.metrics
-            }
-        return None
-    
-    # Inference operations
-    def generate(self, prompt: str, model: Optional[str] = None, 
-                 stream: bool = False, **kwargs) -> Union[str, Any]:
-        """Generate text using configured model."""
-        # Try cloud API first if configured
-        cloud_api = self.get_cloud_api()
-        if cloud_api:
-            try:
-                return cloud_api.generate(prompt, model, stream, **kwargs)
-            except Exception as e:
-                logger.warning(f"Cloud API failed: {e}, trying local model")
-        
-        # Fall back to local model app
-        model_app = self.get_model_app()
-        if model_app:
-            # Ensure service is running
-            if not model_app.is_running():
-                model_app.start_service()
-            
-            return model_app.generate(prompt, model, stream, **kwargs)
-        
-        raise ValueError("No model configured for generation")
-    
-    def chat(self, messages: List[Dict[str, str]], model: Optional[str] = None,
-             stream: bool = False, **kwargs) -> Union[str, Any]:
-        """Chat with configured model."""
-        # Try cloud API first if configured
-        cloud_api = self.get_cloud_api()
-        if cloud_api:
-            try:
-                return cloud_api.chat(messages, model, stream, **kwargs)
-            except Exception as e:
-                logger.warning(f"Cloud API failed: {e}, trying local model")
-        
-        # Fall back to local model app
-        model_app = self.get_model_app()
-        if model_app:
-            # Ensure service is running
-            if not model_app.is_running():
-                model_app.start_service()
-            
-            return model_app.chat(messages, model, stream, **kwargs)
-        
-        raise ValueError("No model configured for chat")
-    
-    # Repository operations
-    def search_models(self, query: str, **filters) -> List[Dict[str, Any]]:
-        """Search for models in repository."""
-        repository = self.get_repository()
-        if not repository:
-            raise ValueError("No repository configured")
-        
-        return repository.search_models(query, **filters)
-    
-    def download_model(self, model_id: str, output_path: str) -> bool:
-        """Download model from repository."""
-        repository = self.get_repository()
-        if not repository:
-            raise ValueError("No repository configured")
-        
-        return repository.download_model(model_id, Path(output_path))
-    
-    def upload_model(self, model_path: str, model_id: str, **metadata) -> bool:
-        """Upload model to repository."""
-        repository = self.get_repository()
-        if not repository:
-            raise ValueError("No repository configured")
-        
-        return repository.upload_model(Path(model_path), model_id, **metadata)
-    
-    # Utility methods
+    # Model management
     def list_available_models(self) -> Dict[str, List[str]]:
-        """List all available models from all sources."""
+        """List all available models from all sources.
+        
+        Returns:
+            Dictionary mapping source to list of model names
+        """
         models = {}
         
-        # Local models
-        model_app = self.get_model_app()
-        if model_app:
-            try:
-                models["local"] = [m["name"] for m in model_app.list_models()]
-            except:
-                models["local"] = []
-        
-        # Cloud models
+        # Cloud API models
         cloud_api = self.get_cloud_api()
-        if cloud_api:
+        if cloud_api and hasattr(cloud_api, "list_models"):
             try:
-                models["cloud"] = [m["id"] for m in cloud_api.list_models()]
-            except:
-                models["cloud"] = []
+                models["cloud_api"] = cloud_api.list_models()
+            except Exception as e:
+                logger.error(f"Failed to list cloud API models: {e}")
+        
+        # Model app models
+        model_app = self.get_model_app()
+        if model_app and hasattr(model_app, "list_models"):
+            try:
+                models["model_app"] = model_app.list_models()
+            except Exception as e:
+                logger.error(f"Failed to list model app models: {e}")
+        
+        # Repository models
+        repository = self.get_repository()
+        if repository and hasattr(repository, "list_models"):
+            try:
+                models["repository"] = repository.list_models()
+            except Exception as e:
+                logger.error(f"Failed to list repository models: {e}")
         
         return models
     
-    def validate_configuration(self) -> Dict[str, List[str]]:
-        """Validate all configured components."""
-        validation_results = {}
+    def validate_configuration(self) -> List[str]:
+        """Validate current configuration.
         
-        # Validate fine-tuner
-        fine_tuner = self.get_fine_tuner()
-        if fine_tuner:
-            validation_results["fine_tuner"] = fine_tuner.validate_config()
-        
-        # Validate model app
-        model_app = self.get_model_app()
-        if model_app:
-            validation_results["model_app"] = []
-            if not model_app.is_running():
-                validation_results["model_app"].append("Service not running")
-        
-        # Validate cloud API
-        cloud_api = self.get_cloud_api()
-        if cloud_api:
-            validation_results["cloud_api"] = []
-            if not cloud_api.validate_credentials():
-                validation_results["cloud_api"].append("Invalid credentials")
-        
-        return validation_results
+        Returns:
+            List of validation errors (empty if valid)
+        """
+        return self.strategy_manager.validate_strategy(self.current_strategy)
     
-    def get_config_summary(self) -> Dict[str, Any]:
-        """Get summary of current configuration."""
-        summary = {
+    def get_info(self) -> Dict[str, Any]:
+        """Get information about current configuration.
+        
+        Returns:
+            Configuration information
+        """
+        return {
+            "strategy": self.current_strategy,
+            "strategy_description": self.strategy_config.get("description", ""),
             "components": {
-                "fine_tuner": self.config.get("fine_tuner", {}).get("type"),
-                "model_app": self.config.get("model_app", {}).get("type"),
-                "repository": self.config.get("repository", {}).get("type"),
-                "cloud_api": self.config.get("cloud_api", {}).get("type")
-            }
+                comp_type: comp_config.get("type") 
+                for comp_type, comp_config in self.strategy_config.get("components", {}).items()
+            },
+            "fallback_count": len(self._fallback_chain),
+            "optimization": self.strategy_manager.get_optimization_config(self.current_strategy),
+            "monitoring": self.strategy_manager.get_monitoring_config(self.current_strategy),
+            "constraints": self.strategy_manager.get_constraints(self.current_strategy)
         }
+    
+    def switch_strategy(self, strategy_name: str):
+        """Switch to a different strategy.
         
-        # Add strategy info if available
-        if "strategy" in self.config:
-            summary["strategy"] = self.config["strategy"]
+        Args:
+            strategy_name: Name of strategy to switch to
+        """
+        if strategy_name not in self.strategy_manager.list_strategies():
+            raise ValueError(f"Strategy '{strategy_name}' not found")
         
-        return summary
+        # Clear cached components
+        self._components.clear()
+        
+        # Load new strategy
+        self.current_strategy = strategy_name
+        self._load_strategy()
+        
+        logger.info(f"Switched to strategy: {strategy_name}")

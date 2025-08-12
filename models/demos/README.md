@@ -1,4 +1,89 @@
-# 🎯 LlamaFarm Models Demo Showcase
+# LlamaFarm Models - Demo Scripts
+
+## Overview
+
+These are **standalone Python scripts** that demonstrate LlamaFarm Models capabilities using real CLI commands. No hardcoding - everything is transparent and educational!
+
+## 🎯 Available Demos
+
+### Demo 1: Cloud Model Fallback
+**File:** `demo1_cloud_fallback.py`
+
+Shows automatic failover from cloud APIs to local models when services are unavailable.
+
+```bash
+python demos/demo1_cloud_fallback.py
+```
+
+**What you'll see:**
+- ✅ Successful cloud API calls
+- ❌ Simulated API failure  
+- 🔄 Explanation of fallback chains
+- 🦙 Local model alternatives
+
+### Demo 2: Multi-Model Optimization
+**File:** `demo2_multi_model.py`
+
+Demonstrates intelligent task routing for cost and performance optimization.
+
+```bash
+python demos/demo2_multi_model.py
+```
+
+**What you'll see:**
+- 💨 Simple queries → Fast, cheap models
+- 🧠 Complex tasks → Advanced models
+- 🎨 Creative tasks → Specialized models
+- 💻 Code tasks → Local models (free!)
+- 📊 Cost analysis (67% savings!)
+
+### Demo 3: Training Pipeline
+**File:** `demo3_training.py`
+
+Complete fine-tuning pipeline with before/after comparison.
+
+```bash
+python demos/demo3_training.py
+```
+
+**What you'll see:**
+- 📝 Base model performance
+- 🏋️ Training progress
+- ✨ Fine-tuned improvements
+- 🦙 Ollama conversion
+
+### Run All Demos
+**File:** `run_all_demos.py`
+
+Runs all three demos in sequence.
+
+```bash
+# Interactive mode
+python demos/run_all_demos.py
+
+# Automated mode (for CI/CD)
+DEMO_MODE=automated python demos/run_all_demos.py --auto --quick
+```
+
+## 🚀 Key Features
+
+### Real CLI Commands
+Every demo runs actual CLI commands that you can see:
+```bash
+$ uv run python cli.py query "What is 2+2?" --provider openai_gpt35_turbo
+```
+
+### Educational Flow
+- Step-by-step explanations
+- "Press Enter to continue" prompts
+- Cost analysis and comparisons
+- Real performance metrics
+
+### Transparent Implementation
+- No hidden abstractions
+- All commands visible
+- Copy/paste to try yourself
+- Strategy-driven configuration
 
 This directory contains **4 core demonstrations** showcasing the key capabilities of the LlamaFarm models system. Each demo uses **real API calls**, **actual model responses**, and **strategy-based configurations** with **NO SIMULATION**.
 

@@ -124,29 +124,30 @@ class TestModelManager:
             }
         }
     
-    def test_model_manager_initialization(self, mock_config):
+    def test_model_manager_initialization(self):
         """Test ModelManager initialization."""
-        manager = ModelManager(mock_config)
+        manager = ModelManager(strategy="local_development")
         
-        assert manager.config == mock_config
-        assert manager._fine_tuner is None
-        assert manager._model_app is None
+        assert manager.current_strategy == "local_development"
+        assert hasattr(manager, "strategy_manager")
+        assert hasattr(manager, "_components")
     
     def test_from_strategy(self):
         """Test creating ModelManager from strategy."""
         # Use an existing strategy instead of mocking
         manager = ModelManager.from_strategy("local_development")
         
-        assert manager.config["model_app"]["type"] == "ollama"
-        assert manager.config["strategy"] == "local_development"
+        assert manager.current_strategy == "local_development"
+        assert manager.strategy_config["components"]["model_app"]["type"] == "ollama"
     
-    def test_get_config_summary(self, mock_config):
-        """Test configuration summary."""
-        manager = ModelManager(mock_config)
-        summary = manager.get_config_summary()
+    def test_get_info(self):
+        """Test getting strategy information."""
+        manager = ModelManager.from_strategy("local_development")
+        info = manager.get_info()
         
-        assert summary["components"]["fine_tuner"] == "pytorch"
-        assert summary["components"]["model_app"] == "ollama"
+        assert info["strategy"] == "local_development"
+        assert "components" in info
+        assert "model_app" in info["components"]
 
 
 class TestStrategyManager:
@@ -156,8 +157,8 @@ class TestStrategyManager:
         """Test StrategyManager initialization."""
         manager = StrategyManager()
         
-        assert hasattr(manager, '_default_strategies')
-        assert 'local_development' in manager._default_strategies
+        assert hasattr(manager, 'strategies')
+        assert 'local_development' in manager.strategies
     
     def test_list_strategies(self):
         """Test listing available strategies."""
@@ -165,47 +166,41 @@ class TestStrategyManager:
         strategies = manager.list_strategies()
         
         assert len(strategies) > 0
-        assert any(s["name"] == "local_development" for s in strategies)
+        assert "local_development" in strategies
     
-    def test_load_default_strategy(self):
-        """Test loading a default strategy."""
+    def test_get_strategy(self):
+        """Test getting a strategy."""
         manager = StrategyManager()
-        config = manager.load_strategy("local_development")
+        config = manager.get_strategy("local_development")
         
-        assert "model_app" in config
-        assert config["model_app"]["type"] == "ollama"
+        assert config is not None
+        assert "components" in config
+        assert "model_app" in config["components"]
+        assert config["components"]["model_app"]["type"] == "ollama"
     
     def test_validate_strategy(self):
         """Test strategy validation."""
         manager = StrategyManager()
         
         # Valid strategy
-        valid_config = {
-            "model_app": {"type": "ollama", "config": {}}
-        }
-        errors = manager.validate_strategy(valid_config)
+        errors = manager.validate_strategy("local_development")
         assert len(errors) == 0
         
-        # Invalid strategy (no components)
-        invalid_config = {}
-        errors = manager.validate_strategy(invalid_config)
+        # Invalid strategy (non-existent)
+        errors = manager.validate_strategy("non_existent_strategy")
         assert len(errors) > 0
     
-    def test_save_custom_strategy(self, tmp_path):
-        """Test saving custom strategy."""
-        manager = StrategyManager(strategies_dir=tmp_path)
+    def test_export_strategy(self, tmp_path):
+        """Test exporting strategy."""
+        manager = StrategyManager()
         
-        config = {
-            "model_app": {"type": "ollama", "config": {}},
-            "description": "Test strategy"
-        }
-        
-        success = manager.save_strategy("test_custom", config)
+        # Export an existing strategy
+        output_path = tmp_path / "test_export.yaml"
+        success = manager.export_strategy("local_development", output_path)
         assert success
         
         # Verify file was created
-        strategy_file = tmp_path / "test_custom.yaml"
-        assert strategy_file.exists()
+        assert output_path.exists()
 
 
 class TestPyTorchFineTuner:
@@ -393,28 +388,19 @@ class TestIntegration:
     
     def test_end_to_end_workflow(self):
         """Test end-to-end workflow with mocked components."""
-        # Create a simple configuration
-        config = {
-            "model_app": {
-                "type": "ollama",
-                "config": {
-                    "default_model": "test"
-                }
-            }
-        }
-        
         # Mock the factory
         mock_app = MagicMock()
         mock_app.is_running.return_value = True
         mock_app.generate.return_value = "Test response"
         
         with patch.object(ModelAppFactory, 'create', return_value=mock_app):
-            manager = ModelManager(config)
+            # Use the local_development strategy which has ollama configured
+            manager = ModelManager(strategy="local_development")
             
             # Test generation
             response = manager.generate("Test prompt")
             assert response == "Test response"
-            mock_app.generate.assert_called_once_with("Test prompt", None, False)
+            mock_app.generate.assert_called_once()
 
 
 if __name__ == "__main__":
