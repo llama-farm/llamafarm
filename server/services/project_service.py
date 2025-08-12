@@ -1,20 +1,15 @@
 import os
-import sys
 from pathlib import Path
 
 from pydantic import BaseModel
 
-from api.errors import NamespaceNotFoundError
+from api.errors import NamespaceNotFoundError, ProjectConfigError, ProjectNotFoundError
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-repo_root = Path(__file__).parent.parent.parent
-if str(repo_root) not in sys.path:
-  sys.path.insert(0, str(repo_root))
-
-from config import ConfigError, load_config, save_config  # noqa: E402
-from config.datamodel import LlamaFarmConfig  # noqa: E402
-from config.helpers.generator import generate_base_config_from_schema  # noqa: E402
+from config import ConfigError, load_config, save_config
+from config.datamodel import LlamaFarmConfig
+from config.helpers.generator import generate_base_config_from_schema
 
 logger = FastAPIStructLogger()
 
@@ -156,7 +151,61 @@ class ProjectService:
   @classmethod
   def get_project(cls, namespace: str, project_id: str) -> Project:
     project_dir = cls.get_project_dir(namespace, project_id)
-    cfg = load_config(directory=project_dir, validate=False)
+    # Validate project directory exists (and is a directory)
+    if not os.path.isdir(project_dir):
+      logger.info(
+        "Project directory not found",
+        namespace=namespace,
+        project_id=project_id,
+        path=project_dir,
+      )
+      raise ProjectNotFoundError(namespace, project_id)
+
+    # Ensure a config file exists inside the directory
+    try:
+      config_file = None
+      try:
+        # find_config_file raises ConfigError when directory missing config
+        from config.helpers.loader import find_config_file
+        config_file = find_config_file(project_dir)
+      except Exception:
+        config_file = None
+
+      if config_file is None:
+        raise ProjectConfigError(
+          namespace,
+          project_id,
+          message="No configuration file found in project directory",
+        )
+
+      # Attempt to load config (do not validate here; align with list_projects)
+      cfg = load_config(directory=project_dir, validate=False)
+    except ProjectConfigError:
+      # bubble our structured error
+      raise
+    except ConfigError as e:
+      # Config present but invalid/malformed
+      logger.warning(
+        "Invalid project config",
+        namespace=namespace,
+        project_id=project_id,
+        error=str(e),
+      )
+      raise ProjectConfigError(
+        namespace,
+        project_id,
+        message="Invalid project configuration",
+      ) from e
+    except Exception as e:
+      # Unexpected loader errors
+      logger.error(
+        "Unexpected error loading project config",
+        namespace=namespace,
+        project_id=project_id,
+        error=str(e),
+      )
+      raise
+
     return Project(
       namespace=namespace,
       name=project_id,

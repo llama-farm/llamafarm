@@ -1,14 +1,12 @@
-import sys
-from pathlib import Path
+from contextlib import contextmanager
 
+from config.datamodel import LlamaFarmConfig
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from api.models import ErrorResponse
+from core.settings import settings as global_settings
 from services.project_service import ProjectService
-
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 
 class Project(BaseModel):
@@ -33,12 +31,30 @@ class GetProjectResponse(BaseModel):
 class DeleteProjectResponse(BaseModel):
     project: Project
 
+@contextmanager
+def override_schema_template(template: str | None):
+    original = getattr(global_settings, "lf_schema_template", "default")
+    try:
+        if template:
+            global_settings.lf_schema_template = template
+        yield
+    finally:
+        global_settings.lf_schema_template = original
+
 router = APIRouter(
   prefix="/projects",
   tags=["projects"],
 )
 
-@router.get("/{namespace}", response_model=ListProjectsResponse)
+@router.get(
+    "/{namespace}",
+    response_model=ListProjectsResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def list_projects(namespace: str):
     projects = ProjectService.list_projects(namespace)
     return ListProjectsResponse(
@@ -50,23 +66,18 @@ async def list_projects(namespace: str):
       ) for project in projects],
     )
 
-@router.post("/{namespace}", response_model=CreateProjectResponse)
+@router.post(
+    "/{namespace}",
+    response_model=CreateProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def create_project(namespace: str, request: CreateProjectRequest):
-    # Optionally override the template for this request by temporarily
-    # setting on settings
-    from core.settings import settings as global_settings
-    original_template = getattr(
-        global_settings,
-        "lf_schema_template",
-        "default",
-    )
-    try:
-        if request.schema_template:
-            global_settings.lf_schema_template = request.schema_template
+    with override_schema_template(request.schema_template):
         project = ProjectService.create_project(namespace, request.name)
-    finally:
-        # restore
-        global_settings.lf_schema_template = original_template
     return CreateProjectResponse(
       project=Project(
         namespace=namespace,
@@ -75,7 +86,15 @@ async def create_project(namespace: str, request: CreateProjectRequest):
       ),
     )
 
-@router.get("/{namespace}/{project_id}", response_model=GetProjectResponse)
+@router.get(
+    "/{namespace}/{project_id}",
+    response_model=GetProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def get_project(namespace: str, project_id: str):
     project = ProjectService.get_project(namespace, project_id)
     return GetProjectResponse(
@@ -86,7 +105,15 @@ async def get_project(namespace: str, project_id: str):
       ),
     )
 
-@router.delete("/{namespace}/{project_id}", response_model=DeleteProjectResponse)
+@router.delete(
+    "/{namespace}/{project_id}",
+    response_model=DeleteProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def delete_project(namespace: str, project_id: str):
     # TODO: Implement actual delete in ProjectService; placeholder response for now
     project = Project(
