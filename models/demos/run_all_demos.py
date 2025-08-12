@@ -66,6 +66,11 @@ def main():
     if not auto_mode:
         input("\nPress Enter to begin the demo suite...")
     
+    # Auto-setup all requirements before running demos
+    print("\n📦 Setting up all components...")
+    if not run_command("uv run python cli.py setup demos/strategies.yaml --auto --verbose", check=False):
+        print("⚠️  Some components may not have installed, but continuing with demos...")
+    
     # Track timing
     suite_start = time.time()
     

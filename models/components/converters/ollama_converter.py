@@ -118,19 +118,20 @@ class OllamaConverter(ModelConverter):
         Returns:
             True if successful
         """
-        # First convert to GGUF using llama.cpp
+        # Import the GGUF converter
+        from .gguf_converter import GGUFConverter
+        
+        # First convert to GGUF using our enhanced GGUF converter
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             gguf_path = temp_path / f"{model_name}.gguf"
             
-            # Check if llama.cpp is available
-            if not self._check_llama_cpp():
-                print("❌ llama.cpp not found. Installing...")
-                if not self._install_llama_cpp():
-                    return False
-                    
-            # Convert to GGUF
-            if not self._convert_to_gguf(pytorch_path, gguf_path, quantization):
+            # Use GGUF converter which handles LoRA models properly
+            gguf_converter = GGUFConverter({'quantization': quantization})
+            
+            print("Converting PyTorch model to GGUF format...")
+            if not gguf_converter.convert(pytorch_path, gguf_path, target_format='gguf'):
+                print("❌ Failed to convert to GGUF")
                 return False
                 
             # Create Ollama model from GGUF

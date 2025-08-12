@@ -2,8 +2,7 @@
 """
 LlamaFarm Models CLI - Model Management Commands
 
-This CLI provides commands for managing cloud and local models following
-the same patterns as the RAG system CLI, using UV for all operations.
+This CLI provides commands for managing cloud and local model using UV for all operations.
 """
 
 import os
@@ -2766,6 +2765,19 @@ Examples:
     train_parser.add_argument("--export-gguf", action="store_true",
                              help="Export to GGUF format after training")
     
+    # ==============================================================================
+    # SETUP COMMAND - Install tools and models from strategy requirements
+    # ==============================================================================
+    setup_parser = subparsers.add_parser("setup", help="Setup tools and models from strategy requirements")
+    setup_parser.add_argument("strategy_file", 
+                             help="Path to strategy YAML file to analyze")
+    setup_parser.add_argument("--auto", action="store_true",
+                             help="Automatic mode - install everything without prompts")
+    setup_parser.add_argument("--verify-only", action="store_true",
+                             help="Only verify setup, don't install anything")
+    setup_parser.add_argument("--verbose", "-v", action="store_true",
+                             help="Show verbose output during setup")
+    
     return parser
 
 def finetune_command(args):
@@ -3944,6 +3956,16 @@ def convert_command(args):
         print_error("Model converters not available. Please check components/converters/ directory.")
         return
     
+    # Auto-setup GGUF converter if needed for conversion
+    if args.format in ["gguf", "ollama"]:
+        from components.converters.llama_cpp_installer import get_llama_cpp_installer
+        installer = get_llama_cpp_installer()
+        if not installer.is_installed():
+            print_info("Setting up conversion tools...")
+            if not installer.install():
+                print_error("Failed to set up conversion tools")
+                sys.exit(1)
+    
     input_path = Path(args.input_path)
     output_path = Path(args.output_path)
     
@@ -3991,14 +4013,32 @@ def convert_command(args):
                 print_info(f"Run with: ollama run {args.model_name}")
         else:
             print_error("Conversion failed")
+            sys.exit(1)  # Exit with error code
             
     except Exception as e:
         print_error(f"Conversion error: {e}")
+        sys.exit(1)  # Exit with error code
 
 def train_command(args):
     """Handle enhanced training command with progress tracking."""
     import yaml
     import time
+    
+    # Auto-setup training requirements if needed
+    from components.setup_manager import SetupManager
+    setup_manager = SetupManager(verbose=args.verbose)
+    
+    # Check if we need to install components for training
+    if args.strategy:
+        strategy_path = Path(args.strategy) if Path(args.strategy).exists() else Path("demos/strategies.yaml")
+        if strategy_path.exists():
+            print_info("Checking training requirements...")
+            requirements = setup_manager.analyze_strategy(strategy_path)
+            if requirements["components"]:
+                for component in requirements["components"]:
+                    if not setup_manager.check_component_installed(component["name"]):
+                        print_info(f"Installing {component['name']}...")
+                        setup_manager.install_component(component["name"], component)
     
     print_info("🚀 Starting model training with strategy...")
     
@@ -4159,6 +4199,68 @@ def train_command(args):
     print(f"   2. Convert formats: uv run python cli.py convert {output_dir} ./medical-model --format ollama")
     print(f"   3. Deploy locally: ollama run medical-model:finetuned")
 
+def setup_command(args):
+    """Setup tools and models based on strategy requirements."""
+    try:
+        from components.setup_manager import SetupManager
+        
+        strategy_path = Path(args.strategy_file)
+        if not strategy_path.exists():
+            print_error(f"Strategy file not found: {strategy_path}")
+            sys.exit(1)
+        
+        # Initialize setup manager
+        setup_manager = SetupManager(verbose=args.verbose)
+        
+        if args.verify_only:
+            # Just verify setup status
+            print_info(f"🔍 Verifying setup for: {strategy_path}")
+            verification = setup_manager.verify_setup(strategy_path)
+            
+            if verification['ready']:
+                print_success("✅ All requirements are met!")
+            else:
+                print_warning("⚠️  Missing components:")
+                if verification['missing_components']:
+                    print_info(f"  Components: {', '.join(verification['missing_components'])}")
+                if verification['missing_dependencies']:
+                    print_info(f"  System Dependencies: {', '.join(verification['missing_dependencies'])}")
+                if verification['missing_models']:
+                    print_info(f"  Models: {', '.join(verification['missing_models'])}")
+                    
+                print_info("Run setup without --verify-only to install missing components")
+                
+        else:
+            # Perform full setup
+            interactive = not args.auto
+            print_info(f"🚀 Setting up requirements for: {strategy_path}")
+            
+            if interactive:
+                print_info("Interactive mode - you will be prompted for each component")
+            else:
+                print_info("Automatic mode - installing all requirements")
+            
+            success = setup_manager.setup_from_strategy(strategy_path, interactive=interactive)
+            
+            if success:
+                print_success("🎉 Setup completed successfully!")
+                print_info("You can now run your strategy commands.")
+            else:
+                print_error("⚠️  Setup completed with some issues")
+                print_info("Check the output above for details")
+                sys.exit(1)
+                
+    except ImportError as e:
+        print_error(f"Setup manager not available: {e}")
+        print_info("Make sure all dependencies are installed")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Setup failed: {e}")
+        if args.verbose:
+            import traceback
+            print_error(traceback.format_exc())
+        sys.exit(1)
+
 def main():
     """Main CLI entry point."""
     parser = create_cli_parser()
@@ -4244,6 +4346,8 @@ def main():
         convert_command(args)
     elif args.command == "train":
         train_command(args)
+    elif args.command == "setup":
+        setup_command(args)
     else:
         print_error(f"Unknown command: {args.command}")
         sys.exit(1)

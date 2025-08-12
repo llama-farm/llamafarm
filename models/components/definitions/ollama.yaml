@@ -1,0 +1,159 @@
+# Ollama Component Definition
+# This file defines everything needed to set up and use Ollama
+
+name: ollama
+type: model_app
+description: "Local model server for running LLMs locally"
+
+# Component configuration schema
+schema:
+  base_url:
+    type: string
+    default: "http://localhost:11434"
+    description: "Ollama server URL"
+  default_model:
+    type: string
+    default: "llama3.2:3b"
+    description: "Default model to use"
+  auto_start:
+    type: boolean
+    default: true
+    description: "Auto-start Ollama service"
+  models:
+    type: array
+    items:
+      name: string
+      pull_on_start: boolean
+    description: "Models to ensure are available"
+
+# Setup and installation configuration
+setup:
+  # Detection - how to check if already installed
+  detection:
+    methods:
+      - command: "ollama --version"
+        success_pattern: "ollama version"
+      - command: "which ollama"
+        success_pattern: "ollama"
+    
+  # Installation methods by platform
+  installation:
+    darwin:
+      # Primary method
+      primary:
+        method: homebrew
+        command: "brew install ollama"
+        verify: "ollama --version"
+        
+      # Fallback methods
+      fallbacks:
+        - method: download
+          url: "https://ollama.ai/download/Ollama-darwin.zip"
+          instructions: "Download and install from ollama.ai"
+          
+    linux:
+      primary:
+        method: script
+        command: "curl -fsSL https://ollama.ai/install.sh | sh"
+        verify: "ollama --version"
+        
+      fallbacks:
+        - method: manual
+          instructions: "Visit https://ollama.ai/download for manual installation"
+          
+    windows:
+      primary:
+        method: download
+        url: "https://ollama.ai/download/Ollama-windows.exe"
+        instructions: "Download installer from ollama.ai"
+        
+  # Dependencies (only external tools, Python deps handled by pyproject.toml)
+  dependencies:
+    system: []  # Ollama is self-contained
+    optional:
+      - name: "docker"
+        description: "For containerized deployment"
+        install_hint: "Install Docker Desktop or docker-ce via package manager"
+        
+  # Service management
+  service:
+    start_command: "ollama serve"
+    stop_command: "pkill ollama"
+    status_command: "pgrep ollama"
+    health_check:
+      url: "http://localhost:11434/api/version"
+      method: GET
+      expected_status: 200
+      timeout: 10
+      
+  # Model management
+  models:
+    download_command: "ollama pull {model_name}"
+    list_command: "ollama list"
+    remove_command: "ollama rm {model_name}"
+    storage_location: "~/.ollama/models"
+    
+    # Size estimation rules
+    size_estimation:
+      rules:
+        - pattern: ".*:1b.*"
+          size_gb: 0.6
+        - pattern: ".*:3b.*"  
+          size_gb: 2.0
+        - pattern: ".*:7b.*"
+          size_gb: 4.5
+        - pattern: ".*:13b.*"
+          size_gb: 8.0
+        - pattern: ".*:70b.*"
+          size_gb: 40.0
+        - pattern: "tinyllama.*"
+          size_gb: 0.6
+        - pattern: "llama3.2:3b"
+          size_gb: 2.0
+        - pattern: "mistral:7b"
+          size_gb: 4.1
+          
+  # Error handling
+  error_handling:
+    installation_failures:
+      - condition: "permission denied"
+        action: retry_with_sudo
+        message: "Installation requires admin privileges"
+        
+      - condition: "command not found.*brew"
+        action: fallback
+        message: "Homebrew not installed, using download method"
+        fallback_method: download
+        
+    service_failures:
+      - condition: "port.*already in use"
+        action: reconfigure
+        message: "Port 11434 is in use, try stopping other services"
+        
+      - condition: "models directory.*permission"
+        action: manual
+        message: "Check permissions on ~/.ollama directory"
+        
+# Capabilities this component provides
+capabilities:
+  - chat
+  - embeddings  
+  - model_management
+  - quantization
+  - streaming
+
+# Integration points
+integration:
+  # How other components can detect and use this
+  provides:
+    - service_type: "model_app"
+      endpoint: "http://localhost:11434"
+      api_format: "ollama"
+      
+  # What this component needs from others
+  requires: []
+  
+  # Optional integrations
+  optional:
+    - component_type: "converter"
+      purpose: "Model format conversion"

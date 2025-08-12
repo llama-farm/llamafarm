@@ -68,6 +68,19 @@ def main():
     print("\n" + "="*70)
     print(f"{Fore.CYAN}🎯 MULTI-MODEL TASK OPTIMIZATION DEMO{Style.RESET_ALL}")
     print("="*70)
+    
+    # Auto-setup requirements
+    print(f"\n{Fore.YELLOW}📦 Checking and installing requirements...{Style.RESET_ALL}")
+    success, stdout, _ = run_cli_command(
+        'uv run python cli.py setup demos/strategies.yaml --auto --verbose',
+        "Setting up components for multi-model strategy",
+        show_output=True
+    )
+    if not success:
+        print_error("Setup failed. Please check your environment.")
+        return
+    print_success("All requirements are ready!")
+    
     print("\nThis demo shows how different models can be optimized")
     print("for different types of tasks to maximize performance and minimize costs.")
     print("\n📚 What you'll see:")

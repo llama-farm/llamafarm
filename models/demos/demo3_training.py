@@ -95,6 +95,20 @@ def main():
     print("\n" + "="*70)
     print(f"{Fore.CYAN}🧠 MEDICAL MODEL FINE-TUNING PIPELINE{Style.RESET_ALL}")
     print("="*70)
+    
+    # Auto-setup requirements including converters for later
+    print(f"\n{Fore.YELLOW}📦 Checking and installing requirements...{Style.RESET_ALL}")
+    print_info("This includes PyTorch for training and GGUF converter for deployment")
+    success, stdout, _ = run_cli_command(
+        'uv run python cli.py setup demos/strategies.yaml --auto --verbose',
+        "Setting up components for training strategy",
+        show_output=True
+    )
+    if not success:
+        print_error("Setup failed. Please check your environment.")
+        return
+    print_success("All requirements are ready!")
+    
     print("\nThis demo shows the complete fine-tuning pipeline using TinyLlama:")
     print("1. Ensure Ollama is running and TinyLlama is installed")
     print("2. Test base TinyLlama on medical questions")

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from .base import ModelConverter
+from .llama_cpp_installer import get_llama_cpp_installer
 
 
 class GGUFConverter(ModelConverter):
@@ -36,7 +37,8 @@ class GGUFConverter(ModelConverter):
         """
         super().__init__(config)
         self.quantization = config.get('quantization', 'q4_0') if config else 'q4_0'
-        self.llama_cpp_path = config.get('llama_cpp_path') if config else self._find_llama_cpp()
+        self.installer = get_llama_cpp_installer()
+        self.llama_cpp_path = self.installer.get_install_dir()
         
     def convert(self, input_path: Path, output_path: Path,
                 target_format: str = 'gguf', **kwargs) -> bool:
@@ -71,49 +73,36 @@ class GGUFConverter(ModelConverter):
         """
         quantization = kwargs.get('quantization', self.quantization)
         
-        if not self.llama_cpp_path:
-            print("❌ llama.cpp not found. Please install it first.")
-            return False
-            
-        # Find convert script
-        convert_script = self.llama_cpp_path / "convert.py"
-        if not convert_script.exists():
-            convert_script = self.llama_cpp_path / "convert-hf.py"
-            
-        if not convert_script.exists():
-            print(f"❌ Convert script not found in {self.llama_cpp_path}")
-            return False
+        # Ensure llama.cpp is installed
+        if not self.installer.is_installed():
+            print("📦 llama.cpp not found. Installing...")
+            if not self.installer.install():
+                print("❌ Failed to install llama.cpp")
+                return False
             
         try:
-            # First convert to F16 GGUF
+            # Check if this is a LoRA model
+            if (input_path / "adapter_config.json").exists():
+                print("Detected LoRA adapter model")
+                
+            # Use the installer to convert
             temp_gguf = output_path.parent / f"{output_path.stem}_f16.gguf"
             
             print(f"Converting to GGUF format...")
-            result = subprocess.run([
-                'python', str(convert_script),
-                str(input_path),
-                '--outfile', str(temp_gguf),
-                '--outtype', 'f16'
-            ], capture_output=True, text=True, check=True)
+            if not self.installer.convert_to_gguf(input_path, temp_gguf):
+                print("❌ Conversion to GGUF failed")
+                return False
             
             # Then quantize if needed
             if quantization != 'f16':
                 print(f"Quantizing to {quantization}...")
-                quantize_exe = self.llama_cpp_path / "quantize"
-                
-                if not quantize_exe.exists():
-                    print("❌ Quantize executable not found. Building llama.cpp...")
-                    self._build_llama_cpp()
-                    
-                result = subprocess.run([
-                    str(quantize_exe),
-                    str(temp_gguf),
-                    str(output_path),
-                    quantization
-                ], capture_output=True, text=True, check=True)
+                if not self.installer.quantize_gguf(temp_gguf, output_path, quantization):
+                    print("❌ Quantization failed")
+                    temp_gguf.unlink(missing_ok=True)
+                    return False
                 
                 # Remove temp file
-                temp_gguf.unlink()
+                temp_gguf.unlink(missing_ok=True)
             else:
                 # Just rename
                 temp_gguf.rename(output_path)

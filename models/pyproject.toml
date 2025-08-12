@@ -48,6 +48,11 @@ dependencies = [
     "safetensors>=0.4.0",
     "psutil>=5.9.0",
     "llamafactory>=0.8.3",
+    # Dependencies for GGUF conversion
+    "mistral-common>=1.8.0",
+    "sentencepiece>=0.2.0",
+    "protobuf>=4.25.0",
+    "numpy<2.0.0",  # Compatibility with other packages
     "jsonref>=1.1.0",
 ]
 

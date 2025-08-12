@@ -1,0 +1,152 @@
+# Component Registry
+# Central registry of all available components and their definitions
+
+version: "1.0"
+description: "Registry of available components with setup and configuration info"
+
+# Component categories and their available implementations
+categories:
+  
+  model_apps:
+    description: "Local model serving applications"
+    components:
+      mock_model:
+        definition_file: "mock_model.yaml"
+        default: false
+        description: "Mock model for fast development and testing"
+        tags: ["testing", "development", "no-dependencies"]
+        
+      ollama:
+        definition_file: "ollama.yaml"
+        default: true
+        description: "Local model server with easy model management"
+        
+      vllm:
+        definition_file: "vllm.yaml" 
+        description: "High-performance inference server"
+        
+      tgi:
+        definition_file: "tgi.yaml"
+        description: "Hugging Face Text Generation Inference"
+        
+  cloud_apis:
+    description: "Cloud-based model API providers"
+    components:
+      openai:
+        definition_file: "openai.yaml"
+        default: true
+        description: "OpenAI API (GPT models)"
+        
+      anthropic:
+        definition_file: "anthropic.yaml"
+        description: "Anthropic API (Claude models)"
+        
+      together:
+        definition_file: "together.yaml"
+        description: "Together AI API"
+        
+      groq:
+        definition_file: "groq.yaml" 
+        description: "Groq API for fast inference"
+        
+  fine_tuners:
+    description: "Model fine-tuning frameworks"
+    components:
+      pytorch:
+        definition_file: "pytorch_tuner.yaml"
+        default: true
+        description: "PyTorch-based fine-tuning with LoRA/QLoRA"
+        
+      llamafactory:
+        definition_file: "llamafactory.yaml"
+        description: "LlamaFactory fine-tuning framework"
+        
+  converters:
+    description: "Model format converters"
+    components:
+      gguf_converter:
+        definition_file: "gguf_converter.yaml"
+        default: true
+        description: "Convert models to GGUF format using llama.cpp"
+        
+      ollama_converter:
+        definition_file: "ollama_converter.yaml"
+        description: "Create Ollama-compatible models"
+        
+  repositories:
+    description: "Model repository integrations"
+    components:
+      huggingface:
+        definition_file: "huggingface.yaml"
+        default: true
+        description: "Hugging Face Hub integration"
+        
+      modelscope:
+        definition_file: "modelscope.yaml"
+        description: "ModelScope repository"
+
+# Default configurations for common use cases
+defaults:
+  local_development:
+    description: "Recommended setup for local development"
+    components:
+      - type: model_apps
+        name: ollama
+      - type: converters
+        name: gguf_converter
+      - type: repositories
+        name: huggingface
+        
+  cloud_production:
+    description: "Cloud-based production setup"
+    components:
+      - type: cloud_apis
+        name: openai
+      - type: cloud_apis
+        name: anthropic
+      - type: repositories
+        name: huggingface
+        
+  complete_pipeline:
+    description: "Full pipeline with training and deployment"
+    components:
+      - type: model_apps
+        name: ollama
+      - type: fine_tuners
+        name: pytorch
+      - type: converters
+        name: gguf_converter  
+      - type: converters
+        name: ollama_converter
+      - type: repositories
+        name: huggingface
+        
+  fast_development:
+    description: "Mock setup for rapid development and testing"
+    components:
+      - type: model_apps
+        name: mock_model
+      - type: repositories
+        name: huggingface
+
+# Component dependency graph
+dependencies:
+  ollama_converter:
+    requires:
+      - gguf_converter  # Needs GGUF conversion first
+      - ollama          # Needs Ollama installed
+      
+  gguf_converter:
+    requires: []        # Standalone component
+    
+  pytorch:
+    requires:
+      - huggingface     # For downloading base models
+      
+# Installation order recommendations
+installation_order:
+  - repositories      # Install repo access first
+  - fine_tuners      # Then training frameworks
+  - converters       # Then format converters  
+  - model_apps       # Finally model servers
+  - cloud_apis       # APIs don't need installation

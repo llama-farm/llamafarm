@@ -39,24 +39,30 @@ A comprehensive model management system providing unified access to **25+ cloud 
 
 ## 🚀 Quick Start
 
+### ✨ Automatic Setup
+**Everything is installed automatically!** Just run any command and the system handles all dependencies. See [docs/SETUP.md](docs/SETUP.md) for details.
+
 ### Prerequisites
-- Python 3.11+
+- Python 3.10+
 - [uv](https://github.com/astral-sh/uv) package manager
 - API keys for cloud providers (optional)
-- [Ollama](https://ollama.ai) for local models (optional)
+- [Ollama](https://ollama.ai) for local models (optional, auto-configured)
 
 ### 1. Installation
 ```bash
 # Clone and navigate to models directory
 cd llamafarm-1/models
 
-# Install dependencies
-uv sync
+# Option 1: Run automated setup (recommended)
+uv run python setup.py
 
-# Copy environment template
+# Option 2: Manual setup
+uv sync
 cp ../.env.example ../.env
-# Edit ../.env with your API keys
+# Edit ../.env with your API keys (optional)
 ```
+
+**Note**: All components (GGUF converter, Ollama, dependencies) are installed automatically when needed!
 
 ### 2. Basic Usage
 ```bash
@@ -792,10 +798,25 @@ uv run black cli.py
 
 ## 📚 Documentation & Resources
 
-- **[Developer Structure Guide](STRUCTURE.md)** - Internal architecture and development patterns
+### Core Documentation
+- **[CLI Reference](docs/CLI.md)** - Complete command-line interface guide
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - Internal architecture and development patterns
+- **[Strategies Guide](docs/STRATEGIES.md)** - Strategy system documentation
+- **[Strategy Examples](docs/STRATEGY_EXAMPLES.md)** - Pre-configured strategy templates
+
+### Integration & Testing
 - **[API Integration Examples](docs/WORKING_API_CALLS.md)** - Real API call demonstrations
 - **[Feature Verification](docs/ALL_WORKING_CONFIRMED.md)** - Complete feature testing results
-- **[Configuration Examples](examples/)** - Working configuration templates
+- **[Integration Guide](docs/INTEGRATION.md)** - System integration documentation
+
+### Advanced Topics
+- **[Image Recognition Guide](docs/IMAGE_RECOGNITION_GUIDE.md)** - Vision model capabilities
+- **[Fine-tuning Demo](docs/REAL_FINETUNING_DEMO.md)** - Training implementation examples
+- **[Component Documentation](docs/components/)** - Individual component guides
+
+### Quick References
+- **[Configuration Examples](example_strategies/)** - Working configuration templates
+- **[Demo Scripts](demos/)** - Ready-to-run demonstrations
 
 ## 🤝 Contributing
 

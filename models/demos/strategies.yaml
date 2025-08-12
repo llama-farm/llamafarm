@@ -256,9 +256,46 @@ strategies:
     export:
       to_ollama: true
       to_gguf: true
-      quantization: q4_0
+      quantization: q4_0  # Options: q4_0 (smallest), q5_0, q8_0, f16 (best quality)
       model_name: medical-model
       system_prompt: "You are a knowledgeable medical assistant. Provide accurate, evidence-based medical information."
+      
+    # Conversion settings (for fine-tuned models)
+    conversion:
+      # Automatic llama.cpp installation
+      auto_install_llama_cpp: true
+      
+      # Platform-specific build options
+      build_options:
+        darwin:  # macOS
+          metal: true  # Enable Metal acceleration for Apple Silicon
+        linux:
+          cuda: true   # Enable CUDA if available
+          rocm: false  # Enable ROCm for AMD GPUs
+        windows:
+          cmake: true  # Use CMake build system
+      
+      # Conversion workflow
+      workflow:
+        - merge_lora      # Merge LoRA adapter with base model
+        - convert_gguf    # Convert to GGUF format
+        - quantize        # Apply quantization
+        - create_ollama   # Create Ollama model
+      
+      # Quantization options for different use cases
+      quantization_profiles:
+        mobile:
+          method: q4_0
+          description: "Smallest size, suitable for mobile/edge devices"
+        balanced:
+          method: q5_0
+          description: "Good balance of size and quality"
+        quality:
+          method: q8_0
+          description: "Higher quality, larger size"
+        maximum:
+          method: f16
+          description: "Best quality, largest size"
       
     # Prompt template for training
     prompt_template:
@@ -458,3 +495,82 @@ strategies:
         daily_cost_usd: 100
         error_rate_percent: 5
       log_level: WARNING
+
+  # =============================================================================
+  # MOCK MODEL STRATEGY - Fast Development and Testing
+  # =============================================================================
+  
+  mock_development:
+    name: "Mock Model for Fast Development"
+    description: "Uses mock models for rapid prototyping and testing without API costs or setup"
+    
+    components:
+      # Mock model server
+      model_app:
+        type: mock_model
+        config:
+          base_url: "builtin://mock"
+          default_model: "mock-gpt-4"
+    
+    test_queries:
+      - "What is machine learning?"
+      - "Write a Python function to sort a list"
+      - "Explain quantum computing"
+      - "Create a haiku about programming"
+      - "What are the benefits of mock testing?"
+          response_delay: 0.2
+          templates:
+            default: |
+              🤖 Mock Response [{timestamp}]
+              
+              Query: "{query}"
+              
+              This is a mock response for development/testing. In a real implementation, 
+              this would be processed by: {model}
+              
+              Estimated tokens: ~{estimated_tokens}
+              Response time: {response_time}ms
+              
+              💡 Tip: Switch to real models when ready for production!
+            error: "❌ Mock Error [{timestamp}]: {error_type} - This is simulated for testing"
+          models:
+            - name: "mock-gpt-4"
+              capabilities: ["chat", "completion", "function_calling"]
+            - name: "mock-claude-3" 
+              capabilities: ["chat", "completion", "vision"]
+            - name: "mock-llama-70b"
+              capabilities: ["chat", "completion"]
+            - name: "mock-tiny"
+              capabilities: ["chat"]
+          mock_config:
+            behavior:
+              echo_query: true
+              add_timestamp: true
+              simulate_thinking: false
+            responses:
+              include_metadata: true
+              show_model_name: true
+              estimate_tokens: true
+            development:
+              log_requests: true
+              validate_schemas: true
+              
+    # Test queries for mock demonstration
+    test_queries:
+      - "What is machine learning?"
+      - "Write a Python function to sort a list"
+      - "Explain quantum computing"
+      - "Create a haiku about programming"
+      - "What are the benefits of mock testing?"
+      
+    # Mock response customization
+    response_config:
+      base_delay: 0.2
+      tokens_per_second: 100
+      max_response_length: 1000
+      include_suggestions: true
+      
+    monitoring:
+      track_requests: true
+      track_response_times: true
+      log_level: DEBUG

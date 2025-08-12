@@ -159,6 +159,126 @@ properties:
     description: Available components and their schemas
     properties:
       
+      # =====================================  
+      # COMPONENT SETUP PATTERNS
+      # =====================================
+      # Common setup patterns that can be referenced by components
+      setup_patterns:
+        type: object
+        description: Reusable setup patterns for different component types
+        properties:
+          
+          package_manager_install:
+            type: object
+            description: Standard package manager installation pattern
+            properties:
+              platforms:
+                type: object
+                properties:
+                  darwin:
+                    type: object
+                    properties:
+                      homebrew:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "brew install {package_name}"
+                          verify_command:
+                            type: string
+                            pattern: "brew list {package_name}"
+                  linux:
+                    type: object
+                    properties:
+                      apt:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "sudo apt-get update && sudo apt-get install -y {package_name}"
+                          verify_command:
+                            type: string
+                            pattern: "dpkg -l | grep {package_name}"
+                      yum:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "sudo yum install -y {package_name}"
+                  windows:
+                    type: object
+                    properties:
+                      chocolatey:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "choco install {package_name} -y"
+                          
+          python_package_install:
+            type: object
+            description: Python package installation pattern
+            properties:
+              methods:
+                type: object
+                properties:
+                  pip:
+                    type: object
+                    properties:
+                      install_command:
+                        type: string
+                        pattern: "pip install {package_name}"
+                      verify_command:
+                        type: string
+                        pattern: "pip show {package_name}"
+                  uv:
+                    type: object
+                    properties:
+                      install_command:
+                        type: string
+                        pattern: "uv add {package_name}"
+                      verify_command:
+                        type: string
+                        pattern: "uv list | grep {package_name}"
+                        
+          build_from_source:
+            type: object
+            description: Build from source pattern
+            properties:
+              steps:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    command:
+                      type: string
+                    working_directory:
+                      type: string
+                    environment_vars:
+                      type: object
+                    timeout_minutes:
+                      type: integer
+                      default: 30
+                      
+          docker_install:
+            type: object
+            description: Docker-based installation pattern
+            properties:
+              image:
+                type: string
+              ports:
+                type: array
+                items:
+                  type: string
+              volumes:
+                type: array
+                items:
+                  type: string
+              environment:
+                type: object
+      
       # Cloud API Components
       cloud_apis:
         type: object
@@ -248,6 +368,179 @@ properties:
                 items:
                   type: string
                   enum: [chat, embeddings, model_management, quantization]
+              # Setup and installation hooks
+              setup:
+                type: object
+                description: Component setup and installation configuration
+                properties:
+                  installer:
+                    type: object
+                    description: Installation method and configuration
+                    properties:
+                      type:
+                        type: string
+                        enum: [binary, package_manager, docker, script, manual]
+                        description: Installation method
+                      platforms:
+                        type: object
+                        description: Platform-specific installation instructions
+                        properties:
+                          darwin:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [homebrew, download, script]
+                              command:
+                                type: string
+                                description: Command to run for installation
+                              url:
+                                type: string
+                                description: Download URL
+                              verify_command:
+                                type: string
+                                description: Command to verify installation
+                          linux:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [apt, yum, dnf, snap, download, script]
+                              command:
+                                type: string
+                              url:
+                                type: string
+                              verify_command:
+                                type: string
+                          windows:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [chocolatey, winget, download, msi]
+                              command:
+                                type: string
+                              url:
+                                type: string
+                              verify_command:
+                                type: string
+                  dependencies:
+                    type: array
+                    description: Required dependencies
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [system, python, binary, service]
+                        version:
+                          type: string
+                        optional:
+                          type: boolean
+                          default: false
+                        install_command:
+                          type: string
+                  verification:
+                    type: object
+                    description: Methods to verify component is working
+                    properties:
+                      health_check:
+                        type: object
+                        properties:
+                          command:
+                            type: string
+                            description: Command to check if component is healthy
+                          expected_output:
+                            type: string
+                            description: Expected output pattern
+                          timeout_seconds:
+                            type: integer
+                            default: 30
+                      service_check:
+                        type: object
+                        properties:
+                          url:
+                            type: string
+                            description: URL to check service availability
+                          method:
+                            type: string
+                            enum: [GET, POST, HEAD]
+                            default: GET
+                          expected_status:
+                            type: integer
+                            default: 200
+                  models:
+                    type: object
+                    description: Model download and management configuration
+                    properties:
+                      repository:
+                        type: string
+                        description: Default model repository
+                      download_command:
+                        type: string
+                        description: Template command for downloading models
+                      list_command:
+                        type: string
+                        description: Command to list installed models
+                      remove_command:
+                        type: string
+                        description: Command to remove models
+                      storage_location:
+                        type: string
+                        description: Where models are stored
+                      size_estimation:
+                        type: object
+                        description: Model size estimation rules
+                        properties:
+                          rules:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                pattern:
+                                  type: string
+                                  description: Model name pattern (regex)
+                                size_gb:
+                                  type: number
+                                  description: Estimated size in GB
+                  error_handling:
+                    type: object
+                    description: Error handling and fallback configuration
+                    properties:
+                      installation_failures:
+                        type: array
+                        description: Actions to take on installation failure
+                        items:
+                          type: object
+                          properties:
+                            condition:
+                              type: string
+                              description: Error condition (regex)
+                            action:
+                              type: string
+                              enum: [retry, fallback, manual, skip]
+                            message:
+                              type: string
+                              description: User message for this error
+                            fallback_installer:
+                              type: string
+                              description: Alternative installation method
+                      service_failures:
+                        type: array
+                        description: Actions for service startup failures
+                        items:
+                          type: object
+                          properties:
+                            condition:
+                              type: string
+                            action:
+                              type: string
+                              enum: [restart, reconfigure, manual, skip]
+                            retry_count:
+                              type: integer
+                              default: 3
                   
       # Fine-tuner Components  
       fine_tuners:
@@ -427,6 +720,162 @@ properties:
                     type: string
                     
       # Repository Components
+      # Converter Components
+      converters:
+        type: object
+        description: Model format converters
+        properties:
+          
+          gguf:
+            type: object
+            description: GGUF format converter with llama.cpp
+            properties:
+              schema:
+                type: object
+                properties:
+                  quantization:
+                    type: string
+                    enum: [q4_0, q4_1, q5_0, q5_1, q8_0, f16, f32]
+                    default: q4_0
+                    description: |
+                      Quantization methods:
+                      - q4_0: 4-bit, smallest size (~3-4GB for 7B model)
+                      - q5_0: 5-bit, balanced (~4-5GB for 7B model)
+                      - q8_0: 8-bit, good quality (~7GB for 7B model)
+                      - f16: 16-bit, best quality (~13GB for 7B model)
+                  auto_install:
+                    type: boolean
+                    default: true
+                    description: Automatically install llama.cpp if not found
+                  build_options:
+                    type: object
+                    properties:
+                      metal:
+                        type: boolean
+                        description: Enable Metal on macOS
+                      cuda:
+                        type: boolean
+                        description: Enable CUDA on Linux/Windows
+                      rocm:
+                        type: boolean
+                        description: Enable ROCm for AMD GPUs
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [pytorch_to_gguf, lora_merge, quantization, ollama_export]
+              # Setup configuration for GGUF converter
+              setup:
+                type: object
+                description: Setup configuration for llama.cpp based conversion
+                properties:
+                  installer:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [build_from_source, binary, script]
+                        default: build_from_source
+                      platforms:
+                        type: object
+                        properties:
+                          darwin:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [build, homebrew]
+                                default: build
+                              build_options:
+                                type: array
+                                items:
+                                  type: string
+                                default: [LLAMA_METAL=1]
+                              repository:
+                                type: string
+                                default: https://github.com/ggerganov/llama.cpp
+                              verify_command:
+                                type: string
+                                default: ./convert.py --help
+                          linux:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [build, package]
+                                default: build
+                              build_options:
+                                type: array
+                                items:
+                                  type: string
+                                default: [LLAMA_CUDA=1]
+                              repository:
+                                type: string
+                                default: https://github.com/ggerganov/llama.cpp
+                              verify_command:
+                                type: string
+                                default: ./convert.py --help
+                  dependencies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [system, python]
+                    default:
+                      - name: git
+                        type: system
+                      - name: make
+                        type: system
+                      - name: gcc
+                        type: system
+                      - name: torch
+                        type: python
+                      - name: numpy
+                        type: python
+                  error_handling:
+                    type: object
+                    properties:
+                      build_failures:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            condition:
+                              type: string
+                            action:
+                              type: string
+                              enum: [retry_with_different_options, fallback_to_cpu, manual]
+                            message:
+                              type: string
+          
+          ollama:
+            type: object
+            description: Ollama model converter
+            properties:
+              schema:
+                type: object
+                properties:
+                  quantization:
+                    type: string
+                    enum: [q4_0, q4_1, q5_0, q5_1, q8_0]
+                    default: q4_0
+                  system_prompt:
+                    type: string
+                    description: System prompt for the model
+                  push_to_registry:
+                    type: boolean
+                    default: false
+                    description: Push to Ollama registry after creation
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [gguf_to_ollama, pytorch_to_ollama, model_management]
+      
       repositories:
         type: object
         description: Model repository integrations
