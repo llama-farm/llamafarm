@@ -6,7 +6,7 @@ from YAML or TOML formats with automatic type checking based on the JSON schema.
 """
 
 from .datamodel import LlamaFarmConfig
-from .helpers.generator import generate_base_config
+from .helpers.generator import generate_base_config, generate_base_config_from_schema
 from .helpers.loader import (
     ConfigError,
     find_config_file,
@@ -24,6 +24,7 @@ __all__ = [
     "save_config",
     "update_config",
     "generate_base_config",
+    "generate_base_config_from_schema",
     "LlamaFarmConfig",
     "datamodel.__all__",
 ]

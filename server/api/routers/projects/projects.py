@@ -12,9 +12,9 @@ from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 
 class Project(BaseModel):
-    namespace: str;
-    name: str;
-    config: LlamaFarmConfig;
+    namespace: str
+    name: str
+    config: LlamaFarmConfig
 
 class ListProjectsResponse(BaseModel):
     total: int
@@ -22,6 +22,7 @@ class ListProjectsResponse(BaseModel):
 
 class CreateProjectRequest(BaseModel):
     name: str
+    schema_template: str | None = "default"
 
 class CreateProjectResponse(BaseModel):
     project: Project
@@ -51,7 +52,21 @@ async def list_projects(namespace: str):
 
 @router.post("/{namespace}", response_model=CreateProjectResponse)
 async def create_project(namespace: str, request: CreateProjectRequest):
-    project = ProjectService.create_project(namespace, request.name)
+    # Optionally override the template for this request by temporarily
+    # setting on settings
+    from core.settings import settings as global_settings
+    original_template = getattr(
+        global_settings,
+        "lf_schema_template",
+        "default",
+    )
+    try:
+        if request.schema_template:
+            global_settings.lf_schema_template = request.schema_template
+        project = ProjectService.create_project(namespace, request.name)
+    finally:
+        # restore
+        global_settings.lf_schema_template = original_template
     return CreateProjectResponse(
       project=Project(
         namespace=namespace,
@@ -73,11 +88,11 @@ async def get_project(namespace: str, project_id: str):
 
 @router.delete("/{namespace}/{project_id}", response_model=DeleteProjectResponse)
 async def delete_project(namespace: str, project_id: str):
+    # TODO: Implement actual delete in ProjectService; placeholder response for now
     project = Project(
-        id=project_id,
-        name="test",
-        description="test",
         namespace=namespace,
+        name=project_id,
+        config=ProjectService.load_config(namespace, project_id),
     )
     return DeleteProjectResponse(
       project=project,

@@ -9,9 +9,12 @@ from core.logging import FastAPIStructLogger
 from core.settings import settings
 
 repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-from config import generate_base_config, load_config, save_config  # noqa: E402
+if str(repo_root) not in sys.path:
+  sys.path.insert(0, str(repo_root))
+
+from config import load_config, save_config  # noqa: E402
 from config.datamodel import LlamaFarmConfig  # noqa: E402
+from config.helpers.generator import generate_base_config_from_schema  # noqa: E402
 
 logger = FastAPIStructLogger()
 
@@ -35,7 +38,12 @@ class ProjectService:
   @classmethod
   def get_project_dir(cls, namespace: str, project_id: str):
     if settings.lf_project_dir is None:
-      return os.path.join(settings.lf_data_dir, "projects", namespace, project_id)
+      return os.path.join(
+        settings.lf_data_dir,
+        "projects",
+        namespace,
+        project_id,
+      )
     else:
       return settings.lf_project_dir
 
@@ -47,10 +55,42 @@ class ProjectService:
     """
     project_dir = cls.get_project_dir(namespace, project_id)
     os.makedirs(project_dir, exist_ok=True)
-    cfg = generate_base_config()
-    cfg.update({"name": project_id})
-    cls.save_config(namespace, project_id, cfg)
-    return cfg
+
+    # Determine schema path from settings; support template selection
+    schema_template = getattr(settings, "lf_schema_template", "default")
+    schema_dir = getattr(settings, "lf_schema_dir", None)
+
+    if schema_dir is None:
+      # default to repo rag/schemas or config/schemas
+      candidate_paths = [
+        Path(__file__).parent.parent.parent
+        / "config"
+        / "schemas"
+        / f"{schema_template}.yaml",
+        Path(__file__).parent.parent.parent / "rag" / "schemas" / "consolidated.yaml",
+      ]
+    else:
+      candidate_paths = [Path(schema_dir) / f"{schema_template}.yaml"]
+
+    schema_path: Path | None = None
+    for p in candidate_paths:
+      if p.exists():
+        schema_path = p
+        break
+
+    if schema_path is None:
+      raise FileNotFoundError(
+        f"No schema file found for template '{schema_template}'. "
+        f"Searched: {', '.join(str(p) for p in candidate_paths)}"
+      )
+
+    cfg_dict = generate_base_config_from_schema(str(schema_path))
+    # Ensure the name matches requested project id
+    cfg_dict.update({"name": project_id})
+
+    # Persist
+    cfg_model = cls.save_config(namespace, project_id, LlamaFarmConfig(**cfg_dict))
+    return cfg_model
 
   @classmethod
   def list_projects(cls, namespace: str) -> list[Project]:
