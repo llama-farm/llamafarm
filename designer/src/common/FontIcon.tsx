@@ -5,6 +5,7 @@ const ArrowFilled = lazy(() => import('../assets/icons/ArrowFilled'))
 const ChevronDown = lazy(() => import('../assets/icons/ChevronDown'))
 const CheckmarkFilled = lazy(() => import('../assets/icons/CheckmarkFilled'))
 const CheckmarkOutline = lazy(() => import('../assets/icons/CheckmarkOutline'))
+const Close = lazy(() => import('../assets/icons/Close'))
 const ClosePanel = lazy(() => import('../assets/icons/ClosePanel'))
 const Code = lazy(() => import('../assets/icons/Code'))
 const Dashboard = lazy(() => import('../assets/icons/Dashboard'))
@@ -33,6 +34,7 @@ type FontIconTypes =
   | 'chevron-down'
   | 'checkmark-filled'
   | 'checkmark-outline'
+  | 'close'
   | 'close-panel'
   | 'code'
   | 'dashboard'
@@ -82,6 +84,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <CheckmarkFilled />
       case 'checkmark-outline':
         return <CheckmarkOutline />
+      case 'close':
+          return <Close />
       case 'close-panel':
         return <ClosePanel />
       case 'code':
