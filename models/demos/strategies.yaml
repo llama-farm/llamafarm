@@ -220,30 +220,39 @@ strategies:
             
           method:
             type: lora
-            r: 16
-            alpha: 32
-            dropout: 0.1
+            # OPTIMIZED FOR 1B MODEL - Reduced LoRA rank for better learning
+            r: 8          # Reduced from 16 - better for small models
+            alpha: 16     # Reduced from 32 - alpha = 2*r is good ratio
+            dropout: 0.05 # Reduced from 0.1 - less regularization needed
             target_modules:
               - q_proj
               - v_proj
               - k_proj
               - o_proj
+              - gate_proj  # Added for better learning
+              - up_proj    # Added for better learning
+              - down_proj  # Added for better learning
               
           training_args:
             output_dir: ./fine_tuned_models/medical
-            num_train_epochs: 3
-            per_device_train_batch_size: 4
-            per_device_eval_batch_size: 4
-            gradient_accumulation_steps: 4
-            learning_rate: 0.0002
-            warmup_ratio: 0.1
-            logging_steps: 10
-            save_steps: 100
+            # OPTIMIZED TRAINING FOR 1B MODEL
+            num_train_epochs: 5  # Increased from 3 - more epochs for better learning
+            per_device_train_batch_size: 2  # Reduced from 4 - smaller batches
+            per_device_eval_batch_size: 2   # Reduced from 4
+            gradient_accumulation_steps: 8  # Increased from 4 - effective batch=16
+            learning_rate: 0.0001  # Reduced from 0.0002 - slower learning
+            warmup_ratio: 0.03     # Reduced from 0.1 - less warmup needed
+            weight_decay: 0.001    # Added - helps prevent overfitting
+            logging_steps: 5       # Reduced from 10 - more frequent logging
+            save_steps: 50         # Reduced from 100 - more frequent saves
             save_total_limit: 3
             # Disable evaluation since we don't have an eval dataset
             eval_strategy: "no"
             save_strategy: "steps"
             load_best_model_at_end: false
+            # CRITICAL: Prevent conversation generation
+            max_length: 256        # Added - limit response length
+            repetition_penalty: 1.1  # Added - reduce repetition
             
       # Model app for testing
       model_app:
@@ -258,8 +267,39 @@ strategies:
       to_gguf: true
       quantization: q4_0  # Options: q4_0 (smallest), q5_0, q8_0, f16 (best quality)
       model_name: medical-model
-      system_prompt: "You are a knowledgeable medical assistant. Provide accurate, evidence-based medical information."
+      system_prompt: "You are a knowledgeable medical assistant. Provide accurate, evidence-based medical information. Answer only the question asked."
+      # Ollama generation parameters - PREVENTS RUNAWAY GENERATION
+      ollama_parameters:
+        temperature: 0.7      # Reduced randomness
+        top_p: 0.9           # Nucleus sampling
+        top_k: 40            # Limit token choices
+        repeat_penalty: 1.1   # Prevent repetition
+        num_predict: 256      # Max tokens to generate
+        stop:                 # Stop sequences
+          - "\nUser:"
+          - "\nAssistant:"
+          - "<|user|>"
+          - "<|assistant|>"
+          - "###"
       
+    # Data preprocessing - IMPORTANT for preventing bad training
+    data_preprocessing:
+      # Clean the dataset before training
+      max_input_length: 128    # Limit question length
+      max_output_length: 256   # Limit answer length
+      remove_duplicates: true  # Remove duplicate Q&A pairs
+      filter_empty: true       # Remove empty responses
+      # Data augmentation for small datasets
+      augmentation:
+        enabled: false  # Set to true if dataset is small
+        paraphrase_questions: false
+        shuffle_dataset: true
+      # Response validation
+      validation:
+        check_format: true     # Ensure proper Q&A format
+        remove_conversations: true  # CRITICAL: Remove multi-turn dialogues
+        single_response_only: true  # CRITICAL: Ensure one response per question
+    
     # Conversion settings (for fine-tuned models)
     conversion:
       # Automatic llama.cpp installation
@@ -297,17 +337,16 @@ strategies:
           method: f16
           description: "Best quality, largest size"
       
-    # Prompt template for training
+    # Prompt template for training - CRITICAL FOR PROPER RESPONSES
     prompt_template:
-      system: "You are a knowledgeable medical assistant."
+      system: "You are a helpful medical assistant. Provide concise, accurate medical information. Answer only the question asked."
+      # SIMPLIFIED FORMAT - Prevents conversation generation
       format: |
-        ### System:
+        <|system|>
         {system}
-        
-        ### User:
+        <|user|>
         {input}
-        
-        ### Assistant:
+        <|assistant|>
         {output}
         
     monitoring:
