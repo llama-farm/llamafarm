@@ -103,7 +103,7 @@ const Projects = () => {
     } catch {}
   }
 
-  const handleSave = (name: string, description: string) => {
+  const handleSave = (name: string, /* description: string */) => {
     if (modalMode === 'create') {
       const exists = listFromStorage.includes(name)
       const updated = exists ? listFromStorage : [...listFromStorage, name]

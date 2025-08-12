@@ -19,7 +19,7 @@ function Header() {
     'Option 4',
   ]
   const [isProjectOpen, setIsProjectOpen] = useState(false)
-  const [projects, setProjects] = useState<string[]>(() => {
+  const [projects, /* setProjects */] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('projectsList')
       if (stored) return JSON.parse(stored)
@@ -59,11 +59,11 @@ function Header() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  const persistProjects = (list: string[]) => {
-    try {
-      localStorage.setItem('projectsList', JSON.stringify(list))
-    } catch {}
-  }
+  // const persistProjects = (list: string[]) => {
+  //   try {
+  //     localStorage.setItem('projectsList', JSON.stringify(list))
+  //   } catch {}
+  // }
 
   const handleCreateProject = () => {
     setIsProjectOpen(false)
