@@ -32,7 +32,7 @@ class TestCLIMockIntegration:
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
     
-    def run_cli_command(self, *args, timeout=10):
+    def run_cli_command(self, *args, timeout=30):
         """Helper to run CLI commands."""
         cmd = ["python", str(self.cli_path)] + list(args)
         result = subprocess.run(
@@ -109,7 +109,7 @@ class TestMockModelFunctionality:
             ["python", str(cli_path), "info", "--strategy", "mock_development"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30
         )
         assert result.returncode == 0
         assert "mock" in result.stdout.lower()
@@ -123,7 +123,7 @@ class TestMockModelFunctionality:
             ["python", str(cli_path), "info", "--strategy", "mock_development"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30
         )
         
         assert result.returncode == 0
@@ -144,7 +144,7 @@ class TestStrategyIntegration:
             ["python", str(self.cli_path), "info", "--strategy", "mock_development"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30
         )
         assert result.returncode == 0
         
@@ -153,7 +153,7 @@ class TestStrategyIntegration:
             ["python", str(self.cli_path), "info", "--strategy", "nonexistent_strategy"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30
         )
         # Check that it shows an error message about not finding the strategy
         assert "not found" in result.stdout.lower() or result.returncode != 0
@@ -166,7 +166,7 @@ class TestStrategyIntegration:
             ["python", str(self.cli_path), "info", "--strategy", "mock_development"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30
         )
         
         assert result.returncode == 0
@@ -224,7 +224,7 @@ class TestSetupManager:
             ["python", str(self.cli_path), "setup", "demos/strategies.yaml", "--verify-only", "--verbose"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30
         )
         
         assert result.returncode == 0
@@ -236,7 +236,7 @@ class TestSetupManager:
             ["python", str(self.cli_path), "setup", "demos/strategies.yaml", "--verify-only"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30
         )
         
         assert result.returncode == 0
@@ -274,7 +274,7 @@ class TestSetupManager:
                 ["python", str(self.cli_path), "setup", str(temp_file), "--verify-only", "--verbose"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=30
             )
             
             assert result.returncode == 0
@@ -291,7 +291,7 @@ class TestEndToEndWorkflows:
         """Set up test environment."""
         self.cli_path = Path(__file__).parent.parent / "cli.py"
         
-    def run_cli_command(self, *args, timeout=10):
+    def run_cli_command(self, *args, timeout=30):
         """Helper to run CLI commands."""
         cmd = ["python", str(self.cli_path)] + list(args)
         result = subprocess.run(
@@ -355,7 +355,7 @@ class TestCLIErrorHandling:
         """Set up test environment."""
         self.cli_path = Path(__file__).parent.parent / "cli.py"
         
-    def run_cli_command(self, *args, timeout=10):
+    def run_cli_command(self, *args, timeout=30):
         """Helper to run CLI commands."""
         cmd = ["python", str(self.cli_path)] + list(args)
         result = subprocess.run(

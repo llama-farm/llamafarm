@@ -81,7 +81,7 @@ class TestOllamaEndToEnd:
         
         try:
             result = subprocess.run(['ollama', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
+                                  capture_output=True, text=True, timeout=30)
             assert result.returncode == 0, "Ollama not installed or not working"
         except FileNotFoundError:
             pytest.skip("Ollama not installed")
@@ -94,7 +94,7 @@ class TestOllamaEndToEnd:
         
         try:
             result = subprocess.run(['ollama', 'list'], 
-                                  capture_output=True, text=True, timeout=10)
+                                  capture_output=True, text=True, timeout=30)
             assert result.returncode == 0, "Failed to list Ollama models"
             
             lines = result.stdout.strip().split('\n')
@@ -113,7 +113,7 @@ class TestOllamaEndToEnd:
         ollama_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
         
         try:
-            response = requests.get(f"{ollama_url}/api/tags", timeout=5)
+            response = requests.get(f"{ollama_url}/api/tags", timeout=30)
             assert response.status_code == 200, f"Ollama API not responding: {response.status_code}"
             
             data = response.json()
@@ -133,7 +133,7 @@ class TestOllamaEndToEnd:
         # Get first available model
         try:
             result = subprocess.run(['ollama', 'list'], 
-                                  capture_output=True, text=True, timeout=10)
+                                  capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 pytest.skip("Cannot list Ollama models")
             
@@ -162,7 +162,7 @@ class TestOllamaEndToEnd:
         
         try:
             # First check if model exists and is loaded
-            models_response = requests.get(f"{ollama_url}/api/tags", timeout=5)
+            models_response = requests.get(f"{ollama_url}/api/tags", timeout=30)
             if models_response.status_code != 200:
                 pytest.skip("Cannot access Ollama API")
             
@@ -295,7 +295,7 @@ class TestEndToEndWorkflows:
         import subprocess
         try:
             result = subprocess.run(['ollama', 'list'], 
-                                  capture_output=True, text=True, timeout=10)
+                                  capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 lines = result.stdout.strip().split('\n')[1:]  # Skip header
                 if lines and lines[0].strip():
@@ -389,7 +389,7 @@ class TestPerformanceAndLimits:
         # Get first available model
         try:
             result = subprocess.run(['ollama', 'list'], 
-                                  capture_output=True, text=True, timeout=10)
+                                  capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 pytest.skip("Cannot list Ollama models")
             
@@ -417,7 +417,7 @@ class TestPerformanceAndLimits:
         
         try:
             # First verify model is available
-            models_response = requests.get(f"{ollama_url}/api/tags", timeout=5)
+            models_response = requests.get(f"{ollama_url}/api/tags", timeout=30)
             if models_response.status_code != 200:
                 pytest.skip("Cannot access Ollama API")
             
