@@ -1,0 +1,34 @@
+# Basic OpenAI Strategy
+# Simple cloud-based strategy using OpenAI GPT-4
+
+strategies:
+  basic_openai:
+    name: Basic OpenAI Configuration
+    description: Simple cloud-based strategy using OpenAI GPT-4 Turbo
+    
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4-turbo-preview
+          max_tokens: 4096
+          temperature: 0.7
+          timeout: 60
+    
+    # Optional routing rules for specific query types
+    routing_rules:
+      - pattern: ".*"
+        provider: cloud_api
+        model: gpt-4-turbo-preview
+    
+    # Cost and performance optimization
+    constraints:
+      max_tokens_per_request: 4096
+      max_requests_per_minute: 500
+    
+    monitoring:
+      track_usage: true
+      track_costs: true
+      log_level: INFO

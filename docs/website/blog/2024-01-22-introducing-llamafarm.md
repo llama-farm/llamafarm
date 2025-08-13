@@ -3,7 +3,6 @@ slug: introducing-llamafarm
 title: Introducing LlamaFarm - Config-Based AI for Everyone
 authors: [llamafarm-team]
 tags: [announcement, llamafarm, release, open-source]
-date: 2025-01-22
 ---
 
 # Introducing LlamaFarm: Config-Based AI for Everyone
@@ -38,26 +37,25 @@ models:
   - name: local-llama
     type: llama2-7b
     device: cuda
-
+    
   - name: embeddings
     type: sentence-transformers
     model: all-MiniLM-L6-v2
-
+    
 pipeline:
-  - embed:
+  - embed: 
       model: embeddings
       input: documents
   - generate:
       model: local-llama
-      prompt: 'Summarize: {context}'
-
+      prompt: "Summarize: {context}"
+      
 deploy:
   local: true
   replicas: 2
 ```
 
 Run it with:
-
 ```bash
 llamafarm up
 ```
@@ -67,19 +65,15 @@ That's it. LlamaFarm handles model downloading, optimization, serving, and scali
 ## Key Features
 
 ### 1. **Model Agnostic**
-
 Support for all major models:
-
 - Llama 2 & 3
 - GPT (via OpenAI API)
-- Claude (via Anthropic API)
+- Claude (via Anthropic API)  
 - Mistral
 - Custom models
 
 ### 2. **Deploy Anywhere**
-
 One configuration, multiple targets:
-
 - Local machines
 - Kubernetes clusters
 - AWS EC2/Lambda
@@ -87,9 +81,7 @@ One configuration, multiple targets:
 - Edge devices
 
 ### 3. **Production Ready**
-
 Built-in features for real applications:
-
 - Auto-scaling
 - Load balancing
 - Health checks
@@ -97,7 +89,6 @@ Built-in features for real applications:
 - A/B testing
 
 ### 4. **Developer Friendly**
-
 - Hot reload configuration
 - Simple CLI
 - REST & gRPC APIs
@@ -106,24 +97,22 @@ Built-in features for real applications:
 ## Real-World Use Cases
 
 ### Secure Document Processing
-
 ```yaml
 models:
   - name: doc-analyzer
     type: llama2-13b
     quantization: int8
-
+    
 pipeline:
-  - extract:
+  - extract: 
       type: pdf
       path: /secure/documents
   - analyze:
       model: doc-analyzer
-      keep_local: true # Never send to cloud
+      keep_local: true  # Never send to cloud
 ```
 
 ### Multi-Cloud Deployment
-
 ```yaml
 deploy:
   targets:
@@ -138,16 +127,15 @@ deploy:
 ```
 
 ### Edge AI
-
 ```yaml
 models:
   - name: edge-vision
     type: mobilenet
     optimize: edge
-
+    
 deploy:
   edge:
-    devices:
+    devices: 
       - raspberry-pi-cluster
       - nvidia-jetson
     sync: true
@@ -156,7 +144,6 @@ deploy:
 ## Getting Started
 
 1. **Install LlamaFarm:**
-
 ```bash
 pip install llamafarm
 # or
@@ -164,20 +151,17 @@ brew install llamafarm
 ```
 
 2. **Create your config:**
-
 ```bash
 llamafarm init my-ai-app
 cd my-ai-app
 ```
 
 3. **Deploy:**
-
 ```bash
 llamafarm up
 ```
 
 4. **Use your AI:**
-
 ```bash
 curl localhost:8080/generate \
   -d '{"prompt": "Hello, LlamaFarm!"}'
@@ -218,4 +202,4 @@ Let's farm some llamas! 🦙
 
 ---
 
-_Ready to take control of your AI infrastructure? Get started with LlamaFarm today and join us in democratizing AI._
+*Ready to take control of your AI infrastructure? Get started with LlamaFarm today and join us in democratizing AI.*

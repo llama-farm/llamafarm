@@ -144,6 +144,7 @@ ENV/
 env.bak/
 venv.bak/
 rag_env/
+*Modefile*
 
 # Spyder project settings
 .spyderproject
@@ -250,6 +251,25 @@ embeddings_cache/
 
 # Tokenizer files (if cached locally)
 tokenizer_cache/
+
+# Models directory specific exclusions
+model_cache/
+models/model_cache/
+models/fine_tuned_models/
+models/fine_tuning_models/
+models/ollama_exports/
+fine_tuned_models/
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.pt
+models/**/*.pth
+models/**/*.onnx
+models/**/optimizer.pt
+models/**/scheduler.pt
+models/**/rng_state.pth
+models/**/training_args.bin
+models/**/model.safetensors
+models/**/checkpoint-*/
 
 # ==============================================================================
 # Data Files - INCLUDE datasets for users, exclude user uploads only
@@ -710,3 +730,8 @@ cli/lf*
 
 # generated file when running `uv run python config/compile_schema.py`
 config/schema.deref.yaml
+
+# Ollama Modelfiles (these are generated/customized locally)
+models/*/Modelfile
+models/medical-llama3.2/Modelfile
+models/medical-tinyllama/Modelfile

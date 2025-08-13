@@ -1,0 +1,60 @@
+# Ollama Local Models Strategy
+# Configuration for running multiple local models with Ollama
+
+strategies:
+  ollama_local_models:
+    name: Ollama Local Models Configuration
+    description: Multiple local models running via Ollama with automatic fallback
+    
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: ${OLLAMA_BASE_URL:-http://localhost:11434}
+          default_model: llama3.2:3b
+          timeout: 120
+          keep_alive: 5m
+          concurrent_requests: 4
+    
+    # Fallback chain for resilience
+    fallback_chain:
+      - provider: model_app
+        model: nomic-embed-text:latest
+        purpose: embeddings
+      - provider: model_app
+        model: llama3.1:8b
+        purpose: general
+      - provider: model_app
+        model: llama3:latest
+        purpose: general
+      - provider: model_app
+        model: llama3.2:3b
+        purpose: fast_response
+      - provider: model_app
+        model: mistral:7b
+        purpose: coding
+    
+    # Routing rules for different query types
+    routing_rules:
+      - pattern: "embed|embedding|vector"
+        provider: model_app
+        model: nomic-embed-text:latest
+      - pattern: "code|programming|debug"
+        provider: model_app
+        model: mistral:7b
+      - pattern: "quick|fast|simple"
+        provider: model_app
+        model: llama3.2:3b
+      - pattern: ".*"
+        provider: model_app
+        model: llama3.1:8b
+    
+    # Performance optimization
+    constraints:
+      requires_gpu: false
+      max_concurrent_requests: 4
+      memory_limit_gb: 16
+    
+    monitoring:
+      track_performance: true
+      log_level: INFO

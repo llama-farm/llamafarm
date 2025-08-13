@@ -1,0 +1,427 @@
+# Comprehensive Model Catalog
+# This catalog includes 40+ models across different categories, sizes, and quantizations
+# for various use cases and fallback scenarios
+
+version: "v1"
+description: "Comprehensive model catalog for LlamaFarm with fallback support"
+
+categories:
+
+  # =============================================================================
+  # GENERAL PURPOSE MODELS
+  # =============================================================================
+  
+  general_purpose:
+    # Llama Models
+    - name: "llama3.2:3b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "3B"
+      memory: "2.5GB"
+      use_cases: ["chat", "general", "fallback"]
+      speed: "fast"
+      
+    - name: "llama3.2:1b"
+      provider: "ollama"
+      quantization: "Q4_K_M" 
+      size: "1B"
+      memory: "1GB"
+      use_cases: ["lightweight", "embedded", "fallback"]
+      speed: "very_fast"
+      
+    - name: "llama3.1:8b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "8B"
+      memory: "5GB"
+      use_cases: ["chat", "reasoning", "general"]
+      speed: "medium"
+      
+    - name: "llama3.1:70b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "70B"
+      memory: "40GB"
+      use_cases: ["complex_reasoning", "professional"]
+      speed: "slow"
+      
+    - name: "llama2:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["general", "fallback", "stable"]
+      speed: "medium"
+      
+    - name: "llama2:13b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "13B"
+      memory: "8GB"
+      use_cases: ["reasoning", "analysis"]
+      speed: "medium_slow"
+
+  # =============================================================================
+  # CODE GENERATION MODELS
+  # =============================================================================
+  
+  code_generation:
+    - name: "codellama:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["code", "programming", "debugging"]
+      speed: "medium"
+      
+    - name: "codellama:13b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "13B"
+      memory: "8GB"
+      use_cases: ["complex_code", "architecture"]
+      speed: "medium_slow"
+      
+    - name: "codellama:34b"
+      provider: "ollama"
+      quantization: "Q4_K_M" 
+      size: "34B"
+      memory: "20GB"
+      use_cases: ["enterprise_code", "complex_systems"]
+      speed: "slow"
+      
+    - name: "codeqwen:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["code", "multilingual_code"]
+      speed: "medium"
+      
+    - name: "deepseek-coder:6.7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "6.7B"
+      memory: "4GB"
+      use_cases: ["code", "fast_coding"]
+      speed: "medium"
+      
+    - name: "starcoder2:3b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "3B"
+      memory: "2GB"
+      use_cases: ["lightweight_code", "embedded"]
+      speed: "fast"
+
+  # =============================================================================
+  # MEDICAL & HEALTHCARE MODELS
+  # =============================================================================
+  
+  medical:
+    - name: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "14B"
+      memory: "8GB"
+      use_cases: ["medical", "healthcare", "diagnosis_support"]
+      speed: "medium"
+      alias: "deepseek-medical"
+      
+    - name: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q2_K"
+      provider: "ollama"
+      quantization: "Q2_K"
+      size: "14B"
+      memory: "5GB"
+      use_cases: ["medical_lightweight", "fallback"]
+      speed: "medium_fast"
+      alias: "deepseek-medical-q2"
+      
+    - name: "meditron:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["medical_research", "clinical"]
+      speed: "medium"
+      
+    - name: "biomistral:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["biomedical", "research"]
+      speed: "medium"
+
+  # =============================================================================
+  # MULTILINGUAL MODELS
+  # =============================================================================
+  
+  multilingual:
+    - name: "qwen2.5:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["multilingual", "chinese", "english"]
+      speed: "medium"
+      
+    - name: "qwen2.5:14b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "14B"
+      memory: "8GB"
+      use_cases: ["advanced_multilingual", "reasoning"]
+      speed: "medium_slow"
+      
+    - name: "qwen2.5:32b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "32B"
+      memory: "18GB"
+      use_cases: ["enterprise_multilingual", "complex_tasks"]
+      speed: "slow"
+      
+    - name: "gemma2:9b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "9B"
+      memory: "6GB"
+      use_cases: ["multilingual", "google_optimized"]
+      speed: "medium"
+      
+    - name: "mistral:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["european_languages", "general"]
+      speed: "medium"
+      
+    - name: "mixtral:8x7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "47B"
+      memory: "26GB"
+      use_cases: ["mixture_of_experts", "complex_multilingual"]
+      speed: "slow"
+
+  # =============================================================================
+  # LIGHTWEIGHT/EMBEDDED MODELS
+  # =============================================================================
+  
+  lightweight:
+    - name: "phi3.5:3.8b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "3.8B"
+      memory: "2.5GB"
+      use_cases: ["mobile", "edge", "fast_inference"]
+      speed: "fast"
+      
+    - name: "phi3:mini"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "3.8B"
+      memory: "2.3GB"
+      use_cases: ["embedded", "mobile", "offline"]
+      speed: "fast"
+      
+    - name: "tinyllama:1.1b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "1.1B"
+      memory: "700MB"
+      use_cases: ["ultra_lightweight", "iot", "testing"]
+      speed: "very_fast"
+      
+    - name: "stable-code:3b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "3B"
+      memory: "2GB"
+      use_cases: ["lightweight_code", "mobile_dev"]
+      speed: "fast"
+
+  # =============================================================================
+  # REASONING & ANALYSIS MODELS
+  # =============================================================================
+  
+  reasoning:
+    - name: "deepseek-r1:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["reasoning", "analysis", "problem_solving"]
+      speed: "medium"
+      
+    - name: "deepseek-r1:32b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "32B"
+      memory: "18GB"
+      use_cases: ["complex_reasoning", "research"]
+      speed: "slow"
+      
+    - name: "wizard-math:7b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "7B"
+      memory: "4GB"
+      use_cases: ["mathematics", "calculations", "logic"]
+      speed: "medium"
+      
+    - name: "wizard-coder:15b"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "15B"
+      memory: "9GB"
+      use_cases: ["advanced_coding", "architecture"]
+      speed: "medium_slow"
+
+  # =============================================================================
+  # SPECIALIZED QUANTIZATIONS
+  # =============================================================================
+  
+  quantization_variants:
+    # Ultra-fast inference (lower quality)
+    - name: "llama3.2:3b-q2"
+      provider: "ollama"
+      quantization: "Q2_K"
+      size: "3B"
+      memory: "1.5GB"
+      use_cases: ["ultra_fast", "testing", "fallback"]
+      speed: "very_fast"
+      
+    # Balanced (recommended)
+    - name: "llama3.2:3b-q4"
+      provider: "ollama"
+      quantization: "Q4_K_M"
+      size: "3B"
+      memory: "2.5GB"
+      use_cases: ["balanced", "production", "general"]
+      speed: "fast"
+      
+    # High quality (slower)
+    - name: "llama3.2:3b-q8"
+      provider: "ollama"
+      quantization: "Q8_0"
+      size: "3B"
+      memory: "4GB"
+      use_cases: ["high_quality", "professional"]
+      speed: "medium"
+      
+    # Maximum quality (full precision)
+    - name: "llama3.2:3b-fp16"
+      provider: "ollama"
+      quantization: "FP16"
+      size: "3B"
+      memory: "6GB"
+      use_cases: ["maximum_quality", "research"]
+      speed: "slow"
+
+# =============================================================================
+# FALLBACK CHAINS BY USE CASE
+# =============================================================================
+
+fallback_chains:
+  
+  medical_chain:
+    description: "Medical/healthcare fallback chain"
+    primary: "hf.co/mradermacher/DeepSeek-R1-Medicalai-923-i1-GGUF:Q4_K_M"
+    fallbacks:
+      - "meditron:7b"
+      - "biomistral:7b"
+      - "llama3.1:8b"  # General fallback
+      - "llama3.2:3b"  # Emergency fallback
+      
+  code_chain:
+    description: "Code generation fallback chain"
+    primary: "codellama:13b"
+    fallbacks:
+      - "codellama:7b"
+      - "deepseek-coder:6.7b"
+      - "codeqwen:7b"
+      - "starcoder2:3b"  # Lightweight fallback
+      
+  general_chain:
+    description: "General purpose fallback chain"
+    primary: "llama3.1:8b"
+    fallbacks:
+      - "llama3.2:3b"
+      - "mistral:7b"
+      - "phi3.5:3.8b"
+      - "tinyllama:1.1b"  # Emergency fallback
+      
+  multilingual_chain:
+    description: "Multilingual fallback chain"
+    primary: "qwen2.5:14b"
+    fallbacks:
+      - "qwen2.5:7b"
+      - "mistral:7b"
+      - "gemma2:9b"
+      - "llama3.2:3b"
+      
+  reasoning_chain:
+    description: "Complex reasoning fallback chain"
+    primary: "deepseek-r1:32b"
+    fallbacks:
+      - "deepseek-r1:7b"
+      - "llama3.1:8b"
+      - "wizard-math:7b"
+      - "llama3.2:3b"
+      
+  lightweight_chain:
+    description: "Resource-constrained environments"
+    primary: "phi3.5:3.8b"
+    fallbacks:
+      - "phi3:mini"
+      - "llama3.2:1b"
+      - "tinyllama:1.1b"
+      
+  quality_chain:
+    description: "Quality-focused chain (different quantizations)"
+    primary: "llama3.2:3b-fp16"
+    fallbacks:
+      - "llama3.2:3b-q8"
+      - "llama3.2:3b-q4"
+      - "llama3.2:3b-q2"
+
+# =============================================================================
+# RECOMMENDED CONFIGURATIONS BY HARDWARE
+# =============================================================================
+
+hardware_recommendations:
+  
+  high_end:
+    description: "32GB+ RAM, RTX 4090 or better"
+    recommended_models:
+      - "llama3.1:70b"
+      - "mixtral:8x7b"
+      - "deepseek-r1:32b"
+      - "qwen2.5:32b"
+      
+  mid_range:
+    description: "16-32GB RAM, RTX 3080 or better"
+    recommended_models:
+      - "llama3.1:8b"
+      - "codellama:13b"
+      - "qwen2.5:14b"
+      - "wizard-coder:15b"
+      
+  low_end:
+    description: "8-16GB RAM, integrated graphics"
+    recommended_models:
+      - "llama3.2:3b"
+      - "phi3.5:3.8b"
+      - "mistral:7b"
+      - "codellama:7b"
+      
+  mobile:
+    description: "4-8GB RAM, mobile/embedded"
+    recommended_models:
+      - "llama3.2:1b"
+      - "phi3:mini"
+      - "tinyllama:1.1b"
+      - "stable-code:3b"
