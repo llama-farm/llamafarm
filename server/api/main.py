@@ -2,7 +2,7 @@ import fastapi
 from asgi_correlation_id import CorrelationIdMiddleware
 
 import api.routers as routers
-from api.handlers import register_exception_handlers
+from api.errors import register_exception_handlers
 from api.middleware.errors import ErrorHandlerMiddleware
 from api.middleware.structlog import StructLogMiddleware
 from core.logging import FastAPIStructLogger

@@ -1,3 +1,8 @@
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+
 class NotFoundError(Exception):
   def __init__(self, message: str | None = None):
     super().__init__(message or "Not found")
@@ -28,17 +33,76 @@ class ProjectConfigError(Exception):
   def __init__(self, namespace: str, project_id: str, message: str | None = None):
     self.namespace = namespace
     self.project_id = project_id
-    super().__init__(message or f"Invalid or missing config for project {namespace}/{project_id}")
+    msg = (
+      message
+      or f"Invalid or missing config for project {namespace}/{project_id}"
+    )
+    super().__init__(msg)
 
 
-class SchemaNotFoundError(Exception):
-  """Raised when the specified schema template cannot be located on disk."""
+class SchemaNotFoundError(NotFoundError):
+  """Raised when the specified config template cannot be located on disk."""
 
   def __init__(self, template: str, searched_paths: list[str] | None = None):
     self.template = template
     self.searched_paths = searched_paths or []
     message = (
-      f"No schema file found for template '{template}'. "
+      f"No config template file found for template '{template}'. "
       + (f"Searched: {', '.join(self.searched_paths)}" if self.searched_paths else "")
     )
     super().__init__(message)
+
+
+# FastAPI exception handlers kept alongside their corresponding error types for cohesion
+class ErrorResponse(BaseModel):
+  error: str
+  message: str
+  details: str | None = None
+
+
+async def _handle_project_not_found(request: Request, exc: Exception) -> Response:
+  payload = ErrorResponse(error="ProjectNotFound", message=str(exc))
+  return JSONResponse(status_code=404, content=payload.model_dump())
+
+
+async def _handle_project_config_error(request: Request, exc: Exception) -> Response:
+  payload = ErrorResponse(error="ProjectConfigError", message=str(exc))
+  return JSONResponse(status_code=422, content=payload.model_dump())
+
+
+async def _handle_schema_not_found(request: Request, exc: Exception) -> Response:
+  payload = ErrorResponse(error="ConfigTemplateNotFound", message=str(exc))
+  return JSONResponse(status_code=404, content=payload.model_dump())
+
+
+async def _handle_config_error(request: Request, exc: Exception) -> Response:
+  payload = ErrorResponse(error="ProjectConfigError", message=str(exc))
+  return JSONResponse(status_code=422, content=payload.model_dump())
+
+
+async def _handle_generic_not_found(request: Request, exc: Exception) -> Response:
+  payload = ErrorResponse(error="NotFound", message=str(exc))
+  return JSONResponse(status_code=404, content=payload.model_dump())
+
+
+async def _handle_unexpected_error(request: Request, exc: Exception) -> Response:
+  payload = ErrorResponse(
+    error="InternalServerError",
+    message="An unexpected error occurred",
+  )
+  return JSONResponse(status_code=500, content=payload.model_dump())
+
+
+def register_exception_handlers(app: FastAPI) -> None:
+  """Register global exception handlers for consistent API errors."""
+
+  app.add_exception_handler(ProjectNotFoundError, _handle_project_not_found)
+  app.add_exception_handler(ProjectConfigError, _handle_project_config_error)
+  app.add_exception_handler(SchemaNotFoundError, _handle_schema_not_found)
+  # ConfigError comes from config package; import locally to avoid
+  # hard dependency at import time
+  from config import ConfigError  # type: ignore
+
+  app.add_exception_handler(ConfigError, _handle_config_error)
+  app.add_exception_handler(NotFoundError, _handle_generic_not_found)
+  app.add_exception_handler(Exception, _handle_unexpected_error)
