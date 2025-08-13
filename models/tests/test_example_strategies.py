@@ -20,7 +20,7 @@ class TestExampleStrategies:
     
     def test_load_basic_openai_strategy(self):
         """Test loading the basic OpenAI strategy."""
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "basic_openai.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "basic_openai.yaml"
         
         # Load strategy
         manager = StrategyManager(strategies_file=strategy_file)
@@ -33,7 +33,7 @@ class TestExampleStrategies:
     
     def test_load_ollama_strategy(self):
         """Test loading the Ollama local models strategy."""
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "ollama_local_models.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "ollama_local_models.yaml"
         
         # Load strategy
         manager = StrategyManager(strategies_file=strategy_file)
@@ -47,7 +47,7 @@ class TestExampleStrategies:
     
     def test_load_production_strategy(self):
         """Test loading the production cloud strategy."""
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "production_cloud.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "production_cloud.yaml"
         
         # Load strategy
         manager = StrategyManager(strategies_file=strategy_file)
@@ -61,7 +61,7 @@ class TestExampleStrategies:
     
     def test_load_multi_model_strategy(self):
         """Test loading the multi-model specialized strategy."""
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "multi_model_specialized.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "multi_model_specialized.yaml"
         
         # Load strategy
         manager = StrategyManager(strategies_file=strategy_file)
@@ -81,7 +81,7 @@ class TestExampleStrategies:
     
     def test_load_fine_tuning_strategy(self):
         """Test loading fine-tuning workflow strategies."""
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "fine_tuning_workflows.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "fine_tuning_workflows.yaml"
         
         # Load strategy
         manager = StrategyManager(strategies_file=strategy_file)
@@ -100,7 +100,7 @@ class TestExampleStrategies:
     
     def test_strategy_validation(self):
         """Test that all example strategies pass validation."""
-        strategies_dir = Path(__file__).parent.parent / "example_strategies"
+        strategies_dir = Path(__file__).parent / "test_strategies"
         yaml_files = list(strategies_dir.glob("*.yaml"))
         
         assert len(yaml_files) > 0, "No strategy files found"
@@ -124,7 +124,7 @@ class TestExampleStrategies:
     
     def test_routing_rules_format(self):
         """Test that routing rules are properly formatted."""
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "multi_model_specialized.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "multi_model_specialized.yaml"
         
         manager = StrategyManager(strategies_file=strategy_file)
         strategy = manager.get_strategy("multi_model_specialized")
@@ -139,7 +139,7 @@ class TestExampleStrategies:
     
     def test_fallback_chain_format(self):
         """Test that fallback chains are properly formatted."""
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "production_cloud.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "production_cloud.yaml"
         
         manager = StrategyManager(strategies_file=strategy_file)
         strategy = manager.get_strategy("production_cloud")
@@ -156,7 +156,7 @@ class TestExampleStrategies:
     def test_strategy_with_model_manager(self, mock_ollama):
         """Test using an example strategy with ModelManager."""
         # We'll test with a mocked Ollama since it doesn't require API keys
-        strategy_file = Path(__file__).parent.parent / "example_strategies" / "ollama_local_models.yaml"
+        strategy_file = Path(__file__).parent / "test_strategies" / "ollama_local_models.yaml"
         
         # First, add the strategy to default strategies for ModelManager to find it
         manager = StrategyManager(strategies_file=strategy_file)
