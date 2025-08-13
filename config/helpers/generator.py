@@ -1,11 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml  # type: ignore
-except ImportError:  # pragma: no cover
-    yaml = None
-
+import yaml  # type: ignore
 from config.datamodel import LlamaFarmConfig
 
 
@@ -37,10 +33,8 @@ def generate_base_config_from_schema(schema_path: str, *, name: str | None = Non
 
     Raises:
         FileNotFoundError: If the schema file cannot be found.
-        ValueError: If PyYAML is not installed or if the loaded config is invalid.
+        ValueError: If the loaded config is invalid.
     """
-    if yaml is None:
-        raise ValueError("PyYAML is required to load schema templates. Install 'pyyaml'.")
 
     path = Path(schema_path)
     if not path.exists() or not path.is_file():
