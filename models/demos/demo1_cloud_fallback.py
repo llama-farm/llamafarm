@@ -99,8 +99,8 @@ def main():
     print("This will work if you have a valid API key in your .env file.")
     
     success, stdout, _ = run_cli_command(
-        'uv run python cli.py query "What is the capital of France?" --provider openai_gpt4o_mini',
-        "Calling OpenAI GPT-4 Mini"
+        'uv run python cli.py complete "What is the capital of France?" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml',
+        "Calling cloud provider via strategy"
     )
     
     if success and "Paris" in stdout:
@@ -125,7 +125,7 @@ def main():
     print_info("Setting invalid API key: sk-invalid-test-key-for-demo")
     
     success, stdout, stderr = run_cli_command(
-        'uv run python cli.py query "Explain quantum computing in simple terms"',
+        'uv run python cli.py complete "Explain quantum computing in simple terms" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml',
         "Attempting cloud API call (will fail)",
         check_error=False
     )
@@ -203,7 +203,7 @@ def main():
     print("   4. Configure additional fallback providers")
     
     print("\n🔍 Try it yourself:")
-    print("   uv run python cli.py generate --strategy demo1_cloud_fallback 'Your prompt here'")
+    print("   uv run python cli.py complete 'Your prompt here' --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml")
 
 if __name__ == "__main__":
     main()

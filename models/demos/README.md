@@ -40,7 +40,7 @@ python demos/demo2_multi_model.py
 ### Demo 3: Training Pipeline
 **File:** `demo3_training.py`
 
-Complete fine-tuning pipeline with before/after comparison.
+Complete fine-tuning pipeline with evaluation and before/after comparison.
 
 ```bash
 python demos/demo3_training.py
@@ -48,9 +48,11 @@ python demos/demo3_training.py
 
 **What you'll see:**
 - 📝 Base model performance
-- 🏋️ Training progress
+- 📊 90/10 train/eval data split
+- 🏋️ Training progress with evaluation metrics
 - ✨ Fine-tuned improvements
 - 🦙 Ollama conversion
+- 📈 Best model selection based on eval loss
 
 ### Run All Demos
 **File:** `run_all_demos.py`
@@ -70,7 +72,7 @@ DEMO_MODE=automated python demos/run_all_demos.py --auto --quick
 ### Real CLI Commands
 Every demo runs actual CLI commands that you can see:
 ```bash
-$ uv run python cli.py query "What is 2+2?" --provider openai_gpt35_turbo
+$ uv run python cli.py complete "What is 2+2?" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
 ```
 
 ### Educational Flow
@@ -78,12 +80,14 @@ $ uv run python cli.py query "What is 2+2?" --provider openai_gpt35_turbo
 - "Press Enter to continue" prompts
 - Cost analysis and comparisons
 - Real performance metrics
+- **NEW**: Evaluation metrics during training
 
 ### Transparent Implementation
 - No hidden abstractions
 - All commands visible
 - Copy/paste to try yourself
 - Strategy-driven configuration
+- **NEW**: Train/eval data splits for robust training
 
 This directory contains **4 core demonstrations** showcasing the key capabilities of the LlamaFarm models system. Each demo uses **real API calls**, **actual model responses**, and **strategy-based configurations** with **NO SIMULATION**.
 
@@ -222,9 +226,34 @@ Advanced multi-stage training for code generation:
   4. Model evaluation with actual code generation
   5. Export and deployment options
 
+## 📊 Training Features (NEW)
+
+### Evaluation During Training
+- **Automatic Data Splitting**: 90/10 train/eval split by default
+- **Custom Split Ratios**: 5%, 10%, 15%, or 20% for evaluation
+- **Real-time Metrics**: Track train and eval loss during training
+- **Best Model Selection**: Automatically saves best checkpoint
+- **Overfitting Detection**: Monitor eval vs train loss gap
+
+### Data Split Utility
+```bash
+# Create custom train/eval splits
+python demos/create_data_split.py --input data.jsonl --eval-percent 10  # Standard
+python demos/create_data_split.py --input data.jsonl --eval-percent 15  # Robust
+python demos/create_data_split.py --input data.jsonl --eval-percent 5   # Maximum training
+```
+
+### Evaluation Benefits
+| Feature | Benefit |
+|---------|---------|
+| Holdout Validation | Unbiased performance metrics |
+| Early Stopping | Prevent overfitting |
+| Best Model Selection | Use optimal checkpoint |
+| Generalization Metrics | Confidence in deployment |
+
 ## 🔧 Configuration Through Strategies
 
-All demos use **strategy-based configuration** from `default_strategies.yaml`. No hardcoded values!
+All demos use **strategy-based configuration** from `strategies.yaml`. No hardcoded values!
 
 ### Key Strategies Used:
 
@@ -288,25 +317,256 @@ uv run python cli.py catalog fallbacks --chain medical_chain
 - **General**: Llama 3.2, Mistral, Phi-3.5
 - **Cloud**: GPT-4, GPT-3.5, Claude (when available)
 
-## 🚀 CLI Commands Used in Demos
+## 📚 Available Strategies
 
-The demos execute real CLI commands:
+The demos use various strategies defined in `demos/strategies.yaml`:
+
+### Demo Strategies
+- **`demo1_cloud_fallback`** - Cloud API with automatic fallback to local models
+- **`demo2_multi_model`** - Intelligent routing to different models based on task
+- **`demo3_base_model`** - Base Llama 3.2:3b model (before training)
+- **`demo3_finetuned_model`** - Fine-tuned medical model (after training)
+- **`demo3_training`** - Training configuration for fine-tuning
+
+### Testing Strategies  
+- **`test_tinyllama`** - TinyLlama 1.1B for quick tests
+- **`test_mistral`** - Mistral 7B for general purpose
+- **`test_codellama`** - Code Llama for programming tasks
+- **`test_phi3`** - Microsoft Phi-3 Mini (3.8B)
+
+### Environment Strategies
+- **`local_development`** - Local-only models for development
+- **`production_hybrid`** - Production with cloud + local fallback
+- **`mock_development`** - Mock responses for testing
+
+### Hardware Training Strategies
+- **`training_mps_apple`** - Optimized for Apple Silicon
+- **`training_cuda_consumer`** - For NVIDIA consumer GPUs
+- **`training_cuda_datacenter`** - For datacenter GPUs
+- **`training_cpu_only`** - CPU-only training
+
+## 🔐 Provider-Agnostic Completions (NEW)
+
+The CLI now supports provider-agnostic completions using the `complete` command. This abstracts away whether you're using Ollama, OpenAI, or any other provider - the strategy determines where the request is routed.
+
+### Why Provider-Agnostic?
+- **Flexibility**: Switch providers without changing code
+- **Abstraction**: Users don't need to know if it's local or cloud
+- **Strategy-driven**: Let the strategy decide the best provider
+- **Unified interface**: Same command works for all providers
+
+### Usage Examples
 
 ```bash
-# List available fine-tuning strategies
-python cli.py finetune strategies list
+# Instead of provider-specific commands like:
+# OLD: uv run python cli.py ollama run llama3.2:3b "prompt"
+# OLD: uv run python cli.py query "prompt" --provider openai 
 
-# Estimate resource requirements
-python cli.py finetune estimate --strategy m1_fine_tuning
+# Test different models using strategies:
+uv run python cli.py complete "Medical question" --strategy demo3_base_model --strategy-file demos/strategies.yaml  # Base Llama 3.2
+uv run python cli.py complete "Medical question" --strategy demo3_finetuned_model --strategy-file demos/strategies.yaml  # After fine-tuning
+uv run python cli.py complete "Quick test" --strategy test_tinyllama --strategy-file demos/strategies.yaml  # Fast 1.1B model
+uv run python cli.py complete "Write code" --strategy test_codellama --strategy-file demos/strategies.yaml  # Code-specific
+uv run python cli.py complete "General query" --strategy test_mistral --strategy-file demos/strategies.yaml  # Mistral 7B
 
-# Start fine-tuning
-python cli.py finetune start --strategy m1_fine_tuning --dataset dataset.jsonl
+# With custom strategy file:
+uv run python cli.py complete "Your prompt here" \
+  --strategy production_hybrid \
+  --strategy-file configs/production.yaml
 
-# Monitor training
-python cli.py finetune monitor --job-id training-job-123
+# With options:
+uv run python cli.py complete "Explain quantum computing" \
+  --strategy demo1_cloud_fallback \
+  --strategy-file demos/strategies.yaml \
+  --temperature 0.7 \
+  --max-tokens 500 \
+  --verbose  # Shows which provider is actually used
 
-# Generate with fine-tuned model
-python cli.py generate --model ./fine_tuned_models/model --prompt "Query"
+# With system prompt:
+uv run python cli.py complete "What are the symptoms?" \
+  --strategy demo3_training \
+  --strategy-file demos/strategies.yaml \
+  --system "You are a medical assistant. Be concise."
+
+# Using a completely different strategy file:
+uv run python cli.py complete "Write code to parse JSON" \
+  --strategy-file my_strategies.yaml \
+  --strategy code_generation
+```
+
+The strategy determines:
+- Which provider to use (Ollama, OpenAI, etc.)
+- Which model to use
+- Fallback chains if primary fails
+- All configuration details
+
+## 🚀 CLI Commands Used in Demos
+
+### Demo 1: Cloud Fallback - Command by Command
+
+```bash
+# Step 1: Setup requirements
+uv run python cli.py setup demos/strategies.yaml --auto
+
+# Step 2: Test cloud provider (OpenAI)
+uv run python cli.py test --strategy demo1_cloud_fallback --provider cloud_api
+
+# Step 3: Query with cloud provider (provider-agnostic)
+uv run python cli.py complete "What is the capital of France?" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml
+
+# Step 4: Simulate fallback to Ollama
+# First ensure Ollama is running
+uv run python cli.py ollama status
+
+# List local models
+uv run python cli.py ollama list
+
+# Test local model (provider-agnostic)
+uv run python cli.py complete "Test query" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml --verbose
+
+# Step 5: Test fallback chain
+uv run python cli.py test --strategy demo1_cloud_fallback --test-fallback
+```
+
+### Demo 2: Multi-Model - Command by Command
+
+```bash
+# Step 1: Setup
+uv run python cli.py setup demos/strategies.yaml --strategy demo2_multi_model --auto
+
+# Step 2: Test different task types
+
+# Simple query (provider-agnostic)
+uv run python cli.py complete "What is 2+2?" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
+
+# Complex reasoning
+uv run python cli.py complete "Explain quantum computing" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
+
+# Creative writing
+uv run python cli.py complete "Write a haiku about programming" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
+
+# Code generation
+uv run python cli.py complete "Write a Python fibonacci function" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
+
+# Step 3: Compare costs
+uv run python cli.py analyze costs --strategy demo2_multi_model
+```
+
+### Demo 3: Training Pipeline - Command by Command
+
+These are the EXACT commands used in demo3_training.py:
+
+```bash
+# Step 1: Setup training requirements (includes converters)
+uv run python cli.py setup demos/strategies.yaml --auto --verbose
+
+# Step 2: Check Ollama status
+uv run python cli.py ollama status
+
+# Step 3: List installed Ollama models
+uv run python cli.py ollama list
+
+# Step 4: Pull Llama 3.2:3b if not present
+uv run python cli.py ollama pull llama3.2:3b
+
+# Step 5: Test base model before training (using base model strategy)
+uv run python cli.py complete "What are the symptoms of diabetes?" --strategy demo3_base_model --strategy-file demos/strategies.yaml
+uv run python cli.py complete "How do you treat hypertension?" --strategy demo3_base_model --strategy-file demos/strategies.yaml
+uv run python cli.py complete "What are the side effects of statins?" --strategy demo3_base_model --strategy-file demos/strategies.yaml
+
+# Step 6: Run training with demo3_training strategy
+# The strategy in demos/strategies.yaml defines all parameters
+uv run python cli.py train --strategy demo3_training --dataset demos/datasets/medical/medical_qa.jsonl --verbose --epochs 1 --batch-size 2
+
+# Step 7: Convert to Ollama format (after training completes)
+# Note: The convert command takes input_path output_path (positional arguments)
+uv run python cli.py convert ./fine_tuned_models/medical/final_model/ ./medical-llama3.2 --format ollama --model-name medical-llama3.2
+
+# Alternative: Convert to GGUF format with quantization
+uv run python cli.py convert ./fine_tuned_models/medical ./medical-model.gguf --format gguf --quantization q4_0
+
+# Step 8: Test fine-tuned model (using finetuned model strategy)
+uv run python cli.py complete "What are the symptoms of diabetes?" --strategy demo3_finetuned_model --strategy-file demos/strategies.yaml
+```
+
+### Hardware-Specific Training Commands
+
+```bash
+# For Apple Silicon (M1/M2/M3)
+uv run python cli.py train \
+  --strategy training_mps_apple \
+  --dataset demos/datasets/medical/medical_qa.jsonl \
+  --device mps \
+  --batch-size 2
+
+# For NVIDIA GPU
+uv run python cli.py train \
+  --strategy training_cuda_consumer \
+  --dataset demos/datasets/medical/medical_qa.jsonl \
+  --device cuda \
+  --fp16 \
+  --batch-size 4
+
+# For CPU only
+uv run python cli.py train \
+  --strategy training_cpu_only \
+  --dataset demos/datasets/medical/medical_qa.jsonl \
+  --device cpu \
+  --batch-size 1
+```
+
+### Mock Development Commands (for testing without resources)
+
+```bash
+# Setup mock strategy
+uv run python cli.py setup demos/strategies.yaml --strategy mock_development --auto
+
+# Test with mock model
+uv run python cli.py complete "What is machine learning?" --strategy mock_development --strategy-file demos/strategies.yaml
+
+# Run all test queries
+uv run python cli.py test --strategy mock_development --all
+```
+
+### Utility Commands
+
+```bash
+# List all available strategies
+uv run python cli.py strategies list
+
+# Show strategy details
+uv run python cli.py strategies show demo3_training
+
+# Validate strategy configuration
+uv run python cli.py strategies validate demos/strategies.yaml
+
+# Check system requirements
+uv run python cli.py check-requirements --strategy demo3_training
+
+# Monitor resource usage during training
+uv run python cli.py monitor --pid <training-process-id>
+
+# Clean up temporary files
+uv run python cli.py cleanup --temp-files --cache
+```
+
+### Running Complete Demos
+
+```bash
+# Run demo 1 (Cloud Fallback)
+uv run python demos/demo1_cloud_fallback.py
+
+# Run demo 2 (Multi-Model) 
+uv run python demos/demo2_multi_model.py
+
+# Run demo 3 (Training)
+uv run python demos/demo3_training.py
+
+# Run all demos automated
+DEMO_MODE=automated uv run python demos/run_all_demos.py --auto
+
+# Run specific demo automated
+DEMO_MODE=automated timeout 60 uv run python demos/demo1_cloud_fallback.py
 ```
 
 ## 🎓 Learning Objectives

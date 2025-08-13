@@ -1,5 +1,5 @@
 # Modelfile for converted model
-FROM /var/folders/w2/j17658j10xz96lm4ndpwtw1r0000gn/T/tmp5_b879qs/medical-tinyllama2.gguf
+FROM /var/folders/w2/j17658j10xz96lm4ndpwtw1r0000gn/T/tmpvi2thc42/medical-tinyllama-3.gguf
 
 # Model parameters
 PARAMETER temperature 0.7

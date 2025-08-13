@@ -56,7 +56,7 @@ strategies:
           - service_running
           
       - provider: model_app
-        model: tinyllama:1.1b
+        model: llama3.2:3b
         conditions:
           - service_running
           
@@ -159,7 +159,207 @@ strategies:
       log_level: INFO
 
   # =============================================================================
-  # DEMO 3: COMPLETE TRAINING PIPELINE
+  # DEMO 3: BASE MODEL TESTING (BEFORE TRAINING)
+  # =============================================================================
+  
+  demo3_base_model:
+    name: "Base Llama 3.2:3b for Testing"
+    description: "Base model before fine-tuning - for comparison"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3.2:3b
+          timeout: 60
+          auto_pull: true
+          
+  # =============================================================================
+  # DEMO 3: FINE-TUNED MODEL TESTING (AFTER TRAINING)
+  # =============================================================================
+  
+  demo3_finetuned_model:
+    name: "Fine-tuned Medical Model"
+    description: "Medical-specific fine-tuned model after training"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: medical-llama3.2-optimized  # The converted optimized fine-tuned model
+          timeout: 60
+          
+  # =============================================================================
+  # DEMO 3: OPTIMIZED TRAINING CONFIGURATION
+  # =============================================================================
+  
+  demo3_training_optimized:
+    name: "Optimized Medical Model Training for Llama 3.2"
+    description: "Prevents conversation generation and ensures single-turn responses"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3.2:3b
+          timeout: 60
+          auto_pull: true
+          
+      fine_tuner:
+        type: pytorch
+        config:
+          hardware:
+            device: auto
+            memory_gb: 8
+            precision:
+              cuda:
+                use_fp16: true
+                use_bf16: false
+                use_tf32: true
+              mps:
+                use_fp16: false
+                use_bf16: false
+              cpu:
+                use_fp16: false
+            optimization:
+              gradient_checkpointing: false
+              gradient_accumulation_steps: 2
+              mixed_precision: no
+          
+          base_model:
+            name: meta-llama/Llama-3.2-3B-Instruct
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
+            cache_dir: ./model_cache
+            torch_dtype: auto
+            
+          method:
+            type: lora
+            # Optimized for 3B model - conservative settings
+            r: 4              # Very low rank to prevent overfitting
+            alpha: 8          # Alpha = 2*r for stability
+            dropout: 0.1      # Higher dropout for regularization
+            target_modules:
+              - q_proj
+              - v_proj
+              - k_proj
+              - o_proj
+              
+          training_args:
+            output_dir: ./fine_tuned_models/medical_optimized
+            # Conservative training to prevent overfitting
+            num_train_epochs: 2           # Fewer epochs
+            per_device_train_batch_size: 1   # Small batch
+            per_device_eval_batch_size: 1
+            gradient_accumulation_steps: 4   # Effective batch = 4
+            learning_rate: 0.00005           # Very low learning rate
+            warmup_steps: 10                 # Fixed warmup steps
+            weight_decay: 0.01               # Strong regularization
+            logging_steps: 5
+            save_steps: 50
+            save_total_limit: 2
+            # Evaluation configuration
+            eval_strategy: "steps"           # Evaluate every N steps
+            eval_steps: 50                   # Evaluate every 50 steps
+            save_strategy: "steps"
+            load_best_model_at_end: true     # Load the best model based on eval
+            metric_for_best_model: "eval_loss"  # Use eval loss to select best
+            greater_is_better: false         # Lower loss is better
+            # Critical generation controls
+            max_length: 150                  # Shorter max length
+            max_new_tokens: 100              # Limit new tokens
+            do_sample: false                 # Deterministic generation
+            temperature: 0.3                 # Low temperature
+            top_p: 0.9
+            repetition_penalty: 1.2          # Strong repetition penalty
+            
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: medical-llama3.2-optimized
+          
+    export:
+      to_ollama: true
+      to_gguf: false  # Skip GGUF for faster testing
+      quantization: q4_0
+      model_name: medical-llama3.2-optimized
+      # Simple, direct system prompt
+      system_prompt: "Answer medical questions concisely and accurately."
+      ollama_parameters:
+        temperature: 0.3
+        top_p: 0.9
+        top_k: 40
+        repeat_penalty: 1.2
+        num_predict: 100     # Strict token limit
+        stop:
+          - "\n\n"
+          - "\nUser:"
+          - "\nAssistant:"
+          - "User:"
+          - "Assistant:"
+          - "###"
+          - "<|im_end|>"
+          - "<|im_start|>"
+      
+    # Dataset configuration
+    dataset:
+      train_file: demos/datasets/medical/medical_qa_train.jsonl
+      eval_file: demos/datasets/medical/medical_qa_eval.jsonl
+      eval_split: 0.1  # 10% for evaluation (customizable)
+      # Options for different eval splits:
+      # - 0.05: 5% eval (more training data, less robust evaluation)
+      # - 0.1:  10% eval (balanced - recommended)
+      # - 0.15: 15% eval (more robust evaluation, less training data)
+      # - 0.2:  20% eval (very robust evaluation, significantly less training)
+      shuffle: true
+      seed: 42  # For reproducible splits
+      
+    # Critical data preprocessing settings
+    data_preprocessing:
+      # Truncate to prevent long responses
+      max_input_length: 50     # Short questions only
+      max_output_length: 100   # Short answers only
+      remove_duplicates: true
+      filter_empty: true
+      # Remove problematic patterns
+      remove_patterns:
+        - "disclaimer"
+        - "consult"
+        - "healthcare provider"
+        - "medical advice"
+        - "Important:"
+        - "Note:"
+        - "**"
+      # Simplify instruction format
+      simplify_instructions: true
+      instruction_template: "Answer briefly:"
+      augmentation:
+        enabled: false
+        shuffle_dataset: true
+      validation:
+        check_format: true
+        remove_conversations: true
+        single_response_only: true
+        remove_multi_sentence: false  # Allow multi-sentence but not conversations
+    
+    # Simplified prompt template
+    prompt_template:
+      system: "Answer medical questions briefly and accurately."
+      format: |
+        Question: {input}
+        Answer: {output}
+      
+    monitoring:
+      track_training_metrics: true
+      save_checkpoints: true
+      log_tensorboard: false  # Disable for simplicity
+      log_level: INFO
+
+  # =============================================================================
+  # DEMO 3: TRAINING CONFIGURATION (ORIGINAL)
   # =============================================================================
   
   demo3_training:
@@ -172,7 +372,7 @@ strategies:
         type: ollama
         config:
           base_url: http://localhost:11434
-          model: tinyllama
+          model: llama3.2:3b
           timeout: 60
           auto_pull: true  # Automatically download if not present
           
@@ -213,14 +413,14 @@ strategies:
           
           # Model configuration
           base_model:
-            name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-            huggingface_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+            name: meta-llama/Llama-3.2-3B-Instruct
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
             cache_dir: ./model_cache
             torch_dtype: auto  # Will be set based on hardware config
             
           method:
             type: lora
-            # OPTIMIZED FOR 1B MODEL - Reduced LoRA rank for better learning
+            # OPTIMIZED FOR 3B MODEL - Adjusted LoRA rank for better learning
             r: 8          # Reduced from 16 - better for small models
             alpha: 16     # Reduced from 32 - alpha = 2*r is good ratio
             dropout: 0.05 # Reduced from 0.1 - less regularization needed
@@ -356,6 +556,62 @@ strategies:
       log_level: INFO
 
   # =============================================================================
+  # =============================================================================
+  # ADDITIONAL TESTING STRATEGIES FOR DIFFERENT MODELS
+  # =============================================================================
+  
+  test_tinyllama:
+    name: "TinyLlama Base Model"
+    description: "1.1B parameter model for quick testing"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: tinyllama:latest
+          timeout: 60
+          auto_pull: true
+          
+  test_mistral:
+    name: "Mistral 7B Base Model"
+    description: "Mistral 7B for general purpose testing"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: mistral:7b
+          timeout: 60
+          auto_pull: true
+          
+  test_codellama:
+    name: "Code Llama Model"
+    description: "Code-specific model for programming tasks"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: codellama:7b
+          timeout: 60
+          auto_pull: true
+          
+  test_phi3:
+    name: "Phi-3 Mini Model"  
+    description: "Microsoft's efficient 3.8B model"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: phi3:mini
+          timeout: 60
+          auto_pull: true
+
   # HARDWARE-SPECIFIC TRAINING CONFIGURATIONS
   # =============================================================================
   # Example configurations optimized for different hardware setups
@@ -381,7 +637,7 @@ strategies:
               gradient_accumulation_steps: 2
               mixed_precision: fp16
           base_model:
-            huggingface_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
             torch_dtype: float16
           training_args:
             per_device_train_batch_size: 4  # Increase if memory allows
@@ -406,7 +662,7 @@ strategies:
               gradient_accumulation_steps: 1
               mixed_precision: no  # MPS doesn't support well
           base_model:
-            huggingface_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
             torch_dtype: float32  # Full precision for stability
           training_args:
             per_device_train_batch_size: 2  # Conservative for stability
@@ -430,7 +686,7 @@ strategies:
               gradient_accumulation_steps: 4  # Simulate larger batches
               mixed_precision: no
           base_model:
-            huggingface_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
             torch_dtype: float32
           training_args:
             per_device_train_batch_size: 1  # Minimal batch size

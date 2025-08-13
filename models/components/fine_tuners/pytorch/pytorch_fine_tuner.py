@@ -264,16 +264,52 @@ class PyTorchFineTuner:
         logger.info("Preparing dataset...")
         
         dataset_config = self.config.get("dataset", {})
+        training_args = self.config.get("training_args", {})
+        
+        # Check if we need evaluation dataset
+        needs_eval = (
+            training_args.get("eval_strategy", "no") != "no" or
+            training_args.get("evaluation_strategy", "no") != "no" or
+            training_args.get("load_best_model_at_end", False)
+        )
         
         # Load dataset
         if "path" in dataset_config:
             dataset_path = Path(dataset_config["path"])
             
-            # Load from JSONL file
-            if dataset_path.suffix == ".jsonl":
-                self.dataset = load_dataset("json", data_files=str(dataset_path))["train"]
+            # Check for separate train/eval files
+            dataset_dir = dataset_path.parent
+            dataset_stem = dataset_path.stem
+            train_file = dataset_dir / f"{dataset_stem}_train.jsonl"
+            eval_file = dataset_dir / f"{dataset_stem}_eval.jsonl"
+            
+            if train_file.exists() and eval_file.exists() and needs_eval:
+                # Load separate train and eval datasets
+                logger.info(f"Loading train dataset from: {train_file}")
+                logger.info(f"Loading eval dataset from: {eval_file}")
+                datasets = load_dataset("json", data_files={
+                    "train": str(train_file),
+                    "validation": str(eval_file)
+                })
+                self.dataset = datasets["train"]
+                self.eval_dataset = datasets["validation"]
             else:
-                raise ValueError(f"Unsupported file format: {dataset_path.suffix}")
+                # Load single file
+                if dataset_path.suffix == ".jsonl":
+                    dataset = load_dataset("json", data_files=str(dataset_path))["train"]
+                    
+                    # Split for evaluation if needed
+                    if needs_eval:
+                        eval_split = dataset_config.get("eval_split", 0.1)
+                        logger.info(f"Splitting dataset with {eval_split:.0%} for evaluation")
+                        split_datasets = dataset.train_test_split(test_size=eval_split, seed=42)
+                        self.dataset = split_datasets["train"]
+                        self.eval_dataset = split_datasets["test"]
+                    else:
+                        self.dataset = dataset
+                        self.eval_dataset = None
+                else:
+                    raise ValueError(f"Unsupported file format: {dataset_path.suffix}")
         
         elif "dataset_name" in dataset_config:
             # Load from HuggingFace datasets
@@ -282,14 +318,36 @@ class PyTorchFineTuner:
                 dataset_config.get("dataset_config_name"),
                 split=dataset_config.get("train_split", "train")
             )
+            
+            if needs_eval:
+                # Try to load eval split or create one
+                try:
+                    self.eval_dataset = load_dataset(
+                        dataset_config["dataset_name"],
+                        dataset_config.get("dataset_config_name"),
+                        split=dataset_config.get("eval_split", "validation")
+                    )
+                except:
+                    # Create eval split from train
+                    eval_split = dataset_config.get("eval_split", 0.1)
+                    logger.info(f"Creating eval split ({eval_split:.0%}) from train dataset")
+                    split_datasets = self.dataset.train_test_split(test_size=eval_split, seed=42)
+                    self.dataset = split_datasets["train"]
+                    self.eval_dataset = split_datasets["test"]
+            else:
+                self.eval_dataset = None
         
         else:
             raise ValueError("No dataset path or name specified")
         
-        # Tokenize dataset
+        # Tokenize datasets
         self.dataset = self._tokenize_dataset(self.dataset)
+        if self.eval_dataset is not None:
+            self.eval_dataset = self._tokenize_dataset(self.eval_dataset)
+            logger.info(f"Dataset prepared with {len(self.dataset)} train and {len(self.eval_dataset)} eval examples")
+        else:
+            logger.info(f"Dataset prepared with {len(self.dataset)} examples (no evaluation)")
         
-        logger.info(f"Dataset prepared with {len(self.dataset)} examples")
         return self.dataset
     
     def _tokenize_dataset(self, dataset):
@@ -386,6 +444,7 @@ class PyTorchFineTuner:
                 model=self.model,
                 args=training_args,
                 train_dataset=self.dataset,
+                eval_dataset=getattr(self, 'eval_dataset', None),  # Pass eval dataset if available
                 data_collator=data_collator,
                 tokenizer=self.tokenizer,
             )

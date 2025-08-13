@@ -422,6 +422,191 @@ def generate_command(args):
     except Exception as e:
         print_error(f"Failed to generate response: {e}")
 
+def complete_command(args):
+    """Get text completion using strategy - provider-agnostic approach."""
+    try:
+        # Load strategies file - use provided path or default
+        strategies_file = Path(args.strategy_file if hasattr(args, 'strategy_file') else "demos/strategies.yaml")
+        if not strategies_file.exists():
+            print_error(f"Strategies file not found: {strategies_file}")
+            print_info("Use --strategy-file to specify a different strategies file")
+            return
+        
+        with open(strategies_file) as f:
+            import yaml
+            strategies_config = yaml.safe_load(f)
+        
+        strategies = strategies_config.get('strategies', {})
+        if args.strategy not in strategies:
+            print_error(f"Strategy '{args.strategy}' not found")
+            print_info(f"Available strategies: {', '.join(strategies.keys())}")
+            return
+        
+        strategy = strategies[args.strategy]
+        
+        # Determine which component to use (ollama, cloud_api, etc.)
+        # Priority: ollama > cloud_api > fine_tuner > mock_model
+        component = None
+        provider_type = None
+        
+        components = strategy.get('components', {})
+        if 'ollama' in components:
+            component = components['ollama']
+            provider_type = 'ollama'
+        elif 'cloud_api' in components:
+            component = components['cloud_api']
+            provider_type = 'cloud_api'
+        elif 'model_app' in components:
+            component = components['model_app']
+            # Check if it's a mock model or regular Ollama
+            if component.get('type') == 'mock_model':
+                provider_type = 'mock_model'
+            else:
+                provider_type = 'ollama'  # model_app is typically Ollama
+        elif 'fine_tuner' in components:
+            # Fine-tuner needs special handling for inference
+            component = components['fine_tuner']
+            provider_type = 'fine_tuner'
+        elif 'mock_model' in components:
+            component = components['mock_model']
+            provider_type = 'mock_model'
+        else:
+            print_error(f"No suitable provider found in strategy '{args.strategy}'")
+            return
+        
+        # Show provider details if verbose
+        if args.verbose:
+            print_info(f"Strategy: {args.strategy}")
+            if 'model_app' in components:
+                print_info(f"Provider: model_app (Ollama)")
+            else:
+                print_info(f"Provider: {provider_type}")
+            if provider_type == 'ollama':
+                model = component.get('config', {}).get('model', component.get('config', {}).get('default_model', 'unknown'))
+                print_info(f"Model: {model}")
+            elif provider_type == 'cloud_api':
+                provider = component.get('config', {}).get('provider', 'unknown')
+                model = component.get('config', {}).get('default_model', 'unknown')
+                print_info(f"Cloud Provider: {provider}")
+                print_info(f"Model: {model}")
+        
+        # Route to appropriate handler based on provider type
+        if provider_type == 'ollama':
+            # Use Ollama for completion
+            model_name = component.get('config', {}).get('model', 'llama3.2:3b')
+            base_url = component.get('config', {}).get('base_url', 'http://localhost:11434')
+            
+            import requests
+            payload = {
+                "model": model_name,
+                "prompt": args.prompt,
+                "stream": args.stream
+            }
+            
+            if args.system:
+                payload["system"] = args.system
+            if args.max_tokens:
+                payload["options"] = {"num_predict": args.max_tokens}
+            if args.temperature is not None:
+                payload.setdefault("options", {})["temperature"] = args.temperature
+            
+            response = requests.post(f"{base_url}/api/generate", json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if args.json:
+                    print(json.dumps({
+                        "strategy": args.strategy,
+                        "provider": "ollama",
+                        "model": model_name,
+                        "response": result.get("response", "")
+                    }, indent=2))
+                else:
+                    print_success("Response:")
+                    print(result.get("response", ""))
+            else:
+                print_error(f"Ollama request failed: {response.status_code}")
+                
+        elif provider_type == 'cloud_api':
+            # Use cloud API (OpenAI, etc.)
+            provider = component.get('config', {}).get('provider', 'openai')
+            api_key = component.get('config', {}).get('api_key', '')
+            model = component.get('config', {}).get('default_model', 'gpt-3.5-turbo')
+            
+            if not api_key or api_key.startswith('${'):
+                # Try to get from environment
+                api_key = os.getenv('OPENAI_API_KEY', '')
+            
+            if not api_key:
+                print_error("API key not found for cloud provider")
+                return
+            
+            # Use OpenAI-compatible API
+            import requests
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            messages = []
+            if args.system:
+                messages.append({"role": "system", "content": args.system})
+            messages.append({"role": "user", "content": args.prompt})
+            
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": args.stream
+            }
+            
+            if args.max_tokens:
+                payload["max_tokens"] = args.max_tokens
+            if args.temperature is not None:
+                payload["temperature"] = args.temperature
+            
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result['choices'][0]['message']['content']
+                if args.json:
+                    print(json.dumps({
+                        "strategy": args.strategy,
+                        "provider": provider,
+                        "model": model,
+                        "response": content
+                    }, indent=2))
+                else:
+                    print_success("Response:")
+                    print(content)
+            else:
+                print_error(f"API request failed: {response.status_code}")
+                print_error(response.text)
+                
+        elif provider_type == 'mock_model':
+            # Mock response for testing
+            response = f"[Mock response to: {args.prompt}]"
+            if args.json:
+                print(json.dumps({
+                    "strategy": args.strategy,
+                    "provider": "mock",
+                    "response": response
+                }, indent=2))
+            else:
+                print_success("Response (Mock):")
+                print(response)
+        else:
+            print_error(f"Provider type '{provider_type}' not yet implemented for completions")
+            
+    except Exception as e:
+        print_error(f"Failed to get completion: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 # ==============================================================================
 # UPDATED LEGACY COMMANDS (now strategy-aware)
@@ -2475,6 +2660,19 @@ Examples:
     generate_parser.add_argument("--json", action="store_true", help="Output response as JSON")
     generate_parser.add_argument("--save", help="Save response to file")
     
+    # Complete command - provider-agnostic text completion
+    complete_parser = subparsers.add_parser("complete", help="Get text completion using strategy (provider-agnostic)")
+    complete_parser.add_argument("prompt", help="Text prompt for completion")
+    complete_parser.add_argument("--strategy", "-s", required=True, help="Strategy name from strategies file")
+    complete_parser.add_argument("--strategy-file", "-f", default="demos/strategies.yaml", 
+                                 help="Path to strategies YAML file (default: demos/strategies.yaml)")
+    complete_parser.add_argument("--max-tokens", "-m", type=int, help="Maximum tokens to generate")
+    complete_parser.add_argument("--temperature", "-t", type=float, help="Temperature for generation")
+    complete_parser.add_argument("--stream", action="store_true", help="Stream the response")
+    complete_parser.add_argument("--system", help="System prompt to use")
+    complete_parser.add_argument("--json", action="store_true", help="Output response as JSON")
+    complete_parser.add_argument("--verbose", "-v", action="store_true", help="Show provider details")
+    
     # ==============================================================================
     # LEGACY COMMANDS (kept for backward compatibility)
     # ==============================================================================
@@ -2764,6 +2962,26 @@ Examples:
                              help="Export to Ollama format after training")
     train_parser.add_argument("--export-gguf", action="store_true",
                              help="Export to GGUF format after training")
+    train_parser.add_argument("--train-dataset",
+                             help="Path to training dataset (when using separate train/eval)")
+    train_parser.add_argument("--eval-dataset",
+                             help="Path to evaluation dataset (when using separate train/eval)")
+    
+    # ==============================================================================
+    # DATASPLIT COMMAND - Create train/eval splits for datasets
+    # ==============================================================================
+    datasplit_parser = subparsers.add_parser("datasplit", 
+                                            help="Create train/eval splits for fine-tuning datasets")
+    datasplit_parser.add_argument("input", 
+                                 help="Input JSONL file to split")
+    datasplit_parser.add_argument("--eval-percent", "-e", type=int, default=10,
+                                 help="Percentage for evaluation (1-50, default: 10)")
+    datasplit_parser.add_argument("--seed", "-s", type=int, default=42,
+                                 help="Random seed for reproducibility (default: 42)")
+    datasplit_parser.add_argument("--output-dir", "-o",
+                                 help="Output directory (defaults to input file directory)")
+    datasplit_parser.add_argument("--verbose", "-v", action="store_true",
+                                 help="Show detailed statistics")
     
     # ==============================================================================
     # SETUP COMMAND - Install tools and models from strategy requirements
@@ -2779,6 +2997,88 @@ Examples:
                              help="Show verbose output during setup")
     
     return parser
+
+def datasplit_command(args):
+    """Create train/eval splits for datasets."""
+    import json
+    import random
+    from pathlib import Path
+    
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print_error(f"Input file not found: {args.input}")
+        return
+    
+    # Validate eval percentage
+    if not 1 <= args.eval_percent <= 50:
+        print_error("Eval percentage must be between 1 and 50")
+        return
+    
+    # Set output directory
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = input_path.parent
+    
+    # Read all lines
+    if args.verbose:
+        print_info(f"Reading {input_path}...")
+    
+    with open(input_path, 'r') as f:
+        lines = f.readlines()
+    
+    total_count = len(lines)
+    if args.verbose:
+        print_info(f"Total examples: {total_count}")
+    
+    # Shuffle with seed for reproducibility
+    random.seed(args.seed)
+    random.shuffle(lines)
+    
+    # Calculate split point
+    split_point = int(total_count * (1 - args.eval_percent / 100))
+    train_lines = lines[:split_point]
+    eval_lines = lines[split_point:]
+    
+    # Generate output filenames
+    base_name = input_path.stem
+    train_file = output_dir / f"{base_name}_train.jsonl"
+    eval_file = output_dir / f"{base_name}_eval.jsonl"
+    
+    # Write train dataset
+    with open(train_file, 'w') as f:
+        f.writelines(train_lines)
+    
+    # Write eval dataset
+    with open(eval_file, 'w') as f:
+        f.writelines(eval_lines)
+    
+    # Print statistics
+    print_success(f"Split created successfully!")
+    
+    if args.verbose:
+        print("\n📊 Statistics:")
+        print(f"  • Train: {len(train_lines)} examples ({100-args.eval_percent}%)")
+        print(f"  • Eval:  {len(eval_lines)} examples ({args.eval_percent}%)")
+        print(f"  • Ratio: {len(train_lines):.1f}:{len(eval_lines):.1f}")
+        
+        # Sample the first example from each split
+        if train_lines:
+            try:
+                train_sample = json.loads(train_lines[0])
+                print("\n📝 Sample from training set:")
+                if 'instruction' in train_sample:
+                    print(f"  Instruction: {train_sample['instruction'][:100]}...")
+                if 'input' in train_sample:
+                    print(f"  Input: {train_sample['input'][:100]}...")
+            except:
+                pass
+    else:
+        print(f"  Train: {len(train_lines)} examples → {train_file}")
+        print(f"  Eval:  {len(eval_lines)} examples → {eval_file}")
+    
+    print(f"\n🎲 Random seed: {args.seed} (use same seed for reproducible splits)")
 
 def finetune_command(args):
     """Handle fine-tuning commands."""
@@ -4284,6 +4584,8 @@ def main():
         info_command(args)
     elif args.command == "generate":
         generate_command(args)
+    elif args.command == "complete":
+        complete_command(args)
     # Legacy commands
     elif args.command == "list":
         list_command(args)
@@ -4346,6 +4648,8 @@ def main():
         convert_command(args)
     elif args.command == "train":
         train_command(args)
+    elif args.command == "datasplit":
+        datasplit_command(args)
     elif args.command == "setup":
         setup_command(args)
     else:

@@ -203,10 +203,43 @@ uv run python cli.py test-local llama3.1:8b
 
 ### Training Commands
 
+#### `datasplit` - Create Train/Eval Splits
+```bash
+# Default 10% evaluation split
+uv run python cli.py datasplit data.jsonl
+
+# Custom 15% evaluation split  
+uv run python cli.py datasplit data.jsonl --eval-percent 15
+
+# 5% eval for maximum training data
+uv run python cli.py datasplit data.jsonl --eval-percent 5
+
+# With custom seed for reproducibility
+uv run python cli.py datasplit data.jsonl --seed 42
+
+# Verbose output with statistics
+uv run python cli.py datasplit data.jsonl --verbose
+
+# Output to specific directory
+uv run python cli.py datasplit data.jsonl --output-dir splits/
+```
+
+**Options:**
+- `--eval-percent, -e`: Percentage for evaluation (1-50, default: 10)
+- `--seed, -s`: Random seed for reproducibility (default: 42)
+- `--output-dir, -o`: Output directory (defaults to input file directory)
+- `--verbose, -v`: Show detailed statistics
+
 #### `train` - Start Training
 ```bash
 # With strategy
 uv run python cli.py train --strategy <strategy_name> --dataset <data.jsonl>
+
+# With separate train/eval datasets
+uv run python cli.py train \
+  --strategy demo3_training_optimized \
+  --train-dataset data_train.jsonl \
+  --eval-dataset data_eval.jsonl
 
 # Custom parameters
 uv run python cli.py train \

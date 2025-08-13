@@ -37,10 +37,22 @@ A comprehensive model management system providing unified access to **25+ cloud 
    - Integration with Weights & Biases for experiment tracking
    - *Impact: Enable custom model training on proprietary data*
 
+## 📚 Documentation
+
+### Training & Fine-Tuning
+- **[Training Overview](docs/TRAINING_OVERVIEW.md)** - Complete training system guide
+- **[PyTorch Training Guide](docs/PYTORCH_TRAINING_GUIDE.md)** - Comprehensive parameter reference with hardware-specific settings
+- **[Demo Scripts](demos/README.md)** - Working examples with evaluation
+
+### System Documentation
+- **[Setup Guide](docs/SETUP.md)** - Installation and configuration
+- **[CLI Reference](docs/CLI.md)** - Command documentation
+- **[Strategy System](docs/STRATEGIES.md)** - Configuration system
+
 ## 🚀 Quick Start
 
 ### ✨ Automatic Setup
-**Everything is installed automatically!** Just run any command and the system handles all dependencies. See [docs/SETUP.md](docs/SETUP.md) for details.
+**Everything is installed automatically!** Just run any command and the system handles all dependencies.
 
 ### Prerequisites
 - Python 3.10+
@@ -69,14 +81,14 @@ cp ../.env.example ../.env
 # List available models
 uv run python cli.py list
 
-# Send your first query
-uv run python cli.py query "What is machine learning?"
+# Send your first query (provider-agnostic with strategies)
+uv run python cli.py complete "What is machine learning?" --strategy local_development --strategy-file demos/strategies.yaml
 
 # Start interactive chat
 uv run python cli.py chat
 
-# Use a specific model
-uv run python cli.py query "Explain quantum computing" --provider openai_gpt4_turbo
+# Use a specific strategy for complex queries
+uv run python cli.py complete "Explain quantum computing" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
 
 # Use different configuration files (YAML or JSON supported)
 uv run python cli.py --config config/development.yaml list
@@ -113,28 +125,31 @@ uv run python cli.py --config config/ollama_local.yaml chat
 
 ### 🎯 **Core Commands**
 
-#### **Query - Send Single Requests**
+#### **Complete - Provider-Agnostic Text Completion (Recommended)**
 ```bash
-# Basic query
-uv run python cli.py query "Explain quantum computing"
+# Basic completion with strategy
+uv run python cli.py complete "Explain quantum computing" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml
 
-# Use specific provider
-uv run python cli.py query "Write Python code" --provider openai_gpt4o_mini
+# Use custom strategy file
+uv run python cli.py complete "Write Python code" --strategy production --strategy-file configs/prod.yaml
 
 # Control generation parameters
-uv run python cli.py query "Tell a creative story" --temperature 0.9 --max-tokens 500
+uv run python cli.py complete "Tell a creative story" --strategy demo2_multi_model --strategy-file demos/strategies.yaml --temperature 0.9 --max-tokens 500
 
 # Add system prompt
-uv run python cli.py query "Analyze this data" --system "You are a data scientist"
+uv run python cli.py complete "Analyze this data" --strategy local_development --strategy-file demos/strategies.yaml --system "You are a data scientist"
 
-# Stream response in real-time
-uv run python cli.py query "Tell a long story" --stream
-
-# Save response to file
-uv run python cli.py query "Write a README" --save output.md
+# Show provider details
+uv run python cli.py complete "Test query" --strategy demo3_training --strategy-file demos/strategies.yaml --verbose
 
 # Output as JSON
-uv run python cli.py query "List AI facts" --json
+uv run python cli.py complete "List AI facts" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml --json
+```
+
+#### **Query - Legacy Direct Provider Access**
+```bash
+# Legacy: Direct provider specification (use 'complete' for strategy-based approach)
+uv run python cli.py query "Write Python code" --provider openai_gpt4o_mini
 ```
 
 #### **Chat - Interactive Sessions**
@@ -662,14 +677,14 @@ cd ../models && uv run python cli.py finetune start --dataset generated_data.jso
 ```bash
 # Use models with RAG context
 cd ../rag && uv run python cli.py search "topic" | \
-  cd ../models && uv run python cli.py query "Summarize this context" --provider openai_gpt4o_mini
+  cd ../models && uv run python cli.py complete "Summarize this context" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
 ```
 
 ### 📝 **Prompts System Integration**  
 ```bash
 # Use optimized prompts with models
 cd ../prompts && uv run python -m prompts.cli execute "query" --template medical_qa | \
-  cd ../models && uv run python cli.py query - --provider anthropic_claude_3_haiku
+  cd ../models && uv run python cli.py complete - --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml
 ```
 
 ### 🔄 **Unified Workflows**
@@ -767,7 +782,7 @@ uv run python cli.py health-check
 uv run python cli.py list --detailed
 
 # Test with verbose output
-uv run python cli.py query "test" --provider openai_gpt4o_mini --json
+uv run python cli.py complete "test" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml --verbose --json
 ```
 
 ## 🧪 Testing & Development

@@ -671,20 +671,20 @@ development:
 
 # Example usage patterns:
 #
-# 1. Basic query with default provider:
-#    uv run python cli.py query "What is machine learning?"
+# 1. Basic query with strategy (provider-agnostic):
+#    uv run python cli.py complete "What is machine learning?" --strategy local_development --strategy-file demos/strategies.yaml
 #
-# 2. Use specific provider:
-#    uv run python cli.py query "Explain quantum computing" --provider anthropic_claude_3_sonnet
+# 2. Use specific strategy for complex queries:
+#    uv run python cli.py complete "Explain quantum computing" --strategy demo2_multi_model --strategy-file demos/strategies.yaml
 #
-# 3. Cost-sensitive queries:
-#    uv run python cli.py query "Simple question" --provider openai_gpt4o_mini
+# 3. Cost-sensitive queries with fallback:
+#    uv run python cli.py complete "Simple question" --strategy demo1_cloud_fallback --strategy-file demos/strategies.yaml
 #
-# 4. Code generation:
-#    uv run python cli.py query "Write a Python function to sort a list" --provider ollama_codellama_13b
+# 4. Code generation (uses local model):
+#    uv run python cli.py complete "Write a Python function to sort a list" --strategy local_development --strategy-file demos/strategies.yaml
 #
-# 5. Local-only for privacy:
-#    uv run python cli.py query "Sensitive data question" --provider ollama_llama3_1_8b
+# 5. Local-only for privacy (production hybrid with fallback):
+#    uv run python cli.py complete "Sensitive data question" --strategy production_hybrid --strategy-file demos/strategies.yaml
 #
 # 6. Batch processing:
 #    uv run python cli.py batch questions.txt --provider groq_mixtral_8x7b

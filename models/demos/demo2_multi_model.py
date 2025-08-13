@@ -112,7 +112,7 @@ def main():
     print("\nFor simple factual questions, we use fast, cheap models:")
     
     run_cli_command(
-        'uv run python cli.py query "What is 2+2?" --provider openai_gpt35_turbo',
+        'uv run python cli.py complete "What is 2+2?" --strategy demo2_multi_model --strategy-file demos/strategies.yaml',
         "Simple math question → GPT-3.5 Turbo"
     )
     
@@ -125,7 +125,7 @@ def main():
     print("\nFor complex reasoning, we use more advanced models:")
     
     run_cli_command(
-        'uv run python cli.py query "Explain the theory of relativity and its key implications for modern physics" --provider openai_gpt4o_mini',
+        'uv run python cli.py complete "Explain the theory of relativity and its key implications for modern physics" --strategy demo2_multi_model --strategy-file demos/strategies.yaml',
         "Complex physics question → GPT-4o Mini"
     )
     
@@ -138,7 +138,7 @@ def main():
     print("\nFor creative tasks, we use the most creative models:")
     
     run_cli_command(
-        'uv run python cli.py query "Write a humorous haiku about debugging code that won\'t work" --provider openai_gpt4o',
+        'uv run python cli.py complete "Write a humorous haiku about debugging code that won\'t work" --strategy demo2_multi_model --strategy-file demos/strategies.yaml',
         "Creative writing → GPT-4o",
         check_error=False
     )
@@ -171,7 +171,7 @@ def main():
         
         # Fallback to cloud for demonstration
         run_cli_command(
-            'uv run python cli.py query "Write a Python function to calculate fibonacci numbers" --provider openai_gpt35_turbo',
+            'uv run python cli.py complete "Write a Python function to calculate fibonacci numbers" --strategy demo2_multi_model --strategy-file demos/strategies.yaml',
             "Code generation → GPT-3.5 (fallback)",
             check_error=False
         )
@@ -218,13 +218,13 @@ def main():
     
     print("\n🔍 Try it yourself with specific task types:")
     print("   # Simple task")
-    print("   uv run python cli.py query 'What is 2+2?' --provider cloud_api")
+    print("   uv run python cli.py complete 'What is 2+2?' --strategy demo2_multi_model --strategy-file demos/strategies.yaml")
     print("   ")
     print("   # Complex task")
-    print("   uv run python cli.py query 'Explain quantum entanglement' --provider cloud_api")
+    print("   uv run python cli.py complete 'Explain quantum entanglement' --strategy demo2_multi_model --strategy-file demos/strategies.yaml")
     print("   ")
     print("   # Code task")
-    print("   uv run python cli.py query 'Write a Python sorting function' --provider model_app")
+    print("   uv run python cli.py complete 'Write a Python sorting function' --strategy demo2_multi_model --strategy-file demos/strategies.yaml")
 
 if __name__ == "__main__":
     main()
