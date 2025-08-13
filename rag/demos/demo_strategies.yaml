@@ -606,7 +606,7 @@ strategies:
           top_k: 5
 
   # =============================================================================
-  # AFI DOCUMENT PROCESSING STRATEGY
+  # DEMO 7: AFI DOCUMENT PROCESSING STRATEGY
   # =============================================================================
   - name: "afi_document_demo"
     description: "Specialized strategy for AFI (Air Force Instruction) document processing"
