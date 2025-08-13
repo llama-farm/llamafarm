@@ -6,15 +6,16 @@ from config.datamodel import LlamaFarmConfig
 from config.helpers.generator import generate_base_config_from_schema
 from pydantic import BaseModel
 
-from api.errors import NamespaceNotFoundError, ProjectConfigError, ProjectNotFoundError
+from api.errors import (
+  NamespaceNotFoundError,
+  ProjectConfigError,
+  ProjectNotFoundError,
+  SchemaNotFoundError,
+)
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
 logger = FastAPIStructLogger()
-
-class SchemaNotFoundError(Exception):
-  """Raised when the specified schema template cannot be located on disk."""
-  pass
 
 class Project(BaseModel):
   namespace: str
@@ -50,7 +51,7 @@ class ProjectService:
     cls,
     namespace: str,
     project_id: str,
-    schema_template: str | None = "default",
+    schema_template: str | None = None,
   ) -> LlamaFarmConfig:
     """
     Create a new project.
@@ -59,41 +60,44 @@ class ProjectService:
     project_dir = cls.get_project_dir(namespace, project_id)
     os.makedirs(project_dir, exist_ok=True)
 
-    # Determine schema path from provided template (do not mutate global settings)
-    schema_template = schema_template or "default"
-    schema_dir = getattr(settings, "lf_schema_dir", None)
+    # Resolve schema path using shared helper (defaults to settings.lf_schema_template)
+    schema_path = cls._resolve_schema_path(schema_template)
 
-    if schema_dir is None:
-      # default to repo rag/schemas or config/schemas
-      candidate_paths = [
-        Path(__file__).parent.parent.parent
-        / "config"
-        / "schemas"
-        / f"{schema_template}.yaml",
-        Path(__file__).parent.parent.parent / "rag" / "schemas" / "consolidated.yaml",
-      ]
-    else:
-      candidate_paths = [Path(schema_dir) / f"{schema_template}.yaml"]
-
-    schema_path: Path | None = None
-    for p in candidate_paths:
-      if p.exists():
-        schema_path = p
-        break
-
-    if schema_path is None:
-      raise SchemaNotFoundError(
-        f"No schema file found for template '{schema_template}'. "
-        f"Searched: {', '.join(str(p) for p in candidate_paths)}"
-      )
-
-    cfg_dict = generate_base_config_from_schema(str(schema_path))
-    # Ensure the name matches requested project id
-    cfg_dict.update({"name": project_id})
+    # Generate config directly with correct name
+    cfg_dict = generate_base_config_from_schema(str(schema_path), name=project_id)
 
     # Persist
     cfg_model = cls.save_config(namespace, project_id, LlamaFarmConfig(**cfg_dict))
     return cfg_model
+
+  @classmethod
+  def _resolve_schema_path(cls, schema_template: str | None) -> Path:
+    """
+    Resolve a schema template name to a concrete filesystem path.
+
+    The resolution order is:
+    - If settings.lf_schema_dir is set: {lf_schema_dir}/{template}.yaml
+    - Otherwise, look under repo 'config/schemas/{template}.yaml'
+    - Finally, fall back to 'rag/schemas/consolidated.yaml' as a generic schema
+    """
+    template = (
+      schema_template if schema_template is not None else settings.lf_schema_template
+    )
+    schema_dir = getattr(settings, "lf_schema_dir", None)
+
+    if schema_dir is None:
+      candidate_paths = [
+        Path(__file__).parent.parent.parent / "config" / "schemas" / f"{template}.yaml",
+        Path(__file__).parent.parent.parent / "rag" / "schemas" / "consolidated.yaml",
+      ]
+    else:
+      candidate_paths = [Path(schema_dir) / f"{template}.yaml"]
+
+    for candidate in candidate_paths:
+      if candidate.exists():
+        return candidate
+
+    raise SchemaNotFoundError(template, [str(p) for p in candidate_paths])
 
   @classmethod
   def list_projects(cls, namespace: str) -> list[Project]:
