@@ -17,7 +17,7 @@ class ListProjectsResponse(BaseModel):
 
 class CreateProjectRequest(BaseModel):
     name: str
-    schema_template: str | None = "default"
+    schema_template: str | None = None
 
 class CreateProjectResponse(BaseModel):
     project: Project

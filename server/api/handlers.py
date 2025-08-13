@@ -4,9 +4,13 @@ from config import ConfigError
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from api.errors import NotFoundError, ProjectConfigError, ProjectNotFoundError
+from api.errors import (
+    NotFoundError,
+    ProjectConfigError,
+    ProjectNotFoundError,
+    SchemaNotFoundError,
+)
 from api.models import ErrorResponse
-from services.project_service import SchemaNotFoundError
 
 logger = logging.getLogger(__name__)
 
