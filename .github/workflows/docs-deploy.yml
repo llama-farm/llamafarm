@@ -41,6 +41,9 @@ jobs:
   deploy:
     # if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./docs/website
     steps:
       - uses: actions/checkout@v4
         with:
