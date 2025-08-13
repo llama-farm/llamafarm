@@ -24,7 +24,7 @@ def generate_base_config() -> dict:
     return cfg
 
 
-def generate_base_config_from_schema(schema_path: str) -> dict:
+def generate_base_config_from_schema(schema_path: str, *, name: str | None = None) -> dict:
     """
     Generate a valid base configuration from a YAML schema/template file.
 
@@ -59,4 +59,7 @@ def generate_base_config_from_schema(schema_path: str) -> dict:
         raise ValueError(f"Schema content is not a valid LlamaFarmConfig: {e}") from e
 
     # Return JSON-serializable dict matching existing generate_base_config format
-    return validated.model_dump(mode="json", exclude_none=True)
+    cfg = validated.model_dump(mode="json", exclude_none=True)
+    if name is not None:
+        cfg["name"] = name
+    return cfg
