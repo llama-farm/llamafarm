@@ -1,9 +1,15 @@
-from config.datamodel import LlamaFarmConfig
+import sys
+from pathlib import Path
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from api.models import ErrorResponse
+from api.errors import ErrorResponse
 from services.project_service import ProjectService
+
+repo_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(repo_root))
+from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 
 class Project(BaseModel):
@@ -17,7 +23,7 @@ class ListProjectsResponse(BaseModel):
 
 class CreateProjectRequest(BaseModel):
     name: str
-    schema_template: str | None = None
+    config_template: str | None = None
 
 class CreateProjectResponse(BaseModel):
     project: Project
@@ -71,7 +77,7 @@ async def list_projects(namespace: str):
 )
 async def create_project(namespace: str, request: CreateProjectRequest):
     cfg = ProjectService.create_project(
-        namespace, request.name, request.schema_template
+        namespace, request.name, request.config_template
     )
     return CreateProjectResponse(
       project=Project(

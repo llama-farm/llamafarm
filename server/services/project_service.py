@@ -1,9 +1,7 @@
 import os
+import sys
 from pathlib import Path
 
-from config import ConfigError, load_config, save_config
-from config.datamodel import LlamaFarmConfig
-from config.helpers.generator import generate_base_config_from_schema
 from pydantic import BaseModel
 
 from api.errors import (
@@ -14,6 +12,16 @@ from api.errors import (
 )
 from core.logging import FastAPIStructLogger
 from core.settings import settings
+
+repo_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(repo_root))
+from config import (  # noqa: E402
+  ConfigError,
+  generate_base_config,
+  load_config,
+  save_config,
+)
+from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 logger = FastAPIStructLogger()
 
@@ -51,7 +59,7 @@ class ProjectService:
     cls,
     namespace: str,
     project_id: str,
-    schema_template: str | None = None,
+    config_template: str | None = None,
   ) -> LlamaFarmConfig:
     """
     Create a new project.
@@ -60,35 +68,36 @@ class ProjectService:
     project_dir = cls.get_project_dir(namespace, project_id)
     os.makedirs(project_dir, exist_ok=True)
 
-    # Resolve schema path using shared helper (defaults to settings.lf_schema_template)
-    schema_path = cls._resolve_schema_path(schema_template)
+    # Resolve config template path using shared helper
+    schema_path = cls._resolve_template_path(config_template)
 
     # Generate config directly with correct name
-    cfg_dict = generate_base_config_from_schema(str(schema_path), name=project_id)
+    cfg_dict = generate_base_config(schema_path=str(schema_path), name=project_id)
 
     # Persist
     cfg_model = cls.save_config(namespace, project_id, LlamaFarmConfig(**cfg_dict))
     return cfg_model
 
   @classmethod
-  def _resolve_schema_path(cls, schema_template: str | None) -> Path:
+  def _resolve_template_path(cls, config_template: str | None) -> Path:
     """
-    Resolve a schema template name to a concrete filesystem path.
+    Resolve a config template name to a concrete filesystem path.
 
     The resolution order is:
-    - If settings.lf_schema_dir is set: {lf_schema_dir}/{template}.yaml
-    - Otherwise, look under repo 'config/schemas/{template}.yaml'
+    - If settings.lf_template_dir is set: {lf_template_dir}/{template}.yaml
+    - Otherwise, look under repo 'config/templates/{template}.yaml'
     - Finally, fall back to 'rag/schemas/consolidated.yaml' as a generic schema
     """
-    template = (
-      schema_template if schema_template is not None else settings.lf_schema_template
-    )
-    schema_dir = getattr(settings, "lf_schema_dir", None)
+    default_template = settings.lf_config_template
+    template = config_template if config_template is not None else default_template
+    schema_dir = settings.lf_template_dir
 
     if schema_dir is None:
       candidate_paths = [
-        Path(__file__).parent.parent.parent / "config" / "schemas" / f"{template}.yaml",
-        Path(__file__).parent.parent.parent / "rag" / "schemas" / "consolidated.yaml",
+        Path(__file__).parent.parent.parent
+        / "config" / "templates" / f"{template}.yaml",
+        Path(__file__).parent.parent.parent
+        / "rag" / "schemas" / "consolidated.yaml",
       ]
     else:
       candidate_paths = [Path(schema_dir) / f"{template}.yaml"]
