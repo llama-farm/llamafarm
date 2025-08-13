@@ -1,9 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {
@@ -35,7 +32,39 @@ export default {
           '100%': { transform: 'translateY(-50%)' },
         },
       },
+      fontFamily: {
+        // Use IBM Plex Sans everywhere by default
+        sans: [
+          '"IBM Plex Sans"',
+          'ui-sans-serif',
+          'system-ui',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica',
+          'Arial',
+          'sans-serif',
+        ],
+        // Map serif utility to Sans as well to keep existing components consistent
+        serif: [
+          '"IBM Plex Sans"',
+          'ui-serif',
+          'Georgia',
+          'Cambria',
+          'Times New Roman',
+          'serif',
+        ],
+        // Use IBM Plex Mono for code-like inputs/blocks
+        mono: [
+          '"IBM Plex Mono"',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Monaco',
+          'Consolas',
+          'monospace',
+        ],
+      },
     },
   },
   plugins: [],
-} 
+}

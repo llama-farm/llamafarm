@@ -14,8 +14,8 @@ const Dashboard = () => {
   return (
     <div className="w-full flex flex-col">
       <DataCards />
-      <div className="w-full flex flex-row gap-2 mt-4">
-        <div className="w-3/5 flex flex-col gap-2">
+      <div className="w-full flex flex-row gap-4 mt-4">
+        <div className="w-3/5 flex flex-col gap-4">
           <div className="flex flex-col">
             <div className="flex flex-row gap-2 items-center h-[40px] px-2 rounded-tl-lg rounded-tr-lg justify-between bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
               <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
@@ -26,7 +26,7 @@ const Dashboard = () => {
                 View and add
               </button>
             </div>
-            <div className="p-2 flex flex-col gap-2 rounded-bl-lg rounded-br-lg bg-white dark:bg-blue-500">
+            <div className="p-6 flex flex-col gap-2 rounded-b-lg bg-white dark:bg-blue-500">
               <div className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-gray-200 dark:bg-blue-700">
                 <div className="text-gray-700 dark:text-white">
                   dataset-1-aircraft-logs
@@ -48,12 +48,12 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-          <div className="flex flex-row gap-2 rounded-lg">
+          <div className="flex flex-row gap-4 rounded-lg">
             <div className="w-1/2">
               <div className="h-[40px] px-2 flex items-center rounded-tl-lg rounded-tr-lg bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
                 <span className="text-gray-700 dark:text-white">Models</span>
               </div>
-              <div className="p-4 flex flex-col min-h-[325px] rounded-bl-lg rounded-br-lg bg-white dark:bg-blue-500">
+              <div className="p-6 flex flex-col min-h-[325px] rounded-b-lg bg-white dark:bg-blue-500">
                 <div className="mb-4">
                   <label className="text-xs text-gray-600 dark:text-gray-100">
                     Current model
@@ -104,7 +104,7 @@ const Dashboard = () => {
                   <FontIcon type="add" className="w-4 h-4" />
                 </button>
               </div>
-              <div className="p-4 flex flex-col min-h-[325px] justify-between rounded-bl-lg rounded-br-lg bg-white dark:bg-blue-500">
+              <div className="p-6 flex flex-col min-h-[325px] justify-between rounded-b-lg bg-white dark:bg-blue-500">
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-row gap-2 items-center border-[1px] border-solid border-blue-200 rounded-lg py-1 px-2 justify-between bg-white dark:bg-blue-600 dark:border-blue-600">
                     <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
@@ -176,7 +176,7 @@ const Dashboard = () => {
             </span>
             <FontIcon type="recently-viewed" className="w-4 h-4" />
           </div>
-          <div className="p-4 flex flex-col rounded-bl-lg rounded-br-lg bg-white dark:bg-blue-500">
+          <div className="p-6 flex flex-col rounded-b-lg bg-white dark:bg-blue-500">
             <div className="flex flex-col gap-2 h-[400px] overflow-y-auto">
               <div className="text-xs text-blue-200 dark:text-blue-100">
                 Today
