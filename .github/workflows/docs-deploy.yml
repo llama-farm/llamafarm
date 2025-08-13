@@ -58,5 +58,5 @@ jobs:
         run: |
           git config --global user.email "ops@llamafarm.dev"
           git config --global user.name "llama-farm-bot"
-          yarn install --frozen-lockfile
-          yarn deploy
+          npm i
+          npm run deploy
