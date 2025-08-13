@@ -1,0 +1,19 @@
+# Modelfile for converted model
+FROM /var/folders/w2/j17658j10xz96lm4ndpwtw1r0000gn/T/tmpvi2thc42/medical-tinyllama-3.gguf
+
+# Model parameters
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER num_predict 2048
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|end|>"
+PARAMETER stop "</s>"
+
+# System prompt
+SYSTEM "You are a helpful assistant."
+
+# Template (for chat models)
+TEMPLATE """{{ if .System }}System: {{ .System }}
+{{ end }}{{ if .Prompt }}User: {{ .Prompt }}
+{{ end }}Assistant: """
