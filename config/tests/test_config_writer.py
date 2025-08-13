@@ -22,6 +22,7 @@ class TestConfigWriter:
         config: dict[str, Any] = {
             "version": Version.v1,
             "name": "sample_config",
+            "namespace": "test",
             "prompts": [
                 {
                     "name": "test_prompt",
