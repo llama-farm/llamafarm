@@ -137,11 +137,35 @@ class LlamaProgressTracker:
                     if key.startswith('_'):
                         continue
                     # Truncate very long values for readability
-                    if isinstance(value, str) and len(value) > 200:
-                        value = value[:197] + "..."
+                    # For content field, show more text (up to 800 chars)
+                    if isinstance(value, str):
+                        if key == 'content' and len(value) > 800:
+                            value = value[:797] + "..."
+                        elif key != 'content' and len(value) > 200:
+                            value = value[:197] + "..."
                     elif isinstance(value, dict):
-                        # Show dict in a cleaner format
-                        if len(str(value)) > 200:
+                        # Show dict in a cleaner format for metadata
+                        if key == 'metadata' and value:
+                            # For metadata, show important fields
+                            important_fields = ['page_number', 'section', 'paragraph_refs', 
+                                              'afi_references', 'form_numbers', 'compliance_terms',
+                                              'warning_statements', 'technical_orders']
+                            shown_items = []
+                            for field in important_fields:
+                                if field in value:
+                                    shown_items.append(f"{field}: {value[field]}")
+                            
+                            # Add any other non-empty fields (up to a limit)
+                            other_fields = [k for k in value.keys() if k not in important_fields and not k.startswith('_')]
+                            for field in other_fields[:5]:  # Show up to 5 additional fields
+                                if value[field]:
+                                    shown_items.append(f"{field}: {str(value[field])[:50]}")
+                            
+                            if shown_items:
+                                value = "{" + ", ".join(shown_items) + "}"
+                            else:
+                                value = f"{{...{len(value)} items...}}"
+                        elif len(str(value)) > 500:  # Increased limit for other dicts
                             value = f"{{...{len(value)} items...}}"
                     elif isinstance(value, list) and len(value) > 10:
                         value = f"[...{len(value)} items...]"
