@@ -45,10 +45,20 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
   const [inputValue, setInputValue] = useState('')
 
   const handleSendClick = () => {
-    setMessages([
-      ...messages,
-      { type: 'user', content: inputValue, timestamp: new Date() },
+    const text = inputValue.trim()
+    if (!text) return
+    setMessages(prev => [
+      ...prev,
+      { type: 'user', content: text, timestamp: new Date() },
     ])
+    setInputValue('')
+  }
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendClick()
+    }
   }
 
   return (
@@ -70,16 +80,17 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
           isPanelOpen ? 'flex' : 'hidden'
         }`}
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           {messages.map((message, index) => (
             <Message key={index} message={message} />
           ))}
         </div>
-        <div className="flex flex-col gap-2 p-2 rounded-lg bg-[#F4F4F4] dark:bg-blue-700">
+        <div className="flex flex-col gap-3 p-3 rounded-lg bg-[#F4F4F4] dark:bg-blue-700">
           <textarea
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
-            className="w-full h-8 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-gray-900 placeholder-gray-500 dark:text-white dark:placeholder-white"
+            onKeyDown={handleKeyDown}
+            className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-gray-900 placeholder-gray-500 dark:text-white dark:placeholder-white"
             placeholder="Type here..."
           />
           <FontIcon
