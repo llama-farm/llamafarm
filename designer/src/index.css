@@ -8,6 +8,24 @@ body,
   width: 100%;
   height: 100% !important;
   transition: background-color 0.3s ease, color 0.3s ease;
+  font-family: theme('fontFamily.sans');
+}
+
+/* Helper for code-like inputs/areas */
+.code-like {
+  font-family: theme('fontFamily.mono');
+}
+
+/* Page fade overlay animation */
+@keyframes page-fade-in-out {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.page-fade-overlay {
+  animation: page-fade-in-out 1.2s ease-in-out forwards;
 }
 
 .custom-dashed-border {
