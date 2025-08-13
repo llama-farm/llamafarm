@@ -1,3 +1,98 @@
+/* Fonts */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --ifm-font-family-base: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  --ifm-font-family-monospace: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Designer-inspired palette */
+  --brand-blue-50: #D3DDFF;
+  --brand-blue-100: #85B1FF;
+  --brand-blue-200: #017BF7;
+  --brand-blue-300: #007FFF;
+  --brand-blue-400: #0F246D;
+  --brand-blue-500: #131E45;
+  --brand-blue-700: #040C1D;
+  --brand-green-100: #48FFE4;
+
+  /* Primary color (light) */
+  --ifm-color-primary: var(--brand-blue-200);
+  --ifm-color-primary-dark: #0369d1;
+  --ifm-color-primary-darker: #025dbb;
+  --ifm-color-primary-darkest: #024a93;
+  --ifm-color-primary-light: #2a90ff;
+  --ifm-color-primary-lighter: #61a9ff;
+  --ifm-color-primary-lightest: #9bc7ff;
+
+  --ifm-font-size-base: 16px;
+  --ifm-line-height-base: 1.65;
+  --ifm-button-border-radius: 10px;
+  --ifm-global-radius: 12px;
+}
+
+/* Dark theme overrides */
+html[data-theme='dark'] {
+  --ifm-color-primary: var(--brand-green-100);
+  --ifm-color-primary-dark: #19e6ca;
+  --ifm-color-primary-darker: #12cbb2;
+  --ifm-color-primary-darkest: #0ea190;
+
+  --ifm-background-color: #000B1B;
+  --ifm-navbar-background-color: #040C1D;
+  --ifm-card-background-color: #131E45;
+  --ifm-code-background: #0c1634;
+}
+
+/* Navbar gradient + border */
+.navbar {
+  background: linear-gradient(180deg, rgba(19,30,69,0.85) 0%, rgba(4,12,29,0.95) 100%);
+  backdrop-filter: saturate(1.1) blur(6px);
+  border-bottom: 1px solid rgba(133,177,255,0.25);
+}
+html[data-theme='light'] .navbar {
+  background: linear-gradient(180deg, rgba(255,255,255,0.8) 0%, rgba(240,246,255,0.9) 100%);
+  border-bottom: 1px solid rgba(0,127,255,0.20);
+}
+
+/* Page backgrounds */
+html[data-theme='dark'] .main-wrapper {
+  background:
+    radial-gradient(1200px 600px at -10% -10%, rgba(15,36,109,0.35), transparent 60%),
+    radial-gradient(800px 400px at 120% 10%, rgba(72,255,228,0.12), transparent 60%),
+    #000B1B;
+}
+html[data-theme='light'] .main-wrapper {
+  background:
+    radial-gradient(1200px 600px at -10% -10%, rgba(1,123,247,0.06), transparent 60%),
+    #f6f8ff;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 { letter-spacing: 0.2px; }
+
+/* Links */
+.markdown a, .menu__link--active, .pagination-nav__link { text-underline-offset: 3px; }
+/* Keep color change on hover but remove underline */
+.markdown a:hover, .menu__link:hover { text-decoration: none; }
+
+/* Cards and admonitions */
+.card, .theme-admonition, .menu__list-item-collapsible {
+  border-radius: 12px;
+  border: 1px solid rgba(133,177,255,0.25);
+}
+
+/* Code blocks */
+code, kbd, samp, pre { font-family: var(--ifm-font-family-monospace); }
+html[data-theme='light'] pre { background: #0d1a3b0d; }
+html[data-theme='dark'] pre { background: #0c1634; }
+
+/* Buttons */
+.button--primary { box-shadow: 0 4px 12px rgba(1,123,247,0.24); }
+html[data-theme='dark'] .button--primary { box-shadow: 0 4px 12px rgba(72,255,228,0.18); }
+
+/* Sidebar */
+html[data-theme='dark'] .menu, html[data-theme='dark'] .menu__list-item-collapsible .menu__link { background: transparent; }
+
 /**
  * LlamaFarm Custom Styles
  * Brand colors and custom styling for the LlamaFarm documentation site
@@ -6,15 +101,6 @@
 /* LlamaFarm Brand Colors */
 :root {
   /* Primary brand colors - inspired by gradients and llamas */
-  --ifm-color-primary: #764ba2;
-  --ifm-color-primary-dark: #6a4291;
-  --ifm-color-primary-darker: #633e89;
-  --ifm-color-primary-darkest: #523371;
-  --ifm-color-primary-light: #8354b3;
-  --ifm-color-primary-lighter: #8a5bb7;
-  --ifm-color-primary-lightest: #9d6bc5;
-  
-  /* Secondary colors */
   --ifm-color-secondary: #667eea;
   --ifm-color-secondary-dark: #4c63e2;
   --ifm-color-secondary-darker: #3f56df;
@@ -22,17 +108,7 @@
   --ifm-color-secondary-light: #7a8ff2;
   --ifm-color-secondary-lighter: #879bf4;
   --ifm-color-secondary-lightest: #a1b9f8;
-  
-  /* Custom LlamaFarm colors */
-  --llamafarm-gradient-start: #667eea;
-  --llamafarm-gradient-end: #764ba2;
-  --llamafarm-accent: #f093fb;
-  --llamafarm-warm: #ff9a9e;
-  
-  /* Code and syntax highlighting */
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(118, 75, 162, 0.1);
-  
+
   /* Custom spacing */
   --ifm-spacing-horizontal: 1.5rem;
   --ifm-heading-margin-bottom: 1rem;
@@ -40,63 +116,18 @@
 
 /* Dark mode colors */
 [data-theme='dark'] {
-  --ifm-color-primary: #a1b9f8;
-  --ifm-color-primary-dark: #879bf4;
-  --ifm-color-primary-darker: #7a8ff2;
-  --ifm-color-primary-darkest: #5470eb;
-  --ifm-color-primary-light: #b5c7fc;
-  --ifm-color-primary-lighter: #c2d1fd;
-  --ifm-color-primary-lightest: #dce7ff;
-  
   --docusaurus-highlighted-code-line-bg: rgba(161, 185, 248, 0.1);
-  
-  /* Better contrast for dark mode */
-  --ifm-background-color: #1a1a1a;
-  --ifm-background-surface-color: #242424;
-}
-
-/* Navbar customization */
-.navbar {
-  background: linear-gradient(135deg, var(--llamafarm-gradient-start), var(--llamafarm-gradient-end));
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.navbar__title {
-  font-weight: 700;
-  font-size: 1.25rem;
-  background: linear-gradient(45deg, #ffffff, #f0f0f0);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.navbar__link {
-  color: rgba(255, 255, 255, 0.9) !important;
-}
-
-.navbar__link:hover {
-  color: #ffffff !important;
 }
 
 /* Hero section enhancements */
-.hero {
-  background: linear-gradient(135deg, var(--llamafarm-gradient-start), var(--llamafarm-gradient-end));
-  color: white;
-}
+.hero { color: white; }
 
-.hero__title {
-  font-size: 3.5rem;
-  font-weight: 800;
-  margin-bottom: 1rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
+/* Preserve existing effects */
+.hero__title { font-size: 3.5rem; font-weight: 800; margin-bottom: 1rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+.hero__subtitle { font-size: 1.5rem; font-weight: 400; opacity: .95; text-shadow: 0 1px 2px rgba(0,0,0,.1); }
 
-.hero__subtitle {
-  font-size: 1.5rem;
-  font-weight: 400;
-  opacity: 0.95;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
+/* Utility */
+.gradient-text { background: linear-gradient(45deg, var(--ifm-color-primary), var(--ifm-color-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
 /* Button enhancements */
 .button {
@@ -169,22 +200,21 @@
 
 /* Footer */
 .footer {
-  background: linear-gradient(135deg, #2d3748, #1a202c);
-  color: #e2e8f0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(245,249,255,0.95) 100%);
+  color: #1f2937;
+  border-top: 1px solid rgba(0,127,255,0.15);
 }
+.footer__title { color: #0f172a; font-weight: 600; }
+.footer__link-item { color: #334155; }
+.footer__link-item:hover { color: var(--ifm-color-primary); }
 
-.footer__title {
-  color: #ffffff;
-  font-weight: 600;
+html[data-theme='dark'] .footer {
+  background: linear-gradient(180deg, #0b142b 0%, #040c1d 100%);
+  color: #e5e7eb;
+  border-top: 1px solid rgba(133,177,255,0.25);
 }
-
-.footer__link-item {
-  color: #cbd5e0;
-}
-
-.footer__link-item:hover {
-  color: var(--ifm-color-primary-lighter);
-}
+html[data-theme='dark'] .footer__link-item { color: #cbd5e1; }
+html[data-theme='dark'] .footer__link-item:hover { color: var(--ifm-color-primary); }
 
 /* Breadcrumbs */
 .breadcrumbs__link {
@@ -228,13 +258,6 @@
 }
 
 /* Custom utility classes */
-.gradient-text {
-  background: linear-gradient(45deg, var(--ifm-color-primary), var(--ifm-color-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
 .glass-effect {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
@@ -267,3 +290,34 @@
     display: none !important;
   }
 }
+
+/* Blog list & post titles */
+.blog .markdown h1, .blog .markdown .blog-post-title, .blog .markdown h2 {
+  font-size: 1.5rem !important;
+}
+.blog .markdown h3 { font-size: 1.1rem !important; }
+
+/* Blog title color and hover */
+html[data-theme='dark'] .blog .markdown h1,
+html[data-theme='dark'] .blog .markdown h2,
+html[data-theme='dark'] .blog .markdown .blog-post-title,
+html[data-theme='dark'] .blog .pagination-nav__label,
+html[data-theme='dark'] .blog .article__title a {
+  color: #ffffff !important;
+}
+
+.blog .article__title a,
+.blog .markdown a {
+  text-decoration: none !important;
+}
+
+.blog .article__title a:hover,
+.blog .markdown a:hover {
+  color: var(--ifm-color-primary) !important;
+  text-decoration: none !important;
+}
+
+.blog .container .article__title a { text-decoration: none !important; }
+.blog .container .article__title a:hover { text-decoration: none !important; color: var(--ifm-color-primary) !important; }
+html[data-theme='dark'] .blog .container .article__title a { color: #ffffff !important; }
+.blog .container .article__title, .blog .container .blog-post-title { font-size: 1.35rem !important; }
