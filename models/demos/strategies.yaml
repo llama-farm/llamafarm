@@ -1,0 +1,836 @@
+# LlamaFarm Demo Strategies
+# All demos are driven by these strategy definitions
+# NO HARDCODED VALUES - everything comes from here
+
+version: "2.0"
+
+strategies:
+  # =============================================================================
+  # DEMO 1: CLOUD API WITH FALLBACK STRATEGY
+  # =============================================================================
+  
+  demo1_cloud_fallback:
+    name: "Cloud API with Automatic Fallback"
+    description: "Production-grade API management with automatic fallback to local models"
+    
+    components:
+      # Primary cloud provider
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o-mini
+          timeout: 30
+          max_retries: 3
+          
+      # Local fallback model
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          timeout: 60
+          
+    # Fallback chain - automatically tries each in order
+    fallback_chain:
+      - provider: cloud_api
+        model: gpt-4o-mini
+        conditions:
+          - api_healthy
+          - within_rate_limit
+          
+      - provider: cloud_api
+        model: gpt-4o-mini  # Fast and efficient
+        conditions:
+          - api_healthy
+          
+      - provider: model_app
+        model: llama3.2:3b
+        conditions:
+          - service_running
+          
+      - provider: model_app
+        model: mistral:7b
+        conditions:
+          - service_running
+          
+      - provider: model_app
+        model: llama3.2:3b
+        conditions:
+          - service_running
+          
+    # Demo-specific settings
+    test_queries:
+      - "What is the capital of France?"
+      - "Explain quantum computing in simple terms"
+      - "Write a haiku about programming"
+      
+    monitoring:
+      track_latency: true
+      track_costs: true
+      track_provider: true
+      log_level: INFO
+
+  # =============================================================================
+  # DEMO 2: MULTI-MODEL OPTIMIZATION STRATEGY
+  # =============================================================================
+  
+  demo2_multi_model:
+    name: "Multi-Model Task Optimization"
+    description: "Intelligent routing to different models based on task complexity"
+    
+    components:
+      # Multiple cloud providers for different tasks
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          timeout: 30
+          
+      # Local models for specific tasks
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          timeout: 60
+          
+    # Task-based routing rules
+    routing_rules:
+      simple:
+        description: "Simple factual queries"
+        provider: cloud_api
+        model: gpt-4o-mini  # Fast and efficient
+        max_tokens: 100
+        temperature: 0.1
+        cost_per_1k_tokens: 0.002
+        
+      complex:
+        description: "Complex reasoning tasks"
+        provider: cloud_api
+        model: gpt-4o-mini
+        max_tokens: 500
+        temperature: 0.7
+        cost_per_1k_tokens: 0.015
+        
+      creative:
+        description: "Creative writing tasks"
+        provider: cloud_api
+        model: gpt-4o
+        max_tokens: 1000
+        temperature: 0.9
+        cost_per_1k_tokens: 0.03
+        
+      code:
+        description: "Code generation and analysis"
+        provider: model_app
+        model: mistral:7b
+        max_tokens: 2000
+        temperature: 0.3
+        cost_per_1k_tokens: 0.0  # Local model
+        
+    # Test tasks for demonstration
+    test_tasks:
+      simple:
+        - "What is 2+2?"
+        - "What is the capital of Japan?"
+        - "Define photosynthesis"
+        
+      complex:
+        - "Explain the theory of relativity"
+        - "What are the implications of quantum entanglement?"
+        - "Analyze the causes of World War I"
+        
+      creative:
+        - "Write a haiku about programming"
+        - "Create a short story about AI"
+        - "Compose a limerick about debugging"
+        
+      code:
+        - "Write a Python function to calculate fibonacci"
+        - "Explain this code: lambda x: x**2"
+        - "Create a sorting algorithm"
+        
+    monitoring:
+      track_model_selection: true
+      track_task_routing: true
+      compare_performance: true
+      log_level: INFO
+
+  # =============================================================================
+  # DEMO 3: BASE MODEL TESTING (BEFORE TRAINING)
+  # =============================================================================
+  
+  demo3_base_model:
+    name: "Base Llama 3.2:3b for Testing"
+    description: "Base model before fine-tuning - for comparison"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3.2:3b
+          timeout: 60
+          auto_pull: true
+          
+  # =============================================================================
+  # DEMO 3: FINE-TUNED MODEL TESTING (AFTER TRAINING)
+  # =============================================================================
+  
+  demo3_finetuned_model:
+    name: "Fine-tuned Medical Model"
+    description: "Medical-specific fine-tuned model after training"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: medical-llama3.2-optimized  # The converted optimized fine-tuned model
+          timeout: 60
+          
+  # =============================================================================
+  # DEMO 3: OPTIMIZED TRAINING CONFIGURATION
+  # =============================================================================
+  
+  demo3_training_optimized:
+    name: "Optimized Medical Model Training for Llama 3.2"
+    description: "Prevents conversation generation and ensures single-turn responses"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3.2:3b
+          timeout: 60
+          auto_pull: true
+          
+      fine_tuner:
+        type: pytorch
+        config:
+          hardware:
+            device: auto
+            memory_gb: 8
+            precision:
+              cuda:
+                use_fp16: true
+                use_bf16: false
+                use_tf32: true
+              mps:
+                use_fp16: false
+                use_bf16: false
+              cpu:
+                use_fp16: false
+            optimization:
+              gradient_checkpointing: false
+              gradient_accumulation_steps: 2
+              mixed_precision: no
+          
+          base_model:
+            name: meta-llama/Llama-3.2-3B-Instruct
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
+            cache_dir: ./model_cache
+            torch_dtype: auto
+            
+          method:
+            type: lora
+            # Optimized for 3B model - conservative settings
+            r: 4              # Very low rank to prevent overfitting
+            alpha: 8          # Alpha = 2*r for stability
+            dropout: 0.1      # Higher dropout for regularization
+            target_modules:
+              - q_proj
+              - v_proj
+              - k_proj
+              - o_proj
+              
+          training_args:
+            output_dir: ./fine_tuned_models/medical_optimized
+            # Conservative training to prevent overfitting
+            num_train_epochs: 2           # Fewer epochs
+            per_device_train_batch_size: 1   # Small batch
+            per_device_eval_batch_size: 1
+            gradient_accumulation_steps: 4   # Effective batch = 4
+            learning_rate: 0.00005           # Very low learning rate
+            warmup_steps: 10                 # Fixed warmup steps
+            weight_decay: 0.01               # Strong regularization
+            logging_steps: 5
+            save_steps: 50
+            save_total_limit: 2
+            # Evaluation configuration
+            eval_strategy: "steps"           # Evaluate every N steps
+            eval_steps: 50                   # Evaluate every 50 steps
+            save_strategy: "steps"
+            load_best_model_at_end: true     # Load the best model based on eval
+            metric_for_best_model: "eval_loss"  # Use eval loss to select best
+            greater_is_better: false         # Lower loss is better
+            # Critical generation controls
+            max_length: 150                  # Shorter max length
+            max_new_tokens: 100              # Limit new tokens
+            do_sample: false                 # Deterministic generation
+            temperature: 0.3                 # Low temperature
+            top_p: 0.9
+            repetition_penalty: 1.2          # Strong repetition penalty
+            
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: medical-llama3.2-optimized
+          
+    export:
+      to_ollama: true
+      to_gguf: false  # Skip GGUF for faster testing
+      quantization: q4_0
+      model_name: medical-llama3.2-optimized
+      # Simple, direct system prompt
+      system_prompt: "Answer medical questions concisely and accurately."
+      ollama_parameters:
+        temperature: 0.3
+        top_p: 0.9
+        top_k: 40
+        repeat_penalty: 1.2
+        num_predict: 100     # Strict token limit
+        stop:
+          - "\n\n"
+          - "\nUser:"
+          - "\nAssistant:"
+          - "User:"
+          - "Assistant:"
+          - "###"
+          - "<|im_end|>"
+          - "<|im_start|>"
+      
+    # Dataset configuration
+    dataset:
+      train_file: demos/datasets/medical/medical_qa_train.jsonl
+      eval_file: demos/datasets/medical/medical_qa_eval.jsonl
+      eval_split: 0.1  # 10% for evaluation (customizable)
+      # Options for different eval splits:
+      # - 0.05: 5% eval (more training data, less robust evaluation)
+      # - 0.1:  10% eval (balanced - recommended)
+      # - 0.15: 15% eval (more robust evaluation, less training data)
+      # - 0.2:  20% eval (very robust evaluation, significantly less training)
+      shuffle: true
+      seed: 42  # For reproducible splits
+      
+    # Critical data preprocessing settings
+    data_preprocessing:
+      # Truncate to prevent long responses
+      max_input_length: 50     # Short questions only
+      max_output_length: 100   # Short answers only
+      remove_duplicates: true
+      filter_empty: true
+      # Remove problematic patterns
+      remove_patterns:
+        - "disclaimer"
+        - "consult"
+        - "healthcare provider"
+        - "medical advice"
+        - "Important:"
+        - "Note:"
+        - "**"
+      # Simplify instruction format
+      simplify_instructions: true
+      instruction_template: "Answer briefly:"
+      augmentation:
+        enabled: false
+        shuffle_dataset: true
+      validation:
+        check_format: true
+        remove_conversations: true
+        single_response_only: true
+        remove_multi_sentence: false  # Allow multi-sentence but not conversations
+    
+    # Simplified prompt template
+    prompt_template:
+      system: "Answer medical questions briefly and accurately."
+      format: |
+        Question: {input}
+        Answer: {output}
+      
+    monitoring:
+      track_training_metrics: true
+      save_checkpoints: true
+      log_tensorboard: false  # Disable for simplicity
+      log_level: INFO
+
+  # =============================================================================
+  # DEMO 3: TRAINING CONFIGURATION (ORIGINAL)
+  # =============================================================================
+  
+  demo3_training:
+    name: "Medical Model Fine-Tuning Pipeline"
+    description: "Complete training workflow with before/after comparison and Ollama export"
+    
+    components:
+      # Local Ollama model for base testing
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3.2:3b
+          timeout: 60
+          auto_pull: true  # Automatically download if not present
+          
+      # Fine-tuner for training
+      fine_tuner:
+        type: pytorch
+        config:
+          # ========================================
+          # HARDWARE CONFIGURATION
+          # ========================================
+          # This section is CRITICAL for cross-platform compatibility
+          # Adjust based on your hardware:
+          
+          hardware:
+            # Device selection (auto-detects by default)
+            device: auto  # Options: auto, cuda, mps, cpu
+            
+            # Your available memory (affects batch size and optimizations)
+            memory_gb: 8  # Adjust to your system's available memory
+            
+            # Precision settings per device type
+            precision:
+              cuda:
+                use_fp16: true   # Faster on NVIDIA GPUs
+                use_bf16: false  # Only for RTX 30xx/40xx, A100
+                use_tf32: true   # Ampere and newer GPUs
+              mps:
+                use_fp16: false  # Not stable on Apple Silicon
+                use_bf16: false  # Not supported on MPS
+              cpu:
+                use_fp16: false  # Keep full precision on CPU
+            
+            # Memory optimizations
+            optimization:
+              gradient_checkpointing: false  # Disabled due to MPS compatibility
+              gradient_accumulation_steps: 1  # Increase if OOM errors
+              mixed_precision: no  # Set to 'fp16' for CUDA, 'no' for others
+          
+          # Model configuration
+          base_model:
+            name: meta-llama/Llama-3.2-3B-Instruct
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
+            cache_dir: ./model_cache
+            torch_dtype: auto  # Will be set based on hardware config
+            
+          method:
+            type: lora
+            # OPTIMIZED FOR 3B MODEL - Adjusted LoRA rank for better learning
+            r: 8          # Reduced from 16 - better for small models
+            alpha: 16     # Reduced from 32 - alpha = 2*r is good ratio
+            dropout: 0.05 # Reduced from 0.1 - less regularization needed
+            target_modules:
+              - q_proj
+              - v_proj
+              - k_proj
+              - o_proj
+              - gate_proj  # Added for better learning
+              - up_proj    # Added for better learning
+              - down_proj  # Added for better learning
+              
+          training_args:
+            output_dir: ./fine_tuned_models/medical
+            # OPTIMIZED TRAINING FOR 1B MODEL
+            num_train_epochs: 5  # Increased from 3 - more epochs for better learning
+            per_device_train_batch_size: 2  # Reduced from 4 - smaller batches
+            per_device_eval_batch_size: 2   # Reduced from 4
+            gradient_accumulation_steps: 8  # Increased from 4 - effective batch=16
+            learning_rate: 0.0001  # Reduced from 0.0002 - slower learning
+            warmup_ratio: 0.03     # Reduced from 0.1 - less warmup needed
+            weight_decay: 0.001    # Added - helps prevent overfitting
+            logging_steps: 5       # Reduced from 10 - more frequent logging
+            save_steps: 50         # Reduced from 100 - more frequent saves
+            save_total_limit: 3
+            # Disable evaluation since we don't have an eval dataset
+            eval_strategy: "no"
+            save_strategy: "steps"
+            load_best_model_at_end: false
+            # CRITICAL: Prevent conversation generation
+            max_length: 256        # Added - limit response length
+            repetition_penalty: 1.1  # Added - reduce repetition
+            
+      # Model app for testing
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: medical-model:finetuned
+          
+    # Export configuration
+    export:
+      to_ollama: true
+      to_gguf: true
+      quantization: q4_0  # Options: q4_0 (smallest), q5_0, q8_0, f16 (best quality)
+      model_name: medical-model
+      system_prompt: "You are a knowledgeable medical assistant. Provide accurate, evidence-based medical information. Answer only the question asked."
+      # Ollama generation parameters - PREVENTS RUNAWAY GENERATION
+      ollama_parameters:
+        temperature: 0.7      # Reduced randomness
+        top_p: 0.9           # Nucleus sampling
+        top_k: 40            # Limit token choices
+        repeat_penalty: 1.1   # Prevent repetition
+        num_predict: 256      # Max tokens to generate
+        stop:                 # Stop sequences
+          - "\nUser:"
+          - "\nAssistant:"
+          - "<|user|>"
+          - "<|assistant|>"
+          - "###"
+      
+    # Data preprocessing - IMPORTANT for preventing bad training
+    data_preprocessing:
+      # Clean the dataset before training
+      max_input_length: 128    # Limit question length
+      max_output_length: 256   # Limit answer length
+      remove_duplicates: true  # Remove duplicate Q&A pairs
+      filter_empty: true       # Remove empty responses
+      # Data augmentation for small datasets
+      augmentation:
+        enabled: false  # Set to true if dataset is small
+        paraphrase_questions: false
+        shuffle_dataset: true
+      # Response validation
+      validation:
+        check_format: true     # Ensure proper Q&A format
+        remove_conversations: true  # CRITICAL: Remove multi-turn dialogues
+        single_response_only: true  # CRITICAL: Ensure one response per question
+    
+    # Conversion settings (for fine-tuned models)
+    conversion:
+      # Automatic llama.cpp installation
+      auto_install_llama_cpp: true
+      
+      # Platform-specific build options
+      build_options:
+        darwin:  # macOS
+          metal: true  # Enable Metal acceleration for Apple Silicon
+        linux:
+          cuda: true   # Enable CUDA if available
+          rocm: false  # Enable ROCm for AMD GPUs
+        windows:
+          cmake: true  # Use CMake build system
+      
+      # Conversion workflow
+      workflow:
+        - merge_lora      # Merge LoRA adapter with base model
+        - convert_gguf    # Convert to GGUF format
+        - quantize        # Apply quantization
+        - create_ollama   # Create Ollama model
+      
+      # Quantization options for different use cases
+      quantization_profiles:
+        mobile:
+          method: q4_0
+          description: "Smallest size, suitable for mobile/edge devices"
+        balanced:
+          method: q5_0
+          description: "Good balance of size and quality"
+        quality:
+          method: q8_0
+          description: "Higher quality, larger size"
+        maximum:
+          method: f16
+          description: "Best quality, largest size"
+      
+    # Prompt template for training - CRITICAL FOR PROPER RESPONSES
+    prompt_template:
+      system: "You are a helpful medical assistant. Provide concise, accurate medical information. Answer only the question asked."
+      # SIMPLIFIED FORMAT - Prevents conversation generation
+      format: |
+        <|system|>
+        {system}
+        <|user|>
+        {input}
+        <|assistant|>
+        {output}
+        
+    monitoring:
+      track_training_metrics: true
+      save_checkpoints: true
+      log_tensorboard: true
+      log_level: INFO
+
+  # =============================================================================
+  # =============================================================================
+  # ADDITIONAL TESTING STRATEGIES FOR DIFFERENT MODELS
+  # =============================================================================
+  
+  test_tinyllama:
+    name: "TinyLlama Base Model"
+    description: "1.1B parameter model for quick testing"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: tinyllama:latest
+          timeout: 60
+          auto_pull: true
+          
+  test_mistral:
+    name: "Mistral 7B Base Model"
+    description: "Mistral 7B for general purpose testing"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: mistral:7b
+          timeout: 60
+          auto_pull: true
+          
+  test_codellama:
+    name: "Code Llama Model"
+    description: "Code-specific model for programming tasks"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: codellama:7b
+          timeout: 60
+          auto_pull: true
+          
+  test_phi3:
+    name: "Phi-3 Mini Model"  
+    description: "Microsoft's efficient 3.8B model"
+    
+    components:
+      ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: phi3:mini
+          timeout: 60
+          auto_pull: true
+
+  # HARDWARE-SPECIFIC TRAINING CONFIGURATIONS
+  # =============================================================================
+  # Example configurations optimized for different hardware setups
+  
+  # For NVIDIA GPU (RTX 3060/3070/3080/4060/4070/4080/4090)
+  training_cuda_consumer:
+    name: "NVIDIA Consumer GPU Training"
+    description: "Optimized for RTX 30xx/40xx series with 8-24GB VRAM"
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          hardware:
+            device: cuda
+            memory_gb: 12  # Adjust to your GPU's VRAM
+            precision:
+              cuda:
+                use_fp16: true   # Fast and memory efficient
+                use_bf16: false  # Set true for RTX 30xx/40xx
+                use_tf32: true   # Ampere optimization
+            optimization:
+              gradient_checkpointing: true  # Enable if <12GB VRAM
+              gradient_accumulation_steps: 2
+              mixed_precision: fp16
+          base_model:
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
+            torch_dtype: float16
+          training_args:
+            per_device_train_batch_size: 4  # Increase if memory allows
+            
+  # For Apple Silicon (M1/M2/M3 Mac)
+  training_mps_apple:
+    name: "Apple Silicon Training"
+    description: "Optimized for M1/M2/M3 Macs with 8-64GB unified memory"
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          hardware:
+            device: mps
+            memory_gb: 16  # Your Mac's RAM
+            precision:
+              mps:
+                use_fp16: false  # Not stable on MPS
+                use_bf16: false  # Not supported
+            optimization:
+              gradient_checkpointing: false  # Usually not needed with unified memory
+              gradient_accumulation_steps: 1
+              mixed_precision: no  # MPS doesn't support well
+          base_model:
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
+            torch_dtype: float32  # Full precision for stability
+          training_args:
+            per_device_train_batch_size: 2  # Conservative for stability
+            
+  # For CPU-only systems (no GPU)
+  training_cpu_only:
+    name: "CPU-Only Training"
+    description: "For systems without GPU - slow but works everywhere"
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          hardware:
+            device: cpu
+            memory_gb: 16  # System RAM
+            precision:
+              cpu:
+                use_fp16: false  # CPU needs full precision
+            optimization:
+              gradient_checkpointing: true  # Save memory
+              gradient_accumulation_steps: 4  # Simulate larger batches
+              mixed_precision: no
+          base_model:
+            huggingface_id: meta-llama/Llama-3.2-3B-Instruct
+            torch_dtype: float32
+          training_args:
+            per_device_train_batch_size: 1  # Minimal batch size
+            num_train_epochs: 1  # Fewer epochs for CPU
+            
+  # For High-End GPUs (A100, H100, RTX 4090)
+  training_cuda_datacenter:
+    name: "Datacenter GPU Training"
+    description: "For A100/H100 or high-end RTX 4090 with 24-80GB VRAM"
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          hardware:
+            device: cuda
+            memory_gb: 40  # Adjust to your GPU
+            precision:
+              cuda:
+                use_fp16: false  # Use bf16 instead
+                use_bf16: true   # Better for large models
+                use_tf32: true   # Tensor Core optimization
+            optimization:
+              gradient_checkpointing: false  # Not needed with large VRAM
+              gradient_accumulation_steps: 1
+              mixed_precision: bf16  # Best for modern datacenter GPUs
+          base_model:
+            huggingface_id: meta-llama/Llama-2-7b-hf  # Can handle larger models
+            torch_dtype: bfloat16
+          training_args:
+            per_device_train_batch_size: 8  # Large batch size
+            
+  # =============================================================================
+  # ADDITIONAL DEMO STRATEGIES
+  # =============================================================================
+  
+  local_development:
+    name: "Local Development Environment"
+    description: "Pure local setup for development and testing"
+    
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          timeout: 120
+          
+    monitoring:
+      log_level: DEBUG
+      
+  production_hybrid:
+    name: "Production Hybrid Setup"
+    description: "Production configuration with cloud and local models"
+    
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o
+          rate_limit:
+            requests_per_minute: 500
+            tokens_per_minute: 90000
+            
+      backup_api:
+        type: openai_compatible
+        config:
+          provider: anthropic
+          api_key: ${ANTHROPIC_API_KEY}
+          default_model: claude-3-opus-20240229
+          
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b  # Smaller model for average machines
+          
+    fallback_chain:
+      - provider: cloud_api
+        model: gpt-4o
+        priority: 1
+        
+      - provider: backup_api
+        model: claude-3-opus-20240229
+        priority: 2
+        
+      - provider: model_app
+        model: llama3.2:3b
+        priority: 3
+        
+    constraints:
+      max_daily_cost_usd: 100
+      max_tokens_per_request: 4096
+      require_ssl: true
+      
+    monitoring:
+      track_usage: true
+      track_costs: true
+      alert_thresholds:
+        daily_cost_usd: 100
+        error_rate_percent: 5
+      log_level: WARNING
+
+  # =============================================================================
+  # MOCK MODEL STRATEGY - Fast Development and Testing
+  # =============================================================================
+  
+  mock_development:
+    name: "Mock Model for Fast Development"
+    description: "Uses mock models for rapid prototyping and testing without API costs or setup"
+    
+    components:
+      # Mock model server
+      model_app:
+        type: mock_model
+        config:
+          base_url: "builtin://mock"
+          default_model: "mock-gpt-4"
+          response_delay: 0.2
+          templates:
+            default: |
+              🤖 Mock Response [{timestamp}]
+              
+              Query: "{query}"
+              
+              This is a mock response for development/testing. In a real implementation, 
+              this would be processed by: {model}
+    
+    test_queries:
+      - "What is machine learning?"
+      - "Write a Python function to sort a list"
+      - "Explain quantum computing"
+      - "Create a haiku about programming"
+      - "What are the benefits of mock testing?"
+      
+    # Mock response customization
+    response_config:
+      base_delay: 0.2
+      tokens_per_second: 100
+      max_response_length: 1000
+      include_suggestions: true
+      
+    monitoring:
+      track_requests: true
+      track_response_times: true
+      log_level: DEBUG

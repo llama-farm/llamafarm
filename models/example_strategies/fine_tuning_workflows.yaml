@@ -1,0 +1,222 @@
+# Fine-Tuning Workflows Strategy
+# Complete fine-tuning pipelines with different frameworks
+
+strategies:
+  pytorch_lora_finetuning:
+    name: PyTorch LoRA Fine-Tuning
+    description: Fine-tune models using PyTorch with LoRA for efficiency
+    
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          base_model:
+            name: meta-llama/Llama-2-7b-hf
+            huggingface_id: meta-llama/Llama-2-7b-hf
+            cache_dir: ./model_cache
+            torch_dtype: float16
+          
+          method:
+            type: lora
+            r: 16
+            alpha: 32
+            dropout: 0.1
+            target_modules:
+              - q_proj
+              - v_proj
+              - k_proj
+              - o_proj
+          
+          dataset:
+            path: ./datasets/training_data.jsonl
+            format: alpaca
+            max_length: 2048
+            train_split: 0.9
+            val_split: 0.1
+          
+          training_args:
+            output_dir: ./fine_tuned_models/lora
+            num_train_epochs: 3
+            per_device_train_batch_size: 4
+            per_device_eval_batch_size: 4
+            gradient_accumulation_steps: 4
+            learning_rate: 2e-4
+            warmup_ratio: 0.1
+            logging_steps: 10
+            save_steps: 100
+            eval_steps: 100
+            save_total_limit: 3
+            load_best_model_at_end: true
+            metric_for_best_model: eval_loss
+            greater_is_better: false
+      
+      repository:
+        type: huggingface
+        config:
+          token: ${HF_TOKEN}
+          private: true
+          repo_prefix: my-org
+    
+    constraints:
+      requires_gpu: true
+      min_vram_gb: 16
+      recommended_vram_gb: 24
+    
+    monitoring:
+      wandb_project: llama-finetuning
+      track_metrics: true
+      log_level: INFO
+
+  llamafactory_comprehensive:
+    name: LlamaFactory Comprehensive Training
+    description: Use LlamaFactory for advanced fine-tuning with multiple methods
+    
+    components:
+      fine_tuner:
+        type: llamafactory
+        config:
+          model_name_or_path: meta-llama/Llama-2-7b-hf
+          stage: sft  # Options: pt, sft, rm, ppo, dpo
+          do_train: true
+          do_eval: true
+          
+          # LoRA configuration
+          finetuning_type: lora
+          lora_rank: 8
+          lora_alpha: 16
+          lora_dropout: 0.1
+          lora_target: q_proj,v_proj
+          
+          # Quantization
+          quantization_bit: 4  # 4-bit quantization
+          double_quantization: true
+          quantization_type: nf4
+          
+          # Dataset
+          dataset: alpaca_gpt4_en
+          template: llama2
+          cutoff_len: 4096
+          overwrite_cache: true
+          preprocessing_num_workers: 16
+          
+          # Training parameters
+          output_dir: ./llamafactory_output
+          per_device_train_batch_size: 2
+          per_device_eval_batch_size: 2
+          gradient_accumulation_steps: 8
+          learning_rate: 5e-5
+          num_train_epochs: 3
+          lr_scheduler_type: cosine
+          warmup_ratio: 0.1
+          bf16: true
+          
+          # Advanced features
+          gradient_checkpointing: true
+          flash_attn: auto
+          use_unsloth: false
+          upcast_layernorm: true
+          
+          # Logging
+          logging_steps: 10
+          save_steps: 500
+          eval_steps: 500
+          report_to: wandb
+      
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: custom-llamafactory
+    
+    deployment:
+      export_format: ollama  # Options: pytorch, onnx, ollama, gguf
+      merge_lora: true
+      quantize_after_merge: true
+      quantization_method: q4_k_m
+    
+    constraints:
+      requires_gpu: true
+      min_vram_gb: 12
+      recommended_cuda_version: "11.8"
+    
+    monitoring:
+      tensorboard: true
+      wandb_project: llamafactory-training
+      log_level: INFO
+
+  multi_stage_training:
+    name: Multi-Stage Training Pipeline
+    description: Complex training pipeline with pre-training, SFT, and RLHF
+    
+    components:
+      # Stage 1: Continued Pre-training
+      pretrain_tuner:
+        type: pytorch
+        config:
+          base_model:
+            name: meta-llama/Llama-2-7b-hf
+          method:
+            type: full
+          dataset:
+            path: ./datasets/domain_corpus.txt
+            format: text
+            max_length: 4096
+          training_args:
+            output_dir: ./models/stage1_pretrain
+            num_train_epochs: 1
+            learning_rate: 1e-5
+      
+      # Stage 2: Supervised Fine-Tuning
+      sft_tuner:
+        type: pytorch
+        config:
+          base_model:
+            checkpoint: ./models/stage1_pretrain/best
+          method:
+            type: lora
+            r: 32
+            alpha: 64
+          dataset:
+            path: ./datasets/instruction_data.jsonl
+            format: alpaca
+          training_args:
+            output_dir: ./models/stage2_sft
+            num_train_epochs: 3
+            learning_rate: 2e-4
+      
+      # Stage 3: RLHF/DPO
+      rlhf_tuner:
+        type: llamafactory
+        config:
+          model_name_or_path: ./models/stage2_sft/merged
+          stage: dpo
+          dataset: comparison_gpt4_en
+          finetuning_type: lora
+          output_dir: ./models/stage3_rlhf
+    
+    pipeline:
+      stages:
+        - name: pretrain
+          component: pretrain_tuner
+          skip_if_exists: true
+        - name: sft
+          component: sft_tuner
+          depends_on: pretrain
+        - name: rlhf
+          component: rlhf_tuner
+          depends_on: sft
+      
+      auto_merge: true
+      auto_quantize: true
+      final_format: gguf
+    
+    constraints:
+      requires_gpu: true
+      min_vram_gb: 24
+      estimated_time_hours: 48
+    
+    monitoring:
+      track_all_stages: true
+      save_checkpoints: true
+      alert_on_failure: true
+      log_level: INFO
