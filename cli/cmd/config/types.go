@@ -184,29 +184,16 @@ type ProjectInfo struct {
 
 // GetProjectInfo extracts namespace and project from the config name field
 func (c *LlamaFarmConfig) GetProjectInfo() (*ProjectInfo, error) {
-    // Preferred: explicit fields
-    if strings.TrimSpace(c.Name) != "" && strings.TrimSpace(c.Namespace) != "" {
-        return &ProjectInfo{Namespace: strings.TrimSpace(c.Namespace), Project: strings.TrimSpace(c.Name)}, nil
-    }
+    name := strings.TrimSpace(c.Name)
+    ns := strings.TrimSpace(c.Namespace)
 
-    // Backward compatibility: support legacy 'name: namespace/project'
-    if strings.TrimSpace(c.Name) != "" {
-        parts := strings.Split(c.Name, "/")
-        if len(parts) == 2 {
-            ns := strings.TrimSpace(parts[0])
-            proj := strings.TrimSpace(parts[1])
-            if ns != "" && proj != "" {
-                return &ProjectInfo{Namespace: ns, Project: proj}, nil
-            }
-        }
-        // If namespace provided via field, pair it with name as project
-        if strings.TrimSpace(c.Namespace) != "" {
-            return &ProjectInfo{Namespace: strings.TrimSpace(c.Namespace), Project: strings.TrimSpace(c.Name)}, nil
-        }
-        return nil, fmt.Errorf("namespace is required (set 'namespace' in llamafarm.yaml or provide --namespace)")
+    if name == "" || ns == "" {
+        return nil, fmt.Errorf("both 'name' (project) and 'namespace' are required in llamafarm.yaml")
     }
-
-    return nil, fmt.Errorf("project name not set in configuration")
+    if strings.Contains(name, "/") {
+        return nil, fmt.Errorf("'name' must be a project id without '/', got: %s", c.Name)
+    }
+    return &ProjectInfo{Namespace: ns, Project: name}, nil
 }
 
 // ServerConfig represents server connection configuration
@@ -254,13 +241,13 @@ func GetServerConfig(configPath string, serverURL string, namespace string, proj
 		}
 	}
 
-	// Validate required fields
-	if finalNamespace == "" {
-		return nil, fmt.Errorf("namespace is required (provide via --namespace flag or set 'name' in llamafarm.yaml)")
-	}
-	if finalProject == "" {
-		return nil, fmt.Errorf("project is required (provide via --project flag or set 'name' in llamafarm.yaml)")
-	}
+    // Validate required fields
+    if finalNamespace == "" {
+        return nil, fmt.Errorf("namespace is required (provide via --namespace or set 'name' and 'namespace' in llamafarm.yaml)")
+    }
+    if finalProject == "" {
+        return nil, fmt.Errorf("project is required (provide via --project or set 'name' and 'namespace' in llamafarm.yaml)")
+    }
 
 	return &ServerConfig{
 		URL:       finalServerURL,

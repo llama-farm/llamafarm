@@ -17,17 +17,23 @@ func writeTempConfig(t *testing.T, content string) string {
 }
 
 func TestGetProjectInfo(t *testing.T) {
-    // Legacy name split
-    cfg := &LlamaFarmConfig{Name: "acme/shop"}
+    // Explicit fields only
+    cfg := &LlamaFarmConfig{Name: "shop", Namespace: "acme"}
     pi, err := cfg.GetProjectInfo()
     if err != nil { t.Fatalf("unexpected err: %v", err) }
     if pi.Namespace != "acme" || pi.Project != "shop" { t.Fatalf("unexpected project info: %+v", pi) }
 
-    // Explicit fields preferred
-    cfg = &LlamaFarmConfig{Name: "shop", Namespace: "acme"}
-    pi, err = cfg.GetProjectInfo()
-    if err != nil { t.Fatalf("unexpected err: %v", err) }
-    if pi.Namespace != "acme" || pi.Project != "shop" { t.Fatalf("unexpected project info: %+v", pi) }
+    // Negative: both missing
+    cfg = &LlamaFarmConfig{}
+    if _, err := cfg.GetProjectInfo(); err == nil {
+        t.Fatalf("expected error when both name and namespace are missing")
+    }
+
+    // Negative: explicit with slash in name
+    cfg = &LlamaFarmConfig{Name: "acme/shop", Namespace: "acme"}
+    if _, err := cfg.GetProjectInfo(); err == nil {
+        t.Fatalf("expected error for explicit fields when name contains slash")
+    }
 }
 
 func TestGetServerConfig_Strict(t *testing.T) {

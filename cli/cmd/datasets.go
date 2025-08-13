@@ -85,8 +85,12 @@ var datasetsListCmd = &cobra.Command{
             os.Exit(1)
         }
         defer resp.Body.Close()
-        body, _ := io.ReadAll(resp.Body)
+        body, readErr := io.ReadAll(resp.Body)
         if resp.StatusCode != http.StatusOK {
+            if readErr != nil {
+                fmt.Fprintf(os.Stderr, "Error (%d), and body read failed: %v\n", resp.StatusCode, readErr)
+                os.Exit(1)
+            }
             fmt.Fprintf(os.Stderr, "Error (%d): %s\n", resp.StatusCode, prettyServerError(resp, body))
             os.Exit(1)
         }
@@ -149,9 +153,13 @@ Examples:
             fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
             os.Exit(1)
         }
-        body, _ := io.ReadAll(resp.Body)
+        body, readErr := io.ReadAll(resp.Body)
         resp.Body.Close()
         if resp.StatusCode != http.StatusOK {
+            if readErr != nil {
+                fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
+                os.Exit(1)
+            }
             fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
             os.Exit(1)
         }
@@ -215,8 +223,12 @@ var datasetsRemoveCmd = &cobra.Command{
             os.Exit(1)
         }
         defer resp.Body.Close()
-        body, _ := io.ReadAll(resp.Body)
+        body, readErr := io.ReadAll(resp.Body)
         if resp.StatusCode != http.StatusOK {
+            if readErr != nil {
+                fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
+                os.Exit(1)
+            }
             fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
             os.Exit(1)
         }
@@ -320,9 +332,12 @@ func uploadFileToDataset(server string, namespace string, project string, datase
     resp, err := getHTTPClient().Do(req)
     if err != nil { return err }
     defer resp.Body.Close()
-    body, _ := io.ReadAll(resp.Body)
+    body, readErr := io.ReadAll(resp.Body)
     if resp.StatusCode != http.StatusOK {
-        return fmt.Errorf(prettyServerError(resp, body))
+        if readErr != nil {
+            return fmt.Errorf("%s", readErr.Error())
+        }
+        return fmt.Errorf("%s", prettyServerError(resp, body))
     }
     return nil
 }
