@@ -363,6 +363,7 @@ class TestDataService:
         mock_project.config = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace=self.test_namespace,
             prompts=[],
             rag={"strategies": [
                 {
