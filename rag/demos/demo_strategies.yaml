@@ -605,6 +605,188 @@ strategies:
         config:
           top_k: 5
 
+  # =============================================================================
+  # DEMO 7: AFI DOCUMENT PROCESSING STRATEGY
+  # =============================================================================
+  - name: "afi_document_demo"
+    description: "Specialized strategy for AFI (Air Force Instruction) document processing"
+    tags: ["demo", "military", "technical", "maintenance", "pdf"]
+    use_cases:
+      - "Military technical documentation"
+      - "Maintenance instruction processing"
+      - "Regulatory document analysis"
+      - "AFI compliance checking"
+    
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          # Advanced PDF parsing with structure preservation
+          chunk_size: 1500  # Optimal for technical instructions
+          chunk_overlap: 200  # Maintain context across chunks
+          chunk_strategy: pages  # Page-aware chunking for AFI documents
+          respect_sentence_boundaries: true
+          respect_paragraph_boundaries: true
+          min_chunk_size: 100
+          
+          # PDF-specific features
+          extract_metadata: true  # Get document metadata
+          extract_page_structure: true  # Preserve page structure
+          combine_pages: false  # Keep pages separate for citation
+          include_page_numbers: true  # Critical for AFI references
+          extract_outline: true  # Extract table of contents
+          page_separator: "\n\n--- Page {page_num} ---\n\n"
+          
+          # Advanced extraction
+          extract_tables: true  # Extract maintenance tables
+          extract_images: false  # Skip diagrams for text processing
+          extract_annotations: true  # Get document annotations
+          
+      extractors:
+        # Page and location extractor
+        - type: "PathExtractor"
+          priority: 100
+          config:
+            enabled: true
+            
+        # AFI-specific pattern extraction
+        - type: "PatternExtractor"
+          priority: 90
+          config:
+            patterns:
+              # AFI/TO references
+              afi_references:
+                pattern: '(?:AFI|AFMAN|AFPD|TO|T\.O\.|DAFI)\s*\d+[-\.\s]*\d*'
+                description: "Air Force Instructions and Technical Orders"
+                
+              # Paragraph references (e.g., 3.2.1.4)
+              paragraph_refs:
+                pattern: '\b\d+(?:\.\d+){1,4}\b'
+                description: "Paragraph number references"
+                
+              # Form numbers
+              form_numbers:
+                pattern: '(?:AF\s*Form|DD\s*Form|SF)\s*\d+'
+                description: "Military form references"
+                
+              # Compliance terms
+              compliance_terms:
+                pattern: '\b(?:shall|must|will|should|may)\b'
+                flags: "IGNORECASE"
+                description: "Compliance and requirement keywords"
+                
+              # Warning/Caution/Note statements
+              warning_statements:
+                pattern: '(?:WARNING|CAUTION|NOTE):\s*[^\.]+\.'
+                flags: "IGNORECASE"
+                description: "Safety and advisory statements"
+                
+              # Technical specifications
+              tech_specs:
+                pattern: '\b\d+(?:\.\d+)?\s*(?:inch|in|mm|cm|ft|lb|kg|psi|mph|Hz|V|A|W)\b'
+                description: "Technical measurements and specifications"
+          
+        # Entity extraction for military terms
+        - type: "EntityExtractor"
+          priority: 80
+          config:
+            model: "en_core_web_sm"  # Can upgrade to military-specific model
+            entity_types:
+              - "ORG"     # Military organizations
+              - "LOC"     # Bases and locations
+              - "DATE"    # Important dates
+              - "PERSON"  # Personnel references
+            custom_patterns:
+              - pattern: "MAJCOM"
+                label: "ORG"
+              - pattern: "Wing|Squadron|Group|Flight"
+                label: "ORG"
+              - pattern: "MDS|WUC|NSN"
+                label: "TECH"
+              
+        # Statistics for document structure
+        - type: "StatisticsExtractor"
+          priority: 70
+          config:
+            compute_readability: true
+            compute_complexity: true
+            extract_structure: true
+            
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          host: "http://localhost:11434"
+          batch_size: 4  # Smaller batches for longer AFI chunks
+          timeout: 60
+          
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "afi_documents"
+          persist_directory: "./demos/vectordb/afi_documents"
+          distance_metric: "cosine"
+          
+          # Metadata configuration for AFI documents
+          metadata_config:
+            indexed_fields:
+              - "page_number"
+              - "section"
+              - "document_type"
+              - "afi_number"
+              - "effective_date"
+            filterable_fields:
+              - "page_number"
+              - "has_warning"
+              - "has_table"
+              - "compliance_level"
+            searchable_fields:
+              - "afi_references"
+              - "form_numbers"
+              - "paragraph_refs"
+              
+      retrieval_strategy:
+        type: "HybridUniversalStrategy"
+        config:
+          combination_method: "weighted_average"
+          strategies:
+            - type: "BasicSimilarityStrategy"
+              weight: 0.6
+              config:
+                distance_metric: "cosine"
+                score_threshold: 0.7
+                
+            - type: "MetadataFilteredStrategy"
+              weight: 0.3
+              config:
+                filter_mode: "pre"
+                fallback_multiplier: 2.0
+                filters:
+                  # Can add runtime filters for page ranges, dates, etc.
+                  
+            - type: "RerankedStrategy"
+              weight: 0.1
+              config:
+                reranking_factors:
+                  - factor: "recency"
+                    weight: 0.2
+                  - factor: "keyword_overlap"
+                    weight: 0.5
+                  - factor: "metadata_match"
+                    weight: 0.3
+                    
+    performance:
+      chunking:
+        optimal_chunk_size: 1500
+        recommended_overlap: 200
+      indexing:
+        batch_size: 10
+        parallel_processing: false  # Sequential for page order preservation
+      search:
+        default_top_k: 10
+        enable_caching: true
+        cache_ttl: 3600
+
 strategy_templates:
   minimal_demo:
     name: "minimal_demo"
