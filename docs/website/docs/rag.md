@@ -1,6 +1,8 @@
 ---
 sidebar_position: 1
-title: "RAG System"
+title: 'RAG System'
+slug: /rag-legacy
+draft: true
 ---
 
 # Simple Extensible RAG System
@@ -38,6 +40,7 @@ A lightweight, extensible RAG (Retrieval-Augmented Generation) system designed f
 ```
 
 The setup script will:
+
 - ✅ Install dependencies (uv, Ollama, Python packages)
 - ✅ Set up virtual environment
 - ✅ Download embedding models
@@ -56,46 +59,50 @@ If you prefer manual setup or are not on macOS:
 #### macOS Installation with UV (Recommended)
 
 1. **Install UV (the fast Python package manager)**:
+
    ```bash
    # Method 1: Official installer
    curl -LsSf https://astral.sh/uv/install.sh | sh
-   
+
    # Method 2: Homebrew
    brew install uv
-   
+
    # Method 3: pipx
    pipx install uv
    ```
 
 2. **Install Ollama**:
+
    ```bash
    # Method 1: Official installer
    curl -fsSL https://ollama.com/install.sh | sh
-   
+
    # Method 2: Homebrew (alternative)
    brew install ollama
    ```
 
 3. **Start Ollama and pull the embedding model**:
+
    ```bash
    # Start Ollama service
    ollama serve
-   
+
    # In a new terminal, pull the embedding model
    ollama pull nomic-embed-text
    ```
 
 4. **Setup the project with UV**:
+
    ```bash
    # Clone the repository
    cd rag/
-   
+
    # Create virtual environment and install dependencies
    uv sync
-   
-   # Activate the environment  
+
+   # Activate the environment
    source .venv/bin/activate
-   
+
    # Or run commands directly with uv
    uv run python cli.py --help
    ```
@@ -103,22 +110,24 @@ If you prefer manual setup or are not on macOS:
 ### Alternative Installation (pip/venv)
 
 If you prefer traditional pip/venv:
-   ```bash
-   # Create virtual environment
-   python3 -m venv .venv
-   source .venv/bin/activate
-   
-   # Install with pip
-   pip install -e .
-   ```
+
+```bash
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install with pip
+pip install -e .
+```
 
 ### Basic Usage
 
 1. **Test the system:**
+
    ```bash
    # Test CSV parsing
-   uv run python cli.py test --test-file samples/small_sample.csv 
-   
+   uv run python cli.py test --test-file samples/small_sample.csv
+
    # Test PDF parsing (if you have a PDF file)
    uv run python cli.py test --test-file samples/test_document.pdf
    ```
@@ -130,7 +139,7 @@ The RAG system includes 5 local-only extractors that enhance documents with meta
 ### Available Extractors
 
 - **YAKE**: Advanced keyword extraction considering position and context
-- **RAKE**: Fast phrase extraction using stop words as delimiters  
+- **RAKE**: Fast phrase extraction using stop words as delimiters
 - **TF-IDF**: Term frequency analysis for finding unique terms
 - **Entities**: Person, organization, date, email, phone extraction (spaCy + regex fallbacks)
 - **DateTime**: Date, time, and relative date extraction
@@ -170,7 +179,11 @@ uv run python cli.py --config config_examples/extractors_demo_config.json ingest
 
 ```json
 {
-  "yake_keywords": ["machine learning", "artificial intelligence", "data analysis"],
+  "yake_keywords": [
+    "machine learning",
+    "artificial intelligence",
+    "data analysis"
+  ],
   "entities_person": ["John Smith", "Sarah Johnson"],
   "entities_email": ["contact@company.com"],
   "word_count": 1250,
@@ -377,7 +390,7 @@ Paths within configuration files are automatically resolved:
   "vector_store": {
     "type": "ChromaStore",
     "config": {
-      "persist_directory": "./data/chroma_db"  // Auto-resolved and created
+      "persist_directory": "./data/chroma_db" // Auto-resolved and created
     }
   }
 }
@@ -424,6 +437,7 @@ uv add --dev package-name
 The system is built around four core components:
 
 ### 1. Parsers
+
 Convert various data formats into the universal `Document` format.
 
 - `CSVParser`: Generic CSV parser with configurable fields
@@ -431,25 +445,29 @@ Convert various data formats into the universal `Document` format.
 - `PDFParser`: Extract text, metadata, and structure from PDF documents
 
 ### 2. Embedders
+
 Generate vector embeddings from text content.
 
 - `OllamaEmbedder`: Uses local Ollama models
 
 ### 3. Vector Stores
+
 Store and search document embeddings.
 
 - `ChromaStore`: ChromaDB integration with persistence
 
 ### 4. Universal Retrieval Strategies
+
 Advanced, database-agnostic retrieval strategies that automatically optimize for your vector database.
 
 - `BasicSimilarityStrategy`: Simple vector similarity search (great for getting started)
 - `MetadataFilteredStrategy`: Intelligent metadata filtering with native/fallback support
-- `MultiQueryStrategy`: Uses multiple query variations to improve recall  
+- `MultiQueryStrategy`: Uses multiple query variations to improve recall
 - `RerankedStrategy`: Multi-factor re-ranking for sophisticated relevance scoring
 - `HybridUniversalStrategy`: Combines multiple strategies with configurable weights
 
 ### 5. Pipeline
+
 Chains components together for end-to-end processing.
 
 ## 🎯 Universal Retrieval Strategies
@@ -459,6 +477,7 @@ The system features a powerful **database-agnostic retrieval system** that autom
 ### Available Strategies
 
 #### **BasicSimilarityStrategy** - Getting Started
+
 ```json
 {
   "retrieval_strategy": {
@@ -469,10 +488,12 @@ The system features a powerful **database-agnostic retrieval system** that autom
   }
 }
 ```
+
 - **Use Cases**: Getting started, simple semantic search, baseline testing
 - **Performance**: Fast | **Complexity**: Low
 
-#### **MetadataFilteredStrategy** - Smart Filtering  
+#### **MetadataFilteredStrategy** - Smart Filtering
+
 ```json
 {
   "retrieval_strategy": {
@@ -488,15 +509,17 @@ The system features a powerful **database-agnostic retrieval system** that autom
   }
 }
 ```
+
 - **Features**: Native filtering when supported, automatic fallback, complex operators (`$ne`, `$in`, `$gt`, etc.)
 - **Use Cases**: Domain-specific searches, multi-tenant applications, content categorization
 - **Performance**: Medium | **Complexity**: Medium
 
 #### **MultiQueryStrategy** - Enhanced Recall
+
 ```json
 {
   "retrieval_strategy": {
-    "type": "MultiQueryStrategy", 
+    "type": "MultiQueryStrategy",
     "config": {
       "num_queries": 3,
       "aggregation_method": "weighted",
@@ -505,11 +528,13 @@ The system features a powerful **database-agnostic retrieval system** that autom
   }
 }
 ```
+
 - **Aggregation Methods**: `max` (best score), `mean` (average), `weighted` (decreasing weights)
 - **Use Cases**: Ambiguous queries, query expansion, improving recall for complex questions
 - **Performance**: Medium | **Complexity**: Medium
 
 #### **RerankedStrategy** - Sophisticated Ranking
+
 ```json
 {
   "retrieval_strategy": {
@@ -519,18 +544,20 @@ The system features a powerful **database-agnostic retrieval system** that autom
       "length_normalization": 1000,
       "rerank_factors": {
         "recency": 0.1,
-        "length": 0.05, 
+        "length": 0.05,
         "metadata_boost": 0.2
       }
     }
   }
 }
 ```
+
 - **Reranking Factors**: Recency boost, content length preference, metadata-based boosts (priority, type, quality indicators)
 - **Use Cases**: Production systems, time-sensitive content, multi-factor relevance
 - **Performance**: Slower | **Complexity**: High
 
 #### **HybridUniversalStrategy** - Best of All Worlds
+
 ```json
 {
   "retrieval_strategy": {
@@ -540,30 +567,31 @@ The system features a powerful **database-agnostic retrieval system** that autom
       "normalize_scores": true,
       "diversity_boost": 0.1,
       "strategies": [
-        {"type": "BasicSimilarityStrategy", "weight": 0.4},
-        {"type": "MetadataFilteredStrategy", "weight": 0.3},
-        {"type": "RerankedStrategy", "weight": 0.2},
-        {"type": "MultiQueryStrategy", "weight": 0.1}
+        { "type": "BasicSimilarityStrategy", "weight": 0.4 },
+        { "type": "MetadataFilteredStrategy", "weight": 0.3 },
+        { "type": "RerankedStrategy", "weight": 0.2 },
+        { "type": "MultiQueryStrategy", "weight": 0.1 }
       ]
     }
   }
 }
 ```
+
 - **Combination Methods**: `weighted_average` (score-based), `rank_fusion` (position-based)
 - **Features**: Strategy aliases (`basic`, `filtered`, `multi_query`, `reranked`)
-- **Use Cases**: Production systems, balanced precision/recall, complex requirements  
+- **Use Cases**: Production systems, balanced precision/recall, complex requirements
 - **Performance**: Variable | **Complexity**: High
 
 ### Strategy Selection Guide
 
-| Use Case | Recommended Strategy | Why |
-|----------|---------------------|-----|
-| **Getting Started** | `BasicSimilarityStrategy` | Simple, fast, reliable baseline |
-| **Production General** | `HybridUniversalStrategy` | Balanced performance across use cases |
-| **High Precision** | `RerankedStrategy` | Multi-factor ranking for nuanced results |
-| **Filtered Content** | `MetadataFilteredStrategy` | Efficient domain-specific searches |
-| **Complex Queries** | `MultiQueryStrategy` | Better recall for ambiguous questions |
-| **High Performance** | `BasicSimilarityStrategy` | Minimal overhead, maximum speed |
+| Use Case               | Recommended Strategy       | Why                                      |
+| ---------------------- | -------------------------- | ---------------------------------------- |
+| **Getting Started**    | `BasicSimilarityStrategy`  | Simple, fast, reliable baseline          |
+| **Production General** | `HybridUniversalStrategy`  | Balanced performance across use cases    |
+| **High Precision**     | `RerankedStrategy`         | Multi-factor ranking for nuanced results |
+| **Filtered Content**   | `MetadataFilteredStrategy` | Efficient domain-specific searches       |
+| **Complex Queries**    | `MultiQueryStrategy`       | Better recall for ambiguous questions    |
+| **High Performance**   | `BasicSimilarityStrategy`  | Minimal overhead, maximum speed          |
 
 ## Configuration
 
@@ -609,16 +637,19 @@ Configuration is JSON-based and includes three main sections. The system support
 ### Sample Configurations
 
 #### Basic Configurations
+
 - `config_examples/basic_config.json`: Simple setup without retrieval strategies
 - `config_examples/custom_csv_config.json`: Custom CSV format configuration
 - `config_examples/flexible_paths_config.json`: Demonstrates flexible path resolution
 
 #### PDF Processing
+
 - `config_examples/pdf_config.json`: PDF processing with combined pages
-- `config_examples/pdf_separate_pages_config.json`: PDF processing with separate page documents  
+- `config_examples/pdf_separate_pages_config.json`: PDF processing with separate page documents
 - `config_examples/pdf_with_retrieval_config.json`: PDF processing with retrieval strategies
 
 #### Retrieval Strategy Examples
+
 - `config_examples/universal_retrieval_config.json`: Basic similarity strategy
 - `config_examples/metadata_filtered_config.json`: Smart metadata filtering
 - `config_examples/multi_query_retrieval_config.json`: Enhanced recall with multiple queries
@@ -673,14 +704,14 @@ class MyEmbedder(Embedder):
 
 1. **Create store class:**
 
-```python  
+```python
 from core.base import VectorStore, Document
 
 class MyVectorStore(VectorStore):
     def add_documents(self, documents: List[Document]) -> bool:
         # Storage logic
         pass
-    
+
     def search(self, query: str, top_k: int = 10) -> List[Document]:
         # Search logic
         pass
@@ -739,6 +770,7 @@ info = api.get_collection_info()
 ```
 
 #### API Features:
+
 - **Configurable search parameters**: `top_k`, `min_score`, `metadata_filter`
 - **Multiple return formats**: `SearchResult` objects or raw `Document` objects
 - **Metadata filtering**: Filter by any metadata field (priority, tags, etc.)
@@ -746,6 +778,7 @@ info = api.get_collection_info()
 - **Multiple configurations**: Use different configs for different data types
 
 Run the example script to see all features:
+
 ```bash
 uv run python example_api_usage.py
 ```
@@ -764,7 +797,7 @@ advanced_api = SearchAPI("config_examples/advanced_retrieval_config.json")
 # Basic strategy - simple vector similarity
 basic_results = basic_api.search("password reset", top_k=3)
 
-# Advanced hybrid strategy - combines multiple approaches  
+# Advanced hybrid strategy - combines multiple approaches
 advanced_results = advanced_api.search("login authentication", top_k=5)
 
 # Compare strategy effectiveness
@@ -775,25 +808,27 @@ print(f"Advanced strategy found {len(advanced_results)} results")
 #### Available Retrieval Strategies:
 
 1. **ChromaBasicStrategy** - Simple vector similarity search
+
    ```json
    {
      "retrieval_strategy": {
        "type": "ChromaBasicStrategy",
-       "config": {"distance_metric": "cosine"}
+       "config": { "distance_metric": "cosine" }
      }
    }
    ```
 
 2. **ChromaHybridStrategy** - Combines multiple strategies with weights
+
    ```json
    {
      "retrieval_strategy": {
-       "type": "ChromaHybridStrategy", 
+       "type": "ChromaHybridStrategy",
        "config": {
          "strategies": [
-           {"type": "ChromaBasicStrategy", "weight": 0.5},
-           {"type": "ChromaRerankedStrategy", "weight": 0.3},
-           {"type": "ChromaMetadataFilterStrategy", "weight": 0.2}
+           { "type": "ChromaBasicStrategy", "weight": 0.5 },
+           { "type": "ChromaRerankedStrategy", "weight": 0.3 },
+           { "type": "ChromaMetadataFilterStrategy", "weight": 0.2 }
          ]
        }
      }
@@ -801,7 +836,7 @@ print(f"Advanced strategy found {len(advanced_results)} results")
    ```
 
 3. **ChromaMetadataFilterStrategy** - Vector search with metadata filtering
-4. **ChromaMultiQueryStrategy** - Uses multiple query variations  
+4. **ChromaMultiQueryStrategy** - Uses multiple query variations
 5. **ChromaRerankedStrategy** - Re-ranks results with multiple factors
 
 #### Testing Retrieval Strategies:
@@ -810,7 +845,7 @@ print(f"Advanced strategy found {len(advanced_results)} results")
 # Test the retrieval system
 uv run python test_retrieval_system.py
 
-# Run retrieval examples  
+# Run retrieval examples
 uv run python example_retrieval_usage.py
 
 # Compare strategies side-by-side
@@ -848,6 +883,7 @@ python test_system.py
 ```
 
 This tests:
+
 - CSV parsing functionality
 - Ollama integration (if available)
 - ChromaDB storage
@@ -860,7 +896,7 @@ rag/
 ├── core/
 │   ├── __init__.py
 │   ├── base.py              # Base classes
-│   ├── enhanced_pipeline.py # Enhanced pipeline with progress tracking  
+│   ├── enhanced_pipeline.py # Enhanced pipeline with progress tracking
 │   └── factories.py         # Factory pattern for component creation
 ├── parsers/
 │   ├── __init__.py
@@ -914,6 +950,7 @@ This system is designed for easy extension. To contribute:
 ### macOS-Specific Issues
 
 #### Ollama Installation Problems
+
 ```bash
 # If the curl install fails, try Homebrew
 brew install ollama
@@ -923,6 +960,7 @@ ollama serve
 ```
 
 #### Python/pip Issues
+
 ```bash
 # Use Python 3 explicitly if needed
 # Create your rag_config.json file first (see Configuration section)
@@ -935,6 +973,7 @@ pip install -r requirements.txt
 ```
 
 #### Check if Everything is Working
+
 ```bash
 # Test Ollama connection
 curl http://localhost:11434/api/tags
@@ -949,16 +988,19 @@ uv run pytest
 ### General Issues
 
 #### Ollama Problems
+
 - Ensure Ollama is running: `ollama serve`
 - Check model availability: `ollama list`
 - Pull required model: `ollama pull nomic-embed-text`
 
 #### ChromaDB Issues
+
 - Check permissions on persist directory
 - Ensure disk space available
 - Try deleting collection and recreating
 
 #### Performance Tips
+
 - Adjust batch sizes based on your hardware
 - Use appropriate embedding models for your use case
 - Consider chunking large CSV files
@@ -970,18 +1012,21 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 🔧 Infrastructure Improvements
 
 #### Top-Level Configuration Library Integration
+
 - Replace current JSON config loading with centralized config management
 - Support for environment-based configuration
 - Configuration validation and schema enforcement
 - Hot-reload capabilities for development
 
 #### Global Logging Module Integration
+
 - Replace current basic logging with enterprise-grade logging system
 - Structured logging with JSON output
 - Log aggregation and monitoring integration
 - Configurable log levels per component
 
 #### Advanced Component Registration
+
 - Dynamic component discovery and registration
 - Plugin system for third-party extensions
 - Runtime component loading from external packages
@@ -990,6 +1035,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 📄 New Parser Support
 
 #### Document Format Expansion
+
 - ✅ **PDF Parser**: Extract text, metadata, and structure from PDF documents (COMPLETED)
 - **Word Document Parser**: Support for .docx files with rich formatting
 - **JSON Parser**: Handle nested JSON structures and arrays
@@ -999,6 +1045,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 - **Markdown Parser**: Parse .md files with proper heading hierarchy
 
 #### Specialized Parsers
+
 - **Code Parser**: Extract functions, classes, and documentation from source code
 - **Log Parser**: Structure log files with timestamp and severity extraction
 - **Database Parser**: Connect directly to databases for real-time ingestion
@@ -1006,6 +1053,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 🗄️ New Vector Database Support
 
 #### Enterprise Vector Stores
+
 - **Pinecone**: Managed vector database with high-performance search
 - **Weaviate**: GraphQL-based vector database with semantic capabilities
 - **Qdrant**: High-performance vector similarity search engine
@@ -1013,6 +1061,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 - **LanceDB**: Serverless vector database with SQL support
 
 #### Traditional Database Integration
+
 - **PostgreSQL with pgvector**: Leverage existing PostgreSQL infrastructure
 - **Elasticsearch**: Full-text search with vector similarity capabilities
 - **Redis with RedisSearch**: In-memory vector search for low-latency applications
@@ -1020,18 +1069,21 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 🧠 New Embedding Model Support
 
 #### Commercial Embedding APIs
+
 - **OpenAI Embeddings**: text-embedding-ada-002 and newer models
 - **Cohere Embed**: Multilingual embedding models
 - **Anthropic Claude**: When embedding APIs become available
 - **Google PaLM Embeddings**: Google's large language model embeddings
 
 #### Open Source Models
+
 - **Sentence Transformers**: Wide variety of pre-trained models
 - **Hugging Face Transformers**: Custom and fine-tuned embedding models
 - **BGE Models**: Beijing Academy of AI's high-performance embedders
 - **E5 Models**: Microsoft's multilingual embedding models
 
 #### Specialized Embeddings
+
 - **Code Embeddings**: Models trained specifically for source code
 - **Domain-Specific Models**: Healthcare, legal, finance-trained embedders
 - **Multimodal Embeddings**: Support for text + image embeddings
@@ -1039,12 +1091,14 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 🤖 AI Integration & API Keys
 
 #### ChatGPT/OpenAI Integration
+
 - **API Key Management**: Secure storage and rotation of OpenAI API keys
 - **GPT Integration**: Use GPT models for query expansion and result summarization
 - **Function Calling**: Leverage GPT's function calling for structured queries
 - **Streaming Responses**: Real-time response streaming for better UX
 
 #### Multi-Provider Support
+
 - **Anthropic Claude**: API key management and integration
 - **Google Gemini**: Support for Google's AI models
 - **Azure OpenAI**: Enterprise OpenAI service integration
@@ -1053,6 +1107,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 🎨 User Experience Enhancements
 
 #### Advanced CLI Features
+
 - **Interactive Mode**: Step-by-step guided setup and usage
 - **Configuration Wizard**: Automated configuration generation
 - **Batch Processing**: Handle multiple files and directories
@@ -1060,6 +1115,7 @@ The RAG system is designed for continuous extension and improvement. Here are th
 - **Result Export**: Save search results in various formats
 
 #### Web Interface
+
 - **REST API**: HTTP endpoints for all RAG operations
 - **Web Dashboard**: Browser-based interface for management
 - **Real-time Monitoring**: Live system status and performance metrics
@@ -1068,12 +1124,14 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 🔒 Security & Compliance
 
 #### Data Protection
+
 - **Encryption at Rest**: Secure storage of documents and embeddings
 - **API Key Encryption**: Secure credential management
 - **Access Controls**: Fine-grained permissions for different operations
 - **Audit Logging**: Complete audit trail of all system operations
 
 #### Privacy Features
+
 - **Data Anonymization**: Remove PII from documents before processing
 - **Selective Deletion**: Remove specific documents from vector stores
 - **Compliance Reporting**: Generate reports for regulatory requirements
@@ -1081,12 +1139,14 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 📊 Performance & Scalability
 
 #### Optimization Features
+
 - **Distributed Processing**: Scale across multiple machines
 - **GPU Acceleration**: Leverage CUDA for faster embedding generation
 - **Caching Layer**: Intelligent caching of embeddings and results
 - **Load Balancing**: Distribute requests across multiple instances
 
 #### Monitoring & Analytics
+
 - **Performance Metrics**: Track processing speed and accuracy
 - **Usage Analytics**: Understand system usage patterns
 - **Cost Tracking**: Monitor API usage and associated costs
@@ -1095,12 +1155,14 @@ The RAG system is designed for continuous extension and improvement. Here are th
 ### 🧪 Advanced Features
 
 #### Intelligent Processing
+
 - **Semantic Chunking**: Smart document splitting based on content structure
 - **Query Expansion**: Automatic query enhancement for better results
 - **Result Ranking**: ML-based relevance scoring and ranking
 - **Duplicate Detection**: Identify and handle duplicate content
 
 #### Integration Capabilities
+
 - **Webhook Support**: Real-time notifications for processing events
 - **ETL Pipeline Integration**: Connect with data pipeline tools
 - **Message Queue Support**: Async processing with RabbitMQ/Kafka
