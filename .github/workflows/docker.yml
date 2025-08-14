@@ -137,10 +137,13 @@ jobs:
     permissions:
       contents: read
       packages: read
+      security-events: write
     strategy:
       matrix:
         service: [designer, server, runtime]
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:

@@ -1,6 +1,6 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
-import type * as Preset from '@docusaurus/preset-classic';
+import { themes as prismThemes } from 'prism-react-renderer'
+import type { Config } from '@docusaurus/types'
+import type * as Preset from '@docusaurus/preset-classic'
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -15,15 +15,17 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://llama-farm.github.io',
+  url: 'https://docs.llamafarm.dev',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
+  trailingSlash: false,
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'llama-farm', // Usually your GitHub org/user name.
-  projectName: 'llamafarm', // Usually your repo name.
+  projectName: 'llama-farm.github.io', // Usually your repo name.
+  deploymentBranch: 'main',
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
@@ -85,7 +87,7 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
-        {to: '/blog', label: 'Blog', position: 'left'},
+        { to: '/blog', label: 'Blog', position: 'left' },
         {
           href: 'https://github.com/llama-farm/llamafarm',
           label: 'GitHub',
@@ -99,56 +101,28 @@ const config: Config = {
         {
           title: 'Documentation',
           items: [
-            {
-              label: 'Getting Started',
-              to: '/docs/intro',
-            },
-            {
-              label: 'Configuration',
-              to: '/docs/configuration',
-            },
-            {
-              label: 'Models',
-              to: '/docs/models',
-            },
-            {
-              label: 'Deployment',
-              to: '/docs/deployment',
-            },
+            { label: 'Getting Started', to: '/docs/intro' },
+            { label: 'Configuration', to: '/docs/configuration' },
+            { label: 'Models', to: '/docs/models' },
+            { label: 'Deployment', to: '/docs/deployment' },
           ],
         },
         {
           title: 'Community',
           items: [
-            {
-              label: 'GitHub Discussions',
-              href: 'https://github.com/llama-farm/llamafarm/discussions',
-            },
-            {
-              label: 'Discord',
-              href: 'https://discord.gg/llamafarm',
-            },
-            {
-              label: 'Twitter',
-              href: 'https://twitter.com/llamafarm',
-            },
+            { label: 'Discord', href: 'https://discord.gg/jtChvg8T' },
+            { label: 'Reddit', href: 'https://www.reddit.com/r/LlamaFarm/' },
           ],
         },
         {
           title: 'Resources',
           items: [
-            {
-              label: 'Blog',
-              to: '/blog',
-            },
+            { label: 'Blog', to: '/blog' },
             {
               label: 'GitHub',
               href: 'https://github.com/llama-farm/llamafarm',
             },
-            {
-              label: 'Roadmap',
-              href: 'https://github.com/llama-farm/llamafarm/projects',
-            },
+            { label: 'Website', href: 'https://llamafarm.dev/' },
           ],
         },
       ],
@@ -159,6 +133,6 @@ const config: Config = {
       darkTheme: prismThemes.dracula,
     },
   } satisfies Preset.ThemeConfig,
-};
+}
 
-export default config;
+export default config

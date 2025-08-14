@@ -2,6 +2,7 @@ import fastapi
 from asgi_correlation_id import CorrelationIdMiddleware
 
 import api.routers as routers
+from api.errors import register_exception_handlers
 from api.middleware.errors import ErrorHandlerMiddleware
 from api.middleware.structlog import StructLogMiddleware
 from core.logging import FastAPIStructLogger
@@ -18,6 +19,9 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(StructLogMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
+
+    # Register global exception handlers
+    register_exception_handlers(app)
 
     app.include_router(routers.projects_router, prefix=API_PREFIX)
     app.include_router(routers.datasets_router, prefix=API_PREFIX)

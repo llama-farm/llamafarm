@@ -1,0 +1,46 @@
+version: v1
+name: default-project
+prompts: []
+rag:
+  strategies:
+    - name: default
+      description: Default RAG strategy
+      components:
+        parser:
+          type: PlainTextParser
+          config:
+            encoding: auto
+            chunk_overlap: 0
+            chunk_strategy: characters
+            respect_sentence_boundaries: true
+            respect_paragraph_boundaries: false
+            min_chunk_size: 50
+            preserve_line_breaks: true
+            strip_empty_lines: true
+            detect_structure: true
+        embedder:
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text
+            base_url: http://localhost:11434/
+            dimension: 768
+            batch_size: 16
+            timeout: 60
+            auto_pull: true
+        vector_store:
+          type: ChromaStore
+          config:
+            collection_name: documents
+            persist_directory: ./data/chroma_db
+            port: 8000
+            distance_function: cosine
+        retrieval_strategy:
+          type: BasicSimilarityStrategy
+          config:
+            top_k: 10
+            distance_metric: cosine
+  strategy_templates: {}
+datasets: []
+models: []
+
+

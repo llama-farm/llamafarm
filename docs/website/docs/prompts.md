@@ -1,6 +1,8 @@
 ---
 sidebar_position: 3
-title: "Prompts System"
+title: 'Prompts System'
+slug: /prompts-legacy
+draft: true
 ---
 
 # LlamaFarm Prompts Management System
@@ -239,7 +241,7 @@ cp templates/basic/qa_basic.json templates/basic/qa_basic_es.json
   "template": "Explain {{topic}} in simple terms, as if explaining to someone new to the field:\n\n"
 }
 
-# expert_analysis.json  
+# expert_analysis.json
 {
   "template": "Provide an in-depth technical analysis of {{topic}}, including:\n- Advanced concepts\n- Current research\n- Technical implications\n\n"
 }
@@ -286,7 +288,7 @@ async def rag_query(question: str, retrieved_docs: list):
     # Load prompt system
     config = PromptConfig.from_file('config/default_prompts.json')
     prompt_system = PromptSystem(config)
-    
+
     # Execute with context
     result = prompt_system.execute_prompt(
         query=question,
@@ -296,7 +298,7 @@ async def rag_query(question: str, retrieved_docs: list):
         },
         template_override="qa_detailed"  # or let strategy decide
     )
-    
+
     return result.rendered_prompt
 
 # Use in your RAG pipeline
@@ -357,6 +359,7 @@ Based on LangChain's prompt template patterns, our system provides specialized t
 **Purpose**: Simple variable substitution for straightforward tasks.
 
 **When to Use**:
+
 - Single-turn interactions
 - Basic Q&A scenarios
 - Document summarization
@@ -366,6 +369,7 @@ Based on LangChain's prompt template patterns, our system provides specialized t
 **Available Templates**:
 
 #### `qa_basic` - Basic Question Answering
+
 ```bash
 # CLI Usage
 uv run python -m prompts.cli template show qa_basic --show-content
@@ -377,6 +381,7 @@ uv run python -m prompts.cli execute "What is photosynthesis?" \
 ```
 
 **Template Structure**:
+
 ```jinja2
 Based on the following context:
 
@@ -388,6 +393,7 @@ Answer:
 ```
 
 #### `qa_detailed` - Comprehensive Q&A
+
 ```bash
 # For complex questions requiring detailed analysis
 uv run python -m prompts.cli execute "How does climate change affect biodiversity?" \
@@ -396,6 +402,7 @@ uv run python -m prompts.cli execute "How does climate change affect biodiversit
 ```
 
 #### `summarization` - Document Summarization
+
 ```bash
 # Summarize documents
 uv run python -m prompts.cli execute "Summarize the key findings" \
@@ -408,6 +415,7 @@ uv run python -m prompts.cli execute "Summarize the key findings" \
 **Purpose**: Multi-turn conversations with message-based structure.
 
 **When to Use**:
+
 - Chatbots and virtual assistants
 - Customer support scenarios
 - Interactive tutoring
@@ -415,6 +423,7 @@ uv run python -m prompts.cli execute "Summarize the key findings" \
 - Context-aware responses
 
 #### `chat_assistant` - Conversational Assistant
+
 ```bash
 # Interactive chat with optional context
 uv run python -m prompts.cli execute "Hello! Can you help me understand quantum computing?" \
@@ -423,6 +432,7 @@ uv run python -m prompts.cli execute "Hello! Can you help me understand quantum 
 ```
 
 **Template Features**:
+
 - Conditional context inclusion
 - Conversational tone
 - Dynamic response adaptation
@@ -432,6 +442,7 @@ uv run python -m prompts.cli execute "Hello! Can you help me understand quantum 
 **Purpose**: Pattern learning through examples.
 
 **When to Use**:
+
 - Classification tasks
 - Pattern recognition
 - Custom formatting requirements
@@ -440,6 +451,7 @@ uv run python -m prompts.cli execute "Hello! Can you help me understand quantum 
 - Consistent output structure needed
 
 #### `few_shot_classification` - Example-Based Classification
+
 ```bash
 # Classify text using examples
 uv run python -m prompts.cli execute "The quarterly earnings exceeded expectations" \
@@ -450,6 +462,7 @@ uv run python -m prompts.cli execute "The quarterly earnings exceeded expectatio
 ```
 
 **Use Cases**:
+
 - Email categorization
 - Document classification
 - Sentiment analysis
@@ -460,6 +473,7 @@ uv run python -m prompts.cli execute "The quarterly earnings exceeded expectatio
 **Purpose**: Complex reasoning and analytical tasks.
 
 **When to Use**:
+
 - Multi-step reasoning required
 - Comparative analysis
 - Complex problem solving
@@ -467,6 +481,7 @@ uv run python -m prompts.cli execute "The quarterly earnings exceeded expectatio
 - Chain-of-thought reasoning
 
 #### `chain_of_thought` - Step-by-Step Reasoning
+
 ```bash
 # Complex analytical reasoning
 uv run python -m prompts.cli execute "Why might renewable energy adoption vary between countries?" \
@@ -475,6 +490,7 @@ uv run python -m prompts.cli execute "Why might renewable energy adoption vary b
 ```
 
 **Template Pattern**:
+
 ```jinja2
 Context: {{ context | format_documents }}
 
@@ -489,6 +505,7 @@ Let me work through this step by step:
 ```
 
 #### `comparative_analysis` - Document Comparison
+
 ```bash
 # Compare multiple documents or concepts
 uv run python -m prompts.cli execute "Compare cloud vs on-premises infrastructure" \
@@ -506,6 +523,7 @@ uv run python -m prompts.cli execute "Compare cloud vs on-premises infrastructur
 **Purpose**: Specialized templates for particular domains.
 
 **When to Use**:
+
 - Domain expertise required
 - Specialized terminology
 - Compliance requirements
@@ -513,6 +531,7 @@ uv run python -m prompts.cli execute "Compare cloud vs on-premises infrastructur
 - Industry-specific analysis
 
 #### `code_analysis` - Software Development
+
 ```bash
 # Code review and analysis
 uv run python -m prompts.cli execute "Review this function for improvements" \
@@ -523,6 +542,7 @@ uv run python -m prompts.cli execute "Review this function for improvements" \
 ```
 
 #### `medical_qa` - Healthcare Context
+
 ```bash
 # Medical information analysis (with appropriate disclaimers)
 uv run python -m prompts.cli execute "What are the symptoms of hypertension?" \
@@ -537,6 +557,7 @@ The system automatically selects optimal templates based on context, user role, 
 ### Strategy Types
 
 #### 1. Context-Aware Strategy
+
 Analyzes domain, user role, and complexity to select templates:
 
 ```bash
@@ -563,6 +584,7 @@ print(f'Strategy: {result.selected_strategy_id}')
 ```
 
 #### 2. Rule-Based Strategy
+
 Uses explicit rules for template routing:
 
 ```bash
@@ -571,6 +593,7 @@ uv run python -m prompts.cli strategy test rule_based_strategy --test-file test_
 ```
 
 #### 3. Static Strategy
+
 Always returns the same template (useful for testing):
 
 ```bash
@@ -585,6 +608,7 @@ Global prompts modify system behavior across all templates:
 ### Available Global Prompts
 
 #### System Context
+
 ```bash
 # View global prompts
 uv run python -m prompts.cli global-prompt list
@@ -594,29 +618,32 @@ uv run python -m prompts.cli execute "Explain quantum computing" --show-details
 ```
 
 #### Quality Guidelines
+
 Ensures consistent response quality:
+
 - Accuracy requirements
 - Clarity standards
 - Appropriate length
 
 #### Domain-Specific Context
+
 Adds specialized knowledge for domains like medical, legal, technical.
 
 ## 📊 Template Decision Guide
 
 ### Quick Selection Chart
 
-| Use Case | Template Type | Example Template | When to Use |
-|----------|---------------|------------------|-------------|
-| Simple Q&A | Basic | `qa_basic` | Straightforward questions with context |
-| Detailed Analysis | Basic | `qa_detailed` | Complex questions needing comprehensive answers |
-| Chat/Conversation | Chat | `chat_assistant` | Interactive, multi-turn conversations |
-| Pattern Learning | Few-Shot | `few_shot_classification` | Need examples to guide model behavior |
-| Step-by-step Reasoning | Advanced | `chain_of_thought` | Complex logical reasoning required |
-| Document Comparison | Advanced | `comparative_analysis` | Analyzing multiple documents/concepts |
-| Code Review | Domain-Specific | `code_analysis` | Software development tasks |
-| Medical Analysis | Domain-Specific | `medical_qa` | Healthcare-related queries |
-| Document Summary | Basic | `summarization` | Condensing large content |
+| Use Case               | Template Type   | Example Template          | When to Use                                     |
+| ---------------------- | --------------- | ------------------------- | ----------------------------------------------- |
+| Simple Q&A             | Basic           | `qa_basic`                | Straightforward questions with context          |
+| Detailed Analysis      | Basic           | `qa_detailed`             | Complex questions needing comprehensive answers |
+| Chat/Conversation      | Chat            | `chat_assistant`          | Interactive, multi-turn conversations           |
+| Pattern Learning       | Few-Shot        | `few_shot_classification` | Need examples to guide model behavior           |
+| Step-by-step Reasoning | Advanced        | `chain_of_thought`        | Complex logical reasoning required              |
+| Document Comparison    | Advanced        | `comparative_analysis`    | Analyzing multiple documents/concepts           |
+| Code Review            | Domain-Specific | `code_analysis`           | Software development tasks                      |
+| Medical Analysis       | Domain-Specific | `medical_qa`              | Healthcare-related queries                      |
+| Document Summary       | Basic           | `summarization`           | Condensing large content                        |
 
 ### Decision Tree
 
@@ -625,27 +652,27 @@ graph TD
     A[Start: What's your use case?] --> B{Need examples?}
     B -->|Yes| C[Few-Shot Templates]
     B -->|No| D{Complex reasoning?}
-    
+
     D -->|Yes| E[Advanced Templates]
     D -->|No| F{Domain-specific?}
-    
+
     F -->|Yes| G[Domain-Specific Templates]
     F -->|No| H{Conversational?}
-    
+
     H -->|Yes| I[Chat Templates]
     H -->|No| J[Basic Templates]
-    
+
     C --> K[few_shot_classification]
     E --> L{Reasoning type?}
     L -->|Step-by-step| M[chain_of_thought]
     L -->|Comparison| N[comparative_analysis]
-    
+
     G --> O{Domain?}
     O -->|Software| P[code_analysis]
     O -->|Medical| Q[medical_qa]
-    
+
     I --> R[chat_assistant]
-    
+
     J --> S{Complexity?}
     S -->|Simple| T[qa_basic]
     S -->|Detailed| U[qa_detailed]
@@ -728,18 +755,20 @@ uv run python -m prompts.cli metrics --detailed
     "author": "Your Name"
   },
   "validation_rules": {
-    "context": {"type": "list", "required": true},
-    "focus_area": {"type": "str", "required": true}
+    "context": { "type": "list", "required": true },
+    "focus_area": { "type": "str", "required": true }
   }
 }
 ```
 
 2. **Regenerate configuration**:
+
 ```bash
 uv run python generate_config.py --validate
 ```
 
 3. **Test your template**:
+
 ```bash
 uv run python -m prompts.cli template test custom_analysis \
   --variables '{"context":[{"title":"Data","content":"..."}], "focus_area":"trends"}'
@@ -758,13 +787,21 @@ Add strategy configuration to your prompt config:
   "rules": [
     {
       "rule_id": "medical_priority",
-      "condition": {"field": "domain", "operator": "equals", "value": "medical"},
+      "condition": {
+        "field": "domain",
+        "operator": "equals",
+        "value": "medical"
+      },
       "template_id": "medical_qa",
       "priority": 100
     },
     {
-      "rule_id": "code_priority", 
-      "condition": {"field": "domain", "operator": "equals", "value": "software"},
+      "rule_id": "code_priority",
+      "condition": {
+        "field": "domain",
+        "operator": "equals",
+        "value": "software"
+      },
       "template_id": "code_analysis",
       "priority": 90
     }
@@ -842,14 +879,14 @@ def rag_query(query: str, retrieved_docs: List[Dict]) -> str:
         domain=infer_domain(query),
         user_role="general"
     )
-    
+
     # Execute with retrieved documents
     result = prompt_system.execute_prompt(
         query=query,
         context=context,
         variables={"context": retrieved_docs}
     )
-    
+
     return result.final_prompt, result.selected_template_id
 ```
 
@@ -861,283 +898,17 @@ from prompts.core.prompt_system import PromptSystem
 
 def create_prompt_workflow():
     workflow = StateGraph()
-    
+
     workflow.add_node("analyze_query", analyze_query_node)
     workflow.add_node("select_template", select_template_node)
     workflow.add_node("execute_prompt", execute_prompt_node)
-    
+
     workflow.set_entry_point("analyze_query")
     workflow.add_edge("analyze_query", "select_template")
     workflow.add_edge("select_template", "execute_prompt")
     workflow.add_edge("execute_prompt", END)
-    
+
     return workflow.compile()
-```
-
-## 🧪 Testing & Validation
-
-### Template Testing
-
-```bash
-# Validate template syntax
-uv run python -m prompts.cli template validate qa_basic
-
-# Test with sample data
-uv run python -m prompts.cli template test qa_basic \
-  --test-file test_data/qa_samples.json
-
-# Performance testing
-uv run python -m prompts.cli template benchmark qa_basic --iterations 100
-```
-
-### Strategy Testing
-
-```bash
-# Test strategy logic
-uv run python -m prompts.cli strategy test context_aware_strategy \
-  --test-file test_data/sample_contexts.json
-
-# Strategy accuracy assessment
-uv run python -m prompts.cli strategy evaluate context_aware_strategy \
-  --ground-truth test_data/expected_selections.json
-```
-
-## 📚 Best Practices
-
-### Template Design
-
-1. **Clear Variable Names**: Use descriptive variable names
-2. **Consistent Formatting**: Follow established patterns
-3. **Comprehensive Validation**: Define proper validation rules
-4. **Good Documentation**: Include examples and use cases
-5. **Performance Consideration**: Optimize for token efficiency
-
-### Strategy Configuration  
-
-1. **Fallback Planning**: Always define fallback strategies
-2. **Priority Ordering**: Set clear priority levels
-3. **Context Utilization**: Leverage available context effectively
-4. **Performance Monitoring**: Track strategy effectiveness
-5. **Gradual Rollout**: Test strategies before full deployment
-
-### System Management
-
-1. **Regular Validation**: Validate configurations regularly
-2. **Performance Monitoring**: Track system metrics
-3. **Version Control**: Maintain template and strategy versions
-4. **Testing Coverage**: Comprehensive test suites
-5. **Documentation**: Keep documentation current
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Template Validation Errors
-```bash
-# Check template syntax
-uv run python -m prompts.cli template validate problematic_template
-
-# View validation details
-uv run python -m prompts.cli template show problematic_template --show-content
-```
-
-#### Strategy Selection Issues
-```bash
-# Debug strategy selection
-uv run python -m prompts.cli execute "test query" --strategy your_strategy --debug
-
-# Test strategy rules
-uv run python -m prompts.cli strategy debug your_strategy --input "test input"
-```
-
-#### Configuration Problems
-```bash
-# Validate entire configuration
-uv run python -m prompts.cli validate-config
-
-# Regenerate configuration
-uv run python generate_config.py --validate
-```
-
-### Performance Issues
-
-1. **Template Caching**: Enable template caching for repeated use
-2. **Strategy Optimization**: Profile and optimize slow strategies
-3. **Variable Preparation**: Pre-process variables when possible
-4. **Batch Operations**: Use batch processing for multiple queries
-
-## 🚀 Production Deployment
-
-### Environment Setup
-
-```bash
-# Production dependencies only
-uv sync --no-dev
-
-# Environment-specific configuration
-export PROMPTS_CONFIG_PATH="/path/to/production/config.json"
-export PROMPTS_LOG_LEVEL="INFO"
-```
-
-### Configuration Management
-
-```python
-# Production configuration
-{
-  "environment": "production",
-  "cache_enabled": true,
-  "metrics_enabled": true,
-  "fallback_strategy": "qa_basic",
-  "performance_limits": {
-    "max_template_size": 4000,
-    "max_variables": 50,
-    "timeout_seconds": 30
-  }
-}
-```
-
-### Monitoring & Alerting
-
-```python
-# Example monitoring integration
-from prompts.core.prompt_system import PromptSystem
-
-system = PromptSystem(config)
-
-# Add monitoring hooks
-system.on_execution_start(lambda ctx: monitor.start_timer(ctx.execution_id))
-system.on_execution_complete(lambda ctx: monitor.record_success(ctx))
-system.on_execution_error(lambda ctx, error: monitor.record_error(ctx, error))
-```
-
-## 🔮 Future Roadmap
-
-### Planned Features
-
-- **ML-Driven Template Selection**: Machine learning models for optimal template selection
-- **Multi-Modal Support**: Templates for image, audio, and video inputs
-- **Advanced Analytics**: Comprehensive usage analytics and optimization suggestions
-- **Template Marketplace**: Community-driven template sharing
-- **Real-Time Learning**: Templates that adapt based on user feedback
-- **Enhanced RAG Integration**: Deeper integration with retrieval systems
-
-### Extension Points
-
-- **Custom Strategies**: Plugin architecture for custom selection strategies
-- **Template Validators**: Custom validation logic for specialized use cases
-- **Output Processors**: Post-processing pipelines for template outputs
-- **Context Enrichers**: Automatic context enhancement from external sources
-
-## 📖 API Reference
-
-### Core Classes
-
-- `PromptSystem`: Main orchestrator
-- `TemplateEngine`: Jinja2 template rendering
-- `StrategyEngine`: Template selection logic
-- `TemplateRegistry`: Template management
-- `GlobalPromptManager`: Global prompt handling
-
-### Configuration Models
-
-- `PromptConfig`: Main configuration container
-- `PromptTemplate`: Individual template definition
-- `PromptStrategy`: Strategy configuration
-- `PromptContext`: Execution context
-
-### CLI Commands
-
-The system provides comprehensive CLI tools for all operations:
-
-#### Core Commands
-```bash
-# Execute prompts
-uv run python -m prompts.cli execute "What is AI?" --template qa_basic
-uv run python -m prompts.cli execute "Compare solar vs wind" --template comparative_analysis
-
-# System information
-uv run python -m prompts.cli stats
-```
-
-#### Template Management
-```bash
-uv run python -m prompts.cli template list
-uv run python -m prompts.cli template show medical_qa
-uv run python -m prompts.cli template search "medical"
-uv run python -m prompts.cli template create --interactive
-uv run python -m prompts.cli template test qa_basic --variables '{"context": [{"title": "Test", "content": "Data"}]}'
-uv run python -m prompts.cli template validate llm_judge
-```
-
-#### Strategy Management  
-```bash
-uv run python -m prompts.cli strategy list
-uv run python -m prompts.cli strategy test context_aware_strategy
-```
-
-#### System Validation & Testing
-```bash
-# Validate entire system
-uv run python -m prompts.cli validate --all
-
-# Validate specific components
-uv run python -m prompts.cli validate --templates
-uv run python -m prompts.cli validate --strategies --config
-
-# Test components
-uv run python -m prompts.cli test --all-templates
-uv run python -m prompts.cli test --template qa_basic --sample-size 3
-uv run python -m prompts.cli test --all-strategies
-```
-
-#### Response Evaluation
-```bash
-# Evaluate AI responses
-uv run python -m prompts.cli evaluate "AI is machine learning" \
-  --query "What is AI?" \
-  --criteria "accuracy,clarity,completeness" \
-  --output-format detailed
-
-# Use different evaluation templates
-uv run python -m prompts.cli evaluate "Response text" \
-  --query "Original query" \
-  --template rag_evaluation \
-  --context '[{"title": "Doc", "content": "Context"}]'
-```
-
-#### Performance Benchmarking
-```bash
-# Benchmark system performance
-uv run python -m prompts.cli benchmark --system --iterations 10
-
-# Benchmark specific components
-uv run python -m prompts.cli benchmark --templates --iterations 5
-uv run python -m prompts.cli benchmark --strategies --output json
-
-# Get CSV output for analysis
-uv run python -m prompts.cli benchmark --system --output csv
-```
-
-#### Global Prompts
-```bash
-uv run python -m prompts.cli global-prompt list
-uv run python -m prompts.cli global-prompt create \
-  --id custom_behavior \
-  --name "Custom System Behavior" \
-  --system "You are a helpful assistant" \
-  --applies-to "*" \
-  --priority 50
-```
-
-#### Full Command Reference
-```bash
-uv run python -m prompts.cli --help
-uv run python -m prompts.cli template --help
-uv run python -m prompts.cli strategy --help
-uv run python -m prompts.cli validate --help
-uv run python -m prompts.cli test --help
-uv run python -m prompts.cli evaluate --help
-uv run python -m prompts.cli benchmark --help
 ```
 
 ## 🧪 Testing & Validation

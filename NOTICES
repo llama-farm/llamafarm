@@ -1,0 +1,46 @@
+LlamaFarm – Third-Party Notices
+
+This project is licensed under the terms described in the LICENSE file at the project root.
+It also bundles and depends upon third‑party open source software. The corresponding
+licenses and copyrights are owned by their respective authors.
+
+Primary dependency ecosystems
+  - Python (server, config, prompts, rag, runtime)
+  - Go (cli)
+  - TypeScript (designer/ui)
+
+Representative third‑party packages (non‑exhaustive)
+  - Python
+    - fastapi (MIT)
+    - pydantic, pydantic‑settings (MIT)
+    - structlog (Apache‑2.0)
+    - requests (Apache‑2.0)
+    - uvicorn (BSD‑3‑Clause)
+    - asgi‑correlation‑id (MIT)
+    - jsonref (BSD‑3‑Clause)
+    - jsonschema (MIT)
+    - appdirs (MIT)
+  - Go
+    - github.com/spf13/cobra (Apache‑2.0)
+    - gopkg.in/yaml.v2 (Apache‑2.0)
+  - TypeScript
+    - React and related libraries (MIT)
+
+How to regenerate a comprehensive notice report
+  - Python (from each Python project directory):
+      pip install pip‑licenses
+      pip‑licenses --format=markdown --with‑license‑file --with‑urls > THIRD_PARTY_LICENSES_PY.md
+    If you use uv: uvx pip‑licenses … (same flags)
+
+  - Go (from cli/):
+      go install github.com/google/go‑licenses@latest
+      go‑licenses report . > THIRD_PARTY_LICENSES_GO.md
+
+  - Node/TypeScript (from designer/):
+      npx license‑checker --json > THIRD_PARTY_LICENSES_TS.json
+
+Notes
+  - The lists above are illustrative and may change over time.
+  - Generated reports should be committed alongside this NOTICES file when releases are cut.
+  - If any package terms require explicit attribution, include the attribution text verbatim in this file
+    or in the generated per‑ecosystem reports.

@@ -1,6 +1,8 @@
 ---
 sidebar_position: 5
 title: Deployment
+slug: /deployment-legacy
+draft: true
 ---
 
 # Deployment Guide
@@ -61,12 +63,12 @@ llamafarm deploy gcp --project my-project
 
 ### System Requirements
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| CPU | 4 cores | 8+ cores |
-| RAM | 8GB | 32GB+ |
-| Storage | 20GB | 100GB+ SSD |
-| GPU | Optional | NVIDIA 8GB+ VRAM |
+| Component | Minimum  | Recommended      |
+| --------- | -------- | ---------------- |
+| CPU       | 4 cores  | 8+ cores         |
+| RAM       | 8GB      | 32GB+            |
+| Storage   | 20GB     | 100GB+ SSD       |
+| GPU       | Optional | NVIDIA 8GB+ VRAM |
 
 ### Configuration
 
@@ -131,7 +133,7 @@ deploy:
     # Instance configuration
     ec2:
       instance_type: g4dn.xlarge
-      ami: ami-0abcdef1234567890  # LlamaFarm AMI
+      ami: ami-0abcdef1234567890 # LlamaFarm AMI
       key_pair: my-keypair
 
       # Auto-scaling
@@ -167,6 +169,7 @@ deploy:
 ```
 
 Deploy command:
+
 ```bash
 llamafarm deploy aws --config deploy.aws.yaml
 ```
@@ -230,6 +233,7 @@ deploy:
 ```
 
 Deploy command:
+
 ```bash
 llamafarm deploy azure --config deploy.azure.yaml
 ```
@@ -282,29 +286,29 @@ spec:
         app: llamafarm
     spec:
       containers:
-      - name: llamafarm
-        image: llamafarm/llamafarm:latest
-        ports:
-        - containerPort: 8080
-        resources:
-          requests:
-            memory: "8Gi"
-            cpu: "4"
-            nvidia.com/gpu: 1
-          limits:
-            memory: "16Gi"
-            cpu: "8"
-            nvidia.com/gpu: 1
-        env:
-        - name: MODEL_PATH
-          value: "/models"
-        volumeMounts:
-        - name: models
-          mountPath: /models
+        - name: llamafarm
+          image: llamafarm/llamafarm:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: '8Gi'
+              cpu: '4'
+              nvidia.com/gpu: 1
+            limits:
+              memory: '16Gi'
+              cpu: '8'
+              nvidia.com/gpu: 1
+          env:
+            - name: MODEL_PATH
+              value: '/models'
+          volumeMounts:
+            - name: models
+              mountPath: /models
       volumes:
-      - name: models
-        persistentVolumeClaim:
-          claimName: models-pvc
+        - name: models
+          persistentVolumeClaim:
+            claimName: models-pvc
 ```
 
 ### Helm Chart
@@ -381,7 +385,7 @@ deploy:
       replicas: 3
       backup:
         enabled: true
-        schedule: "0 2 * * *"
+        schedule: '0 2 * * *'
 
     # Model caching
     cache:
@@ -498,10 +502,10 @@ cost_optimization:
   # Auto-shutdown
   schedules:
     - name: development
-      start: "8:00"
-      stop: "18:00"
-      timezone: "America/New_York"
-      days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+      start: '8:00'
+      stop: '18:00'
+      timezone: 'America/New_York'
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 ```
 
 ### Model Optimization
@@ -585,12 +589,12 @@ module "llamafarm" {
 
 ### Common Issues
 
-| Issue | Solution |
-|-------|----------|
-| Out of Memory | Reduce batch size, enable quantization |
-| Slow inference | Enable GPU, use smaller model |
-| Connection refused | Check firewall, security groups |
-| Model not loading | Verify model path, check permissions |
+| Issue              | Solution                               |
+| ------------------ | -------------------------------------- |
+| Out of Memory      | Reduce batch size, enable quantization |
+| Slow inference     | Enable GPU, use smaller model          |
+| Connection refused | Check firewall, security groups        |
+| Model not loading  | Verify model path, check permissions   |
 
 ### Health Checks
 
