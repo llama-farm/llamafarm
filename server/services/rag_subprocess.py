@@ -40,15 +40,6 @@ def build_v1_config_from_strategy(strategy) -> dict[str, Any]:
     # Embedder with fallback if sentence-transformer is not implemented in rag
     embedder_type = _enum_value(components.embedder.type)
     embedder_config = components.embedder.config.model_dump(mode="json")
-    if embedder_type == "SentenceTransformerEmbedder":
-        logger.info("RAG: Fallback to OllamaEmbedder for sentence-transformers")
-        embedder_type = "OllamaEmbedder"
-        embedder_config = {
-            "model": "nomic-embed-text",
-            "base_url": "http://localhost:11434",
-            "batch_size": 16,
-            "timeout": 60,
-        }
 
     # Vector store
     vector_store_type = _enum_value(components.vector_store.type)
