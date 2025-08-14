@@ -1,29 +1,22 @@
 import builtins
 import threading
+import time
 import uuid
 
-import instructor
-from atomic_agents.agents.base_agent import (
-    BaseAgent,
-    BaseAgentConfig,
-    BaseAgentInputSchema,
-    BaseAgentOutputSchema,
-)
-from atomic_agents.lib.components.agent_memory import AgentMemory
-from fastapi import APIRouter, Header, HTTPException, Response
-from openai import OpenAI
+from atomic_agents import AtomicAgent
+from fastapi import Header, HTTPException, Response
+from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat.chat_completion import Choice
 
+from agents.project_chat_orchestrator import (
+    ProjectChatOrchestratorAgentFactory,
+    ProjectChatOrchestratorAgentInputSchema,
+)
 from api.routers.inference.models import ChatRequest, ChatResponse
-from api.routers.shared.response_utils import (
-    build_chat_response,
-    set_session_header,
-)
-from core.config import settings
+from api.routers.shared.response_utils import set_session_header
+from services.project_service import ProjectService
 
-router = APIRouter(
-    prefix="/projects/{namespace}/{project_id}",
-    tags=["project_chat"],
-)
+from .projects import router
 
 """
 Project-scoped chat endpoint that uses the same OpenAI-style models as inference.
@@ -32,53 +25,28 @@ Project-scoped chat endpoint that uses the same OpenAI-style models as inference
 
 # Store agent instances to maintain conversation context
 # In production, use Redis, database, or other persistent storage
-agent_sessions: builtins.dict[str, BaseAgent] = {}
+agent_sessions: builtins.dict[str, AtomicAgent] = {}
 _agent_sessions_lock = threading.RLock()
 
-def create_agent() -> BaseAgent:
-    """Create a new agent instance"""
-    # Initialize memory
-    memory = AgentMemory()
 
-    # Initialize memory with an initial message from the assistant
-    initial_message = BaseAgentOutputSchema(chat_message="Hello! How can I assist you today?")
-    memory.add_message("assistant", initial_message)
-
-    # Create OpenAI-compatible client pointing to Ollama
-    ollama_client = OpenAI(
-        base_url=settings.ollama_host,
-        api_key=settings.ollama_api_key,  # Ollama doesn't require a real API key, but instructor needs something
-    )
-
-    client = instructor.from_openai(ollama_client)
-
-    # Agent setup with specified configuration
-    agent = BaseAgent(
-        config=BaseAgentConfig(
-            client=client,
-            model=settings.ollama_model,  # Using Ollama model name (make sure this model is installed)
-            memory=memory,
-        )
-    )
-
-    return agent
-
-@router.post("/chat/completions", response_model=ChatResponse)
+@router.post("/{namespace}/{project_id}/chat/completions", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
     namespace: str,
     project_id: str,
     response: Response,
-    session_id: str | None = Header(None, alias="X-Session-ID")
+    session_id: str | None = Header(None, alias="X-Session-ID"),
 ):
     """Send a message to the chat agent"""
     try:
+        project_config = ProjectService.load_config(namespace, project_id)
+
         # If no session ID provided, create a new one and ensure thread-safe session map access
         with _agent_sessions_lock:
             if not session_id or session_id not in agent_sessions:
                 if not session_id:
                     session_id = str(uuid.uuid4())
-                agent = create_agent()
+                agent = ProjectChatOrchestratorAgentFactory.create_agent(project_config)
                 agent_sessions[session_id] = agent
             else:
                 # Use existing agent to maintain conversation context
@@ -98,11 +66,13 @@ async def chat(
             raise HTTPException(status_code=400, detail="No user message provided")
 
         # Process the user's input through the agent and get the response
-        input_schema = BaseAgentInputSchema(chat_message=latest_user_message)
+        input_schema = ProjectChatOrchestratorAgentInputSchema(
+            chat_message=latest_user_message
+        )
         agent_response = agent.run(input_schema)
 
         # Extract the message from the response
-        if hasattr(agent_response, 'chat_message'):
+        if hasattr(agent_response, "chat_message"):
             response_message = agent_response.chat_message
         else:
             # Fallback if the response structure is different
@@ -111,14 +81,34 @@ async def chat(
         # Set session header
         set_session_header(response, session_id)
 
-        # Return OpenAI-compatible response using shared builder
-        model_name = request.model or settings.ollama_model
-        return build_chat_response(model_name, response_message)
+        # model_name should come from the project config
+        # model_name = request.model or settings.ollama_model
+
+        completion: ChatCompletion = ChatCompletion(
+            id=f"chat-{uuid.uuid4()}",
+            object="chat.completion",
+            created=int(time.time()),
+            model="todo: use model from project config",
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        content=response_message,
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+        )
+        return completion
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error processing chat: {str(e)}"
+        ) from e
 
-@router.delete("/chat/session/{session_id}")
+
+@router.delete("/{namespace}/{project_id}/chat/session/{session_id}")
 async def delete_chat_session(session_id: str):
     """Delete a chat session"""
     with _agent_sessions_lock:

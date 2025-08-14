@@ -22,7 +22,6 @@ dependencies = [
     "pydantic-settings>=2.10.1",
     "ruff>=0.12.7",
     "uvicorn>=0.35.0",
-    "atomic-agents>=0.1.0",
     "openai>=1.0.0",
     "instructor>=1.0.0",
     "urllib3==1.26.20",
@@ -30,6 +29,8 @@ dependencies = [
     "requests>=2.25.0",
     "structlog>=25.4.0",
     "asgi-correlation-id>=4.3.4",
+    "atomic-agents>=2.0.1",
+    "jsonref>=1.1.0",
 ]
 
 [project.optional-dependencies]

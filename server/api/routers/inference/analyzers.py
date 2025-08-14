@@ -17,24 +17,29 @@ logger = FastAPIStructLogger()
 # Constants
 PROJECT_KEYWORDS = ["project", "list", "create", "show", "namespace"]
 
+
 # Structured output models for LLM-based analysis
 class ProjectAnalysis(BaseModel):
     """Structured output for project-related message analysis"""
+
     action: str = Field(description="The action to take: 'create' or 'list'")
     namespace: str | None = Field(
-        description="The namespace mentioned, or None if not specified")
+        description="The namespace mentioned, or None if not specified"
+    )
     project_id: str | None = Field(
-        description="The project ID/name for create actions, or None if not specified")
+        description="The project ID/name for create actions, or None if not specified"
+    )
     confidence: float = Field(description="Confidence score between 0 and 1")
     reasoning: str = Field(description="Brief explanation of the analysis")
 
+
 class LLMAnalyzer:
     """LLM-based message analyzer for more flexible project action detection"""
-    
+
     def __init__(self):
         self.client = None
         self._initialize_client()
-    
+
     def _initialize_client(self):
         """Initialize the instructor client for structured outputs"""
         try:
@@ -43,13 +48,13 @@ class LLMAnalyzer:
                 api_key=settings.ollama_api_key,
             )
             self.client = instructor.from_openai(
-                ollama_client, 
+                ollama_client,
                 mode=instructor.Mode.JSON,
-                )
+            )
         except Exception as e:
             logger.warning("Failed to initialize LLM analyzer client", error=str(e))
             self.client = None
-    
+
     def analyze_project_intent(self, message: str) -> ProjectAnalysis:
         """
         Use LLM to analyze user intent for project-related actions.
@@ -57,7 +62,6 @@ class LLMAnalyzer:
         """
         if not self.client:
             return self._fallback_analysis(message)
-        
         try:
             system_prompt = """
 You are an expert at analyzing user messages to determine project management actions.
@@ -89,48 +93,47 @@ Examples:
                 model=settings.ollama_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Analyze this message: {message}"}
+                    {"role": "user", "content": f"Analyze this message: {message}"},
                 ],
                 response_model=ProjectAnalysis,
                 temperature=0.1,
-                max_retries=2
+                max_retries=2,
             )
-            
-            
+
         except Exception as e:
             logger.warning(
-                "LLM analysis failed, falling back to rule-based", 
-                error=str(e)
+                "LLM analysis failed, falling back to rule-based", error=str(e)
             )
             return self._fallback_analysis(message)
-    
+
     def _fallback_analysis(self, message: str) -> ProjectAnalysis:
         """Fallback to rule-based analysis when LLM is unavailable"""
         # Use the new strategy-based approach
         strategy = AnalysisStrategyFactory.create_strategy("rule_based")
         result = strategy.analyze(message)
-        
+
         return ProjectAnalysis(
             action=result["action"],
             namespace=result["namespace"],
             project_id=result["project_id"],
             confidence=result["confidence"],
-            reasoning=result["reasoning"] + " (LLM unavailable)"
+            reasoning=result["reasoning"] + " (LLM unavailable)",
         )
+
 
 class MessageAnalyzer:
     """Handles message analysis and parameter extraction"""
-    
+
     # Class-level LLM analyzer instance
     _llm_analyzer = None
-    
+
     @classmethod
     def get_llm_analyzer(cls) -> LLMAnalyzer:
         """Get or create LLM analyzer instance"""
         if cls._llm_analyzer is None:
             cls._llm_analyzer = LLMAnalyzer()
         return cls._llm_analyzer
-    
+
     @staticmethod
     def analyze_with_llm(
         message: str,
@@ -144,24 +147,22 @@ class MessageAnalyzer:
         # Get LLM analysis
         analyzer = MessageAnalyzer.get_llm_analyzer()
         analysis = analyzer.analyze_project_intent(message)
-        
+
         # Override with request fields if provided (suggestion 2)
         if request_namespace is not None:
             analysis.namespace = request_namespace
             analysis.reasoning += " (namespace overridden from request field)"
-        
+
         if request_project_id is not None:
             analysis.project_id = request_project_id
             analysis.reasoning += " (project_id overridden from request field)"
-        
+
         # Use default namespace if still None
         if analysis.namespace is None:
             analysis.namespace = "test"
-        
-        return analysis
-    
 
-    
+        return analysis
+
     @staticmethod
     def determine_action(message: str) -> ProjectAction:
         """Determine if user wants to create or list projects (enhanced method)"""
@@ -177,12 +178,13 @@ class MessageAnalyzer:
         """Check if message is project-related"""
         return any(word in message.lower() for word in PROJECT_KEYWORDS)
 
+
 class ResponseAnalyzer:
     """Handles response analysis and validation"""
-    
+
     # Class-level validation strategy instance
     _validation_strategy = None
-    
+
     @classmethod
     def get_validation_strategy(cls) -> ResponseValidationStrategy:
         """Get or create validation strategy instance"""
@@ -191,7 +193,7 @@ class ResponseAnalyzer:
                 AnalysisStrategyFactory.create_validation_strategy()
             )
         return cls._validation_strategy
-    
+
     @staticmethod
     def is_template_response(response: str) -> bool:
         """Detect if response contains template placeholders"""
@@ -202,4 +204,4 @@ class ResponseAnalyzer:
     def needs_manual_execution(response: str, message: str) -> bool:
         """Determine if manual tool execution is needed"""
         strategy = ResponseAnalyzer.get_validation_strategy()
-        return strategy.needs_manual_execution(response, message) 
+        return strategy.needs_manual_execution(response, message)
