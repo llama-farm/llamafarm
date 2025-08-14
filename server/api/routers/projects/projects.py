@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from api.errors import ErrorResponse
 from services.project_service import ProjectService
 
 repo_root = Path(__file__).parent.parent.parent
@@ -12,9 +13,9 @@ from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 
 class Project(BaseModel):
-    namespace: str;
-    name: str;
-    config: LlamaFarmConfig;
+    namespace: str
+    name: str
+    config: LlamaFarmConfig
 
 class ListProjectsResponse(BaseModel):
     total: int
@@ -22,6 +23,7 @@ class ListProjectsResponse(BaseModel):
 
 class CreateProjectRequest(BaseModel):
     name: str
+    config_template: str | None = None
 
 class CreateProjectResponse(BaseModel):
     project: Project
@@ -32,12 +34,27 @@ class GetProjectResponse(BaseModel):
 class DeleteProjectResponse(BaseModel):
     project: Project
 
+class UpdateProjectRequest(BaseModel):
+    # Full replacement update of the project's configuration
+    config: LlamaFarmConfig
+
+class UpdateProjectResponse(BaseModel):
+    project: Project
+
 router = APIRouter(
   prefix="/projects",
   tags=["projects"],
 )
 
-@router.get("/{namespace}", response_model=ListProjectsResponse)
+@router.get(
+    "/{namespace}",
+    response_model=ListProjectsResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def list_projects(namespace: str):
     projects = ProjectService.list_projects(namespace)
     return ListProjectsResponse(
@@ -49,18 +66,36 @@ async def list_projects(namespace: str):
       ) for project in projects],
     )
 
-@router.post("/{namespace}", response_model=CreateProjectResponse)
+@router.post(
+    "/{namespace}",
+    response_model=CreateProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def create_project(namespace: str, request: CreateProjectRequest):
-    project = ProjectService.create_project(namespace, request.name)
+    cfg = ProjectService.create_project(
+        namespace, request.name, request.config_template
+    )
     return CreateProjectResponse(
       project=Project(
         namespace=namespace,
         name=request.name,
-        config=project,
+        config=cfg,
       ),
     )
 
-@router.get("/{namespace}/{project_id}", response_model=GetProjectResponse)
+@router.get(
+    "/{namespace}/{project_id}",
+    response_model=GetProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def get_project(namespace: str, project_id: str):
     project = ProjectService.get_project(namespace, project_id)
     return GetProjectResponse(
@@ -71,13 +106,48 @@ async def get_project(namespace: str, project_id: str):
       ),
     )
 
-@router.delete("/{namespace}/{project_id}", response_model=DeleteProjectResponse)
+@router.put(
+    "/{namespace}/{project_id}",
+    response_model=UpdateProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+async def update_project(
+    namespace: str,
+    project_id: str,
+    request: UpdateProjectRequest,
+):
+    updated_config = ProjectService.update_project(
+        namespace,
+        project_id,
+        request.config,
+    )
+    return UpdateProjectResponse(
+        project=Project(
+            namespace=namespace,
+            name=project_id,
+            config=updated_config,
+        )
+    )
+
+@router.delete(
+    "/{namespace}/{project_id}",
+    response_model=DeleteProjectResponse,
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
 async def delete_project(namespace: str, project_id: str):
+    # TODO: Implement actual delete in ProjectService; placeholder response for now
     project = Project(
-        id=project_id,
-        name="test",
-        description="test",
         namespace=namespace,
+        name=project_id,
+        config=ProjectService.load_config(namespace, project_id),
     )
     return DeleteProjectResponse(
       project=project,

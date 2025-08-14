@@ -1,6 +1,8 @@
 ---
 sidebar_position: 3
 title: Configuration
+slug: /configuration-legacy
+draft: true
 ---
 
 # Configuration Guide
@@ -30,6 +32,7 @@ deploy:
 ```
 
 This configuration:
+
 - Downloads and loads Llama 2 7B model
 - Runs it locally on available hardware
 - Exposes a REST API on port 8080
@@ -61,15 +64,15 @@ models:
   # Local model example
   - name: local-llama
     type: llama2-13b
-    device: cuda  # or cpu, auto
-    quantization: int8  # int4, int8, float16
+    device: cuda # or cpu, auto
+    quantization: int8 # int4, int8, float16
     cache_dir: ./models
 
   # Cloud API example
   - name: cloud-gpt
     type: openai
     model: gpt-4
-    api_key: ${OPENAI_API_KEY}  # Environment variable
+    api_key: ${OPENAI_API_KEY} # Environment variable
 
   # Custom model
   - name: custom-bert
@@ -104,8 +107,8 @@ pipeline:
       top_k: 5
   - generate:
       model: local-llama
-      context: "{retrieved_docs}"
-      prompt: "Answer based on context: {query}"
+      context: '{retrieved_docs}'
+      prompt: 'Answer based on context: {query}'
   - output: answer
 ```
 
@@ -143,10 +146,10 @@ deploy:
     replicas: 3
     resources:
       requests:
-        memory: "8Gi"
-        cpu: "4"
+        memory: '8Gi'
+        cpu: '4'
       limits:
-        memory: "16Gi"
+        memory: '16Gi'
         nvidia.com/gpu: 1
 ```
 
@@ -160,11 +163,11 @@ Route requests to different models based on criteria:
 models:
   - name: fast-model
     type: llama2-7b
-    tags: ["fast", "general"]
+    tags: ['fast', 'general']
 
   - name: accurate-model
     type: llama2-70b
-    tags: ["accurate", "slow"]
+    tags: ['accurate', 'slow']
 
 pipeline:
   - route:
@@ -202,7 +205,7 @@ Distribute load across multiple instances:
 ```yaml
 deploy:
   load_balancer:
-    strategy: round_robin  # or least_connections, weighted
+    strategy: round_robin # or least_connections, weighted
     health_check:
       endpoint: /health
       interval: 30s
@@ -226,7 +229,7 @@ settings:
       port: 9090
 
     logging:
-      level: info  # debug, info, warning, error
+      level: info # debug, info, warning, error
       format: json
       outputs:
         - console
@@ -261,12 +264,12 @@ settings:
       key: ./certs/key.pem
 
     cors:
-      origins: ["https://myapp.com"]
-      methods: ["GET", "POST"]
+      origins: ['https://myapp.com']
+      methods: ['GET', 'POST']
 
     input_validation:
       max_length: 10000
-      block_patterns: ["<script>", "DROP TABLE"]
+      block_patterns: ['<script>', 'DROP TABLE']
 ```
 
 ## Environment Variables
@@ -279,7 +282,7 @@ models:
     api_key: ${OPENAI_API_KEY}
 
   - name: anthropic
-    api_key: ${ANTHROPIC_API_KEY:-default_value}  # With default
+    api_key: ${ANTHROPIC_API_KEY:-default_value} # With default
 
 settings:
   database:
@@ -297,7 +300,7 @@ extends: llamafarm.yaml
 models:
   - name: assistant
     type: llama2-7b
-    quantization: int4  # Faster for development
+    quantization: int4 # Faster for development
 
 deploy:
   local:
@@ -311,7 +314,7 @@ extends: llamafarm.yaml
 models:
   - name: assistant
     type: llama2-70b
-    quantization: float16  # Better quality
+    quantization: float16 # Better quality
 
 deploy:
   aws:
@@ -408,12 +411,12 @@ experiments:
     variants:
       - name: variant-a
         model: llama2
-        prompt: "You are a helpful assistant."
+        prompt: 'You are a helpful assistant.'
         weight: 50
 
       - name: variant-b
         model: llama2
-        prompt: "You are a knowledgeable expert."
+        prompt: 'You are a knowledgeable expert.'
         weight: 50
 
     metrics:
