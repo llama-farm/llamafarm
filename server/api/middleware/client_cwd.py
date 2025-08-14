@@ -33,8 +33,7 @@ class ClientCWDHeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         # Only relevant when not using the shared data dir
         if not settings.lf_use_data_dir:
-            header_value = request.headers.get("x-lf-client-cwd")
-            if header_value:
+            if header_value := request.headers.get("x-lf-client-cwd"):
                 token = current_client_cwd.set(header_value)
                 try:
                     response = await call_next(request)
