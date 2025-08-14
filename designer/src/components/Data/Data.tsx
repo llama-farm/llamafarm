@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useMemo } from 'react'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import LoadingSteps from '../../common/LoadingSteps'
+import ModeToggle, { Mode } from '../ModeToggle'
+import ConfigEditor from '../ConfigEditor'
 
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
@@ -10,6 +12,7 @@ const Data = () => {
   const [droppedFiles, setDroppedFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [searchValue, setSearchValue] = useState('')
+  const [mode, setMode] = useState<Mode>('designer')
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -75,6 +78,17 @@ const Data = () => {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <div className="w-full flex items-center justify-between mb-4">
+        <h2 className="text-2xl ">
+          {mode === 'designer' ? 'Data' : 'Config editor'}
+        </h2>
+        <div className="flex items-center gap-3">
+          <ModeToggle mode={mode} onToggle={setMode} />
+          <button className="opacity-50 cursor-not-allowed text-sm px-3 py-2 rounded-lg border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400">
+            Deploy
+          </button>
+        </div>
+      </div>
       <input
         type="file"
         ref={fileInputRef}
@@ -83,14 +97,20 @@ const Data = () => {
         onChange={handleFileSelect}
       />
       <div className="w-full flex flex-col h-full">
-        <div className="mb-2">Project data</div>
-        <div className="mb-2 flex flex-row gap-2 justify-between items-end">
-          <div className="text-sm">Dataset</div>
-          <button className="py-2 px-3 bg-blue-200 rounded-lg text-sm text-white ">
-            Upload data
-          </button>
-        </div>
-        {isDragging ? (
+        {mode === 'designer' && (
+          <>
+            <div className="mb-2">Project data</div>
+            <div className="mb-2 flex flex-row gap-2 justify-between items-end">
+              <div className="text-sm">Dataset</div>
+              <button className="py-2 px-3 bg-blue-200 rounded-lg text-sm text-white ">
+                Upload data
+              </button>
+            </div>
+          </>
+        )}
+        {mode !== 'designer' ? (
+          <ConfigEditor />
+        ) : isDragging ? (
           <div
             className={`w-full h-full flex flex-col items-center justify-center border-[1px] border-dashed rounded-lg p-4 gap-2 transition-colors border-blue-100`}
           >
@@ -113,7 +133,7 @@ const Data = () => {
           </div>
         ) : (
           <div>
-            {droppedFiles.length <= 0 ? (
+            {mode === 'designer' && droppedFiles.length <= 0 ? (
               <div
                 className="w-full mb-6 flex items-center justify-center bg-blue-500 rounded-lg py-4 text-blue-200 text-center"
                 style={{ background: 'rgba(1, 123, 247, 0.10)' }}
@@ -121,37 +141,41 @@ const Data = () => {
                 Datasets will appear here when they’re ready
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2 mb-6">
-                {Array.from({ length: 2 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="w-full bg-[#FFFFFF] dark:bg-blue-500 rounded-lg border-[1px] border-blue-50 border-solid dark:border-none flex flex-col gap-2 p-4"
-                  >
-                    <div className="text-sm">air-craft-maintenance-guides</div>
-                    <div className="text-xs text-blue-100">
-                      Updated on 8/23/25
-                    </div>
-                    <div className="flex flex-row gap-2">
-                      <div className="text-xs text-white bg-blue-100 dark:bg-blue-200 rounded-xl px-3 py-0.5">
-                        Embedded
+              mode === 'designer' && (
+                <div className="grid grid-cols-2 gap-2 mb-6">
+                  {Array.from({ length: 2 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="w-full bg-[#FFFFFF] dark:bg-blue-500 rounded-lg border-[1px] border-blue-50 border-solid dark:border-none flex flex-col gap-2 p-4"
+                    >
+                      <div className="text-sm">
+                        air-craft-maintenance-guides
                       </div>
-                      <div className="text-xs text-white bg-blue-100 dark:bg-blue-200 rounded-xl px-3 py-0.5">
-                        Chunked
+                      <div className="text-xs text-blue-100">
+                        Updated on 8/23/25
+                      </div>
+                      <div className="flex flex-row gap-2">
+                        <div className="text-xs text-white bg-blue-100 dark:bg-blue-200 rounded-xl px-3 py-0.5">
+                          Embedded
+                        </div>
+                        <div className="text-xs text-white bg-blue-100 dark:bg-blue-200 rounded-xl px-3 py-0.5">
+                          Chunked
+                        </div>
+                      </div>
+                      <div className="text-xs text-blue-100">
+                        more info here in a line
+                      </div>
+                      <div className="flex justify-end">
+                        <button className="text-sm bg-transparent text-blue-200 dark:text-green-100 hover:text-white hover:bg-blue-100 dark:hover:text-black dark:hover:bg-green-100 rounded-lg px-2 py-1 w-fit">
+                          View raw data
+                        </button>
                       </div>
                     </div>
-                    <div className="text-xs text-blue-100">
-                      more info here in a line
-                    </div>
-                    <div className="flex justify-end">
-                      <button className="text-sm bg-transparent text-blue-200 dark:text-green-100 hover:text-white hover:bg-blue-100 dark:hover:text-black dark:hover:bg-green-100 rounded-lg px-2 py-1 w-fit">
-                        View raw data
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )
             )}
-            <div className="mb-4">Raw data files</div>
+            {mode === 'designer' && <div className="mb-4">Raw data files</div>}
             {isLoading && droppedFiles.length <= 0 ? (
               <div className="w-full flex flex-col items-center justify-center border-[1px] border-solid rounded-lg p-4 gap-2 transition-colors border-blue-100">
                 <div className="flex flex-col items-center justify-center gap-4 text-center my-[40px]">
@@ -164,6 +188,7 @@ const Data = () => {
                 </div>
               </div>
             ) : (
+              mode === 'designer' &&
               droppedFiles.length <= 0 && (
                 <div className="w-full flex flex-col items-center justify-center border-[1px] border-dashed rounded-lg p-4 gap-2 transition-colors border-blue-100">
                   <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px]">
@@ -189,7 +214,7 @@ const Data = () => {
                 </div>
               )
             )}
-            {filteredFiles.length > 0 && (
+            {mode === 'designer' && filteredFiles.length > 0 && (
               <div>
                 <div className="w-full flex flex-row gap-2">
                   <div className="w-3/4 flex flex-row gap-2 items-center bg-[#FFFFFF] dark:bg-transparent rounded-lg pl-2 border-[1px] border-solid border-blue-50 dark:border-blue-100">
