@@ -132,15 +132,18 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
 
     permissions:
       contents: read
       packages: read
+      security-events: write
     strategy:
       matrix:
         service: [designer, server, runtime]
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
