@@ -13,9 +13,9 @@ properties:
   # STRATEGIES - Top-level strategy definitions
   # =====================================
   strategies:
-    type: object
-    description: Named strategy configurations combining components for specific use cases
-    additionalProperties:
+    type: array
+    description: List of named strategy configurations combining components for specific use cases
+    items:
       type: object
       required: [name, description, components]
       properties:

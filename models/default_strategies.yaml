@@ -8,8 +8,7 @@ strategies:
   # =====================================
   # LOCAL DEVELOPMENT
   # =====================================
-  local_development:
-    name: Local Development Environment
+  - name: local_development
     description: Optimized for local development with Ollama, no external dependencies
     components:
       model_app:
@@ -37,8 +36,7 @@ strategies:
   # =====================================
   # CLOUD PRODUCTION
   # =====================================
-  cloud_production:
-    name: Production Cloud Deployment
+  - name: cloud_production
     description: High-availability production setup with OpenAI API
     components:
       cloud_api:
@@ -71,8 +69,7 @@ strategies:
   # =====================================
   # HYBRID WITH FALLBACK
   # =====================================
-  hybrid_fallback:
-    name: Hybrid Cloud-Local with Fallback
+  - name: hybrid_fallback
     description: Cloud API primary with automatic local fallback for resilience
     components:
       cloud_api:
@@ -122,8 +119,7 @@ strategies:
   # =====================================
   # MULTI-PROVIDER LOAD BALANCED
   # =====================================
-  multi_provider:
-    name: Multi-Provider Load Balanced
+  - name: multi_provider
     description: Distribute load across multiple cloud providers for resilience and cost optimization
     components:
       cloud_api:
@@ -169,8 +165,7 @@ strategies:
   # =====================================
   # COST OPTIMIZED
   # =====================================
-  cost_optimized:
-    name: Cost-Optimized Configuration
+  - name: cost_optimized
     description: Minimize costs while maintaining acceptable quality
     components:
       cloud_api:
@@ -201,8 +196,7 @@ strategies:
   # =====================================
   # PRIVACY FIRST
   # =====================================
-  privacy_first:
-    name: Privacy-First Local Only
+  - name: privacy_first
     description: All processing done locally, no data leaves the system
     components:
       model_app:
@@ -234,8 +228,7 @@ strategies:
   # =====================================
   # FINE-TUNING PIPELINE
   # =====================================
-  fine_tuning_pipeline:
-    name: Complete Fine-Tuning Workflow
+  - name: fine_tuning_pipeline
     description: End-to-end fine-tuning pipeline with PyTorch
     components:
       fine_tuner:
@@ -279,8 +272,7 @@ strategies:
   # =====================================
   # RESEARCH EXPERIMENTATION
   # =====================================
-  research_experimentation:
-    name: Research and Experimentation
+  - name: research_experimentation
     description: Flexible setup for testing multiple models and configurations
     components:
       cloud_api:
@@ -338,8 +330,7 @@ strategies:
   # =====================================
   # SPECIALIZED CODE GENERATION
   # =====================================
-  code_generation:
-    name: Specialized Code Generation
+  - name: code_generation
     description: Optimized for code generation and analysis
     components:
       cloud_api:
@@ -380,8 +371,7 @@ strategies:
   # =====================================
   # FAST INFERENCE
   # =====================================
-  fast_inference:
-    name: Ultra-Fast Inference
+  - name: fast_inference
     description: Optimized for lowest latency using Groq LPU
     components:
       cloud_api:
