@@ -93,21 +93,18 @@ class ProjectChatService:
         if results is None:
             results = []
 
-        # Normalize to objects with content/metadata/score
-        normalized = []
-        for item in results:
-            normalized.append(
-                type(
-                    "RagResult",
-                    (),
-                    {
-                        "content": item.get("content", ""),
-                        "metadata": item.get("metadata", {}),
-                        "score": item.get("score", 0.0),
-                    },
-                )()
-            )
-
+        normalized = [
+            type(
+                "RagResult",
+                (),
+                {
+                    "content": item.get("content", ""),
+                    "metadata": item.get("metadata", {}),
+                    "score": item.get("score", 0.0),
+                },
+            )()
+            for item in results
+        ]
         logger.info(f"RAG search returned {len(normalized)} results")
         return normalized
 
