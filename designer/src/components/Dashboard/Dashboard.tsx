@@ -309,6 +309,12 @@ const Dashboard = () => {
           try {
             const stored = localStorage.getItem('projectsList')
             const list = stored ? (JSON.parse(stored) as string[]) : []
+            // prevent duplicate names
+            if (list.includes(name) && name !== projectName) {
+              console.warn('Project rename skipped: duplicate name', name)
+              setIsModalOpen(false)
+              return
+            }
             const updated = list.map(n => (n === projectName ? name : n))
             localStorage.setItem('projectsList', JSON.stringify(updated))
             localStorage.setItem('activeProject', name)
@@ -317,8 +323,12 @@ const Dashboard = () => {
               window.dispatchEvent(
                 new CustomEvent<string>('lf-active-project', { detail: name })
               )
-            } catch {}
-          } catch {}
+            } catch (err) {
+              console.error('Failed to dispatch lf-active-project event:', err)
+            }
+          } catch (err) {
+            console.error('Failed to update project in localStorage:', err)
+          }
           setIsModalOpen(false)
         }}
         onDelete={() => {
@@ -335,8 +345,12 @@ const Dashboard = () => {
               window.dispatchEvent(
                 new CustomEvent<string>('lf-active-project', { detail: next })
               )
-            } catch {}
-          } catch {}
+            } catch (err) {
+              console.error('Failed to dispatch lf-active-project event:', err)
+            }
+          } catch (err) {
+            console.error('Failed to delete project from localStorage:', err)
+          }
           setIsModalOpen(false)
         }}
       />

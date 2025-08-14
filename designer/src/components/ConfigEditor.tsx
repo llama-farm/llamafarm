@@ -66,11 +66,15 @@ function ConfigEditor() {
   }
 
   const closeTab = (id: FileId) => {
-    setOpenTabs(prev => prev.filter(t => t.id !== id))
-    if (activeId === id) {
-      const next = openTabs.find(t => t.id !== id)
-      if (next) setActiveId(next.id)
-    }
+    setOpenTabs(prev => {
+      const remaining = prev.filter(t => t.id !== id)
+      // Prevent closing the last tab; keep at least one open
+      if (remaining.length === 0) return prev
+      if (activeId === id) {
+        setActiveId(remaining[0].id)
+      }
+      return remaining
+    })
   }
 
   return (
@@ -158,7 +162,7 @@ function ConfigEditor() {
         <div className="flex-1 p-3">
           <textarea
             className="w-full h-full resize-none bg-[#0b122b] text-white rounded-md p-3 font-mono text-sm"
-            value={content[activeId]}
+            value={content[activeId] ?? ''}
             onChange={e =>
               setContent(prev => ({ ...prev, [activeId]: e.target.value }))
             }
