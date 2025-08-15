@@ -290,7 +290,6 @@ func init() {
     datasetsCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
     datasetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")
     datasetsCmd.PersistentFlags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
-    datasetsCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose HTTP logging")
 
     // Add flags specific to add command
     datasetsAddCmd.Flags().StringVarP(&ragStrategy, "rag-strategy", "r", "auto", "RAG strategy to use for this dataset (default: auto)")

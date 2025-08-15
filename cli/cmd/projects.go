@@ -19,14 +19,12 @@ import (
 )
 
 var (
-	serverURL   string
 	namespace   string
 	projectID   string
 	sessionID   string
 	temperature float64
 	maxTokens   int
     streaming   bool
-    verbose     bool
 )
 
 // ChatSessionContext encapsulates CLI session and connection state.
@@ -109,6 +107,93 @@ type ChatResponse struct {
 }
 
 // HTTP client types and helpers are centralized in httpclient.go
+
+// buildChatAPIURL chooses the appropriate endpoint based on whether
+// namespace and project are set. If both are provided, it uses the
+// project-scoped chat completions endpoint; otherwise it falls back
+// to the inference chat endpoint.
+func buildChatAPIURL(ctx *ChatSessionContext) string {
+    base := strings.TrimSuffix(ctx.ServerURL, "/")
+    if ctx.Namespace != "" && ctx.ProjectID != "" {
+        return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID)
+    }
+    return fmt.Sprintf("%s/v1/inference/chat", base)
+}
+
+// projectsListCmd lists projects for a namespace from the server
+var projectsListCmd = &cobra.Command{
+    Use:   "list",
+    Short: "List projects in a namespace",
+    Long:  "List projects available in the specified namespace on the LlamaFarm server.",
+    Run: func(cmd *cobra.Command, args []string) {
+        // Resolve config path from persistent flag
+        configPath, _ := cmd.Flags().GetString("config")
+
+        // Resolve server URL and namespace (project is not required for list)
+        serverCfg, err := config.GetServerConfigLenient(configPath, serverURL, namespace, "")
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)
+        }
+        serverURL = serverCfg.URL
+        ns := strings.TrimSpace(serverCfg.Namespace)
+
+        if ns == "" {
+            fmt.Fprintln(os.Stderr, "Error: namespace is required. Provide --namespace or set it in llamafarm.yaml")
+            os.Exit(1)
+        }
+
+        // Ensure server is up (auto-start locally if needed)
+        if err := ensureServerAvailable(serverURL); err != nil {
+            fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+            os.Exit(1)
+        }
+
+        // Build request
+        base := strings.TrimSuffix(serverURL, "/")
+        url := fmt.Sprintf("%s/v1/projects/%s", base, ns)
+        req, err := http.NewRequest(http.MethodGet, url, nil)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+            os.Exit(1)
+        }
+        _ = addLocalhostCWDHeader(req)
+
+        // Execute
+        resp, err := getHTTPClient().Do(req)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error requesting server: %v\n", err)
+            os.Exit(1)
+        }
+        defer resp.Body.Close()
+        body, _ := io.ReadAll(resp.Body)
+        if resp.StatusCode != http.StatusOK {
+            fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, string(body))
+            os.Exit(1)
+        }
+
+        var listResp struct {
+            Total    int `json:"total"`
+            Projects []struct {
+                Namespace string `json:"namespace"`
+                Name      string `json:"name"`
+            } `json:"projects"`
+        }
+        if err := json.Unmarshal(body, &listResp); err != nil {
+            fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
+            os.Exit(1)
+        }
+
+        if listResp.Total == 0 || len(listResp.Projects) == 0 {
+            fmt.Printf("No projects found in namespace %s\n", ns)
+            return
+        }
+
+        for _, p := range listResp.Projects {
+            fmt.Printf("%s/%s\n", p.Namespace, p.Name)
+        }
+    },
+}
 
 // chatCmd represents the chat command
 var chatCmd = &cobra.Command{
@@ -247,19 +332,22 @@ func sendChatRequest(messages []ChatMessage) (*ChatResponse, error) {
 }
 
 func sendChatRequestWithContext(messages []ChatMessage, ctx *ChatSessionContext) (*ChatResponse, error) {
-    // Construct the API URL
-    url := fmt.Sprintf("%s/v1/inference/chat",
-        strings.TrimSuffix(ctx.ServerURL, "/"))
+    // Construct the API URL (project-scoped if ns/project provided)
+    url := buildChatAPIURL(ctx)
 
-    // Create request payload (OpenAI-compatible) and pass routing via metadata
-    meta := map[string]string{}
-    if ctx.Namespace != "" {
-        meta["namespace"] = ctx.Namespace
+    // Create request payload (OpenAI-compatible)
+    request := ChatRequest{Messages: messages}
+    // Only include metadata when routing via inference endpoint
+    if !strings.Contains(url, "/v1/projects/") {
+        meta := map[string]string{}
+        if ctx.Namespace != "" {
+            meta["namespace"] = ctx.Namespace
+        }
+        if ctx.ProjectID != "" {
+            meta["project_id"] = ctx.ProjectID
+        }
+        request.Metadata = meta
     }
-    if ctx.ProjectID != "" {
-        meta["project_id"] = ctx.ProjectID
-    }
-    request := ChatRequest{Messages: messages, Metadata: meta}
 
     // Add optional parameters if provided
     if ctx.Temperature >= 0 {
@@ -336,17 +424,21 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
 }
 
 func sendChatRequestStreamWithContext(messages []ChatMessage, ctx *ChatSessionContext) (string, error) {
-    url := fmt.Sprintf("%s/v1/inference/chat", strings.TrimSuffix(ctx.ServerURL, "/"))
+    url := buildChatAPIURL(ctx)
 
     streamTrue := true
-    meta := map[string]string{}
-    if ctx.Namespace != "" {
-        meta["namespace"] = ctx.Namespace
+    request := ChatRequest{Messages: messages, Stream: &streamTrue}
+    // Only include metadata when routing via inference endpoint
+    if !strings.Contains(url, "/v1/projects/") {
+        meta := map[string]string{}
+        if ctx.Namespace != "" {
+            meta["namespace"] = ctx.Namespace
+        }
+        if ctx.ProjectID != "" {
+            meta["project_id"] = ctx.ProjectID
+        }
+        request.Metadata = meta
     }
-    if ctx.ProjectID != "" {
-        meta["project_id"] = ctx.ProjectID
-    }
-    request := ChatRequest{Messages: messages, Metadata: meta, Stream: &streamTrue}
 
     jsonData, err := json.Marshal(request)
     if err != nil {
@@ -368,7 +460,7 @@ func sendChatRequestStreamWithContext(messages []ChatMessage, ctx *ChatSessionCo
         req.Header.Set("X-Session-ID", ctx.SessionID)
     }
     _ = addLocalhostCWDHeader(req)
-    if verbose {
+    if debug {
         fmt.Fprintf(os.Stderr, "HTTP %s %s\n", req.Method, req.URL.String())
         logHeaders("request", req.Header)
     }
@@ -385,7 +477,7 @@ func sendChatRequestStreamWithContext(messages []ChatMessage, ctx *ChatSessionCo
         body, _ := io.ReadAll(resp.Body)
         return "", fmt.Errorf("server returned error %d: %s", resp.StatusCode, string(body))
     }
-    if verbose {
+    if debug {
         fmt.Fprintf(os.Stderr, "  -> %d %s\n", resp.StatusCode, http.StatusText(resp.StatusCode))
         logHeaders("response", resp.Header)
     }
@@ -493,19 +585,20 @@ func init() {
 	projectsCmd.PersistentFlags().StringP("config", "c", "", "config file path (default: llamafarm.yaml in current directory)")
 
 	// Add flags to chat command
-	chatCmd.Flags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
 	chatCmd.Flags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")
 	chatCmd.Flags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
 	chatCmd.Flags().StringVar(&sessionID, "session-id", "", "Existing session ID to continue conversation")
 	chatCmd.Flags().Float64Var(&temperature, "temperature", 0.7, "Sampling temperature (0.0 to 2.0)")
 	chatCmd.Flags().IntVar(&maxTokens, "max-tokens", 1000, "Maximum number of tokens to generate")
     chatCmd.Flags().BoolVar(&streaming, "stream", true, "Stream assistant responses")
-    chatCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Verbose HTTP logging")
 
 	// No flags are required now - they can come from config file
 
 	// Add subcommands to projects
 	projectsCmd.AddCommand(chatCmd)
+
+	// Add list subcommand to projects
+	projectsCmd.AddCommand(projectsListCmd)
 
 	// Add the projects command to root
 	rootCmd.AddCommand(projectsCmd)

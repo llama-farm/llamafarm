@@ -48,7 +48,7 @@ func (v *VerboseHTTPClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 func getHTTPClient() HTTPClient {
-    if verbose {
+    if debug {
         return &VerboseHTTPClient{Inner: httpClient}
     }
     return httpClient

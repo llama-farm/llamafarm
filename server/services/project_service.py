@@ -133,16 +133,21 @@ class ProjectService:
 
     @classmethod
     def list_projects(cls, namespace: str) -> list[Project]:
-        if settings.lf_project_dir is not None:
-            logger.info(f"Listing projects in {settings.lf_project_dir}")
-            cfg = load_config(directory=settings.lf_project_dir, validate=False)
-            return [
-                Project(
-                    namespace=namespace,
-                    name=cfg.name,
-                    config=cfg,
-                )
-            ]
+        project_dir: str | None
+        if not settings.lf_use_data_dir and client_cwd.get() is not None:
+            project_dir = client_cwd.get()
+        elif settings.lf_project_dir is not None:
+            project_dir = settings.lf_project_dir
+        if project_dir:
+          logger.info(f"Listing projects in {project_dir}")
+          cfg = load_config(directory=project_dir, validate=False)
+          return [
+              Project(
+                  namespace=namespace,
+                  name=cfg.name,
+                  config=cfg,
+              )
+          ]
 
         namespace_dir = cls.get_namespace_dir(namespace)
         logger.info(f"Listing projects in {namespace_dir}")
