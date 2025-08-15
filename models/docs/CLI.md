@@ -1,305 +1,346 @@
-# 🖥️ LlamaFarm CLI Documentation
+# CLI Reference
 
-> **Complete Command-Line Interface Guide** - Strategy-based model management, setup automation, and training
+Complete reference for the LlamaFarm Models CLI commands.
 
-## 📋 Table of Contents
-- [Quick Start](#-quick-start)
-- [Core Concepts](#-core-concepts)
-- [Command Reference](#-command-reference)
-- [Strategies System](#-strategies-system)
-- [Setup & Installation](#-setup--installation)
-- [Model Operations](#-model-operations)
-- [Training & Fine-tuning](#-training--fine-tuning)
-- [Mock Models & Testing](#-mock-models--testing)
-- [Examples](#-examples)
+## Table of Contents
+- [Installation](#installation)
+- [Basic Usage](#basic-usage)
+- [Strategy Commands](#strategy-commands)
+- [Generation Commands](#generation-commands)
+- [Training Commands](#training-commands)
+- [Model Management](#model-management)
+- [Utilities](#utilities)
 
-## 🚀 Quick Start
+## Installation
 
-### Installation
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/llamafarm.git
-cd llamafarm/models
-
 # Install dependencies
 uv sync
 
-# Setup environment
-cp ../.env.example ../.env
-# Edit .env with your API keys
-
-# Run automatic setup
-uv run python cli.py setup demos/strategies.yaml --auto
+# Or with pip
+pip install -e .
 ```
 
-### First Commands
+## Basic Usage
+
 ```bash
-# List available strategies
+# General format
+uv run python cli.py [command] [options]
+
+# Get help
+uv run python cli.py --help
+
+# Get help for specific command
+uv run python cli.py [command] --help
+```
+
+## Strategy Commands
+
+Strategies are the core configuration system in LlamaFarm.
+
+### list-strategies
+List all available strategies from the default configuration.
+
+```bash
 uv run python cli.py list-strategies
 
-# Get info about a strategy
-uv run python cli.py info --strategy mock_development
-
-# Use mock model for testing (no API key needed)
-uv run python cli.py info --strategy mock_development
-
-# Run a demo
-DEMO_MODE=automated uv run python demos/demo1_cloud_fallback.py
+# With custom strategy file
+uv run python cli.py --strategy-file custom_strategies.yaml list-strategies
 ```
 
-## 🎯 Core Concepts
+### use-strategy
+Switch to and use a specific strategy.
 
-### Strategies
-Strategies are pre-configured model setups that define:
-- Which models/APIs to use
-- Fallback chains for reliability
-- Hardware optimization settings
-- Training configurations
-- Export/conversion options
-
-### Components
-Reusable building blocks that strategies use:
-- **model_app**: Model servers (Ollama, mock)
-- **cloud_api**: Cloud providers (OpenAI, Anthropic)
-- **fine_tuner**: Training engines (PyTorch, LlamaFactory)
-- **converter**: Format converters (GGUF, Ollama)
-
-### Setup Manager
-Automatic installation and configuration system that:
-- Analyzes strategy requirements
-- Installs needed components
-- Downloads required models
-- Configures environment
-
-## 📚 Command Reference
-
-### Setup Commands
-
-#### `setup` - Install Required Components
 ```bash
-# Verify requirements only
-uv run python cli.py setup <strategy_file> --verify-only
-
-# Automatic installation
-uv run python cli.py setup <strategy_file> --auto
-
-# Interactive mode (default)
-uv run python cli.py setup <strategy_file>
-
-# Verbose output
-uv run python cli.py setup <strategy_file> --verbose
+uv run python cli.py use-strategy local_development
+uv run python cli.py use-strategy cloud_production
 ```
 
-**Examples:**
-```bash
-# Setup for mock development
-uv run python cli.py setup demos/mock_strategy.yaml --auto
+### info
+Show detailed information about a strategy.
 
-# Setup for training
+```bash
+# Current strategy
+uv run python cli.py info
+
+# Specific strategy
+uv run python cli.py info --strategy cloud_production
+```
+
+### setup
+Setup tools and models required by a strategy.
+
+```bash
+# Auto-setup everything
 uv run python cli.py setup demos/strategies.yaml --auto
 
-# Check requirements without installing
+# Verify without installing
 uv run python cli.py setup demos/strategies.yaml --verify-only
+
+# Setup specific strategy
+uv run python cli.py setup demos/strategies.yaml --strategy local_development
 ```
 
-### Strategy Commands
+## Generation Commands
 
-#### `list-strategies` - List Available Strategies
+### generate
+Generate text using the current strategy.
+
 ```bash
-uv run python cli.py list-strategies
-```
+# Basic generation
+uv run python cli.py generate "Write a poem about AI"
 
-Output shows all strategies in the default strategies.yaml file.
-
-#### `info` - Get Strategy Information
-```bash
-# Get info about specific strategy
-uv run python cli.py info --strategy <strategy_name>
-
-# Export strategy configuration
-uv run python cli.py info --strategy <strategy_name> --export
-```
-
-**Examples:**
-```bash
-# Info about mock development strategy
-uv run python cli.py info --strategy mock_development
-
-# Info about training strategy
-uv run python cli.py info --strategy demo3_training
-```
-
-#### `use-strategy` - Set Active Strategy
-```bash
-uv run python cli.py use-strategy <strategy_name>
-```
-
-### Model Operations
-
-#### `list` - List Available Models
-```bash
-# List all configured models
-uv run python cli.py list
-
-# Detailed view with costs
-uv run python cli.py list --detailed
-```
-
-#### `test` - Test Model Connection
-```bash
-# Test specific provider
-uv run python cli.py test <provider_name>
-
-# Test all providers
-uv run python cli.py health-check
-```
-
-#### `query` - Send Single Query
-```bash
-# Basic query
-uv run python cli.py query "Your question here"
-
-# With specific provider
-uv run python cli.py query "Question" --provider <provider_name>
+# With specific strategy
+uv run python cli.py generate --strategy local_development "Hello world"
 
 # With parameters
-uv run python cli.py query "Question" --temperature 0.8 --max-tokens 500
+uv run python cli.py generate \
+  --max-tokens 500 \
+  --temperature 0.7 \
+  "Your prompt"
 ```
 
-#### `chat` - Interactive Chat Session
+### complete
+Get text completion (provider-agnostic).
+
 ```bash
-# Start chat with default model
+uv run python cli.py complete \
+  --prompt "The future of AI is" \
+  --max-tokens 100 \
+  --strategy cloud_production
+```
+
+### chat
+Start an interactive chat session.
+
+```bash
+# Default strategy
 uv run python cli.py chat
 
-# With specific provider
-uv run python cli.py chat --provider <provider_name>
+# With specific model
+uv run python cli.py chat --model gpt-4o-mini
 
 # With system prompt
 uv run python cli.py chat --system "You are a helpful assistant"
-
-# Save/load history
-uv run python cli.py chat --save-history session.json
-uv run python cli.py chat --history previous_session.json
 ```
 
-### Local Model Management
+### query
+Send a query with full control over parameters.
 
-#### `list-local` - List Ollama Models
 ```bash
-uv run python cli.py list-local
+uv run python cli.py query \
+  --provider openai \
+  --model gpt-3.5-turbo \
+  --temperature 0.5 \
+  "Your question"
 ```
 
-#### `pull` - Download Ollama Model
+## Training Commands
+
+### train
+Train a model using a strategy.
+
 ```bash
-# Pull specific model
-uv run python cli.py pull llama3.2:3b
-uv run python cli.py pull mistral:latest
-```
-
-#### `test-local` - Test Local Model
-```bash
-uv run python cli.py test-local llama3.1:8b
-```
-
-### Training Commands
-
-#### `datasplit` - Create Train/Eval Splits
-```bash
-# Default 10% evaluation split
-uv run python cli.py datasplit data.jsonl
-
-# Custom 15% evaluation split  
-uv run python cli.py datasplit data.jsonl --eval-percent 15
-
-# 5% eval for maximum training data
-uv run python cli.py datasplit data.jsonl --eval-percent 5
-
-# With custom seed for reproducibility
-uv run python cli.py datasplit data.jsonl --seed 42
-
-# Verbose output with statistics
-uv run python cli.py datasplit data.jsonl --verbose
-
-# Output to specific directory
-uv run python cli.py datasplit data.jsonl --output-dir splits/
-```
-
-**Options:**
-- `--eval-percent, -e`: Percentage for evaluation (1-50, default: 10)
-- `--seed, -s`: Random seed for reproducibility (default: 42)
-- `--output-dir, -o`: Output directory (defaults to input file directory)
-- `--verbose, -v`: Show detailed statistics
-
-#### `train` - Start Training
-```bash
-# With strategy
-uv run python cli.py train --strategy <strategy_name> --dataset <data.jsonl>
-
-# With separate train/eval datasets
+# Basic training
 uv run python cli.py train \
-  --strategy demo3_training_optimized \
-  --train-dataset data_train.jsonl \
-  --eval-dataset data_eval.jsonl
-
-# Custom parameters
-uv run python cli.py train \
+  --strategy demo3_training \
   --dataset data.jsonl \
-  --base-model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
-  --epochs 3 \
+  --epochs 3
+
+# With validation
+uv run python cli.py train \
+  --strategy fine_tuning_pipeline \
+  --dataset train.jsonl \
+  --eval-dataset eval.jsonl \
+  --epochs 5 \
   --batch-size 4
 ```
 
-#### `finetune` - Advanced Fine-tuning
+### finetune
+Fine-tuning operations with detailed control.
+
 ```bash
-# List fine-tuning strategies
-uv run python cli.py finetune strategies list
+# Start fine-tuning
+uv run python cli.py finetune start \
+  --model "meta-llama/Llama-2-7b-hf" \
+  --dataset train.jsonl \
+  --method lora \
+  --output ./output
 
-# Start with strategy
-uv run python cli.py finetune start --strategy mac_m1_lora --dataset data.jsonl
+# Monitor progress
+uv run python cli.py finetune monitor --job-id [job_id]
 
-# Estimate resources
-uv run python cli.py finetune estimate --strategy gpu_full_finetune
+# List jobs
+uv run python cli.py finetune jobs
+
+# Evaluate model
+uv run python cli.py finetune evaluate \
+  --model ./output/checkpoint-best \
+  --dataset test.jsonl
 ```
 
-#### `convert` - Convert Model Formats
-```bash
-# Convert to GGUF
-uv run python cli.py convert --input model_path --output model.gguf --format gguf
+### datasplit
+Split dataset into train/eval sets.
 
-# Convert to Ollama
-uv run python cli.py convert --input model.gguf --output ollama_model --format ollama
+```bash
+uv run python cli.py datasplit \
+  --input data.jsonl \
+  --train-output train.jsonl \
+  --eval-output eval.jsonl \
+  --eval-percentage 10 \
+  --seed 42
 ```
 
-## 🎨 Strategies System
+## Model Management
 
-### Default Strategies
+### Ollama Commands
 
-#### Development Strategies
-- **mock_development** - Mock model for testing (no API needed)
-- **local_development** - Local Ollama models
-- **demo1_cloud_fallback** - Cloud with automatic fallback
-- **demo2_multi_model** - Multiple model configuration
+```bash
+# List installed models
+uv run python cli.py ollama list
 
-#### Training Strategies
-- **demo3_training** - Basic PyTorch training
-- **training_cuda_consumer** - Consumer GPU optimization
-- **training_mps_apple** - Apple Silicon optimization
-- **training_cpu_only** - CPU-only training
-- **training_cuda_datacenter** - Multi-GPU setup
+# Pull a model
+uv run python cli.py ollama pull llama3.2:3b
 
-#### Production Strategies
-- **production_hybrid** - Cloud + local fallback
-- **local_development** - Privacy-first local models
+# Run a model
+uv run python cli.py ollama run llama3.2:3b "Your prompt"
 
-### Creating Custom Strategies
+# Check status
+uv run python cli.py ollama status
+```
 
-Create a YAML file with your strategy:
+### HuggingFace Commands
+
+```bash
+# List available models
+uv run python cli.py list-hf --category text-generation
+
+# Download a model
+uv run python cli.py download-hf meta-llama/Llama-2-7b-hf
+
+# Test a model
+uv run python cli.py test-hf \
+  --model meta-llama/Llama-2-7b-hf \
+  --prompt "Test prompt"
+
+# Login to HuggingFace
+uv run python cli.py hf-login
+```
+
+### Model Catalog
+
+```bash
+# List models from catalog
+uv run python cli.py catalog list
+uv run python cli.py catalog list --provider openai
+uv run python cli.py catalog list --category vision
+
+# Search models
+uv run python cli.py catalog search "code generation"
+
+# Show model info
+uv run python cli.py catalog info gpt-4o
+
+# Show fallback chains
+uv run python cli.py catalog fallbacks
+```
+
+## Utilities
+
+### convert
+Convert models between formats.
+
+```bash
+# Convert to GGUF format
+uv run python cli.py convert \
+  --input model_path \
+  --output model.gguf \
+  --format gguf
+
+# Convert to Ollama format
+uv run python cli.py convert \
+  --input model.gguf \
+  --output ollama_model \
+  --format ollama \
+  --quantization q4_k_m
+```
+
+### test
+Test model connectivity.
+
+```bash
+# Test current strategy
+uv run python cli.py test
+
+# Test specific provider
+uv run python cli.py test --provider openai
+
+# Test local models
+uv run python cli.py test-local
+```
+
+### validate-config
+Validate configuration files.
+
+```bash
+uv run python cli.py validate-config custom_strategies.yaml
+```
+
+### compare
+Compare responses from different models.
+
+```bash
+uv run python cli.py compare \
+  --models "gpt-3.5-turbo,gpt-4o-mini,llama3.2:3b" \
+  --prompt "Explain quantum computing"
+```
+
+### batch
+Process multiple queries from a file.
+
+```bash
+# Process queries
+uv run python cli.py batch \
+  --input queries.txt \
+  --output responses.jsonl \
+  --provider openai \
+  --model gpt-3.5-turbo
+```
+
+### health-check
+Check health of all configured providers.
+
+```bash
+uv run python cli.py health-check
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# API Keys
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GROQ_API_KEY="gsk_..."
+export HF_TOKEN="hf_..."
+
+# Endpoints
+export OLLAMA_BASE_URL="http://localhost:11434"
+
+# Directories
+export MODEL_CACHE_DIR="./model_cache"
+export OUTPUT_DIR="./output"
+```
+
+### Strategy Files
+
+Strategies are defined in YAML files:
 
 ```yaml
 version: "2.0"
 strategies:
-  my_custom_strategy:
-    name: "My Custom Setup"
+  - name: my_custom_strategy
     description: "Custom configuration for my use case"
     
     components:
@@ -318,213 +359,93 @@ strategies:
     fallback_chain:
       - cloud_api
       - model_app
-    
-    routing_rules:
-      - condition:
-          prompt_contains: ["code", "programming"]
-        action:
-          use_component: cloud_api
 ```
 
-## 🔧 Setup & Installation
+### Command-Line Options
 
-### Component Installation
+Global options available for all commands:
 
-The setup system automatically installs required components:
-
-#### Supported Components
-- **ollama** - Local model server
-- **gguf_converter** - GGUF format converter (uses llama.cpp)
-- **mock_model** - Built-in mock for testing
-- **pytorch** - PyTorch training framework
-- **llamafactory** - Advanced training system
-
-#### Installation Methods
-- **builtin** - No installation needed
-- **homebrew** - macOS package manager
-- **script** - Shell script execution
-- **download** - Direct download
-- **build_from_source** - Compile from source
-
-### Platform Support
-
-#### macOS (Apple Silicon)
 ```bash
-# Optimized for M1/M2/M3
-uv run python cli.py setup demos/strategies.yaml --auto
-
-# Uses Metal Performance Shaders for training
-uv run python cli.py train --strategy training_mps_apple --dataset data.jsonl
+--strategy-file PATH    # Path to strategy YAML file
+--strategy NAME         # Strategy to use
+--log-level LEVEL      # Logging level: DEBUG, INFO, WARNING, ERROR
+--output-format FORMAT # Output format: text, json, yaml
+--verbose             # Enable verbose output
+--quiet              # Suppress non-essential output
 ```
 
-#### Linux/Windows
-```bash
-# CUDA support for NVIDIA GPUs
-uv run python cli.py setup demos/strategies.yaml --auto
+## Examples
 
-# Uses CUDA for training
-uv run python cli.py train --strategy training_cuda_consumer --dataset data.jsonl
+### Common Workflows
+
+#### 1. Local Development Setup
+```bash
+# Setup local Ollama
+uv run python cli.py setup demos/strategies.yaml --strategy local_development --auto
+
+# Test it works
+uv run python cli.py generate --strategy local_development "Hello"
+
+# Start interactive chat
+uv run python cli.py chat --strategy local_development
 ```
 
-## 🧪 Mock Models & Testing
-
-### Using Mock Models
-
-Mock models are perfect for:
-- Testing without API keys
-- Development and debugging
-- Unit testing
-- CI/CD pipelines
-- Quick prototyping
-
+#### 2. Cloud API Usage
 ```bash
-# Setup mock model (instant, no download)
-uv run python cli.py setup demos/mock_strategy.yaml --auto
+# Setup environment
+export OPENAI_API_KEY="sk-..."
 
-# Test mock model
-uv run python cli.py info --strategy mock_development
+# Use cloud strategy
+uv run python cli.py generate --strategy cloud_production "Write code"
 
-# Run mock demo
-DEMO_MODE=automated uv run python demos/demo_mock_model.py
+# Compare models
+uv run python cli.py compare \
+  --models "gpt-3.5-turbo,gpt-4o" \
+  --prompt "Complex question"
 ```
 
-### Available Mock Models
-- **mock-gpt-4** - Simulates GPT-4 responses
-- **mock-claude-3** - Simulates Claude responses
-- **mock-tiny** - Lightweight mock model
-
-## 📋 Examples
-
-### Example 1: Quick Start with Mock
+#### 3. Fine-Tuning Workflow
 ```bash
-# No API keys needed!
-uv run python cli.py setup demos/mock_strategy.yaml --auto
-uv run python cli.py info --strategy mock_development
-```
-
-### Example 2: Setup Cloud + Fallback
-```bash
-# Setup OpenAI with Ollama fallback
-uv run python cli.py setup demos/strategies.yaml --auto
-
-# Test the setup
-uv run python cli.py info --strategy demo1_cloud_fallback
-```
-
-### Example 3: Train a Model
-```bash
-# Setup training environment
-uv run python cli.py setup demos/strategies.yaml --auto
+# Prepare data
+uv run python cli.py datasplit \
+  --input data.jsonl \
+  --eval-percentage 10
 
 # Start training
 uv run python cli.py train \
-  --strategy demo3_training \
-  --dataset demos/datasets/medical/medical_qa.jsonl \
-  --epochs 1 \
-  --batch-size 2
+  --strategy fine_tuning_pipeline \
+  --dataset data_train.jsonl \
+  --eval-dataset data_eval.jsonl \
+  --epochs 3
+
+# Test the model
+uv run python cli.py generate \
+  --model ./output/checkpoint-best \
+  --prompt "Test prompt"
 ```
 
-### Example 4: Convert Model to Ollama
+## Error Handling
+
+Common errors and solutions:
+
 ```bash
-# Train model
-uv run python cli.py train --strategy demo3_training --dataset data.jsonl
+# Missing API key
+export OPENAI_API_KEY="your-key"
 
-# Convert to GGUF
-uv run python cli.py convert \
-  --input ./fine_tuned_models/final_model \
-  --output model.gguf \
-  --format gguf
+# Ollama not running
+ollama serve  # In another terminal
 
-# Create Ollama model
-ollama create my_model -f Modelfile
+# Model not found
+uv run python cli.py ollama pull model-name
+
+# Out of memory
+# Reduce batch size or use quantization
 ```
 
-## 🐛 Troubleshooting
+## Tips
 
-### Common Issues
-
-#### "Strategy not found"
-```bash
-# Check available strategies
-uv run python cli.py list-strategies
-
-# Verify strategy file exists
-ls demos/strategies.yaml
-```
-
-#### "Component not installed"
-```bash
-# Run setup to install components
-uv run python cli.py setup demos/strategies.yaml --auto
-
-# Verify installation
-uv run python cli.py setup demos/strategies.yaml --verify-only
-```
-
-#### "API key not set"
-```bash
-# Check environment
-cat ../.env | grep API_KEY
-
-# Set in .env file
-echo "OPENAI_API_KEY=sk-..." >> ../.env
-```
-
-#### "Ollama not running"
-```bash
-# Start Ollama
-ollama serve
-
-# Check status
-curl http://localhost:11434/api/tags
-```
-
-### Debug Mode
-```bash
-# Run with verbose output
-uv run python cli.py --log-level DEBUG <command>
-
-# Check configuration
-uv run python cli.py validate-config
-```
-
-## 🧪 Testing
-
-### Run Tests
-```bash
-# Run CLI tests
-uv run pytest tests/test_cli_mock.py -v
-
-# Run all tests
-uv run pytest tests/ -v
-
-# Run specific test
-uv run pytest tests/test_cli_mock.py::TestCLIMockIntegration -v
-```
-
-### Test Coverage
-- ✅ CLI command parsing
-- ✅ Strategy management
-- ✅ Setup automation
-- ✅ Mock model integration
-- ✅ Error handling
-- ✅ End-to-end workflows
-
-## 📚 Additional Resources
-
-- [Main README](../README.md) - Project overview
-- [Strategies Documentation](../demos/strategies.yaml) - Strategy configurations
-- [Component Definitions](../components/definitions/) - Component specifications
-- [Demo Scripts](../demos/) - Example implementations
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-1. Add tests for new features
-2. Update documentation
-3. Follow existing patterns
-4. Run tests before submitting
-
----
-
-**Ready to manage models like a pro? The CLI is your command center! 🚀**
+1. **Use strategies** instead of manual configuration
+2. **Set up environment variables** in `.env` file
+3. **Test connectivity** before long operations
+4. **Monitor training** with TensorBoard
+5. **Save checkpoints** regularly during training
