@@ -101,10 +101,10 @@ One-shot learning enables the model to recognize or classify new images with jus
 ### Implementation Approach
 
 #### CLIP-Based One-Shot Classification
-```python
-class OneShot ImageClassifier(BaseMultimodalModel):
-    """One-shot image classification using CLIP embeddings."""
-    
++```python
++class OneShotImageClassifier(BaseMultimodalModel):
++    """One-shot image classification using CLIP embeddings."""
++    
     def __init__(self, config: MultimodalConfig):
         super().__init__(config)
         self.clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
