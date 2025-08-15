@@ -12,6 +12,7 @@
     "lint:fix": "eslint . --ext ts,tsx --fix"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.85.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.7.1"
