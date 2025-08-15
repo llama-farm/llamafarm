@@ -69,9 +69,16 @@ function Header() {
 
   const handleCreateProject = () => {
     setIsProjectOpen(false)
-    // Route to projects page and signal to open modal
-    localStorage.setItem('openCreateProjectModal', '1')
-    navigate('/projects')
+    navigate('/')
+    // open create modal on Home and scroll to projects
+    try {
+      localStorage.setItem('homeOpenCreate', '1')
+    } catch {}
+    setTimeout(() => {
+      const el = document.getElementById('projects')
+      el?.scrollIntoView({ behavior: 'smooth' })
+      window.dispatchEvent(new Event('home-open-create'))
+    }, 0)
   }
 
   const handleSelectProject = (name: string) => {
@@ -92,7 +99,7 @@ function Header() {
     }
   }
 
-  const isProjectsPage = location.pathname.startsWith('/projects')
+  const isHomePage = location.pathname === '/'
 
   return (
     <header className="fixed top-0 left-0 z-50 w-full border-b transition-colors bg-white border-gray-200 dark:bg-blue-700 dark:border-blue-400/30">
@@ -109,10 +116,10 @@ function Header() {
           >
             🦙
           </div>
-          {isProjectsPage ? (
+          {isHomePage ? (
             <button
               className="font-serif text-base text-gray-900 dark:text-white"
-              onClick={() => navigate('/projects')}
+              onClick={() => navigate('/')}
             >
               LlamaFarm
             </button>
@@ -162,10 +169,14 @@ function Header() {
                       type="button"
                       onClick={() => {
                         setIsProjectOpen(false)
-                        navigate('/projects')
+                        navigate('/')
+                        setTimeout(() => {
+                          const el = document.getElementById('projects')
+                          el?.scrollIntoView({ behavior: 'smooth' })
+                        }, 0)
                       }}
                     >
-                      View all projects
+                      All projects
                     </button>
                   </div>
                 </div>

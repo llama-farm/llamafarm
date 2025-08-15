@@ -52,6 +52,13 @@ const Projects = () => {
       setModalProject({ name: '', description: '' })
       setIsModalOpen(true)
     }
+    const editName = localStorage.getItem('openEditProject')
+    if (editName) {
+      localStorage.removeItem('openEditProject')
+      setModalMode('edit')
+      setModalProject({ name: editName, description: '' })
+      setIsModalOpen(true)
+    }
   }, [])
 
   // Pull list from localStorage to mirror dropdown, fallback to defaults
@@ -103,7 +110,7 @@ const Projects = () => {
     } catch {}
   }
 
-  const handleSave = (name: string, /* description: string */) => {
+  const handleSave = (name: string /* description: string */) => {
     if (modalMode === 'create') {
       const exists = listFromStorage.includes(name)
       const updated = exists ? listFromStorage : [...listFromStorage, name]
