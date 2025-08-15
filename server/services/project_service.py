@@ -292,6 +292,4 @@ class ProjectService:
         # Validate by reconstructing model
         cfg_model = LlamaFarmConfig(**config_dict)
 
-        # Persist (will create a backup and preserve format)
-        saved_cfg = cls.save_config(namespace, project_id, cfg_model)
-        return saved_cfg
+        return cls.save_config(namespace, project_id, cfg_model)
