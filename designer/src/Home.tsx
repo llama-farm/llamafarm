@@ -24,13 +24,13 @@ function Home() {
     'Option 4',
   ]
 
-  const projectsList = useMemo(() => {
+  const [projectsList, setProjectsList] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('projectsList')
       if (stored) return JSON.parse(stored) as string[]
     } catch {}
     return defaultProjectNames
-  }, [])
+  })
 
   const filteredProjectNames = useMemo(() => {
     if (!search) return projectsList
@@ -73,23 +73,20 @@ function Home() {
 
   // Listen for header-triggered create intent and scroll
   useEffect(() => {
-    const handler = () => {
-      if (localStorage.getItem('homeOpenCreate') === '1') {
-        localStorage.removeItem('homeOpenCreate')
+    // Support router state-based control from Header
+    try {
+      // @ts-ignore - history state type
+      const state = window.history.state && window.history.state.usr
+      if (state?.openCreate) {
         setModalMode('create')
         setModalProjectName('')
         setIsModalOpen(true)
       }
-      const el = document.getElementById('projects')
-      el?.scrollIntoView({ behavior: 'smooth' })
-    }
-    window.addEventListener('home-open-create', handler)
-    // also handle direct nav to /projects → Home
-    if (window.location.pathname === '/projects') {
-      const el = document.getElementById('projects')
-      el?.scrollIntoView({ behavior: 'smooth' })
-    }
-    return () => window.removeEventListener('home-open-create', handler)
+      if (state?.scrollTo === 'projects') {
+        const el = document.getElementById('projects')
+        el?.scrollIntoView({ behavior: 'smooth' })
+      }
+    } catch {}
   }, [])
 
   return (
@@ -233,7 +230,7 @@ function Home() {
                     </span>
                   </div>
                   <div className="text-xs text-blue-100 mt-2">
-                    Last edited on 8/15/2025
+                    Last edited on N/A
                   </div>
                 </div>
                 <FontIcon
@@ -296,7 +293,7 @@ function Home() {
             <div className="text-sm text-gray-600 dark:text-blue-100">
               Guides and API references
             </div>
-            <div className="mt-2 text-xs text-blue-2 00 dark:text-blue-100">
+            <div className="mt-2 text-xs text-blue-200 dark:text-blue-100">
               docs.llamafarm.dev
             </div>
           </a>
@@ -336,6 +333,8 @@ function Home() {
             const updated = list.map(n => (n === modalProjectName ? name : n))
             localStorage.setItem('projectsList', JSON.stringify(updated))
             localStorage.setItem('activeProject', name)
+            // Update local state for immediate UI sync
+            setProjectsList(updated)
             // Best-effort refresh via event for header/project dropdown consumers
             try {
               window.dispatchEvent(
@@ -355,6 +354,7 @@ function Home() {
             localStorage.setItem('projectsList', JSON.stringify(updated))
             const next = updated[0] || 'aircraft-mx-flow'
             localStorage.setItem('activeProject', next)
+            setProjectsList(updated)
             try {
               window.dispatchEvent(
                 new CustomEvent<string>('lf-active-project', { detail: next })
