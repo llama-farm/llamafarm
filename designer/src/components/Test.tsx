@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import FontIcon from '../common/FontIcon'
+import ModeToggle, { Mode } from './ModeToggle'
+import ConfigEditor from './ConfigEditor'
 
 interface TestCase {
   id: number
@@ -184,154 +186,167 @@ const Test = () => {
     setIsEditOpen(false)
   }
 
+  const [mode, setMode] = useState<Mode>('designer')
+
   return (
     <div className="w-full flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl ">Test</h2>
-        <button className="opacity-50 cursor-not-allowed text-sm px-3 py-2 rounded-lg border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400">
-          Deploy
-        </button>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl ">
+          {mode === 'designer' ? 'Test' : 'Config editor'}
+        </h2>
+        <div className="flex items-center gap-3">
+          <ModeToggle mode={mode} onToggle={setMode} />
+          <button className="opacity-50 cursor-not-allowed text-sm px-3 py-2 rounded-lg border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400">
+            Deploy
+          </button>
+        </div>
       </div>
 
       {/* New test case accordion */}
-      <div className="w-full rounded-xl bg-white dark:bg-blue-500 p-4">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            className="flex items-center gap-2 text-left"
-            onClick={() => setIsNewOpen(v => !v)}
-          >
-            <span className="text-sm">New test case</span>
-            <FontIcon
-              type="chevron-down"
-              className={`w-4 h-4 text-gray-800 dark:text-white transition-transform ${
-                isNewOpen ? 'rotate-180' : ''
+      {mode !== 'designer' ? (
+        <ConfigEditor />
+      ) : (
+        <div className="w-full rounded-xl bg-white dark:bg-blue-500 p-4">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              className="flex items-center gap-2 text-left"
+              onClick={() => setIsNewOpen(v => !v)}
+            >
+              <span className="text-sm">New test case</span>
+              <FontIcon
+                type="chevron-down"
+                className={`w-4 h-4 text-gray-800 dark:text-white transition-transform ${
+                  isNewOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            <button
+              type="button"
+              disabled={!isFormValid}
+              onClick={handleAddTest}
+              className={`text-sm px-3 py-2 rounded-lg ${
+                isFormValid
+                  ? 'bg-blue-200 text-white hover:opacity-90'
+                  : 'opacity-50 cursor-not-allowed border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400'
               }`}
-            />
-          </button>
-          <button
-            type="button"
-            disabled={!isFormValid}
-            onClick={handleAddTest}
-            className={`text-sm px-3 py-2 rounded-lg ${
-              isFormValid
-                ? 'bg-blue-200 text-white hover:opacity-90'
-                : 'opacity-50 cursor-not-allowed border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400'
-            }`}
-          >
-            Add test case
-          </button>
-        </div>
-
-        {isNewOpen && (
-          <div className="mt-3 flex flex-col gap-3">
-            <div>
-              <label className="text-xs text-blue-100">Test name</label>
-              <input
-                type="text"
-                placeholder="Test name here"
-                value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-blue-100">Input</label>
-              <textarea
-                rows={3}
-                placeholder="Enter the input prompt to test"
-                value={form.input}
-                onChange={e => setForm({ ...form, input: e.target.value })}
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100 code-like"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-blue-100">
-                Expected output (baseline)
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Enter the input prompt to test"
-                value={form.expected}
-                onChange={e => setForm({ ...form, expected: e.target.value })}
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100 code-like"
-              />
-            </div>
+            >
+              Add test case
+            </button>
           </div>
-        )}
-      </div>
+
+          {isNewOpen && (
+            <div className="mt-3 flex flex-col gap-3">
+              <div>
+                <label className="text-xs text-blue-100">Test name</label>
+                <input
+                  type="text"
+                  placeholder="Test name here"
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-blue-100">Input</label>
+                <textarea
+                  rows={3}
+                  placeholder="Enter the input prompt to test"
+                  value={form.input}
+                  onChange={e => setForm({ ...form, input: e.target.value })}
+                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100 code-like"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-blue-100">
+                  Expected output (baseline)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Enter the input prompt to test"
+                  value={form.expected}
+                  onChange={e => setForm({ ...form, expected: e.target.value })}
+                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100 code-like"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Table of tests */}
-      <div className="w-full rounded-md overflow-hidden border border-blue-50 dark:border-blue-700">
-        <table className="w-full text-sm">
-          <thead className="bg-[#131d45]/10 dark:bg-blue-700/40">
-            <tr>
-              <th className="text-left px-4 py-2">Test name</th>
-              <th className="text-left px-4 py-2">Match score</th>
-              <th className="text-left px-4 py-2">Environment</th>
-              <th className="text-left px-4 py-2">Last run</th>
-              <th className="text-left px-4 py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tests.map(test => (
-              <tr
-                key={test.id}
-                className="bg-white dark:bg-blue-500 border-t border-blue-50 dark:border-blue-700"
-              >
-                <td className="px-4 py-3 align-top">
-                  <div className="text-sm">{test.name}</div>
-                  <div className="text-xs text-blue-200 dark:text-blue-100">
-                    {test.source}
-                  </div>
-                </td>
-                <td className="px-4 py-3 align-top">
-                  <span
-                    className={`px-2 py-0.5 rounded-2xl text-xs ${scorePillClasses(test.score)}`}
-                  >
-                    {test.score}%
-                  </span>
-                </td>
-                <td className="px-4 py-3 align-top">
-                  <select
-                    className="w-[160px] bg-transparent rounded-md px-3 py-1 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100"
-                    value={test.environment}
-                    onChange={e =>
-                      handleEnvChange(
-                        test.id,
-                        e.target.value as TestCase['environment']
-                      )
-                    }
-                  >
-                    {envOptions.map(opt => (
-                      <option key={opt} value={opt} className="text-gray-900">
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3 align-top">{test.lastRun}</td>
-                <td className="px-4 py-3 align-top">
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-3 py-1 rounded-md border text-xs border-emerald-300 text-emerald-300 hover:bg-emerald-300 hover:text-black transition-colors"
-                      onClick={() => handleRun(test.id)}
-                    >
-                      Run
-                    </button>
-                    <FontIcon
-                      type="edit"
-                      isButton
-                      handleOnClick={() => openEdit(test.id)}
-                      className="w-5 h-5 text-blue-200 dark:text-blue-100"
-                    />
-                  </div>
-                </td>
+      {mode === 'designer' && (
+        <div className="w-full rounded-md overflow-hidden border border-blue-50 dark:border-blue-700">
+          <table className="w-full text-sm">
+            <thead className="bg-[#131d45]/10 dark:bg-blue-700/40">
+              <tr>
+                <th className="text-left px-4 py-2">Test name</th>
+                <th className="text-left px-4 py-2">Match score</th>
+                <th className="text-left px-4 py-2">Environment</th>
+                <th className="text-left px-4 py-2">Last run</th>
+                <th className="text-left px-4 py-2">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {tests.map(test => (
+                <tr
+                  key={test.id}
+                  className="bg-white dark:bg-blue-500 border-t border-blue-50 dark:border-blue-700"
+                >
+                  <td className="px-4 py-3 align-top">
+                    <div className="text-sm">{test.name}</div>
+                    <div className="text-xs text-blue-200 dark:text-blue-100">
+                      {test.source}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <span
+                      className={`px-2 py-0.5 rounded-2xl text-xs ${scorePillClasses(test.score)}`}
+                    >
+                      {test.score}%
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <select
+                      className="w-[160px] bg-transparent rounded-md px-3 py-1 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100"
+                      value={test.environment}
+                      onChange={e =>
+                        handleEnvChange(
+                          test.id,
+                          e.target.value as TestCase['environment']
+                        )
+                      }
+                    >
+                      {envOptions.map(opt => (
+                        <option key={opt} value={opt} className="text-gray-900">
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3 align-top">{test.lastRun}</td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="px-3 py-1 rounded-md border text-xs border-emerald-300 text-emerald-300 hover:bg-emerald-300 hover:text-black transition-colors"
+                        onClick={() => handleRun(test.id)}
+                      >
+                        Run
+                      </button>
+                      <FontIcon
+                        type="edit"
+                        isButton
+                        handleOnClick={() => openEdit(test.id)}
+                        className="w-5 h-5 text-blue-200 dark:text-blue-100"
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {isEditOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">

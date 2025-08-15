@@ -1,272 +1,299 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"text/tabwriter"
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "mime/multipart"
+    "net/http"
+    "os"
+    "path/filepath"
+    "strings"
+    "text/tabwriter"
 
-	"github.com/spf13/cobra"
-	"llamafarm-cli/cmd/config"
+    "github.com/spf13/cobra"
+    "llamafarm-cli/cmd/config"
 )
 
 var (
 	configFile string
-	datasetParser string
+    ragStrategy string
 )
 
 // datasetsCmd represents the datasets command
 var datasetsCmd = &cobra.Command{
 	Use:   "datasets",
 	Short: "Manage datasets in your LlamaFarm configuration",
-	Long: `Manage datasets in your LlamaFarm configuration. Datasets are collections
+    Long: `Manage datasets on your LlamaFarm server. Datasets are collections
 of files that can be ingested into your RAG system for retrieval-augmented generation.
 
 Available commands:
-  list    - List all datasets in your configuration
-  add     - Add a new dataset to your configuration
-  remove  - Remove a dataset from your configuration
-  ingest  - Start ingestion of specific dataset(s) or all datasets`,
+  list    - List all datasets on the server for a project
+  add     - Create a dataset on the server (optionally then upload files)
+  remove  - Delete a dataset from the server
+  ingest  - Upload files to a dataset on the server`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("LlamaFarm Datasets Management")
 		cmd.Help()
 	},
 }
 
+// ==== API types (mirroring server) ====
+type apiDataset struct {
+    Name        string   `json:"name"`
+    RAGStrategy string   `json:"rag_strategy"`
+    Files       []string `json:"files"`
+}
+
+type listDatasetsResponse struct {
+    Total    int          `json:"total"`
+    Datasets []apiDataset `json:"datasets"`
+}
+
+type createDatasetRequest struct {
+    Name        string `json:"name"`
+    RAGStrategy string `json:"rag_strategy"`
+}
+
+type createDatasetResponse struct {
+    Dataset apiDataset `json:"dataset"`
+}
+
 // datasetsListCmd represents the datasets list command
 var datasetsListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all datasets in your configuration",
-	Long:  `List all datasets configured in your llamafarm.yaml file with their names, parsers, and file counts.`,
+    Short: "List all datasets on the server for the selected project",
+    Long:  `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadConfig(configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
-		}
+        // Resolve server and routing
+        serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)
+        }
 
-		if len(cfg.Datasets) == 0 {
-			fmt.Println("No datasets configured.")
-			return
-		}
+        url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/", strings.TrimSuffix(serverCfg.URL, "/"), serverCfg.Namespace, serverCfg.Project)
+        req, err := http.NewRequest("GET", url, nil)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+            os.Exit(1)
+        }
+        resp, err := getHTTPClient().Do(req)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
+            os.Exit(1)
+        }
+        defer resp.Body.Close()
+        body, readErr := io.ReadAll(resp.Body)
+        if resp.StatusCode != http.StatusOK {
+            if readErr != nil {
+                fmt.Fprintf(os.Stderr, "Error (%d), and body read failed: %v\n", resp.StatusCode, readErr)
+                os.Exit(1)
+            }
+            fmt.Fprintf(os.Stderr, "Error (%d): %s\n", resp.StatusCode, prettyServerError(resp, body))
+            os.Exit(1)
+        }
 
-		fmt.Printf("Found %d dataset(s):\n\n", len(cfg.Datasets))
+        var out listDatasetsResponse
+        if err := json.Unmarshal(body, &out); err != nil {
+            fmt.Fprintf(os.Stderr, "Failed parsing response: %v\n", err)
+            os.Exit(1)
+        }
 
-		// Create a tab writer for aligned output
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "NAME\tPARSER\tFILES\tFILE PATHS")
-		fmt.Fprintln(w, "----\t------\t-----\t----------")
+        if out.Total == 0 {
+            fmt.Println("No datasets found.")
+            return
+        }
 
-		for _, dataset := range cfg.Datasets {
-			parser := dataset.Parser
-			if parser == "" {
-				parser = "auto"
-			}
-
-			fileCount := len(dataset.Files)
-			filePaths := strings.Join(dataset.Files, ", ")
-			if len(filePaths) > 60 {
-				filePaths = filePaths[:57] + "..."
-			}
-
-			fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", dataset.Name, parser, fileCount, filePaths)
-		}
-
-		w.Flush()
+        fmt.Printf("Found %d dataset(s):\n\n", out.Total)
+        w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+        fmt.Fprintln(w, "NAME\tRAG STRATEGY\tFILE COUNT")
+        fmt.Fprintln(w, "----\t------------\t----------")
+        for _, ds := range out.Datasets {
+            fmt.Fprintf(w, "%s\t%s\t%d\n", ds.Name, emptyDefault(ds.RAGStrategy, "auto"), len(ds.Files))
+        }
+        w.Flush()
 	},
 }
 
 // datasetsAddCmd represents the datasets add command
 var datasetsAddCmd = &cobra.Command{
-	Use:   "add [name] [file1] [file2] ...",
-	Short: "Add a new dataset to your configuration",
-	Long: `Add a new dataset to your llamafarm.yaml configuration file.
+    Use:   "add [name] [file1] [file2] ...",
+    Short: "Create a new dataset on the server (optionally upload files)",
+    Long: `Create a new dataset on the server for the current project.
 
 Examples:
-  lf datasets add my-docs ./docs/file1.pdf ./docs/file2.txt
-  lf datasets add --parser pdf-parser my-pdfs ./pdfs/*.pdf`,
-	Args: func(cmd *cobra.Command, args []string) error {
-		if len(args) < 2 {
-			return fmt.Errorf("requires at least 2 arguments: dataset name and at least one file path")
-		}
-		return nil
-	},
+  lf datasets add my-docs
+  lf datasets add --rag-strategy auto my-pdfs ./pdfs/*.pdf`,
+    Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadConfig(configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
-		}
+        serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)
+        }
 
-		datasetName := args[0]
-		filePaths := args[1:]
+        datasetName := args[0]
+        // 1) Create dataset via API
+        if ragStrategy == "" {
+            ragStrategy = "auto"
+        }
+        createReq := createDatasetRequest{Name: datasetName, RAGStrategy: ragStrategy}
+        payload, _ := json.Marshal(createReq)
+        url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/", strings.TrimSuffix(serverCfg.URL, "/"), serverCfg.Namespace, serverCfg.Project)
+        req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+            os.Exit(1)
+        }
+        req.Header.Set("Content-Type", "application/json")
+        resp, err := getHTTPClient().Do(req)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
+            os.Exit(1)
+        }
+        body, readErr := io.ReadAll(resp.Body)
+        resp.Body.Close()
+        if resp.StatusCode != http.StatusOK {
+            if readErr != nil {
+                fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
+                os.Exit(1)
+            }
+            fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
+            os.Exit(1)
+        }
+        var created createDatasetResponse
+        if err := json.Unmarshal(body, &created); err != nil {
+            fmt.Fprintf(os.Stderr, "Failed parsing response: %v\n", err)
+            os.Exit(1)
+        }
+        fmt.Printf("✅ Created dataset '%s' (rag: %s)\n", created.Dataset.Name, emptyDefault(created.Dataset.RAGStrategy, "auto"))
 
-		// Validate file paths exist
-		var validFiles []string
-		for _, filePath := range filePaths {
-			// Handle glob patterns
-			matches, err := filepath.Glob(filePath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid file pattern '%s': %v\n", filePath, err)
-				continue
-			}
-
-			if len(matches) == 0 {
-				// Check if it's a direct file path
-				if _, err := os.Stat(filePath); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: File '%s' does not exist\n", filePath)
-				}
-				validFiles = append(validFiles, filePath)
-			} else {
-				validFiles = append(validFiles, matches...)
-			}
-		}
-
-		if len(validFiles) == 0 {
-			fmt.Fprintf(os.Stderr, "Error: No valid files provided\n")
-			os.Exit(1)
-		}
-
-		// Create new dataset
-		dataset := config.Dataset{
-			Name:  datasetName,
-			Files: validFiles,
-		}
-
-		if datasetParser != "" {
-			dataset.Parser = datasetParser
-		}
-
-		// Add to configuration
-		if err := cfg.AddDataset(dataset); err != nil {
-			fmt.Fprintf(os.Stderr, "Error adding dataset: %v\n", err)
-			os.Exit(1)
-		}
-
-		// Save configuration
-		if err := config.SaveConfig(cfg, configFile); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("✅ Successfully added dataset '%s' with %d file(s)\n", datasetName, len(validFiles))
-		if datasetParser != "" {
-			fmt.Printf("   Parser: %s\n", datasetParser)
-		}
-		fmt.Printf("   Files: %s\n", strings.Join(validFiles, ", "))
+        // 2) Optionally upload files if provided
+        filePaths := args[1:]
+        if len(filePaths) == 0 {
+            return
+        }
+        var filesToUpload []string
+        for _, p := range filePaths {
+            matches, err := filepath.Glob(p)
+            if err != nil || len(matches) == 0 {
+                // if direct path or glob error, include as-is; upload will validate
+                filesToUpload = append(filesToUpload, p)
+                continue
+            }
+            filesToUpload = append(filesToUpload, matches...)
+        }
+        uploaded := 0
+        for _, fp := range filesToUpload {
+            if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, fp); err != nil {
+                fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", fp, err)
+                continue
+            }
+            fmt.Printf("   📤 Uploaded: %s\n", fp)
+            uploaded++
+        }
+        fmt.Printf("   Done. Uploaded %d/%d file(s).\n", uploaded, len(filesToUpload))
 	},
 }
 
 // datasetsRemoveCmd represents the datasets remove command
 var datasetsRemoveCmd = &cobra.Command{
 	Use:   "remove [name]",
-	Short: "Remove a dataset from your configuration",
-	Long:  `Remove a dataset from your llamafarm.yaml configuration file.`,
+    Short: "Delete a dataset from the server",
+    Long:  `Deletes a dataset from the LlamaFarm server for the selected project.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadConfig(configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
-		}
-
-		datasetName := args[0]
-
-		// Check if dataset exists
-		if dataset, _ := cfg.FindDatasetByName(datasetName); dataset == nil {
-			fmt.Fprintf(os.Stderr, "Error: Dataset '%s' not found\n", datasetName)
-			os.Exit(1)
-		}
-
-		// Remove from configuration
-		if err := cfg.RemoveDataset(datasetName); err != nil {
-			fmt.Fprintf(os.Stderr, "Error removing dataset: %v\n", err)
-			os.Exit(1)
-		}
-
-		// Save configuration
-		if err := config.SaveConfig(cfg, configFile); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("✅ Successfully removed dataset '%s'\n", datasetName)
+        serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)
+        }
+        datasetName := args[0]
+        url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/%s", strings.TrimSuffix(serverCfg.URL, "/"), serverCfg.Namespace, serverCfg.Project, datasetName)
+        req, err := http.NewRequest("DELETE", url, nil)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+            os.Exit(1)
+        }
+        resp, err := getHTTPClient().Do(req)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
+            os.Exit(1)
+        }
+        defer resp.Body.Close()
+        body, readErr := io.ReadAll(resp.Body)
+        if resp.StatusCode != http.StatusOK {
+            if readErr != nil {
+                fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
+                os.Exit(1)
+            }
+            fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
+            os.Exit(1)
+        }
+        fmt.Printf("✅ Successfully removed dataset '%s'\n", datasetName)
 	},
 }
 
 // datasetsIngestCmd represents the datasets ingest command
 var datasetsIngestCmd = &cobra.Command{
-	Use:   "ingest [dataset-name]",
-	Short: "Start ingestion of dataset(s)",
-	Long: `Start ingestion of specific dataset(s) or all datasets if no name is provided.
-This will process the files in the dataset(s) and add them to your vector store for retrieval.
+    Use:   "ingest [dataset-name] [file1] [file2] ...",
+    Short: "Upload files to a dataset on the server",
+    Long: `Uploads one or more files to the specified dataset on the LlamaFarm server.
 
 Examples:
-  lf datasets ingest                # Ingest all datasets
-  lf datasets ingest my-docs        # Ingest specific dataset`,
-	Args: cobra.MaximumNArgs(1),
+  lf datasets ingest my-docs ./docs/file1.pdf ./docs/file2.txt
+  lf datasets ingest my-docs ./pdfs/*.pdf`,
+    Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadConfig(configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
-		}
+        serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)
+        }
 
-		if len(cfg.Datasets) == 0 {
-			fmt.Println("No datasets configured for ingestion.")
-			return
-		}
+        datasetName := args[0]
+        inPaths := args[1:]
+        var files []string
+        for _, p := range inPaths {
+            matches, err := filepath.Glob(p)
+            if err != nil || len(matches) == 0 {
+                files = append(files, p)
+                continue
+            }
+            files = append(files, matches...)
+        }
+        if len(files) == 0 {
+            fmt.Fprintf(os.Stderr, "No files to upload.\n")
+            os.Exit(1)
+        }
 
-		var datasetsToIngest []config.Dataset
-
-		if len(args) == 0 {
-			// Ingest all datasets
-			datasetsToIngest = cfg.Datasets
-			fmt.Printf("Starting ingestion of all %d dataset(s)...\n", len(datasetsToIngest))
-		} else {
-			// Ingest specific dataset
-			datasetName := args[0]
-			dataset, _ := cfg.FindDatasetByName(datasetName)
-			if dataset == nil {
-				fmt.Fprintf(os.Stderr, "Error: Dataset '%s' not found\n", datasetName)
-				os.Exit(1)
-			}
-			datasetsToIngest = []config.Dataset{*dataset}
-			fmt.Printf("Starting ingestion of dataset '%s'...\n", datasetName)
-		}
-
-		// TODO: Implement actual ingestion logic
-		// For now, this is a placeholder that shows what would be ingested
-		for _, dataset := range datasetsToIngest {
-			fmt.Printf("\n📊 Dataset: %s\n", dataset.Name)
-			parser := dataset.Parser
-			if parser == "" {
-				parser = "auto"
-			}
-			fmt.Printf("   Parser: %s\n", parser)
-			fmt.Printf("   Files to process: %d\n", len(dataset.Files))
-
-			for i, file := range dataset.Files {
-				fmt.Printf("   [%d] %s\n", i+1, file)
-			}
-		}
-
-		fmt.Printf("\n🚀 Ingestion process would start for %d dataset(s)\n", len(datasetsToIngest))
-		fmt.Printf("💡 Note: Actual ingestion implementation coming soon!\n")
-		fmt.Printf("   This will process files using the configured RAG pipeline:\n")
-		fmt.Printf("   - Parse files using specified parsers\n")
-		fmt.Printf("   - Generate embeddings using configured embedders\n")
-		fmt.Printf("   - Store vectors in configured vector stores\n")
+        fmt.Printf("Starting upload to dataset '%s' (%d file(s))...\n", datasetName, len(files))
+        uploaded := 0
+        for _, f := range files {
+            if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f); err != nil {
+                fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", f, err)
+                continue
+            }
+            fmt.Printf("   📤 Uploaded: %s\n", f)
+            uploaded++
+        }
+        fmt.Printf("Done. Uploaded %d/%d file(s).\n", uploaded, len(files))
 	},
 }
 
 func init() {
 	// Add persistent flags
 	datasetsCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path (default: llamafarm.yaml in current directory)")
+    // Server routing flags (align with projects chat)
+    datasetsCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
+    datasetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")
+    datasetsCmd.PersistentFlags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
+    datasetsCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose HTTP logging")
 
-	// Add flags specific to add command
-	datasetsAddCmd.Flags().StringVarP(&datasetParser, "parser", "p", "", "parser to use for this dataset (default: auto)")
+    // Add flags specific to add command
+    datasetsAddCmd.Flags().StringVarP(&ragStrategy, "rag-strategy", "r", "auto", "RAG strategy to use for this dataset (default: auto)")
 
 	// Add subcommands to datasets
 	datasetsCmd.AddCommand(datasetsListCmd)
@@ -276,4 +303,92 @@ func init() {
 
 	// Add the datasets command to root
 	rootCmd.AddCommand(datasetsCmd)
+}
+
+// ==== helpers ====
+func emptyDefault(s string, d string) string { if strings.TrimSpace(s) == "" { return d }; return s }
+
+func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) error {
+    // Open file
+    file, err := os.Open(path)
+    if err != nil { return err }
+    defer file.Close()
+
+    // Prepare multipart form
+    var buf bytes.Buffer
+    writer := multipart.NewWriter(&buf)
+    part, err := writer.CreateFormFile("file", filepath.Base(path))
+    if err != nil { return err }
+    if _, err := io.Copy(part, file); err != nil { return err }
+    if err := writer.Close(); err != nil { return err }
+
+    // Build request
+    url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/%s/data", strings.TrimSuffix(server, "/"), namespace, project, dataset)
+    req, err := http.NewRequest("POST", url, &buf)
+    if err != nil { return err }
+    req.Header.Set("Content-Type", writer.FormDataContentType())
+    _ = addLocalhostCWDHeader(req)
+
+    resp, err := getHTTPClient().Do(req)
+    if err != nil { return err }
+    defer resp.Body.Close()
+    body, readErr := io.ReadAll(resp.Body)
+    if resp.StatusCode != http.StatusOK {
+        if readErr != nil {
+            return fmt.Errorf("%s", readErr.Error())
+        }
+        return fmt.Errorf("%s", prettyServerError(resp, body))
+    }
+    return nil
+}
+
+// prettyServerError extracts a readable message from a server error response.
+// It attempts to parse common JSON shapes like {"detail":"..."}, {"message":"..."}, {"error":"..."}.
+func prettyServerError(resp *http.Response, body []byte) string {
+    // Try to parse JSON error envelopes
+    var env struct {
+        Detail any    `json:"detail"`
+        Message string `json:"message"`
+        Error   string `json:"error"`
+    }
+    if json.Unmarshal(body, &env) == nil {
+        // Prefer detail
+        switch v := env.Detail.(type) {
+        case string:
+            if v != "" {
+                return v
+            }
+        case map[string]any:
+            // Common nested shapes
+            if m, ok := v["message"].(string); ok && m != "" {
+                return m
+            }
+            if m, ok := v["detail"].(string); ok && m != "" {
+                return m
+            }
+        case []any:
+            if len(v) > 0 {
+                if m, ok := v[0].(map[string]any); ok {
+                    if s, ok := m["message"].(string); ok && s != "" {
+                        return s
+                    }
+                    if s, ok := m["detail"].(string); ok && s != "" {
+                        return s
+                    }
+                }
+            }
+        }
+        if env.Message != "" {
+            return env.Message
+        }
+        if env.Error != "" {
+            return env.Error
+        }
+    }
+    // Fallback: raw body trimmed
+    s := strings.TrimSpace(string(body))
+    if s == "" {
+        return http.StatusText(resp.StatusCode)
+    }
+    return s
 }

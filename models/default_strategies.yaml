@@ -1,0 +1,435 @@
+# Models System Default Strategies
+# Version: 2.0.0
+# This file defines pre-configured strategies for common use cases
+
+version: 2.0.0
+
+strategies:
+  # =====================================
+  # LOCAL DEVELOPMENT
+  # =====================================
+  - name: local_development
+    description: Optimized for local development with Ollama, no external dependencies
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          auto_start: true
+          models:
+            - name: llama3.2:3b
+              pull_on_start: true
+            - name: mistral:7b
+              pull_on_start: false
+    optimization:
+      cache_enabled: true
+      batch_size: 1
+      timeout_seconds: 300
+    monitoring:
+      log_level: DEBUG
+      metrics_enabled: false
+    constraints:
+      privacy_mode: local_only
+      max_tokens: 2048
+
+  # =====================================
+  # CLOUD PRODUCTION
+  # =====================================
+  - name: cloud_production
+    description: High-availability production setup with OpenAI API
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o-mini
+          timeout: 60
+          max_retries: 3
+    optimization:
+      cache_enabled: true
+      batch_size: 10
+      timeout_seconds: 60
+      retry_policy:
+        max_attempts: 3
+        backoff_multiplier: 2.0
+    monitoring:
+      log_level: WARNING
+      metrics_enabled: true
+      trace_enabled: true
+    constraints:
+      max_tokens: 4096
+      max_cost_per_request: 0.1
+      allowed_models:
+        - gpt-4o-mini
+        - gpt-4o
+        - gpt-3.5-turbo
+
+  # =====================================
+  # HYBRID WITH FALLBACK
+  # =====================================
+  - name: hybrid_fallback
+    description: Cloud API primary with automatic local fallback for resilience
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o-mini
+          timeout: 30
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          auto_start: false
+    fallback_chain:
+      - name: OpenAI GPT-3.5
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-3.5-turbo
+          timeout: 20
+      - name: Groq Fast
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-8b-instant
+          timeout: 15
+      - name: Local Llama
+        type: ollama
+        config:
+          default_model: llama3.2:3b
+      - name: Local Mistral
+        type: ollama
+        config:
+          default_model: mistral:7b
+    optimization:
+      cache_enabled: true
+      batch_size: 5
+      timeout_seconds: 30
+    monitoring:
+      log_level: INFO
+      metrics_enabled: true
+
+  # =====================================
+  # MULTI-PROVIDER LOAD BALANCED
+  # =====================================
+  - name: multi_provider
+    description: Distribute load across multiple cloud providers for resilience and cost optimization
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-3.5-turbo
+    routing_rules:
+      - condition: input.length > 2000
+        target: groq_provider
+        priority: high
+      - condition: input.requires_vision
+        target: openai_provider
+        priority: normal
+      - condition: input.is_code
+        target: deepseek_provider
+        priority: normal
+    fallback_chain:
+      - name: groq_provider
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-70b-versatile
+      - name: together_provider
+        type: openai_compatible
+        config:
+          provider: together
+          api_key: ${TOGETHER_API_KEY}
+          default_model: meta-llama/Llama-3-70b-chat-hf
+      - name: deepseek_provider
+        type: openai_compatible
+        config:
+          provider: deepseek
+          api_key: ${DEEPSEEK_API_KEY}
+          default_model: deepseek-coder
+    optimization:
+      cache_enabled: true
+      batch_size: 20
+      timeout_seconds: 45
+
+  # =====================================
+  # COST OPTIMIZED
+  # =====================================
+  - name: cost_optimized
+    description: Minimize costs while maintaining acceptable quality
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-8b-instant
+    fallback_chain:
+      - name: DeepSeek Cheap
+        type: openai_compatible
+        config:
+          provider: deepseek
+          api_key: ${DEEPSEEK_API_KEY}
+          default_model: deepseek-chat
+      - name: Local Small Model
+        type: ollama
+        config:
+          default_model: tinyllama:1.1b
+    optimization:
+      cache_enabled: true
+      batch_size: 50
+      timeout_seconds: 120
+    constraints:
+      max_tokens: 1024
+      max_cost_per_request: 0.001
+
+  # =====================================
+  # PRIVACY FIRST
+  # =====================================
+  - name: privacy_first
+    description: All processing done locally, no data leaves the system
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          auto_start: true
+          models:
+            - name: llama3.2:3b
+              pull_on_start: true
+            - name: mistral:7b
+              pull_on_start: true
+            - name: phi3:medium
+              pull_on_start: false
+    optimization:
+      cache_enabled: false  # Disable caching for sensitive data
+      batch_size: 1
+      timeout_seconds: 600
+    monitoring:
+      log_level: ERROR  # Minimal logging
+      metrics_enabled: false
+      trace_enabled: false
+    constraints:
+      privacy_mode: local_only
+      max_tokens: 4096
+      requires_gpu: false
+
+  # =====================================
+  # FINE-TUNING PIPELINE
+  # =====================================
+  - name: fine_tuning_pipeline
+    description: End-to-end fine-tuning pipeline with PyTorch
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          base_model:
+            huggingface_id: meta-llama/Llama-2-7b-hf
+            cache_dir: ./model_cache
+            torch_dtype: float16
+          method:
+            type: lora
+            r: 16
+            alpha: 32
+            dropout: 0.1
+          training:
+            batch_size: 4
+            learning_rate: 0.0002
+            num_epochs: 3
+            gradient_accumulation_steps: 4
+            warmup_ratio: 0.1
+      repository:
+        type: huggingface
+        config:
+          token: ${HF_TOKEN}
+          cache_dir: ./hf_cache
+          private: false
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: custom-finetuned
+    optimization:
+      cache_enabled: true
+      batch_size: 4
+    monitoring:
+      log_level: INFO
+      metrics_enabled: true
+    constraints:
+      requires_gpu: true
+
+  # =====================================
+  # RESEARCH EXPERIMENTATION
+  # =====================================
+  - name: research_experimentation
+    description: Flexible setup for testing multiple models and configurations
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+          models:
+            - name: llama3.2:3b
+              pull_on_start: true
+            - name: llama3.2:1b
+              pull_on_start: true
+            - name: mistral:7b
+              pull_on_start: true
+            - name: mixtral:8x7b
+              pull_on_start: false
+            - name: phi3:medium
+              pull_on_start: false
+      fine_tuner:
+        type: llamafactory
+        config:
+          model_name_or_path: meta-llama/Llama-2-7b-hf
+          dataset: alpaca
+          template: llama2
+          finetuning_type: lora
+          output_dir: ./experiments
+    fallback_chain:
+      - name: Try Anthropic
+        type: openai_compatible
+        config:
+          provider: anthropic
+          api_key: ${ANTHROPIC_API_KEY}
+          default_model: claude-3-haiku
+      - name: Try Mistral
+        type: openai_compatible
+        config:
+          provider: mistral
+          api_key: ${MISTRAL_API_KEY}
+          default_model: mistral-small-latest
+    optimization:
+      cache_enabled: true
+      batch_size: 1
+      timeout_seconds: 300
+    monitoring:
+      log_level: DEBUG
+      metrics_enabled: true
+      trace_enabled: true
+
+  # =====================================
+  # SPECIALIZED CODE GENERATION
+  # =====================================
+  - name: code_generation
+    description: Optimized for code generation and analysis
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: deepseek
+          api_key: ${DEEPSEEK_API_KEY}
+          default_model: deepseek-coder
+    fallback_chain:
+      - name: OpenAI GPT-4
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          default_model: gpt-4o
+      - name: Mistral Codestral
+        type: openai_compatible
+        config:
+          provider: mistral
+          api_key: ${MISTRAL_API_KEY}
+          default_model: codestral-latest
+      - name: Local Code Model
+        type: ollama
+        config:
+          default_model: codellama:7b
+    optimization:
+      cache_enabled: true
+      batch_size: 1
+      timeout_seconds: 120
+    constraints:
+      max_tokens: 8192
+      allowed_models:
+        - deepseek-coder
+        - gpt-4o
+        - codestral-latest
+        - codellama
+
+  # =====================================
+  # FAST INFERENCE
+  # =====================================
+  - name: fast_inference
+    description: Optimized for lowest latency using Groq LPU
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-8b-instant
+          timeout: 10
+    fallback_chain:
+      - name: Groq Larger Model
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          default_model: llama-3.1-70b-versatile
+          timeout: 15
+    optimization:
+      cache_enabled: true
+      batch_size: 100
+      timeout_seconds: 10
+    monitoring:
+      log_level: WARNING
+      metrics_enabled: true
+    constraints:
+      max_tokens: 2048
+
+# =====================================
+# USE CASE MAPPINGS
+# =====================================
+use_case_mapping:
+  chatbot:
+    - hybrid_fallback
+    - cloud_production
+  code_generation:
+    - code_generation
+    - cloud_production
+  document_analysis:
+    - local_development
+    - privacy_first
+  creative_writing:
+    - cloud_production
+    - research_experimentation
+  translation:
+    - multi_provider
+    - cloud_production
+  summarization:
+    - cost_optimized
+    - fast_inference
+  research:
+    - research_experimentation
+    - fine_tuning_pipeline
+  prototyping:
+    - local_development
+    - cost_optimized
+  production:
+    - cloud_production
+    - multi_provider
+  enterprise:
+    - hybrid_fallback
+    - privacy_first

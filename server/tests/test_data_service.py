@@ -29,11 +29,11 @@ class TestDataService:
         self.test_namespace = "test_namespace"
         self.test_project = "test_project"
         self.test_data_dir = "/test/data/dir"
-        
+
         # Mock file data
         self.test_file_content = b"test file content"
         self.test_file_hash = "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
-        
+
         # Mock metadata
         self.mock_metadata = MetadataFileContent(
             original_file_name="test.pdf",
@@ -43,12 +43,13 @@ class TestDataService:
             hash=self.test_file_hash,
             timestamp=1640995200.0
         )
-        
-        # Mock project with datasets  
+
+        # Mock project with datasets
         self.mock_project = Mock()
         self.mock_project.config = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace=self.test_namespace,
             prompts=[],
             rag={"strategies": [
                 {
@@ -75,13 +76,13 @@ class TestDataService:
     def test_get_data_dir_creates_directories(self, mock_get_project_dir, mock_makedirs):
         """Test that get_data_dir creates all necessary directories."""
         mock_get_project_dir.return_value = "/project/dir"
-        
+
         result = DataService.get_data_dir(self.test_namespace, self.test_project)
-        
+
         expected_data_dir = "/project/dir/lf_data"
         assert result == expected_data_dir
         mock_get_project_dir.assert_called_once_with(self.test_namespace, self.test_project)
-        
+
         # Verify all directories are created
         expected_calls = [
             (("/project/dir/lf_data",), {"exist_ok": True}),
@@ -97,20 +98,20 @@ class TestDataService:
         """Test data hashing functionality."""
         test_data = b"hello world"
         expected_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
-        
+
         result = DataService.hash_data(test_data)
-        
+
         assert result == expected_hash
 
     @patch('services.data_service.datetime')
     def test_append_collision_timestamp(self, mock_datetime):
         """Test timestamp appending for collision resolution."""
         mock_datetime.now.return_value.timestamp.return_value = 1640995200.0
-        
+
         # Test with extension
         result = DataService.append_collision_timestamp("test.pdf")
         assert result == "test_1640995200.0.pdf"
-        
+
         # Test without extension
         result = DataService.append_collision_timestamp("test")
         assert result == "test_1640995200.0"
@@ -123,12 +124,12 @@ class TestDataService:
     @patch('services.data_service.logger')
     @pytest.mark.asyncio
     async def test_add_data_file_success(
-        self, 
-        mock_logger, 
-        mock_symlink, 
-        mock_file_open, 
-        mock_append_timestamp, 
-        mock_hash_data, 
+        self,
+        mock_logger,
+        mock_symlink,
+        mock_file_open,
+        mock_append_timestamp,
+        mock_hash_data,
         mock_get_data_dir
     ):
         """Test successfully adding a data file."""
@@ -136,20 +137,20 @@ class TestDataService:
         mock_get_data_dir.return_value = self.test_data_dir
         mock_hash_data.return_value = self.test_file_hash
         mock_append_timestamp.return_value = "test_1640995200.0.pdf"
-        
+
         # Create mock upload file
         mock_upload_file = Mock(spec=UploadFile)
         mock_upload_file.filename = "test.pdf"
         mock_upload_file.content_type = "application/pdf"
         mock_upload_file.read = AsyncMock(return_value=self.test_file_content)
-        
+
         # Execute
         result = await DataService.add_data_file(
-            self.test_namespace, 
-            self.test_project, 
+            self.test_namespace,
+            self.test_project,
             mock_upload_file
         )
-        
+
         # Verify result
         assert isinstance(result, MetadataFileContent)
         assert result.original_file_name == "test.pdf"
@@ -157,12 +158,12 @@ class TestDataService:
         assert result.size == len(self.test_file_content)
         assert result.mime_type == "application/pdf"
         assert result.hash == self.test_file_hash
-        
+
         # Verify file operations
         mock_upload_file.read.assert_called_once()
         mock_hash_data.assert_called_once_with(self.test_file_content)
         mock_append_timestamp.assert_called_once_with("test.pdf")
-        
+
         # Verify file writes
         assert mock_file_open.call_count == 2  # metadata and raw file
         mock_symlink.assert_called_once()
@@ -173,13 +174,13 @@ class TestDataService:
     def test_read_data_file_success(self, mock_file_open, mock_get_data_dir):
         """Test successfully reading a data file."""
         mock_get_data_dir.return_value = self.test_data_dir
-        
+
         result = DataService.read_data_file(
-            self.test_namespace, 
-            self.test_project, 
+            self.test_namespace,
+            self.test_project,
             self.test_file_hash
         )
-        
+
         assert result == b"test file content"
         mock_get_data_dir.assert_called_once_with(self.test_namespace, self.test_project)
         mock_file_open.assert_called_once_with(
@@ -192,11 +193,11 @@ class TestDataService:
         """Test reading a non-existent data file."""
         mock_get_data_dir.return_value = self.test_data_dir
         mock_file_open.side_effect = FileNotFoundError("File not found")
-        
+
         with pytest.raises(FileNotFoundError):
             DataService.read_data_file(
-                self.test_namespace, 
-                self.test_project, 
+                self.test_namespace,
+                self.test_project,
                 "nonexistent_hash"
             )
 
@@ -206,17 +207,17 @@ class TestDataService:
         """Test successfully getting metadata by hash."""
         mock_get_data_dir.return_value = self.test_data_dir
         mock_file_open.return_value.read.return_value = self.mock_metadata.model_dump_json()
-        
+
         result = DataService.get_data_file_metadata_by_hash(
-            self.test_namespace, 
-            self.test_project, 
+            self.test_namespace,
+            self.test_project,
             self.test_file_hash
         )
-        
+
         assert isinstance(result, MetadataFileContent)
         assert result.original_file_name == self.mock_metadata.original_file_name
         assert result.hash == self.mock_metadata.hash
-        
+
         mock_get_data_dir.assert_called_once_with(self.test_namespace, self.test_project)
         mock_file_open.assert_called_once_with(
             f"{self.test_data_dir}/meta/{self.test_file_hash}.json"
@@ -228,11 +229,11 @@ class TestDataService:
         """Test getting metadata for non-existent file."""
         mock_get_data_dir.return_value = self.test_data_dir
         mock_file_open.side_effect = FileNotFoundError("Metadata not found")
-        
+
         with pytest.raises(FileNotFoundError):
             DataService.get_data_file_metadata_by_hash(
-                self.test_namespace, 
-                self.test_project, 
+                self.test_namespace,
+                self.test_project,
                 "nonexistent_hash"
             )
 
@@ -241,20 +242,21 @@ class TestDataService:
     @patch.object(DataService, 'get_data_dir')
     @patch('services.data_service.ProjectService.get_project')
     def test_delete_data_file_success(
-        self, 
+        self,
         mock_get_project,
-        mock_get_data_dir, 
-        mock_logger, 
+        mock_get_data_dir,
+        mock_logger,
         mock_remove
     ):
         """Test successfully deleting a data file."""
         mock_get_data_dir.return_value = self.test_data_dir
-        
+
         # Mock project with datasets where no other dataset exists
         mock_project = Mock()
         mock_project.config = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace=self.test_namespace,
             prompts=[],
             rag={"strategies": [
                 {
@@ -275,15 +277,15 @@ class TestDataService:
             models=[]
         )
         mock_get_project.return_value = mock_project
-        
+
         # Execute
         DataService.delete_data_file(
-            self.test_namespace, 
-            self.test_project, 
-            "target_dataset", 
+            self.test_namespace,
+            self.test_project,
+            "target_dataset",
             self.mock_metadata
         )
-        
+
         # Verify file removals
         expected_calls = [
             f"{self.test_data_dir}/meta/{self.test_file_hash}.json",
@@ -293,25 +295,26 @@ class TestDataService:
         assert mock_remove.call_count == 3
         for expected_path in expected_calls:
             mock_remove.assert_any_call(expected_path)
-        
+
         mock_logger.info.assert_called_once()
 
     @patch.object(DataService, 'get_data_dir')
     @patch('services.data_service.ProjectService.get_project')
     def test_delete_data_file_in_use_by_another_dataset(
-        self, 
-        mock_get_project, 
+        self,
+        mock_get_project,
         mock_get_data_dir
     ):
         """Test deleting a file that's in use by another dataset."""
         mock_get_data_dir.return_value = self.test_data_dir
-        
+
         # Mock project with datasets where another dataset exists
         # Note: Current logic just checks if ANY other dataset exists, not if file is in use
         mock_project = Mock()
         mock_project.config = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace=self.test_namespace,
             prompts=[],
             rag={"strategies": [
                 {
@@ -333,33 +336,34 @@ class TestDataService:
             models=[]
         )
         mock_get_project.return_value = mock_project
-        
+
         # Execute and verify exception
         with pytest.raises(FileExistsInAnotherDatasetError) as exc_info:
             DataService.delete_data_file(
-                self.test_namespace, 
-                self.test_project, 
-                "target_dataset", 
+                self.test_namespace,
+                self.test_project,
+                "target_dataset",
                 self.mock_metadata
             )
-        
+
         assert "is in use by dataset 'other_dataset'" in str(exc_info.value)
 
     @patch.object(DataService, 'get_data_dir')
     @patch('services.data_service.ProjectService.get_project')
     def test_delete_data_file_no_other_datasets(
-        self, 
-        mock_get_project, 
+        self,
+        mock_get_project,
         mock_get_data_dir
     ):
         """Test deleting a file when no other datasets exist."""
         mock_get_data_dir.return_value = self.test_data_dir
-        
+
         # Mock project with only the target dataset
         mock_project = Mock()
         mock_project.config = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace=self.test_namespace,
             prompts=[],
             rag={"strategies": [
                 {
@@ -380,18 +384,18 @@ class TestDataService:
             models=[]
         )
         mock_get_project.return_value = mock_project
-        
+
         with patch('services.data_service.os.remove') as mock_remove, \
              patch('services.data_service.logger') as mock_logger:
-            
+
             # Should not raise an exception
             DataService.delete_data_file(
-                self.test_namespace, 
-                self.test_project, 
-                "target_dataset", 
+                self.test_namespace,
+                self.test_project,
+                "target_dataset",
                 self.mock_metadata
             )
-            
+
             # Verify files were removed
             assert mock_remove.call_count == 3
             mock_logger.info.assert_called_once()
@@ -407,11 +411,11 @@ class TestDataServiceIntegration:
         test_data1 = b"consistent test data"
         test_data2 = b"consistent test data"
         test_data3 = b"different test data"
-        
+
         hash1 = DataService.hash_data(test_data1)
         hash2 = DataService.hash_data(test_data2)
         hash3 = DataService.hash_data(test_data3)
-        
+
         assert hash1 == hash2  # Same data, same hash
         assert hash1 != hash3  # Different data, different hash
         assert len(hash1) == 64  # SHA256 hex length
@@ -420,7 +424,7 @@ class TestDataServiceIntegration:
         """Test that collision timestamp produces valid file names."""
         with patch('services.data_service.datetime') as mock_datetime:
             mock_datetime.now.return_value.timestamp.return_value = 1640995200.5
-            
+
             # Test various file name formats
             test_cases = [
                 ("file.pdf", "file_1640995200.5.pdf"),
@@ -428,7 +432,7 @@ class TestDataServiceIntegration:
                 ("no_extension", "no_extension_1640995200.5"),
                 ("multiple.dots.in.name.txt", "multiple.dots.in.name_1640995200.5.txt")
             ]
-            
+
             for input_name, expected_output in test_cases:
                 result = DataService.append_collision_timestamp(input_name)
                 assert result == expected_output
@@ -443,13 +447,13 @@ class TestDataServiceIntegration:
             hash="abcd1234",
             timestamp=1640995200.0
         )
-        
+
         # Serialize to JSON
         json_data = original_metadata.model_dump_json()
-        
+
         # Deserialize back
         restored_metadata = MetadataFileContent.model_validate_json(json_data)
-        
+
         # Verify all fields match
         assert restored_metadata.original_file_name == original_metadata.original_file_name
         assert restored_metadata.resolved_file_name == original_metadata.resolved_file_name

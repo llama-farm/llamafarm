@@ -1,0 +1,192 @@
+# GGUF Converter Component Definition
+# This file defines everything needed to set up and use GGUF model conversion
+
+name: gguf_converter
+type: converter
+description: "Converts models to GGUF format using llama.cpp"
+
+# Component configuration schema
+schema:
+  quantization:
+    type: string
+    enum: [q4_0, q4_1, q5_0, q5_1, q8_0, f16, f32]
+    default: "q4_0"
+    description: "Quantization method to use"
+  auto_install:
+    type: boolean
+    default: true
+    description: "Automatically install llama.cpp if missing"
+  build_options:
+    type: object
+    description: "Platform-specific build options"
+    properties:
+      metal: 
+        type: boolean
+        description: "Enable Metal on macOS"
+      cuda:
+        type: boolean  
+        description: "Enable CUDA on Linux/Windows"
+      rocm:
+        type: boolean
+        description: "Enable ROCm for AMD GPUs"
+
+# Setup and installation configuration
+setup:
+  # Detection - check if llama.cpp is available
+  detection:
+    methods:
+      - path_exists: "~/.llamafarm/llama.cpp/convert.py"
+      - path_exists: "~/.llamafarm/llama.cpp/convert-hf-to-gguf.py"
+      - path_exists: "~/.llamafarm/llama.cpp/build"
+      - command: "test -d ~/.llamafarm/llama.cpp/build && echo 'found'"
+        success_pattern: "found"
+        
+  # Installation methods by platform  
+  installation:
+    darwin:
+      primary:
+        method: build_from_source
+        steps:
+          - name: "Clone llama.cpp repository"
+            command: "test -d ~/.llamafarm/llama.cpp && echo 'Directory exists, pulling updates...' && cd ~/.llamafarm/llama.cpp && git pull || git clone https://github.com/ggerganov/llama.cpp ~/.llamafarm/llama.cpp"
+            working_directory: "~"
+            
+          - name: "Configure build with CMake and Metal support"
+            command: "cmake -B build -DLLAMA_METAL=ON"
+            working_directory: "~/.llamafarm/llama.cpp"
+            timeout_minutes: 5
+            
+          - name: "Build with CMake"
+            command: "cmake --build build --config Release -j$(sysctl -n hw.ncpu)"
+            working_directory: "~/.llamafarm/llama.cpp"
+            timeout_minutes: 15
+            
+        verify: "cd ~/.llamafarm/llama.cpp && python convert.py --help"
+        
+      fallbacks:
+        - method: build_minimal
+          steps:
+            - name: "Build without Metal (CPU only)"
+              command: "make -j$(sysctl -n hw.ncpu)"
+              working_directory: "~/.llamafarm/llama.cpp"
+              
+    linux:
+      primary:
+        method: build_from_source
+        steps:
+          - name: "Install build dependencies"
+            command: "sudo apt-get update && sudo apt-get install -y build-essential git cmake"
+            
+          - name: "Clone llama.cpp repository"
+            command: "git clone https://github.com/ggerganov/llama.cpp ~/.llamafarm/llama.cpp"
+            
+          - name: "Configure build with CMake and CUDA support"
+            command: "cmake -B build -DLLAMA_CUDA=ON"
+            working_directory: "~/.llamafarm/llama.cpp"
+            timeout_minutes: 5
+            
+          - name: "Build with CMake"
+            command: "cmake --build build --config Release -j$(nproc)"
+            working_directory: "~/.llamafarm/llama.cpp"
+            timeout_minutes: 20
+            
+        verify: "cd ~/.llamafarm/llama.cpp && python convert.py --help"
+        
+      fallbacks:
+        - method: build_cpu_only
+          steps:
+            - name: "Build CPU-only version"
+              command: "make -j$(nproc)" 
+              working_directory: "~/.llamafarm/llama.cpp"
+              
+    windows:
+      primary:
+        method: manual
+        instructions: |
+          1. Install Visual Studio Build Tools
+          2. Clone: git clone https://github.com/ggerganov/llama.cpp
+          3. Build using cmake or Visual Studio
+          4. Ensure convert.py is accessible
+          
+  # Dependencies (only external tools, Python deps handled by pyproject.toml)
+  dependencies:
+    system:
+      - name: "git"
+        required: true
+        description: "Required to clone llama.cpp repository"
+      - name: "cmake" 
+        required: true
+        description: "Modern build system for llama.cpp"
+      - name: "make" 
+        required: true
+        platforms: [darwin, linux]
+        description: "Build system for compiling llama.cpp"
+      - name: "gcc"
+        required: true
+        platforms: [linux]
+        description: "Compiler for Linux builds"
+      - name: "clang"
+        required: true
+        platforms: [darwin]
+        description: "Compiler for macOS builds"
+        
+    # NOTE: Python packages like torch, numpy, transformers are handled by pyproject.toml
+    # The setup manager only handles external tools that can't be pip installed
+        
+    optional:
+      - name: "cuda-toolkit"
+        description: "For GPU acceleration on Linux"
+        platforms: [linux]
+        install_hint: "Install via system package manager or NVIDIA website"
+        
+  # Error handling
+  error_handling:
+    build_failures:
+      - condition: "nvcc.*not found"
+        action: fallback_to_cpu
+        message: "CUDA not available, building CPU-only version"
+        
+      - condition: "Metal.*not supported"
+        action: fallback_to_cpu  
+        message: "Metal not supported, building CPU-only version"
+        
+      - condition: "make.*failed"
+        action: retry_with_different_options
+        message: "Build failed, trying alternative build options"
+        retry_options:
+          - "make clean && make"
+          - "cmake . && make"
+          
+    runtime_failures:
+      - condition: "convert.py.*not found"
+        action: reinstall
+        message: "Conversion script missing, reinstalling llama.cpp"
+        
+      - condition: "torch.*not found"
+        action: install_dependency
+        message: "PyTorch not installed"
+        dependency: "torch"
+
+# Capabilities this component provides        
+capabilities:
+  - pytorch_to_gguf
+  - lora_merge
+  - quantization
+  - ollama_export
+
+# Integration points
+integration:
+  provides:
+    - service_type: "converter"
+      input_formats: ["pytorch", "huggingface"]
+      output_formats: ["gguf"]
+      
+  requires:
+    - component_type: "python_environment"
+      packages: ["torch", "transformers"]
+      
+  # Can work with these components
+  works_with:
+    - component_type: "model_app"
+      name: "ollama"
+      purpose: "Can create Ollama-compatible models"

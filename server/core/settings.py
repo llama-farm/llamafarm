@@ -12,6 +12,7 @@ class Settings(BaseSettings, env_file=".env"):
     LOG_NAME: str = "server"
     LOG_ACCESS_NAME: str = "server.access"
 
+    lf_use_data_dir: bool = False
     lf_project_dir: str | None = None
     lf_data_dir: str = default_data_dir
     # Config template settings

@@ -1482,6 +1482,7 @@ class Model4(BaseModel):
 class LlamaFarmConfig(BaseModel):
     version: Version = Field(..., description='Config version, must be "v1"')
     name: str = Field(..., description="Project name", examples=["my-namespace/my-project"])
+    namespace: str = Field(..., description="Project namespace", examples=["my-namespace"])
     prompts: list[Prompt]
     rag: Rag = Field(
         ...,

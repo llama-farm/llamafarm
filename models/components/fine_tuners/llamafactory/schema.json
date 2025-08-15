@@ -1,0 +1,234 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["base_model", "method", "dataset", "training_args"],
+  "properties": {
+    "base_model": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "llama3.2-3b",
+            "llama3.1-8b",
+            "llama3.1-70b",
+            "mistral-7b",
+            "codellama-13b",
+            "custom"
+          ],
+          "description": "Model name or identifier"
+        },
+        "custom_model_path": {
+          "type": "string",
+          "description": "Path to custom model (if name is 'custom')"
+        }
+      }
+    },
+    "method": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["lora", "qlora", "full_finetune"],
+          "description": "Fine-tuning method"
+        },
+        "r": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512,
+          "default": 16,
+          "description": "LoRA rank"
+        },
+        "alpha": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 32,
+          "description": "LoRA scaling parameter"
+        },
+        "dropout": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.1,
+          "description": "LoRA dropout rate"
+        },
+        "target_modules": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["q_proj", "v_proj"],
+          "description": "Modules to apply LoRA to"
+        }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to dataset file (JSONL format)"
+        },
+        "conversation_template": {
+          "type": "string",
+          "enum": ["alpaca", "sharegpt", "openai", "custom"],
+          "default": "alpaca",
+          "description": "Conversation format template"
+        },
+        "custom_template": {
+          "type": "object",
+          "properties": {
+            "system": {"type": "string"},
+            "user": {"type": "string"},
+            "assistant": {"type": "string"}
+          },
+          "description": "Custom template definition"
+        },
+        "max_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of samples to use"
+        }
+      }
+    },
+    "training_args": {
+      "type": "object",
+      "required": ["output_dir"],
+      "properties": {
+        "output_dir": {
+          "type": "string",
+          "description": "Directory to save model and checkpoints"
+        },
+        "num_train_epochs": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3,
+          "description": "Number of training epochs"
+        },
+        "per_device_train_batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4,
+          "description": "Batch size per GPU"
+        },
+        "gradient_accumulation_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4,
+          "description": "Gradient accumulation steps"
+        },
+        "learning_rate": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.0002,
+          "description": "Initial learning rate"
+        },
+        "warmup_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.03,
+          "description": "Warmup ratio"
+        },
+        "lr_scheduler_type": {
+          "type": "string",
+          "enum": ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant"],
+          "default": "cosine",
+          "description": "Learning rate scheduler"
+        },
+        "max_grad_norm": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.0,
+          "description": "Maximum gradient norm"
+        },
+        "weight_decay": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.01,
+          "description": "Weight decay"
+        },
+        "fp16": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use FP16 mixed precision"
+        },
+        "bf16": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use BF16 mixed precision"
+        },
+        "max_seq_length": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1024,
+          "description": "Maximum sequence length"
+        },
+        "logging_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "Log every N steps"
+        },
+        "save_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 500,
+          "description": "Save checkpoint every N steps"
+        },
+        "save_total_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Maximum checkpoints to keep"
+        },
+        "resume_from_checkpoint": {
+          "type": "string",
+          "description": "Path to checkpoint to resume from"
+        }
+      }
+    },
+    "framework": {
+      "type": "object",
+      "properties": {
+        "use_fast_tokenizer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use fast tokenizer"
+        },
+        "gradient_checkpointing": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable gradient checkpointing (saves memory)"
+        },
+        "flash_attention": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use Flash Attention 2"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "string",
+          "enum": ["auto", "cuda", "mps"],
+          "default": "auto",
+          "description": "Device to use"
+        },
+        "num_gpus": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Number of GPUs to use"
+        },
+        "deepspeed_config": {
+          "type": "string",
+          "description": "Path to DeepSpeed configuration"
+        }
+      }
+    }
+  }
+}

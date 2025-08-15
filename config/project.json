@@ -1,0 +1,40 @@
+{
+  "root": "config/",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}/config",
+        "command": "uv run pytest -q"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}/config",
+        "command": "uv run ruff check ."
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}/config",
+        "command": "uv run mypy config"
+      }
+    },
+    "compile-schema": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}/config",
+        "command": "uv run python compile_schema.py"
+      }
+    },
+    "generate-types": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}/config",
+        "command": "bash generate-types.sh"
+      }
+    }
+  }
+}

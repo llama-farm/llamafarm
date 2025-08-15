@@ -5,7 +5,7 @@ from typing import Any
 import yaml  # type: ignore
 
 repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root)) 
+sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 

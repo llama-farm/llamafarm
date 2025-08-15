@@ -790,6 +790,131 @@ class TestLocalEnginesConfiguration:
         except SystemExit:
             pytest.fail("list_command raised SystemExit unexpectedly")
 
+
+class TestStrategyBasedCLI:
+    """Test new strategy-based CLI commands."""
+    
+    def test_list_strategies_command(self):
+        """Test list-strategies CLI command."""
+        from argparse import Namespace
+        
+        args = Namespace()
+        
+        try:
+            import cli
+            cli.list_strategies_command(args)
+        except SystemExit:
+            pytest.fail("list_strategies_command raised SystemExit unexpectedly")
+        except ImportError:
+            pytest.skip("Strategy management components not available")
+    
+    def test_use_strategy_command(self):
+        """Test use-strategy CLI command.""" 
+        from argparse import Namespace
+        
+        args = Namespace(strategy="local_development", save=False)
+        
+        try:
+            import cli
+            cli.use_strategy_command(args)
+        except SystemExit:
+            pytest.fail("use_strategy_command raised SystemExit unexpectedly")
+        except ImportError:
+            pytest.skip("Strategy management components not available")
+    
+    def test_info_command(self):
+        """Test info CLI command."""
+        from argparse import Namespace
+        
+        args = Namespace(strategy="local_development")
+        
+        try:
+            import cli
+            cli.info_command(args)
+        except SystemExit:
+            pytest.fail("info_command raised SystemExit unexpectedly") 
+        except ImportError:
+            pytest.skip("Strategy management components not available")
+    
+    def test_generate_command_mock(self):
+        """Test generate CLI command with mocked response."""
+        from argparse import Namespace
+        from unittest.mock import patch, MagicMock
+        
+        args = Namespace(
+            strategy="local_development", 
+            prompt="Hello world",
+            max_tokens=50,
+            temperature=0.7,
+            stream=False,
+            json=False,
+            save=None
+        )
+        
+        try:
+            import cli
+            
+            # Mock the ModelManager to avoid actual API calls
+            with patch('cli.ModelManager') as mock_manager_class:
+                mock_manager = MagicMock()
+                mock_manager.generate.return_value = "Hello! How can I help you?"
+                mock_manager_class.from_strategy.return_value = mock_manager
+                
+                cli.generate_command(args)
+                
+                # Verify ModelManager was created with correct strategy
+                mock_manager_class.from_strategy.assert_called_once_with("local_development")
+                # Verify generate was called
+                mock_manager.generate.assert_called_once()
+                
+        except SystemExit:
+            pytest.fail("generate_command raised SystemExit unexpectedly")
+        except ImportError:
+            pytest.skip("Strategy management components not available")
+
+
+class TestStrategyMigration:
+    """Test migration from config-based to strategy-based system."""
+    
+    def test_legacy_commands_show_deprecation_warning(self, capsys):
+        """Test that legacy commands show deprecation warnings.""" 
+        from argparse import Namespace
+        import tempfile
+        import json
+        
+        # Create a temporary config file
+        test_config = {
+            "name": "Test Config",
+            "providers": {
+                "test_provider": {
+                    "type": "cloud",
+                    "provider": "openai",
+                    "model": "gpt-3.5-turbo"
+                }
+            }
+        }
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(test_config, f)
+            temp_path = f.name
+        
+        try:
+            args = Namespace(config=temp_path, detailed=False)
+            
+            import cli
+            cli.list_command(args)
+            
+            # Check that deprecation warning was printed
+            captured = capsys.readouterr()
+            assert "legacy config system" in captured.out or "legacy config system" in captured.err
+            
+        except SystemExit:
+            # This is expected for some commands
+            pass
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == "__main__":
     # Run tests with verbose output
     pytest.main([__file__, "-v", "--tb=short"])

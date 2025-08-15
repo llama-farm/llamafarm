@@ -4,6 +4,7 @@ type: object
 required:
   - version
   - name
+  - namespace
   - prompts
   - rag
   - datasets
@@ -17,7 +18,11 @@ properties:
   name:
     type: string
     description: Project name
-    example: my-namespace/my-project
+    example: my-project
+  namespace:
+    type: string
+    description: Project namespace
+    example: my-namespace
   prompts:
     type: array
     items:

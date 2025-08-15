@@ -1,0 +1,1054 @@
+# Models System Schema - RAG-style configuration
+# Version: 2.0.0
+# Schema: draft-07
+$schema: http://json-schema.org/draft-07/schema#
+
+title: Models System Configuration Schema
+description: Comprehensive schema for model management, fine-tuning, and deployment strategies
+version: 2.0.0
+
+type: object
+properties:
+  # =====================================
+  # STRATEGIES - Top-level strategy definitions
+  # =====================================
+  strategies:
+    type: array
+    description: List of named strategy configurations combining components for specific use cases
+    items:
+      type: object
+      required: [name, description, components]
+      properties:
+        name:
+          type: string
+          description: Human-readable strategy name
+          
+        description:
+          type: string
+          description: Detailed description of strategy purpose and use case
+          
+        components:
+          type: object
+          description: Component configuration for this strategy
+          properties:
+            cloud_api:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [openai_compatible, anthropic, custom]
+                config:
+                  type: object
+                  
+            model_app:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [ollama, llamacpp, vllm, custom]
+                config:
+                  type: object
+                  
+            fine_tuner:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [pytorch, llamafactory, custom]
+                config:
+                  type: object
+                  
+            repository:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [huggingface, modelscope, custom]
+                config:
+                  type: object
+                  
+        fallback_chain:
+          type: array
+          description: Ordered list of fallback options
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+              config:
+                type: object
+                
+        routing_rules:
+          type: array
+          description: Conditional routing based on input characteristics
+          items:
+            type: object
+            properties:
+              condition:
+                type: string
+              target:
+                type: string
+              priority:
+                type: string
+                enum: [low, normal, high, critical]
+                
+        optimization:
+          type: object
+          description: Performance optimization settings
+          properties:
+            cache_enabled:
+              type: boolean
+              default: true
+            batch_size:
+              type: integer
+              minimum: 1
+            timeout_seconds:
+              type: integer
+              minimum: 1
+            retry_policy:
+              type: object
+              properties:
+                max_attempts:
+                  type: integer
+                  minimum: 1
+                backoff_multiplier:
+                  type: number
+                  minimum: 1.0
+                  
+        monitoring:
+          type: object
+          description: Monitoring and observability configuration
+          properties:
+            metrics_enabled:
+              type: boolean
+              default: true
+            log_level:
+              type: string
+              enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+            trace_enabled:
+              type: boolean
+              default: false
+              
+        constraints:
+          type: object
+          description: Resource and policy constraints
+          properties:
+            max_tokens:
+              type: integer
+              minimum: 1
+            max_cost_per_request:
+              type: number
+              minimum: 0
+            allowed_models:
+              type: array
+              items:
+                type: string
+            requires_gpu:
+              type: boolean
+            privacy_mode:
+              type: string
+              enum: [public, private, local_only]
+
+  # =====================================
+  # COMPONENT DEFINITIONS
+  # =====================================
+  components:
+    type: object
+    description: Available components and their schemas
+    properties:
+      
+      # =====================================  
+      # COMPONENT SETUP PATTERNS
+      # =====================================
+      # Common setup patterns that can be referenced by components
+      setup_patterns:
+        type: object
+        description: Reusable setup patterns for different component types
+        properties:
+          
+          package_manager_install:
+            type: object
+            description: Standard package manager installation pattern
+            properties:
+              platforms:
+                type: object
+                properties:
+                  darwin:
+                    type: object
+                    properties:
+                      homebrew:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "brew install {package_name}"
+                          verify_command:
+                            type: string
+                            pattern: "brew list {package_name}"
+                  linux:
+                    type: object
+                    properties:
+                      apt:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "sudo apt-get update && sudo apt-get install -y {package_name}"
+                          verify_command:
+                            type: string
+                            pattern: "dpkg -l | grep {package_name}"
+                      yum:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "sudo yum install -y {package_name}"
+                  windows:
+                    type: object
+                    properties:
+                      chocolatey:
+                        type: object
+                        properties:
+                          install_command:
+                            type: string
+                            pattern: "choco install {package_name} -y"
+                          
+          python_package_install:
+            type: object
+            description: Python package installation pattern
+            properties:
+              methods:
+                type: object
+                properties:
+                  pip:
+                    type: object
+                    properties:
+                      install_command:
+                        type: string
+                        pattern: "pip install {package_name}"
+                      verify_command:
+                        type: string
+                        pattern: "pip show {package_name}"
+                  uv:
+                    type: object
+                    properties:
+                      install_command:
+                        type: string
+                        pattern: "uv add {package_name}"
+                      verify_command:
+                        type: string
+                        pattern: "uv list | grep {package_name}"
+                        
+          build_from_source:
+            type: object
+            description: Build from source pattern
+            properties:
+              steps:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    command:
+                      type: string
+                    working_directory:
+                      type: string
+                    environment_vars:
+                      type: object
+                    timeout_minutes:
+                      type: integer
+                      default: 30
+                      
+          docker_install:
+            type: object
+            description: Docker-based installation pattern
+            properties:
+              image:
+                type: string
+              ports:
+                type: array
+                items:
+                  type: string
+              volumes:
+                type: array
+                items:
+                  type: string
+              environment:
+                type: object
+      
+      # Cloud API Components
+      cloud_apis:
+        type: object
+        description: Cloud-based model API providers
+        properties:
+          
+          openai_compatible:
+            type: object
+            description: OpenAI-compatible API providers (OpenAI, Together, Groq, etc.)
+            properties:
+              schema:
+                type: object
+                properties:
+                  provider:
+                    type: string
+                    description: Provider name
+                    enum: [openai, together, anyscale, perplexity, groq, mistral, deepseek, grok, fireworks, openrouter, custom]
+                  api_key:
+                    type: string
+                    description: API key for authentication
+                  base_url:
+                    type: string
+                    description: Custom base URL for the API
+                  default_model:
+                    type: string
+                    description: Default model to use
+                  timeout:
+                    type: integer
+                    minimum: 1
+                    default: 60
+                  max_retries:
+                    type: integer
+                    minimum: 0
+                    default: 3
+                  organization:
+                    type: string
+                    description: Organization ID (OpenAI specific)
+                required: [provider]
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [chat, completion, embeddings, function_calling, vision, streaming]
+              providers:
+                type: object
+                description: Provider-specific configurations
+                
+      # Model App Components
+      model_apps:
+        type: object
+        description: Local model serving applications
+        properties:
+          
+          ollama:
+            type: object
+            description: Ollama local model server
+            properties:
+              schema:
+                type: object
+                properties:
+                  base_url:
+                    type: string
+                    default: http://localhost:11434
+                  default_model:
+                    type: string
+                    default: llama3.2:3b
+                  auto_start:
+                    type: boolean
+                    default: true
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        pull_on_start:
+                          type: boolean
+                  gpu_layers:
+                    type: integer
+                    minimum: 0
+                  num_thread:
+                    type: integer
+                    minimum: 1
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [chat, embeddings, model_management, quantization]
+              # Setup and installation hooks
+              setup:
+                type: object
+                description: Component setup and installation configuration
+                properties:
+                  installer:
+                    type: object
+                    description: Installation method and configuration
+                    properties:
+                      type:
+                        type: string
+                        enum: [binary, package_manager, docker, script, manual]
+                        description: Installation method
+                      platforms:
+                        type: object
+                        description: Platform-specific installation instructions
+                        properties:
+                          darwin:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [homebrew, download, script]
+                              command:
+                                type: string
+                                description: Command to run for installation
+                              url:
+                                type: string
+                                description: Download URL
+                              verify_command:
+                                type: string
+                                description: Command to verify installation
+                          linux:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [apt, yum, dnf, snap, download, script]
+                              command:
+                                type: string
+                              url:
+                                type: string
+                              verify_command:
+                                type: string
+                          windows:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [chocolatey, winget, download, msi]
+                              command:
+                                type: string
+                              url:
+                                type: string
+                              verify_command:
+                                type: string
+                  dependencies:
+                    type: array
+                    description: Required dependencies
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [system, python, binary, service]
+                        version:
+                          type: string
+                        optional:
+                          type: boolean
+                          default: false
+                        install_command:
+                          type: string
+                  verification:
+                    type: object
+                    description: Methods to verify component is working
+                    properties:
+                      health_check:
+                        type: object
+                        properties:
+                          command:
+                            type: string
+                            description: Command to check if component is healthy
+                          expected_output:
+                            type: string
+                            description: Expected output pattern
+                          timeout_seconds:
+                            type: integer
+                            default: 30
+                      service_check:
+                        type: object
+                        properties:
+                          url:
+                            type: string
+                            description: URL to check service availability
+                          method:
+                            type: string
+                            enum: [GET, POST, HEAD]
+                            default: GET
+                          expected_status:
+                            type: integer
+                            default: 200
+                  models:
+                    type: object
+                    description: Model download and management configuration
+                    properties:
+                      repository:
+                        type: string
+                        description: Default model repository
+                      download_command:
+                        type: string
+                        description: Template command for downloading models
+                      list_command:
+                        type: string
+                        description: Command to list installed models
+                      remove_command:
+                        type: string
+                        description: Command to remove models
+                      storage_location:
+                        type: string
+                        description: Where models are stored
+                      size_estimation:
+                        type: object
+                        description: Model size estimation rules
+                        properties:
+                          rules:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                pattern:
+                                  type: string
+                                  description: Model name pattern (regex)
+                                size_gb:
+                                  type: number
+                                  description: Estimated size in GB
+                  error_handling:
+                    type: object
+                    description: Error handling and fallback configuration
+                    properties:
+                      installation_failures:
+                        type: array
+                        description: Actions to take on installation failure
+                        items:
+                          type: object
+                          properties:
+                            condition:
+                              type: string
+                              description: Error condition (regex)
+                            action:
+                              type: string
+                              enum: [retry, fallback, manual, skip]
+                            message:
+                              type: string
+                              description: User message for this error
+                            fallback_installer:
+                              type: string
+                              description: Alternative installation method
+                      service_failures:
+                        type: array
+                        description: Actions for service startup failures
+                        items:
+                          type: object
+                          properties:
+                            condition:
+                              type: string
+                            action:
+                              type: string
+                              enum: [restart, reconfigure, manual, skip]
+                            retry_count:
+                              type: integer
+                              default: 3
+                  
+      # Fine-tuner Components  
+      fine_tuners:
+        type: object
+        description: Model fine-tuning frameworks
+        properties:
+          
+          pytorch:
+            type: object
+            description: PyTorch-based fine-tuning
+            properties:
+              schema:
+                type: object
+                properties:
+                  # Hardware configuration - CRITICAL for cross-platform support
+                  hardware:
+                    type: object
+                    description: Hardware-specific settings for optimal performance
+                    properties:
+                      device:
+                        type: string
+                        enum: [auto, cuda, mps, cpu]
+                        default: auto
+                        description: |
+                          Device selection:
+                          - auto: Automatically detect best available (recommended)
+                          - cuda: NVIDIA GPU (Windows/Linux with CUDA)
+                          - mps: Apple Silicon GPU (M1/M2/M3 Macs)
+                          - cpu: CPU only (slowest but universal)
+                      
+                      memory_gb:
+                        type: integer
+                        minimum: 2
+                        description: |
+                          Available memory in GB:
+                          - 4-8 GB: Use batch_size=1-2, gradient_checkpointing=true
+                          - 8-16 GB: Use batch_size=2-4, standard settings
+                          - 16+ GB: Use batch_size=4-8, can disable gradient_checkpointing
+                      
+                      precision:
+                        type: object
+                        description: Precision settings per hardware type
+                        properties:
+                          cuda:
+                            type: object
+                            properties:
+                              use_fp16:
+                                type: boolean
+                                default: true
+                                description: Use FP16 on CUDA (faster, less memory)
+                              use_bf16:
+                                type: boolean
+                                default: false
+                                description: Use BF16 if GPU supports it (A100, RTX 30xx+)
+                              use_tf32:
+                                type: boolean
+                                default: true
+                                description: Use TF32 on Ampere+ GPUs
+                          mps:
+                            type: object
+                            properties:
+                              use_fp16:
+                                type: boolean
+                                default: false
+                                description: FP16 not well supported on MPS
+                              use_bf16:
+                                type: boolean
+                                default: false
+                                description: BF16 not supported on MPS
+                          cpu:
+                            type: object
+                            properties:
+                              use_fp16:
+                                type: boolean
+                                default: false
+                                description: Keep FP32 on CPU for stability
+                      
+                      optimization:
+                        type: object
+                        description: Memory and speed optimizations
+                        properties:
+                          gradient_checkpointing:
+                            type: boolean
+                            default: true
+                            description: |
+                              Trade compute for memory:
+                              - Enable for <8GB memory
+                              - Disable for faster training with >16GB
+                          gradient_accumulation_steps:
+                            type: integer
+                            minimum: 1
+                            default: 1
+                            description: |
+                              Simulate larger batches:
+                              - Use 4-8 for <8GB memory
+                              - Use 1-2 for >16GB memory
+                          mixed_precision:
+                            type: string
+                            enum: [no, fp16, bf16]
+                            default: no
+                            description: |
+                              Mixed precision training:
+                              - fp16: NVIDIA GPUs, saves memory
+                              - bf16: Newer GPUs (A100, RTX 30xx+)
+                              - no: CPU or compatibility mode
+                  
+                  base_model:
+                    type: object
+                    properties:
+                      huggingface_id:
+                        type: string
+                      cache_dir:
+                        type: string
+                      torch_dtype:
+                        type: string
+                        enum: [auto, float32, float16, bfloat16]
+                        description: |
+                          Model loading precision:
+                          - auto: Let PyTorch decide
+                          - float32: Full precision (most memory)
+                          - float16: Half precision (CUDA/MPS)
+                          - bfloat16: Brain float (newer GPUs)
+                  method:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [lora, qlora, full_finetune]
+                      r:
+                        type: integer
+                        minimum: 1
+                        maximum: 512
+                      alpha:
+                        type: integer
+                        minimum: 1
+                      dropout:
+                        type: number
+                        minimum: 0
+                        maximum: 1
+                  training:
+                    type: object
+                    properties:
+                      batch_size:
+                        type: integer
+                        minimum: 1
+                      learning_rate:
+                        type: number
+                        minimum: 0
+                      num_epochs:
+                        type: integer
+                        minimum: 1
+                      gradient_accumulation_steps:
+                        type: integer
+                        minimum: 1
+                      warmup_ratio:
+                        type: number
+                        minimum: 0
+                        maximum: 1
+                      
+          llamafactory:
+            type: object
+            description: LlamaFactory fine-tuning framework
+            properties:
+              schema:
+                type: object
+                properties:
+                  model_name_or_path:
+                    type: string
+                  dataset:
+                    type: string
+                  template:
+                    type: string
+                  finetuning_type:
+                    type: string
+                    enum: [lora, qlora, full]
+                  output_dir:
+                    type: string
+                    
+      # Repository Components
+      # Converter Components
+      converters:
+        type: object
+        description: Model format converters
+        properties:
+          
+          gguf:
+            type: object
+            description: GGUF format converter with llama.cpp
+            properties:
+              schema:
+                type: object
+                properties:
+                  quantization:
+                    type: string
+                    enum: [q4_0, q4_1, q5_0, q5_1, q8_0, f16, f32]
+                    default: q4_0
+                    description: |
+                      Quantization methods:
+                      - q4_0: 4-bit, smallest size (~3-4GB for 7B model)
+                      - q5_0: 5-bit, balanced (~4-5GB for 7B model)
+                      - q8_0: 8-bit, good quality (~7GB for 7B model)
+                      - f16: 16-bit, best quality (~13GB for 7B model)
+                  auto_install:
+                    type: boolean
+                    default: true
+                    description: Automatically install llama.cpp if not found
+                  build_options:
+                    type: object
+                    properties:
+                      metal:
+                        type: boolean
+                        description: Enable Metal on macOS
+                      cuda:
+                        type: boolean
+                        description: Enable CUDA on Linux/Windows
+                      rocm:
+                        type: boolean
+                        description: Enable ROCm for AMD GPUs
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [pytorch_to_gguf, lora_merge, quantization, ollama_export]
+              # Setup configuration for GGUF converter
+              setup:
+                type: object
+                description: Setup configuration for llama.cpp based conversion
+                properties:
+                  installer:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [build_from_source, binary, script]
+                        default: build_from_source
+                      platforms:
+                        type: object
+                        properties:
+                          darwin:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [build, homebrew]
+                                default: build
+                              build_options:
+                                type: array
+                                items:
+                                  type: string
+                                default: [LLAMA_METAL=1]
+                              repository:
+                                type: string
+                                default: https://github.com/ggerganov/llama.cpp
+                              verify_command:
+                                type: string
+                                default: ./convert.py --help
+                          linux:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [build, package]
+                                default: build
+                              build_options:
+                                type: array
+                                items:
+                                  type: string
+                                default: [LLAMA_CUDA=1]
+                              repository:
+                                type: string
+                                default: https://github.com/ggerganov/llama.cpp
+                              verify_command:
+                                type: string
+                                default: ./convert.py --help
+                  dependencies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [system, python]
+                    default:
+                      - name: git
+                        type: system
+                      - name: make
+                        type: system
+                      - name: gcc
+                        type: system
+                      - name: torch
+                        type: python
+                      - name: numpy
+                        type: python
+                  error_handling:
+                    type: object
+                    properties:
+                      build_failures:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            condition:
+                              type: string
+                            action:
+                              type: string
+                              enum: [retry_with_different_options, fallback_to_cpu, manual]
+                            message:
+                              type: string
+          
+          ollama:
+            type: object
+            description: Ollama model converter
+            properties:
+              schema:
+                type: object
+                properties:
+                  quantization:
+                    type: string
+                    enum: [q4_0, q4_1, q5_0, q5_1, q8_0]
+                    default: q4_0
+                  system_prompt:
+                    type: string
+                    description: System prompt for the model
+                  push_to_registry:
+                    type: boolean
+                    default: false
+                    description: Push to Ollama registry after creation
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [gguf_to_ollama, pytorch_to_ollama, model_management]
+      
+      repositories:
+        type: object
+        description: Model repository integrations
+        properties:
+          
+          huggingface:
+            type: object
+            description: HuggingFace Hub integration
+            properties:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: HuggingFace API token
+                  cache_dir:
+                    type: string
+                    description: Local cache directory
+                  repo_id:
+                    type: string
+                    description: Repository identifier
+                  private:
+                    type: boolean
+                    default: false
+
+  # =====================================
+  # STRATEGY TEMPLATES
+  # =====================================
+  strategy_templates:
+    type: object
+    description: Pre-defined strategy templates for common use cases
+    properties:
+      
+      local_development:
+        type: object
+        description: Optimized for local development with Ollama
+        
+      cloud_production:
+        type: object
+        description: Production deployment with cloud APIs
+        
+      hybrid_fallback:
+        type: object
+        description: Cloud primary with local fallback
+        
+      fine_tuning_pipeline:
+        type: object
+        description: Complete fine-tuning workflow
+        
+      multi_provider:
+        type: object
+        description: Load-balanced multi-provider setup
+        
+      cost_optimized:
+        type: object
+        description: Minimize costs while maintaining quality
+        
+      privacy_first:
+        type: object
+        description: Local-only processing for sensitive data
+        
+      research_experimentation:
+        type: object
+        description: Flexible setup for model research
+
+  # =====================================
+  # USE CASE MAPPINGS
+  # =====================================
+  use_case_mapping:
+    type: object
+    description: Maps use cases to recommended strategies
+    properties:
+      
+      chatbot:
+        type: array
+        items:
+          type: string
+        default: [hybrid_fallback, cloud_production]
+        
+      code_generation:
+        type: array
+        items:
+          type: string
+        default: [cloud_production, specialized_models]
+        
+      document_analysis:
+        type: array
+        items:
+          type: string
+        default: [local_development, privacy_first]
+        
+      creative_writing:
+        type: array
+        items:
+          type: string
+        default: [cloud_production, fine_tuned_models]
+        
+      translation:
+        type: array
+        items:
+          type: string
+        default: [multi_lingual, cloud_production]
+        
+      summarization:
+        type: array
+        items:
+          type: string
+        default: [cost_optimized, hybrid_fallback]
+
+  # =====================================
+  # VALIDATION RULES
+  # =====================================
+  validation_rules:
+    type: object
+    description: System-wide validation constraints
+    properties:
+      
+      required_components:
+        type: array
+        description: Components required for valid configuration
+        items:
+          type: string
+          
+      incompatible_combinations:
+        type: array
+        description: Component combinations that are not allowed
+        items:
+          type: object
+          properties:
+            components:
+              type: array
+              items:
+                type: string
+            reason:
+              type: string
+              
+      performance_thresholds:
+        type: object
+        properties:
+          max_latency_ms:
+            type: integer
+            minimum: 1
+          min_throughput_rps:
+            type: number
+            minimum: 0
+          max_error_rate:
+            type: number
+            minimum: 0
+            maximum: 1
+
+  # =====================================
+  # METADATA
+  # =====================================
+  metadata:
+    type: object
+    description: Schema metadata and versioning
+    properties:
+      version:
+        type: string
+        pattern: ^\d+\.\d+\.\d+$
+      last_updated:
+        type: string
+        format: date-time
+      maintainers:
+        type: array
+        items:
+          type: string
+      documentation_url:
+        type: string
+        format: uri
+
+# Required top-level properties
+required: [strategies, components]
+
+# Additional schema constraints
+additionalProperties: false

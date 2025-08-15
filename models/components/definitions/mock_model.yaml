@@ -1,0 +1,161 @@
+# Mock Model Component Definition
+# This component provides a mock model for fast development and testing
+
+name: mock_model
+type: model_app
+description: "Mock model that echoes requests with timestamps for testing and development"
+
+# Component configuration schema
+schema:
+  base_url:
+    type: string
+    default: "http://localhost:8765"
+    description: "Mock server URL"
+  response_delay:
+    type: number
+    default: 0.5
+    description: "Simulated response delay in seconds"
+  default_model:
+    type: string
+    default: "mock-gpt-4"
+    description: "Default mock model name"
+  templates:
+    type: object
+    description: "Response templates for different scenarios"
+    properties:
+      default:
+        type: string
+        default: "🤖 Mock Response [{timestamp}]\n\nYou asked: \"{query}\"\n\nThis is a simulated response for testing purposes. The mock model would normally process your request and provide a meaningful answer here.\n\nModel: {model}\nTokens: ~{estimated_tokens}"
+      error:
+        type: string
+        default: "❌ Mock Error [{timestamp}]: {error_type}"
+      thinking:
+        type: string
+        default: "🤔 Mock thinking step [{step}]: {thought}"
+  models:
+    type: array
+    items:
+      name: string
+      capabilities: array
+    default:
+      - name: "mock-gpt-4"
+        capabilities: ["chat", "completion", "function_calling"]
+      - name: "mock-claude-3"
+        capabilities: ["chat", "completion", "vision"]
+      - name: "mock-llama-70b"
+        capabilities: ["chat", "completion"]
+      - name: "mock-tiny"
+        capabilities: ["chat"]
+
+# Setup and installation configuration
+setup:
+  # Detection - mock doesn't need external installation
+  detection:
+    methods:
+      - command: "python -c 'print(\"mock always available\")'"
+        success_pattern: "mock always available"
+        
+  # Installation - mock is built-in, no external dependencies
+  installation:
+    darwin:
+      primary:
+        method: builtin
+        description: "Mock model is built-in, no installation required"
+        
+    linux:
+      primary:
+        method: builtin
+        description: "Mock model is built-in, no installation required"
+        
+    windows:
+      primary:
+        method: builtin
+        description: "Mock model is built-in, no installation required"
+        
+  # Dependencies - none required for mock
+  dependencies:
+    system: []  # No system dependencies
+    optional: []
+        
+  # Service management - mock runs in-process
+  service:
+    start_command: "# Mock runs in-process"
+    stop_command: "# Mock runs in-process"  
+    status_command: "# Mock is always available"
+    health_check:
+      method: builtin
+      description: "Mock is always healthy"
+      
+  # Mock doesn't manage external models
+  models:
+    description: "Mock models are virtual - no downloads needed"
+    storage_location: "memory"
+    size_estimation:
+      rules:
+        - pattern: "mock-.*"
+          size_gb: 0.0  # Mock models take no disk space
+          
+  # Error handling for mock (mostly for demonstration)
+  error_handling:
+    service_failures:
+      - condition: ".*"
+        action: skip
+        message: "Mock model always works"
+
+# Capabilities this component provides
+capabilities:
+  - chat
+  - completion
+  - function_calling
+  - vision
+  - streaming
+  - fast_testing
+  - no_api_key_required
+  - offline_capable
+
+# Integration points
+integration:
+  provides:
+    - service_type: "model_app"
+      endpoint: "builtin://mock"
+      api_format: "openai_compatible"
+      
+  requires: []  # No external dependencies
+  
+  # Works with all other components
+  works_with:
+    - component_type: "fine_tuner"
+      purpose: "Can mock fine-tuning workflows"
+    - component_type: "converter"
+      purpose: "Can mock model conversion"
+    - component_type: "cloud_api"
+      purpose: "Can serve as fallback during development"
+
+# Mock-specific configuration
+mock_config:
+  # Behavioral settings
+  behavior:
+    echo_query: true
+    add_timestamp: true
+    simulate_thinking: false
+    random_delays: false
+    
+  # Response customization
+  responses:
+    include_metadata: true
+    show_model_name: true
+    estimate_tokens: true
+    add_suggestions: true
+    
+  # Development helpers
+  development:
+    log_requests: true
+    validate_schemas: true
+    simulate_errors: false
+    error_probability: 0.0
+    
+  # Performance simulation
+  performance:
+    base_delay: 0.5
+    tokens_per_second: 50
+    max_response_length: 2000

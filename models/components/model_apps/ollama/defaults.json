@@ -1,0 +1,6 @@
+{
+  "base_url": "http://localhost:11434",
+  "default_model": "llama3.2",
+  "timeout": 300,
+  "auto_start": true
+}

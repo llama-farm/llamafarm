@@ -1,0 +1,102 @@
+# Multi-Model Specialized Strategy
+# Different models optimized for specific tasks
+
+strategies:
+  multi_model_specialized:
+    name: Multi-Model Task-Specific Configuration
+    description: Use different models optimized for specific task types
+    
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          provider: openai
+          api_key: ${OPENAI_API_KEY}
+          timeout: 60
+      
+      groq_api:
+        type: openai_compatible
+        config:
+          provider: groq
+          api_key: ${GROQ_API_KEY}
+          base_url: https://api.groq.com/openai/v1
+          timeout: 30
+      
+      together_api:
+        type: openai_compatible
+        config:
+          provider: together
+          api_key: ${TOGETHER_API_KEY}
+          base_url: https://api.together.xyz/v1
+          timeout: 60
+      
+      local_ollama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          timeout: 120
+    
+    # Task-specific model selection
+    routing_rules:
+      # Code generation - use specialized code models
+      - pattern: "code|function|class|debug|programming"
+        provider: together_api
+        model: codellama/CodeLlama-70b-Python-hf
+        max_tokens: 2048
+      
+      # Fast responses - use Groq for speed
+      - pattern: "quick|fast|simple|yes/no"
+        provider: groq_api
+        model: llama-3.1-70b-versatile
+        max_tokens: 512
+      
+      # Complex reasoning - use GPT-4
+      - pattern: "analyze|complex|research|detailed"
+        provider: cloud_api
+        model: gpt-4-turbo-preview
+        max_tokens: 4096
+      
+      # Creative writing - use Claude
+      - pattern: "story|creative|poem|narrative"
+        provider: cloud_api
+        model: gpt-4-turbo-preview
+        temperature: 0.9
+        max_tokens: 2048
+      
+      # Math and calculations - use specialized model
+      - pattern: "calculate|math|equation|solve"
+        provider: together_api
+        model: meta-llama/Llama-3-70b-chat-hf
+        temperature: 0.1
+        max_tokens: 1024
+      
+      # Local/private data - use local model
+      - pattern: "private|confidential|secret|internal"
+        provider: local_ollama
+        model: llama3.2:3b
+        max_tokens: 2048
+      
+      # Default fallback
+      - pattern: ".*"
+        provider: cloud_api
+        model: gpt-3.5-turbo
+        max_tokens: 2048
+    
+    # Performance optimization per provider
+    constraints:
+      groq_api:
+        max_requests_per_minute: 30
+        max_tokens_per_request: 1024
+      together_api:
+        max_requests_per_minute: 60
+        max_tokens_per_request: 4096
+      cloud_api:
+        max_requests_per_minute: 500
+        max_tokens_per_request: 4096
+      local_ollama:
+        max_concurrent_requests: 2
+    
+    monitoring:
+      track_usage: true
+      track_model_selection: true
+      log_level: INFO

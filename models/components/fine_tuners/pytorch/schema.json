@@ -1,0 +1,305 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["base_model", "method", "dataset", "training_args"],
+  "properties": {
+    "base_model": {
+      "type": "object",
+      "required": ["name", "huggingface_id"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for the model"
+        },
+        "huggingface_id": {
+          "type": "string",
+          "description": "HuggingFace model identifier"
+        },
+        "cache_dir": {
+          "type": "string",
+          "description": "Directory to cache downloaded models"
+        },
+        "torch_dtype": {
+          "type": "string",
+          "enum": ["auto", "float32", "float16", "bfloat16"],
+          "default": "auto",
+          "description": "PyTorch data type for model"
+        },
+        "device_map": {
+          "oneOf": [
+            {"type": "string", "enum": ["auto", "cpu", "cuda", "mps"]},
+            {"type": "object"}
+          ],
+          "default": "auto",
+          "description": "Device placement strategy"
+        },
+        "trust_remote_code": {
+          "type": "boolean",
+          "default": false,
+          "description": "Trust remote code in model repository"
+        }
+      }
+    },
+    "method": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["lora", "qlora", "full_finetune"],
+          "description": "Fine-tuning method"
+        },
+        "r": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512,
+          "default": 16,
+          "description": "LoRA rank"
+        },
+        "alpha": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 32,
+          "description": "LoRA scaling parameter"
+        },
+        "dropout": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.1,
+          "description": "LoRA dropout rate"
+        },
+        "target_modules": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["q_proj", "v_proj"],
+          "description": "Modules to apply LoRA to"
+        },
+        "bias": {
+          "type": "string",
+          "enum": ["none", "all", "lora_only"],
+          "default": "none",
+          "description": "Bias training strategy"
+        }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to local dataset file"
+        },
+        "dataset_name": {
+          "type": "string",
+          "description": "HuggingFace dataset name"
+        },
+        "dataset_config_name": {
+          "type": "string",
+          "description": "Dataset configuration name"
+        },
+        "train_split": {
+          "type": "string",
+          "default": "train",
+          "description": "Split to use for training"
+        },
+        "preprocessing_num_workers": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 4,
+          "description": "Number of workers for preprocessing"
+        }
+      }
+    },
+    "training_args": {
+      "type": "object",
+      "required": ["output_dir"],
+      "properties": {
+        "output_dir": {
+          "type": "string",
+          "description": "Directory to save model and checkpoints"
+        },
+        "num_train_epochs": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3,
+          "description": "Number of training epochs"
+        },
+        "per_device_train_batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4,
+          "description": "Batch size per GPU/CPU"
+        },
+        "per_device_eval_batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4,
+          "description": "Eval batch size per GPU/CPU"
+        },
+        "gradient_accumulation_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Gradient accumulation steps"
+        },
+        "learning_rate": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.0002,
+          "description": "Initial learning rate"
+        },
+        "warmup_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.03,
+          "description": "Warmup ratio"
+        },
+        "lr_scheduler_type": {
+          "type": "string",
+          "enum": ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+          "default": "linear",
+          "description": "Learning rate scheduler"
+        },
+        "max_grad_norm": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.0,
+          "description": "Maximum gradient norm"
+        },
+        "weight_decay": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.01,
+          "description": "Weight decay"
+        },
+        "optim": {
+          "type": "string",
+          "default": "adamw_torch",
+          "description": "Optimizer"
+        },
+        "fp16": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use FP16 mixed precision"
+        },
+        "bf16": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use BF16 mixed precision"
+        },
+        "tf32": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use TF32 on Ampere GPUs"
+        },
+        "max_seq_length": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 512,
+          "description": "Maximum sequence length"
+        },
+        "logging_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "Log every N steps"
+        },
+        "save_strategy": {
+          "type": "string",
+          "enum": ["no", "steps", "epoch"],
+          "default": "steps",
+          "description": "Checkpoint saving strategy"
+        },
+        "save_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 500,
+          "description": "Save checkpoint every N steps"
+        },
+        "save_total_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Maximum checkpoints to keep"
+        },
+        "eval_strategy": {
+          "type": "string",
+          "enum": ["no", "steps", "epoch"],
+          "default": "no",
+          "description": "Evaluation strategy"
+        },
+        "eval_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100,
+          "description": "Evaluate every N steps"
+        },
+        "load_best_model_at_end": {
+          "type": "boolean",
+          "default": true,
+          "description": "Load best model at end"
+        },
+        "metric_for_best_model": {
+          "type": "string",
+          "default": "loss",
+          "description": "Metric for model selection"
+        },
+        "greater_is_better": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether higher metric is better"
+        },
+        "report_to": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": [],
+          "description": "Integrations to report to"
+        },
+        "dataloader_num_workers": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of data loading workers"
+        }
+      }
+    },
+    "framework": {
+      "type": "object",
+      "properties": {
+        "gradient_checkpointing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable gradient checkpointing"
+        },
+        "use_fast_tokenizer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use fast tokenizer"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "string",
+          "enum": ["auto", "cpu", "cuda", "mps"],
+          "default": "auto",
+          "description": "Device to use"
+        },
+        "seed": {
+          "type": "integer",
+          "default": 42,
+          "description": "Random seed"
+        },
+        "low_cpu_mem_usage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reduce CPU memory usage"
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ from api.errors import (
   ProjectNotFoundError,
   SchemaNotFoundError,
 )
+from api.middleware.client_cwd import client_cwd
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
@@ -44,6 +45,9 @@ class ProjectService:
 
   @classmethod
   def get_project_dir(cls, namespace: str, project_id: str):
+    if not settings.lf_use_data_dir:
+      # Prefer client CWD (localhost CLI) when available; fallback to server CWD
+      return client_cwd.get() or os.getcwd()
     if settings.lf_project_dir is None:
       return os.path.join(
         settings.lf_data_dir,

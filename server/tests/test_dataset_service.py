@@ -23,6 +23,7 @@ class TestDatasetService:
         self.mock_project_config = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace="test_namespace",
             prompts=[],
             rag={
                 "strategies": [
@@ -62,6 +63,7 @@ class TestDatasetService:
         self.mock_empty_project_config = LlamaFarmConfig(
             version=Version.v1,
             name="empty_project",
+            namespace="test_namespace",
             prompts=[],
             rag={
                 "strategies": [
@@ -121,6 +123,7 @@ class TestDatasetService:
         config_without_datasets = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace="test_namespace",
             prompts=[],
             rag={
                 "strategies": [
@@ -317,6 +320,7 @@ class TestDatasetService:
         config_no_rag = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace="test_namespace",
             prompts=[],
             rag={
                 "strategies": [
@@ -357,6 +361,7 @@ class TestDatasetService:
         config_no_strategies_key = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace="test_namespace",
             prompts=[],
             rag={
                 "strategies": [
@@ -397,6 +402,7 @@ class TestDatasetService:
         config_no_datasets = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
+            namespace="test_namespace",
             prompts=[],
             rag={
                 "strategies": [
@@ -458,6 +464,7 @@ class TestDatasetServiceIntegration:
                 return LlamaFarmConfig(
                     version=Version.v1,
                     name="test_project",
+                    namespace=namespace,
                     prompts=[],
                     rag={
                         "strategies": [

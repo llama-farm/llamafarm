@@ -1,0 +1,6 @@
+{
+  "default_model": "gpt-4o-mini",
+  "timeout": 60,
+  "max_retries": 3,
+  "base_url": "https://api.openai.com/v1"
+}
