@@ -1,579 +1,338 @@
-# Strategies Guide
+# LlamaFarm Strategies Collection
 
-Complete guide to understanding and configuring strategies in LlamaFarm.
+This directory contains **strategy-based configurations** for different use cases, deployment scenarios, and requirements. Instead of manually configuring individual components, you can choose a strategy that matches your needs and let LlamaFarm optimize the entire stack for you.
 
-## Table of Contents
-- [What are Strategies?](#what-are-strategies)
-- [Strategy Structure](#strategy-structure)
-- [Components](#components)
-- [Advanced Features](#advanced-features)
-- [Pre-Configured Strategies](#pre-configured-strategies)
-- [Creating Custom Strategies](#creating-custom-strategies)
-- [Best Practices](#best-practices)
+## 🎯 Strategy-First Philosophy
 
-## What are Strategies?
+**Why strategies over traditional config?**
+- **Opinionated excellence**: Each strategy represents best practices for specific use cases
+- **Hardware optimization**: Automatically adapts to your hardware (M1, NVIDIA, CPU-only)
+- **Intelligent fallbacks**: Built-in fallback chains ensure reliability
+- **Cost awareness**: Strategies include cost optimization and budget management
+- **Performance tuning**: Pre-configured for optimal performance in each scenario
 
-Strategies are configuration blueprints that define how LlamaFarm interacts with AI models. They combine:
-- Model providers (cloud APIs, local models)
-- Fallback chains for reliability
-- Routing rules for optimization
-- Resource constraints and limits
-- Performance optimizations
+## 📚 Available Strategies
 
-Think of strategies as "recipes" for different use cases - development, production, training, etc.
+### 🚀 **API-First & Quick Start**
 
-## Strategy Structure
-
-### Basic Structure
+#### [`api_first_cost_optimized.yaml`](./api_first_cost_optimized.yaml)
+**Perfect for: Prototyping, MVPs, low-volume production**
+- **Cost**: $10-50/month
+- **Setup time**: < 30 minutes  
+- **Complexity**: Easy
+- Uses GPT-4o-mini (60x cheaper than GPT-4) with intelligent routing
+- Built-in cost monitoring and budget alerts
+- Great for startups and proof-of-concepts
 
 ```yaml
-version: "2.0.0"
-
-strategies:
-  - name: strategy_name           # Unique identifier
-    description: "Purpose"         # Human-readable description
-    
-    components:                    # Core components configuration
-      cloud_api: {...}
-      model_app: {...}
-      fine_tuner: {...}
-      repository: {...}
-    
-    fallback_chain: [...]         # Fallback options
-    routing_rules: [...]          # Conditional routing
-    optimization: {...}           # Performance settings
-    monitoring: {...}             # Observability config
-    constraints: {...}            # Resource limits
+# Quick start example
+strategy: "api_first_cost_optimized"
+environments:
+  development:
+    daily_budget: 2.0
+    max_tokens: 1000
 ```
 
-### Full Example
+#### [`startup_budget_conscious.yaml`](./startup_budget_conscious.yaml)
+**Perfect for: Bootstrapped startups, MVPs, extreme budget constraints**
+- **Cost**: $0-25/month
+- **Setup time**: < 1 hour
+- **Complexity**: Easy
+- Maximizes free tiers and local models
+- Aggressive caching and cost optimization
+- Scaling path from $0 to $1000/month planned
+
+### 🏠 **Local & Privacy-First**
+
+#### [`local_first_privacy.yaml`](./local_first_privacy.yaml)
+**Perfect for: Healthcare, legal, financial, sensitive enterprise data**
+- **Privacy**: Maximum (data never leaves device)
+- **Setup time**: 30-60 minutes
+- **Complexity**: Intermediate
+- HIPAA/GDPR/SOX compliant
+- Complete network isolation option
+- Optimized for Apple Silicon, NVIDIA, and CPU-only
 
 ```yaml
-strategies:
-  - name: production_hybrid
-    description: "Production setup with cloud primary and local fallback"
-    
-    components:
-      cloud_api:
-        type: openai_compatible
-        config:
-          provider: openai
-          api_key: ${OPENAI_API_KEY}
-          default_model: gpt-4o-mini
-          timeout: 30
-          max_retries: 3
-      
-      model_app:
-        type: ollama
-        config:
-          base_url: http://localhost:11434
-          default_model: llama3.2:3b
-          auto_start: true
-    
-    fallback_chain:
-      - name: primary_cloud
-        type: cloud_api
-      - name: local_backup
-        type: model_app
-    
-    optimization:
-      cache_enabled: true
-      batch_size: 10
-      timeout_seconds: 30
-    
-    constraints:
-      max_tokens: 4096
-      max_cost_per_request: 0.10
+# Privacy-first example
+strategy: "local_first_privacy"
+privacy_settings:
+  network_isolation: true
+  encrypted_storage: true
+  audit_trail: true
 ```
 
-## Components
+### 🔬 **Fine-Tuning & Specialization**
 
-### cloud_api
-Connects to cloud-based AI services.
+#### [`domain_specialist_finetuning.yaml`](./domain_specialist_finetuning.yaml)
+**Perfect for: Medical AI, legal assistants, technical support, specialized consulting**
+- **Training time**: 2-8 hours
+- **Setup time**: 1-2 hours
+- **Complexity**: Advanced
+- QLoRA/LoRA optimization for M1 and NVIDIA hardware
+- Domain-specific configurations (medical, legal, technical, financial)
+- Built-in evaluation and safety checks
 
 ```yaml
-cloud_api:
-  type: openai_compatible        # Provider type
-  config:
-    provider: openai              # openai, anthropic, groq, etc.
-    api_key: ${OPENAI_API_KEY}    # API authentication
-    default_model: gpt-4o-mini    # Default model to use
-    
-    # Optional settings
-    base_url: null                # Custom endpoint
-    timeout: 60                   # Request timeout (seconds)
-    max_retries: 3               # Retry attempts
-    retry_delay: 1               # Delay between retries
-    
-    # Model-specific overrides
-    models:
-      gpt-4o:
-        max_tokens: 4096
-        temperature: 0.7
-      gpt-3.5-turbo:
-        max_tokens: 2048
+# Medical specialist example  
+strategy: "domain_specialist_finetuning"
+domain_configs:
+  medical:
+    safety_checks: true
+    disclaimer_required: true
+    special_tokens: ["<PATIENT>", "<DIAGNOSIS>"]
 ```
 
-#### Supported Providers
-- **openai**: GPT-4, GPT-3.5, DALL-E
-- **anthropic**: Claude 3 models
-- **groq**: Fast inference with Llama, Mixtral
-- **together**: Open-source models
-- **deepseek**: Code-specialized models
-- **mistral**: Mistral and Codestral models
+### ⚡ **Performance & Production**
 
-### model_app
-Manages local model applications.
+#### [`performance_optimized_throughput.yaml`](./performance_optimized_throughput.yaml)
+**Perfect for: Real-time APIs, live chat, high-frequency trading, gaming**
+- **Throughput**: 1000+ requests/second
+- **Latency**: < 100ms p95
+- **Complexity**: Advanced
+- Multi-tier model architecture
+- Advanced caching and optimization
+- Auto-scaling and load balancing
 
-```yaml
-model_app:
-  type: ollama                   # Application type
-  config:
-    base_url: http://localhost:11434
-    default_model: llama3.2:3b
-    auto_start: true              # Start automatically if not running
-    
-    # Models to manage
-    models:
-      - name: llama3.2:3b
-        pull_on_start: true       # Download if missing
-      - name: mistral:7b
-        pull_on_start: false
-      - name: codellama:13b
-        pull_on_start: false
-    
-    # Resource settings
-    gpu_layers: -1                # Number of layers on GPU (-1 = all)
-    cpu_threads: 8               # CPU threads to use
-    context_size: 4096           # Context window size
+#### [`hybrid_cloud_local.yaml`](./hybrid_cloud_local.yaml)
+**Perfect for: Production applications, growing startups, privacy-conscious enterprises**
+- **Cost optimization**: Intelligent routing
+- **Privacy**: Configurable levels
+- **Complexity**: Intermediate
+- Smart routing between cloud and local models
+- Privacy classification system
+- Cost management with budget controls
+
+### 🔬 **Research & Experimentation**
+
+#### [`research_experimentation.yaml`](./research_experimentation.yaml)
+**Perfect for: Academic research, model evaluation, prototyping, AI education**
+- **Flexibility**: Maximum
+- **Reproducibility**: High
+- **Complexity**: Intermediate
+- Multi-model comparison framework
+- Academic benchmark integration
+- Experiment tracking and collaboration tools
+
+## 🎯 How to Choose a Strategy
+
+### Quick Decision Tree
+
+```
+🤔 What's your primary goal?
+
+├── 💰 Minimize costs
+│   ├── Have $0 budget → startup_budget_conscious
+│   └── Have small budget → api_first_cost_optimized
+│
+├── 🔒 Maximum privacy/security
+│   └── → local_first_privacy
+│
+├── 🚀 Production performance
+│   ├── Need high throughput → performance_optimized_throughput
+│   └── Need balanced approach → hybrid_cloud_local
+│
+├── 🧠 Domain expertise
+│   └── → domain_specialist_finetuning
+│
+└── 🔬 Research/experiments
+    └── → research_experimentation
 ```
 
-#### Supported Applications
-- **ollama**: Easy local model management
-- **llamacpp**: Direct llama.cpp integration
-- **vllm**: High-performance serving
-- **tgi**: Text Generation Inference
+### By Use Case
 
-### fine_tuner
-Configures model training and fine-tuning.
+| Use Case | Strategy | Why |
+|----------|----------|-----|
+| **Startup MVP** | `startup_budget_conscious` | Maximum value for minimal cost |
+| **Enterprise API** | `hybrid_cloud_local` | Balance of performance, cost, privacy |
+| **Healthcare App** | `local_first_privacy` | HIPAA compliance, data protection |
+| **Trading Bot** | `performance_optimized_throughput` | Ultra-low latency requirements |
+| **Legal Assistant** | `domain_specialist_finetuning` | Specialized knowledge and accuracy |
+| **Research Project** | `research_experimentation` | Flexibility and reproducibility |
+| **Customer Support** | `api_first_cost_optimized` | Quick deployment, cost control |
 
-```yaml
-fine_tuner:
-  type: pytorch                  # Fine-tuning framework
-  config:
-    # Base model configuration
-    base_model:
-      huggingface_id: meta-llama/Llama-2-7b-hf
-      cache_dir: ./model_cache
-      torch_dtype: float16
-    
-    # Training method
-    method:
-      type: lora                 # lora, qlora, full
-      r: 16                      # LoRA rank
-      alpha: 32                  # LoRA alpha
-      dropout: 0.1               # Dropout rate
-      target_modules:            # Modules to adapt
-        - q_proj
-        - v_proj
-    
-    # Training parameters
-    training:
-      batch_size: 4
-      learning_rate: 2e-4
-      num_epochs: 3
-      gradient_accumulation_steps: 4
-      warmup_ratio: 0.1
-```
+### By Budget
 
-#### Supported Fine-Tuners
-- **pytorch**: Direct PyTorch/Transformers
-- **llamafactory**: Advanced fine-tuning framework
-- **custom**: Custom training scripts
+| Monthly Budget | Recommended Strategy | Features |
+|----------------|---------------------|----------|
+| **$0-25** | `startup_budget_conscious` | Free local models, minimal APIs |
+| **$25-100** | `api_first_cost_optimized` | Smart API usage, cost monitoring |
+| **$100-500** | `hybrid_cloud_local` | Best of both worlds |
+| **$500+** | `performance_optimized_throughput` | Maximum performance |
 
-### repository
-Manages model storage and distribution.
+### By Technical Complexity
 
-```yaml
-repository:
-  type: huggingface              # Repository type
-  config:
-    token: ${HF_TOKEN}           # Authentication
-    cache_dir: ./hf_cache        # Local cache
-    private: false               # Repository visibility
-    
-    # Upload settings
-    push_to_hub: true
-    hub_model_id: username/model-name
-    hub_strategy: every_save     # every_save, checkpoint, end
-```
+| Complexity | Strategies | Setup Time |
+|------------|-----------|------------|
+| **Easy** | `api_first_cost_optimized`, `startup_budget_conscious` | < 30 min |
+| **Intermediate** | `local_first_privacy`, `hybrid_cloud_local`, `research_experimentation` | 30-90 min |
+| **Advanced** | `domain_specialist_finetuning`, `performance_optimized_throughput` | 1-4 hours |
 
-## Advanced Features
+## 🚀 Quick Start
 
-### Fallback Chains
-
-Define multiple fallback options for reliability:
-
-```yaml
-fallback_chain:
-  - name: Primary OpenAI
-    type: openai_compatible
-    config:
-      provider: openai
-      default_model: gpt-4o
-      
-  - name: Secondary Groq
-    type: openai_compatible
-    config:
-      provider: groq
-      default_model: llama-3.1-70b-versatile
-      
-  - name: Local Fallback
-    type: ollama
-    config:
-      default_model: llama3.2:3b
-```
-
-### Routing Rules
-
-Route requests based on conditions:
-
-```yaml
-routing_rules:
-  - condition: input.length > 2000
-    target: long_context_model
-    priority: high
-    
-  - condition: input.contains("code")
-    target: code_specialist
-    priority: normal
-    
-  - condition: input.requires_vision
-    target: multimodal_model
-    priority: high
-```
-
-### Optimization Settings
-
-```yaml
-optimization:
-  # Caching
-  cache_enabled: true            # Enable response caching
-  cache_ttl: 3600               # Cache time-to-live (seconds)
-  
-  # Batching
-  batch_size: 10                # Batch size for processing
-  batch_timeout: 100            # Max wait for batch (ms)
-  
-  # Performance
-  timeout_seconds: 60           # Overall timeout
-  parallel_requests: 5          # Concurrent requests
-  
-  # Retry policy
-  retry_policy:
-    max_attempts: 3
-    backoff_multiplier: 2.0
-    max_backoff: 30
-```
-
-### Monitoring Configuration
-
-```yaml
-monitoring:
-  # Logging
-  log_level: INFO               # DEBUG, INFO, WARNING, ERROR
-  log_format: json              # json, text
-  
-  # Metrics
-  metrics_enabled: true
-  metrics_port: 9090
-  
-  # Tracing
-  trace_enabled: true
-  trace_sample_rate: 0.1
-  
-  # Alerts
-  alerts:
-    - type: latency
-      threshold: 5000           # ms
-    - type: error_rate
-      threshold: 0.05           # 5%
-```
-
-### Constraints
-
-Define resource and policy limits:
-
-```yaml
-constraints:
-  # Token limits
-  max_tokens: 4096
-  max_input_tokens: 3000
-  max_output_tokens: 1096
-  
-  # Cost controls
-  max_cost_per_request: 0.10
-  daily_budget: 100.0
-  monthly_budget: 3000.0
-  
-  # Model restrictions
-  allowed_models:
-    - gpt-4o-mini
-    - gpt-3.5-turbo
-  blocked_models:
-    - gpt-4-turbo-preview
-  
-  # Hardware requirements
-  requires_gpu: false
-  min_gpu_memory: 8            # GB
-  
-  # Privacy settings
-  privacy_mode: local_only     # public, private, local_only
-```
-
-## Pre-Configured Strategies
-
-### Development Strategies
-
-#### local_development
-```yaml
-- name: local_development
-  description: "Pure local development with Ollama"
-  # Uses only local models, no external APIs
-  # Perfect for offline development
-```
-
-#### hybrid_fallback
-```yaml
-- name: hybrid_fallback
-  description: "Cloud primary with local fallback"
-  # Tries cloud first, falls back to local
-  # Good balance of performance and reliability
-```
-
-### Production Strategies
-
-#### cloud_production
-```yaml
-- name: cloud_production
-  description: "High-availability cloud setup"
-  # OpenAI with retries and monitoring
-  # For production workloads
-```
-
-#### multi_provider
-```yaml
-- name: multi_provider
-  description: "Load-balanced across providers"
-  # Distributes across OpenAI, Anthropic, Groq
-  # Maximum reliability and cost optimization
-```
-
-### Specialized Strategies
-
-#### code_generation
-```yaml
-- name: code_generation
-  description: "Optimized for coding tasks"
-  # Uses DeepSeek Coder, GPT-4, Codestral
-  # Best for programming assistance
-```
-
-#### fine_tuning_pipeline
-```yaml
-- name: fine_tuning_pipeline
-  description: "Complete training workflow"
-  # PyTorch with LoRA, HuggingFace integration
-  # For model customization
-```
-
-#### privacy_first
-```yaml
-- name: privacy_first
-  description: "All processing stays local"
-  # No external API calls
-  # For sensitive data
-```
-
-## Creating Custom Strategies
-
-### Step 1: Define Requirements
-
-Identify your needs:
-- Budget constraints?
-- Privacy requirements?
-- Performance needs?
-- Reliability requirements?
-
-### Step 2: Choose Components
-
-Select appropriate components:
-```yaml
-components:
-  # Pick what you need
-  cloud_api: {...}     # If using cloud
-  model_app: {...}     # If using local
-  fine_tuner: {...}    # If training
-  repository: {...}    # If storing models
-```
-
-### Step 3: Add Resilience
-
-Configure fallbacks:
-```yaml
-fallback_chain:
-  - name: primary
-    # Your primary option
-  - name: secondary
-    # Backup option
-  - name: emergency
-    # Last resort
-```
-
-### Step 4: Optimize
-
-Add performance settings:
-```yaml
-optimization:
-  cache_enabled: true
-  batch_size: 10
-  # Tune for your use case
-```
-
-### Step 5: Set Limits
-
-Define constraints:
-```yaml
-constraints:
-  max_tokens: 2048
-  max_cost_per_request: 0.05
-  # Protect against runaway costs
-```
-
-## Best Practices
-
-### 1. Start Simple
-Begin with a pre-configured strategy and customize:
-```yaml
-# Start with local_development
-# Add cloud_api when needed
-# Add fallbacks for production
-```
-
-### 2. Use Environment Variables
-Never hardcode sensitive data:
-```yaml
-api_key: ${OPENAI_API_KEY}  # Good
-api_key: "sk-..."            # Bad!
-```
-
-### 3. Test Fallbacks
-Ensure fallbacks actually work:
+### 1. Choose Your Strategy
 ```bash
-# Test primary fails gracefully
-uv run python cli.py test --strategy your_strategy
+# List available strategies
+ls /models/strategies/
+
+# View strategy details
+cat /models/strategies/api_first_cost_optimized.yaml
 ```
 
-### 4. Monitor Costs
-Set budget constraints:
-```yaml
-constraints:
-  daily_budget: 10.0
-  max_cost_per_request: 0.01
-```
-
-### 5. Version Control
-Track strategy changes:
-```yaml
-version: "2.0.0"
-# Update version when modifying
-```
-
-### 6. Document Purpose
-Always include descriptions:
-```yaml
-- name: my_strategy
-  description: "Why this exists and what it does"
-```
-
-## Validation
-
-Validate your strategies:
-
+### 2. Use Strategy in Demo
 ```bash
-# Validate syntax
-uv run python cli.py validate-config my_strategies.yaml
+# Run with specific strategy
+cd /models/demos/creative_writing
+STRATEGY=api_first_cost_optimized python run_demo.py
 
-# Test functionality
-uv run python cli.py test --strategy-file my_strategies.yaml --strategy my_strategy
+# Or configure in your application
+strategy: "api_first_cost_optimized"
 ```
 
-## Examples
-
-### Minimal Strategy
+### 3. Customize as Needed
 ```yaml
-strategies:
-  - name: minimal
-    description: "Bare minimum configuration"
-    components:
-      cloud_api:
-        type: openai_compatible
-        config:
-          provider: openai
-          default_model: gpt-3.5-turbo
+# Override specific settings while keeping strategy benefits
+strategy: "hybrid_cloud_local"
+strategy_overrides:
+  cost_management:
+    daily_budget: 50.0  # Increase budget
+  privacy_classifier:
+    sensitivity_levels:
+      internal:
+        route_to: "local_only"  # More conservative privacy
 ```
 
-### Complex Production Strategy
+## 🔧 Strategy Components
+
+Each strategy includes:
+
+### 📋 **Strategy Info**
+- Name, description, use case
+- Difficulty level and setup time
+- Cost estimates and requirements
+
+### 🤖 **Model Selection**
+- Primary and fallback models
+- Hardware-optimized configurations
+- Intelligent routing rules
+
+### ⚙️ **Environment Configs**
+- Apple Silicon (M1/M2/M3) optimization
+- NVIDIA GPU configurations
+- CPU-only fallback options
+
+### 💰 **Cost Management**
+- Budget controls and alerts
+- Cost optimization techniques
+- Usage monitoring and reporting
+
+### 🔒 **Privacy & Security**
+- Data handling policies
+- Compliance configurations
+- Audit and monitoring features
+
+### 📊 **Performance Tuning**
+- Latency optimization
+- Throughput maximization
+- Resource utilization
+
+## 🎨 Creating Custom Strategies
+
+### Strategy Template
 ```yaml
-strategies:
-  - name: production_complex
-    description: "Full production setup with all features"
-    
-    components:
-      cloud_api:
-        type: openai_compatible
-        config:
-          provider: openai
-          api_key: ${OPENAI_API_KEY}
-          default_model: gpt-4o-mini
-      
-      model_app:
-        type: ollama
-        config:
-          base_url: http://localhost:11434
-          default_model: llama3.2:3b
-    
-    fallback_chain:
-      - name: primary
-        type: cloud_api
-      - name: groq_fast
-        type: openai_compatible
-        config:
-          provider: groq
-          default_model: llama-3.1-8b-instant
-      - name: local
-        type: model_app
-    
-    routing_rules:
-      - condition: urgent
-        target: groq_fast
-      - condition: complex
-        target: primary
-      - condition: private
-        target: local
-    
-    optimization:
-      cache_enabled: true
-      batch_size: 20
-      parallel_requests: 5
-    
-    monitoring:
-      log_level: INFO
-      metrics_enabled: true
-      trace_enabled: true
-    
-    constraints:
-      max_tokens: 4096
-      daily_budget: 100.0
-      privacy_mode: private
+# My Custom Strategy
+version: "v1"
+
+strategy_info:
+  name: "my_custom_strategy"
+  description: "Custom strategy for my specific needs"
+  use_case: "My specific use case"
+  difficulty: "intermediate"
+
+# Your custom configuration...
+model_selection:
+  primary: "your_preferred_model"
+  fallback_chain: ["model1", "model2", "model3"]
+
+environments:
+  my_environment:
+    active: true
+    # Your environment config...
 ```
+
+### Best Practices
+1. **Start with existing strategy**: Copy the closest match and modify
+2. **Include fallbacks**: Always have backup options
+3. **Document decisions**: Explain why choices were made
+4. **Test thoroughly**: Validate performance and costs
+5. **Version control**: Track changes and improvements
+
+## 🔄 Migration Between Strategies
+
+### From API-Only to Hybrid
+```bash
+# Current: api_first_cost_optimized
+# Target: hybrid_cloud_local
+
+# 1. Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 2. Pull required models
+ollama pull llama3.1:8b
+
+# 3. Update strategy
+sed -i 's/api_first_cost_optimized/hybrid_cloud_local/' config.yaml
+
+# 4. Test and monitor
+python test_strategy.py --validate
+```
+
+### Cost Migration Path
+```
+startup_budget_conscious ($0-25)
+         ↓
+api_first_cost_optimized ($25-100)  
+         ↓
+hybrid_cloud_local ($100-500)
+         ↓
+performance_optimized_throughput ($500+)
+```
+
+## 📈 Strategy Evolution
+
+### Automatic Upgrades
+Strategies can suggest upgrades when:
+- Usage exceeds current tier limits
+- Cost efficiency would improve
+- New capabilities are needed
+- Performance requirements change
+
+### Community Strategies
+- Submit your strategies via PR
+- Share successful configurations
+- Collaborate on domain-specific optimizations
+- Learn from production deployments
+
+## 🆘 Getting Help
+
+### Strategy Selection Help
+- Use the decision tree above
+- Check example use cases
+- Consider your constraints (budget, privacy, performance)
+- Start simple and evolve
+
+### Configuration Help
+- Each strategy includes detailed comments
+- Example applications are provided
+- Hardware requirements are specified
+- Migration paths are documented
+
+### Community Support
+- GitHub Discussions for strategy questions
+- Discord for real-time help
+- Strategy showcase for inspiration
+- Best practices documentation
+
+---
+
+**Remember**: Strategies are starting points, not rigid rules. Customize them to fit your specific needs while maintaining the benefits of opinionated excellence.
