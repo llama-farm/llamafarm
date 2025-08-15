@@ -2,8 +2,7 @@
 # Enterprise-grade configuration with failover and monitoring
 
 strategies:
-  production_cloud:
-    name: Production Model Configuration
+  - name: production_cloud
     description: Enterprise production setup with multiple providers and automatic failover
     
     components:

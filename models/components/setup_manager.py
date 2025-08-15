@@ -98,82 +98,86 @@ class SetupManager:
         seen_components = set()
         
         # Analyze each strategy
-        for strategy_name, strategy in strategies.get('strategies', {}).items():
-            if self.verbose:
-                print(f"Analyzing strategy: {strategy_name}")
-            
-            # Check components
-            components = strategy.get('components', {})
-            
-            # Map component types to actual component names
-            component_mapping = {
+        strategies_list = strategies.get('strategies', [])
+        if isinstance(strategies_list, list):
+            # New array format
+            for strategy in strategies_list:
+                strategy_name = strategy.get('name', 'unknown')
+                if self.verbose:
+                    print(f"Analyzing strategy: {strategy_name}")
+                
+                # Check components
+                components = strategy.get('components', {})
+                
+                # Map component types to actual component names
+                component_mapping = {
                 'model_app': 'ollama',           # Default model app (can be overridden by type)
                 'cloud_api': 'openai',           # Default cloud API
                 'fine_tuner': 'pytorch',         # Default fine tuner
                 'ollama': 'ollama',              # Direct reference
                 'mock_model': 'mock_model',      # Direct mock reference
                 'converters': 'gguf_converter'   # From export settings
-            }
-            
-            # Process each component in the strategy
-            for component_type, component_config in components.items():
-                # Determine actual component name
-                if isinstance(component_config, dict) and 'type' in component_config:
-                    component_name = component_config['type']
-                else:
-                    component_name = component_mapping.get(component_type, component_type)
+                }
                 
-                # Skip if we've already seen this component
-                if component_name in seen_components:
-                    continue
+                # Process each component in the strategy
+                for component_type, component_config in components.items():
+                    # Determine actual component name
+                    if isinstance(component_config, dict) and 'type' in component_config:
+                        component_name = component_config['type']
+                    else:
+                        component_name = component_mapping.get(component_type, component_type)
                     
-                seen_components.add(component_name)
-                
-                if self.verbose:
-                    print(f"  Found component: {component_name} (type: {component_type})")
-                
-                # Load component definition
-                definition = self._load_component_definition(component_name)
-                if definition:
-                    requirements['components'].append({
-                        'name': component_name,
-                        'type': component_type,
-                        'config': component_config,
-                        'definition': definition
-                    })
+                    # Skip if we've already seen this component
+                    if component_name in seen_components:
+                        continue
+                        
+                    seen_components.add(component_name)
                     
-                    # Add system dependencies from component definition
-                    # NOTE: Python dependencies are handled by pyproject.toml
-                    deps = definition.get('setup', {}).get('dependencies', {})
-                    for dep in deps.get('system', []):
-                        if isinstance(dep, dict):
-                            requirements['dependencies'].add(dep['name'])
-                        else:
-                            requirements['dependencies'].add(dep)
-            
-            # Check for export/conversion requirements
-            export_config = strategy.get('export', {})
-            if export_config.get('to_ollama') or export_config.get('to_gguf'):
-                # Need converters
-                if export_config.get('to_gguf') or export_config.get('to_ollama'):
-                    gguf_def = self._load_component_definition('gguf_converter')
-                    if gguf_def:
+                    if self.verbose:
+                        print(f"  Found component: {component_name} (type: {component_type})")
+                    
+                    # Load component definition
+                    definition = self._load_component_definition(component_name)
+                    if definition:
                         requirements['components'].append({
-                            'name': 'gguf_converter',
-                            'type': 'converter',
-                            'config': export_config,
-                            'definition': gguf_def
+                            'name': component_name,
+                            'type': component_type,
+                            'config': component_config,
+                            'definition': definition
                         })
                         
-                if export_config.get('to_ollama'):
-                    ollama_conv_def = self._load_component_definition('ollama_converter')  
-                    if ollama_conv_def:
-                        requirements['components'].append({
-                            'name': 'ollama_converter', 
-                            'type': 'converter',
-                            'config': export_config,
-                            'definition': ollama_conv_def
-                        })
+                        # Add system dependencies from component definition
+                        # NOTE: Python dependencies are handled by pyproject.toml
+                        deps = definition.get('setup', {}).get('dependencies', {})
+                        for dep in deps.get('system', []):
+                            if isinstance(dep, dict):
+                                requirements['dependencies'].add(dep['name'])
+                            else:
+                                requirements['dependencies'].add(dep)
+                
+                # Check for export/conversion requirements
+                export_config = strategy.get('export', {})
+                if export_config.get('to_ollama') or export_config.get('to_gguf'):
+                    # Need converters
+                    if export_config.get('to_gguf') or export_config.get('to_ollama'):
+                        gguf_def = self._load_component_definition('gguf_converter')
+                        if gguf_def:
+                            requirements['components'].append({
+                                'name': 'gguf_converter',
+                                'type': 'converter',
+                                'config': export_config,
+                                'definition': gguf_def
+                            })
+                            
+                    if export_config.get('to_ollama'):
+                        ollama_conv_def = self._load_component_definition('ollama_converter')  
+                        if ollama_conv_def:
+                            requirements['components'].append({
+                                'name': 'ollama_converter', 
+                                'type': 'converter',
+                                'config': export_config,
+                                'definition': ollama_conv_def
+                            })
             
             # Extract model requirements from component configs
             for component in requirements['components']:

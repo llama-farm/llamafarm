@@ -2,8 +2,7 @@
 # Simple cloud-based strategy using OpenAI GPT-4
 
 strategies:
-  basic_openai:
-    name: Basic OpenAI Configuration
+  - name: basic_openai
     description: Simple cloud-based strategy using OpenAI GPT-4 Turbo
     
     components:

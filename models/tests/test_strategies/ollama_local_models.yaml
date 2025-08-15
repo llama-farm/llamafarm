@@ -2,8 +2,7 @@
 # Configuration for running multiple local models with Ollama
 
 strategies:
-  ollama_local_models:
-    name: Ollama Local Models Configuration
+  - name: ollama_local_models
     description: Multiple local models running via Ollama with automatic fallback
     
     components:
