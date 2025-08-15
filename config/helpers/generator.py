@@ -9,12 +9,16 @@ sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 
-def generate_base_config(*, schema_path: str | None = None, name: str | None = None) -> dict:
+def generate_base_config(
+    namespace: str,
+    name: str | None = None,
+    config_template_path: str | None = None,
+) -> dict:
     """
     Generate a valid base configuration from a YAML config template file.
 
     Args:
-        schema_path: Optional absolute or relative filesystem path to a YAML file that
+        config_template_path: Optional absolute or relative filesystem path to a YAML file that
                      contains a complete, valid configuration structure.
                      If not provided, uses built-in `config/templates/default.yaml`.
         name: Optional override for the resulting configuration's `name` field.
@@ -28,8 +32,8 @@ def generate_base_config(*, schema_path: str | None = None, name: str | None = N
     """
 
     path = (
-        Path(schema_path)
-        if schema_path is not None
+        Path(config_template_path)
+        if config_template_path is not None
         else Path(__file__).parent.parent / "templates" / "default.yaml"
     )
 
@@ -42,6 +46,13 @@ def generate_base_config(*, schema_path: str | None = None, name: str | None = N
     except Exception as e:  # pragma: no cover
         raise ValueError(f"Error reading config template file '{path}': {e}") from e
 
+    raw_cfg.update(
+        {
+            "namespace": namespace,
+            "name": name or raw_cfg.get("name", ""),
+        }
+    )
+
     # Validate against current data model to ensure correctness
     try:
         validated = LlamaFarmConfig(**raw_cfg)
@@ -50,6 +61,4 @@ def generate_base_config(*, schema_path: str | None = None, name: str | None = N
 
     # Return JSON-serializable dict
     cfg = validated.model_dump(mode="json", exclude_none=True)
-    if name is not None:
-        cfg["name"] = name
     return cfg
