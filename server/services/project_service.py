@@ -84,9 +84,7 @@ class ProjectService:
             config_template_path=str(config_template_path),
         )
 
-        # Persist
-        cfg_model = cls.save_config(namespace, project_id, LlamaFarmConfig(**cfg_dict))
-        return cfg_model
+        return cls.save_config(namespace, project_id, LlamaFarmConfig(**cfg_dict))
 
     @classmethod
     def _resolve_template_path(cls, config_template: str | None) -> Path:
