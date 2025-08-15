@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from api.errors import (
     NamespaceNotFoundError,
@@ -20,6 +20,7 @@ from config import (  # noqa: E402
     ConfigError,
     generate_base_config,
     load_config,
+    load_config_dict,
     save_config,
 )
 from config.datamodel import LlamaFarmConfig  # noqa: E402
@@ -135,14 +136,33 @@ class ProjectService:
     def list_projects(cls, namespace: str) -> list[Project]:
         if settings.lf_project_dir is not None:
             logger.info(f"Listing projects in {settings.lf_project_dir}")
-            cfg = load_config(directory=settings.lf_project_dir, validate=False)
-            return [
-                Project(
-                    namespace=namespace,
-                    name=cfg.name,
-                    config=cfg,
+            try:
+                cfg_dict = load_config_dict(
+                    directory=settings.lf_project_dir,
+                    validate=False,
                 )
-            ]
+                # Ensure required identifiers exist; derive sane defaults from context
+                if not cfg_dict.get("namespace"):
+                    cfg_dict["namespace"] = namespace
+                if not cfg_dict.get("name"):
+                    cfg_dict["name"] = os.path.basename(
+                        settings.lf_project_dir.rstrip(os.sep)
+                    )
+                cfg = LlamaFarmConfig(**cfg_dict)
+                return [
+                    Project(
+                        namespace=namespace,
+                        name=cfg.name,
+                        config=cfg,
+                    )
+                ]
+            except (ConfigError, ValidationError) as e:
+                logger.warning(
+                    "Skipping invalid project at configured project_dir",
+                    path=settings.lf_project_dir,
+                    error=str(e),
+                )
+                return []
 
         namespace_dir = cls.get_namespace_dir(namespace)
         logger.info(f"Listing projects in {namespace_dir}")
@@ -168,11 +188,17 @@ class ProjectService:
 
             # Attempt to load project config; skip if invalid/missing
             try:
-                cfg = load_config(
+                cfg_dict = load_config_dict(
                     directory=project_path,
                     validate=False,
                 )
-            except ConfigError as e:
+                # Inject expected identifiers when missing
+                if not cfg_dict.get("namespace"):
+                    cfg_dict["namespace"] = namespace
+                if not cfg_dict.get("name"):
+                    cfg_dict["name"] = project_name
+                cfg = LlamaFarmConfig(**cfg_dict)
+            except (ConfigError, ValidationError) as e:
                 logger.warning(
                     "Skipping project without valid config",
                     entry=project_name,
@@ -228,11 +254,16 @@ class ProjectService:
                 )
 
             # Attempt to load config (do not validate here; align with list_projects)
-            cfg = load_config(directory=project_dir, validate=False)
+            cfg_dict = load_config_dict(directory=project_dir, validate=False)
+            if not cfg_dict.get("namespace"):
+                cfg_dict["namespace"] = namespace
+            if not cfg_dict.get("name"):
+                cfg_dict["name"] = project_id
+            cfg = LlamaFarmConfig(**cfg_dict)
         except ProjectConfigError:
             # bubble our structured error
             raise
-        except ConfigError as e:
+        except (ConfigError, ValidationError) as e:
             # Config present but invalid/malformed
             logger.warning(
                 "Invalid project config",
