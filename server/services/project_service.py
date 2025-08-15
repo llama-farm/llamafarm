@@ -51,12 +51,15 @@ class ProjectService:
             # Prefer client CWD (localhost CLI) when available; fallback to server CWD
             return client_cwd.get() or os.getcwd()
         if settings.lf_project_dir is None:
-            return os.path.join(
-                settings.lf_data_dir,
-                "projects",
-                namespace,
-                project_id,
-            )
+            base_path = os.path.join(settings.lf_data_dir, "projects")
+            raw_path = os.path.join(base_path, namespace, project_id)
+            norm_path = os.path.normpath(raw_path)
+            # Ensure the normalized path is within the base_path
+            if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
+                raise NamespaceNotFoundError(
+                    "Invalid namespace or project_id: path traversal detected"
+                )
+            return norm_path
         else:
             return settings.lf_project_dir
 
