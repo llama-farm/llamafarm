@@ -2,8 +2,7 @@
 # Different models optimized for specific tasks
 
 strategies:
-  multi_model_specialized:
-    name: Multi-Model Task-Specific Configuration
+  - name: multi_model_specialized
     description: Use different models optimized for specific task types
     
     components:

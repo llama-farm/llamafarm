@@ -9,8 +9,7 @@ strategies:
   # DEMO 1: CLOUD API WITH FALLBACK STRATEGY
   # =============================================================================
   
-  demo1_cloud_fallback:
-    name: "Cloud API with Automatic Fallback"
+  - name: demo1_cloud_fallback
     description: "Production-grade API management with automatic fallback to local models"
     
     components:
@@ -76,8 +75,7 @@ strategies:
   # DEMO 2: MULTI-MODEL OPTIMIZATION STRATEGY
   # =============================================================================
   
-  demo2_multi_model:
-    name: "Multi-Model Task Optimization"
+  - name: demo2_multi_model
     description: "Intelligent routing to different models based on task complexity"
     
     components:
@@ -162,8 +160,7 @@ strategies:
   # DEMO 3: BASE MODEL TESTING (BEFORE TRAINING)
   # =============================================================================
   
-  demo3_base_model:
-    name: "Base Llama 3.2:3b for Testing"
+  - name: demo3_base_model
     description: "Base model before fine-tuning - for comparison"
     
     components:
@@ -179,8 +176,7 @@ strategies:
   # DEMO 3: FINE-TUNED MODEL TESTING (AFTER TRAINING)
   # =============================================================================
   
-  demo3_finetuned_model:
-    name: "Fine-tuned Medical Model"
+  - name: demo3_finetuned_model
     description: "Medical-specific fine-tuned model after training"
     
     components:
@@ -195,8 +191,7 @@ strategies:
   # DEMO 3: OPTIMIZED TRAINING CONFIGURATION
   # =============================================================================
   
-  demo3_training_optimized:
-    name: "Optimized Medical Model Training for Llama 3.2"
+  - name: demo3_training_optimized
     description: "Prevents conversation generation and ensures single-turn responses"
     
     components:
@@ -362,8 +357,7 @@ strategies:
   # DEMO 3: TRAINING CONFIGURATION (ORIGINAL)
   # =============================================================================
   
-  demo3_training:
-    name: "Medical Model Fine-Tuning Pipeline"
+  - name: demo3_training
     description: "Complete training workflow with before/after comparison and Ollama export"
     
     components:
@@ -560,8 +554,7 @@ strategies:
   # ADDITIONAL TESTING STRATEGIES FOR DIFFERENT MODELS
   # =============================================================================
   
-  test_tinyllama:
-    name: "TinyLlama Base Model"
+  - name: test_tinyllama
     description: "1.1B parameter model for quick testing"
     
     components:
@@ -573,8 +566,7 @@ strategies:
           timeout: 60
           auto_pull: true
           
-  test_mistral:
-    name: "Mistral 7B Base Model"
+  - name: test_mistral
     description: "Mistral 7B for general purpose testing"
     
     components:
@@ -586,8 +578,7 @@ strategies:
           timeout: 60
           auto_pull: true
           
-  test_codellama:
-    name: "Code Llama Model"
+  - name: test_codellama
     description: "Code-specific model for programming tasks"
     
     components:
@@ -599,8 +590,8 @@ strategies:
           timeout: 60
           auto_pull: true
           
-  test_phi3:
-    name: "Phi-3 Mini Model"  
+  - name: test_phi3
+  
     description: "Microsoft's efficient 3.8B model"
     
     components:
@@ -617,8 +608,7 @@ strategies:
   # Example configurations optimized for different hardware setups
   
   # For NVIDIA GPU (RTX 3060/3070/3080/4060/4070/4080/4090)
-  training_cuda_consumer:
-    name: "NVIDIA Consumer GPU Training"
+  - name: training_cuda_consumer
     description: "Optimized for RTX 30xx/40xx series with 8-24GB VRAM"
     components:
       fine_tuner:
@@ -643,8 +633,7 @@ strategies:
             per_device_train_batch_size: 4  # Increase if memory allows
             
   # For Apple Silicon (M1/M2/M3 Mac)
-  training_mps_apple:
-    name: "Apple Silicon Training"
+  - name: training_mps_apple
     description: "Optimized for M1/M2/M3 Macs with 8-64GB unified memory"
     components:
       fine_tuner:
@@ -668,8 +657,7 @@ strategies:
             per_device_train_batch_size: 2  # Conservative for stability
             
   # For CPU-only systems (no GPU)
-  training_cpu_only:
-    name: "CPU-Only Training"
+  - name: training_cpu_only
     description: "For systems without GPU - slow but works everywhere"
     components:
       fine_tuner:
@@ -693,8 +681,7 @@ strategies:
             num_train_epochs: 1  # Fewer epochs for CPU
             
   # For High-End GPUs (A100, H100, RTX 4090)
-  training_cuda_datacenter:
-    name: "Datacenter GPU Training"
+  - name: training_cuda_datacenter
     description: "For A100/H100 or high-end RTX 4090 with 24-80GB VRAM"
     components:
       fine_tuner:
@@ -722,8 +709,7 @@ strategies:
   # ADDITIONAL DEMO STRATEGIES
   # =============================================================================
   
-  local_development:
-    name: "Local Development Environment"
+  - name: local_development
     description: "Pure local setup for development and testing"
     
     components:
@@ -737,8 +723,7 @@ strategies:
     monitoring:
       log_level: DEBUG
       
-  production_hybrid:
-    name: "Production Hybrid Setup"
+  - name: production_hybrid
     description: "Production configuration with cloud and local models"
     
     components:
@@ -795,8 +780,7 @@ strategies:
   # MOCK MODEL STRATEGY - Fast Development and Testing
   # =============================================================================
   
-  mock_development:
-    name: "Mock Model for Fast Development"
+  - name: mock_development
     description: "Uses mock models for rapid prototyping and testing without API costs or setup"
     
     components:

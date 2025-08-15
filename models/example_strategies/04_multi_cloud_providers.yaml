@@ -1,0 +1,100 @@
+# Multi-Cloud Provider Configuration
+# Combining multiple cloud providers for resilience and optimization
+
+strategies:
+  - name: multi_cloud_failover
+    description: Automatic failover across cloud providers
+    components:
+      openai:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+      anthropic:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-opus-20240229
+          base_url: https://api.anthropic.com/v1
+      together:
+        type: openai_compatible
+        config:
+          api_key: ${TOGETHER_API_KEY}
+          model: meta-llama/Llama-3-70b-chat-hf
+          base_url: https://api.together.xyz/v1
+    fallback_chain:
+      - provider: openai
+        timeout: 30
+      - provider: anthropic
+        timeout: 30
+      - provider: together
+        timeout: 60
+    
+  - name: cost_optimized_routing
+    description: Route to most cost-effective provider based on task
+    components:
+      premium:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          cost_per_1k_tokens: 0.03
+      standard:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          cost_per_1k_tokens: 0.002
+      budget:
+        type: openai_compatible
+        config:
+          api_key: ${GROQ_API_KEY}
+          model: llama3-70b-8192
+          base_url: https://api.groq.com/openai/v1
+          cost_per_1k_tokens: 0.0007
+    routing_rules:
+      - pattern: "complex|analyze|reason"
+        provider: premium
+      - pattern: "summarize|translate|moderate"
+        provider: standard
+      - pattern: "simple|quick|test"
+        provider: budget
+      - pattern: ".*"
+        provider: standard
+    
+  - name: specialized_model_routing
+    description: Route to specialized models based on task type
+    components:
+      code_model:
+        type: openai_compatible
+        config:
+          api_key: ${TOGETHER_API_KEY}
+          model: codellama/CodeLlama-70b-Instruct-hf
+          base_url: https://api.together.xyz/v1
+          temperature: 0.2
+      chat_model:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-sonnet-20240229
+          base_url: https://api.anthropic.com/v1
+          temperature: 0.7
+      math_model:
+        type: openai_compatible
+        config:
+          api_key: ${TOGETHER_API_KEY}
+          model: meta-llama/Llama-3-70b-chat-hf
+          base_url: https://api.together.xyz/v1
+          temperature: 0.1
+    routing_rules:
+      - pattern: "code|function|debug|program"
+        provider: code_model
+      - pattern: "chat|conversation|discuss"
+        provider: chat_model
+      - pattern: "calculate|math|equation|solve"
+        provider: math_model
+      - pattern: ".*"
+        provider: chat_model

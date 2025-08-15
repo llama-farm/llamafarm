@@ -27,7 +27,8 @@ class TestExampleStrategies:
         strategy = manager.get_strategy("basic_openai")
         
         assert strategy is not None
-        assert strategy['name'] == "Basic OpenAI Configuration"
+        assert strategy['name'] == "basic_openai"
+        assert strategy['description'] == "Simple cloud-based strategy using OpenAI GPT-4 Turbo"
         assert 'cloud_api' in strategy['components']
         assert strategy['components']['cloud_api']['type'] == 'openai_compatible'
     
@@ -119,8 +120,12 @@ class TestExampleStrategies:
             for name, strategy in manager.strategies.items():
                 assert 'name' in strategy, f"Missing 'name' in {name}"
                 assert 'description' in strategy, f"Missing 'description' in {name}"
-                assert 'components' in strategy, f"Missing 'components' in {name}"
-                assert len(strategy['components']) > 0, f"No components in {name}"
+                # Multi-stage strategies have 'stages' instead of 'components'
+                if 'stages' in strategy:
+                    assert len(strategy['stages']) > 0, f"No stages in {name}"
+                else:
+                    assert 'components' in strategy, f"Missing 'components' in {name}"
+                    assert len(strategy['components']) > 0, f"No components in {name}"
     
     def test_routing_rules_format(self):
         """Test that routing rules are properly formatted."""

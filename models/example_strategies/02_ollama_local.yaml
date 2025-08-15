@@ -1,0 +1,71 @@
+# Ollama Local Models
+# Configuration for running models locally with Ollama
+
+strategies:
+  - name: ollama_llama3_chat
+    description: Local Llama 3 model for conversational AI
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3.1:8b
+          temperature: 0.7
+          top_p: 0.9
+          num_predict: 2048
+          num_ctx: 4096
+          num_gpu: 1
+          repeat_penalty: 1.1
+    
+  - name: ollama_mistral_instruct
+    description: Mistral 7B for instruction-following tasks
+    components:
+      model_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: mistral:7b-instruct
+          temperature: 0.5
+          top_p: 0.95
+          num_predict: 1024
+          seed: 42
+    
+  - name: ollama_code_specialist
+    description: Code-specialized models via Ollama
+    components:
+      codellama:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: codellama:13b
+          temperature: 0.2
+          top_p: 0.95
+      deepseek:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: deepseek-coder:6.7b
+          temperature: 0.2
+    routing_rules:
+      - pattern: "python|javascript|typescript"
+        provider: deepseek
+      - pattern: "java|c++|rust|go"
+        provider: codellama
+      - pattern: ".*"
+        provider: codellama
+    
+  - name: ollama_embedding_models
+    description: Embedding models for RAG applications
+    components:
+      embedder:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: nomic-embed-text:latest
+          embedding_only: true
+      retriever:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3:8b
+          temperature: 0.3

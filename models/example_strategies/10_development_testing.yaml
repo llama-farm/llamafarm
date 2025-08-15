@@ -1,0 +1,104 @@
+# Development and Testing Strategies
+# Configurations for development, testing, and experimentation
+
+strategies:
+  - name: mock_testing
+    description: Local lightweight models for unit testing
+    components:
+      test_model:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: tinyllama:1.1b  # Smallest model for testing
+          temperature: 0.0  # Deterministic for tests
+          seed: 42
+          num_predict: 100
+      test_embedder:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: all-minilm:latest  # Small embedding model
+          embedding_only: true
+    testing:
+      record_requests: true
+      validate_schemas: true
+      check_determinism: true
+    
+  - name: a_b_testing
+    description: A/B testing different models
+    components:
+      variant_a:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.7
+      variant_b:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.5
+    experiment:
+      split_ratio: 50
+      metrics: ["response_quality", "latency", "cost"]
+      duration_hours: 168
+      min_sample_size: 1000
+    
+  - name: benchmark_suite
+    description: Comprehensive benchmarking configuration
+    components:
+      openai_baseline:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+      anthropic_challenger:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-haiku-20240307
+          base_url: https://api.anthropic.com/v1
+      local_model:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3:8b
+    benchmarks:
+      - name: latency
+        iterations: 100
+        warmup: 10
+      - name: throughput
+        duration: 60
+        concurrent_requests: 10
+      - name: quality
+        dataset: mmlu
+        metrics: ["accuracy", "f1", "perplexity"]
+    
+  - name: debug_verbose
+    description: Verbose debugging configuration
+    components:
+      debug_model:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.7
+          stream: false
+    debugging:
+      log_level: DEBUG
+      log_requests: true
+      log_responses: true
+      log_tokens: true
+      save_conversations: true
+      trace_calls: true
+      profile_performance: true
+    output:
+      format: json
+      pretty_print: true
+      include_metadata: true
+      save_to_file: ./debug_logs/

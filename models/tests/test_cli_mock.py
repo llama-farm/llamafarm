@@ -176,9 +176,10 @@ class TestStrategyIntegration:
         """Test strategy with routing rules."""
         strategy_config = {
             "version": "2.0",
-            "strategies": {
-                "test_routing": {
-                    "name": "Test Routing",
+            "strategies": [
+                {
+                    "name": "test_routing",
+                    "description": "Test Routing",
                     "components": {
                         "model_app": {
                             "type": "mock_model",
@@ -192,7 +193,7 @@ class TestStrategyIntegration:
                         }
                     ]
                 }
-            }
+            ]
         }
         
         temp_file = Path(tempfile.mktemp(suffix=".yaml"))
@@ -205,8 +206,10 @@ class TestStrategyIntegration:
             with open(temp_file, "r") as f:
                 loaded = yaml.safe_load(f)
             assert "strategies" in loaded
-            assert "test_routing" in loaded["strategies"]
-            assert "routing_rules" in loaded["strategies"]["test_routing"]
+            assert isinstance(loaded["strategies"], list)
+            assert len(loaded["strategies"]) > 0
+            assert loaded["strategies"][0]["name"] == "test_routing"
+            assert "routing_rules" in loaded["strategies"][0]
         finally:
             temp_file.unlink(missing_ok=True)
 
@@ -248,9 +251,10 @@ class TestSetupManager:
         # Create a training strategy that needs converters
         strategy_config = {
             "version": "2.0",
-            "strategies": {
-                "test_training": {
-                    "name": "Test Training",
+            "strategies": [
+                {
+                    "name": "test_training",
+                    "description": "Test Training",
                     "components": {
                         "fine_tuner": {
                             "type": "pytorch",
@@ -262,7 +266,7 @@ class TestSetupManager:
                         "quantization": "q4_0"
                     }
                 }
-            }
+            ]
         }
         
         temp_file = Path(tempfile.mktemp(suffix=".yaml"))

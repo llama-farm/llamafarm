@@ -436,13 +436,22 @@ def complete_command(args):
             import yaml
             strategies_config = yaml.safe_load(f)
         
-        strategies = strategies_config.get('strategies', {})
-        if args.strategy not in strategies:
-            print_error(f"Strategy '{args.strategy}' not found")
-            print_info(f"Available strategies: {', '.join(strategies.keys())}")
-            return
+        strategies_list = strategies_config.get('strategies', [])
         
-        strategy = strategies[args.strategy]
+        # Find the strategy in the list
+        strategy = None
+        available_names = []
+        for s in strategies_list:
+            if 'name' in s:
+                available_names.append(s['name'])
+                if s['name'] == args.strategy:
+                    strategy = s
+                    break
+        
+        if not strategy:
+            print_error(f"Strategy '{args.strategy}' not found")
+            print_info(f"Available strategies: {', '.join(available_names)}")
+            return
         
         # Determine which component to use (ollama, cloud_api, etc.)
         # Priority: ollama > cloud_api > fine_tuner > mock_model
@@ -4347,14 +4356,26 @@ def train_command(args):
         strategy_file = Path(args.strategy)
         with open(strategy_file) as f:
             strategies = yaml.safe_load(f)
-            strategy_config = strategies.get('strategies', {}).get('demo3_training', {})
+            strategies_list = strategies.get('strategies', [])
+            # Find demo3_training in the list
+            strategy_config = {}
+            for s in strategies_list:
+                if s.get('name') == 'demo3_training':
+                    strategy_config = s
+                    break
     else:
         # It's a strategy name, use default file
         strategy_file = Path("demos/strategies.yaml")
         if strategy_file.exists():
             with open(strategy_file) as f:
                 strategies = yaml.safe_load(f)
-                strategy_config = strategies.get('strategies', {}).get(args.strategy, {})
+                strategies_list = strategies.get('strategies', [])
+                # Find the strategy in the list
+                strategy_config = {}
+                for s in strategies_list:
+                    if s.get('name') == args.strategy:
+                        strategy_config = s
+                        break
         else:
             print_error(f"Strategy file not found: {strategy_file}")
             return
