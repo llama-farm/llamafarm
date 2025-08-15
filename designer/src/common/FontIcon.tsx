@@ -10,6 +10,7 @@ const Close = lazy(() => import('../assets/icons/Close'))
 const ClosePanel = lazy(() => import('../assets/icons/ClosePanel'))
 const Code = lazy(() => import('../assets/icons/Code'))
 const Dashboard = lazy(() => import('../assets/icons/Dashboard'))
+const ToolsAlt = lazy(() => import('../assets/icons/ToolsAlt'))
 const Data = lazy(() => import('../assets/icons/Data'))
 const Edit = lazy(() => import('../assets/icons/Edit'))
 const Fade = lazy(() => import('../assets/icons/Fade'))
@@ -41,6 +42,7 @@ type FontIconTypes =
   | 'code'
   | 'dashboard'
   | 'data'
+  | 'tools-alt'
   | 'edit'
   | 'fade'
   | 'integration'
@@ -98,6 +100,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Dashboard />
       case 'data':
         return <Data />
+      case 'tools-alt':
+        return <ToolsAlt />
       case 'edit':
         return <Edit />
       case 'fade':

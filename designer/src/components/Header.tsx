@@ -19,11 +19,13 @@ function Header() {
     'Option 4',
   ]
   const [isProjectOpen, setIsProjectOpen] = useState(false)
-  const [projects, /* setProjects */] = useState<string[]>(() => {
+  const [projects /* setProjects */] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('projectsList')
       if (stored) return JSON.parse(stored)
-    } catch {}
+    } catch (err) {
+      console.error('Failed to read projectsList from localStorage:', err)
+    }
     return defaultProjectNames
   })
   const [activeProject, setActiveProject] = useState<string>(
@@ -76,6 +78,13 @@ function Header() {
     const isDifferent = name !== activeProject
     setActiveProject(name)
     localStorage.setItem('activeProject', name)
+    try {
+      window.dispatchEvent(
+        new CustomEvent<string>('lf-active-project', { detail: name })
+      )
+    } catch (err) {
+      console.error('Failed to dispatch lf-active-project event:', err)
+    }
     setIsProjectOpen(false)
     if (isDifferent) {
       setIsSwitching(true)
