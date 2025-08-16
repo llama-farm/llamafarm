@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -93,8 +92,8 @@ func isLocalhost(serverURL string) bool {
 // It uses a fixed container name and maps the serverURL port to container port 8000.
 func startLocalServerViaDocker(serverURL string) error {
 	// Ensure Docker is available
-	if err := exec.Command("docker", "--version").Run(); err != nil {
-		return errors.New("docker is not available. Please install Docker and try again")
+	if err := ensureDockerAvailable(); err != nil {
+		return err
 	}
 
 	port := resolvePort(serverURL, 8000)
@@ -119,10 +118,7 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	// Pull latest image (best effort)
-	pullCmd := exec.Command("docker", "pull", image)
-	pullCmd.Stdout = os.Stdout
-	pullCmd.Stderr = os.Stderr
-	_ = pullCmd.Run()
+	_ = pullImage(image)
 
 	// Run new container
 	runArgs := []string{
@@ -185,43 +181,15 @@ func resolvePort(serverURL string, defaultPort int) int {
 	return defaultPort
 }
 
-func containerExists(name string) bool {
-	cmd := exec.Command("docker", "ps", "-a", "--format", "{{.Names}}")
-	out, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.TrimSpace(line) == name {
-			return true
-		}
-	}
-	return false
-}
-
-func isContainerRunning(name string) bool {
-	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}")
-	out, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.TrimSpace(line) == name {
-			return true
-		}
-	}
-	return false
-}
-
 // isHostOllamaAvailable returns true if an Ollama server on the host appears reachable
-// at the default localhost port 11434 or via OLLAMA_BASE_URL.
+// at the default localhost port 11434 or via OLLAMA_HOST.
 func isHostOllamaAvailable() bool {
-	// Respect explicit OLLAMA_BASE_URL
+	// Respect explicit OLLAMA_HOST
 	if baseURL, ok := os.LookupEnv("OLLAMA_HOST"); ok && strings.TrimSpace(baseURL) != "" {
 		return pingURL(strings.TrimSpace(baseURL)) == nil
 	}
 	// Try default local port
-	return pingURL("http://localhost:11434") == nil
+	return pingURL("http://localhost:11434/v1") == nil
 }
 
 func pingURL(base string) error {
