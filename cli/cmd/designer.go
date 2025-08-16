@@ -28,17 +28,14 @@ var designerStartCmd = &cobra.Command{
 		fmt.Println("Starting LlamaFarm designer container...")
 
 		// Check if Docker is available
-		if err := exec.Command("docker", "--version").Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Docker is not available. Please install Docker first.\n")
+		if err := ensureDockerAvailable(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Pull the latest llamafarm image if needed
 		fmt.Println("Pulling latest LlamaFarm image...")
-		pullCmd := exec.Command("docker", "pull", "ghcr.io/llamafarm/llamafarm:latest")
-		pullCmd.Stdout = os.Stdout
-		pullCmd.Stderr = os.Stderr
-		if err := pullCmd.Run(); err != nil {
+		if err := pullImage("ghcr.io/llama-farm/llamafarm/designer:latest"); err != nil {
 			fmt.Printf("Warning: Failed to pull latest image: %v\n", err)
 			fmt.Println("Continuing with existing local image...")
 		}
@@ -51,7 +48,7 @@ var designerStartCmd = &cobra.Command{
 			"--name", "llamafarm-designer",
 			"-p", "8080:8080", // Map port 8080
 			"-v", fmt.Sprintf("%s:/workspace", getCurrentDir()), // Mount current directory
-			"llamafarm/designer:latest",
+			"ghcr.io/llama-farm/llamafarm/designer:latest",
 		}
 
 		startCmd := exec.Command("docker", dockerArgs...)

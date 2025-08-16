@@ -7,6 +7,7 @@ import (
     "sort"
     "strings"
     "time"
+    "encoding/json"
 )
 
 // HTTPClient interface for testing
@@ -48,7 +49,7 @@ func (v *VerboseHTTPClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 func getHTTPClient() HTTPClient {
-    if verbose {
+    if debug {
         return &VerboseHTTPClient{Inner: httpClient}
     }
     return httpClient
@@ -83,4 +84,52 @@ func logHeaders(kind string, hdr http.Header) {
             fmt.Fprintf(os.Stderr, "  %s header: %s: %s\n", kind, k, v)
         }
     }
+}
+
+// prettyServerError extracts a readable message from a server error response body.
+// It parses common JSON shapes like {"detail":...}, {"message":...}, {"error":...}.
+func prettyServerError(resp *http.Response, body []byte) string {
+    // Try to parse JSON error envelopes
+    var env struct {
+        Detail  any    `json:"detail"`
+        Message string `json:"message"`
+        Error   string `json:"error"`
+    }
+    if json.Unmarshal(body, &env) == nil {
+        switch v := env.Detail.(type) {
+        case string:
+            if v != "" {
+                return v
+            }
+        case map[string]any:
+            if m, ok := v["message"].(string); ok && m != "" {
+                return m
+            }
+            if m, ok := v["detail"].(string); ok && m != "" {
+                return m
+            }
+        case []any:
+            if len(v) > 0 {
+                if m, ok := v[0].(map[string]any); ok {
+                    if s, ok := m["message"].(string); ok && s != "" {
+                        return s
+                    }
+                    if s, ok := m["detail"].(string); ok && s != "" {
+                        return s
+                    }
+                }
+            }
+        }
+        if env.Message != "" {
+            return env.Message
+        }
+        if env.Error != "" {
+            return env.Error
+        }
+    }
+    s := strings.TrimSpace(string(body))
+    if s == "" {
+        return http.StatusText(resp.StatusCode)
+    }
+    return s
 }

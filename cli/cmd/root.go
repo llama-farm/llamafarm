@@ -3,9 +3,14 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 )
+
+var debug bool
+var serverURL string
+var serverStartTimeout time.Duration
 
 var rootCmd = &cobra.Command{
 	Use:   "lf",
@@ -30,13 +35,8 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// Example of a persistent flag
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.llamafarm-cli.yaml)")
-
-	// Example of a local flag
-	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// Global persistent flags
+	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug output")
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
+	rootCmd.PersistentFlags().DurationVar(&serverStartTimeout, "server-start-timeout", 45*time.Second, "How long to wait for local server to become ready when auto-starting (e.g. 45s, 1m)")
 }

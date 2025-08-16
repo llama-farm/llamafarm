@@ -73,7 +73,13 @@ var datasetsListCmd = &cobra.Command{
             os.Exit(1)
         }
 
-        url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/", strings.TrimSuffix(serverCfg.URL, "/"), serverCfg.Namespace, serverCfg.Project)
+        // Ensure server is up (auto-start locally if needed)
+        if err := ensureServerAvailable(serverCfg.URL); err != nil {
+            fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+            os.Exit(1)
+        }
+
+        url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/", serverCfg.Namespace, serverCfg.Project))
         req, err := http.NewRequest("GET", url, nil)
         if err != nil {
             fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
@@ -141,7 +147,13 @@ Examples:
         }
         createReq := createDatasetRequest{Name: datasetName, RAGStrategy: ragStrategy}
         payload, _ := json.Marshal(createReq)
-        url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/", strings.TrimSuffix(serverCfg.URL, "/"), serverCfg.Namespace, serverCfg.Project)
+        // Ensure server is up
+        if err := ensureServerAvailable(serverCfg.URL); err != nil {
+            fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+            os.Exit(1)
+        }
+
+        url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/", serverCfg.Namespace, serverCfg.Project))
         req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
         if err != nil {
             fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
@@ -211,7 +223,12 @@ var datasetsRemoveCmd = &cobra.Command{
             os.Exit(1)
         }
         datasetName := args[0]
-        url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/%s", strings.TrimSuffix(serverCfg.URL, "/"), serverCfg.Namespace, serverCfg.Project, datasetName)
+        // Ensure server is up
+        if err := ensureServerAvailable(serverCfg.URL); err != nil {
+            fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+            os.Exit(1)
+        }
+        url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
         req, err := http.NewRequest("DELETE", url, nil)
         if err != nil {
             fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
@@ -269,6 +286,11 @@ Examples:
             os.Exit(1)
         }
 
+        // Ensure server is up
+        if err := ensureServerAvailable(serverCfg.URL); err != nil {
+            fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+            os.Exit(1)
+        }
         fmt.Printf("Starting upload to dataset '%s' (%d file(s))...\n", datasetName, len(files))
         uploaded := 0
         for _, f := range files {
@@ -290,7 +312,6 @@ func init() {
     datasetsCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
     datasetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")
     datasetsCmd.PersistentFlags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
-    datasetsCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose HTTP logging")
 
     // Add flags specific to add command
     datasetsAddCmd.Flags().StringVarP(&ragStrategy, "rag-strategy", "r", "auto", "RAG strategy to use for this dataset (default: auto)")
@@ -323,7 +344,7 @@ func uploadFileToDataset(server string, namespace string, project string, datase
     if err := writer.Close(); err != nil { return err }
 
     // Build request
-    url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets/%s/data", strings.TrimSuffix(server, "/"), namespace, project, dataset)
+    url := buildServerURL(server, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/data", namespace, project, dataset))
     req, err := http.NewRequest("POST", url, &buf)
     if err != nil { return err }
     req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -340,55 +361,4 @@ func uploadFileToDataset(server string, namespace string, project string, datase
         return fmt.Errorf("%s", prettyServerError(resp, body))
     }
     return nil
-}
-
-// prettyServerError extracts a readable message from a server error response.
-// It attempts to parse common JSON shapes like {"detail":"..."}, {"message":"..."}, {"error":"..."}.
-func prettyServerError(resp *http.Response, body []byte) string {
-    // Try to parse JSON error envelopes
-    var env struct {
-        Detail any    `json:"detail"`
-        Message string `json:"message"`
-        Error   string `json:"error"`
-    }
-    if json.Unmarshal(body, &env) == nil {
-        // Prefer detail
-        switch v := env.Detail.(type) {
-        case string:
-            if v != "" {
-                return v
-            }
-        case map[string]any:
-            // Common nested shapes
-            if m, ok := v["message"].(string); ok && m != "" {
-                return m
-            }
-            if m, ok := v["detail"].(string); ok && m != "" {
-                return m
-            }
-        case []any:
-            if len(v) > 0 {
-                if m, ok := v[0].(map[string]any); ok {
-                    if s, ok := m["message"].(string); ok && s != "" {
-                        return s
-                    }
-                    if s, ok := m["detail"].(string); ok && s != "" {
-                        return s
-                    }
-                }
-            }
-        }
-        if env.Message != "" {
-            return env.Message
-        }
-        if env.Error != "" {
-            return env.Error
-        }
-    }
-    // Fallback: raw body trimmed
-    s := strings.TrimSpace(string(body))
-    if s == "" {
-        return http.StatusText(resp.StatusCode)
-    }
-    return s
 }
