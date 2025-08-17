@@ -20,3 +20,21 @@ func TestBuildChatAPIURL(t *testing.T) {
         t.Fatalf("expected %q, got %q", want, got)
     }
 }
+
+func TestNewDefaultContextFromGlobals(t *testing.T) {
+    serverURL = "http://localhost:8000"
+    namespace = "ns"
+    projectID = "proj"
+    sessionID = "sess"
+    temperature = 0.5
+    maxTokens = 123
+    streaming = true
+
+    ctx := newDefaultContextFromGlobals()
+    if ctx.ServerURL != serverURL || ctx.Namespace != namespace || ctx.ProjectID != projectID || ctx.SessionID != sessionID || ctx.Temperature != temperature || ctx.MaxTokens != maxTokens || ctx.Streaming != streaming {
+        t.Fatalf("context not initialized from globals correctly")
+    }
+    if ctx.HTTPClient == nil {
+        t.Fatalf("expected HTTPClient set")
+    }
+}
