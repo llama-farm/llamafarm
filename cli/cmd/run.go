@@ -122,8 +122,8 @@ Examples:
             ServerURL:   serverURL,
             Namespace:   ns,
             ProjectID:   proj,
-            Temperature: 0.7,
-            MaxTokens:   1000,
+            Temperature: temperature,
+            MaxTokens:   maxTokens,
             HTTPClient:  getHTTPClient(),
         }
 
@@ -134,7 +134,14 @@ Examples:
             os.Exit(1)
         }
         if len(resp.Choices) > 0 {
-            fmt.Printf("%s\n", resp.Choices[0].Message.Content)
+            if len(resp.Choices) == 1 {
+                fmt.Printf("%s\n", resp.Choices[0].Message.Content)
+            } else {
+                fmt.Printf("Received %d choices:\n", len(resp.Choices))
+                for i, choice := range resp.Choices {
+                    fmt.Printf("Choice %d:\n%s\n\n", i+1, choice.Message.Content)
+                }
+            }
         } else {
             fmt.Println("No response received.")
         }

@@ -147,7 +147,7 @@ func sendChatRequestWithContext(messages []ChatMessage, ctx *ChatSessionContext)
         return nil, fmt.Errorf("failed to read response: %w", err)
     }
     if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("server returned error %d: %s", resp.StatusCode, string(body))
+        return nil, fmt.Errorf("server returned error %d: %s", resp.StatusCode, prettyServerError(resp, body))
     }
 
     var chatResponse ChatResponse
@@ -214,8 +214,11 @@ func sendChatRequestStreamWithContext(messages []ChatMessage, ctx *ChatSessionCo
     }
     defer resp.Body.Close()
     if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        return "", fmt.Errorf("server returned error %d: %s", resp.StatusCode, string(body))
+        body, readErr := io.ReadAll(resp.Body)
+        if readErr != nil {
+            return "", fmt.Errorf("server returned error %d and body read failed: %v", resp.StatusCode, readErr)
+        }
+        return "", fmt.Errorf("server returned error %d: %s", resp.StatusCode, prettyServerError(resp, body))
     }
     if debug {
         fmt.Fprintf(os.Stderr, "  -> %d %s\n", resp.StatusCode, http.StatusText(resp.StatusCode))
