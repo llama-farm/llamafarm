@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: npm i
       - name: Build website
-        run: nx build docs
+        run: npx nx build docs
 
       # Replace the pages artifact with a regular artifact to reuse in another job
       - name: Upload build artifact
