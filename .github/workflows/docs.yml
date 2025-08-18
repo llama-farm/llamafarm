@@ -20,10 +20,6 @@ jobs:
     name: Build Docusaurus
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: ./docs/website
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,11 +32,12 @@ jobs:
 
       - name: Install dependencies
         run: npm i
+        working-directory: docs/website
 
-      - name: Install Nx CLI
-        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+      # - name: Install Nx CLI
+      #   run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
       - name: Build website
-        run: nx build docs
+        run: npx --yes nx build docs
 
       # Replace the pages artifact with a regular artifact to reuse in another job
       - name: Upload build artifact
