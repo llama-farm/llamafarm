@@ -1,13 +1,11 @@
-# LlamaFarm Prompts Schema
-# JSON-Schema compliant prompt configuration in YAML format
+# LlamaFarm Prompts Schema - Atomic Agents Pattern
+# JSON-Schema compliant prompt configuration with Background/Steps/Output structure
 
 $schema: http://json-schema.org/draft-07/schema#
-title: LlamaFarm Prompts Configuration
-description: Schema for defining global and specific prompts with full variable support
+title: LlamaFarm Prompts Configuration - Atomic Pattern
+description: Schema for defining prompts using the Atomic Agents pattern with reusable components
 type: object
 required:
-  - version
-  - global_prompts
   - prompts
 
 properties:
@@ -15,7 +13,7 @@ properties:
     type: string
     description: Schema version for compatibility
     pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
-    example: "1.0.0"
+    example: "2.0.0"
 
   metadata:
     type: object
@@ -35,190 +33,184 @@ properties:
         items:
           type: string
         description: Tags for categorization
-      created_at:
-        type: string
-        format: date-time
-        description: When this configuration was created
-      updated_at:
-        type: string
-        format: date-time
-        description: When this configuration was last updated
 
-  global_prompts:
-    type: array
-    description: Global prompts that apply across all interactions
-    items:
-      type: object
-      required:
-        - id
-        - name
-        - content
-      properties:
-        id:
-          type: string
-          description: Unique identifier for this global prompt
-          pattern: "^[a-z0-9_]+$"
-        name:
-          type: string
-          description: Human-readable name
-        description:
-          type: string
-          description: What this global prompt does
-        content:
-          type: string
-          description: The actual prompt content with variable placeholders
-        variables:
-          type: array
-          description: Variables used in this prompt
-          items:
-            type: object
-            required:
-              - name
-              - type
-            properties:
-              name:
-                type: string
-                description: Variable name (used in content as {{variable_name}})
-              type:
-                type: string
-                enum: [string, number, boolean, array, object]
-                description: Data type of the variable
-              required:
-                type: boolean
-                default: false
-                description: Whether this variable is required
-              default:
-                description: Default value if not provided
-              description:
-                type: string
-                description: What this variable is for
-              validation:
-                type: object
-                description: Optional validation rules
-                properties:
-                  min_length:
-                    type: integer
-                  max_length:
-                    type: integer
-                  pattern:
-                    type: string
-                  enum:
-                    type: array
-        enabled:
-          type: boolean
-          default: true
-          description: Whether this global prompt is active
-        priority:
-          type: integer
-          default: 100
-          description: Priority for applying multiple global prompts (lower = higher priority)
-        conditions:
+  components:
+    type: object
+    description: Reusable prompt components that can be referenced
+    properties:
+      backgrounds:
+        type: object
+        description: Reusable background sections
+        additionalProperties:
           type: object
-          description: Optional conditions for when to apply this global prompt
+          required:
+            - content
           properties:
-            domains:
+            id:
+              type: string
+              description: Component identifier
+            content:
               type: array
               items:
                 type: string
-              description: Only apply for these domains
-            contexts:
+              description: Background statements defining role and expertise
+            variables:
+              type: array
+              description: Variables used in this component
+              items:
+                $ref: '#/definitions/variable'
+      
+      steps:
+        type: object
+        description: Reusable step sequences
+        additionalProperties:
+          type: object
+          required:
+            - content
+          properties:
+            id:
+              type: string
+              description: Component identifier
+            content:
               type: array
               items:
                 type: string
-              description: Only apply in these contexts
+              description: Ordered list of steps to follow
+            variables:
+              type: array
+              description: Variables used in this component
+              items:
+                $ref: '#/definitions/variable'
+      
+      output_instructions:
+        type: object
+        description: Reusable output instruction sets
+        additionalProperties:
+          type: object
+          required:
+            - content
+          properties:
+            id:
+              type: string
+              description: Component identifier
+            content:
+              type: array
+              items:
+                type: string
+              description: Instructions for formatting and structuring output
+            variables:
+              type: array
+              description: Variables used in this component
+              items:
+                $ref: '#/definitions/variable'
 
   prompts:
     type: array
-    description: Specific prompts for different purposes
+    description: Complete prompts following the Atomic Agents pattern
     items:
       type: object
       required:
         - id
         - name
         - type
-        - content
       properties:
         id:
           type: string
           description: Unique identifier for this prompt
           pattern: "^[a-z0-9_]+$"
+        
         name:
           type: string
           description: Human-readable name
+        
         type:
           type: string
-          enum: [system, user, assistant, function, tool, example, instruction, context, query, response]
-          description: The type/role of this prompt
+          enum: [agent, assistant, analyzer, generator, validator, coordinator, specialist]
+          description: The type of agent/prompt
+        
         description:
           type: string
-          description: What this prompt is for
-        content:
-          type: string
-          description: The actual prompt content with variable placeholders
+          description: What this prompt/agent does
+        
+        background:
+          oneOf:
+            - type: array
+              items:
+                type: string
+              description: Direct background statements
+            - type: string
+              pattern: "^@components\\.backgrounds\\.[a-z0-9_]+$"
+              description: Reference to a reusable background component
+            - type: object
+              properties:
+                combine:
+                  type: array
+                  items:
+                    type: string
+                  description: Combine multiple background components
+        
+        steps:
+          oneOf:
+            - type: array
+              items:
+                type: string
+              description: Direct step instructions
+            - type: string
+              pattern: "^@components\\.steps\\.[a-z0-9_]+$"
+              description: Reference to reusable steps
+            - type: object
+              properties:
+                combine:
+                  type: array
+                  items:
+                    type: string
+                  description: Combine multiple step components
+        
+        output_instructions:
+          oneOf:
+            - type: array
+              items:
+                type: string
+              description: Direct output instructions
+            - type: string
+              pattern: "^@components\\.output_instructions\\.[a-z0-9_]+$"
+              description: Reference to reusable output instructions
+            - type: object
+              properties:
+                combine:
+                  type: array
+                  items:
+                    type: string
+                  description: Combine multiple output instruction components
+        
         variables:
           type: array
           description: Variables used in this prompt
           items:
-            type: object
-            required:
-              - name
-              - type
-            properties:
-              name:
-                type: string
-                description: Variable name (used in content as {{variable_name}})
-              type:
-                type: string
-                enum: [string, number, boolean, array, object]
-                description: Data type of the variable
-              required:
-                type: boolean
-                default: false
-                description: Whether this variable is required
-              default:
-                description: Default value if not provided
-              description:
-                type: string
-                description: What this variable is for
-              validation:
-                type: object
-                description: Optional validation rules
-                properties:
-                  min_length:
-                    type: integer
-                  max_length:
-                    type: integer
-                  pattern:
-                    type: string
-                  enum:
-                    type: array
-                  min:
-                    type: number
-                  max:
-                    type: number
-        tags:
-          type: array
-          items:
-            type: string
-          description: Tags for categorization
-        category:
-          type: string
-          description: Category this prompt belongs to
+            $ref: '#/definitions/variable'
+        
         examples:
           type: array
           description: Example usage of this prompt
           items:
             type: object
             properties:
-              name:
+              input:
                 type: string
-                description: Name of this example
+                description: Example input
+              expected_output:
+                type: string
+                description: Expected output
               variables:
                 type: object
                 description: Variable values for this example
-              expected_output:
-                type: string
-                description: What the expected output looks like
+        
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorization
+        
         metadata:
           type: object
           description: Additional metadata
@@ -226,15 +218,6 @@ properties:
             version:
               type: string
               description: Version of this specific prompt
-            author:
-              type: string
-              description: Author of this prompt
-            created_at:
-              type: string
-              format: date-time
-            updated_at:
-              type: string
-              format: date-time
             model_preferences:
               type: object
               description: Preferred model settings
@@ -251,25 +234,71 @@ properties:
                   minimum: 0
                   maximum: 1
 
+definitions:
+  variable:
+    type: object
+    required:
+      - name
+      - type
+    properties:
+      name:
+        type: string
+        description: Variable name (used in content as {{variable_name}})
+      type:
+        type: string
+        enum: [string, number, boolean, array, object]
+        description: Data type of the variable
+      required:
+        type: boolean
+        default: false
+        description: Whether this variable is required
+      default:
+        description: Default value if not provided
+      description:
+        type: string
+        description: What this variable is for
+      validation:
+        type: object
+        description: Optional validation rules
+        properties:
+          min_length:
+            type: integer
+          max_length:
+            type: integer
+          pattern:
+            type: string
+          enum:
+            type: array
+          min:
+            type: number
+          max:
+            type: number
+
 # Example of a minimal valid configuration
 examples:
-  - version: "1.0.0"
-    global_prompts:
-      - id: base_system
-        name: Base System Prompt
-        content: "You are a helpful AI assistant. {{context}}"
-        variables:
-          - name: context
-            type: string
-            required: false
-            description: Additional context
+  - version: "2.0.0"
+    components:
+      backgrounds:
+        expert_analyst:
+          content:
+            - "You are an expert analyst with deep domain knowledge."
+            - "You approach problems systematically and provide evidence-based insights."
+      steps:
+        basic_analysis:
+          content:
+            - "1. Understand the user's request"
+            - "2. Analyze the provided information"
+            - "3. Formulate a comprehensive response"
+      output_instructions:
+        clear_format:
+          content:
+            - "Provide clear, structured responses"
+            - "Use bullet points for multiple items"
+            - "Include relevant examples when helpful"
     prompts:
-      - id: simple_query
-        name: Simple Query
-        type: user
-        content: "{{question}}"
-        variables:
-          - name: question
-            type: string
-            required: true
-            description: The user's question
+      - id: simple_analyst
+        name: Simple Analyst
+        type: agent
+        background: "@components.backgrounds.expert_analyst"
+        steps: "@components.steps.basic_analysis"
+        output_instructions: "@components.output_instructions.clear_format"
