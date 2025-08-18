@@ -107,6 +107,7 @@ jobs:
 
       - name: Install dependencies
         run: npm i
+        working-directory: docs/website
 
       - name: Install Nx CLI
         run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
