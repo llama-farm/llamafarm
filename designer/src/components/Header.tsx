@@ -127,8 +127,13 @@ function Header() {
             <button
               className="font-serif text-base text-foreground"
               onClick={() => navigate('/')}
+              aria-label="LlamaFarm Home"
             >
-              LlamaFarm
+              <img
+                src="/logotype-long-tan.svg"
+                alt="LlamaFarm"
+                className="h-5 md:h-6 w-auto"
+              />
             </button>
           ) : (
             <div ref={projectRef}>
