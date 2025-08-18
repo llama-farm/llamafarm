@@ -31,14 +31,20 @@ jobs:
       - name: Install dependencies
         run: npm i
       - name: Build website
-        run: npm run build
+        run: nx build docs
 
-      - name: Upload Build Artifact
-        uses: actions/upload-pages-artifact@v3
+      # Replace the pages artifact with a regular artifact to reuse in another job
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
+          name: docs-website-build
           path: docs/website/build
+          if-no-files-found: error
+          retention-days: 7
 
   deploy:
+    name: Deploy to GitHub Pages
+    needs: build
     # if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
@@ -53,14 +59,31 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: docs/website/package-lock.json
-      - uses: webfactory/ssh-agent@v0.5.0
+
+      - name: Install dependencies
+        run: npm i
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-website-build
+          path: docs/website/build
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.5.0
         with:
           ssh-private-key: ${{ secrets.GH_PAGES_DEPLOY }}
+
+      - name: Add github.com to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
       - name: Deploy to GitHub Pages
         env:
           USE_SSH: true
         run: |
           git config --global user.email "ops@llamafarm.dev"
           git config --global user.name "llama-farm-bot"
-          npm i
-          npm run deploy
+          # Re-use build produced in the build job; do not rebuild
+          npx docusaurus deploy --skip-build
