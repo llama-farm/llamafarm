@@ -1,0 +1,499 @@
+# Customer Service Prompts
+# Specialized prompts for customer service interactions
+
+version: "1.0.0"
+
+metadata:
+  name: Customer Service Prompts
+  description: Prompts optimized for customer support and service interactions
+  author: LlamaFarm Team
+  tags:
+    - customer-service
+    - support
+    - helpdesk
+
+global_prompts:
+  - id: customer_service_persona
+    name: Customer Service Agent Persona
+    description: Professional and empathetic customer service personality
+    content: |
+      You are a professional customer service representative for {{company_name}}.
+      Your goal is to help customers resolve their issues quickly and satisfactorily.
+      
+      Key principles:
+      - Be empathetic and understanding
+      - Provide clear, actionable solutions
+      - Maintain a positive, helpful tone
+      - {{#if escalation_policy}}Follow escalation policy: {{escalation_policy}}{{/if}}
+      - {{#if service_standards}}Adhere to service standards: {{service_standards}}{{/if}}
+    variables:
+      - name: company_name
+        type: string
+        required: true
+        default: "our company"
+        description: Company name for personalization
+      - name: escalation_policy
+        type: string
+        required: false
+        description: When to escalate issues
+      - name: service_standards
+        type: string
+        required: false
+        description: Service level standards
+    enabled: true
+    priority: 10
+
+  - id: customer_data_handling
+    name: Customer Data Handling
+    description: Guidelines for handling customer information
+    content: |
+      Always protect customer privacy and data:
+      - Only access information necessary to resolve the issue
+      - Never share customer data inappropriately
+      - {{#if compliance_requirements}}Comply with: {{compliance_requirements}}{{/if}}
+    variables:
+      - name: compliance_requirements
+        type: string
+        required: false
+        default: "GDPR, CCPA"
+        description: Compliance requirements
+    enabled: true
+    priority: 20
+
+prompts:
+  # System prompts for different support scenarios
+  - id: system_tier1_support
+    name: Tier 1 Support System
+    type: system
+    description: First-line support system configuration
+    content: |
+      You are a Tier 1 customer support agent for {{company_name}}.
+      
+      Your capabilities:
+      - Answer common questions about {{product_categories}}
+      - Troubleshoot basic issues
+      - Process returns and refunds up to {{refund_limit}}
+      - Create support tickets for complex issues
+      
+      {{#if knowledge_base}}
+      Use knowledge base: {{knowledge_base}}
+      {{/if}}
+      
+      For issues beyond your scope, escalate to Tier 2 support.
+    variables:
+      - name: company_name
+        type: string
+        required: true
+        description: Company name
+      - name: product_categories
+        type: string
+        required: true
+        description: Product categories supported
+      - name: refund_limit
+        type: string
+        required: false
+        default: "$100"
+        description: Maximum refund authority
+      - name: knowledge_base
+        type: string
+        required: false
+        description: Knowledge base reference
+    category: system
+    tags: [tier1, support]
+
+  # User query templates
+  - id: user_complaint
+    name: Customer Complaint
+    type: user
+    description: Template for customer complaints
+    content: |
+      {{#if order_number}}Order #: {{order_number}}{{/if}}
+      {{#if product}}Product: {{product}}{{/if}}
+      
+      Issue: {{complaint}}
+      
+      {{#if previous_attempts}}
+      Previous attempts to resolve:
+      {{previous_attempts}}
+      {{/if}}
+      
+      {{#if desired_resolution}}
+      Desired resolution: {{desired_resolution}}
+      {{/if}}
+    variables:
+      - name: complaint
+        type: string
+        required: true
+        description: The customer's complaint
+      - name: order_number
+        type: string
+        required: false
+        description: Order number if applicable
+      - name: product
+        type: string
+        required: false
+        description: Product name
+      - name: previous_attempts
+        type: string
+        required: false
+        description: Previous resolution attempts
+      - name: desired_resolution
+        type: string
+        required: false
+        description: What the customer wants
+    category: user
+    tags: [complaint, issue]
+
+  - id: user_product_inquiry
+    name: Product Inquiry
+    type: user
+    description: Customer asking about products
+    content: |
+      I'm interested in {{product_interest}}.
+      
+      {{#if specific_questions}}
+      Specific questions:
+      {{specific_questions}}
+      {{/if}}
+      
+      {{#if use_case}}
+      My use case: {{use_case}}
+      {{/if}}
+      
+      {{#if budget}}
+      Budget: {{budget}}
+      {{/if}}
+    variables:
+      - name: product_interest
+        type: string
+        required: true
+        description: Product or category of interest
+      - name: specific_questions
+        type: string
+        required: false
+        description: Specific questions
+      - name: use_case
+        type: string
+        required: false
+        description: How they plan to use it
+      - name: budget
+        type: string
+        required: false
+        description: Budget range
+    category: user
+    tags: [inquiry, product]
+
+  # Assistant response templates
+  - id: assistant_greeting
+    name: Support Greeting
+    type: assistant
+    description: Initial greeting for support interactions
+    content: |
+      Hello{{#if customer_name}} {{customer_name}}{{/if}}! 
+      
+      Thank you for contacting {{company_name}} support. {{greeting_message}}
+      
+      {{#if account_status}}
+      I can see you're a {{account_status}} customer.
+      {{/if}}
+      
+      {{#if wait_time}}
+      Current estimated wait time: {{wait_time}}
+      {{/if}}
+      
+      How can I assist you today?
+    variables:
+      - name: company_name
+        type: string
+        required: true
+        description: Company name
+      - name: customer_name
+        type: string
+        required: false
+        description: Customer's name
+      - name: greeting_message
+        type: string
+        required: false
+        default: "I'm here to help!"
+        description: Custom greeting
+      - name: account_status
+        type: string
+        required: false
+        description: Customer tier/status
+      - name: wait_time
+        type: string
+        required: false
+        description: Estimated wait time
+    category: assistant
+    tags: [greeting, welcome]
+
+  - id: assistant_resolution
+    name: Issue Resolution Response
+    type: assistant
+    description: Template for resolving customer issues
+    content: |
+      I understand your concern about {{issue_summary}}.
+      
+      {{#if empathy_statement}}
+      {{empathy_statement}}
+      {{/if}}
+      
+      Here's how I can help:
+      
+      {{solution}}
+      
+      {{#if steps}}
+      Steps to follow:
+      {{steps}}
+      {{/if}}
+      
+      {{#if timeline}}
+      Timeline: {{timeline}}
+      {{/if}}
+      
+      {{#if follow_up}}
+      {{follow_up}}
+      {{/if}}
+      
+      Is there anything else I can help you with?
+    variables:
+      - name: issue_summary
+        type: string
+        required: true
+        description: Brief summary of the issue
+      - name: empathy_statement
+        type: string
+        required: false
+        description: Empathetic acknowledgment
+      - name: solution
+        type: string
+        required: true
+        description: The proposed solution
+      - name: steps
+        type: string
+        required: false
+        description: Step-by-step instructions
+      - name: timeline
+        type: string
+        required: false
+        description: Expected timeline
+      - name: follow_up
+        type: string
+        required: false
+        description: Follow-up actions
+    category: assistant
+    tags: [resolution, solution]
+
+  # Instruction templates
+  - id: instruction_troubleshooting
+    name: Troubleshooting Guide
+    type: instruction
+    description: Step-by-step troubleshooting instructions
+    content: |
+      Troubleshooting: {{issue_type}}
+      
+      Before we begin:
+      {{prerequisites}}
+      
+      Steps to resolve:
+      {{#each troubleshooting_steps}}
+      Step {{@index}}: {{this}}
+      {{/each}}
+      
+      {{#if common_mistakes}}
+      Common mistakes to avoid:
+      {{common_mistakes}}
+      {{/if}}
+      
+      If the issue persists after these steps, {{escalation_action}}.
+    variables:
+      - name: issue_type
+        type: string
+        required: true
+        description: Type of issue
+      - name: prerequisites
+        type: string
+        required: true
+        description: What's needed before starting
+      - name: troubleshooting_steps
+        type: array
+        required: true
+        description: Steps to follow
+      - name: common_mistakes
+        type: string
+        required: false
+        description: Mistakes to avoid
+      - name: escalation_action
+        type: string
+        required: true
+        default: "please contact technical support"
+        description: What to do if unresolved
+    category: instruction
+    tags: [troubleshooting, guide]
+
+  # Context templates
+  - id: context_customer_history
+    name: Customer History Context
+    type: context
+    description: Provides customer history context
+    content: |
+      Customer Profile:
+      - Name: {{customer_name}}
+      - Account ID: {{account_id}}
+      - Member since: {{member_since}}
+      - Status: {{customer_status}}
+      
+      {{#if purchase_history}}
+      Recent purchases:
+      {{purchase_history}}
+      {{/if}}
+      
+      {{#if support_history}}
+      Previous support interactions:
+      {{support_history}}
+      {{/if}}
+      
+      {{#if preferences}}
+      Preferences:
+      {{preferences}}
+      {{/if}}
+    variables:
+      - name: customer_name
+        type: string
+        required: true
+        description: Customer's name
+      - name: account_id
+        type: string
+        required: true
+        description: Account identifier
+      - name: member_since
+        type: string
+        required: true
+        description: Membership date
+      - name: customer_status
+        type: string
+        required: true
+        description: Customer tier/status
+      - name: purchase_history
+        type: string
+        required: false
+        description: Recent purchases
+      - name: support_history
+        type: string
+        required: false
+        description: Previous tickets
+      - name: preferences
+        type: string
+        required: false
+        description: Customer preferences
+    category: context
+    tags: [customer, history]
+
+  # Response templates
+  - id: response_ticket_created
+    name: Support Ticket Created
+    type: response
+    description: Response when creating a support ticket
+    content: |
+      Support Ticket Created
+      
+      Ticket ID: {{ticket_id}}
+      Priority: {{priority}}
+      Category: {{category}}
+      
+      Issue Summary:
+      {{issue_summary}}
+      
+      {{#if assigned_to}}
+      Assigned to: {{assigned_to}}
+      {{/if}}
+      
+      Expected response time: {{response_time}}
+      
+      {{#if tracking_link}}
+      Track your ticket: {{tracking_link}}
+      {{/if}}
+      
+      We'll contact you at {{contact_method}} with updates.
+    variables:
+      - name: ticket_id
+        type: string
+        required: true
+        description: Ticket identifier
+      - name: priority
+        type: string
+        required: true
+        validation:
+          enum: [low, medium, high, urgent]
+        description: Ticket priority
+      - name: category
+        type: string
+        required: true
+        description: Issue category
+      - name: issue_summary
+        type: string
+        required: true
+        description: Summary of the issue
+      - name: assigned_to
+        type: string
+        required: false
+        description: Assigned agent/team
+      - name: response_time
+        type: string
+        required: true
+        default: "24 hours"
+        description: Expected response time
+      - name: tracking_link
+        type: string
+        required: false
+        description: Link to track ticket
+      - name: contact_method
+        type: string
+        required: true
+        default: "email"
+        description: How we'll contact them
+    category: response
+    tags: [ticket, confirmation]
+
+  # Multiple similar prompts showing variations
+  - id: simple_acknowledgment_1
+    name: Simple Acknowledgment v1
+    type: assistant
+    description: Basic acknowledgment
+    content: "I understand. {{response}}"
+    variables:
+      - name: response
+        type: string
+        required: true
+        description: The response
+    category: variations
+    tags: [simple, acknowledgment]
+
+  - id: simple_acknowledgment_2
+    name: Simple Acknowledgment v2
+    type: assistant
+    description: Acknowledgment with confirmation
+    content: "Got it. {{response}} Is that correct?"
+    variables:
+      - name: response
+        type: string
+        required: true
+        description: The response
+    category: variations
+    tags: [simple, acknowledgment]
+
+  - id: simple_acknowledgment_3
+    name: Simple Acknowledgment v3
+    type: assistant
+    description: Detailed acknowledgment
+    content: |
+      Thank you for that information.
+      {{response}}
+      Let me help you with this.
+    variables:
+      - name: response
+        type: string
+        required: true
+        description: The response
+    category: variations
+    tags: [simple, acknowledgment]

@@ -1,0 +1,670 @@
+# Data Analysis Prompts
+# Specialized prompts for data analysis and insights generation
+
+version: "1.0.0"
+
+metadata:
+  name: Data Analysis Prompts
+  description: Prompts optimized for data analysis, visualization, and insights
+  author: LlamaFarm Team
+  tags:
+    - data-analysis
+    - analytics
+    - insights
+
+global_prompts:
+  - id: data_analyst_persona
+    name: Data Analyst Persona
+    description: Expert data analyst with statistical knowledge
+    content: |
+      You are an expert data analyst specializing in {{domain}}.
+      
+      Your analysis approach:
+      - Use {{analysis_methods}} methods
+      - Focus on {{business_goals}}
+      - {{#if statistical_rigor}}Apply statistical rigor: {{statistical_rigor}}{{/if}}
+      - Provide actionable insights, not just observations
+      - Support conclusions with data
+    variables:
+      - name: domain
+        type: string
+        required: true
+        default: "business analytics"
+        description: Domain of expertise
+      - name: analysis_methods
+        type: string
+        required: false
+        default: "descriptive and inferential"
+        description: Analysis methods to use
+      - name: business_goals
+        type: string
+        required: false
+        default: "actionable business insights"
+        description: Business objectives
+      - name: statistical_rigor
+        type: string
+        required: false
+        description: Level of statistical rigor
+    enabled: true
+    priority: 10
+
+  - id: data_quality_standards
+    name: Data Quality Standards
+    description: Standards for data quality and validation
+    content: |
+      Ensure data quality:
+      - Check for missing values and outliers
+      - Validate data types and ranges
+      - {{#if quality_thresholds}}Quality thresholds: {{quality_thresholds}}{{/if}}
+      - Document any data limitations
+    variables:
+      - name: quality_thresholds
+        type: string
+        required: false
+        description: Specific quality thresholds
+    enabled: true
+    priority: 20
+
+prompts:
+  # System prompts for analysis contexts
+  - id: system_business_analyst
+    name: Business Data Analyst
+    type: system
+    description: System prompt for business data analysis
+    content: |
+      You are a business data analyst for {{company_type}}.
+      
+      Your responsibilities:
+      - Analyze {{data_sources}} data
+      - Generate insights for {{stakeholders}}
+      - Focus on {{kpis}}
+      - {{#if reporting_format}}Use reporting format: {{reporting_format}}{{/if}}
+      
+      Analysis framework:
+      1. Data exploration and validation
+      2. Statistical analysis
+      3. Trend identification
+      4. Actionable recommendations
+      5. Risk assessment
+    variables:
+      - name: company_type
+        type: string
+        required: true
+        description: Type of company
+      - name: data_sources
+        type: string
+        required: true
+        description: Primary data sources
+      - name: stakeholders
+        type: string
+        required: true
+        description: Target audience
+      - name: kpis
+        type: string
+        required: true
+        description: Key performance indicators
+      - name: reporting_format
+        type: string
+        required: false
+        description: Preferred reporting format
+    category: system
+    tags: [business, analyst]
+
+  # User query templates
+  - id: user_dataset_analysis
+    name: Dataset Analysis Request
+    type: user
+    description: Request to analyze a dataset
+    content: |
+      Please analyze this dataset:
+      
+      Dataset: {{dataset_name}}
+      {{#if dataset_description}}
+      Description: {{dataset_description}}
+      {{/if}}
+      
+      {{#if sample_data}}
+      Sample data:
+      ```
+      {{sample_data}}
+      ```
+      {{/if}}
+      
+      Analysis objectives:
+      {{#each objectives}}
+      - {{this}}
+      {{/each}}
+      
+      {{#if specific_questions}}
+      Specific questions:
+      {{specific_questions}}
+      {{/if}}
+      
+      {{#if constraints}}
+      Constraints: {{constraints}}
+      {{/if}}
+    variables:
+      - name: dataset_name
+        type: string
+        required: true
+        description: Dataset name
+      - name: dataset_description
+        type: string
+        required: false
+        description: Dataset description
+      - name: sample_data
+        type: string
+        required: false
+        description: Sample of the data
+      - name: objectives
+        type: array
+        required: true
+        description: Analysis objectives
+      - name: specific_questions
+        type: string
+        required: false
+        description: Specific questions to answer
+      - name: constraints
+        type: string
+        required: false
+        description: Analysis constraints
+    category: user
+    tags: [dataset, analysis]
+
+  - id: user_metric_calculation
+    name: Metric Calculation Request
+    type: user
+    description: Request to calculate specific metrics
+    content: |
+      Calculate the following metrics:
+      
+      {{#each metrics}}
+      - {{this}}
+      {{/each}}
+      
+      Data source: {{data_source}}
+      Time period: {{time_period}}
+      
+      {{#if grouping}}
+      Group by: {{grouping}}
+      {{/if}}
+      
+      {{#if filters}}
+      Apply filters:
+      {{filters}}
+      {{/if}}
+      
+      {{#if comparison}}
+      Compare with: {{comparison}}
+      {{/if}}
+    variables:
+      - name: metrics
+        type: array
+        required: true
+        description: Metrics to calculate
+      - name: data_source
+        type: string
+        required: true
+        description: Data source
+      - name: time_period
+        type: string
+        required: true
+        description: Time period
+      - name: grouping
+        type: string
+        required: false
+        description: Grouping criteria
+      - name: filters
+        type: string
+        required: false
+        description: Filters to apply
+      - name: comparison
+        type: string
+        required: false
+        description: Comparison period/benchmark
+    category: user
+    tags: [metrics, calculation]
+
+  # Assistant response templates
+  - id: assistant_analysis_report
+    name: Data Analysis Report
+    type: assistant
+    description: Comprehensive analysis report
+    content: |
+      # Data Analysis Report: {{title}}
+      
+      ## Executive Summary
+      {{executive_summary}}
+      
+      ## Data Overview
+      - Dataset: {{dataset_info}}
+      - Time period: {{time_period}}
+      - Records analyzed: {{record_count}}
+      - {{#if data_quality}}Data quality: {{data_quality}}{{/if}}
+      
+      ## Key Findings
+      {{#each key_findings}}
+      {{@index}}. {{this}}
+      {{/each}}
+      
+      ## Statistical Analysis
+      {{statistical_analysis}}
+      
+      {{#if visualizations}}
+      ## Visualizations
+      {{visualizations}}
+      {{/if}}
+      
+      ## Insights
+      {{insights}}
+      
+      ## Recommendations
+      {{#each recommendations}}
+      - {{this}}
+      {{/each}}
+      
+      {{#if limitations}}
+      ## Limitations
+      {{limitations}}
+      {{/if}}
+      
+      {{#if next_steps}}
+      ## Next Steps
+      {{next_steps}}
+      {{/if}}
+    variables:
+      - name: title
+        type: string
+        required: true
+        description: Report title
+      - name: executive_summary
+        type: string
+        required: true
+        description: Executive summary
+      - name: dataset_info
+        type: string
+        required: true
+        description: Dataset information
+      - name: time_period
+        type: string
+        required: true
+        description: Analysis time period
+      - name: record_count
+        type: number
+        required: true
+        description: Number of records
+      - name: data_quality
+        type: string
+        required: false
+        description: Data quality assessment
+      - name: key_findings
+        type: array
+        required: true
+        description: Key findings
+      - name: statistical_analysis
+        type: string
+        required: true
+        description: Statistical analysis results
+      - name: visualizations
+        type: string
+        required: false
+        description: Visualization descriptions
+      - name: insights
+        type: string
+        required: true
+        description: Business insights
+      - name: recommendations
+        type: array
+        required: true
+        description: Recommendations
+      - name: limitations
+        type: string
+        required: false
+        description: Analysis limitations
+      - name: next_steps
+        type: string
+        required: false
+        description: Suggested next steps
+    category: assistant
+    tags: [report, analysis]
+
+  # Query templates
+  - id: query_sql_generation
+    name: SQL Query Generation
+    type: query
+    description: Generate SQL queries for analysis
+    content: |
+      Generate SQL query:
+      
+      Objective: {{objective}}
+      
+      Tables:
+      {{#each tables}}
+      - {{this}}
+      {{/each}}
+      
+      {{#if joins}}
+      Required joins:
+      {{joins}}
+      {{/if}}
+      
+      {{#if conditions}}
+      Conditions:
+      {{conditions}}
+      {{/if}}
+      
+      {{#if aggregations}}
+      Aggregations:
+      {{aggregations}}
+      {{/if}}
+      
+      {{#if ordering}}
+      Order by: {{ordering}}
+      {{/if}}
+      
+      {{#if limit}}
+      Limit: {{limit}}
+      {{/if}}
+    variables:
+      - name: objective
+        type: string
+        required: true
+        description: Query objective
+      - name: tables
+        type: array
+        required: true
+        description: Tables to query
+      - name: joins
+        type: string
+        required: false
+        description: Join conditions
+      - name: conditions
+        type: string
+        required: false
+        description: WHERE conditions
+      - name: aggregations
+        type: string
+        required: false
+        description: GROUP BY aggregations
+      - name: ordering
+        type: string
+        required: false
+        description: ORDER BY clause
+      - name: limit
+        type: number
+        required: false
+        description: Result limit
+    category: query
+    tags: [sql, database]
+
+  # Instruction templates
+  - id: instruction_data_cleaning
+    name: Data Cleaning Instructions
+    type: instruction
+    description: Step-by-step data cleaning guide
+    content: |
+      ## Data Cleaning Process for {{dataset_name}}
+      
+      ### Pre-cleaning Assessment
+      - Total records: {{total_records}}
+      - Columns: {{columns}}
+      - Data types: {{data_types}}
+      
+      ### Cleaning Steps
+      {{#each cleaning_steps}}
+      
+      #### Step {{@index}}: {{this.name}}
+      {{this.description}}
+      
+      {{#if this.code}}
+      Code:
+      ```{{this.language}}
+      {{this.code}}
+      ```
+      {{/if}}
+      
+      Expected impact: {{this.impact}}
+      {{/each}}
+      
+      {{#if validation}}
+      ### Validation
+      {{validation}}
+      {{/if}}
+      
+      {{#if documentation}}
+      ### Documentation
+      {{documentation}}
+      {{/if}}
+    variables:
+      - name: dataset_name
+        type: string
+        required: true
+        description: Dataset name
+      - name: total_records
+        type: number
+        required: true
+        description: Total number of records
+      - name: columns
+        type: string
+        required: true
+        description: Column list
+      - name: data_types
+        type: string
+        required: true
+        description: Data types
+      - name: cleaning_steps
+        type: array
+        required: true
+        description: Cleaning steps
+      - name: validation
+        type: string
+        required: false
+        description: Validation steps
+      - name: documentation
+        type: string
+        required: false
+        description: Documentation requirements
+    category: instruction
+    tags: [cleaning, preprocessing]
+
+  # Context templates
+  - id: context_business_context
+    name: Business Context
+    type: context
+    description: Provides business context for analysis
+    content: |
+      ## Business Context
+      
+      Industry: {{industry}}
+      Company size: {{company_size}}
+      Market position: {{market_position}}
+      
+      {{#if business_model}}
+      ### Business Model
+      {{business_model}}
+      {{/if}}
+      
+      {{#if competitive_landscape}}
+      ### Competitive Landscape
+      {{competitive_landscape}}
+      {{/if}}
+      
+      {{#if strategic_goals}}
+      ### Strategic Goals
+      {{strategic_goals}}
+      {{/if}}
+      
+      {{#if constraints}}
+      ### Constraints
+      {{constraints}}
+      {{/if}}
+    variables:
+      - name: industry
+        type: string
+        required: true
+        description: Industry sector
+      - name: company_size
+        type: string
+        required: true
+        description: Company size
+      - name: market_position
+        type: string
+        required: true
+        description: Market position
+      - name: business_model
+        type: string
+        required: false
+        description: Business model
+      - name: competitive_landscape
+        type: string
+        required: false
+        description: Competitive landscape
+      - name: strategic_goals
+        type: string
+        required: false
+        description: Strategic goals
+      - name: constraints
+        type: string
+        required: false
+        description: Business constraints
+    category: context
+    tags: [business, context]
+
+  # Response templates
+  - id: response_insight_summary
+    name: Insight Summary
+    type: response
+    description: Summarized insights response
+    content: |
+      ## Insights Summary
+      
+      ### Top {{top_n}} Insights
+      {{#each insights}}
+      
+      **Insight {{@index}}:** {{this.title}}
+      - Finding: {{this.finding}}
+      - Impact: {{this.impact}}
+      - Confidence: {{this.confidence}}%
+      - Action: {{this.action}}
+      {{/each}}
+      
+      {{#if trends}}
+      ### Trends Identified
+      {{trends}}
+      {{/if}}
+      
+      {{#if anomalies}}
+      ### Anomalies Detected
+      {{anomalies}}
+      {{/if}}
+      
+      {{#if correlations}}
+      ### Correlations
+      {{correlations}}
+      {{/if}}
+      
+      ### Bottom Line
+      {{bottom_line}}
+    variables:
+      - name: top_n
+        type: number
+        required: false
+        default: 3
+        description: Number of top insights
+      - name: insights
+        type: array
+        required: true
+        description: List of insights
+      - name: trends
+        type: string
+        required: false
+        description: Trends identified
+      - name: anomalies
+        type: string
+        required: false
+        description: Anomalies detected
+      - name: correlations
+        type: string
+        required: false
+        description: Correlations found
+      - name: bottom_line
+        type: string
+        required: true
+        description: Summary conclusion
+    category: response
+    tags: [insights, summary]
+
+  # Multiple similar prompts showing variations
+  - id: simple_stat_1
+    name: Simple Statistic v1
+    type: assistant
+    description: Basic statistic
+    content: "{{metric}}: {{value}}"
+    variables:
+      - name: metric
+        type: string
+        required: true
+        description: Metric name
+      - name: value
+        type: string
+        required: true
+        description: Metric value
+    category: variations
+    tags: [simple, statistic]
+
+  - id: simple_stat_2
+    name: Simple Statistic v2
+    type: assistant
+    description: Statistic with change
+    content: "{{metric}}: {{value}} ({{change}}% change)"
+    variables:
+      - name: metric
+        type: string
+        required: true
+        description: Metric name
+      - name: value
+        type: string
+        required: true
+        description: Metric value
+      - name: change
+        type: number
+        required: true
+        description: Percentage change
+    category: variations
+    tags: [simple, statistic]
+
+  - id: simple_stat_3
+    name: Simple Statistic v3
+    type: assistant
+    description: Detailed statistic
+    content: |
+      {{metric}}:
+      - Current: {{value}}
+      - Previous: {{previous}}
+      - Change: {{change}}%
+      - Trend: {{trend}}
+    variables:
+      - name: metric
+        type: string
+        required: true
+        description: Metric name
+      - name: value
+        type: string
+        required: true
+        description: Current value
+      - name: previous
+        type: string
+        required: true
+        description: Previous value
+      - name: change
+        type: number
+        required: true
+        description: Percentage change
+      - name: trend
+        type: string
+        required: true
+        validation:
+          enum: [increasing, decreasing, stable]
+        description: Trend direction
+    category: variations
+    tags: [simple, statistic]

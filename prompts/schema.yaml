@@ -1,0 +1,275 @@
+# LlamaFarm Prompts Schema
+# JSON-Schema compliant prompt configuration in YAML format
+
+$schema: http://json-schema.org/draft-07/schema#
+title: LlamaFarm Prompts Configuration
+description: Schema for defining global and specific prompts with full variable support
+type: object
+required:
+  - version
+  - global_prompts
+  - prompts
+
+properties:
+  version:
+    type: string
+    description: Schema version for compatibility
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    example: "1.0.0"
+
+  metadata:
+    type: object
+    description: Optional metadata about this prompt configuration
+    properties:
+      name:
+        type: string
+        description: Name of this prompt collection
+      description:
+        type: string
+        description: Description of what these prompts are for
+      author:
+        type: string
+        description: Author of the prompts
+      tags:
+        type: array
+        items:
+          type: string
+        description: Tags for categorization
+      created_at:
+        type: string
+        format: date-time
+        description: When this configuration was created
+      updated_at:
+        type: string
+        format: date-time
+        description: When this configuration was last updated
+
+  global_prompts:
+    type: array
+    description: Global prompts that apply across all interactions
+    items:
+      type: object
+      required:
+        - id
+        - name
+        - content
+      properties:
+        id:
+          type: string
+          description: Unique identifier for this global prompt
+          pattern: "^[a-z0-9_]+$"
+        name:
+          type: string
+          description: Human-readable name
+        description:
+          type: string
+          description: What this global prompt does
+        content:
+          type: string
+          description: The actual prompt content with variable placeholders
+        variables:
+          type: array
+          description: Variables used in this prompt
+          items:
+            type: object
+            required:
+              - name
+              - type
+            properties:
+              name:
+                type: string
+                description: Variable name (used in content as {{variable_name}})
+              type:
+                type: string
+                enum: [string, number, boolean, array, object]
+                description: Data type of the variable
+              required:
+                type: boolean
+                default: false
+                description: Whether this variable is required
+              default:
+                description: Default value if not provided
+              description:
+                type: string
+                description: What this variable is for
+              validation:
+                type: object
+                description: Optional validation rules
+                properties:
+                  min_length:
+                    type: integer
+                  max_length:
+                    type: integer
+                  pattern:
+                    type: string
+                  enum:
+                    type: array
+        enabled:
+          type: boolean
+          default: true
+          description: Whether this global prompt is active
+        priority:
+          type: integer
+          default: 100
+          description: Priority for applying multiple global prompts (lower = higher priority)
+        conditions:
+          type: object
+          description: Optional conditions for when to apply this global prompt
+          properties:
+            domains:
+              type: array
+              items:
+                type: string
+              description: Only apply for these domains
+            contexts:
+              type: array
+              items:
+                type: string
+              description: Only apply in these contexts
+
+  prompts:
+    type: array
+    description: Specific prompts for different purposes
+    items:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - content
+      properties:
+        id:
+          type: string
+          description: Unique identifier for this prompt
+          pattern: "^[a-z0-9_]+$"
+        name:
+          type: string
+          description: Human-readable name
+        type:
+          type: string
+          enum: [system, user, assistant, function, tool, example, instruction, context, query, response]
+          description: The type/role of this prompt
+        description:
+          type: string
+          description: What this prompt is for
+        content:
+          type: string
+          description: The actual prompt content with variable placeholders
+        variables:
+          type: array
+          description: Variables used in this prompt
+          items:
+            type: object
+            required:
+              - name
+              - type
+            properties:
+              name:
+                type: string
+                description: Variable name (used in content as {{variable_name}})
+              type:
+                type: string
+                enum: [string, number, boolean, array, object]
+                description: Data type of the variable
+              required:
+                type: boolean
+                default: false
+                description: Whether this variable is required
+              default:
+                description: Default value if not provided
+              description:
+                type: string
+                description: What this variable is for
+              validation:
+                type: object
+                description: Optional validation rules
+                properties:
+                  min_length:
+                    type: integer
+                  max_length:
+                    type: integer
+                  pattern:
+                    type: string
+                  enum:
+                    type: array
+                  min:
+                    type: number
+                  max:
+                    type: number
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorization
+        category:
+          type: string
+          description: Category this prompt belongs to
+        examples:
+          type: array
+          description: Example usage of this prompt
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: Name of this example
+              variables:
+                type: object
+                description: Variable values for this example
+              expected_output:
+                type: string
+                description: What the expected output looks like
+        metadata:
+          type: object
+          description: Additional metadata
+          properties:
+            version:
+              type: string
+              description: Version of this specific prompt
+            author:
+              type: string
+              description: Author of this prompt
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            model_preferences:
+              type: object
+              description: Preferred model settings
+              properties:
+                temperature:
+                  type: number
+                  minimum: 0
+                  maximum: 2
+                max_tokens:
+                  type: integer
+                  minimum: 1
+                top_p:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+
+# Example of a minimal valid configuration
+examples:
+  - version: "1.0.0"
+    global_prompts:
+      - id: base_system
+        name: Base System Prompt
+        content: "You are a helpful AI assistant. {{context}}"
+        variables:
+          - name: context
+            type: string
+            required: false
+            description: Additional context
+    prompts:
+      - id: simple_query
+        name: Simple Query
+        type: user
+        content: "{{question}}"
+        variables:
+          - name: question
+            type: string
+            required: true
+            description: The user's question

@@ -1,0 +1,603 @@
+# Code Review Prompts
+# Specialized prompts for code analysis and review
+
+version: "1.0.0"
+
+metadata:
+  name: Code Review Prompts
+  description: Prompts optimized for code review, analysis, and technical documentation
+  author: LlamaFarm Team
+  tags:
+    - code-review
+    - programming
+    - technical
+
+global_prompts:
+  - id: code_reviewer_persona
+    name: Code Reviewer Persona
+    description: Expert code reviewer with focus on best practices
+    content: |
+      You are an experienced {{language}} developer and code reviewer.
+      
+      Your review approach:
+      - Focus on {{review_focus}}
+      - Consider {{coding_standards}}
+      - {{#if team_conventions}}Follow team conventions: {{team_conventions}}{{/if}}
+      - Provide constructive feedback with examples
+      - Suggest improvements, not just identify problems
+    variables:
+      - name: language
+        type: string
+        required: true
+        default: "software"
+        description: Primary programming language
+      - name: review_focus
+        type: string
+        required: false
+        default: "readability, maintainability, and performance"
+        description: Areas to focus on
+      - name: coding_standards
+        type: string
+        required: false
+        default: "industry best practices"
+        description: Coding standards to follow
+      - name: team_conventions
+        type: string
+        required: false
+        description: Team-specific conventions
+    enabled: true
+    priority: 10
+
+  - id: security_awareness
+    name: Security Review Guidelines
+    description: Security considerations for code review
+    content: |
+      Always check for security vulnerabilities:
+      - Input validation and sanitization
+      - Authentication and authorization
+      - Data encryption and protection
+      - {{#if security_checklist}}Additional checks: {{security_checklist}}{{/if}}
+    variables:
+      - name: security_checklist
+        type: string
+        required: false
+        description: Additional security checks
+    enabled: true
+    priority: 15
+
+prompts:
+  # System prompts for different review contexts
+  - id: system_pull_request_review
+    name: Pull Request Reviewer
+    type: system
+    description: System prompt for PR reviews
+    content: |
+      You are reviewing a pull request for {{repository}}.
+      
+      Review criteria:
+      - Code quality and style
+      - Test coverage (minimum {{test_coverage}}%)
+      - Documentation updates
+      - Breaking changes
+      - Performance impact
+      
+      {{#if pr_template}}
+      PR must follow template:
+      {{pr_template}}
+      {{/if}}
+      
+      Provide feedback in the following format:
+      1. Summary of changes
+      2. Issues that must be fixed
+      3. Suggestions for improvement
+      4. Approval decision
+    variables:
+      - name: repository
+        type: string
+        required: true
+        description: Repository name
+      - name: test_coverage
+        type: number
+        required: false
+        default: 80
+        description: Required test coverage
+      - name: pr_template
+        type: string
+        required: false
+        description: PR template requirements
+    category: system
+    tags: [pull-request, review]
+
+  # User prompts for code submission
+  - id: user_code_submission
+    name: Code Review Request
+    type: user
+    description: Submitting code for review
+    content: |
+      Please review the following {{language}} code:
+      
+      ```{{language}}
+      {{code}}
+      ```
+      
+      {{#if context}}
+      Context: {{context}}
+      {{/if}}
+      
+      {{#if specific_concerns}}
+      Specific concerns:
+      {{specific_concerns}}
+      {{/if}}
+      
+      {{#if performance_requirements}}
+      Performance requirements:
+      {{performance_requirements}}
+      {{/if}}
+    variables:
+      - name: language
+        type: string
+        required: true
+        description: Programming language
+      - name: code
+        type: string
+        required: true
+        description: Code to review
+      - name: context
+        type: string
+        required: false
+        description: Code context
+      - name: specific_concerns
+        type: string
+        required: false
+        description: Areas of concern
+      - name: performance_requirements
+        type: string
+        required: false
+        description: Performance needs
+    category: user
+    tags: [submission, code]
+
+  - id: user_refactor_request
+    name: Refactoring Request
+    type: user
+    description: Request for code refactoring
+    content: |
+      Please refactor this code:
+      
+      ```{{language}}
+      {{original_code}}
+      ```
+      
+      Refactoring goals:
+      {{#each goals}}
+      - {{this}}
+      {{/each}}
+      
+      {{#if constraints}}
+      Constraints:
+      {{constraints}}
+      {{/if}}
+      
+      {{#if maintain_compatibility}}
+      Must maintain backward compatibility: {{maintain_compatibility}}
+      {{/if}}
+    variables:
+      - name: language
+        type: string
+        required: true
+        description: Programming language
+      - name: original_code
+        type: string
+        required: true
+        description: Code to refactor
+      - name: goals
+        type: array
+        required: true
+        description: Refactoring goals
+      - name: constraints
+        type: string
+        required: false
+        description: Refactoring constraints
+      - name: maintain_compatibility
+        type: boolean
+        required: false
+        default: true
+        description: Maintain compatibility
+    category: user
+    tags: [refactor, improvement]
+
+  # Assistant response templates
+  - id: assistant_review_summary
+    name: Code Review Summary
+    type: assistant
+    description: Comprehensive code review response
+    content: |
+      ## Code Review Summary
+      
+      **Overall Assessment:** {{overall_rating}}/10
+      
+      ### Strengths
+      {{strengths}}
+      
+      ### Issues Found
+      {{#if critical_issues}}
+      #### Critical (Must Fix)
+      {{critical_issues}}
+      {{/if}}
+      
+      {{#if major_issues}}
+      #### Major (Should Fix)
+      {{major_issues}}
+      {{/if}}
+      
+      {{#if minor_issues}}
+      #### Minor (Consider Fixing)
+      {{minor_issues}}
+      {{/if}}
+      
+      ### Suggestions
+      {{suggestions}}
+      
+      {{#if code_examples}}
+      ### Improved Code Examples
+      {{code_examples}}
+      {{/if}}
+      
+      ### Decision: {{decision}}
+    variables:
+      - name: overall_rating
+        type: number
+        required: true
+        validation:
+          min: 1
+          max: 10
+        description: Overall code rating
+      - name: strengths
+        type: string
+        required: true
+        description: Code strengths
+      - name: critical_issues
+        type: string
+        required: false
+        description: Critical issues
+      - name: major_issues
+        type: string
+        required: false
+        description: Major issues
+      - name: minor_issues
+        type: string
+        required: false
+        description: Minor issues
+      - name: suggestions
+        type: string
+        required: true
+        description: Improvement suggestions
+      - name: code_examples
+        type: string
+        required: false
+        description: Example improvements
+      - name: decision
+        type: string
+        required: true
+        validation:
+          enum: [approved, needs_changes, rejected]
+        description: Review decision
+    category: assistant
+    tags: [review, summary]
+
+  # Function templates for code operations
+  - id: function_run_tests
+    name: Run Test Suite
+    type: function
+    description: Execute test suite for code
+    content: |
+      Execute test suite:
+      - Test framework: {{framework}}
+      - Test files: {{test_pattern}}
+      - Coverage requirement: {{coverage_threshold}}%
+      
+      {{#if test_environment}}
+      Environment:
+      {{test_environment}}
+      {{/if}}
+      
+      {{#if specific_tests}}
+      Focus on tests:
+      {{specific_tests}}
+      {{/if}}
+    variables:
+      - name: framework
+        type: string
+        required: true
+        description: Test framework
+      - name: test_pattern
+        type: string
+        required: true
+        default: "*.test.js"
+        description: Test file pattern
+      - name: coverage_threshold
+        type: number
+        required: false
+        default: 80
+        description: Coverage threshold
+      - name: test_environment
+        type: object
+        required: false
+        description: Test environment config
+      - name: specific_tests
+        type: array
+        required: false
+        description: Specific tests to run
+    category: function
+    tags: [testing, validation]
+
+  # Instruction templates
+  - id: instruction_debugging_guide
+    name: Debugging Instructions
+    type: instruction
+    description: Step-by-step debugging guide
+    content: |
+      ## Debugging: {{issue_description}}
+      
+      ### Initial Assessment
+      - Error message: {{error_message}}
+      - Affected component: {{component}}
+      - Reproduction steps: {{reproduction_steps}}
+      
+      ### Debugging Steps
+      {{#each debug_steps}}
+      {{@index}}. {{this}}
+      {{/each}}
+      
+      {{#if breakpoints}}
+      ### Suggested Breakpoints
+      {{breakpoints}}
+      {{/if}}
+      
+      {{#if logging}}
+      ### Add Logging
+      {{logging}}
+      {{/if}}
+      
+      {{#if common_causes}}
+      ### Common Causes
+      {{common_causes}}
+      {{/if}}
+    variables:
+      - name: issue_description
+        type: string
+        required: true
+        description: Description of the issue
+      - name: error_message
+        type: string
+        required: true
+        description: Error message
+      - name: component
+        type: string
+        required: true
+        description: Affected component
+      - name: reproduction_steps
+        type: string
+        required: true
+        description: How to reproduce
+      - name: debug_steps
+        type: array
+        required: true
+        description: Debugging steps
+      - name: breakpoints
+        type: string
+        required: false
+        description: Where to set breakpoints
+      - name: logging
+        type: string
+        required: false
+        description: Logging to add
+      - name: common_causes
+        type: string
+        required: false
+        description: Common causes
+    category: instruction
+    tags: [debugging, troubleshooting]
+
+  # Context templates
+  - id: context_codebase_info
+    name: Codebase Context
+    type: context
+    description: Provides codebase context
+    content: |
+      ## Codebase Information
+      
+      Project: {{project_name}}
+      Language: {{primary_language}}
+      Framework: {{framework}}
+      Version: {{version}}
+      
+      {{#if architecture}}
+      ### Architecture
+      {{architecture}}
+      {{/if}}
+      
+      {{#if dependencies}}
+      ### Key Dependencies
+      {{dependencies}}
+      {{/if}}
+      
+      {{#if conventions}}
+      ### Coding Conventions
+      {{conventions}}
+      {{/if}}
+      
+      {{#if related_files}}
+      ### Related Files
+      {{related_files}}
+      {{/if}}
+    variables:
+      - name: project_name
+        type: string
+        required: true
+        description: Project name
+      - name: primary_language
+        type: string
+        required: true
+        description: Primary language
+      - name: framework
+        type: string
+        required: true
+        description: Framework used
+      - name: version
+        type: string
+        required: true
+        description: Project version
+      - name: architecture
+        type: string
+        required: false
+        description: Architecture overview
+      - name: dependencies
+        type: string
+        required: false
+        description: Key dependencies
+      - name: conventions
+        type: string
+        required: false
+        description: Coding conventions
+      - name: related_files
+        type: string
+        required: false
+        description: Related files
+    category: context
+    tags: [codebase, project]
+
+  # Example templates
+  - id: example_code_pattern
+    name: Code Pattern Example
+    type: example
+    description: Shows a code pattern example
+    content: |
+      ## Pattern: {{pattern_name}}
+      
+      ### Bad Example
+      ```{{language}}
+      {{bad_example}}
+      ```
+      Problems: {{bad_explanation}}
+      
+      ### Good Example
+      ```{{language}}
+      {{good_example}}
+      ```
+      Benefits: {{good_explanation}}
+      
+      {{#if use_cases}}
+      ### When to Use
+      {{use_cases}}
+      {{/if}}
+    variables:
+      - name: pattern_name
+        type: string
+        required: true
+        description: Pattern name
+      - name: language
+        type: string
+        required: true
+        description: Programming language
+      - name: bad_example
+        type: string
+        required: true
+        description: Bad example code
+      - name: bad_explanation
+        type: string
+        required: true
+        description: Why it's bad
+      - name: good_example
+        type: string
+        required: true
+        description: Good example code
+      - name: good_explanation
+        type: string
+        required: true
+        description: Why it's good
+      - name: use_cases
+        type: string
+        required: false
+        description: When to use this pattern
+    category: example
+    tags: [pattern, best-practice]
+
+  # Multiple similar prompts showing variations
+  - id: simple_fix_1
+    name: Simple Fix v1
+    type: assistant
+    description: Quick fix suggestion
+    content: "Change line {{line_number}} to: `{{fix}}`"
+    variables:
+      - name: line_number
+        type: number
+        required: true
+        description: Line number
+      - name: fix
+        type: string
+        required: true
+        description: The fix
+    category: variations
+    tags: [simple, fix]
+
+  - id: simple_fix_2
+    name: Simple Fix v2
+    type: assistant
+    description: Fix with explanation
+    content: |
+      Line {{line_number}}: `{{fix}}`
+      Reason: {{reason}}
+    variables:
+      - name: line_number
+        type: number
+        required: true
+        description: Line number
+      - name: fix
+        type: string
+        required: true
+        description: The fix
+      - name: reason
+        type: string
+        required: true
+        description: Why this fix
+    category: variations
+    tags: [simple, fix]
+
+  - id: simple_fix_3
+    name: Simple Fix v3
+    type: assistant
+    description: Detailed fix
+    content: |
+      Issue on line {{line_number}}:
+      
+      Replace:
+      ```
+      {{original}}
+      ```
+      
+      With:
+      ```
+      {{fix}}
+      ```
+      
+      This fixes: {{issue}}
+    variables:
+      - name: line_number
+        type: number
+        required: true
+        description: Line number
+      - name: original
+        type: string
+        required: true
+        description: Original code
+      - name: fix
+        type: string
+        required: true
+        description: Fixed code
+      - name: issue
+        type: string
+        required: true
+        description: What it fixes
+    category: variations
+    tags: [simple, fix]

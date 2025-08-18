@@ -1,0 +1,559 @@
+# Default Prompts Configuration
+# This file contains all prompt types without specific use-case customization
+
+version: "1.0.0"
+
+metadata:
+  name: Default Prompts Collection
+  description: Standard prompts with all types for general use
+  author: LlamaFarm Team
+  tags:
+    - default
+    - standard
+    - general
+
+global_prompts:
+  - id: base_system
+    name: Base System Instructions
+    description: Core system behavior that applies to all interactions
+    content: |
+      You are a helpful AI assistant. 
+      {{#if expertise}}You have expertise in {{expertise}}.{{/if}}
+      {{#if tone}}Please maintain a {{tone}} tone.{{/if}}
+      {{#if constraints}}
+      Important constraints:
+      {{constraints}}
+      {{/if}}
+    variables:
+      - name: expertise
+        type: string
+        required: false
+        description: Domain expertise to emphasize
+      - name: tone
+        type: string
+        required: false
+        default: professional
+        description: Communication tone
+        validation:
+          enum: [professional, friendly, formal, casual, technical]
+      - name: constraints
+        type: string
+        required: false
+        description: Any constraints or rules to follow
+    enabled: true
+    priority: 10
+
+  - id: safety_guidelines
+    name: Safety Guidelines
+    description: Safety and ethical guidelines for responses
+    content: |
+      Always prioritize safety and ethical considerations.
+      {{#if safety_level}}Safety level: {{safety_level}}{{/if}}
+      {{#if forbidden_topics}}
+      Do not discuss: {{forbidden_topics}}
+      {{/if}}
+    variables:
+      - name: safety_level
+        type: string
+        required: false
+        default: standard
+        validation:
+          enum: [minimal, standard, strict]
+      - name: forbidden_topics
+        type: array
+        required: false
+        description: Topics to avoid
+    enabled: true
+    priority: 20
+
+  - id: context_awareness
+    name: Context Awareness
+    description: Instructions for handling context
+    content: |
+      {{#if context}}
+      Consider the following context:
+      {{context}}
+      {{/if}}
+      {{#if history}}
+      Previous conversation:
+      {{history}}
+      {{/if}}
+    variables:
+      - name: context
+        type: string
+        required: false
+        description: Relevant context information
+      - name: history
+        type: array
+        required: false
+        description: Conversation history
+    enabled: true
+    priority: 30
+
+prompts:
+  # System Prompts
+  - id: system_basic
+    name: Basic System Prompt
+    type: system
+    description: Simple system instruction
+    content: "{{instruction}}"
+    variables:
+      - name: instruction
+        type: string
+        required: true
+        description: The system instruction
+    category: system
+    tags: [basic, system]
+
+  - id: system_role
+    name: Role-Based System Prompt
+    type: system
+    description: System prompt with specific role
+    content: |
+      You are a {{role}}.
+      {{#if responsibilities}}
+      Your responsibilities include:
+      {{responsibilities}}
+      {{/if}}
+      {{#if guidelines}}
+      Follow these guidelines:
+      {{guidelines}}
+      {{/if}}
+    variables:
+      - name: role
+        type: string
+        required: true
+        description: The role to assume
+      - name: responsibilities
+        type: string
+        required: false
+        description: Key responsibilities
+      - name: guidelines
+        type: string
+        required: false
+        description: Guidelines to follow
+    category: system
+    tags: [role, system]
+
+  # User Prompts
+  - id: user_simple
+    name: Simple User Query
+    type: user
+    description: Basic user question
+    content: "{{question}}"
+    variables:
+      - name: question
+        type: string
+        required: true
+        description: The user's question
+    category: user
+    tags: [simple, query]
+
+  - id: user_detailed
+    name: Detailed User Request
+    type: user
+    description: User request with context and requirements
+    content: |
+      {{request}}
+      {{#if context}}
+      Context: {{context}}
+      {{/if}}
+      {{#if requirements}}
+      Requirements:
+      {{requirements}}
+      {{/if}}
+      {{#if examples}}
+      Examples:
+      {{examples}}
+      {{/if}}
+    variables:
+      - name: request
+        type: string
+        required: true
+        description: The main request
+      - name: context
+        type: string
+        required: false
+        description: Additional context
+      - name: requirements
+        type: string
+        required: false
+        description: Specific requirements
+      - name: examples
+        type: string
+        required: false
+        description: Examples to consider
+    category: user
+    tags: [detailed, request]
+
+  # Assistant Prompts
+  - id: assistant_response
+    name: Assistant Response Template
+    type: assistant
+    description: Template for assistant responses
+    content: |
+      {{#if greeting}}{{greeting}}{{/if}}
+      
+      {{response}}
+      
+      {{#if follow_up}}
+      {{follow_up}}
+      {{/if}}
+      {{#if resources}}
+      Additional resources:
+      {{resources}}
+      {{/if}}
+    variables:
+      - name: greeting
+        type: string
+        required: false
+        description: Optional greeting
+      - name: response
+        type: string
+        required: true
+        description: Main response content
+      - name: follow_up
+        type: string
+        required: false
+        description: Follow-up questions or actions
+      - name: resources
+        type: string
+        required: false
+        description: Additional resources or links
+    category: assistant
+    tags: [response, assistant]
+
+  # Function Prompts
+  - id: function_call
+    name: Function Call Template
+    type: function
+    description: Template for function/tool calls
+    content: |
+      Execute function: {{function_name}}
+      Parameters:
+      {{#each parameters}}
+      - {{@key}}: {{this}}
+      {{/each}}
+      {{#if expected_output}}
+      Expected output format: {{expected_output}}
+      {{/if}}
+    variables:
+      - name: function_name
+        type: string
+        required: true
+        description: Name of the function to call
+      - name: parameters
+        type: object
+        required: true
+        description: Function parameters
+      - name: expected_output
+        type: string
+        required: false
+        description: Expected output format
+    category: function
+    tags: [function, tool]
+
+  # Tool Prompts
+  - id: tool_use
+    name: Tool Use Template
+    type: tool
+    description: Template for using external tools
+    content: |
+      Use tool: {{tool_name}}
+      {{#if tool_description}}
+      Description: {{tool_description}}
+      {{/if}}
+      Input: {{input}}
+      {{#if config}}
+      Configuration:
+      {{config}}
+      {{/if}}
+    variables:
+      - name: tool_name
+        type: string
+        required: true
+        description: Name of the tool
+      - name: tool_description
+        type: string
+        required: false
+        description: What the tool does
+      - name: input
+        type: string
+        required: true
+        description: Input for the tool
+      - name: config
+        type: object
+        required: false
+        description: Tool configuration
+    category: tool
+    tags: [tool, external]
+
+  # Example Prompts
+  - id: example_demonstration
+    name: Example Demonstration
+    type: example
+    description: Template for showing examples
+    content: |
+      Example {{#if example_number}}#{{example_number}}{{/if}}:
+      
+      Input: {{input}}
+      Output: {{output}}
+      {{#if explanation}}
+      Explanation: {{explanation}}
+      {{/if}}
+    variables:
+      - name: example_number
+        type: number
+        required: false
+        description: Example number
+      - name: input
+        type: string
+        required: true
+        description: Example input
+      - name: output
+        type: string
+        required: true
+        description: Example output
+      - name: explanation
+        type: string
+        required: false
+        description: Explanation of the example
+    category: example
+    tags: [example, demonstration]
+
+  # Instruction Prompts
+  - id: instruction_step_by_step
+    name: Step-by-Step Instructions
+    type: instruction
+    description: Template for step-by-step instructions
+    content: |
+      {{title}}
+      
+      {{#if overview}}
+      Overview: {{overview}}
+      {{/if}}
+      
+      Steps:
+      {{#each steps}}
+      {{@index}}. {{this}}
+      {{/each}}
+      
+      {{#if notes}}
+      Important notes:
+      {{notes}}
+      {{/if}}
+    variables:
+      - name: title
+        type: string
+        required: true
+        description: Title of the instructions
+      - name: overview
+        type: string
+        required: false
+        description: Brief overview
+      - name: steps
+        type: array
+        required: true
+        description: List of steps
+      - name: notes
+        type: string
+        required: false
+        description: Important notes or warnings
+    category: instruction
+    tags: [instruction, tutorial]
+
+  # Context Prompts
+  - id: context_document
+    name: Document Context
+    type: context
+    description: Template for providing document context
+    content: |
+      Document: {{document_title}}
+      {{#if document_type}}Type: {{document_type}}{{/if}}
+      {{#if summary}}
+      Summary: {{summary}}
+      {{/if}}
+      
+      Relevant sections:
+      {{content}}
+      
+      {{#if metadata}}
+      Metadata:
+      {{#each metadata}}
+      - {{@key}}: {{this}}
+      {{/each}}
+      {{/if}}
+    variables:
+      - name: document_title
+        type: string
+        required: true
+        description: Title of the document
+      - name: document_type
+        type: string
+        required: false
+        description: Type of document
+      - name: summary
+        type: string
+        required: false
+        description: Document summary
+      - name: content
+        type: string
+        required: true
+        description: Relevant content
+      - name: metadata
+        type: object
+        required: false
+        description: Document metadata
+    category: context
+    tags: [context, document]
+
+  # Query Prompts
+  - id: query_structured
+    name: Structured Query
+    type: query
+    description: Template for structured queries
+    content: |
+      Query Type: {{query_type}}
+      
+      {{#if filters}}
+      Filters:
+      {{#each filters}}
+      - {{@key}}: {{this}}
+      {{/each}}
+      {{/if}}
+      
+      Question: {{question}}
+      
+      {{#if output_format}}
+      Desired output format: {{output_format}}
+      {{/if}}
+      {{#if constraints}}
+      Constraints: {{constraints}}
+      {{/if}}
+    variables:
+      - name: query_type
+        type: string
+        required: true
+        description: Type of query
+        validation:
+          enum: [search, analysis, comparison, explanation, generation]
+      - name: question
+        type: string
+        required: true
+        description: The main question
+      - name: filters
+        type: object
+        required: false
+        description: Query filters
+      - name: output_format
+        type: string
+        required: false
+        description: Desired output format
+      - name: constraints
+        type: string
+        required: false
+        description: Query constraints
+    category: query
+    tags: [query, structured]
+
+  # Response Prompts
+  - id: response_formatted
+    name: Formatted Response
+    type: response
+    description: Template for formatted responses
+    content: |
+      {{#if status}}Status: {{status}}{{/if}}
+      
+      {{#if summary}}
+      ## Summary
+      {{summary}}
+      {{/if}}
+      
+      ## Response
+      {{content}}
+      
+      {{#if details}}
+      ## Details
+      {{details}}
+      {{/if}}
+      
+      {{#if recommendations}}
+      ## Recommendations
+      {{recommendations}}
+      {{/if}}
+      
+      {{#if next_steps}}
+      ## Next Steps
+      {{next_steps}}
+      {{/if}}
+    variables:
+      - name: status
+        type: string
+        required: false
+        description: Response status
+        validation:
+          enum: [success, partial, failure, pending]
+      - name: summary
+        type: string
+        required: false
+        description: Brief summary
+      - name: content
+        type: string
+        required: true
+        description: Main response content
+      - name: details
+        type: string
+        required: false
+        description: Detailed information
+      - name: recommendations
+        type: string
+        required: false
+        description: Recommendations
+      - name: next_steps
+        type: string
+        required: false
+        description: Suggested next steps
+    category: response
+    tags: [response, formatted]
+
+  # Multiple similar prompts to show variations
+  - id: simple_1
+    name: Simple Prompt Variation 1
+    type: user
+    description: First variation of a simple prompt
+    content: "{{input}}"
+    variables:
+      - name: input
+        type: string
+        required: true
+        description: User input
+    category: variations
+    tags: [simple, variation]
+
+  - id: simple_2
+    name: Simple Prompt Variation 2
+    type: user
+    description: Second variation with prefix
+    content: "Question: {{input}}"
+    variables:
+      - name: input
+        type: string
+        required: true
+        description: User input
+    category: variations
+    tags: [simple, variation]
+
+  - id: simple_3
+    name: Simple Prompt Variation 3
+    type: user
+    description: Third variation with formatting
+    content: |
+      User Query:
+      {{input}}
+    variables:
+      - name: input
+        type: string
+        required: true
+        description: User input
+    category: variations
+    tags: [simple, variation]
