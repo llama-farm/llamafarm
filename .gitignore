@@ -710,3 +710,4 @@ cli/lf*
 
 # generated file when running `uv run python config/compile_schema.py`
 config/schema.deref.yaml
+models/medical-llama3.2-optimized/Modelfile
