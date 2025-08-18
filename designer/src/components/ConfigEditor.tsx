@@ -161,6 +161,8 @@ function ConfigEditor() {
           <div className="col-span-1">
             <textarea
               className="w-full h-full resize-none bg-background text-foreground rounded-md p-3 font-mono text-sm"
+              spellCheck={false}
+              autoComplete="off"
               value={content[activeId] ?? ''}
               onChange={e =>
                 setContent(prev => ({ ...prev, [activeId]: e.target.value }))
