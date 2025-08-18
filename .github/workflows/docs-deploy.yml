@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - fix-docs-deploy
   pull_request:
     branches:
       - main
@@ -38,7 +39,7 @@ jobs:
           path: docs/website/build
 
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
       run:
