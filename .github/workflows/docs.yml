@@ -33,6 +33,9 @@ jobs:
 
       - name: Install Nx CLI
         run: npm install -g nx
+
+      - name: Init nx
+        run: nx init
       - name: Build website
         run: nx build docs
 
