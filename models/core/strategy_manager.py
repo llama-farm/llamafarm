@@ -45,11 +45,6 @@ class StrategyManager:
                 data = yaml.safe_load(f) or {}
                 strategies_list = data.get("strategies", [])
                 
-                # Strategies must be an array
-                if not isinstance(strategies_list, list):
-                    logger.error(f"Strategies must be an array, got {type(strategies_list).__name__}")
-                    return {}
-                
                 # Convert array of strategies to dict keyed by name
                 strategies_dict = {}
                 for strategy in strategies_list:
