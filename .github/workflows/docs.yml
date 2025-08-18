@@ -30,14 +30,8 @@ jobs:
 
       - name: Install dependencies
         run: npm i
-
-      - name: Install Nx CLI
-        run: npm install -g nx
-
-      - name: Init nx
-        run: nx init
       - name: Build website
-        run: nx build docs
+        run: npx --yes nx build docs
 
       # Replace the pages artifact with a regular artifact to reuse in another job
       - name: Upload build artifact
