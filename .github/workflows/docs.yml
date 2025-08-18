@@ -5,9 +5,15 @@ on:
     branches:
       - main
       - fix-docs-deploy
+    paths:
+      - 'docs/website/**'
+      - '.github/workflows/docs.yml'
   pull_request:
     branches:
       - main
+    paths:
+      - 'docs/website/**'
+      - '.github/workflows/docs.yml'
 
 jobs:
   build:
@@ -30,8 +36,11 @@ jobs:
 
       - name: Install dependencies
         run: npm i
+
+      - name: Install Nx CLI
+        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
       - name: Build website
-        run: npx --yes nx build docs
+        run: nx build docs
 
       # Replace the pages artifact with a regular artifact to reuse in another job
       - name: Upload build artifact
