@@ -67,6 +67,28 @@ properties:
                 config:
                   type: object
                   
+            image_recognizer:
+              type: object
+              description: Image recognition and computer vision component
+              properties:
+                type:
+                  type: string
+                  enum: [yolo, opencv, tensorflow, pytorch_vision, custom]
+                config:
+                  type: object
+                  description: Configuration specific to the image recognizer type
+                  
+            image_trainer:
+              type: object
+              description: Image model training component
+              properties:
+                type:
+                  type: string
+                  enum: [yolo_trainer, few_shot_trainer, pytorch_trainer, custom]
+                config:
+                  type: object
+                  description: Configuration specific to the image trainer type
+                  
         fallback_chain:
           type: array
           description: Ordered list of fallback options
@@ -901,6 +923,563 @@ properties:
                     type: boolean
                     default: false
 
+      # =====================================
+      # IMAGE RECOGNITION COMPONENTS
+      # =====================================
+      image_recognizers:
+        type: object
+        description: Image recognition and computer vision components
+        properties:
+          
+          yolo:
+            type: object
+            description: YOLO (You Only Look Once) object detection framework
+            properties:
+              schema:
+                type: object
+                properties:
+                  model:
+                    type: string
+                    description: YOLO model variant to use
+                    enum: [
+                      yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt,
+                      yolov8n-cls.pt, yolov8s-cls.pt, yolov8m-cls.pt,
+                      yolov8n-seg.pt, yolov8s-seg.pt, yolov8m-seg.pt,
+                      yolov9c.pt, yolov9e.pt, yolov10n.pt, yolov10s.pt,
+                      yolo11n.pt, yolo11s.pt, yolo11m.pt, yolo11l.pt, yolo11x.pt
+                    ]
+                    default: yolov8n.pt
+                  device:
+                    type: string
+                    enum: [auto, cpu, cuda, mps]
+                    default: auto
+                    description: |
+                      Compute device selection:
+                      - auto: Automatically detect best available (recommended)
+                      - cpu: CPU only (universal but slower)
+                      - cuda: NVIDIA GPU acceleration
+                      - mps: Apple Silicon GPU acceleration (M1/M2/M3/M4)
+                  confidence:
+                    type: number
+                    minimum: 0.0
+                    maximum: 1.0
+                    default: 0.5
+                    description: Minimum confidence threshold for detections
+                  nms_threshold:
+                    type: number
+                    minimum: 0.0
+                    maximum: 1.0
+                    default: 0.45
+                    description: Non-Maximum Suppression threshold
+                  max_detections:
+                    type: integer
+                    minimum: 1
+                    maximum: 1000
+                    default: 100
+                    description: Maximum number of detections per image
+                  input_size:
+                    type: integer
+                    enum: [320, 416, 512, 640, 832, 1024, 1280]
+                    default: 640
+                    description: Input image size (affects speed vs accuracy)
+                  half_precision:
+                    type: boolean
+                    default: false
+                    description: Use FP16 for faster inference (GPU only)
+                  batch_size:
+                    type: integer
+                    minimum: 1
+                    maximum: 32
+                    default: 1
+                    description: Number of images to process in parallel
+                  cache_images:
+                    type: boolean
+                    default: false
+                    description: Cache preprocessed images for faster repeated inference
+                  classes:
+                    type: array
+                    items:
+                      type: integer
+                    description: Filter detections to specific class IDs (optional)
+                  agnostic_nms:
+                    type: boolean
+                    default: false
+                    description: Class-agnostic Non-Maximum Suppression
+                  augment:
+                    type: boolean
+                    default: false
+                    description: Use test-time augmentation for better accuracy
+                  retina_masks:
+                    type: boolean
+                    default: false
+                    description: Use high-resolution masks (segmentation models only)
+                  
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [
+                    object_detection, classification, segmentation, tracking,
+                    pose_estimation, face_detection, text_detection,
+                    batch_processing, real_time, export_formats
+                  ]
+                default: [object_detection, batch_processing, export_formats]
+                
+              # YOLO setup configuration
+              setup:
+                type: object
+                description: YOLO installation and setup configuration
+                properties:
+                  installer:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [python_package, conda, docker]
+                        default: python_package
+                      platforms:
+                        type: object
+                        properties:
+                          all:
+                            type: object
+                            properties:
+                              method:
+                                type: string
+                                enum: [pip, uv, conda, poetry]
+                                default: pip
+                              package_name:
+                                type: string
+                                default: ultralytics
+                              version:
+                                type: string
+                                default: ">=8.0.0"
+                              install_command:
+                                type: string
+                                default: "pip install ultralytics>=8.0.0"
+                              verify_command:
+                                type: string
+                                default: "python -c 'from ultralytics import YOLO; print(YOLO.__version__)'"
+                  dependencies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [python, system]
+                        version:
+                          type: string
+                        optional:
+                          type: boolean
+                    default:
+                      - name: torch
+                        type: python
+                        version: ">=1.8.0"
+                      - name: torchvision
+                        type: python
+                        version: ">=0.9.0"
+                      - name: opencv-python
+                        type: python
+                        version: ">=4.5.0"
+                      - name: pillow
+                        type: python
+                        version: ">=8.0.0"
+                      - name: numpy
+                        type: python
+                        version: ">=1.18.0"
+                      - name: pandas
+                        type: python
+                        version: ">=1.1.0"
+                        optional: true
+                      - name: matplotlib
+                        type: python
+                        version: ">=3.3.0"
+                        optional: true
+                  models:
+                    type: object
+                    properties:
+                      repository:
+                        type: string
+                        default: "https://github.com/ultralytics/assets/releases/download"
+                      download_command:
+                        type: string
+                        default: "yolo task=detect mode=predict model={model_name}"
+                      auto_download:
+                        type: boolean
+                        default: true
+                        description: Automatically download models on first use
+                      cache_location:
+                        type: string
+                        default: "~/.cache/ultralytics"
+                        description: Directory to cache downloaded models
+                      size_estimates:
+                        type: object
+                        description: Model size estimates in MB
+                        properties:
+                          yolov8n.pt:
+                            type: number
+                            default: 6.2
+                          yolov8s.pt:
+                            type: number
+                            default: 21.5
+                          yolov8m.pt:
+                            type: number
+                            default: 49.7
+                          yolov8l.pt:
+                            type: number
+                            default: 83.7
+                          yolov8x.pt:
+                            type: number
+                            default: 130.5
+                  verification:
+                    type: object
+                    properties:
+                      quick_test:
+                        type: object
+                        properties:
+                          command:
+                            type: string
+                            default: "python -c 'from ultralytics import YOLO; model = YOLO(\"yolov8n.pt\"); print(\"YOLO ready\")'"
+                          timeout_seconds:
+                            type: integer
+                            default: 60
+                      performance_test:
+                        type: object
+                        properties:
+                          command:
+                            type: string
+                            default: "yolo predict model=yolov8n.pt source=ultralytics/assets/bus.jpg"
+                          expected_objects:
+                            type: array
+                            items:
+                              type: string
+                            default: [person, bus]
+                  
+          opencv:
+            type: object
+            description: OpenCV computer vision library integration
+            properties:
+              schema:
+                type: object
+                properties:
+                  backend:
+                    type: string
+                    enum: [opencv, opencv-contrib]
+                    default: opencv
+                  dnn_backend:
+                    type: string
+                    enum: [default, opencv, openvino, cuda, tensorrt]
+                    default: default
+                  cascade_path:
+                    type: string
+                    description: Path to Haar cascade files
+                  model_path:
+                    type: string
+                    description: Path to pre-trained models
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [
+                    image_processing, video_processing, face_detection,
+                    feature_detection, optical_flow, stereo_vision,
+                    dnn_inference, gpu_acceleration
+                  ]
+                  
+          tensorflow:
+            type: object
+            description: TensorFlow-based image recognition
+            properties:
+              schema:
+                type: object
+                properties:
+                  model_format:
+                    type: string
+                    enum: [savedmodel, h5, tflite, tfjs]
+                    default: savedmodel
+                  model_path:
+                    type: string
+                  input_shape:
+                    type: array
+                    items:
+                      type: integer
+                    default: [224, 224, 3]
+                  preprocessing:
+                    type: object
+                    properties:
+                      normalize:
+                        type: boolean
+                        default: true
+                      mean:
+                        type: array
+                        items:
+                          type: number
+                        default: [0.485, 0.456, 0.406]
+                      std:
+                        type: array
+                        items:
+                          type: number
+                        default: [0.229, 0.224, 0.225]
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [
+                    classification, object_detection, segmentation,
+                    transfer_learning, quantization, edge_deployment
+                  ]
+                  
+      # =====================================
+      # IMAGE TRAINING COMPONENTS
+      # =====================================
+      image_trainers:
+        type: object
+        description: Image model training and fine-tuning components
+        properties:
+          
+          yolo_trainer:
+            type: object
+            description: YOLO model training and fine-tuning
+            properties:
+              schema:
+                type: object
+                properties:
+                  base_model:
+                    type: string
+                    enum: [
+                      yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt,
+                      yolov9c.pt, yolov9e.pt, yolov10n.pt, yolov10s.pt,
+                      yolo11n.pt, yolo11s.pt, yolo11m.pt, yolo11l.pt, yolo11x.pt
+                    ]
+                    default: yolov8n.pt
+                  dataset_format:
+                    type: string
+                    enum: [yolo, coco, voc, custom]
+                    default: yolo
+                  dataset_path:
+                    type: string
+                    description: Path to training dataset
+                  epochs:
+                    type: integer
+                    minimum: 1
+                    maximum: 1000
+                    default: 100
+                  batch_size:
+                    type: integer
+                    minimum: 1
+                    maximum: 64
+                    default: 16
+                  image_size:
+                    type: integer
+                    enum: [320, 416, 512, 640, 832, 1024, 1280]
+                    default: 640
+                  learning_rate:
+                    type: number
+                    minimum: 0.0001
+                    maximum: 1.0
+                    default: 0.01
+                  momentum:
+                    type: number
+                    minimum: 0.0
+                    maximum: 1.0
+                    default: 0.937
+                  weight_decay:
+                    type: number
+                    minimum: 0.0
+                    maximum: 1.0
+                    default: 0.0005
+                  augmentation:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: true
+                      hsv_h:
+                        type: number
+                        default: 0.015
+                      hsv_s:
+                        type: number
+                        default: 0.7
+                      hsv_v:
+                        type: number
+                        default: 0.4
+                      degrees:
+                        type: number
+                        default: 0.0
+                      translate:
+                        type: number
+                        default: 0.1
+                      scale:
+                        type: number
+                        default: 0.5
+                      shear:
+                        type: number
+                        default: 0.0
+                      perspective:
+                        type: number
+                        default: 0.0
+                      flipud:
+                        type: number
+                        default: 0.0
+                      fliplr:
+                        type: number
+                        default: 0.5
+                      mosaic:
+                        type: number
+                        default: 1.0
+                      mixup:
+                        type: number
+                        default: 0.0
+                      copy_paste:
+                        type: number
+                        default: 0.0
+                  validation:
+                    type: object
+                    properties:
+                      split:
+                        type: number
+                        minimum: 0.0
+                        maximum: 1.0
+                        default: 0.2
+                      patience:
+                        type: integer
+                        minimum: 1
+                        default: 50
+                      save_best:
+                        type: boolean
+                        default: true
+                  device:
+                    type: string
+                    enum: [auto, cpu, cuda, mps]
+                    default: auto
+                  workers:
+                    type: integer
+                    minimum: 0
+                    maximum: 32
+                    default: 8
+                  project:
+                    type: string
+                    description: Project name for saving results
+                  name:
+                    type: string
+                    description: Experiment name
+                  exist_ok:
+                    type: boolean
+                    default: false
+                    description: Whether to overwrite existing project
+                  pretrained:
+                    type: boolean
+                    default: true
+                    description: Use pretrained weights
+                  optimizer:
+                    type: string
+                    enum: [SGD, Adam, AdamW, NAdam, RAdam, RMSProp]
+                    default: auto
+                  verbose:
+                    type: boolean
+                    default: true
+                  seed:
+                    type: integer
+                    default: 0
+                  deterministic:
+                    type: boolean
+                    default: true
+                  single_cls:
+                    type: boolean
+                    default: false
+                    description: Train as single-class dataset
+                  rect:
+                    type: boolean
+                    default: false
+                    description: Rectangular training
+                  cos_lr:
+                    type: boolean
+                    default: false
+                    description: Cosine learning rate scheduler
+                  close_mosaic:
+                    type: integer
+                    default: 10
+                    description: Disable mosaic augmentation for final epochs
+                  resume:
+                    type: boolean
+                    default: false
+                    description: Resume training from last checkpoint
+                  amp:
+                    type: boolean
+                    default: true
+                    description: Automatic Mixed Precision training
+                  fraction:
+                    type: number
+                    minimum: 0.0
+                    maximum: 1.0
+                    default: 1.0
+                    description: Fraction of dataset to use for training
+                  profile:
+                    type: boolean
+                    default: false
+                    description: Profile ONNX and TensorRT speeds
+                  freeze:
+                    type: array
+                    items:
+                      type: integer
+                    description: Layer indices to freeze during training
+                    
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [
+                    object_detection_training, classification_training,
+                    segmentation_training, transfer_learning, few_shot_learning,
+                    data_augmentation, model_pruning, quantization_aware_training,
+                    hyperparameter_tuning, distributed_training
+                  ]
+                  
+          few_shot_trainer:
+            type: object
+            description: Few-shot learning for image recognition
+            properties:
+              schema:
+                type: object
+                properties:
+                  base_model:
+                    type: string
+                    description: Pre-trained model to fine-tune
+                  support_shots:
+                    type: integer
+                    minimum: 1
+                    maximum: 50
+                    default: 5
+                    description: Number of examples per class
+                  query_shots:
+                    type: integer
+                    minimum: 1
+                    default: 5
+                    description: Number of query examples per class
+                  meta_learning_rate:
+                    type: number
+                    default: 0.001
+                  inner_learning_rate:
+                    type: number
+                    default: 0.01
+                  meta_batch_size:
+                    type: integer
+                    default: 4
+                  adaptation_steps:
+                    type: integer
+                    default: 5
+                  algorithm:
+                    type: string
+                    enum: [maml, prototypical, matching, relation]
+                    default: prototypical
+              capabilities:
+                type: array
+                items:
+                  type: string
+                  enum: [few_shot_detection, few_shot_classification, meta_learning]
+
   # =====================================
   # STRATEGY TEMPLATES
   # =====================================
@@ -940,6 +1519,251 @@ properties:
       research_experimentation:
         type: object
         description: Flexible setup for model research
+        
+      # =====================================
+      # IMAGE RECOGNITION STRATEGY TEMPLATES
+      # =====================================
+      object_detection_pipeline:
+        type: object
+        description: Complete object detection workflow with YOLO
+        properties:
+          components:
+            type: object
+            properties:
+              image_recognizer:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: yolo
+                  config:
+                    type: object
+                    properties:
+                      model:
+                        type: string
+                        default: yolov8n.pt
+                      device:
+                        type: string
+                        default: auto
+                      confidence:
+                        type: number
+                        default: 0.5
+          detection_params:
+            type: object
+            properties:
+              confidence:
+                type: number
+                default: 0.5
+              nms_threshold:
+                type: number
+                default: 0.45
+          visualization:
+            type: object
+            properties:
+              show_labels:
+                type: boolean
+                default: true
+              show_confidence:
+                type: boolean
+                default: true
+        
+      real_time_vision_processing:
+        type: object
+        description: Real-time video processing and object tracking
+        properties:
+          components:
+            type: object
+            properties:
+              image_recognizer:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: yolo
+                  config:
+                    type: object
+                    properties:
+                      model:
+                        type: string
+                        default: yolov8s.pt
+                      device:
+                        type: string
+                        default: auto
+                      half_precision:
+                        type: boolean
+                        default: true
+          optimization:
+            type: object
+            properties:
+              batch_size:
+                type: integer
+                default: 4
+              cache_images:
+                type: boolean
+                default: true
+        
+      edge_device_vision:
+        type: object
+        description: Optimized for mobile and edge devices
+        properties:
+          components:
+            type: object
+            properties:
+              image_recognizer:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: yolo
+                  config:
+                    type: object
+                    properties:
+                      model:
+                        type: string
+                        default: yolov8n.pt
+                      device:
+                        type: string
+                        default: cpu
+                      input_size:
+                        type: integer
+                        default: 320
+          constraints:
+            type: object
+            properties:
+              max_memory_mb:
+                type: integer
+                default: 512
+              max_inference_time_ms:
+                type: integer
+                default: 100
+        
+      industrial_quality_control:
+        type: object
+        description: High-precision defect detection for manufacturing
+        properties:
+          components:
+            type: object
+            properties:
+              image_recognizer:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: yolo
+                  config:
+                    type: object
+                    properties:
+                      model:
+                        type: string
+                        default: yolov8l.pt
+                      confidence:
+                        type: number
+                        default: 0.3
+                      input_size:
+                        type: integer
+                        default: 1024
+              image_trainer:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: yolo_trainer
+                  config:
+                    type: object
+                    properties:
+                      epochs:
+                        type: integer
+                        default: 200
+                      patience:
+                        type: integer
+                        default: 50
+          monitoring:
+            type: object
+            properties:
+              track_accuracy:
+                type: boolean
+                default: true
+              alert_threshold:
+                type: number
+                default: 0.95
+        
+      medical_image_analysis:
+        type: object
+        description: Medical imaging with regulatory compliance
+        properties:
+          components:
+            type: object
+            properties:
+              image_recognizer:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: tensorflow
+                  config:
+                    type: object
+                    properties:
+                      model_format:
+                        type: string
+                        default: savedmodel
+                      preprocessing:
+                        type: object
+                        properties:
+                          normalize:
+                            type: boolean
+                            default: true
+          constraints:
+            type: object
+            properties:
+              privacy_mode:
+                type: string
+                default: local_only
+              audit_logging:
+                type: boolean
+                default: true
+              hipaa_compliant:
+                type: boolean
+                default: true
+        
+      content_moderation_system:
+        type: object
+        description: Automated content filtering and classification
+        properties:
+          components:
+            type: object
+            properties:
+              image_recognizer:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: tensorflow
+                  config:
+                    type: object
+                    properties:
+                      model_path:
+                        type: string
+                        default: "./models/content_classifier"
+          fallback_chain:
+            type: array
+            items:
+              type: object
+              properties:
+                provider:
+                  type: string
+                model:
+                  type: string
+                confidence_threshold:
+                  type: number
+          monitoring:
+            type: object
+            properties:
+              false_positive_tracking:
+                type: boolean
+                default: true
+              human_review_threshold:
+                type: number
+                default: 0.7
 
   # =====================================
   # USE CASE MAPPINGS
@@ -984,6 +1808,107 @@ properties:
         items:
           type: string
         default: [cost_optimized, hybrid_fallback]
+        
+      # =====================================
+      # IMAGE RECOGNITION USE CASES
+      # =====================================
+      object_detection:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_default, image_yolo_performance, image_yolo_accuracy]
+        description: Detect and locate objects in images
+        
+      image_classification:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_classification, tensorflow_classifier]
+        description: Categorize images into predefined classes
+        
+      image_segmentation:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_segmentation, tensorflow_segmentation]
+        description: Pixel-level object detection and segmentation
+        
+      real_time_vision:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_performance, image_apple_silicon_optimized, image_cuda_optimized]
+        description: Real-time image processing for video streams
+        
+      mobile_vision:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_mobile, image_cpu_optimized]
+        description: Image recognition on mobile and edge devices
+        
+      batch_image_processing:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_performance, image_cuda_optimized]
+        description: Process large batches of images efficiently
+        
+      face_detection:
+        type: array
+        items:
+          type: string
+        default: [opencv_face_detector, yolo_face_detector]
+        description: Detect faces in images
+        
+      document_analysis:
+        type: array
+        items:
+          type: string
+        default: [opencv_document_scanner, tensorflow_ocr]
+        description: Analyze and extract information from documents
+        
+      medical_imaging:
+        type: array
+        items:
+          type: string
+        default: [tensorflow_medical, pytorch_medical]
+        description: Medical image analysis and diagnosis
+        
+      security_surveillance:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_performance, real_time_tracker]
+        description: Security and surveillance applications
+        
+      autonomous_vehicles:
+        type: array
+        items:
+          type: string
+        default: [image_yolo_accuracy, multi_camera_fusion]
+        description: Computer vision for autonomous driving
+        
+      industrial_inspection:
+        type: array
+        items:
+          type: string
+        default: [high_precision_detector, defect_classifier]
+        description: Quality control and defect detection
+        
+      retail_analytics:
+        type: array
+        items:
+          type: string
+        default: [product_recognizer, people_counter]
+        description: Retail customer and product analytics
+        
+      content_moderation:
+        type: array
+        items:
+          type: string
+        default: [nsfw_classifier, content_analyzer]
+        description: Automated content moderation and filtering
 
   # =====================================
   # VALIDATION RULES
@@ -1011,6 +1936,13 @@ properties:
                 type: string
             reason:
               type: string
+        default:
+          - components: [image_recognizer, fine_tuner]
+            reason: Image recognition and LLM fine-tuning serve different purposes
+          - components: [yolo, tensorflow]
+            reason: Multiple image recognition frameworks in same strategy not recommended
+          - components: [image_trainer, cloud_api]
+            reason: Image training typically requires local compute resources
               
       performance_thresholds:
         type: object

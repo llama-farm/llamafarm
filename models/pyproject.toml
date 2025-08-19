@@ -54,9 +54,59 @@ dependencies = [
     "protobuf>=4.25.0",
     "numpy<2.0.0",  # Compatibility with other packages
     "jsonref>=1.1.0",
+    # Image recognition dependencies
+    "ultralytics>=8.0.0",  # YOLO models for object detection/segmentation
+    "opencv-python>=4.8.0",  # Computer vision and image processing
+    "opencv-contrib-python>=4.8.0",  # Additional OpenCV modules
+    "pillow>=10.0.0",  # Python Imaging Library
+    "matplotlib>=3.7.0",  # Plotting and visualization
+    "seaborn>=0.12.0",  # Statistical data visualization
+    "scikit-image>=0.21.0",  # Image processing algorithms
+    "albumentations>=1.3.0",  # Image augmentation library
+    "torchvision>=0.15.0",  # PyTorch vision utilities
+    "timm>=0.9.0",  # PyTorch image models
+    "supervision>=0.16.0",  # Computer vision tools
+    "lapx>=0.5.0",  # Linear assignment problem solver
+    "tqdm>=4.66.0",  # Progress bars
+    "pandas>=2.0.0",  # Data manipulation
+    "scipy>=1.10.0",  # Scientific computing
 ]
 
 [project.optional-dependencies]
+image-advanced = [
+    # Advanced image models (future additions)
+    # Note: Some packages may need manual installation
+    "clip-interrogator>=0.6.0",  # CLIP interrogator
+    "transformers>=4.35.0",  # For vision transformers
+]
+image-optimization = [
+    # Platform-specific optimizations
+    "coremltools>=7.0",  # CoreML for Apple Silicon
+    "onnxruntime>=1.16.0",  # ONNX Runtime
+    "onnx>=1.14.0",  # ONNX format
+    "openvino>=2023.2.0",  # Intel OpenVINO
+    "tflite-runtime>=2.14.0",  # TensorFlow Lite
+]
+image-gpu-nvidia = [
+    # NVIDIA-specific (Linux/Windows only - install manually on those platforms)
+    # "tensorrt>=8.6.0",  # TensorRT optimization (Linux/Windows only)
+    # "pycuda>=2022.2",  # CUDA bindings (requires CUDA toolkit)
+    # "cupy>=12.0.0",  # CUDA arrays (requires CUDA toolkit)
+]
+image-tracking = [
+    # Object tracking and video processing
+    "norfair>=2.2.0",  # Object tracking
+    "filterpy>=1.4.5",  # Kalman filters
+    "motpy>=0.0.10",  # Multi-object tracking
+]
+image-ocr = [
+    # OCR and document processing
+    "pytesseract>=0.3.10",  # Tesseract OCR
+    "easyocr>=1.7.0",  # Easy OCR
+    "paddleocr>=2.7.0",  # PaddleOCR
+    "pdf2image>=1.16.0",  # PDF to image conversion
+    "pymupdf>=1.23.0",  # PDF processing
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -89,7 +139,9 @@ finetuning = [
 ]
 
 [project.scripts]
+llamafarm = "cli:main"
 llamafarm-models = "cli:main"
+llamafarm-image = "cli_image_extension:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
