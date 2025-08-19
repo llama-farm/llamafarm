@@ -13,8 +13,8 @@ COPY package*.json ./
 # Disable husky/lifecycle scripts during container installs
 ENV HUSKY=0
 
-# Install dependencies (use lockfile if present) without running scripts
-RUN npm ci --legacy-peer-deps --ignore-scripts || npm install --legacy-peer-deps --ignore-scripts
+# Install dependencies (allow scripts so rollup can install its native binary)
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
