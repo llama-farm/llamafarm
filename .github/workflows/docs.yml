@@ -104,9 +104,10 @@ jobs:
         name: List the state of node modules
         continue-on-error: true
         run: npm list
+        working-directory: docs/website
 
       - name: Install dependencies
-        run: npm i
+        run: npm ci
         working-directory: docs/website
 
       - name: Install Nx CLI
@@ -133,6 +134,7 @@ jobs:
           USE_SSH: true
         working-directory: docs/website
         run: |
+          cp -R .github build/.github
           git config --global user.email "ops@llamafarm.dev"
           git config --global user.name "llama-farm-bot"
           # Re-use build produced in the build job; do not rebuild
