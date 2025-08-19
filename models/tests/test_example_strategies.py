@@ -27,9 +27,10 @@ class TestExampleStrategies:
         strategy = manager.get_strategy("basic_openai")
 
         assert strategy is not None
-        assert strategy["name"] == "basic_openai"
-        assert "cloud_api" in strategy["components"]
-        assert strategy["components"]["cloud_api"]["type"] == "openai_compatible"
+        assert strategy['name'] == "basic_openai"
+        assert strategy['description'] == "Simple cloud-based strategy using OpenAI GPT-4 Turbo"
+        assert 'cloud_api' in strategy['components']
+        assert strategy['components']['cloud_api']['type'] == 'openai_compatible'
 
     def test_load_ollama_strategy(self):
         """Test loading the Ollama local models strategy."""

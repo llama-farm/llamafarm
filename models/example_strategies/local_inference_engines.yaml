@@ -1,0 +1,173 @@
+# Local Inference Engines Strategy
+# Configuration for various local inference engines
+
+strategies:
+  - name: huggingface_transformers
+    description: Run models locally using HuggingFace Transformers
+    
+    components:
+      model_app:
+        type: huggingface
+        config:
+          model_id: microsoft/phi-2
+          device: cuda  # or 'cpu', 'mps' for M1/M2 Macs
+          torch_dtype: float16
+          cache_dir: ~/.cache/huggingface
+          load_in_8bit: false
+          load_in_4bit: false
+          max_length: 2048
+          temperature: 0.7
+    
+    constraints:
+      requires_gpu: true
+      min_vram_gb: 4
+      supported_devices:
+        - cuda
+        - mps
+        - cpu
+    
+    monitoring:
+      track_gpu_usage: true
+      log_level: INFO
+
+  - name: vllm_high_throughput
+    description: High-performance inference with vLLM for production workloads
+    
+    components:
+      model_app:
+        type: vllm
+        config:
+          model: meta-llama/Llama-2-13b-chat-hf
+          tensor_parallel_size: 1
+          gpu_memory_utilization: 0.9
+          max_model_len: 4096
+          download_dir: ./models
+          quantization: awq  # Options: awq, gptq, squeezellm, None
+          dtype: half  # Options: auto, half, float16, bfloat16, float32
+          enforce_eager: false
+          enable_prefix_caching: true
+          max_num_batched_tokens: 32768
+          max_num_seqs: 256
+    
+    # vLLM-specific optimizations
+    performance:
+      swap_space_gb: 4
+      block_size: 16
+      num_gpu_blocks_override: null
+      sliding_window: null
+      enable_chunked_prefill: false
+    
+    constraints:
+      requires_gpu: true
+      min_vram_gb: 24
+      recommended_vram_gb: 40
+    
+    monitoring:
+      track_throughput: true
+      track_latency: true
+      metrics_port: 8001
+      log_level: INFO
+
+  - name: tgi_production_server
+    description: Hugging Face TGI for production-grade inference
+    
+    components:
+      model_app:
+        type: tgi
+        config:
+          model_id: meta-llama/Llama-2-7b-chat-hf
+          endpoint: http://localhost:8080
+          num_shard: 1
+          quantize: bitsandbytes-nf4  # Options: bitsandbytes, bitsandbytes-nf4, gptq, awq, eetq
+          dtype: float16
+          trust_remote_code: false
+          max_concurrent_requests: 128
+          max_input_length: 4096
+          max_total_tokens: 8192
+          max_batch_prefill_tokens: 16384
+          max_batch_total_tokens: 32768
+          waiting_served_ratio: 1.2
+          max_waiting_tokens: 20
+    
+    # TGI deployment configuration
+    deployment:
+      docker_image: ghcr.io/huggingface/text-generation-inference:latest
+      port: 8080
+      shm_size: 1g
+      disable_custom_kernels: false
+      cuda_memory_fraction: 0.95
+      json_output: true
+      otlp_endpoint: null
+    
+    constraints:
+      requires_gpu: true
+      min_vram_gb: 16
+      requires_docker: true
+    
+    monitoring:
+      prometheus_port: 9090
+      track_metrics: true
+      log_level: INFO
+
+  - name: hybrid_local_engines
+    description: Combine multiple local inference engines for flexibility
+    
+    components:
+      # Small, fast model via Ollama
+      ollama_app:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          default_model: llama3.2:3b
+      
+      # Medium model via HuggingFace
+      hf_app:
+        type: huggingface
+        config:
+          model_id: microsoft/phi-2
+          device: cuda
+      
+      # Large model via vLLM (if available)
+      vllm_app:
+        type: vllm
+        config:
+          model: meta-llama/Llama-2-13b-chat-hf
+          gpu_memory_utilization: 0.8
+    
+    # Smart routing based on request requirements
+    routing_rules:
+      - pattern: "quick|simple|fast"
+        provider: ollama_app
+        model: llama3.2:3b
+      - pattern: "medium|standard"
+        provider: hf_app
+        model: microsoft/phi-2
+      - pattern: "complex|detailed|long"
+        provider: vllm_app
+        model: meta-llama/Llama-2-13b-chat-hf
+      - pattern: ".*"
+        provider: ollama_app
+        model: llama3.2:3b
+    
+    # Fallback chain for resilience
+    fallback_chain:
+      - provider: vllm_app
+        conditions:
+          - service_healthy
+          - gpu_available
+      - provider: hf_app
+        conditions:
+          - gpu_available
+      - provider: ollama_app
+        conditions:
+          - service_running
+    
+    constraints:
+      preferred_gpu: true
+      min_ram_gb: 16
+      recommended_ram_gb: 32
+    
+    monitoring:
+      track_engine_selection: true
+      track_fallbacks: true
+      log_level: INFO

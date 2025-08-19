@@ -110,18 +110,17 @@ function Header() {
 
       <div className="w-full flex items-center h-12">
         <div className="w-1/4 pl-4 flex items-center gap-2">
-          <div
-            className="font-serif text-base font-medium select-none text-gray-900 dark:text-white"
-            aria-hidden
-          >
-            🦙
-          </div>
           {isHomePage ? (
             <button
-              className="font-serif text-base text-gray-900 dark:text-white"
+              className="flex items-center"
               onClick={() => navigate('/')}
+              aria-label="LlamaFarm Home"
             >
-              LlamaFarm
+              <img
+                src="/logotype-long-tan.svg"
+                alt="LlamaFarm"
+                className="h-5 md:h-6 w-auto"
+              />
             </button>
           ) : (
             <div className="relative" ref={projectRef}>
