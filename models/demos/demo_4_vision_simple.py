@@ -207,8 +207,8 @@ def demonstrate_image_recognition_cli():
     # Detect objects in street scene
     console.print("\n[bold yellow]Detection 1: Street Scene[/bold yellow]")
     run_cli_command(
-        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --confidence 0.5 --measure-time --output-format summary",
-        "Detecting objects in street scene (buses, people, cars)"
+        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_default --confidence 0.5 --measure-time --output-format summary",
+        "Detecting objects in street scene (buses, people, cars) using default YOLO strategy"
     )
     
     time.sleep(2)
@@ -216,8 +216,8 @@ def demonstrate_image_recognition_cli():
     # Detect objects in people image
     console.print("\n[bold yellow]Detection 2: People in Stadium[/bold yellow]")
     run_cli_command(
-        "uv run python cli.py image detect demos/sample_images/people.jpg --confidence 0.5 --output-format summary",
-        "Detecting people in stadium image"
+        "uv run python cli.py image detect demos/sample_images/people.jpg --strategy image_yolo_default --confidence 0.5 --output-format summary",
+        "Detecting people in stadium image using default YOLO strategy"
     )
     
     time.sleep(2)
@@ -227,8 +227,8 @@ def demonstrate_image_recognition_cli():
     if airplane_path.exists():
         console.print("\n[bold yellow]Detection 3: Airplane in Sky[/bold yellow]")
         run_cli_command(
-            "uv run python cli.py image detect demos/sample_images/airplane_sky.jpg --confidence 0.4 --output-format summary",
-            "Detecting airplane and sky objects"
+            "uv run python cli.py image detect demos/sample_images/airplane_sky.jpg --strategy image_yolo_default --confidence 0.4 --output-format summary",
+            "Detecting airplane and sky objects using default YOLO strategy"
         )
         time.sleep(2)
     
@@ -237,8 +237,8 @@ def demonstrate_image_recognition_cli():
     if dog_path.exists():
         console.print("\n[bold yellow]Detection 4: Animals[/bold yellow]")
         run_cli_command(
-            "uv run python cli.py image detect demos/sample_images/dog.jpg --confidence 0.4 --output-format summary",
-            "Detecting animals in image"
+            "uv run python cli.py image detect demos/sample_images/dog.jpg --strategy image_yolo_default --confidence 0.4 --output-format summary",
+            "Detecting animals in image using default YOLO strategy"
         )
     
     wait_for_enter()
@@ -248,7 +248,7 @@ def demonstrate_image_recognition_cli():
     
     console.print("\n[bold yellow]JSON Format (for API integration)[/bold yellow]")
     run_cli_command(
-        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --confidence 0.5 --output-format json | head -20",
+        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_default --confidence 0.5 --output-format json | head -20",
         "JSON output for programmatic use"
     )
     
@@ -256,7 +256,7 @@ def demonstrate_image_recognition_cli():
     
     console.print("\n[bold yellow]CSV Format (for data analysis)[/bold yellow]")
     run_cli_command(
-        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --confidence 0.5 --output-format csv",
+        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_default --confidence 0.5 --output-format csv",
         "CSV output for spreadsheets"
     )
     
@@ -297,16 +297,16 @@ def demonstrate_image_recognition_cli():
     
     console.print("\n[bold yellow]Visualization 1: Street Scene with Bounding Boxes[/bold yellow]")
     run_cli_command(
-        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --visualize --output-path demos/demo_outputs_vision/street_scene_detected.jpg",
-        "Creating annotated street scene image"
+        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_default --visualize --output-path demos/demo_outputs_vision/street_scene_detected.jpg",
+        "Creating annotated street scene image using default strategy"
     )
     
     time.sleep(2)
     
     console.print("\n[bold yellow]Visualization 2: People Detection with Bounding Boxes[/bold yellow]")
     run_cli_command(
-        "uv run python cli.py image detect demos/sample_images/people.jpg --visualize --output-path demos/demo_outputs_vision/people_detected.jpg",
-        "Creating annotated people image"
+        "uv run python cli.py image detect demos/sample_images/people.jpg --strategy image_yolo_default --visualize --output-path demos/demo_outputs_vision/people_detected.jpg",
+        "Creating annotated people image using default strategy"
     )
     
     time.sleep(2)
@@ -316,8 +316,8 @@ def demonstrate_image_recognition_cli():
     if airplane_path.exists():
         console.print("\n[bold yellow]Visualization 3: Airplane Detection with Bounding Boxes[/bold yellow]")
         run_cli_command(
-            "uv run python cli.py image detect demos/sample_images/airplane_sky.jpg --visualize --output-path demos/demo_outputs_vision/airplane_detected.jpg",
-            "Creating annotated airplane image"
+            "uv run python cli.py image detect demos/sample_images/airplane_sky.jpg --strategy image_yolo_default --visualize --output-path demos/demo_outputs_vision/airplane_detected.jpg",
+            "Creating annotated airplane image using default strategy"
         )
         time.sleep(2)
     
@@ -326,8 +326,8 @@ def demonstrate_image_recognition_cli():
     if dog_path.exists():
         console.print("\n[bold yellow]Visualization 4: Dog Detection with Bounding Boxes[/bold yellow]")
         run_cli_command(
-            "uv run python cli.py image detect demos/sample_images/dog.jpg --visualize --output-path demos/demo_outputs_vision/dog_detected.jpg",
-            "Creating annotated dog image"
+            "uv run python cli.py image detect demos/sample_images/dog.jpg --strategy image_yolo_default --visualize --output-path demos/demo_outputs_vision/dog_detected.jpg",
+            "Creating annotated dog image using default strategy"
         )
         time.sleep(2)
     
@@ -423,13 +423,13 @@ def demonstrate_image_recognition_cli():
         
         # Get actual stats for street scene
         result1 = subprocess.run(
-            "uv run python cli.py image detect demos/sample_images/street_scene.jpg --output-format json",
+            "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_default --output-format json",
             shell=True, capture_output=True, text=True, cwd=MODELS_DIR
         )
         
         # Get actual stats for people image
         result2 = subprocess.run(
-            "uv run python cli.py image detect demos/sample_images/people.jpg --output-format json",
+            "uv run python cli.py image detect demos/sample_images/people.jpg --strategy image_yolo_default --output-format json",
             shell=True, capture_output=True, text=True, cwd=MODELS_DIR
         )
         
@@ -438,7 +438,7 @@ def demonstrate_image_recognition_cli():
         airplane_path = Path("demos/sample_images/airplane_sky.jpg")
         if airplane_path.exists():
             result3 = subprocess.run(
-                "uv run python cli.py image detect demos/sample_images/airplane_sky.jpg --output-format json",
+                "uv run python cli.py image detect demos/sample_images/airplane_sky.jpg --strategy image_yolo_default --output-format json",
                 shell=True, capture_output=True, text=True, cwd=MODELS_DIR
             )
         else:
@@ -448,7 +448,7 @@ def demonstrate_image_recognition_cli():
         dog_path = Path("demos/sample_images/dog.jpg")
         if dog_path.exists():
             result4 = subprocess.run(
-                "uv run python cli.py image detect demos/sample_images/dog.jpg --output-format json",
+                "uv run python cli.py image detect demos/sample_images/dog.jpg --strategy image_yolo_default --output-format json",
                 shell=True, capture_output=True, text=True, cwd=MODELS_DIR
             )
         else:
@@ -517,28 +517,34 @@ def demonstrate_image_recognition_cli():
     
     wait_for_enter()
     
-    # Step 8: Model comparison
-    print_section_header("Model Comparison", "📈")
+    # Step 8: Strategy comparison
+    print_section_header("Strategy Comparison", "📈")
     
-    console.print("\n[bold]Available YOLO models:[/bold]")
-    model_table = Table(show_header=True, header_style="bold magenta")
-    model_table.add_column("Model", style="cyan")
-    model_table.add_column("Size", style="white")
-    model_table.add_column("Speed", style="yellow")
-    model_table.add_column("Accuracy", style="green")
+    console.print("\n[bold]Available Image Recognition Strategies:[/bold]")
     
-    models = [
-        ("yolov8n", "6.3 MB", "Fastest ⚡⚡⚡⚡⚡", "Good ⭐⭐⭐"),
-        ("yolov8s", "22 MB", "Fast ⚡⚡⚡⚡", "Better ⭐⭐⭐⭐"),
-        ("yolov8m", "52 MB", "Balanced ⚡⚡⚡", "High ⭐⭐⭐⭐"),
-        ("yolov8l", "87 MB", "Slower ⚡⚡", "Higher ⭐⭐⭐⭐⭐"),
-        ("yolov8x", "137 MB", "Slowest ⚡", "Highest ⭐⭐⭐⭐⭐")
-    ]
+    # Show available strategies
+    run_cli_command(
+        "uv run python cli.py image info --strategies",
+        "Displaying available image recognition strategies"
+    )
     
-    for model, size, speed, accuracy in models:
-        model_table.add_row(model, size, speed, accuracy)
+    console.print("\n[bold yellow]Strategy Demonstration: Comparing default vs performance[/bold yellow]")
     
-    console.print(model_table)
+    # Demonstrate performance strategy
+    console.print("\n[cyan]Using high-performance strategy (yolov8s):[/cyan]")
+    run_cli_command(
+        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_performance --measure-time --output-format summary",
+        "Detection with performance-optimized strategy"
+    )
+    
+    time.sleep(2)
+    
+    # Demonstrate accuracy strategy 
+    console.print("\n[cyan]Using high-accuracy strategy (yolov8l):[/cyan]")
+    run_cli_command(
+        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_accuracy --measure-time --output-format summary",
+        "Detection with accuracy-optimized strategy"
+    )
     
     wait_for_enter()
     
@@ -631,8 +637,8 @@ def demonstrate_image_recognition_cli():
     console.print("[yellow]Running detection with full verbose output to show all details:[/yellow]\n")
     
     run_cli_command(
-        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --verbose --confidence 0.5 --measure-time",
-        "Complete verbose detection showing all processing steps"
+        "uv run python cli.py image detect demos/sample_images/street_scene.jpg --strategy image_yolo_default --verbose --confidence 0.5 --measure-time",
+        "Complete verbose detection showing all processing steps with strategy configuration"
     )
     
     console.print("\n[bold green]🎉 Image recognition demo complete![/bold green]")

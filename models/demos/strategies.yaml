@@ -818,3 +818,264 @@ strategies:
       track_requests: true
       track_response_times: true
       log_level: DEBUG
+
+  # =============================================================================
+  # IMAGE RECOGNITION STRATEGIES
+  # =============================================================================
+  
+  - name: image_yolo_default
+    description: "Default YOLO object detection strategy for general use"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8n.pt
+          device: auto
+          confidence: 0.5
+          nms_threshold: 0.45
+          
+    detection_params:
+      confidence: 0.5
+      nms_threshold: 0.45
+      max_detections: 100
+      
+    visualization:
+      show_labels: true
+      show_confidence: true
+      bbox_thickness: 2
+      font_scale: 0.7
+      colors: auto
+      
+    optimization:
+      batch_size: 1
+      half_precision: false
+      cache_images: false
+      
+    use_cases: ["object_detection", "general_vision"]
+
+  - name: image_yolo_performance
+    description: "High-performance YOLO strategy optimized for speed"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8s.pt
+          device: auto
+          confidence: 0.6
+          nms_threshold: 0.5
+          
+    detection_params:
+      confidence: 0.6
+      nms_threshold: 0.5
+      max_detections: 50
+      
+    visualization:
+      show_labels: true
+      show_confidence: true
+      bbox_thickness: 3
+      font_scale: 0.8
+      colors: auto
+      
+    optimization:
+      batch_size: 4
+      half_precision: true
+      cache_images: true
+      
+    use_cases: ["object_detection", "batch_processing"]
+
+  - name: image_yolo_accuracy
+    description: "High-accuracy YOLO strategy for precise detection"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8l.pt
+          device: auto
+          confidence: 0.3
+          nms_threshold: 0.4
+          
+    detection_params:
+      confidence: 0.3
+      nms_threshold: 0.4
+      max_detections: 200
+      
+    visualization:
+      show_labels: true
+      show_confidence: true
+      bbox_thickness: 2
+      font_scale: 0.6
+      colors: auto
+      
+    optimization:
+      batch_size: 1
+      half_precision: false
+      cache_images: false
+      
+    use_cases: ["object_detection", "high_precision"]
+
+  - name: image_yolo_mobile
+    description: "Mobile-optimized YOLO strategy for resource-constrained environments"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8n.pt
+          device: cpu
+          confidence: 0.6
+          nms_threshold: 0.5
+          
+    detection_params:
+      confidence: 0.6
+      nms_threshold: 0.5
+      max_detections: 30
+      
+    visualization:
+      show_labels: true
+      show_confidence: false
+      bbox_thickness: 1
+      font_scale: 0.5
+      colors: auto
+      
+    optimization:
+      batch_size: 1
+      half_precision: false
+      cache_images: false
+      
+    use_cases: ["mobile", "edge_deployment"]
+
+  - name: image_yolo_classification
+    description: "YOLO classification strategy for image categorization"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8n-cls.pt
+          device: auto
+          top_k: 5
+          
+    optimization:
+      batch_size: 8
+      half_precision: true
+      cache_images: true
+      
+    use_cases: ["classification", "image_tagging"]
+
+  - name: image_yolo_segmentation
+    description: "YOLO segmentation strategy for pixel-level detection"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8n-seg.pt
+          device: auto
+          confidence: 0.5
+          
+    detection_params:
+      confidence: 0.5
+      nms_threshold: 0.45
+      
+    visualization:
+      show_masks: true
+      show_labels: true
+      mask_alpha: 0.3
+      
+    use_cases: ["segmentation", "pixel_detection"]
+
+  - name: image_apple_silicon_optimized
+    description: "Optimized strategy for Apple Silicon (M1/M2/M3) devices"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8s.pt
+          device: mps
+          confidence: 0.5
+          nms_threshold: 0.45
+          
+    detection_params:
+      confidence: 0.5
+      nms_threshold: 0.45
+      max_detections: 100
+      
+    optimization:
+      batch_size: 2
+      half_precision: false  # MPS doesn't support fp16 well
+      cache_images: true
+      
+    use_cases: ["apple_silicon", "macos"]
+
+  - name: image_cuda_optimized
+    description: "Optimized strategy for NVIDIA CUDA devices"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8m.pt
+          device: cuda
+          confidence: 0.5
+          nms_threshold: 0.45
+          
+    detection_params:
+      confidence: 0.5
+      nms_threshold: 0.45
+      max_detections: 200
+      
+    optimization:
+      batch_size: 8
+      half_precision: true
+      cache_images: true
+      
+    use_cases: ["cuda", "gpu_acceleration"]
+
+  - name: image_cpu_optimized
+    description: "CPU-optimized strategy for systems without GPU acceleration"
+    
+    components:
+      image_recognizer:
+        type: yolo
+        config:
+          model: yolov8n.pt
+          device: cpu
+          confidence: 0.6
+          nms_threshold: 0.5
+          
+    detection_params:
+      confidence: 0.6
+      nms_threshold: 0.5
+      max_detections: 50
+      
+    optimization:
+      batch_size: 1
+      half_precision: false
+      cache_images: false
+      
+    use_cases: ["cpu_only", "low_resource"]
+
+# Use case mapping for image recognition
+use_case_mapping:
+  object_detection:
+    - image_yolo_default
+    - image_yolo_performance
+    - image_yolo_accuracy
+  classification:
+    - image_yolo_classification
+  segmentation:
+    - image_yolo_segmentation
+  mobile:
+    - image_yolo_mobile
+    - image_cpu_optimized
+  high_performance:
+    - image_yolo_performance
+    - image_cuda_optimized
+    - image_apple_silicon_optimized
+  batch_processing:
+    - image_yolo_performance
+    - image_cuda_optimized

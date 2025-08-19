@@ -13,6 +13,7 @@ from io import BytesIO
 # Import components
 from components.factory import ImageRecognizerFactory, ImageTrainerFactory
 from components.base import TrainingExample, Detection
+from ..strategy_manager import StrategyManager
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,12 @@ def add_image_commands(subparsers):
     info_parser.add_argument(
         "--strategies",
         action="store_true",
-        help="List available strategies"
+        help="List available image strategies"
+    )
+    info_parser.add_argument(
+        "--strategy-file",
+        default="demos/strategies.yaml",
+        help="Path to strategies file"
     )
     info_parser.set_defaults(func=info_command)
     
@@ -103,8 +109,13 @@ def add_image_commands(subparsers):
     )
     detect_parser.add_argument(
         "--strategy",
-        default="default_yolo",
-        help="Strategy to use"
+        default="image_yolo_default",
+        help="Image strategy to use"
+    )
+    detect_parser.add_argument(
+        "--strategy-file",
+        default="demos/strategies.yaml",
+        help="Path to strategies file"
     )
     detect_parser.add_argument(
         "--confidence",
@@ -440,17 +451,33 @@ def info_command(args):
                 print(f"    - {model}")
     
     if args.strategies:
-        print("\n📋 Available Strategies:")
-        strategies = [
-            "default_yolo - Fast object detection",
-            "high_accuracy_detection - More accurate detection",
-            "mobile_detection - Optimized for mobile",
-            "realtime_detection - Optimized for video",
-            "apple_silicon_optimized - M1/M2/M3 optimized",
-            "cpu_optimized - CPU optimized"
-        ]
-        for strategy in strategies:
-            print(f"  - {strategy}")
+        print("\n📋 Available Image Strategies:")
+        try:
+            strategy_manager = StrategyManager(strategies_file=Path(args.strategy_file))
+            strategies = strategy_manager.list_image_strategies()
+            if strategies:
+                for strategy_name in strategies:
+                    strategy_config = strategy_manager.get_image_strategy(strategy_name)
+                    if strategy_config:
+                        description = strategy_config.get('description', 'No description')
+                        use_cases = strategy_config.get('use_cases', [])
+                        print(f"  - {strategy_name}: {description}")
+                        if use_cases:
+                            print(f"    Use cases: {', '.join(use_cases)}")
+            else:
+                print(f"  No image strategies found in {args.strategy_file}")
+        except Exception as e:
+            print(f"  Error loading strategies: {e}")
+            # Fallback to hardcoded list
+            strategies = [
+                "image_yolo_default - Default YOLO object detection",
+                "image_yolo_performance - High-performance detection",
+                "image_yolo_accuracy - High-accuracy detection",
+                "image_apple_silicon_optimized - M1/M2/M3 optimized",
+                "image_cpu_optimized - CPU optimized"
+            ]
+            for strategy in strategies:
+                print(f"  - {strategy}")
     
     return 0
 
@@ -504,16 +531,37 @@ def download_sample_command(args):
 
 
 def detect_command(args):
-    """Enhanced object detection command."""
+    """Enhanced object detection command using strategy-based configuration."""
     from PIL import Image
+    
+    # Initialize strategy manager
+    strategy_manager = StrategyManager(strategies_file=Path(args.strategy_file))
+    
+    # Get strategy configuration
+    strategy_config = strategy_manager.build_image_recognizer_config(args.strategy)
+    if not strategy_config:
+        print(f"❌ Strategy '{args.strategy}' not found in {args.strategy_file}")
+        available_strategies = strategy_manager.list_image_strategies()
+        if available_strategies:
+            print(f"Available image strategies: {', '.join(available_strategies)}")
+        return 1
+    
+    # Get detection parameters from strategy
+    detection_params = strategy_manager.get_image_detection_params(args.strategy)
+    
+    # Override confidence if provided as argument
+    if hasattr(args, 'confidence') and args.confidence:
+        detection_params['confidence'] = args.confidence
     
     # Verbose output
     if args.verbose:
         print("🔍 Starting Object Detection")
         print("=" * 60)
         print(f"  Image: {args.image_path}")
-        print(f"  Model: yolov8n")
-        print(f"  Confidence: {args.confidence}")
+        print(f"  Strategy: {args.strategy}")
+        print(f"  Model: {strategy_config.get('config', {}).get('model', 'unknown')}")
+        print(f"  Device: {strategy_config.get('config', {}).get('device', 'auto')}")
+        print(f"  Confidence: {detection_params.get('confidence', 0.5)}")
         print(f"  Output Format: {args.output_format}")
         print("=" * 60)
     
@@ -530,21 +578,14 @@ def detect_command(args):
         if args.verbose:
             print(f"  ✅ Saved to temporary file: {temp_path}")
     
-    # Create recognizer
-    config = {
-        "type": "yolo",
-        "config": {
-            "version": "yolov8n",
-            "confidence_threshold": args.confidence
-        }
-    }
-    
     if args.verbose:
-        print("\n📦 Loading YOLO Model")
-        print(f"  Model: yolov8n")
+        print("\n📦 Loading Model from Strategy")
+        print(f"  Strategy: {args.strategy}")
+        print(f"  Model: {strategy_config.get('config', {}).get('model', 'unknown')}")
         print(f"  Device: Detecting best available...")
     
-    recognizer = ImageRecognizerFactory.create(config)
+    # Create recognizer using strategy configuration
+    recognizer = ImageRecognizerFactory.create(strategy_config)
     
     if args.verbose:
         print(f"  ✅ Model loaded on device: {recognizer.device}")
@@ -555,8 +596,9 @@ def detect_command(args):
     if args.measure_time or args.verbose:
         start_time = time.time()
     
-    # Run detection
-    detections = recognizer.detect(image_path, confidence=args.confidence)
+    # Run detection using strategy parameters
+    confidence = detection_params.get('confidence', args.confidence if hasattr(args, 'confidence') else 0.5)
+    detections = recognizer.detect(image_path, confidence=confidence)
     
     if args.measure_time or args.verbose:
         elapsed = time.time() - start_time

@@ -12,17 +12,21 @@ from typing import Dict, Any, Optional, List, Union
 import logging
 from copy import deepcopy
 
+# Import the ImageStrategyManager
+from .image_strategy_manager import ImageStrategyManager
+
 logger = logging.getLogger(__name__)
 
 
 class StrategyManager:
     """Manages strategies for model operations using the new schema format."""
     
-    def __init__(self, strategies_file: Optional[Path] = None):
+    def __init__(self, strategies_file: Optional[Path] = None, image_strategies_file: Optional[Path] = None):
         """Initialize strategy manager.
         
         Args:
             strategies_file: Path to strategies YAML file
+            image_strategies_file: Path to image strategies YAML file
         """
         if strategies_file:
             self.strategies_file = Path(strategies_file)
@@ -33,6 +37,9 @@ class StrategyManager:
         # Load strategies
         self.strategies = self._load_strategies()
         self.use_case_mapping = self._load_use_case_mapping()
+        
+        # Initialize image strategy manager with the same strategies file
+        self.image_strategy_manager = ImageStrategyManager(self.strategies_file)
     
     def _load_strategies(self) -> Dict[str, Dict[str, Any]]:
         """Load strategies from YAML file."""
@@ -230,6 +237,81 @@ class StrategyManager:
                 errors.append(f"Fallback {i} missing 'config' field")
         
         return errors
+    
+    # Image strategy methods
+    def get_image_strategy(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a specific image strategy by name.
+        
+        Args:
+            name: Strategy name
+            
+        Returns:
+            Strategy configuration or None if not found
+        """
+        return self.image_strategy_manager.get_strategy(name)
+    
+    def list_image_strategies(self) -> List[str]:
+        """List all available image strategy names.
+        
+        Returns:
+            List of strategy names
+        """
+        return self.image_strategy_manager.list_strategies()
+    
+    def build_image_recognizer_config(self, strategy_name: str) -> Optional[Dict[str, Any]]:
+        """Build image recognizer configuration from strategy.
+        
+        Args:
+            strategy_name: Strategy name
+            
+        Returns:
+            Image recognizer configuration or None
+        """
+        return self.image_strategy_manager.build_image_recognizer_config(strategy_name)
+    
+    def build_image_trainer_config(self, strategy_name: str) -> Optional[Dict[str, Any]]:
+        """Build image trainer configuration from strategy.
+        
+        Args:
+            strategy_name: Strategy name
+            
+        Returns:
+            Image trainer configuration or None
+        """
+        return self.image_strategy_manager.build_image_trainer_config(strategy_name)
+    
+    def get_image_detection_params(self, strategy_name: str) -> Dict[str, Any]:
+        """Get detection parameters for an image strategy.
+        
+        Args:
+            strategy_name: Strategy name
+            
+        Returns:
+            Detection parameters
+        """
+        return self.image_strategy_manager.get_detection_params(strategy_name)
+    
+    def get_image_visualization_config(self, strategy_name: str) -> Dict[str, Any]:
+        """Get visualization configuration for an image strategy.
+        
+        Args:
+            strategy_name: Strategy name
+            
+        Returns:
+            Visualization configuration
+        """
+        return self.image_strategy_manager.get_visualization_config(strategy_name)
+    
+    def validate_image_strategy(self, strategy_name: str) -> List[str]:
+        """Validate an image strategy configuration.
+        
+        Args:
+            strategy_name: Strategy name
+            
+        Returns:
+            List of validation errors (empty if valid)
+        """
+        return self.image_strategy_manager.validate_strategy(strategy_name)
     
     def _expand_env_vars(self, config: Union[Dict, List, str, Any]) -> Union[Dict, List, str, Any]:
         """Recursively expand environment variables in configuration.
