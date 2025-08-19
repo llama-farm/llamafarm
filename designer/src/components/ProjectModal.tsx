@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import FontIcon from '../common/FontIcon'
 import {
   Dialog,
   DialogContent,

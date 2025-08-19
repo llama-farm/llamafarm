@@ -74,19 +74,7 @@ function Header() {
   //   } catch {}
   // }
 
-  const handleCreateProject = () => {
-    setIsProjectOpen(false)
-    navigate('/')
-    // open create modal on Home and scroll to projects
-    try {
-      localStorage.setItem('homeOpenCreate', '1')
-    } catch {}
-    setTimeout(() => {
-      const el = document.getElementById('projects')
-      el?.scrollIntoView({ behavior: 'smooth' })
-      window.dispatchEvent(new Event('home-open-create'))
-    }, 0)
-  }
+  // (removed unused handleCreateProject)
 
   const handleSelectProject = (name: string) => {
     const isDifferent = name !== activeProject
