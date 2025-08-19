@@ -33,12 +33,10 @@ jobs:
       - name: Cache node modules
         id: cache-npm
         uses: actions/cache@v4
-
         env:
           cache-name: cache-node-modules
         with:
-          # npm cache files are stored in `~/.npm` on Linux/macOS
-          path: ~/.npm
+          path: docs/website/node_modules
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('docs/website/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
@@ -75,6 +73,11 @@ jobs:
     # if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,12 +91,11 @@ jobs:
       - name: Cache node modules
         id: cache-npm
         uses: actions/cache@v4
-
         env:
           cache-name: cache-node-modules
         with:
           # npm cache files are stored in `~/.npm` on Linux/macOS
-          path: ~/.npm
+          path: docs/website/node_modules
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('docs/website/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
@@ -107,7 +109,7 @@ jobs:
         working-directory: docs/website
 
       - name: Install dependencies
-        run: npm ci
+        run: npm i
         working-directory: docs/website
 
       - name: Install Nx CLI
