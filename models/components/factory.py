@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Dict, Any, Type, Optional, List
 import logging
 
-from .base import BaseFineTuner, BaseModelApp, BaseModelRepository, BaseCloudAPI
+from .base import (
+    BaseFineTuner, BaseModelApp, BaseModelRepository, BaseCloudAPI,
+    BaseImageRecognizer, BaseImageTrainer
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +126,30 @@ class CloudAPIFactory(ComponentFactory):
         return Path(__file__).parent / "cloud_apis" / component_type
 
 
+class ImageRecognizerFactory(ComponentFactory):
+    """Factory for creating image recognizer instances."""
+    
+    _registry: Dict[str, Type[BaseImageRecognizer]] = {}
+    _component_type = "image_recognizers"
+    
+    @classmethod
+    def _get_component_path(cls, component_type: str) -> Path:
+        """Get the directory path for an image recognizer type."""
+        return Path(__file__).parent / "image_recognizers" / component_type
+
+
+class ImageTrainerFactory(ComponentFactory):
+    """Factory for creating image trainer instances."""
+    
+    _registry: Dict[str, Type[BaseImageTrainer]] = {}
+    _component_type = "image_trainers"
+    
+    @classmethod
+    def _get_component_path(cls, component_type: str) -> Path:
+        """Get the directory path for an image trainer type."""
+        return Path(__file__).parent / "image_recognizers" / component_type / "trainer"
+
+
 # Auto-register components
 def auto_register_components():
     """Automatically register all available components."""
@@ -137,7 +164,8 @@ def auto_register_components():
         "fine_tuners": (FineTunerFactory, BaseFineTuner),
         "model_apps": (ModelAppFactory, BaseModelApp),
         "model_repositories": (ModelRepositoryFactory, BaseModelRepository),
-        "cloud_apis": (CloudAPIFactory, BaseCloudAPI)
+        "cloud_apis": (CloudAPIFactory, BaseCloudAPI),
+        "image_recognizers": (ImageRecognizerFactory, BaseImageRecognizer)
     }
     
     for subdir, (factory, base_class) in factory_map.items():

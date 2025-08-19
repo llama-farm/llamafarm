@@ -1,0 +1,136 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "YOLO Recognizer Configuration",
+    "type": "object",
+    "properties": {
+        "version": {
+            "type": "string",
+            "description": "YOLO model version",
+            "enum": [
+                "yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x",
+                "yolov8n-cls", "yolov8s-cls", "yolov8m-cls", "yolov8l-cls", "yolov8x-cls",
+                "yolov8n-seg", "yolov8s-seg", "yolov8m-seg", "yolov8l-seg", "yolov8x-seg"
+            ],
+            "default": "yolov8n"
+        },
+        "confidence_threshold": {
+            "type": "number",
+            "description": "Minimum confidence for detections",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "default": 0.5
+        },
+        "nms_threshold": {
+            "type": "number",
+            "description": "Non-maximum suppression threshold",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "default": 0.45
+        },
+        "max_detections": {
+            "type": "integer",
+            "description": "Maximum number of detections per image",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
+        },
+        "hardware_optimizations": {
+            "type": "object",
+            "description": "Hardware-specific optimizations",
+            "properties": {
+                "apple_silicon": {
+                    "type": "object",
+                    "properties": {
+                        "use_coreml": {
+                            "type": "boolean",
+                            "description": "Use CoreML acceleration",
+                            "default": false
+                        },
+                        "use_metal": {
+                            "type": "boolean",
+                            "description": "Use Metal Performance Shaders",
+                            "default": true
+                        }
+                    }
+                },
+                "nvidia": {
+                    "type": "object",
+                    "properties": {
+                        "use_tensorrt": {
+                            "type": "boolean",
+                            "description": "Use TensorRT optimization",
+                            "default": false
+                        },
+                        "fp16": {
+                            "type": "boolean",
+                            "description": "Use FP16 precision",
+                            "default": true
+                        }
+                    }
+                },
+                "amd": {
+                    "type": "object",
+                    "properties": {
+                        "use_rocm": {
+                            "type": "boolean",
+                            "description": "Use ROCm acceleration",
+                            "default": false
+                        }
+                    }
+                },
+                "cpu": {
+                    "type": "object",
+                    "properties": {
+                        "num_threads": {
+                            "type": "integer",
+                            "description": "Number of CPU threads",
+                            "minimum": 1,
+                            "default": 4
+                        },
+                        "use_onnx": {
+                            "type": "boolean",
+                            "description": "Use ONNX Runtime",
+                            "default": false
+                        }
+                    }
+                }
+            }
+        },
+        "training": {
+            "type": "object",
+            "description": "Training configuration",
+            "properties": {
+                "dataset_path": {
+                    "type": "string",
+                    "description": "Path to dataset directory",
+                    "default": "./yolo_dataset"
+                },
+                "augmentation_factor": {
+                    "type": "integer",
+                    "description": "Number of augmented images per original",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "default": 3
+                },
+                "default_epochs": {
+                    "type": "integer",
+                    "description": "Default number of training epochs",
+                    "minimum": 1,
+                    "default": 10
+                },
+                "default_batch_size": {
+                    "type": "integer",
+                    "description": "Default batch size",
+                    "minimum": 1,
+                    "default": 4
+                },
+                "default_learning_rate": {
+                    "type": "number",
+                    "description": "Default learning rate",
+                    "minimum": 0.0,
+                    "default": 0.001
+                }
+            }
+        }
+    }
+}

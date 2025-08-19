@@ -2836,6 +2836,14 @@ Examples:
     catalog_parser = subparsers.add_parser("catalog", help="Model catalog operations")
     catalog_subparsers = catalog_parser.add_subparsers(dest="catalog_command", help="Catalog commands")
     
+    # Image recognition commands
+    try:
+        from core.cli.image_commands import add_image_commands
+        add_image_commands(subparsers)
+    except ImportError:
+        # Image commands not available if dependencies not installed
+        pass
+    
     # List models from catalog
     catalog_list_parser = catalog_subparsers.add_parser("list", help="List models from catalog")
     catalog_list_parser.add_argument("--category", "-c", help="Filter by category (medical, code_generation, multilingual, etc.)")
@@ -4673,6 +4681,53 @@ def main():
         datasplit_command(args)
     elif args.command == "setup":
         setup_command(args)
+    elif args.command == "image":
+        # Handle image recognition commands
+        try:
+            from core.cli.image_commands import (
+                setup_command as image_setup,
+                info_command as image_info,
+                download_sample_command,
+                detect_command,
+                classify_command,
+                batch_detect_command,
+                benchmark_command,
+                train_detector_command,
+                create_dataset_command,
+                list_models_command as image_list_models,
+                export_model_command
+            )
+            
+            # Route image subcommands
+            if args.image_command == "setup":
+                return image_setup(args)
+            elif args.image_command == "info":
+                return image_info(args)
+            elif args.image_command == "download-sample":
+                return download_sample_command(args)
+            elif args.image_command == "detect":
+                return detect_command(args)
+            elif args.image_command == "classify":
+                return classify_command(args)
+            elif args.image_command == "batch-detect":
+                return batch_detect_command(args)
+            elif args.image_command == "benchmark":
+                return benchmark_command(args)
+            elif args.image_command == "train":
+                return train_detector_command(args)
+            elif args.image_command == "create-dataset":
+                return create_dataset_command(args)
+            elif args.image_command == "list-models":
+                return image_list_models(args)
+            elif args.image_command == "export":
+                return export_model_command(args)
+            else:
+                print_error(f"Unknown image command: {args.image_command}")
+                sys.exit(1)
+        except ImportError as e:
+            print_error(f"Image recognition commands not available: {e}")
+            print_info("Install with: uv sync")
+            sys.exit(1)
     else:
         print_error(f"Unknown command: {args.command}")
         sys.exit(1)

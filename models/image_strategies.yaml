@@ -1,0 +1,238 @@
+# Image Recognition Strategies for LlamaFarm Models
+
+strategies:
+  # Default YOLO detection strategy
+  default_yolo:
+    name: "Default YOLO Detection"
+    description: "Fast object detection with YOLOv8 nano model"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n
+        confidence_threshold: 0.5
+        nms_threshold: 0.45
+        max_detections: 100
+        hardware_optimizations:
+          apple_silicon:
+            use_metal: true
+          nvidia:
+            fp16: true
+
+  # High accuracy detection
+  high_accuracy_detection:
+    name: "High Accuracy Detection"
+    description: "More accurate but slower detection with YOLOv8 X-Large"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8x
+        confidence_threshold: 0.7
+        nms_threshold: 0.5
+        max_detections: 200
+        hardware_optimizations:
+          nvidia:
+            use_tensorrt: true
+            fp16: true
+
+  # Mobile optimized detection
+  mobile_detection:
+    name: "Mobile Optimized Detection"
+    description: "Lightweight detection for mobile/edge devices"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n
+        confidence_threshold: 0.4
+        nms_threshold: 0.4
+        max_detections: 50
+        hardware_optimizations:
+          cpu:
+            num_threads: 2
+            use_onnx: true
+
+  # Classification strategy
+  default_yolo_cls:
+    name: "YOLO Image Classification"
+    description: "Image classification with YOLOv8"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n-cls
+        confidence_threshold: 0.5
+
+  # Segmentation strategy
+  default_yolo_seg:
+    name: "YOLO Instance Segmentation"
+    description: "Instance segmentation with YOLOv8"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n-seg
+        confidence_threshold: 0.5
+        nms_threshold: 0.45
+
+  # Document analysis pipeline
+  document_analysis:
+    name: "Document Analysis Pipeline"
+    description: "Complete document processing with layout detection and text extraction"
+    pipeline:
+      - name: layout_detection
+        type: image_recognition
+        config:
+          type: yolo
+          version: yolov8m
+          confidence_threshold: 0.6
+      - name: text_extraction
+        type: ocr
+        config:
+          engine: tesseract
+          language: eng
+      - name: content_analysis
+        type: llm
+        config:
+          model: llama3.2
+          task: summarization
+
+  # Real-time detection
+  realtime_detection:
+    name: "Real-time Detection"
+    description: "Optimized for real-time video processing"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n
+        confidence_threshold: 0.3
+        nms_threshold: 0.3
+        max_detections: 30
+        hardware_optimizations:
+          nvidia:
+            fp16: true
+          apple_silicon:
+            use_coreml: true
+
+  # Few-shot training configuration
+  few_shot_training:
+    name: "Few-shot Training Configuration"
+    description: "Configuration for training with minimal examples"
+    training:
+      type: yolo
+      config:
+        base_model: yolov8n
+        augmentation_factor: 5
+        training_args:
+          epochs: 20
+          batch_size: 4
+          learning_rate: 0.001
+          patience: 10
+          warmup_epochs: 2
+        hardware_optimizations:
+          use_mixed_precision: true
+          gradient_checkpointing: true
+
+  # Multi-model ensemble (future)
+  ensemble_detection:
+    name: "Ensemble Detection"
+    description: "Combine multiple models for better accuracy"
+    ensemble:
+      models:
+        - type: yolo
+          version: yolov8m
+          weight: 0.5
+        - type: yolo
+          version: yolov8l
+          weight: 0.5
+      voting: weighted_average
+      confidence_threshold: 0.6
+
+  # Specialized detectors
+  face_detection:
+    name: "Face Detection"
+    description: "Specialized face detection model"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n-face  # Custom trained model
+        confidence_threshold: 0.6
+        nms_threshold: 0.4
+        post_processing:
+          blur_faces: false
+          extract_embeddings: false
+
+  vehicle_detection:
+    name: "Vehicle Detection"
+    description: "Specialized vehicle and license plate detection"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8m
+        confidence_threshold: 0.5
+        classes:
+          - car
+          - truck
+          - bus
+          - motorcycle
+          - bicycle
+        post_processing:
+          track_objects: true
+          count_objects: true
+
+  medical_imaging:
+    name: "Medical Image Analysis"
+    description: "Medical image processing and analysis"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8x
+        confidence_threshold: 0.8
+        nms_threshold: 0.5
+        preprocessing:
+          normalize: true
+          enhance_contrast: true
+        hardware_optimizations:
+          nvidia:
+            use_tensorrt: false  # Prioritize accuracy
+            fp16: false  # Use FP32 for medical accuracy
+
+  # Hardware-specific optimizations
+  apple_silicon_optimized:
+    name: "Apple Silicon Optimized"
+    description: "Optimized for M1/M2/M3 Macs"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n
+        confidence_threshold: 0.5
+        hardware_optimizations:
+          apple_silicon:
+            use_coreml: true
+            use_metal: true
+            batch_size: 8
+
+  nvidia_optimized:
+    name: "NVIDIA GPU Optimized"
+    description: "Optimized for NVIDIA GPUs with CUDA"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8m
+        confidence_threshold: 0.5
+        hardware_optimizations:
+          nvidia:
+            use_tensorrt: true
+            fp16: true
+            batch_size: 32
+            num_workers: 4
+
+  cpu_optimized:
+    name: "CPU Optimized"
+    description: "Optimized for CPU-only systems"
+    image_recognition:
+      type: yolo
+      config:
+        version: yolov8n
+        confidence_threshold: 0.5
+        hardware_optimizations:
+          cpu:
+            num_threads: 8
+            use_onnx: true
+            quantization: int8

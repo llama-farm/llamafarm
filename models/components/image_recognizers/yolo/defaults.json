@@ -1,0 +1,30 @@
+{
+    "version": "yolov8n",
+    "confidence_threshold": 0.5,
+    "nms_threshold": 0.45,
+    "max_detections": 100,
+    "hardware_optimizations": {
+        "apple_silicon": {
+            "use_coreml": false,
+            "use_metal": true
+        },
+        "nvidia": {
+            "use_tensorrt": false,
+            "fp16": true
+        },
+        "amd": {
+            "use_rocm": false
+        },
+        "cpu": {
+            "num_threads": 4,
+            "use_onnx": false
+        }
+    },
+    "training": {
+        "dataset_path": "./yolo_dataset",
+        "augmentation_factor": 3,
+        "default_epochs": 10,
+        "default_batch_size": 4,
+        "default_learning_rate": 0.001
+    }
+}
