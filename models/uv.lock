@@ -2049,6 +2049,9 @@ finetuning = [
     { name = "transformers" },
     { name = "wandb" },
 ]
+local-engines = [
+    { name = "tgi" },
+]
 tgi = [
     { name = "text-generation" },
 ]
@@ -2107,6 +2110,7 @@ requires-dist = [
     { name = "tenacity", specifier = ">=8.2.0" },
     { name = "tensorboard", marker = "extra == 'finetuning'", specifier = ">=2.14.0" },
     { name = "text-generation", marker = "extra == 'tgi'", specifier = ">=0.6.0" },
+    { name = "tgi", marker = "extra == 'local-engines'", specifier = ">=2.4.2" },
     { name = "tiktoken", specifier = ">=0.5.0" },
     { name = "together", specifier = ">=1.0.0" },
     { name = "torch", specifier = ">=2.0.0" },
@@ -2116,7 +2120,7 @@ requires-dist = [
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.2.0" },
     { name = "wandb", marker = "extra == 'finetuning'", specifier = ">=0.15.0" },
 ]
-provides-extras = ["dev", "vllm", "tgi", "finetuning"]
+provides-extras = ["dev", "vllm", "tgi", "finetuning", "local-engines"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4748,6 +4752,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ef/53/1b2dc20686079464ae381f230a9fc412984a4255cea73c21afb6a46bc21f/text_generation-0.7.0.tar.gz", hash = "sha256:689200cd1f0d4141562af2515393c2c21cdbd9fac21c8398bf3043cdcc14184e", size = 10373, upload-time = "2024-03-22T16:09:22.167Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/79/8fc351fd919a41287243c998a47692c7eb0fa5acded13db0080f2c6f1852/text_generation-0.7.0-py3-none-any.whl", hash = "sha256:02ab337a0ee0e7c70e04a607b311c261caae74bde46a7d837c6fdd150108f4d8", size = 12718, upload-time = "2024-03-22T16:09:20.874Z" },
+]
+
+[[package]]
+name = "tgi"
+version = "2.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "huggingface-hub" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/6f/f468ef78e7f6bf3d33e9e54706b49be0254e79e88bb478ad3c5631d06fda/tgi-2.4.2.tar.gz", hash = "sha256:020dc144b6360148d9ceec559e13322b082acc0e87a5bd5084f13a0d5fb94f58", size = 11427, upload-time = "2024-11-04T21:30:49.365Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/f5/6a1fe7152da75dce61c71886f134d8654abf3dcd7cb459a4e3b2f2647280/tgi-2.4.2-py3-none-any.whl", hash = "sha256:81a1fd0d83a8bde93d17a425153a1a60b9fb201e824b1166b1628ddeff2e8783", size = 13547, upload-time = "2024-11-04T21:30:48.025Z" },
 ]
 
 [[package]]

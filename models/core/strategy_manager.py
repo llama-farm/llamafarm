@@ -45,7 +45,7 @@ class StrategyManager:
         try:
             with open(self.strategies_file) as f:
                 data = yaml.safe_load(f) or {}
-                return data.get("strategies", {})
+                return data.get("strategies", [])
         except Exception as e:
             logger.error(f"Failed to load strategies: {e}")
             return []
@@ -74,7 +74,7 @@ class StrategyManager:
         """
         return deepcopy(
             next(
-                (strategy for strategy in self.strategies if strategy["name"] == name),
+                (s for s in self.strategies if s["name"] == name),
                 None,
             )
         )
@@ -348,7 +348,7 @@ class StrategyManager:
                     config = yaml.safe_load(f)
 
             # Add to strategies
-            self.strategies[name] = config
+            self.strategies.append(config)
 
             logger.info(f"Imported strategy '{name}' from {config_path}")
             return True
