@@ -1,0 +1,143 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - fix-docs-deploy
+    paths:
+      - 'docs/website/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/website/**'
+      - '.github/workflows/docs.yml'
+
+jobs:
+  build:
+    name: Build Docusaurus
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/website/package-lock.json
+
+      - name: Cache node modules
+        id: cache-npm
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: docs/website/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('docs/website/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
+        name: List the state of node modules
+        continue-on-error: true
+        run: npm list
+
+      - name: Install dependencies
+        run: npm i
+        working-directory: docs/website
+
+      - name: Install Nx CLI
+        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+
+      - name: Build website
+        run: npx --yes nx build docs
+
+      # Replace the pages artifact with a regular artifact to reuse in another job
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-website-build
+          path: docs/website/build
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/website/package-lock.json
+
+      - name: Cache node modules
+        id: cache-npm
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          # npm cache files are stored in `~/.npm` on Linux/macOS
+          path: docs/website/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('docs/website/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
+        name: List the state of node modules
+        continue-on-error: true
+        run: npm list
+        working-directory: docs/website
+
+      - name: Install dependencies
+        run: npm i
+        working-directory: docs/website
+
+      - name: Install Nx CLI
+        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-website-build
+          path: docs/website/build
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.5.0
+        with:
+          ssh-private-key: ${{ secrets.GH_PAGES_DEPLOY }}
+
+      - name: Add github.com to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Deploy to GitHub Pages
+        env:
+          USE_SSH: true
+        working-directory: docs/website
+        run: |
+          cp -R .github build/.github
+          git config --global user.email "ops@llamafarm.dev"
+          git config --global user.name "llama-farm-bot"
+          # Re-use build produced in the build job; do not rebuild
+          npx --yes docusaurus deploy --skip-build

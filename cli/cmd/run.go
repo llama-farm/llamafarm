@@ -6,6 +6,7 @@ import (
     "strings"
 
     "github.com/spf13/cobra"
+    "llamafarm-cli/cmd/config"
 )
 
 var (
@@ -14,35 +15,63 @@ var (
 
 // runCmd represents the `lf run` command
 var runCmd = &cobra.Command{
-    Use:   "run <namespace>/<project> [input]",
+    Use:   "run [namespace/project] [input]",
     Short: "Run a one-off prompt against a project",
     Long: `Run a one-off prompt against a LlamaFarm project.
 
 Examples:
+  # Explicit project and inline input
   lf run my-org/my-project "What models are configured?"
-  lf run my-org/my-project -f ./prompt.txt`,
+
+  # Explicit project and input file
+  lf run my-org/my-project -f ./prompt.txt
+
+  # Project inferred from llamafarm.yaml, inline input
+  lf run "What models are configured?"
+
+  # Project inferred from llamafarm.yaml, input file
+  lf run -f ./prompt.txt`,
     Args: func(cmd *cobra.Command, args []string) error {
-        if len(args) < 1 {
-            return fmt.Errorf("requires project in format 'namespace/project'")
+        // Valid forms:
+        // 1) run <ns>/<proj> <input>
+        // 2) run <ns>/<proj> --file <path>
+        // 3) run <input>              (ns/proj inferred from config)
+        // 4) run --file <path>        (ns/proj inferred from config)
+
+        if len(args) == 0 {
+            // Must at least have input via file
+            if runInputFile == "" {
+                return fmt.Errorf("provide an input string or --file")
+            }
+            return nil
         }
-        if strings.Count(args[0], "/") != 1 {
-            return fmt.Errorf("project must be in format 'namespace/project', got: %s", args[0])
+
+        if strings.Contains(args[0], "/") {
+            // Explicit project provided
+            if strings.Count(args[0], "/") != 1 {
+                return fmt.Errorf("project must be in format 'namespace/project', got: %s", args[0])
+            }
+            // If no file, require inline input as second arg
+            if runInputFile == "" && len(args) < 2 {
+                return fmt.Errorf("provide an input string or --file")
+            }
+            // If file is set, do not allow a third arg
+            if runInputFile != "" && len(args) >= 2 {
+                return fmt.Errorf("specify either --file or an inline input, not both")
+            }
+            return nil
         }
-        // Either a file or an inline input must be provided
-        if runInputFile == "" && len(args) < 2 {
-            return fmt.Errorf("provide an input string or --file")
-        }
-        // Do not allow both file and inline input
-        if runInputFile != "" && len(args) >= 2 {
+
+        // No explicit project; first arg is the inline input.
+        // If a file is also provided, it's ambiguous/invalid.
+        if runInputFile != "" {
             return fmt.Errorf("specify either --file or an inline input, not both")
         }
         return nil
     },
     Run: func(cmd *cobra.Command, args []string) {
-        // Parse namespace/project
-        parts := strings.SplitN(args[0], "/", 2)
-        ns := strings.TrimSpace(parts[0])
-        proj := strings.TrimSpace(parts[1])
+        // Resolve project and input according to args pattern
+        var ns, proj string
 
         // Resolve input
         var input string
@@ -53,25 +82,69 @@ Examples:
                 os.Exit(1)
             }
             input = string(data)
-        } else if len(args) >= 2 {
-            input = args[1]
+        } else if len(args) >= 1 {
+            if strings.Contains(args[0], "/") {
+                // Explicit project, inline input follows
+                if len(args) >= 2 {
+                    input = args[1]
+                }
+            } else {
+                // No explicit project, first arg is inline input
+                input = args[0]
+            }
         }
 
-        // Stub behavior: just echo what would run
-        fmt.Printf("🌾 LlamaFarm run (stub)\n")
-        fmt.Printf("📁 Project: %s/%s\n", ns, proj)
-        if runInputFile != "" {
-            fmt.Printf("📄 Input file: %s\n", runInputFile)
+        // Parse explicit project if provided
+        if len(args) >= 1 && strings.Contains(args[0], "/") {
+            parts := strings.SplitN(args[0], "/", 2)
+            ns = strings.TrimSpace(parts[0])
+            proj = strings.TrimSpace(parts[1])
+        }
+
+        // Resolve server configuration (strict): if ns/proj are absent, require from llamafarm.yaml
+        serverCfg, err := config.GetServerConfig("", serverURL, ns, proj)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)
+        }
+        serverURL = serverCfg.URL
+        ns = serverCfg.Namespace
+        proj = serverCfg.Project
+
+        // Ensure server is up (auto-start locally if needed)
+        if err := ensureServerAvailable(serverURL); err != nil {
+            fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+            os.Exit(1)
+        }
+
+        // Construct context and call the project-scoped chat completions via shared helpers
+        ctx := &ChatSessionContext{
+            ServerURL:   serverURL,
+            Namespace:   ns,
+            ProjectID:   proj,
+            Temperature: temperature,
+            MaxTokens:   maxTokens,
+            HTTPClient:  getHTTPClient(),
+        }
+
+        messages := []ChatMessage{{Role: "user", Content: input}}
+        resp, err := sendChatRequestWithContext(messages, ctx)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)
+        }
+        if len(resp.Choices) > 0 {
+            if len(resp.Choices) == 1 {
+                fmt.Printf("%s\n", resp.Choices[0].Message.Content)
+            } else {
+                fmt.Printf("Received %d choices:\n", len(resp.Choices))
+                for i, choice := range resp.Choices {
+                    fmt.Printf("Choice %d:\n%s\n\n", i+1, choice.Message.Content)
+                }
+            }
         } else {
-            fmt.Printf("💬 Inline input provided\n")
+            fmt.Println("No response received.")
         }
-        // Show a short preview of input for confirmation
-        preview := input
-        if len(preview) > 200 {
-            preview = preview[:200] + "..."
-        }
-        fmt.Printf("\n— Input Preview —\n%s\n\n", preview)
-        fmt.Println("(This is a stub. Actual execution will be implemented in a future update.)")
     },
 }
 

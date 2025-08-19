@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Message from './Message'
 import FontIcon from '../../common/FontIcon'
 
@@ -43,6 +43,17 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
   ])
 
   const [inputValue, setInputValue] = useState('')
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const endRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    // Scroll to bottom on mount and whenever messages change
+    if (endRef.current) {
+      endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    } else if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight
+    }
+  }, [messages])
 
   const handleSendClick = () => {
     const text = inputValue.trim()
@@ -64,9 +75,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
   return (
     <div className="w-full h-full flex flex-col transition-colors bg-card text-foreground">
       <div
-        className={`flex  ${
-          isPanelOpen ? 'justify-end mr-1 mt-1' : 'justify-center mt-3'
-        }`}
+        className={`flex ${isPanelOpen ? 'justify-end mr-1 mt-1' : 'justify-center mt-3'}`}
       >
         <FontIcon
           isButton
@@ -76,14 +85,16 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
         />
       </div>
       <div
-        className={`flex flex-col justify-between h-full p-4 ${
-          isPanelOpen ? 'flex' : 'hidden'
-        }`}
+        className={`flex flex-col h-full p-4 overflow-hidden ${isPanelOpen ? 'flex' : 'hidden'}`}
       >
-        <div className="flex flex-col gap-5">
+        <div
+          ref={listRef}
+          className="flex-1 overflow-y-auto flex flex-col gap-5 pr-1"
+        >
           {messages.map((message, index) => (
             <Message key={index} message={message} />
           ))}
+          <div ref={endRef} />
         </div>
         <div className="flex flex-col gap-3 p-3 rounded-lg bg-secondary">
           <textarea
