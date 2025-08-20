@@ -9,7 +9,7 @@
   [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
   [![Go 1.19+](https://img.shields.io/badge/go-1.19+-00ADD8.svg)](https://golang.org/dl/)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-  [![Discord](https://img.shields.io/discord/1234567890?color=7289da&logo=discord&logoColor=white)](https://discord.gg/llamafarm)
+  [![Discord](https://img.shields.io/discord/1234567890?color=7289da&logo=discord&logoColor=white)](https://discord.gg/8kH9AmQpSa)
 
   
   [🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [🏗️ Architecture](#-architecture) • [🤝 Contributing](#-contributing)
@@ -20,14 +20,22 @@
 
 ## 🚀 What is LlamaFarm?
 
+> **🚧 Building in the Open:** We're actively developing LlamaFarm and not everything is working yet. Join us as we build the future of local-first AI development! Check our [roadmap](#-roadmap) to see what's coming and how you can contribute.
+
+### Why LlamaFarm?
+
+The AI revolution should be accessible to everyone, not just ML experts and big tech companies. We believe you shouldn't need a PhD to build powerful AI applications - just a CLI, your config files, and your data. Too many teams are stuck between expensive cloud APIs that lock you in, or complex open-source tools that require months of ML expertise to productionize. LlamaFarm changes this: full control and production-ready AI with simple commands and YAML configs. No machine learning degree required - if you can write config files and run CLI commands, you can build sophisticated AI systems. Build locally with your data, maintain complete control over costs, and deploy anywhere from your laptop to the cloud - all with the same straightforward interface.
+
 LlamaFarm is a comprehensive, modular framework for building AI Projects that run locally, collaborate, and deploy anywhere. We provide battle-tested components for RAG systems, vector databases, model management, prompt engineering, and soon fine-tuning - all designed to work seamlessly together or independently.
+
+We're not local-only zealots - use cloud APIs where they make sense for your needs - llamafarm helps with that! But we believe the real value in the AI economy comes from building something uniquely yours, not just wrapping another UI around GPT-5. True innovation happens when you can train on your proprietary data, fine-tune for your specific use cases, and maintain full control over your AI stack. LlamaFarm gives you the tools to create differentiated AI products that your competitors can't simply copy by calling the same API.
 
 
 LlamaFarm is a **comprehensive, modular AI framework** that gives you complete control over your AI stack. Unlike cloud-only solutions, we provide:
 
 - **🏠 Local-First Development** - Build and test entirely on your machine
 - **🔧 Production-Ready Components** - Battle-tested modules that scale from laptop to cluster
-- **🎯 Strategy-Based Configuration** - Smart defaults with infinite customization
+- **🎯 Strategy/config-Based Configuration** - Smart defaults with infinite customization
 - **🚀 Deploy Anywhere** - Same code runs locally, on-premise, or in any cloud
 
 ### 🎭 Perfect For
@@ -48,6 +56,7 @@ LlamaFarm is built as a modular system where each component can be used independ
 #### **🚀 Runtime**
 The execution environment that orchestrates all components and manages the application lifecycle.
 - **Process Management**: Handles component initialization and shutdown
+- **API/Access Layer**: Send queries to /chat, data to /data, and get full results with ease. 
 - **Resource Allocation**: Manages memory, CPU, and GPU resources efficiently
 - **Service Discovery**: Automatically finds and connects components
 - **Health Monitoring**: Tracks component status and performance metrics
@@ -85,12 +94,12 @@ Unified interface for all LLM operations with enterprise-grade features.
 #### **📝 Prompts**
 Enterprise prompt management system with version control and A/B testing.
 - **Template Library**: 20+ pre-built templates for common use cases
-- **Dynamic Variables**: Jinja2 templating with type validation
+- **Dynamic Variables**: Jinja2 templating with type validation (roadmap)
 - **Strategy Selection**: Automatically choose best template based on context
-- **Version Control**: Track prompt changes and performance over time
-- **A/B Testing**: Compare prompt variations with built-in analytics
+- **Version Control**: Track prompt changes and performance over time (roadmap)
+- **A/B Testing**: Compare prompt variations with built-in analytics (roadmap)
 - **Chain-of-Thought**: Built-in support for reasoning chains
-- **Multi-Agent**: Coordinate multiple specialized prompts
+- **Multi-Agent**: Coordinate multiple specialized prompts (roadmap)
 
 ### 🔄 How Components Work Together
 
@@ -110,34 +119,67 @@ Each component is independent but designed to work seamlessly together through s
 ### Installation
 
 ```bash
-# Quick install with our script
-curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
+
 
 # Or clone and set up manually
 git clone https://github.com/llama-farm/llamafarm.git
 cd llamafarm
 ```
 
-### 📦 Component Setup
+### 🎯 Getting Started
 
-Each component can be used independently or together:
+> **💡 Important:** All our demos use the **REAL CLI** and **REAL configuration system** - what you see in the demos is exactly how you'll use LlamaFarm in production!
 
+For the best experience getting started with LlamaFarm, we recommend exploring our component documentation and running the interactive demos:
+
+#### 📚 RAG System (Document Processing & Retrieval)
+- **[Read the RAG Documentation](rag/README.md)** - Complete guide to document ingestion, embedding, and retrieval
+- **Run the Interactive Demos:**
+  ```bash
+  cd rag
+  uv sync
+  
+  # Interactive setup wizard - guides you through configuration
+  uv run python setup_demo.py
+  
+  # Or try specific demos with the real CLI:
+  uv run python cli.py demo research_papers    # Academic paper analysis
+  uv run python cli.py demo customer_support   # Support ticket processing
+  uv run python cli.py demo code_analysis      # Source code understanding
+  
+  # Use your own documents:
+  uv run python cli.py ingest ./your-docs/ --strategy research
+  uv run python cli.py search "your query here" --top-k 5
+  ```
+
+#### 🤖 Models (LLM Management & Optimization)
+- **[Read the Models Documentation](models/README.md)** - Multi-provider support, fallback strategies, and cost optimization
+- **Run the Interactive Demos:**
+  ```bash
+  cd models
+  uv sync
+  
+  # Try our showcase demos:
+  uv run python demos/demo1_cloud_fallback.py  # Automatic provider fallback
+  uv run python demos/demo2_multi_model.py     # Smart model routing
+  uv run python demos/demo3_training.py        # Fine-tuning pipeline (preview)
+  
+  # Or use the real CLI directly:
+  uv run python cli.py chat --strategy balanced "Explain quantum computing"
+  uv run python cli.py chat --primary gpt-4 --fallback claude-3 "Write a haiku"
+  
+  # Test with your own config:
+  uv run python cli.py setup your-strategy.yaml --verify
+  uv run python cli.py demo your-strategy
+  ```
+
+#### 📝 Prompts (Coming Soon)
+The prompts system is under active development. For now, explore the template system:
 ```bash
-# 1. RAG System - Document Processing & Retrieval
-cd rag
-uv sync
-uv run python setup_demo.py  # Interactive setup wizard
-
-
-# 2. Models - LLM Management
-cd ../models
-uv sync
-uv run python demos/demo_fallback.py  # See fallback in action
-
-# 3. Prompts - Template System
-cd ../prompts
+cd prompts
 uv sync
 uv run python -m prompts.cli template list  # View available templates
+uv run python -m prompts.cli execute "Your task" --template research
 ```
 
 ### 🎮 Try It Live
@@ -465,6 +507,13 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
 - CLI tools for all components
 - Docker deployment support
 
+### 🚀 Coming Soon
+- **Full Runtime System** - Complete orchestration layer for managing all components with health monitoring, resource allocation, and automatic recovery
+- **Production Deployer** - Zero-configuration deployment from local development to cloud with automatic scaling and load balancing
+- **Fine-tuning Pipeline** - Train custom models on your data with integrated evaluation and deployment
+- **Web UI Dashboard** - Visual interface for monitoring, configuration, and management
+- **Enhanced CLI** - Unified command interface across all components
+
 ### 🚧 In Progress
 - **Fine-tuning pipeline** *(Looking for contributors with ML experience)*
 - **Advanced caching system** *(Redis/Memcached integration - 40% complete)*
@@ -472,12 +521,12 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
 - **Multi-modal support** *(Vision models integration - Early prototype)*
 - **Agent orchestration** *(LangGraph integration planned)*
 
-### 📅 Planned (2025)
-- **AutoML for strategy optimization** *(Q3 2025 - Seeking ML engineers)*
+### 📅 Planned (late-2025)
+- **AutoML for strategy optimization** *(Q4 2025 - Seeking ML engineers)*
 - **Distributed training** *(Q4 2025 - Partnership opportunities welcome)*
-- **Edge deployment** *(Q2 2025 - IoT and mobile focus)*
+- **Edge deployment** *(Q4 2025 - IoT and mobile focus)*
 - **Mobile SDKs** *(iOS/Android - Looking for mobile developers)*
-- **Web UI dashboard** *(Q2 2025 - React/Vue developers needed)*
+- **Web UI dashboard** *(Q4 2025 - React/Vue developers needed)*
 
 ### 🤝 Want to Contribute?
 We're actively looking for contributors in these areas:
@@ -487,7 +536,6 @@ We're actively looking for contributors in these areas:
 - 🔍 **Search**: GraphRAG and advanced retrieval
 - 📚 **Documentation**: Tutorials and examples
 
-See our [public roadmap](https://github.com/llama-farm/llamafarm/projects) for details.
 
 ---
 
@@ -515,9 +563,8 @@ See [CREDITS.md](CREDITS.md) for complete acknowledgments.
   <p>Join thousands of developers building with LlamaFarm</p>
   <p>
     <a href="https://github.com/llama-farm/llamafarm">⭐ Star on GitHub</a> • 
-    <a href="https://discord.gg/llamafarm">💬 Join Discord</a> • 
-    <a href="https://llamafarm.ai">📚 Read Docs</a> •
-    <a href="https://twitter.com/llamafarm">🐦 Follow Updates</a>
+    <a href="https://discord.gg/https://discord.gg/8kH9AmQpSa">💬 Join Discord</a> • 
+    <a href="https://docs.llamafarm.dev">📚 Read Docs</a> •
 
   </p>
   <br>
