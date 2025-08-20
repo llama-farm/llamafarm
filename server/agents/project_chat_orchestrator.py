@@ -80,12 +80,8 @@ class LFSystemPromptGenerator(SystemPromptGenerator):
         if self.context_providers:
             prompt_parts.append("# EXTRA INFORMATION AND CONTEXT")
             for provider in self.context_providers.values():
-                info = provider.get_info()
-                if info:
-                    prompt_parts.append(f"## {provider.title}")
-                    prompt_parts.append(info)
-                    prompt_parts.append("")
-
+                if info := provider.get_info():
+                    prompt_parts.extend((f"## {provider.title}", info, ""))
         return "\n".join(prompt_parts).strip()
 
     def generate_prompt(self) -> str:
