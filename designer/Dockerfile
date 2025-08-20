@@ -19,6 +19,12 @@ RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 # Copy source code
 COPY . .
 
+# Workaround for rollup optional native binary on platform images
+# npm recommends reinstalling without lock after copying sources
+RUN npm cache clean --force \
+    && rm -rf node_modules package-lock.json \
+    && npm install --legacy-peer-deps
+
 # Build
 RUN npm run build
 
