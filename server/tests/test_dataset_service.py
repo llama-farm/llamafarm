@@ -8,7 +8,14 @@ including unit tests for all public methods and edge cases.
 from unittest.mock import patch
 
 import pytest
-from config.datamodel import Dataset, LlamaFarmConfig, Version
+from config.datamodel import (
+    Dataset,
+    LlamaFarmConfig,
+    Prompt,
+    Provider,
+    Runtime,
+    Version,
+)
 
 from services.dataset_service import DEFAULT_RAG_STRATEGIES, DatasetService
 from services.project_service import ProjectService
@@ -24,7 +31,12 @@ class TestDatasetService:
             version=Version.v1,
             name="test_project",
             namespace="test_namespace",
-            prompts=[],
+            prompts=[
+                Prompt(
+                    name="default",
+                    raw_text="You are a helpful assistant.",
+                )
+            ],
             rag={
                 "strategies": [
                     {
@@ -56,7 +68,15 @@ class TestDatasetService:
                     name="dataset2", rag_strategy="custom_strategy", files=["data.csv"]
                 ),
             ],
-            models=[],
+            runtime=Runtime(
+                provider=Provider.openai,
+                model="llama3.1:8b",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                model_api_parameters={
+                    "temperature": 0.5,
+                },
+            ),
         )
 
         # Mock project config without datasets (rag requires >=1 strategy)
@@ -64,7 +84,12 @@ class TestDatasetService:
             version=Version.v1,
             name="empty_project",
             namespace="test_namespace",
-            prompts=[],
+            prompts=[
+                Prompt(
+                    name="default",
+                    raw_text="You are a helpful assistant.",
+                )
+            ],
             rag={
                 "strategies": [
                     {
@@ -87,7 +112,15 @@ class TestDatasetService:
                 ]
             },
             datasets=[],
-            models=[],
+            runtime=Runtime(
+                provider=Provider.openai,
+                model="llama3.1:8b",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                model_api_parameters={
+                    "temperature": 0.5,
+                },
+            ),
         )
 
     @patch.object(ProjectService, "load_config")
@@ -124,7 +157,12 @@ class TestDatasetService:
             version=Version.v1,
             name="test_project",
             namespace="test_namespace",
-            prompts=[],
+            prompts=[
+                Prompt(
+                    name="default",
+                    raw_text="You are a helpful assistant.",
+                )
+            ],
             rag={
                 "strategies": [
                     {
@@ -147,7 +185,15 @@ class TestDatasetService:
                 ]
             },
             datasets=[],
-            models=[],
+            runtime=Runtime(
+                provider=Provider.openai,
+                model="llama3.1:8b",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                model_api_parameters={
+                    "temperature": 0.5,
+                },
+            ),
         )
         mock_load_config.return_value = config_without_datasets
 
@@ -321,7 +367,12 @@ class TestDatasetService:
             version=Version.v1,
             name="test_project",
             namespace="test_namespace",
-            prompts=[],
+            prompts=[
+                Prompt(
+                    name="default",
+                    raw_text="You are a helpful assistant.",
+                )
+            ],
             rag={
                 "strategies": [
                     {
@@ -344,7 +395,15 @@ class TestDatasetService:
                 ]
             },
             datasets=[],
-            models=[],
+            runtime=Runtime(
+                provider=Provider.openai,
+                model="llama3.1:8b",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                model_api_parameters={
+                    "temperature": 0.5,
+                },
+            ),
         )
         mock_load_config.return_value = config_no_rag
 
@@ -362,7 +421,12 @@ class TestDatasetService:
             version=Version.v1,
             name="test_project",
             namespace="test_namespace",
-            prompts=[],
+            prompts=[
+                Prompt(
+                    name="default",
+                    raw_text="You are a helpful assistant.",
+                )
+            ],
             rag={
                 "strategies": [
                     {
@@ -385,7 +449,15 @@ class TestDatasetService:
                 ]
             },
             datasets=[],
-            models=[],
+            runtime=Runtime(
+                provider=Provider.openai,
+                model="llama3.1:8b",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                model_api_parameters={
+                    "temperature": 0.5,
+                },
+            ),
         )
         mock_load_config.return_value = config_no_strategies_key
 
@@ -403,7 +475,12 @@ class TestDatasetService:
             version=Version.v1,
             name="test_project",
             namespace="test_namespace",
-            prompts=[],
+            prompts=[
+                Prompt(
+                    name="default",
+                    raw_text="You are a helpful assistant.",
+                )
+            ],
             rag={
                 "strategies": [
                     {
@@ -426,7 +503,15 @@ class TestDatasetService:
                 ]
             },
             datasets=[],
-            models=[],
+            runtime=Runtime(
+                provider=Provider.openai,
+                model="llama3.1:8b",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                model_api_parameters={
+                    "temperature": 0.5,
+                },
+            ),
         )
         mock_load_config.return_value = config_no_datasets
 
@@ -465,7 +550,12 @@ class TestDatasetServiceIntegration:
                     version=Version.v1,
                     name="test_project",
                     namespace=namespace,
-                    prompts=[],
+                    prompts=[
+                        Prompt(
+                            name="default",
+                            raw_text="You are a helpful assistant.",
+                        )
+                    ],
                     rag={
                         "strategies": [
                             {
@@ -491,7 +581,15 @@ class TestDatasetServiceIntegration:
                         ]
                     },
                     datasets=current_datasets.copy(),
-                    models=[],
+                    runtime=Runtime(
+                        provider=Provider.openai,
+                        model="llama3.1:8b",
+                        api_key="ollama",
+                        base_url="http://localhost:11434/v1",
+                        model_api_parameters={
+                            "temperature": 0.5,
+                        },
+                    ),
                 )
 
             def mock_save_side_effect(namespace, project, config):
