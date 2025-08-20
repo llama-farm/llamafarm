@@ -41,6 +41,8 @@ rag:
             distance_metric: cosine
   strategy_templates: {}
 datasets: []
-models: []
-
-
+runtime:
+  provider: openai
+  base_url: http://localhost:11434/v1
+  api_key: ollama
+  model: llama3.1:8b
