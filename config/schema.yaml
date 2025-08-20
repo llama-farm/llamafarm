@@ -98,7 +98,7 @@ properties:
     properties:
       provider:
         type: string
-        enum: [openai, ollama]
+        enum: [openai]
         default: openai
       model:
         type: string
