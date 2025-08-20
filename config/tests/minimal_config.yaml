@@ -44,5 +44,15 @@ datasets:
 
 prompts:
   - name: "minimal_prompt"
-    prompt: "This is a minimal prompt."
-    description: "This is a description of the minimal prompt."
+    sections:
+      - title: "default"
+        content:
+          - "This is a minimal prompt."
+
+runtime:
+  provider: "openai"
+  model: "llama3.1:8b"
+  api_key: "ollama"
+  base_url: "http://localhost:11434/v1"
+  model_api_parameters:
+    temperature: 0.5

@@ -66,72 +66,29 @@ class TestModuleIntegration:
         assert len(collection_name) > 0
         assert len(persist_directory) > 0
 
-    def test_model_manager_usage(self, sample_config_dir):
-        """Test how a model manager module would use the configuration."""
-        config_path = sample_config_dir / "sample_config.yaml"
-        config = load_config_dict(config_path=config_path)
-
-        # Simulate model manager extracting model configurations
-        models = config["models"]
-
-        # Group models by provider (common pattern)
-        models_by_provider = {}
-        for model in models:
-            provider = model["provider"]
-            if provider not in models_by_provider:
-                models_by_provider[provider] = []
-            models_by_provider[provider].append(model)
-
-        # Verify we have models for different providers
-        assert "local" in models_by_provider
-        assert "openai" in models_by_provider
-        assert len(models_by_provider["local"]) >= 1
-        assert len(models_by_provider["openai"]) >= 1
-
-        # Test model filtering (common use case)
-        local_models = [m for m in models if m["provider"] == "local"]
-        cloud_models = [m for m in models if m["provider"] in ["openai", "anthropic", "google"]]
-
-        assert len(local_models) >= 1
-        assert len(cloud_models) >= 1
-
-        # Verify model structure
-        for model in models:
-            assert "provider" in model
-            assert "model" in model
-            assert isinstance(model["provider"], str)
-            assert isinstance(model["model"], str)
-            assert len(model["model"]) > 0
-
     def test_prompt_manager_usage(self, sample_config_dir):
         """Test how a prompt manager module would use the configuration."""
         config_path = sample_config_dir / "sample_config.yaml"
         config = load_config_dict(config_path=config_path)
 
-        # Handle optional prompts field
+        # Handle prompts field using new sections/raw_text structure
         prompts = config.get("prompts", [])
         if prompts:
-            # Simulate prompt manager creating a lookup dictionary
-            prompt_lookup = {}
-            for prompt in prompts:
-                if "name" in prompt:
-                    prompt_lookup[prompt["name"]] = prompt
+            prompt_lookup = {p["name"]: p for p in prompts if "name" in p}
 
-            # Test accessing specific prompts
             if "customer_support" in prompt_lookup:
                 cs_prompt = prompt_lookup["customer_support"]
-                assert "prompt" in cs_prompt
-                assert isinstance(cs_prompt["prompt"], str)
-                assert len(cs_prompt["prompt"]) > 0
+                if "raw_text" in cs_prompt:
+                    assert isinstance(cs_prompt["raw_text"], str)
+                    assert len(cs_prompt["raw_text"]) > 0
+                elif "sections" in cs_prompt:
+                    sections = cs_prompt["sections"]
+                    assert isinstance(sections, list) and len(sections) > 0
+                    first = sections[0]
+                    assert "title" in first and "content" in first
+                    assert isinstance(first["content"], list) and len(first["content"]) > 0
 
-                # Check optional fields
-                if "description" in cs_prompt:
-                    assert isinstance(cs_prompt["description"], str)
-
-            # Test prompt filtering by name pattern
             support_prompts = [p for p in prompts if "support" in p.get("name", "").lower()]
-
-            # Should have at least one support prompt in our sample
             assert len(support_prompts) >= 1
 
     def test_configuration_validation_service(self, sample_config_dir):
@@ -154,21 +111,15 @@ class TestModuleIntegration:
 
                 # Check required sections exist
                 assert "rag" in config, f"Missing RAG section in {config_file}"
-                assert "models" in config, f"Missing models section in {config_file}"
 
                 # Check RAG structure
                 rag = config["rag"]
                 # Strict schema uses strategies array instead of these root keys
                 assert "strategies" in rag
 
-                # Check models structure
-                models = config["models"]
-                assert isinstance(models, list), f"Models should be a list in {config_file}"
-                assert len(models) > 0, f"No models defined in {config_file}"
-
-                for i, model in enumerate(models):
-                    assert "provider" in model, f"Model {i} missing provider in {config_file}"
-                    assert "model" in model, f"Model {i} missing model name in {config_file}"
+                # Runtime is the canonical place for execution provider
+                runtime = config["runtime"]
+                assert runtime["provider"] == "openai"
 
     def test_runtime_config_reload(self, sample_config_dir):
         """Test configuration reloading during runtime (common pattern)."""
@@ -176,14 +127,11 @@ class TestModuleIntegration:
 
         # Initial load
         config1 = load_config_dict(config_path=config_path)
-        initial_model_count = len(config1["models"])
 
         # Reload (simulating runtime configuration reload)
         config2 = load_config_dict(config_path=config_path)
-        reloaded_model_count = len(config2["models"])
 
         # Should be identical
-        assert initial_model_count == reloaded_model_count
         assert config1["version"] == config2["version"]
         assert (
             config1["rag"]["strategies"][0]["components"]["parser"]["type"]
@@ -228,9 +176,13 @@ rag:
           config:
             distance_metric: "cosine"
 
-models:
-  - provider: "local"
-    model: "llama3.1:8b"  # Smaller model for dev
+runtime:
+  provider: "openai"
+  model: "llama3.1:8b"
+  api_key: "ollama"
+  base_url: "http://localhost:11434/v1"
+  model_api_parameters:
+    temperature: 0.5
 
 datasets:
   - name: "dev_dataset"
@@ -282,11 +234,13 @@ rag:
           config:
             distance_metric: "cosine"
 
-models:
-  - provider: "local"
-    model: "llama3.1:70b"  # Larger model for prod
-  - provider: "openai"
-    model: "gpt-4"  # Backup cloud model
+runtime:
+  provider: "openai"
+  model: "llama3.1:8b"
+  api_key: "ollama"
+  base_url: "http://localhost:11434/v1"
+  model_api_parameters:
+    temperature: 0.5
 
 datasets:
   - name: "prod_dataset"
@@ -312,7 +266,6 @@ prompts:
         assert (
             dev_strat["components"]["vector_store"]["config"]["collection_name"] == "dev_collection"
         )
-        assert len(dev_cfg["models"]) == 1
 
         # Load production config
         prod_cfg = load_config_dict(config_path=prod_path)
@@ -322,7 +275,8 @@ prompts:
             prod_strat["components"]["vector_store"]["config"]["collection_name"]
             == "production_collection"
         )
-        assert len(prod_cfg["models"]) == 2
+        # Models list is optional; rely on runtime instead
+        assert prod_cfg["runtime"]["provider"] == "openai"
 
     def test_config_driven_component_initialization(self, sample_config_dir):
         """Test how components would be initialized based on configuration."""
@@ -371,20 +325,14 @@ prompts:
         assert embedder["type"] == "OllamaEmbedder"
         assert embedder["batch_size"] > 0
 
-        # Test model initialization
-        models = config["models"]
-        initialized_models = []
-
-        for model_config in models:
-            model_instance = {
-                "provider": model_config["provider"],
-                "model_name": model_config["model"],
-                "initialized": True,
-            }
-            initialized_models.append(model_instance)
-
-        assert len(initialized_models) == len(models)
-        assert all(m["initialized"] for m in initialized_models)
+        # Test runtime initialization (models list optional in schema)
+        runtime = config["runtime"]
+        runtime_instance = {
+            "provider": runtime["provider"],
+            "model_name": runtime["model"],
+            "initialized": True,
+        }
+        assert runtime_instance["initialized"] is True
 
 
 def test_cross_module_config_sharing():
@@ -406,17 +354,6 @@ def test_cross_module_config_sharing():
             self.embedder_type = strat.components.embedder.type
             self.collection_type = strat.components.vector_store.type
 
-    # Module 2: Model Manager
-    class ModelManager:
-        def __init__(self, config: LlamaFarmConfig):
-            self.models = config.models
-            self.local_models = [
-                m for m in self.models if getattr(m.provider, "value", m.provider) == "local"
-            ]
-            self.cloud_models = [
-                m for m in self.models if getattr(m.provider, "value", m.provider) != "local"
-            ]
-
     # Module 3: Prompt Service
     class PromptService:
         def __init__(self, config: LlamaFarmConfig):
@@ -425,7 +362,6 @@ def test_cross_module_config_sharing():
 
     # Initialize all services with shared config
     rag_service = RAGService(shared_config)
-    model_manager = ModelManager(shared_config)
     prompt_service = PromptService(shared_config)
 
     # Verify each service extracted its configuration correctly (support enum or str)
@@ -436,12 +372,15 @@ def test_cross_module_config_sharing():
     assert embedder_type == "OllamaEmbedder"
     assert collection_type == "ChromaStore"
 
-    assert len(model_manager.models) >= 1
-    assert len(model_manager.local_models) >= 1
-
     if "customer_support" in prompt_service.prompt_lookup:
         cs_prompt = prompt_service.prompt_lookup["customer_support"]
-        assert "assistant" in cs_prompt.prompt.lower()
+        if getattr(cs_prompt, "raw_text", None):
+            assert "assistant" in cs_prompt.raw_text.lower()
+        elif getattr(cs_prompt, "sections", None):
+            contents = []
+            for section in cs_prompt.sections:
+                contents.extend(section.content)
+            assert any("assistant" in c.lower() for c in contents)
 
     # Test that all services are working with the same config version
     assert getattr(shared_config.version, "value", shared_config.version) == "v1"
