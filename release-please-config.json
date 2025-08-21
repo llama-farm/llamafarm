@@ -1,0 +1,13 @@
+{
+    "bootstrap-sha": "",
+    "manifest": true,
+    "monorepo-tags": true,
+    "plugins": ["node-workspace"],
+    "packages": {
+      "cli": { "release-type": "go" },
+      "server": { "release-type": "node" },
+      "runtime": { "release-type": "python" },
+      "rag": { "release-type": "python" },
+      "models": { "release-type": "python" }
+    }
+  }
