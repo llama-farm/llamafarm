@@ -49,6 +49,7 @@ jobs:
           cp config/schema.yaml cli/cmd/config/
 
       - name: Build binary
+        id: build
         working-directory: cli
         env:
           GOOS: ${{ matrix.goos }}
@@ -84,8 +85,8 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.version }}
           files: |
-            cli/${{ steps.version.outputs.binary_name }}
-            cli/${{ steps.version.outputs.binary_name }}.sha256
+            cli/${{ steps.build.outputs.binary_name }}
+            cli/${{ steps.build.outputs.binary_name }}.sha256
           fail_on_unmatched_files: true
           append_body: true
 
