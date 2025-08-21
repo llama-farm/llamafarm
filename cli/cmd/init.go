@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"llamafarm-cli/cmd/config"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -12,46 +16,117 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a new LlamaFarm project",
-	Long:  `Initialize a new LlamaFarm project with a default configuration.`,
+	Long:  `Initialize a new LlamaFarm project by creating it on the server for the current directory (or a target path).`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Initializing a new LlamaFarm project...")
 
-		// Create a new project directory
+		// Determine target directory
 		projectDir := "."
 		if len(args) > 0 {
 			projectDir = args[0]
 		}
-
 		if projectDir != "." {
-			os.MkdirAll(projectDir, 0755)
+			if err := os.MkdirAll(projectDir, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to create directory %s: %v\n", projectDir, err)
+				os.Exit(1)
+			}
 		}
 
-		configPath := projectDir + "/llamafarm.yaml"
-
-		if _, err := os.Stat(configPath); err == nil {
-			fmt.Printf("llamafarm.yaml already exists at %s\n", configPath)
-		} else {
-			configContent, err := config.Generate()
-			if err != nil {
-				fmt.Printf("Failed to generate llamafarm.yaml: %v\n", err)
-				return
-			}
-
-			err = os.WriteFile(configPath, []byte(configContent), 0644)
-			if err != nil {
-				fmt.Printf("Failed to create llamafarm.yaml: %v\n", err)
+		// Derive project name from directory
+		var projectName string
+		if projectDir == "." {
+			if wd, err := os.Getwd(); err == nil {
+				projectName = filepath.Base(wd)
 			} else {
-				absPath, err := os.Getwd()
-				if err == nil && projectDir != "." {
-					absPath = absPath + "/" + projectDir
-				}
-				fmt.Printf("Created llamafarm.yaml in %s\n", absPath)
+				fmt.Fprintf(os.Stderr, "Failed to determine working directory: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			projectName = filepath.Base(projectDir)
+		}
+
+		ns := namespace
+		if ns == "" {
+			ns = "default"
+		}
+
+		// Ensure server is available (auto-start locally if needed)
+		base := serverURL
+		if base == "" {
+			base = "http://localhost:8000"
+		}
+		if err := ensureServerAvailable(base); err != nil {
+			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Build URL
+		url := buildServerURL(base, fmt.Sprintf("/v1/projects/%s", ns))
+
+		// Prepare payload
+		type createProjectRequest struct {
+			Name           string  `json:"name"`
+			ConfigTemplate *string `json:"config_template,omitempty"`
+		}
+		var tplPtr *string
+		if initConfigTemplate != "" {
+			tpl := initConfigTemplate
+			tplPtr = &tpl
+		}
+		bodyBytes, _ := json.Marshal(createProjectRequest{Name: projectName, ConfigTemplate: tplPtr})
+
+		// Change CWD for localhost header if targeting a different path
+		origWD, _ := os.Getwd()
+		needChdir := projectDir != "."
+		if needChdir {
+			if err := os.Chdir(projectDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to change directory to %s: %v\n", projectDir, err)
+				os.Exit(1)
+			}
+			defer func() { _ = os.Chdir(origWD) }()
+		}
+
+		// Create request
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(bodyBytes))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+			os.Exit(1)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		// Execute
+		resp, err := getHTTPClient().Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error contacting server: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, prettyServerError(resp, respBody))
+			os.Exit(1)
+		}
+
+		// Success message
+		absPath := projectDir
+		if projectDir == "." {
+			if wd, err := os.Getwd(); err == nil {
+				absPath = wd
+			}
+		} else {
+			if p, err := filepath.Abs(projectDir); err == nil {
+				absPath = p
 			}
 		}
+		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absPath)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(initCmd)
+	initCmd.Flags().StringVar(&namespace, "namespace", "", "Project namespace")
+	initCmd.Flags().StringVar(&initConfigTemplate, "template", "", "Configuration template to use (optional)")
 }
+
+var initConfigTemplate string

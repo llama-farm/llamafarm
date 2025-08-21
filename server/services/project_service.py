@@ -134,35 +134,21 @@ class ProjectService:
 
     @classmethod
     def list_projects(cls, namespace: str) -> list[Project]:
-        if settings.lf_project_dir is not None:
-            logger.info(f"Listing projects in {settings.lf_project_dir}")
-            try:
-                cfg_dict = load_config_dict(
-                    directory=settings.lf_project_dir,
-                    validate=False,
-                )
-                # Ensure required identifiers exist; derive sane defaults from context
-                if not cfg_dict.get("namespace"):
-                    cfg_dict["namespace"] = namespace
-                if not cfg_dict.get("name"):
-                    cfg_dict["name"] = os.path.basename(
-                        settings.lf_project_dir.rstrip(os.sep)
-                    )
-                cfg = LlamaFarmConfig(**cfg_dict)
-                return [
-                    Project(
-                        namespace=namespace,
-                        name=cfg.name,
-                        config=cfg,
-                    )
-                ]
-            except (ConfigError, ValidationError) as e:
-                logger.warning(
-                    "Skipping invalid project at configured project_dir",
-                    path=settings.lf_project_dir,
-                    error=str(e),
-                )
-                return []
+        project_dir: str | None
+        if not settings.lf_use_data_dir and client_cwd.get() is not None:
+            project_dir = client_cwd.get()
+        elif settings.lf_project_dir is not None:
+            project_dir = settings.lf_project_dir
+        if project_dir:
+          logger.info(f"Listing projects in {project_dir}")
+          cfg = load_config(directory=project_dir, validate=False)
+          return [
+              Project(
+                  namespace=namespace,
+                  name=cfg.name,
+                  config=cfg,
+              )
+          ]
 
         namespace_dir = cls.get_namespace_dir(namespace)
         logger.info(f"Listing projects in {namespace_dir}")

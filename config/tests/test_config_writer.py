@@ -26,8 +26,12 @@ class TestConfigWriter:
             "prompts": [
                 {
                     "name": "test_prompt",
-                    "prompt": "This is a test prompt for configuration testing.",
-                    "description": "A sample prompt for testing purposes"
+                    "sections": [
+                        {
+                            "title": "default",
+                            "content": ["This is a test prompt for configuration testing."],
+                        }
+                    ],
                 }
             ],
             "rag": {
@@ -42,8 +46,8 @@ class TestConfigWriter:
                                     "content_fields": ["question"],
                                     "metadata_fields": ["category"],
                                     "id_field": "id",
-                                    "combine_content": True
-                                }
+                                    "combine_content": True,
+                                },
                             },
                             "extractors": [],
                             "embedder": {
@@ -52,29 +56,25 @@ class TestConfigWriter:
                                     "model": "nomic-embed-text",
                                     "base_url": "http://localhost:11434",
                                     "batch_size": 16,
-                                    "timeout": 30
-                                }
+                                    "timeout": 30,
+                                },
                             },
-                            "vector_store": {
-                                "type": "ChromaStore",
-                                "config": {}
-                            },
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
-                                "config": {}
-                            }
-                        }
+                            "vector_store": {"type": "ChromaStore", "config": {}},
+                            "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}},
+                        },
                     }
                 ]
             },
             "datasets": [
-                {
-                    "name": "test_dataset",
-                    "files": ["test_file.csv"],
-                    "rag_strategy": "auto"
-                }
+                {"name": "test_dataset", "files": ["test_file.csv"], "rag_strategy": "auto"}
             ],
-            "models": []
+            "runtime": {
+                "provider": "openai",
+                "model": "llama3.1:8b",
+                "api_key": "ollama",
+                "base_url": "http://localhost:11434/v1",
+                "model_api_parameters": {"temperature": 0.5},
+            },
         }
         return LlamaFarmConfig(**config)
 
@@ -208,25 +208,19 @@ class TestConfigWriter:
                             "components": {
                                 "embedder": {
                                     "type": "OllamaEmbedder",
-                                    "config": {"batch_size": 32}
+                                    "config": {"batch_size": 32},
                                 },
                                 "parser": {"type": "CSVParser", "config": {}},
                                 "vector_store": {"type": "ChromaStore", "config": {}},
-                                "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
-                            }
+                                "retrieval_strategy": {
+                                    "type": "BasicSimilarityStrategy",
+                                    "config": {},
+                                },
+                            },
                         }
                     ]
                 },
-                "models": [
-                    {
-                        "provider": "local",
-                        "model": "llama3.1:8b"
-                    },
-                    {
-                        "provider": "openai",
-                        "model": "gpt-4"
-                    }
-                ]
+                "runtime": {"model": "gpt-4"},
             }
 
             updated_path, _ = update_config(config_path, updates)
@@ -238,11 +232,12 @@ class TestConfigWriter:
             # Load and verify changes
             loaded_config = load_config_dict(config_path)
             assert (
-                loaded_config["rag"]["strategies"][0]["components"]["embedder"]["config"]["batch_size"]
+                loaded_config["rag"]["strategies"][0]["components"]["embedder"]["config"][
+                    "batch_size"
+                ]
                 == 32
             )
-            assert len(loaded_config["models"]) == 2
-            assert loaded_config["models"][1]["provider"] == "openai"
+            assert loaded_config["runtime"]["model"] == "gpt-4"
 
             # Verify other values remain unchanged
             assert loaded_config["version"] == "v1"
@@ -265,22 +260,28 @@ class TestConfigWriter:
                             "components": {
                                 "embedder": {
                                     "type": "OllamaEmbedder",
-                                    "config": {"batch_size": 64, "timeout": 45}
+                                    "config": {"batch_size": 64, "timeout": 45},
                                 },
                                 "parser": {"type": "CSVParser", "config": {}},
                                 "vector_store": {"type": "ChromaStore", "config": {}},
-                                "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}}
-                            }
+                                "retrieval_strategy": {
+                                    "type": "BasicSimilarityStrategy",
+                                    "config": {},
+                                },
+                            },
                         }
                     ]
-                }
+                },
+                "runtime": {"model_api_parameters": {"top_p": 0.9}},
             }
 
             update_config(config_path, updates)
 
             # Load and verify deep merge worked
             loaded_config = load_config_dict(config_path)
-            embedder_config = loaded_config["rag"]["strategies"][0]["components"]["embedder"]["config"]
+            embedder_config = loaded_config["rag"]["strategies"][0]["components"]["embedder"][
+                "config"
+            ]
 
             # Updated values
             assert embedder_config["batch_size"] == 64
@@ -289,6 +290,8 @@ class TestConfigWriter:
             # Preserved values
             assert embedder_config["model"] == "nomic-embed-text"
             assert embedder_config["base_url"] == "http://localhost:11434"
+            # Runtime deep merge
+            assert loaded_config["runtime"]["model_api_parameters"]["top_p"] == 0.9
 
     def test_update_nonexistent_file(self):
         """Test updating a file that doesn't exist."""

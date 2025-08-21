@@ -1,0 +1,20 @@
+{
+  "name": "docs",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "docs/website",
+        "command": "npm run build"
+      }
+    },
+
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "docs/website",
+        "command": "npm run deploy"
+      }
+    }
+  }
+}

@@ -78,10 +78,10 @@ function ConfigEditor() {
   }
 
   return (
-    <div className="w-full h-[70vh] min-h-[420px] rounded-lg overflow-hidden flex bg-white dark:bg-blue-500">
+    <div className="w-full h-[70vh] min-h-[420px] rounded-lg overflow-hidden flex bg-card">
       {/* Sidebar */}
-      <div className="w-64 shrink-0 border-r border-blue-50 dark:border-blue-700 p-3 space-y-3">
-        <div className="flex items-center gap-2 bg-[#FFFFFF] dark:bg-blue-600 rounded-md px-2 py-1 border border-blue-50 dark:border-blue-400/40">
+      <div className="w-64 shrink-0 border-r border-border p-3 space-y-3">
+        <div className="flex items-center gap-2 bg-card rounded-md px-2 py-1 border border-input">
           <FontIcon
             type="search"
             className="w-4 h-4 text-gray-800 dark:text-white"
@@ -90,20 +90,20 @@ function ConfigEditor() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search config"
-            className="w-full bg-transparent text-sm focus:outline-none text-gray-900 dark:text-white"
+            className="w-full bg-transparent text-sm focus:outline-none text-foreground"
           />
         </div>
 
         {Object.entries(filesByGroup).map(([group, files]) => (
           <div key={group} className="text-sm">
             <button
-              className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-blue-50/50 dark:hover:bg-blue-600/40"
+              className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-accent/20"
               onClick={() => setOpenGroups(g => ({ ...g, [group]: !g[group] }))}
             >
-              <span className="text-gray-800 dark:text-white">{group}</span>
+              <span className="text-foreground">{group}</span>
               <FontIcon
                 type="chevron-down"
-                className={`w-4 h-4 text-gray-800 dark:text-white transition-transform ${
+                className={`w-4 h-4 text-foreground transition-transform ${
                   openGroups[group] ? 'rotate-180' : ''
                 }`}
               />
@@ -113,10 +113,8 @@ function ConfigEditor() {
                 {files.map(f => (
                   <button
                     key={f.id}
-                    className={`w-full text-left px-2 py-1 rounded-md hover:bg-blue-50/50 dark:hover:bg-blue-600/40 ${
-                      activeId === f.id
-                        ? 'bg-blue-50/60 dark:bg-blue-600/50'
-                        : ''
+                    className={`w-full text-left px-2 py-1 rounded-md hover:bg-accent/20 ${
+                      activeId === f.id ? 'bg-accent/30' : ''
                     }`}
                     onClick={() => openFile(f.id, f.label)}
                   >
@@ -132,14 +130,14 @@ function ConfigEditor() {
       {/* Main */}
       <div className="flex-1 flex flex-col">
         {/* Tabs */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-blue-50 dark:border-blue-700 bg-[#FFFFFF] dark:bg-blue-600">
+        <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-card">
           {openTabs.map(tab => (
             <div
               key={tab.id}
               className={`flex items-center gap-2 px-2 py-1 rounded-md text-sm cursor-default ${
                 activeId === tab.id
-                  ? 'bg-blue-50/60 dark:bg-blue-700 text-gray-900 dark:text-white'
-                  : 'text-blue-100'
+                  ? 'bg-accent/30 text-foreground'
+                  : 'text-muted-foreground'
               }`}
             >
               <button
@@ -159,14 +157,53 @@ function ConfigEditor() {
         </div>
 
         {/* Editor area */}
-        <div className="flex-1 p-3">
-          <textarea
-            className="w-full h-full resize-none bg-[#0b122b] text-white rounded-md p-3 font-mono text-sm"
-            value={content[activeId] ?? ''}
-            onChange={e =>
-              setContent(prev => ({ ...prev, [activeId]: e.target.value }))
-            }
-          />
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3 p-3">
+          <div className="col-span-1">
+            <textarea
+              className="w-full h-full resize-none bg-background text-foreground rounded-md p-3 font-mono text-sm"
+              spellCheck={false}
+              autoComplete="off"
+              value={content[activeId] ?? ''}
+              onChange={e =>
+                setContent(prev => ({ ...prev, [activeId]: e.target.value }))
+              }
+            />
+          </div>
+          <div className="hidden lg:block col-span-1">
+            <div className="w-full h-full rounded-md p-3 font-mono text-[13px] leading-6 bg-card border border-border overflow-auto">
+              <pre className="whitespace-pre-wrap">
+                <code>
+                  <span className="text-foreground">project:</span>{' '}
+                  <span className="text-teal-500 dark:text-teal-300">
+                    aircraft-mx-flow
+                  </span>
+                  {'\n'}
+                  <span className="text-foreground">features:</span>
+                  {'\n'} -{' '}
+                  <span className="text-teal-500 dark:text-teal-300">rag</span>
+                  {'\n'} -{' '}
+                  <span className="text-teal-500 dark:text-teal-300">
+                    prompts
+                  </span>
+                  {'\n'} -{' '}
+                  <span className="text-teal-500 dark:text-teal-300">
+                    models
+                  </span>
+                  {'\n'}
+                  <span className="text-foreground">retriever:</span>
+                  {'\n'} <span className="text-foreground">strategy:</span>{' '}
+                  <span className="text-teal-500 dark:text-teal-300">
+                    hybrid
+                  </span>
+                  {'\n'} <span className="text-foreground">top_k:</span>{' '}
+                  <span className="text-teal-500 dark:text-teal-300">8</span>
+                  {'\n'}{' '}
+                  <span className="text-foreground">score_threshold:</span>{' '}
+                  <span className="text-teal-500 dark:text-teal-300">0.72</span>
+                </code>
+              </pre>
+            </div>
+          </div>
         </div>
       </div>
     </div>

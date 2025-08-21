@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic'
 const config: Config = {
   title: 'LlamaFarm',
   tagline: 'Config-Based AI • Local First • Deploy Anywhere',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/llama-farm-favicon.svg',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -25,7 +25,7 @@ const config: Config = {
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'llama-farm', // Usually your GitHub org/user name.
   projectName: 'llama-farm.github.io', // Usually your repo name.
-  deploymentBranch: 'main',
+  deploymentBranch: 'gh-pages',
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
@@ -78,7 +78,8 @@ const config: Config = {
       title: 'LlamaFarm',
       logo: {
         alt: 'LlamaFarm Logo',
-        src: 'img/rocket-llama.png',
+        src: 'img/llama-farm-favicon.svg',
+        srcDark: 'img/llama-farm-favicon.svg',
       },
       items: [
         {

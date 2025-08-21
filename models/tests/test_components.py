@@ -158,7 +158,7 @@ class TestStrategyManager:
         manager = StrategyManager()
         
         assert hasattr(manager, 'strategies')
-        assert 'local_development' in manager.strategies
+        assert 'local_development' in manager.list_strategies()
     
     def test_list_strategies(self):
         """Test listing available strategies."""

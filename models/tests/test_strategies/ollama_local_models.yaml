@@ -2,10 +2,9 @@
 # Configuration for running multiple local models with Ollama
 
 strategies:
-  ollama_local_models:
-    name: Ollama Local Models Configuration
+  - name: ollama_local_models
     description: Multiple local models running via Ollama with automatic fallback
-    
+
     components:
       model_app:
         type: ollama
@@ -15,7 +14,7 @@ strategies:
           timeout: 120
           keep_alive: 5m
           concurrent_requests: 4
-    
+
     # Fallback chain for resilience
     fallback_chain:
       - provider: model_app
@@ -33,7 +32,7 @@ strategies:
       - provider: model_app
         model: mistral:7b
         purpose: coding
-    
+
     # Routing rules for different query types
     routing_rules:
       - pattern: "embed|embedding|vector"
@@ -48,13 +47,13 @@ strategies:
       - pattern: ".*"
         provider: model_app
         model: llama3.1:8b
-    
+
     # Performance optimization
     constraints:
       requires_gpu: false
       max_concurrent_requests: 4
       memory_limit_gb: 16
-    
+
     monitoring:
       track_performance: true
       log_level: INFO

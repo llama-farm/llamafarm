@@ -10,16 +10,23 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with a workaround for the rollup ARM64 issue
-RUN npm install --legacy-peer-deps
+# Disable husky/lifecycle scripts during container installs
+ENV HUSKY=0
+
+# Install dependencies (allow scripts so rollup can install its native binary)
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
 
-# Workaround for rollup ARM64 dependency issue
-RUN rm -rf node_modules package-lock.json && \
-    npm install --legacy-peer-deps && \
-    npm run build
+# Workaround for rollup optional native binary on platform images
+# npm recommends reinstalling without lock after copying sources
+RUN npm cache clean --force \
+    && rm -rf node_modules package-lock.json \
+    && npm install --legacy-peer-deps
+
+# Build
+RUN npm run build
 
 # Production stage
 FROM nginx:alpine

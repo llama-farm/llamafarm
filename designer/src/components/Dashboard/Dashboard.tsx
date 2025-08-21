@@ -54,16 +54,13 @@ const Dashboard = () => {
                   setIsModalOpen(true)
                 }}
               >
-                <FontIcon
-                  type="edit"
-                  className="w-5 h-5 text-blue-200 dark:text-blue-100"
-                />
+                <FontIcon type="edit" className="w-5 h-5 text-primary" />
               </button>
             )}
           </div>
           <div className="flex items-center gap-3">
             <ModeToggle mode={mode} onToggle={setMode} />
-            <button className="opacity-50 cursor-not-allowed text-sm px-3 py-2 rounded-lg border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400">
+            <button className="opacity-50 cursor-not-allowed text-sm px-3 py-2 rounded-lg border border-input text-muted-foreground">
               Deploy
             </button>
           </div>
@@ -76,102 +73,98 @@ const Dashboard = () => {
             <div className="w-full flex flex-row gap-4 mt-4">
               <div className="w-3/5 flex flex-col gap-4">
                 <div className="flex flex-col">
-                  <div className="flex flex-row gap-2 items-center h-[40px] px-2 rounded-tl-lg rounded-tr-lg justify-between bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                    <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                  <div className="flex flex-row gap-2 items-center h-[40px] px-2 rounded-tl-lg rounded-tr-lg justify-between bg-card border-b border-border">
+                    <div className="flex flex-row gap-2 items-center text-foreground">
                       <FontIcon type="data" className="w-4 h-4" />
                       Data
                     </div>
-                    <button className="text-xs text-blue-200 dark:text-green-100">
+                    <button className="text-xs text-primary">
                       View and add
                     </button>
                   </div>
-                  <div className="p-6 flex flex-col gap-2 rounded-b-lg bg-white dark:bg-blue-500">
-                    <div className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-gray-200 dark:bg-blue-700">
-                      <div className="text-gray-700 dark:text-white">
+                  <div className="p-6 flex flex-col gap-2 rounded-b-lg bg-card">
+                    <div className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-secondary">
+                      <div className="text-foreground">
                         dataset-1-aircraft-logs
                       </div>
-                      <div className="text-xs text-blue-200 dark:text-blue-100">
+                      <div className="text-xs text-muted-foreground">
                         Updated 3 hours ago
                       </div>
                     </div>
-                    <div className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-gray-200 dark:bg-blue-700">
-                      <div className="text-gray-700 dark:text-white">
+                    <div className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-secondary">
+                      <div className="text-foreground">
                         data-set-2-aircraft-maintenance-rules
                       </div>
-                      <div className="text-xs text-blue-200 dark:text-blue-100">
+                      <div className="text-xs text-muted-foreground">
                         Updated 6 hours ago
                       </div>
                     </div>
-                    <div className="text-xs text-blue-200 dark:text-blue-100">
+                    <div className="text-xs text-muted-foreground">
                       3 datasets total, showing last updated
                     </div>
                   </div>
                 </div>
                 <div className="flex flex-row gap-4 rounded-lg">
                   <div className="w-1/2">
-                    <div className="h-[40px] px-2 flex items-center rounded-tl-lg rounded-tr-lg bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                      <span className="text-gray-700 dark:text-white">
-                        Models
-                      </span>
+                    <div className="h-[40px] px-2 flex items-center rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
+                      <span className="text-foreground">Models</span>
                     </div>
-                    <div className="p-6 flex flex-col min-h-[325px] rounded-b-lg bg-white dark:bg-blue-500">
+                    <div className="p-6 flex flex-col min-h-[325px] rounded-b-lg bg-card">
                       <div className="mb-4">
-                        <label className="text-xs text-gray-600 dark:text-gray-100">
+                        <label className="text-xs text-muted-foreground">
                           Current model
                         </label>
                         <div className="w-full flex flex-row gap-2 items-center justify-between">
-                          <div className="rounded-xl px-3 py-1 my-1 w-full bg-gray-200 dark:bg-blue-600">
-                            <span className="text-gray-700 dark:text-white">
-                              TinyLlama
-                            </span>
+                          <div className="rounded-xl px-3 py-1 my-1 w-full bg-secondary">
+                            <span className="text-foreground">TinyLlama</span>
                           </div>
                           <FontIcon
                             type="edit"
-                            className="w-6 h-6 text-blue-200 dark:text-blue-100"
+                            className="w-6 h-6 text-primary"
                           />
                         </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
+                        <div className="text-xs text-muted-foreground">
                           Why TinyLama?
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600 dark:text-gray-100">
+                        <label className="text-xs text-muted-foreground">
                           OpenAI API Key
                         </label>
                         <div className="w-full flex flex-row gap-2 items-center justify-between my-1">
-                          <div className="rounded-xl px-3 py-1 w-full bg-gray-200 dark:bg-blue-600">
-                            <span className="text-gray-500 dark:text-gray-300">
+                          <div className="rounded-xl px-3 py-1 w-full bg-secondary">
+                            <span className="text-muted-foreground">
                               Enter here
                             </span>
                           </div>
-                          <button className="rounded-lg p-1 w-10 h-8 flex items-center justify-center bg-blue-100 dark:bg-blue-200">
+                          <button className="rounded-lg p-1 w-10 h-8 flex items-center justify-center bg-primary">
                             <FontIcon
                               type="add"
-                              className="w-4 h-4 text-white"
+                              className="w-4 h-4 text-primary-foreground"
                             />
                           </button>
                         </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
+                        <div className="text-xs text-muted-foreground">
                           Connect your project to OpenAI
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="w-1/2">
-                    <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                      <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                    <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
+                      <div className="flex flex-row gap-2 items-center text-foreground">
                         <FontIcon type="integration" className="w-4 h-4" />
                         Integrations
                       </div>
-                      <button className="text-xs text-blue-200 dark:text-green-100 flex flex-row gap-1 items-center">
+                      <button className="text-xs text-primary flex flex-row gap-1 items-center">
                         Add
                         <FontIcon type="add" className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="p-6 flex flex-col min-h-[325px] justify-between rounded-b-lg bg-white dark:bg-blue-500">
+                    <div className="p-6 flex flex-col min-h-[325px] justify-between rounded-b-lg bg-card">
                       <div className="flex flex-col gap-2">
-                        <div className="flex flex-row gap-2 items-center border-[1px] border-solid border-blue-200 rounded-lg py-1 px-2 justify-between bg-white dark:bg-blue-600 dark:border-blue-600">
-                          <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                        <div className="flex flex-row gap-2 items-center border border-input rounded-lg py-1 px-2 justify-between bg-card">
+                          <div className="flex flex-row gap-2 items-center text-foreground">
                             <img
                               src={
                                 theme === 'dark'
@@ -184,14 +177,14 @@ const Dashboard = () => {
                             <div>Gitlab</div>
                           </div>
                           <div className="flex flex-row gap-1 items-center">
-                            <div className="w-2 h-2 bg-blue-200 dark:bg-green-100 rounded-full"></div>
-                            <div className="text-xs text-blue-200 dark:text-green-100">
+                            <div className="w-2 h-2 bg-primary rounded-full"></div>
+                            <div className="text-xs text-primary">
                               Connected
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-row gap-2 items-center border-[1px] border-solid border-blue-200 rounded-lg py-1 px-2 justify-between bg-white dark:bg-blue-600 dark:border-blue-600">
-                          <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                        <div className="flex flex-row gap-2 items-center border border-input rounded-lg py-1 px-2 justify-between bg-card">
+                          <div className="flex flex-row gap-2 items-center text-foreground">
                             <img
                               src={
                                 theme === 'dark'
@@ -204,14 +197,14 @@ const Dashboard = () => {
                             <div>Github</div>
                           </div>
                           <div className="flex flex-row gap-1 items-center">
-                            <div className="w-2 h-2 bg-blue-200 dark:bg-green-100 rounded-full"></div>
-                            <div className="text-xs text-blue-200 dark:text-green-100">
+                            <div className="w-2 h-2 bg-primary rounded-full"></div>
+                            <div className="text-xs text-primary">
                               Connected
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-row gap-2 items-center border-[1px] border-solid border-blue-200 rounded-lg py-1 px-2 justify-between bg-white dark:bg-blue-600 dark:border-blue-600">
-                          <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                        <div className="flex flex-row gap-2 items-center border border-input rounded-lg py-1 px-2 justify-between bg-card">
+                          <div className="flex flex-row gap-2 items-center text-foreground">
                             <img
                               src={
                                 theme === 'dark'
@@ -224,15 +217,15 @@ const Dashboard = () => {
                             <div>Slack</div>
                           </div>
                           <div className="flex flex-row gap-1 items-center">
-                            <div className="w-2 h-2 bg-blue-200 dark:bg-green-100 rounded-full"></div>
-                            <div className="text-xs text-blue-200 dark:text-green-100">
+                            <div className="w-2 h-2 bg-primary rounded-full"></div>
+                            <div className="text-xs text-primary">
                               Connected
                             </div>
                           </div>
                         </div>
                       </div>
                       <div>
-                        <button className="text-xs text-blue-200 dark:text-blue-100 flex flex-row gap-1 items-center justify-center">
+                        <button className="text-xs text-primary flex flex-row gap-1 items-center justify-center">
                           Edit
                           <FontIcon type="edit" className="w-4 h-4" />
                         </button>
@@ -242,53 +235,39 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="w-2/5">
-                <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                  <span className="text-gray-700 dark:text-white">
-                    Project versions
-                  </span>
+                <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
+                  <span className="text-foreground">Project versions</span>
                   <FontIcon type="recently-viewed" className="w-4 h-4" />
                 </div>
-                <div className="p-6 flex flex-col rounded-b-lg bg-white dark:bg-blue-500">
+                <div className="p-6 flex flex-col rounded-b-lg bg-card">
                   <div className="flex flex-col gap-2 h-[400px] overflow-y-auto">
-                    <div className="text-xs text-blue-200 dark:text-blue-100">
-                      Today
-                    </div>
+                    <div className="text-xs text-muted-foreground">Today</div>
                     {Array.from({ length: 4 }).map((_, index) => (
                       <div key={index} className="flex flex-col mb-2">
                         <div className="flex flex-row gap-2 items-center justify-between">
-                          <div className="text-gray-700 dark:text-white">
-                            Version 1.0.0
-                          </div>
-                          <div className="text-gray-500 dark:text-blue-100">
-                            7:45PM
-                          </div>
+                          <div className="text-foreground">Version 1.0.0</div>
+                          <div className="text-muted-foreground">7:45PM</div>
                         </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
+                        <div className="text-xs text-muted-foreground">
                           RAG and prompt model updates
                         </div>
                       </div>
                     ))}
-                    <div className="text-xs text-blue-200 dark:text-blue-100">
-                      July 30
-                    </div>
+                    <div className="text-xs text-muted-foreground">July 30</div>
                     {Array.from({ length: 2 }).map((_, index) => (
                       <div key={index} className="flex flex-col">
                         <div className="flex flex-row gap-2 items-center justify-between">
-                          <div className="text-gray-700 dark:text-white">
-                            Version 1.0.0
-                          </div>
-                          <div className="text-gray-500 dark:text-blue-100">
-                            7:45PM
-                          </div>
+                          <div className="text-foreground">Version 1.0.0</div>
+                          <div className="text-muted-foreground">7:45PM</div>
                         </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
+                        <div className="text-xs text-muted-foreground">
                           RAG and prompt model updates
                         </div>
                       </div>
                     ))}
                   </div>
                   <div className="w-full flex justify-center items-center mt-4">
-                    <button className="w-full rounded-lg py-1 border-[1px] border-solid flex flex-row gap-2 items-center justify-center border-blue-200 text-blue-200 hover:bg-blue-50 dark:border-green-100 dark:text-green-100">
+                    <button className="w-full rounded-lg py-1 border flex flex-row gap-2 items-center justify-center border-input text-primary hover:bg-accent/20">
                       View config
                       <FontIcon type="code" className="w-4 h-4" />
                     </button>

@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import FontIcon from '../common/FontIcon'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog'
 
 export type ProjectModalMode = 'create' | 'edit'
 
@@ -32,8 +38,6 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     }
   }, [isOpen, initialName, initialDescription])
 
-  if (!isOpen) return null
-
   const title = mode === 'create' ? 'Create new project' : 'Edit project'
   const cta = mode === 'create' ? 'Create' : 'Save'
   const isValid = name.trim().length > 0
@@ -45,33 +49,29 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center pt-16 bg-black/50">
-      <div className="w-[720px] max-w-[95vw] rounded-xl overflow-hidden bg-white dark:bg-blue-600 text-gray-900 dark:text-white shadow-xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-blue-50/50 dark:border-blue-400/30">
-          <div className="text-lg">{title}</div>
-          <FontIcon
-            type="close"
-            isButton
-            handleOnClick={onClose}
-            className="w-5 h-5 text-gray-700 dark:text-white"
-          />
-        </div>
+    <Dialog open={isOpen} onOpenChange={v => (!v ? onClose() : undefined)}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="text-lg text-foreground">{title}</DialogTitle>
+        </DialogHeader>
 
-        <div className="p-5 flex flex-col gap-3">
+        <div className="flex flex-col gap-3 pt-1">
           <div>
-            <label className="text-xs text-blue-100">Project name</label>
+            <label className="text-xs text-muted-foreground">
+              Project name
+            </label>
             <input
-              className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100"
+              className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
               placeholder="Enter name"
               value={name}
               onChange={e => setName(e.target.value)}
             />
           </div>
           <div>
-            <label className="text-xs text-blue-100">Description</label>
+            <label className="text-xs text-muted-foreground">Description</label>
             <textarea
               rows={4}
-              className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-blue-50 text-gray-800 dark:text-white dark:border-blue-100"
+              className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
               placeholder="Add a brief description"
               value={desc}
               onChange={e => setDesc(e.target.value)}
@@ -79,20 +79,21 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
         </div>
 
-        <div className="px-5 py-4 flex items-center justify-between bg-white dark:bg-blue-600">
+        <DialogFooter className="flex items-center justify-between gap-2">
           {mode === 'edit' ? (
             <button
-              className="px-3 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 text-sm"
+              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
               onClick={handleDelete}
+              type="button"
             >
               Delete
             </button>
           ) : (
             <div />
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-auto">
             <button
-              className="px-3 py-2 rounded-md text-sm text-blue-200 dark:text-green-100 hover:underline"
+              className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
               onClick={onClose}
               type="button"
             >
@@ -101,17 +102,17 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
             <button
               className={`px-3 py-2 rounded-md text-sm ${
                 isValid
-                  ? 'bg-blue-200 text-white hover:opacity-90'
-                  : 'opacity-50 cursor-not-allowed bg-blue-200 text-white'
+                  ? 'bg-primary text-primary-foreground hover:opacity-90'
+                  : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
               }`}
               onClick={() => isValid && onSave(name.trim(), desc.trim())}
             >
               {cta}
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

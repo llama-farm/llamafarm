@@ -23,16 +23,15 @@ const Message: React.FC<MessageProps> = ({ message }) => {
 
     switch (type) {
       case 'user':
-        return `${baseBubble} bg-[#F4F4F4] text-[#252525] dark:bg-blue-600 dark:text-white text-base leading-relaxed`
+        return `${baseBubble} bg-secondary text-foreground text-base leading-relaxed`
       case 'assistant':
-        // Light mode: dark text; Dark mode: softer near-white text
-        return 'text-[15px] md:text-base leading-relaxed text-gray-800 dark:text-white/90'
+        return 'text-[15px] md:text-base leading-relaxed text-foreground/90'
       case 'system':
         return `${baseBubble} bg-green-500 text-white rounded-2xl border-green-500 italic`
       case 'error':
         return `${baseBubble} bg-red-500 text-white rounded-2xl rounded-bl-sm border-red-500`
       default:
-        return `${baseBubble} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200`
+        return `${baseBubble} bg-muted text-foreground`
     }
   }
 

@@ -8,7 +8,7 @@ required:
   - prompts
   - rag
   - datasets
-  - models
+  - runtime
 properties:
   version:
     type: string
@@ -28,16 +28,38 @@ properties:
     items:
       type: object
       required:
-        - prompt
+        - name
       properties:
         name:
           type: string
           description: Prompt name
-        prompt:
+        sections:
+          type: array
+          description: List of prompt sections
+          items:
+            type: object
+            required:
+              - title
+              - content
+            properties:
+              title:
+                type: string
+                description: Section title
+              content:
+                type: array
+                description: List of section content
+                items:
+                  type: string
+                  description: Section content
+        raw_text:
           type: string
-          description: Prompt text
-        description:
-          type: string
+          description: Raw text of the prompt
+      example:
+        name: default
+        sections:
+          - title: "IDENTITY and PURPOSE"
+            content:
+              - "You are a helpful assistant that can answer questions and help with tasks."
     default: []
 
   rag:
@@ -68,19 +90,25 @@ properties:
           default: []
     default: []
 
-  models:
-    type: array
-    description: List of model configurations
-    items:
-      type: object
-      required:
-        - provider
-        - model
-      properties:
-        provider:
-          type: string
-          enum: ["openai", "anthropic", "google", "local", "custom"]
-          default: local
-        model:
-          type: string
-          description: Model name or ID
+  runtime:
+    type: object
+    required:
+      - provider
+      - model
+    properties:
+      provider:
+        type: string
+        enum: [openai]
+        default: openai
+      model:
+        type: string
+        description: Model name or ID
+      base_url:
+        type: string
+        description: Base URL for the provider
+      api_key:
+        type: string
+        description: API key for the provider
+      model_api_parameters:
+        description: Additional parameters passed to the API provider
+        additionalProperties: true

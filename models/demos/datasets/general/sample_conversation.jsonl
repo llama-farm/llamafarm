@@ -1,0 +1,3 @@
+{"text": "Human: Hello, how are you today?\nAssistant: I'm doing well, thank you for asking! How can I help you today?"}
+{"text": "Human: Can you explain what LlamaFarm is?\nAssistant: LlamaFarm is a comprehensive AI model management system that helps users work with various language models including OpenAI, Anthropic, local models like Ollama, and fine-tuning capabilities."}
+{"text": "Human: What's the difference between LoRA and full fine-tuning?\nAssistant: LoRA (Low-Rank Adaptation) is a parameter-efficient fine-tuning method that only updates a small subset of model parameters, making it faster and requiring less memory. Full fine-tuning updates all model parameters, providing potentially better results but requiring more computational resources."}

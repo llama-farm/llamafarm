@@ -93,3 +93,11 @@ model = "custom-fine-tuned-model-v1"
 name = "sample_dataset"
 files = ["test_file.csv"]
 rag_strategy = "default"
+
+[runtime]
+provider = "openai"
+model = "llama3.1:8b"
+api_key = "ollama"
+base_url = "http://localhost:11434/v1"
+[runtime.model_api_parameters]
+temperature = 0.5

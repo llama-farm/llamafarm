@@ -1,16 +1,17 @@
 import sys
 from pathlib import Path
+from typing import override
 
 import instructor
 from atomic_agents import AgentConfig, AtomicAgent, BaseIOSchema  # type: ignore
-from atomic_agents.agents.atomic_agent import ChatHistory  # type: ignore
+from atomic_agents.agents.atomic_agent import ChatHistory, SystemPromptGenerator  # type: ignore
 from openai import OpenAI
 
 from core.settings import settings  # type: ignore
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
-from config.datamodel import LlamaFarmConfig  # noqa: E402
+from config.datamodel import LlamaFarmConfig, Provider  # noqa: E402
 
 
 class ProjectChatOrchestratorAgentInputSchema(BaseIOSchema):
@@ -47,22 +48,60 @@ class ProjectChatOrchestratorAgent(
         super().__init__(
             config=AgentConfig(
                 client=client,
-                model=settings.ollama_model,
+                model=project_config.runtime.model,
                 history=history,
-                # TODO: add a SystemPromptGenerator using the project's prompt config
+                system_prompt_generator=LFSystemPromptGenerator(
+                    project_config=project_config
+                ),
+                system_role="system",
+                model_api_parameters=project_config.runtime.model_api_parameters,
             )
         )
 
 
+class LFSystemPromptGenerator(SystemPromptGenerator):
+    def __init__(self, project_config: LlamaFarmConfig):
+        self.prompt = project_config.prompts[0]
+        super().__init__()
+
+    def _generate_prompt_from_sections(self) -> str:
+        sections = [
+            (section.title, section.content) for section in self.prompt.sections or []
+        ]
+
+        prompt_parts = []
+
+        for title, content in sections:
+            if content:
+                prompt_parts.append(f"# {title}")
+                prompt_parts.extend(f"- {item}" for item in content)
+                prompt_parts.append("")
+
+        if self.context_providers:
+            prompt_parts.append("# EXTRA INFORMATION AND CONTEXT")
+            for provider in self.context_providers.values():
+                if info := provider.get_info():
+                    prompt_parts.extend((f"## {provider.title}", info, ""))
+        return "\n".join(prompt_parts).strip()
+
+    def generate_prompt(self) -> str:
+        if self.prompt.raw_text:
+            return self.prompt.raw_text
+        elif self.prompt.sections:
+            return self._generate_prompt_from_sections()
+        return ""
+
+
 def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor:
-    # TODO: use the values from the project's model strategy config
-    # api_key=project_config.rag.strategies[0].api_key
-    # base_url=project_config.rag.strategies[0].base_url
-
-    api_key = settings.ollama_api_key
-    base_url = settings.ollama_host
-
-    return instructor.from_openai(OpenAI(api_key=api_key, base_url=base_url))
+    if project_config.runtime.provider == Provider.openai:
+        return instructor.from_openai(
+            OpenAI(
+                api_key=project_config.runtime.api_key,
+                base_url=project_config.runtime.base_url,
+            )
+        )
+    else:
+        raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")
 
 
 class ProjectChatOrchestratorAgentFactory:

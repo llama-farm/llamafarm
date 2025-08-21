@@ -136,16 +136,16 @@ const Projects = () => {
   }
 
   return (
-    <div className="w-full h-full transition-colors bg-gray-200 dark:bg-blue-800 pt-16">
+    <div className="w-full h-full transition-colors bg-background pt-16">
       <div className="max-w-6xl mx-auto px-6 flex flex-col gap-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl text-gray-900 dark:text-blue-50">Projects</h2>
+          <h2 className="text-2xl text-foreground">Projects</h2>
           <div className="flex items-center gap-2">
-            <button className="px-3 py-2 rounded-lg border border-blue-50 text-blue-50 hover:bg-blue-50 hover:text-white dark:border-blue-400 dark:text-blue-100 dark:hover:bg-blue-600/40">
+            <button className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20">
               Explore public projects
             </button>
             <button
-              className="px-3 py-2 rounded-lg bg-blue-200 text-white hover:opacity-90"
+              className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
               onClick={openCreate}
             >
               New project
@@ -153,13 +153,10 @@ const Projects = () => {
           </div>
         </div>
 
-        <div className="w-full flex items-center bg-white dark:bg-blue-500 rounded-lg px-3 py-2 border border-blue-50 dark:border-blue-100">
-          <FontIcon
-            type="search"
-            className="w-4 h-4 text-gray-700 dark:text-white"
-          />
+        <div className="w-full flex items-center bg-card rounded-lg px-3 py-2 border border-input">
+          <FontIcon type="search" className="w-4 h-4 text-foreground" />
           <input
-            className="w-full bg-transparent border-none focus:outline-none px-2 text-sm text-gray-800 dark:text-white"
+            className="w-full bg-transparent border-none focus:outline-none px-2 text-sm text-foreground"
             placeholder="Search projects"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -170,35 +167,30 @@ const Projects = () => {
           {filtered.map(p => (
             <div
               key={p.id}
-              className="group w-full rounded-lg p-4 bg-white dark:bg-blue-600 border border-blue-50 dark:border-blue-600 cursor-pointer"
+              className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer"
               onClick={() => openProject(p.name)}
             >
               <div className="flex items-start justify-between">
-                <div className="text-base text-gray-900 dark:text-blue-50">
-                  {p.name}
-                </div>
-                <FontIcon
-                  type="arrow-right"
-                  className="w-5 h-5 text-blue-200 dark:text-blue-100"
-                />
+                <div className="text-base text-foreground">{p.name}</div>
+                <FontIcon type="arrow-right" className="w-5 h-5 text-primary" />
               </div>
               <div className="mt-3">
-                <span className="text-xs text-white bg-blue-100 dark:bg-blue-200 rounded-xl px-3 py-0.5">
+                <span className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5">
                   {p.model}
                 </span>
               </div>
-              <div className="text-xs text-blue-100 mt-2">
+              <div className="text-xs text-muted-foreground mt-2">
                 Last edited on {p.lastEdited}
               </div>
               <div className="mt-4 flex justify-end">
                 <button
-                  className="flex items-center gap-1 text-green-100 hover:opacity-80"
+                  className="flex items-center gap-1 text-primary hover:opacity-80"
                   onClick={e => {
                     e.stopPropagation()
                     openEdit(p.name)
                   }}
                 >
-                  <FontIcon type="edit" className="w-5 h-5 text-green-100" />
+                  <FontIcon type="edit" className="w-5 h-5 text-primary" />
                   <span className="text-sm">Edit</span>
                 </button>
               </div>

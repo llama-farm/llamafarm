@@ -20,10 +20,11 @@
 }
 
 .heroLogo {
-  width: 120px;
-  height: 120px;
-  margin-bottom: 2rem;
+  width: 360px; /* control width; keep intrinsic aspect ratio */
+  height: auto;
+  margin: 0.25rem auto 2.5rem;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+  display: block;
 }
 
 .heroDescription {
@@ -35,8 +36,8 @@
 }
 
 @media screen and (max-width: 996px) {
-  .heroBanner { padding: 2rem; }
-  .heroLogo { width: 80px; height: 80px; }
+  .heroBanner { padding: 2rem 0; }
+  .heroLogo { width: 220px; height: auto; margin: 0.2rem auto 1.6rem; }
   .heroDescription { font-size: 1rem; }
 }
 
