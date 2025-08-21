@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from api.errors import (
     NamespaceNotFoundError,
@@ -20,7 +20,6 @@ from config import (  # noqa: E402
     ConfigError,
     generate_base_config,
     load_config,
-    load_config_dict,
     save_config,
 )
 from config.datamodel import LlamaFarmConfig  # noqa: E402
@@ -174,17 +173,11 @@ class ProjectService:
 
             # Attempt to load project config; skip if invalid/missing
             try:
-                cfg_dict = load_config_dict(
+                cfg = load_config(
                     directory=project_path,
                     validate=False,
                 )
-                # Inject expected identifiers when missing
-                if not cfg_dict.get("namespace"):
-                    cfg_dict["namespace"] = namespace
-                if not cfg_dict.get("name"):
-                    cfg_dict["name"] = project_name
-                cfg = LlamaFarmConfig(**cfg_dict)
-            except (ConfigError, ValidationError) as e:
+            except ConfigError as e:
                 logger.warning(
                     "Skipping project without valid config",
                     entry=project_name,
@@ -240,16 +233,11 @@ class ProjectService:
                 )
 
             # Attempt to load config (do not validate here; align with list_projects)
-            cfg_dict = load_config_dict(directory=project_dir, validate=False)
-            if not cfg_dict.get("namespace"):
-                cfg_dict["namespace"] = namespace
-            if not cfg_dict.get("name"):
-                cfg_dict["name"] = project_id
-            cfg = LlamaFarmConfig(**cfg_dict)
+            cfg = load_config(directory=project_dir, validate=False)
         except ProjectConfigError:
             # bubble our structured error
             raise
-        except (ConfigError, ValidationError) as e:
+        except ConfigError as e:
             # Config present but invalid/malformed
             logger.warning(
                 "Invalid project config",
