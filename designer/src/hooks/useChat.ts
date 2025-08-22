@@ -1,0 +1,187 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  chatInference,
+  deleteChatSession,
+} from '../api/chatService'
+import {
+  ChatRequest,
+  ChatResponse,
+  DeleteSessionResponse,
+} from '../types/chat'
+
+// Query key factory for chat operations
+export const chatKeys = {
+  all: ['chat'] as const,
+  sessions: () => [...chatKeys.all, 'sessions'] as const,
+  session: (sessionId: string) => [...chatKeys.sessions(), sessionId] as const,
+  messages: () => [...chatKeys.all, 'messages'] as const,
+  messageHistory: (sessionId: string) => [...chatKeys.messages(), sessionId] as const,
+}
+
+
+/**
+ * Mutation hook for sending chat messages
+ * Handles loading, error, and success states with proper cache management
+ */
+export function useChatInference() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<
+    ChatResponse,
+    Error,
+    { chatRequest: ChatRequest; sessionId?: string },
+    { sessionId?: string }
+  >({
+    mutationFn: ({ chatRequest, sessionId }) => chatInference(chatRequest, sessionId),
+    
+    // Store context for potential rollback
+    onMutate: async ({ sessionId }) => {
+      if (sessionId) {
+        // Cancel any outgoing queries for this session
+        await queryClient.cancelQueries({ 
+          queryKey: chatKeys.session(sessionId) 
+        })
+      }
+      return { sessionId }
+    },
+    
+    onSuccess: (data, variables) => {
+      const { sessionId } = variables
+      
+      if (sessionId) {
+        // Update session cache with new message
+        queryClient.setQueryData(
+          chatKeys.session(sessionId),
+          (oldData: ChatResponse[] | undefined) => {
+            return oldData ? [...oldData, data] : [data]
+          }
+        )
+        
+        // Invalidate related queries
+        queryClient.invalidateQueries({ 
+          queryKey: chatKeys.messageHistory(sessionId) 
+        })
+      }
+    },
+    
+    onError: (error, _variables, context) => {
+      // Log error for debugging
+      console.error('Chat inference error:', error)
+      
+      if (context?.sessionId) {
+        // Invalidate potentially stale cache
+        queryClient.invalidateQueries({ 
+          queryKey: chatKeys.session(context.sessionId) 
+        })
+      }
+    },
+    
+    // Configure retry logic for chat requests
+    retry: (failureCount, error) => {
+      // Don't retry validation errors
+      if (error.name === 'ValidationError') {
+        return false
+      }
+      
+      // Don't retry client errors (4xx)
+      if (error.name === 'ChatApiError' && (error as any).status >= 400 && (error as any).status < 500) {
+        return false
+      }
+      
+      // Retry network errors and server errors up to 2 times
+      return failureCount < 2
+    },
+    
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+  })
+}
+
+/**
+ * Mutation hook for deleting chat sessions
+ * Handles success/error callbacks and cache invalidation
+ */
+export function useDeleteChatSession() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<
+    DeleteSessionResponse,
+    Error,
+    string, // sessionId
+    { sessionId: string }
+  >({
+    mutationFn: (sessionId: string) => deleteChatSession(sessionId),
+    
+    onMutate: async (sessionId) => {
+      // Cancel any outgoing queries for this session
+      await queryClient.cancelQueries({ 
+        queryKey: chatKeys.session(sessionId) 
+      })
+      
+      return { sessionId }
+    },
+    
+    onSuccess: (_data, sessionId) => {
+      // Remove session data from cache
+      queryClient.removeQueries({ 
+        queryKey: chatKeys.session(sessionId) 
+      })
+      
+      queryClient.removeQueries({ 
+        queryKey: chatKeys.messageHistory(sessionId) 
+      })
+      
+      // Invalidate sessions list if we're tracking it
+      queryClient.invalidateQueries({ 
+        queryKey: chatKeys.sessions() 
+      })
+    },
+    
+    onError: (error, sessionId) => {
+      console.error(`Failed to delete session ${sessionId}:`, error)
+      
+      // Refresh session data in case it still exists
+      queryClient.invalidateQueries({ 
+        queryKey: chatKeys.session(sessionId) 
+      })
+    },
+    
+    // Don't retry deletion operations by default
+    retry: false,
+  })
+}
+
+/**
+ * Hook for managing chat session state
+ * Provides utilities for session management
+ */
+export function useChatSession(sessionId?: string) {
+  const queryClient = useQueryClient()
+  
+  const clearSessionCache = (id: string) => {
+    queryClient.removeQueries({ queryKey: chatKeys.session(id) })
+    queryClient.removeQueries({ queryKey: chatKeys.messageHistory(id) })
+  }
+  
+  const invalidateSession = (id: string) => {
+    queryClient.invalidateQueries({ queryKey: chatKeys.session(id) })
+    queryClient.invalidateQueries({ queryKey: chatKeys.messageHistory(id) })
+  }
+  
+  const getSessionData = (id: string): ChatResponse[] | undefined => {
+    return queryClient.getQueryData(chatKeys.session(id))
+  }
+  
+  return {
+    sessionId,
+    clearSessionCache,
+    invalidateSession,
+    getSessionData,
+  }
+}
+
+export default {
+  useChatInference,
+  useDeleteChatSession,
+  useChatSession,
+  chatKeys,
+}
