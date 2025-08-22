@@ -9,9 +9,14 @@ import {
 } from '../types/chat'
 
 // Environment constants - using same pattern as projects.ts
-const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000'
-const API_VERSION = (import.meta as any).env.VITE_API_VERSION || 'v1'
-const CHAT_API_BASE_URL = `${API_BASE_URL}/${API_VERSION}/inference`
+// In development, use empty base URL to leverage Vite proxy
+// In production, use the full backend server URL
+const isDevelopment = import.meta.env.DEV
+const API_BASE_URL = isDevelopment 
+  ? '' // Use relative URLs in development to leverage Vite proxy
+  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
+const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
+const CHAT_API_BASE_URL = `${API_BASE_URL}/api/${API_VERSION}/inference`
 
 // Axios instance for chat API
 const chatHttp: AxiosInstance = axios.create({
