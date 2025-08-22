@@ -55,6 +55,9 @@ export interface UpdateProjectResponse {
   project: Project
 }
 
+// Types aligned with server/api/routers/projects/projects.py
+
+
 // Layer 1: Plain API functions
 export async function listProjects(namespace: string): Promise<ListProjectsResponse> {
   const res = await http.get<ListProjectsResponse>(`/projects/${encodeURIComponent(namespace)}`)
