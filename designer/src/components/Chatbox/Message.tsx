@@ -1,7 +1,7 @@
-import { Message as MessageType } from './Chatbox'
+import { ChatboxMessage } from '../../types/chatbox'
 
 export interface MessageProps {
-  message: MessageType
+  message: ChatboxMessage
 }
 
 const Message: React.FC<MessageProps> = ({ message }) => {

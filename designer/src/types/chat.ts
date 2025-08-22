@@ -1,10 +1,36 @@
-// Chat API Types - aligned with server/api/routers/inference/models.py
+/**
+ * Chat API Types - aligned with server/api/routers/inference/models.py
+ * 
+ * This file contains types for backend communication and external chat service integration.
+ * These types should remain stable and aligned with the API contract.
+ */
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+/**
+ * Base message interface containing shared properties between API and UI layers
+ */
+export interface BaseMessage {
   content: string
 }
 
+/**
+ * Chat message structure for API communication
+ * Used in requests/responses to the chat inference service
+ * 
+ * @example
+ * const message: ChatMessage = {
+ *   role: 'user',
+ *   content: 'Hello, how are you?'
+ * }
+ */
+export interface ChatMessage extends BaseMessage {
+  /** Message role for API - must match backend expectations */
+  role: 'system' | 'user' | 'assistant'
+}
+
+/**
+ * Complete chat request payload for API calls
+ * Contains messages and all model configuration parameters
+ */
 export interface ChatRequest {
   model?: string | null
   messages: ChatMessage[]
@@ -22,18 +48,28 @@ export interface ChatRequest {
   logit_bias?: Record<string, number>
 }
 
+/**
+ * Individual response choice from chat API
+ */
 export interface ChatChoice {
   index: number
   message: ChatMessage
   finish_reason: string
 }
 
+/**
+ * Token usage statistics from API response
+ */
 export interface Usage {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
 }
 
+/**
+ * Complete chat response from API
+ * Contains generated choices and usage metadata
+ */
 export interface ChatResponse {
   id: string
   object: string
@@ -43,6 +79,9 @@ export interface ChatResponse {
   usage?: Usage | null
 }
 
+/**
+ * Response from session deletion API endpoint
+ */
 export interface DeleteSessionResponse {
   message: string
 }

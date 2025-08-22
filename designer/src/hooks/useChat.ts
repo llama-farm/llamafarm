@@ -65,8 +65,7 @@ export function useChatInference() {
     },
     
     onError: (error, _variables, context) => {
-      // Log error for debugging
-      console.error('Chat inference error:', error)
+    
       
       if (context?.sessionId) {
         // Invalidate potentially stale cache
@@ -150,38 +149,10 @@ export function useDeleteChatSession() {
   })
 }
 
-/**
- * Hook for managing chat session state
- * Provides utilities for session management
- */
-export function useChatSession(sessionId?: string) {
-  const queryClient = useQueryClient()
-  
-  const clearSessionCache = (id: string) => {
-    queryClient.removeQueries({ queryKey: chatKeys.session(id) })
-    queryClient.removeQueries({ queryKey: chatKeys.messageHistory(id) })
-  }
-  
-  const invalidateSession = (id: string) => {
-    queryClient.invalidateQueries({ queryKey: chatKeys.session(id) })
-    queryClient.invalidateQueries({ queryKey: chatKeys.messageHistory(id) })
-  }
-  
-  const getSessionData = (id: string): ChatResponse[] | undefined => {
-    return queryClient.getQueryData(chatKeys.session(id))
-  }
-  
-  return {
-    sessionId,
-    clearSessionCache,
-    invalidateSession,
-    getSessionData,
-  }
-}
+
 
 export default {
   useChatInference,
   useDeleteChatSession,
-  useChatSession,
   chatKeys,
 }
