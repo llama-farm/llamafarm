@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-REPO="llamafarm/llamafarm"
+REPO="llama-farm/llamafarm"
 BINARY_NAME="lf"
 INSTALL_DIR="/usr/local/bin"
 CLI_NAME="llamafarm-cli"

@@ -7,7 +7,7 @@ This guide covers multiple ways to install the LlamaFarm CLI (`lf`) on your syst
 The easiest way to install LlamaFarm CLI is using our installation script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/llamafarm/llamafarm/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 ```
 
 This will:
