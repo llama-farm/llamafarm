@@ -119,7 +119,7 @@ ensure_install_dir() {
 
 # Main installation function
 install_cli() {
-    local platform version download_url temp_dir binary_path
+    local platform version download_url temp_dir
 
     info "Starting LlamaFarm CLI installation..."
 
