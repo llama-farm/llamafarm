@@ -16,7 +16,7 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a new LlamaFarm project",
-	Long:  `Initialize a new LlamaFarm project by creating it on the server for the current directory (or a target path).`,
+	Long:  `Initialize a new LlamaFarm project in the current directory (or a target path).`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Initializing a new LlamaFarm project...")
