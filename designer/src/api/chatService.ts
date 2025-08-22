@@ -23,7 +23,7 @@ const chatHttp: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 120000, // Longer timeout for chat operations (2 minutes)
+  timeout: 30000, // Timeout for chat operations (30 seconds)
 })
 
 // Response interceptor for consistent error handling
