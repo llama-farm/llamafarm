@@ -1,9 +1,9 @@
 # Use Python 3.12 slim image
-FROM ghcr.io/astral-sh/uv:python3.13-alpine
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
 
 ENV UV_COMPILE_BYTECODE=1
 
-RUN apk add --no-cache curl
+RUN apt update && apt install -y curl && rm -rf /var/lib/apt/lists/*
 
 
 # Set working directory
