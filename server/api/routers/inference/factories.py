@@ -7,7 +7,7 @@ from atomic_agents import (
     BasicChatInputSchema,
     BasicChatOutputSchema,
 )
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 from core.logging import FastAPIStructLogger
 from core.settings import settings
@@ -141,3 +141,31 @@ Format project lists in a readable way with bullet points."""
         agent = AtomicAgent[BasicChatInputSchema, BasicChatOutputSchema](agent_config)
         logger.info("Agent created successfully")
         return agent
+
+    @staticmethod
+    def create_json_chat_agent() -> AtomicAgent[BasicChatInputSchema, BasicChatOutputSchema]:
+        """Create an agent configured for JSON-mode narration (no tools).
+
+        This is used to stream the assistant's final narrated response after tools run,
+        ensuring incremental, parseable chunks.
+        """
+        from core.settings import settings
+
+        # Force JSON mode and disable tools; use async client for better partial streaming
+        async_client = instructor.from_openai(
+            AsyncOpenAI(
+                base_url=settings.ollama_host,
+                api_key=settings.ollama_api_key,
+            ),
+            mode=instructor.Mode.JSON,
+        )
+
+        agent_config = AgentConfig(
+            client=async_client,
+            model=settings.ollama_model,
+            model_api_parameters={
+                "temperature": 0.1,
+                "top_p": 0.9,
+            },
+        )
+        return AtomicAgent[BasicChatInputSchema, BasicChatOutputSchema](agent_config)

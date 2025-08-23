@@ -47,7 +47,7 @@ var designerStartCmd = &cobra.Command{
 			"-d", // Run in detached mode
 			"--name", "llamafarm-designer",
 			"-p", "8080:8080", // Map port 8080
-			"-v", fmt.Sprintf("%s:/workspace", getCurrentDir()), // Mount current directory
+			"-v", fmt.Sprintf("%s:/workspace", mustEffectiveCWD()), // Mount current directory
 			"ghcr.io/llama-farm/llamafarm/designer:latest",
 		}
 
@@ -67,12 +67,14 @@ var designerStartCmd = &cobra.Command{
 	},
 }
 
-func getCurrentDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "."
+func mustEffectiveCWD() string {
+	if dir, err := getEffectiveCWD(); err == nil {
+		return dir
 	}
-	return dir
+	if dir, err := os.Getwd(); err == nil {
+		return dir
+	}
+	return "."
 }
 
 func init() {

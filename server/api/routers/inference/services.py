@@ -1,7 +1,10 @@
+import asyncio
+import contextlib
 import threading
 from typing import Any
 
 from atomic_agents import BasicChatInputSchema  # type: ignore
+from openai import AsyncOpenAI
 
 from core.logging import FastAPIStructLogger
 
@@ -168,7 +171,9 @@ class ChatProcessor:
     """Main chat processing logic"""
 
     @staticmethod
-    def process_chat(request: ChatRequest, session_id: str) -> tuple[str, list[dict] | None]:
+    def process_chat(
+        request: ChatRequest, session_id: str
+    ) -> tuple[str, list[dict] | None]:
         """Process chat request and return response with tool info.
 
         Expects an OpenAI-style ChatRequest with messages and optional metadata.
@@ -198,7 +203,7 @@ class ChatProcessor:
             # Run agent
             logger.info(
                 "Running agent with message",
-                message_preview=f"{latest_user_message[:100]}..."
+                message_preview=f"{latest_user_message[:100]}...",
             )
             input_schema = BasicChatInputSchema(chat_message=latest_user_message)
             response = agent.run(input_schema)
@@ -210,7 +215,7 @@ class ChatProcessor:
                 response_message = str(response)
             logger.info(
                 "Initial agent response",
-                response_preview=response_message[:200] + "..."
+                response_preview=response_message[:200] + "...",
             )
 
             # Initialize tool_info to avoid UnboundLocalError
@@ -219,7 +224,8 @@ class ChatProcessor:
             # Check if manual execution is needed
             try:
                 needs_manual = ResponseAnalyzer.needs_manual_execution(
-                    response_message, latest_user_message
+                    response_message,
+                    latest_user_message,
                 )
                 logger.info("Response analysis completed", needs_manual=needs_manual)
             except Exception as e:
@@ -246,7 +252,7 @@ class ChatProcessor:
 
                     if tool_result.success:
                         response_message = ResponseFormatter.format_tool_response(
-                            tool_result
+                            tool_result,
                         )
                         tool_info = ResponseFormatter.create_tool_info(tool_result)
                         logger.info("Manual execution successful")
@@ -288,6 +294,96 @@ class ChatProcessor:
             error_message = f"I'm sorry, I encountered an unexpected error: {str(e)}"
             return error_message, None
 
+    @staticmethod
+    async def stream_chat(request: ChatRequest, session_id: str):
+        """Return an iterator/async-iterator of assistant content chunks.
+
+        Uses AtomicAgent streaming if available; otherwise falls back to chunking the full response.
+        """
+        logger.info("Starting chat streaming", session_id=session_id)
+
+        with _agent_sessions_lock:
+            if session_id not in agent_sessions:
+                agent = AgentFactory.create_agent()
+                agent_sessions[session_id] = agent
+                logger.info("Created new agent session", session_id=session_id)
+            else:
+                agent = agent_sessions[session_id]
+
+        latest_user_message: str | None = None
+        for message in reversed(request.messages):
+            if isinstance(message, ChatMessage) and message.role == "user" and message.content:
+                latest_user_message = message.content
+                break
+        if latest_user_message is None:
+            # yield an error and end
+            yield "No user message found in request.messages"
+            return
+
+        input_schema = BasicChatInputSchema(chat_message=latest_user_message)
+
+        try:
+            # Preflight once to detect tool need
+            pre = await asyncio.to_thread(agent.run, input_schema)
+            pre_msg = getattr(pre, "chat_message", str(pre))
+            try:
+                needs_manual = ResponseAnalyzer.needs_manual_execution(pre_msg, latest_user_message)
+            except Exception:
+                needs_manual = False
+
+            if needs_manual:
+                # Run tools, format final narration prompt
+                request_context = {
+                    "namespace": request.metadata.get("namespace") or "unknown",
+                    "project_id": request.metadata.get("project_id"),
+                }
+                tool_result = ToolExecutor.execute_manual(latest_user_message, request_context)
+                narration = ResponseFormatter.format_tool_response(tool_result)
+
+                # Stream narrated response from JSON-mode agent (no tools)
+                # Stream narrated response directly from OpenAI-compatible API for fine-grained deltas
+                from core.settings import settings
+                aoai = AsyncOpenAI(
+                    base_url=settings.ollama_host,
+                    api_key=settings.ollama_api_key,
+                )
+                stream = await aoai.chat.completions.create(
+                    model=settings.ollama_model,
+                    messages=[{"role": "user", "content": narration}],
+                    temperature=0.1,
+                    top_p=0.9,
+                    stream=True,
+                )
+                async for event in stream:
+                    piece = getattr(getattr(event.choices[0], "delta", object()), "content", None)
+                    if not piece:
+                        continue
+                    yield piece
+                return
+
+            # Otherwise stream directly from the main agent (sync client)
+            from core.settings import settings
+            aoai = AsyncOpenAI(
+                base_url=settings.ollama_host,
+                api_key=settings.ollama_api_key,
+            )
+            stream = await aoai.chat.completions.create(
+                model=settings.ollama_model,
+                messages=[{"role": "user", "content": latest_user_message}],
+                temperature=0.1,
+                top_p=0.9,
+                stream=True,
+            )
+            async for event in stream:
+                piece = getattr(getattr(event.choices[0], "delta", object()), "content", None)
+                if not piece:
+                    continue
+                yield piece
+            return
+        except Exception:
+            logger.error("Agent streaming failed; falling back to single response", exc_info=True)
+            yield "I encountered an error while processing your request"
+
 class AgentSessionManager:
     """Manages agent sessions"""
 
@@ -306,11 +402,8 @@ class AgentSessionManager:
         """Delete a chat session"""
         with _agent_sessions_lock:
             if session_id in agent_sessions:
-                try:
+                with contextlib.suppress(Exception):
                     agent_sessions[session_id].reset_history()
-                except Exception:
-                    # Best-effort reset; proceed with deletion
-                    pass
                 del agent_sessions[session_id]
                 logger.info("Deleted session", session_id=session_id)
                 return True
