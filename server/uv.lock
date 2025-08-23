@@ -122,7 +122,7 @@ wheels = [
 
 [[package]]
 name = "atomic-agents"
-version = "2.0.1"
+version = "2.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "gitpython" },
@@ -135,9 +135,9 @@ dependencies = [
     { name = "rich" },
     { name = "textual" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/34/dc000a0942db075f34fb160aadc23fc0ad1bff5c41869ca5d87eb0eb8ee8/atomic_agents-2.0.1.tar.gz", hash = "sha256:9da03c78aa1ed198e2f5cfd68623f85eac3186f7f9fc368d3b8ea66430971d6a", size = 35202, upload-time = "2025-08-01T18:09:29.951Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/1d/a88cc001ae16a503d29668fa3cde7fa7c0795f058ed42cf62bc91d43874b/atomic_agents-2.0.4.tar.gz", hash = "sha256:4a1d6c91bfdef6337af769f715dfba183163882fac5ace128cdc5448aea2aefa", size = 36350, upload-time = "2025-08-21T18:30:11.771Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/57/4959cd31ac659d6d411d267e44f129f43373ba62542300706bb0189c682d/atomic_agents-2.0.1-py3-none-any.whl", hash = "sha256:094aebcc27060e02f1f0a927437ea3fd37126a2f661a096a9683ec238e642424", size = 49442, upload-time = "2025-08-01T18:09:28.467Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/01/e7e47ff94c177769781ad96ea76e5fd1775403cb48610f9ac68b560444ea/atomic_agents-2.0.4-py3-none-any.whl", hash = "sha256:e9a66eb6ecb74f4838a85e3288d9d0b5941f553d6d46c64f6ea80b3aaa510a2c", size = 50602, upload-time = "2025-08-21T18:30:10.722Z" },
 ]
 
 [[package]]
@@ -1251,7 +1251,7 @@ test = [
 requires-dist = [
     { name = "appdirs", specifier = ">=1.4.4" },
     { name = "asgi-correlation-id", specifier = ">=4.3.4" },
-    { name = "atomic-agents", specifier = ">=2.0.1" },
+    { name = "atomic-agents", specifier = "==2.0.4" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "instructor", specifier = ">=1.0.0" },
@@ -1358,17 +1358,18 @@ wheels = [
 
 [[package]]
 name = "textual"
-version = "0.89.1"
+version = "5.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify", "plugins"] },
     { name = "platformdirs" },
+    { name = "pygments" },
     { name = "rich" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/cb/b3ff0e45d812997a527cb581a4cd602f0b28793450aa26201969fd6ce42c/textual-0.89.1.tar.gz", hash = "sha256:66befe80e2bca5a8c876cd8ceeaf01752267b6b1dc1d0f73071f1f1e15d90cc8", size = 1517074, upload-time = "2024-12-05T15:17:12.903Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/ce/f0f938d33d9bebbf8629e0020be00c560ddfa90a23ebe727c2e5aa3f30cf/textual-5.3.0.tar.gz", hash = "sha256:1b6128b339adef2e298cc23ab4777180443240ece5c232f29b22960efd658d4d", size = 1557651, upload-time = "2025-08-07T12:36:50.342Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8e/02/650adf160774a43c206011d23283d568d2dbcd43cf7b40dff0a880885b47/textual-0.89.1-py3-none-any.whl", hash = "sha256:0a5d214df6e951b4a2c421e13d0b608482882471c1e34ea74a3631adede8054f", size = 656019, upload-time = "2024-12-05T15:17:10.37Z" },
+    { url = "https://files.pythonhosted.org/packages/00/2f/f7c8a533bee50fbf5bb37ffc1621e7b2cdd8c9a6301fc51faa35fa50b09d/textual-5.3.0-py3-none-any.whl", hash = "sha256:02a6abc065514c4e21f94e79aaecea1f78a28a85d11d7bfc64abf3392d399890", size = 702671, upload-time = "2025-08-07T12:36:48.272Z" },
 ]
 
 [[package]]

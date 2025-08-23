@@ -12,7 +12,10 @@ from pydantic import BaseModel
 from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
-from api.routers.shared.response_utils import set_session_header
+from api.routers.shared.response_utils import (
+    create_streaming_response_from_iterator,
+    set_session_header,
+)
 from services.project_chat_service import project_chat_service
 from services.project_service import ProjectService
 
@@ -216,13 +219,25 @@ async def chat(
     if latest_user_message is None:
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
 
+    # Streaming support via SSE, like inference endpoint
+    if request.stream:
+        stream_iter = project_chat_service.stream_chat(
+            project_config=project_config,
+            chat_agent=agent,
+            message=latest_user_message,
+        )
+        set_session_header(response, session_id)
+        return create_streaming_response_from_iterator(
+            request,
+            stream_iter,
+            session_id,
+        )
+
     completion = project_chat_service.chat(
         project_config=project_config,
         chat_agent=agent,
         message=latest_user_message,
     )
 
-    # Set session header
     set_session_header(response, session_id)
-
     return completion

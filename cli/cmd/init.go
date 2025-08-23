@@ -36,7 +36,9 @@ var initCmd = &cobra.Command{
 		// Derive project name from directory
 		var projectName string
 		if projectDir == "." {
-			if wd, err := os.Getwd(); err == nil {
+			if wd, err := getEffectiveCWD(); err == nil {
+				projectName = filepath.Base(wd)
+			} else if wd, err2 := os.Getwd(); err2 == nil {
 				projectName = filepath.Base(wd)
 			} else {
 				fmt.Fprintf(os.Stderr, "Failed to determine working directory: %v\n", err)
@@ -111,7 +113,9 @@ var initCmd = &cobra.Command{
 		// Success message
 		absPath := projectDir
 		if projectDir == "." {
-			if wd, err := os.Getwd(); err == nil {
+			if wd, err := getEffectiveCWD(); err == nil {
+				absPath = wd
+			} else if wd, err2 := os.Getwd(); err2 == nil {
 				absPath = wd
 			}
 		} else {

@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -11,6 +13,7 @@ import (
 var debug bool
 var serverURL string
 var serverStartTimeout time.Duration
+var overrideCwd string
 
 var rootCmd = &cobra.Command{
 	Use:   "lf",
@@ -39,4 +42,21 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug output")
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
 	rootCmd.PersistentFlags().DurationVar(&serverStartTimeout, "server-start-timeout", 45*time.Second, "How long to wait for local server to become ready when auto-starting (e.g. 45s, 1m)")
+	rootCmd.PersistentFlags().StringVar(&overrideCwd, "cwd", "", "Override the current working directory for CLI operations")
+}
+
+// getEffectiveCWD returns the directory to treat as the working directory.
+// If the global --cwd flag is provided, it returns its absolute path; otherwise os.Getwd().
+func getEffectiveCWD() (string, error) {
+	if strings.TrimSpace(overrideCwd) != "" {
+		if filepath.IsAbs(overrideCwd) {
+			return overrideCwd, nil
+		}
+		abs, err := filepath.Abs(overrideCwd)
+		if err != nil {
+			return "", err
+		}
+		return abs, nil
+	}
+	return os.Getwd()
 }

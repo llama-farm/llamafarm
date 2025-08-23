@@ -5,7 +5,7 @@ from fastapi import APIRouter, Header, HTTPException, Response
 
 from ..shared.response_utils import (
     build_chat_response,
-    create_streaming_response,
+    create_streaming_response_from_iterator,
     set_session_header,
 )
 from .models import ChatRequest, ChatResponse
@@ -28,19 +28,19 @@ async def chat(
         if not session_id:
             session_id = str(uuid.uuid4())
 
-        # Use ChatProcessor directly with the full OpenAI-style request
-        response_message, _tool_info = ChatProcessor.process_chat(
-            request, session_id
-        )
-
-        # Set session header for client continuity
-        set_session_header(response, session_id)
-
-        # If client requested streaming, return Server-Sent Events stream
+        # If client requested streaming, return Server-Sent Events stream using agent-native streaming when possible
         if request.stream:
-            return create_streaming_response(request, response_message, session_id)
+            stream_iter = ChatProcessor.stream_chat(request, session_id)
+            set_session_header(response, session_id)
+            return create_streaming_response_from_iterator(
+                request,
+                stream_iter,
+                session_id,
+            )
 
-        # Return OpenAI-compatible response
+        # Non-streaming path
+        response_message, _tool_info = ChatProcessor.process_chat(request, session_id)
+        set_session_header(response, session_id)
         return build_chat_response(request.model, response_message)
 
     except Exception as e:
