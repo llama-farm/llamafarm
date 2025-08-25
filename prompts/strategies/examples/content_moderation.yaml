@@ -1,0 +1,95 @@
+# Content Moderation Strategy
+# For content safety and moderation tasks
+
+name: "Content Moderation System"
+description: "Multi-level content moderation with explanations"
+use_cases:
+  - "content_moderation"
+  - "safety_check"
+  - "toxicity_detection"
+  - "policy_compliance"
+  - "user_generated_content"
+performance_profile: "accuracy"
+complexity: "complex"
+
+templates:
+  default:
+    template: "content_moderation"
+    config:
+      check_categories:
+        - "toxicity"
+        - "harassment"
+        - "hate_speech"
+        - "violence"
+        - "adult_content"
+        - "misinformation"
+      severity_levels: ["safe", "warning", "violation"]
+      include_explanation: true
+      include_suggestions: true
+  
+  specialized:
+    - condition:
+        query_type: "social_media"
+      template: "social_media_moderation"
+      config:
+        check_categories:
+          - "spam"
+          - "self_promotion"
+          - "engagement_bait"
+        platform_specific: true
+      priority: 15
+    
+    - condition:
+        query_type: "educational"
+      template: "educational_content_check"
+      config:
+        age_appropriate: true
+        educational_value: true
+        fact_checking: true
+      priority: 10
+    
+    - condition:
+        query_type: "automated_review"
+      template: "bulk_moderation"
+      config:
+        batch_processing: true
+        summary_report: true
+      priority: 5
+
+selection_rules:
+  - name: "explicit_content_priority"
+    condition:
+      expression: "'explicit' in context.get('flags', []) or 'nsfw' in context.get('flags', [])"
+    template: "explicit_content_moderation"
+    priority: 100
+    stop_on_match: true
+  
+  - name: "legal_compliance"
+    condition:
+      expression: "'legal' in context.get('requirements', []) or 'compliance' in context.get('requirements', [])"
+    template: "legal_compliance_check"
+    priority: 90
+
+global_config:
+  system_prompts:
+    - content: "Evaluate content objectively based on community guidelines. Be specific about policy violations."
+      position: "system"
+      priority: 100
+    - content: "Consider context and intent. Err on the side of user safety."
+      position: "system"
+      priority: 90
+  temperature: 0.1  # Very low for consistency
+  max_tokens: 1000
+  model_preferences: ["gpt-4-turbo", "claude-3-opus"]
+
+optimization:
+  caching: true
+  compression: false
+  token_optimization: true
+  parallel_processing: true  # For bulk moderation
+
+metadata:
+  version: "2.0.0"
+  author: "LlamaFarm Safety Team"
+  tags: ["moderation", "safety", "content", "policy", "compliance"]
+  updated_at: "2024-01-15"

@@ -274,8 +274,18 @@ class TemplateRegistry:
                     f"in {var.lower()} ",           # {% for x in var %}
                     f"{{% if {var.lower()}",        # {% if var %}
                     f"{{% if {var.lower()} ",       # {% if var %}
+                    f"{var.lower()}|default(",      # var|default(
+                    f"{var.lower()} |default(",     # var |default(
+                    f"get('{var.lower()}'",         # get('var'
+                    f"get( '{var.lower()}'",        # get( 'var'
                 ]
-                if not any(pattern in template_content for pattern in var_patterns):
+                # Only require variables if they don't have default filters or get() calls
+                has_default = any(f"{var.lower()}|default(" in template_content or 
+                                f"{var.lower()} |default(" in template_content for var in [var])
+                has_get = any(f"get('{var.lower()}')" in template_content or 
+                            f"get( '{var.lower()}')" in template_content for var in [var])
+                
+                if not any(pattern in template_content for pattern in var_patterns) and not has_default and not has_get:
                     errors.append(f"Required variable '{var}' not found in template")
         
         return errors

@@ -1,0 +1,23 @@
+Based on the following context:
+
+{% if config.context_format == "numbered" %}
+{% for doc in context %}
+{{ loop.index }}. {{ doc.title }}:
+{{ doc.content }}
+{% endfor %}
+{% elif config.context_format == "bullet" %}
+{% for doc in context %}
+• {{ doc.title }}:
+  {{ doc.content }}
+{% endfor %}
+{% else %}
+{% for doc in context %}
+{{ doc.title }}:
+{{ doc.content }}
+
+{% endfor %}
+{% endif %}
+
+Question: {{ query }}
+
+Answer:

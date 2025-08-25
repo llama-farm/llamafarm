@@ -1,0 +1,117 @@
+# Product Assistant Strategy
+# E-commerce and product recommendation assistant
+
+name: "E-commerce Product Assistant"
+description: "Intelligent product recommendations and shopping assistance"
+use_cases:
+  - "product_recommendation"
+  - "product_comparison"
+  - "shopping_assistant"
+  - "product_search"
+  - "purchase_decision"
+  - "customer_reviews"
+performance_profile: "speed"
+complexity: "moderate"
+
+templates:
+  default:
+    template: "product_recommendation"
+    config:
+      recommendation_count: 5
+      include_pros_cons: true
+      include_pricing: true
+      include_ratings: true
+      sort_by: "relevance"
+  
+  specialized:
+    - condition:
+        query_type: "comparison"
+      template: "product_comparison"
+      config:
+        comparison_format: "table"
+        highlight_differences: true
+        include_verdict: true
+        criteria:
+          - "price"
+          - "features"
+          - "quality"
+          - "value"
+      priority: 20
+    
+    - condition:
+        query_type: "budget"
+      template: "budget_recommendation"
+      config:
+        price_sensitivity: "high"
+        value_focus: true
+        include_alternatives: true
+        show_savings: true
+      priority: 15
+    
+    - condition:
+        query_type: "premium"
+      template: "premium_recommendation"
+      config:
+        quality_focus: true
+        brand_emphasis: true
+        luxury_features: true
+      priority: 15
+    
+    - condition:
+        context:
+          user_expertise: "beginner"
+      template: "beginner_guide"
+      config:
+        educational_content: true
+        terminology_explanation: true
+        buying_guide: true
+      priority: 10
+
+selection_rules:
+  - name: "gift_detection"
+    condition:
+      expression: "'gift' in context.get('query', '').lower() or 'present' in context.get('query', '').lower()"
+    template: "gift_recommendation"
+    priority: 25
+  
+  - name: "technical_product"
+    condition:
+      expression: "context.get('category') in ['electronics', 'computers', 'appliances']"
+    template: "technical_product_guide"
+    priority: 20
+  
+  - name: "urgent_need"
+    condition:
+      expression: "'urgent' in context.get('tags', []) or 'asap' in context.get('query', '').lower()"
+    template: "quick_recommendation"
+    priority: 30
+
+global_config:
+  system_prompts:
+    - content: "You are a helpful shopping assistant. Provide honest, unbiased recommendations based on user needs."
+      position: "system"
+      priority: 100
+    - content: "Consider budget, use case, and user preferences. Always disclose if information might be outdated."
+      position: "system"
+      priority: 90
+  temperature: 0.6
+  max_tokens: 800
+  model_preferences: ["gpt-3.5-turbo", "claude-3-haiku"]  # Fast models
+
+optimization:
+  caching: true  # Cache product information
+  compression: true  # Compress product descriptions
+  token_optimization: true  # Concise responses
+  parallel_processing: true  # For multiple products
+
+output_transforms:
+  - transform: "clean_markdown"  # Clean output for display
+
+metadata:
+  version: "2.2.0"
+  author: "LlamaFarm Commerce Team"
+  tags: ["ecommerce", "shopping", "products", "recommendations", "retail"]
+  integrations:
+    - "product_database"
+    - "review_aggregator"
+    - "price_tracker"

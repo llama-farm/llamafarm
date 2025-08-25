@@ -1,0 +1,31 @@
+{
+  "template_id": "code_analysis",
+  "name": "Code Analysis",
+  "description": "Template for analyzing, debugging, and reviewing code",
+  "category": "domain_specific",
+  "use_cases": ["code_review", "debugging", "optimization", "security"],
+  "inputs": {
+    "code": {
+      "type": "string",
+      "required": true,
+      "description": "The code to analyze"
+    },
+    "language": {
+      "type": "string",
+      "required": true,
+      "description": "Programming language"
+    },
+    "analysis_type": {
+      "type": "string",
+      "required": false,
+      "description": "Type of analysis (review, debug, optimize, security)"
+    }
+  },
+  "outputs": {
+    "prompt": {
+      "type": "string",
+      "description": "Generated code analysis prompt"
+    }
+  },
+  "frameworks": ["langchain", "native"]
+}

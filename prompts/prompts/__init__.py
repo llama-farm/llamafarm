@@ -1,37 +1,54 @@
 """
-LlamaFarm Prompts Management System
+LlamaFarm Prompts System
 
-A comprehensive, configuration-driven prompt management framework that integrates
-seamlessly with the LlamaFarm RAG ecosystem. Built with best practices for
-production use, extensibility, and developer experience.
+A strategy-based prompt management system for LLMs, providing dynamic template 
+selection, multi-framework support, and extensible architecture.
 
 Key Features:
-- Configuration-driven prompt templates
-- LangGraph integration for advanced workflows  
-- CLI-first management interface
-- High-level global prompts system
-- 20+ built-in prompt templates
-- Validation and testing framework
-- RAG system integration
+- Strategy-based configuration
+- Dynamic template selection
+- Multi-framework support (LangChain, LangGraph, Native APIs)
+- Performance optimization
+- Extensible architecture
+- Comprehensive CLI
+- 20+ built-in templates across 6 categories
+
+Directory Structure:
+- core/        Internal components (engines, models, loaders, CLI)
+- frameworks/  Framework integrations (extensible)
+- strategies/  Strategy definitions (extensible)
+- templates/   Template definitions (extensible)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "LlamaFarm Team"
 
-from .core.prompt_system import PromptSystem
-from .core.template_engine import TemplateEngine
-from .core.strategy_engine import StrategyEngine
-from .core.template_registry import TemplateRegistry
-from .models.template import PromptTemplate
-from .models.strategy import PromptStrategy
-from .models.config import PromptConfig
+# Core components
+from .core.engines import (
+    PromptSystem,
+    TemplateEngine,
+    StrategyEngine,
+    TemplateRegistry
+)
+
+# Models
+from .core.models import (
+    PromptTemplate,
+    PromptStrategy,
+    PromptConfig,
+    PromptContext
+)
 
 __all__ = [
+    # Core engines
     "PromptSystem",
     "TemplateEngine", 
     "StrategyEngine",
     "TemplateRegistry",
+    
+    # Models
     "PromptTemplate",
     "PromptStrategy", 
     "PromptConfig",
+    "PromptContext",
 ]

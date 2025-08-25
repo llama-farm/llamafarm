@@ -1,0 +1,30 @@
+{% if config.system_message %}{{ config.system_message }}
+
+{% endif %}
+Analyze the following {{ language }} code:
+
+```{{ language }}
+{{ code }}
+```
+
+{% if config.focus == "bugs" or analysis_type|default("") == "debug" %}
+Focus on: Identifying bugs, errors, and potential issues. Provide specific line numbers and explain what's wrong.
+{% elif config.focus == "optimization" or analysis_type|default("") == "optimize" %}
+Focus on: Performance improvements and optimization opportunities. Suggest specific changes for better efficiency.
+{% elif config.focus == "security" or analysis_type|default("") == "security" %}
+Focus on: Security vulnerabilities and best practices. Identify potential security risks.
+{% elif analysis_type|default("") == "generate" %}
+Generate new code based on the requirements. If existing code is provided, use it as reference.
+{% else %}
+Provide a comprehensive code review including:
+1. Code quality and style
+2. Potential bugs or issues
+3. Performance considerations
+4. Best practices and suggestions
+{% endif %}
+
+{% if config.include_suggestions %}
+Please include specific, actionable suggestions for improvement.
+{% endif %}
+
+Analysis:

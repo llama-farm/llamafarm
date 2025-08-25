@@ -1,0 +1,476 @@
+# Demo Strategies Configuration
+# This file contains all strategies needed for the demos to run properly
+# Demonstrates the power of easy prompt customization without rewriting templates
+
+version: "v1"
+
+# =============================================================================
+# DEMO 1: Simple Q&A Strategy
+# =============================================================================
+simple_qa:
+  name: "Simple Question Answering"
+  description: "Basic Q&A strategy for straightforward queries"
+  use_cases: ["simple_queries", "faq", "basic_qa"]
+  performance_profile: "speed"
+  complexity: "simple"
+  
+  templates:
+    default:
+      template: "qa_basic"
+      config:
+        system_message: "You are a helpful assistant. Answer questions clearly and concisely."
+        context_format: "numbered"
+    
+    detailed:
+      template: "qa_basic"
+      config:
+        system_message: "You are a knowledgeable assistant. Provide detailed, comprehensive answers."
+        context_format: "bullet"
+  
+  selection_rules:
+    - name: "detailed_mode"
+      condition:
+        expression: "'detailed' in context.get('mode', '')"
+      template: "detailed"
+      priority: 10
+  
+  global_config:
+    temperature: 0.7
+    max_tokens: 500
+
+# =============================================================================
+# DEMO 2: Customer Support Strategy
+# =============================================================================
+customer_support:
+  name: "Customer Support Assistant"
+  description: "Handles customer inquiries with empathy and efficiency"
+  use_cases: ["customer_service", "support", "helpdesk"]
+  performance_profile: "balanced"
+  complexity: "moderate"
+  
+  templates:
+    default:
+      template: "conversational"
+      config:
+        tone: "professional"
+        empathy_level: "high"
+    
+    technical:
+      template: "conversational"
+      config:
+        tone: "technical"
+        include_troubleshooting: true
+        system_message: "You are a technical support specialist. Help users resolve technical issues step by step."
+    
+    complaint:
+      template: "conversational"
+      config:
+        tone: "empathetic"
+        escalation_awareness: true
+        system_message: "You are handling a customer complaint. Be extra empathetic and focus on resolution."
+  
+  selection_rules:
+    - name: "technical_issue"
+      condition:
+        expression: "'error' in context.get('message', '').lower() or 'bug' in context.get('message', '').lower()"
+      template: "technical"
+      priority: 20
+    
+    - name: "complaint_detection"
+      condition:
+        expression: "'third time' in context.get('message', '').lower() or 'frustrated' in context.get('message', '').lower()"
+      template: "complaint"
+      priority: 30
+  
+  input_transforms:
+    - input: "message"
+      transform: "trim"
+    - input: "history"
+      transform: "limit_last_n"
+      params:
+        n: 5
+  
+  global_config:
+    temperature: 0.6
+    max_tokens: 300
+
+# =============================================================================
+# DEMO 3: Code Assistant Strategy
+# =============================================================================
+code_assistant:
+  name: "Code Analysis Assistant"
+  description: "Analyzes, debugs, and improves code"
+  use_cases: ["code_review", "debugging", "optimization"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "code_analysis"
+      config:
+        analysis_depth: "standard"
+        include_suggestions: true
+    
+    debug:
+      template: "code_analysis"
+      config:
+        analysis_depth: "deep"
+        focus: "bugs"
+        system_message: "You are a debugging expert. Find and explain bugs in the code."
+    
+    optimize:
+      template: "code_analysis"
+      config:
+        analysis_depth: "performance"
+        focus: "optimization"
+        system_message: "You are a performance optimization expert. Suggest improvements for speed and efficiency."
+    
+    security:
+      template: "code_analysis"
+      config:
+        analysis_depth: "security"
+        focus: "vulnerabilities"
+        system_message: "You are a security expert. Identify potential security issues in the code."
+  
+  selection_rules:
+    - name: "debug_mode"
+      condition:
+        expression: "context.get('analysis_type') == 'debug'"
+      template: "debug"
+      priority: 20
+    
+    - name: "optimize_mode"
+      condition:
+        expression: "context.get('analysis_type') == 'optimize'"
+      template: "optimize"
+      priority: 20
+    
+    - name: "security_mode"
+      condition:
+        expression: "context.get('analysis_type') == 'security'"
+      template: "security"
+      priority: 20
+  
+  output_transforms:
+    - transform: "extract_code"
+    - transform: "highlight_issues"
+  
+  global_config:
+    temperature: 0.3
+    max_tokens: 1000
+
+# =============================================================================
+# DEMO 4: RAG Research Strategy
+# =============================================================================
+rag_qa:
+  name: "RAG Question Answering"
+  description: "Answers questions using retrieved context"
+  use_cases: ["rag", "research", "knowledge_base"]
+  performance_profile: "balanced"
+  complexity: "moderate"
+  
+  templates:
+    default:
+      template: "rag_response"
+      config:
+        citation_style: "inline"
+        relevance_threshold: 0.7
+    
+    no_context:
+      template: "qa_basic"
+      config:
+        system_message: "No relevant documents were found. Answer based on your general knowledge, but mention that no specific sources were available."
+  
+  selection_rules:
+    - name: "no_documents"
+      condition:
+        expression: "len(context.get('retrieved_documents', [])) == 0"
+      template: "no_context"
+      priority: 100
+      stop_on_match: true
+  
+  input_transforms:
+    - input: "retrieved_documents"
+      transform: "sort_by_relevance"
+    - input: "retrieved_documents"
+      transform: "limit_tokens"
+      params:
+        max_tokens: 2000
+  
+  global_config:
+    temperature: 0.5
+    max_tokens: 800
+
+research_assistant:
+  name: "Research Assistant"
+  description: "Academic research helper with citations"
+  use_cases: ["research", "academic", "literature_review"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "rag_response"
+      config:
+        citation_style: "academic"
+        include_methodology: true
+        system_message: "You are an academic research assistant. Provide scholarly analysis with proper citations."
+  
+  global_config:
+    temperature: 0.4
+    max_tokens: 1200
+
+# =============================================================================
+# Professional Assistant Strategy (used in Demo 2)
+# =============================================================================
+professional_assistant:
+  name: "Professional Assistant"
+  description: "Professional and polite assistant with input cleaning"
+  use_cases: ["professional", "business", "formal"]
+  performance_profile: "balanced"
+  complexity: "simple"
+  
+  templates:
+    default:
+      template: "conversational"
+      config:
+        tone: "professional"
+        system_message: "You are a medical assistant. Provide health-related information in a professional and caring manner."
+  
+  input_transforms:
+    - input: "message"
+      transform: "trim"
+    - input: "message"
+      transform: "clean_whitespace"
+  
+  global_config:
+    temperature: 0.6
+    max_tokens: 300
+
+# =============================================================================
+# DEMO 5: Advanced Reasoning Strategies
+# =============================================================================
+analytical_reasoning:
+  name: "Analytical Reasoning"
+  description: "Step-by-step analytical problem solving"
+  use_cases: ["analysis", "problem_solving", "reasoning"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "chain_of_thought"
+      config:
+        reasoning_steps: "explicit"
+        show_work: true
+        system_message: "You are an analytical thinker. Break down problems step by step and show your reasoning."
+  
+  global_config:
+    temperature: 0.4
+    max_tokens: 1500
+
+mathematical_solver:
+  name: "Mathematical Problem Solver"
+  description: "Solves mathematical problems with proofs"
+  use_cases: ["math", "proofs", "calculations"]
+  performance_profile: "accuracy"
+  complexity: "complex"
+  
+  templates:
+    default:
+      template: "chain_of_thought"
+      config:
+        reasoning_steps: "mathematical"
+        notation: "formal"
+        system_message: "You are a mathematician. Provide rigorous proofs and clear mathematical reasoning."
+  
+  global_config:
+    temperature: 0.2
+    max_tokens: 2000
+
+quality_evaluator:
+  name: "Quality Evaluator"
+  description: "Evaluates content quality using criteria"
+  use_cases: ["evaluation", "assessment", "quality_control"]
+  performance_profile: "balanced"
+  complexity: "moderate"
+  
+  templates:
+    default:
+      template: "evaluation"
+      config:
+        evaluation_format: "rubric"
+        include_scores: true
+        system_message: "You are a quality evaluator. Assess content objectively against the provided criteria."
+    
+    comparative:
+      template: "evaluation"
+      config:
+        evaluation_format: "comparative"
+        system_message: "You are comparing multiple options. Identify strengths and weaknesses of each."
+  
+  selection_rules:
+    - name: "comparison_mode"
+      condition:
+        expression: "isinstance(context.get('content'), list)"
+      template: "comparative"
+      priority: 20
+  
+  global_config:
+    temperature: 0.3
+    max_tokens: 1000
+
+# =============================================================================
+# Template Definitions (Simplified for demos)
+# =============================================================================
+# Note: These would normally be in separate template files, but for demo
+# purposes we can define simple versions here
+
+template_definitions:
+  qa_basic:
+    description: "Basic question answering template"
+    default_content: |
+      {% if config.system_message %}{{ config.system_message }}{% endif %}
+      
+      {% if context %}
+      Based on the following context:
+      {% if config.context_format == "numbered" %}
+      {% for doc in context %}
+      {{ loop.index }}. {{ doc.title | default('Document') }}:
+      {{ doc.content }}
+      {% endfor %}
+      {% else %}
+      {% for doc in context %}
+      • {{ doc.title | default('Document') }}:
+        {{ doc.content }}
+      {% endfor %}
+      {% endif %}
+      {% endif %}
+      
+      Question: {{ query }}
+      
+      Answer:
+  
+  conversational:
+    description: "Conversational support template"
+    default_content: |
+      {% if config.system_message %}{{ config.system_message }}{% endif %}
+      
+      {% if history %}
+      Previous conversation:
+      {% for msg in history %}
+      {{ msg.role }}: {{ msg.content }}
+      {% endfor %}
+      {% endif %}
+      
+      Customer: {{ message }}
+      
+      {% if config.tone == "empathetic" %}
+      (Remember to acknowledge their frustration and focus on resolution)
+      {% endif %}
+      
+      Support Agent:
+  
+  code_analysis:
+    description: "Code analysis template"
+    default_content: |
+      {% if config.system_message %}{{ config.system_message }}{% endif %}
+      
+      Analyze the following {{ language }} code:
+      
+      ```{{ language }}
+      {{ code }}
+      ```
+      
+      {% if config.focus == "bugs" %}
+      Focus on: Identifying bugs, errors, and potential issues
+      {% elif config.focus == "optimization" %}
+      Focus on: Performance improvements and optimization opportunities
+      {% elif config.focus == "security" %}
+      Focus on: Security vulnerabilities and best practices
+      {% else %}
+      Provide a comprehensive code review
+      {% endif %}
+      
+      Analysis:
+  
+  rag_response:
+    description: "RAG response template"
+    default_content: |
+      {% if config.system_message %}{{ config.system_message }}{% endif %}
+      
+      Based on the retrieved documents, answer the following question:
+      
+      Retrieved Documents:
+      {% for doc in retrieved_documents %}
+      [{{ loop.index }}] {{ doc.title | default('Document ' + loop.index|string) }}
+      Relevance: {{ doc.relevance_score | default('N/A') }}
+      Content: {{ doc.content }}
+      {% if doc.metadata %}
+      Metadata: {{ doc.metadata }}
+      {% endif %}
+      
+      {% endfor %}
+      
+      Question: {{ query }}
+      
+      {% if config.citation_style == "academic" %}
+      Provide a comprehensive answer with academic citations in the format [1], [2], etc.
+      {% else %}
+      Answer (cite sources as needed):
+      {% endif %}
+  
+  chain_of_thought:
+    description: "Chain of thought reasoning template"
+    default_content: |
+      {% if config.system_message %}{{ config.system_message }}{% endif %}
+      
+      Problem: {{ query }}
+      
+      {% if context %}
+      Given information:
+      {% for item in context %}
+      - {{ item }}
+      {% endfor %}
+      {% endif %}
+      
+      {% if config.reasoning_steps == "mathematical" %}
+      Provide a step-by-step mathematical solution:
+      
+      Step 1: Understand the problem
+      Step 2: Set up the mathematical framework
+      Step 3: Solve step by step
+      Step 4: Verify the solution
+      {% else %}
+      Let me think through this step by step:
+      {% endif %}
+      
+      Solution:
+  
+  evaluation:
+    description: "Evaluation template"
+    default_content: |
+      {% if config.system_message %}{{ config.system_message }}{% endif %}
+      
+      {% if config.evaluation_format == "comparative" %}
+      Compare the following options:
+      {% for item in content %}
+      Option {{ item.id }}: {{ item.text }}
+      {% endfor %}
+      
+      Evaluation criteria: {{ criteria }}
+      {% else %}
+      Evaluate the following content:
+      {{ content }}
+      
+      Against these criteria:
+      {% for criterion in criteria %}
+      - {{ criterion }}
+      {% endfor %}
+      
+      {% if rubric %}
+      Rubric: {{ rubric }}
+      {% endif %}
+      {% endif %}
+      
+      Evaluation:

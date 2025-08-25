@@ -1,0 +1,63 @@
+I need to solve this problem step by step.
+
+{% if examples %}
+Here are some examples of how to approach similar problems:
+
+{% for example in examples %}
+Example {{ loop.index }}:
+Problem: {{ example.problem }}
+
+Reasoning:
+{% for step in example.reasoning %}
+{% if config.step_format == "numbered" %}
+{{ loop.index }}. {{ step }}
+{% elif config.step_format == "bullet" %}
+• {{ step }}
+{% else %}
+{{ step }}
+{% endif %}
+{% endfor %}
+
+Answer: {{ example.answer }}
+
+---
+{% endfor %}
+{% endif %}
+
+Now, let me solve the current problem:
+
+Problem: {{ query }}
+
+{% if context %}
+Additional Context:
+{% for item in context %}
+- {{ item }}
+{% endfor %}
+{% endif %}
+
+Let me think through this step by step:
+
+{% if config.step_format == "numbered" %}
+1. First, I need to understand what's being asked...
+2. Next, I'll identify the key information...
+3. Then, I'll work through the solution...
+{% for i in range(4, config.num_steps + 1) %}
+{{ i }}. [Continue reasoning...]
+{% endfor %}
+{% elif config.step_format == "bullet" %}
+• First, I need to understand what's being asked...
+• Next, I'll identify the key information...
+• Then, I'll work through the solution...
+{% for i in range(4, config.num_steps + 1) %}
+• [Continue reasoning...]
+{% endfor %}
+{% else %}
+First, I need to understand what's being asked. Then I'll identify the key information and work through the solution methodically.
+{% endif %}
+
+{% if config.include_self_reflection %}
+
+Self-reflection: Let me verify my reasoning...
+{% endif %}
+
+Therefore, the answer is:

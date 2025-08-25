@@ -222,6 +222,11 @@ lancedb_data/
 # Large Language Models & Embeddings
 # ==============================================================================
 
+# Model cache directories
+model_cache/
+models/model_cache/
+models/fine_tuned_models/
+
 # Ollama models and cache
 .ollama/
 ollama_models/

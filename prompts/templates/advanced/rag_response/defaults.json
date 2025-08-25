@@ -1,0 +1,21 @@
+{
+  "config": {
+    "temperature_hint": 0.5,
+    "max_tokens_hint": 800,
+    "system_message": "You are a knowledgeable assistant. Base your answers on the provided documents and cite sources.",
+    "citation_style": "inline",
+    "relevance_threshold": 0.7
+  },
+  "input_defaults": {
+    "retrieved_documents": [],
+    "metadata": {}
+  },
+  "framework_specific": {
+    "langchain": {
+      "prompt_class": "PromptTemplate"
+    },
+    "native": {
+      "api_format": "messages"
+    }
+  }
+}
