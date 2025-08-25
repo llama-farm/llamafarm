@@ -6,10 +6,10 @@
 set -e
 
 # Configuration
-REPO="llamafarm/llamafarm"
+REPO="llama-farm/llamafarm"
 BINARY_NAME="lf"
 INSTALL_DIR="/usr/local/bin"
-CLI_NAME="llamafarm-cli"
+CLI_NAME="llamafarm"
 
 # Colors for output
 RED='\033[0;31m'
@@ -55,7 +55,7 @@ detect_platform() {
         *)              error "Unsupported architecture: $(uname -m)" ;;
     esac
 
-    echo "${os}_${arch}"
+    echo "${os}-${arch}"
 }
 
 # Check if command exists
@@ -119,7 +119,7 @@ ensure_install_dir() {
 
 # Main installation function
 install_cli() {
-    local platform version download_url temp_dir binary_path
+    local platform version download_url temp_dir
 
     info "Starting LlamaFarm CLI installation..."
 
@@ -144,28 +144,19 @@ install_cli() {
     fi
 
     # Construct download URL
-    local filename="${CLI_NAME}_${version#v}_${platform}"
+    local filename="${CLI_NAME}-${platform}"
     if [[ "$platform" == *"windows"* ]]; then
         filename="${filename}.exe"
     fi
-    download_url="https://github.com/$REPO/releases/download/$version/${filename}.tar.gz"
+    download_url="https://github.com/$REPO/releases/download/$version/${filename}"
 
     # Create temporary directory
     temp_dir=$(mktemp -d)
     trap 'rm -rf $temp_dir' EXIT
 
     # Download and extract
-    local archive_path="$temp_dir/archive.tar.gz"
-    download_file "$download_url" "$archive_path"
-
-    info "Extracting archive..."
-    tar -xzf "$archive_path" -C "$temp_dir" || error "Failed to extract archive"
-
-    # Find the binary
-    binary_path=$(find "$temp_dir" -name "$BINARY_NAME*" -type f | head -1)
-    if [[ -z "$binary_path" ]]; then
-        error "Binary not found in archive"
-    fi
+    local download_path="$temp_dir/${filename}"
+    download_file "$download_url" "$download_path"
 
     # Check permissions and prepare for installation
     check_permissions
@@ -173,7 +164,7 @@ install_cli() {
 
     # Install binary
     info "Installing binary to $INSTALL_DIR/$BINARY_NAME"
-    $SUDO_CMD cp "$binary_path" "$INSTALL_DIR/$BINARY_NAME" || error "Failed to copy binary"
+    $SUDO_CMD cp "$download_path" "$INSTALL_DIR/$BINARY_NAME" || error "Failed to copy binary"
     $SUDO_CMD chmod +x "$INSTALL_DIR/$BINARY_NAME" || error "Failed to make binary executable"
 
     success "LlamaFarm CLI installed successfully!"
