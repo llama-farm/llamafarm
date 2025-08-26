@@ -13,8 +13,8 @@ const Tabs = ({ activeTab, setActiveTab, tabs }: TabsProps) => {
           className={`h-fit border-b-2 ${
             activeTab === tab.id
               ? 'border-primary text-foreground'
-              : 'border-border text-muted-foreground'
-          } pb-1 pl-4 w-full text-left hover:text-foreground`}
+              : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
+          } pb-1 pl-4 w-full text-left`}
           onClick={() => setActiveTab(tab.id)}
         >
           {tab.label}

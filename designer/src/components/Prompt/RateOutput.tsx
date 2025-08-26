@@ -12,9 +12,12 @@ const RateOutput = ({ output, tag }: RateOutputProps) => {
 
   return (
     <div
-      className={`flex flex-col border border-input bg-card rounded-lg p-4 gap-2 ${
-        isThumbsUpFilled ? 'ring-1 ring-teal-500/40' : ''
-      }`}
+      className={`flex flex-col border border-border bg-card rounded-lg p-4 gap-2 ${
+        isThumbsUpFilled ? 'ring-2 ring-primary/40' : ''
+      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+      tabIndex={0}
+      aria-label="Rate output"
+      role="group"
     >
       <div className="flex flex-row gap-2 justify-between">
         <div>{output}</div>

@@ -40,7 +40,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
 
   const title = mode === 'create' ? 'Create prompt' : 'Edit prompt'
   const cta = mode === 'create' ? 'Create' : 'Save'
-  const isValid = text.trim().length > 0
+  const isValid = text.trim().length > 0 && version.trim().length > 0
 
   const handleDelete = () => {
     if (!onDelete) return

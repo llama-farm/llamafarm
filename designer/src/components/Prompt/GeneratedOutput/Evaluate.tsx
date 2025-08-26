@@ -55,8 +55,11 @@ const Evaluate = () => {
           <Textarea
             className="w-full h-18 text-lg"
             placeholder="Try another input"
+            aria-label="Prompt input"
           />
-          <Button className="self-start">Submit</Button>
+          <Button className="self-start" aria-label="Submit prompt">
+            Submit
+          </Button>
         </div>
         <label className="block mt-2 text-sm text-muted-foreground">
           Not sure where to start? Think about the questions your users will
