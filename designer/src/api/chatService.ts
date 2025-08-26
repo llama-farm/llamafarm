@@ -129,27 +129,8 @@ export function createChatRequest(
   }
 }
 
-/**
- * Create a chat request with conversation history
- */
-export function createChatRequestWithHistory(
-  messages: ChatRequest['messages'],
-  options: Partial<ChatRequest> = {}
-): ChatRequest {
-  return {
-    messages,
-    metadata: {},
-    modalities: [],
-    response_format: {},
-    stop: [],
-    logit_bias: {},
-    ...options,
-  }
-}
-
 export default {
   chatInference,
   deleteChatSession,
   createChatRequest,
-  createChatRequestWithHistory,
 }
