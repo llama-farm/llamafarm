@@ -1,73 +1,9 @@
-import axios, { AxiosInstance, AxiosError } from 'axios'
+import { apiClient } from './client'
 import {
   ChatRequest,
   ChatResponse,
   DeleteSessionResponse,
-  ChatApiError,
-  NetworkError,
-  ValidationError
 } from '../types/chat'
-
-// Use '/api' path consistently - Vite proxy will handle routing
-const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
-const CHAT_API_BASE_URL = `/api/${API_VERSION}/inference`
-
-// Axios instance for chat API
-const chatHttp: AxiosInstance = axios.create({
-  baseURL: CHAT_API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 30000, // Timeout for chat operations (30 seconds)
-})
-
-// Response interceptor for consistent error handling
-chatHttp.interceptors.response.use(
-  response => response,
-  (error: AxiosError) => {
-    if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK') {
-      throw new NetworkError('Network error occurred', error)
-    }
-
-    if (error.response) {
-      const { status, data } = error.response
-      const errorData = data as any // Type assertion for error response data
-      
-      switch (status) {
-        case 400:
-          throw new ValidationError(
-            `Validation error: ${errorData?.detail || 'Invalid request'}`,
-            errorData
-          )
-        case 404:
-          throw new ChatApiError(
-            `Resource not found: ${errorData?.detail || 'Not found'}`,
-            status,
-            errorData
-          )
-        case 422:
-          throw new ValidationError(
-            `Validation error: ${errorData?.detail || 'Unprocessable entity'}`,
-            errorData
-          )
-        case 500:
-          throw new ChatApiError(
-            `Server error: ${errorData?.detail || 'Internal server error'}`,
-            status,
-            errorData
-          )
-        default:
-          throw new ChatApiError(
-            `HTTP ${status}: ${errorData?.detail || error.message}`,
-            status,
-            errorData
-          )
-      }
-    }
-
-    throw new NetworkError('Unknown error occurred', error)
-  }
-)
 
 
 /**
@@ -86,7 +22,7 @@ export async function chatInference(
     headers['X-Session-ID'] = sessionId
   }
 
-  const response = await chatHttp.post<ChatResponse>('/chat', chatRequest, {
+  const response = await apiClient.post<ChatResponse>('/inference/chat', chatRequest, {
     headers,
   })
 
@@ -105,7 +41,7 @@ export async function chatInference(
  * @returns Promise<DeleteSessionResponse>
  */
 export async function deleteChatSession(sessionId: string): Promise<DeleteSessionResponse> {
-  const response = await chatHttp.delete<DeleteSessionResponse>(`/chat/session/${encodeURIComponent(sessionId)}`)
+  const response = await apiClient.delete<DeleteSessionResponse>(`/inference/chat/session/${encodeURIComponent(sessionId)}`)
   return response.data
 }
 
