@@ -17,6 +17,7 @@ export function useChatbox(initialSessionId?: string) {
     messages: persistedMessages,
     saveSessionMessages,
     createNewSession,
+    setSessionId,
     isLoading: isLoadingSession
   } = useChatSession(initialSessionId)
   
@@ -97,9 +98,14 @@ export function useChatbox(initialSessionId?: string) {
         sessionId
       })
 
+      // Set session ID if received from server (for new sessions)
+      if (response.sessionId && response.sessionId !== sessionId) {
+        setSessionId(response.sessionId)
+      }
+
       // Update assistant message with response
-      if (response.choices && response.choices.length > 0) {
-        const assistantResponse = response.choices[0].message.content
+      if (response.data.choices && response.data.choices.length > 0) {
+        const assistantResponse = response.data.choices[0].message.content
         
         updateMessage(assistantMessageId, {
           content: assistantResponse,
@@ -132,7 +138,7 @@ export function useChatbox(initialSessionId?: string) {
 
       return false
     }
-  }, [chatMutation, sessionId, addMessage, updateMessage])
+  }, [chatMutation, sessionId, setSessionId, addMessage, updateMessage])
 
   // Handle clear chat
   const clearChat = useCallback(async () => {

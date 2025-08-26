@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChatboxMessage, ChatSession } from '../types/chatbox'
-import { generateSessionId } from '../utils/idGenerator'
 import { chatKeys } from './useChat'
 
 // Session storage keys
@@ -20,12 +19,13 @@ const SESSION_STORAGE_KEYS = {
 export function useChatSession(initialSessionId?: string) {
   const queryClient = useQueryClient()
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
-    // Try to restore from localStorage, fallback to provided or generated ID
+    // Try to restore from localStorage, fallback to provided ID or empty string
+    // Session ID will be provided by server on first chat message
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(SESSION_STORAGE_KEYS.CURRENT_SESSION)
-      return saved || initialSessionId || generateSessionId()
+      return saved || initialSessionId || ''
     }
-    return initialSessionId || generateSessionId()
+    return initialSessionId || ''
   })
 
   // Query for current session messages
@@ -136,18 +136,20 @@ export function useChatSession(initialSessionId?: string) {
     }
   }, [loadAllSessions, queryClient])
 
-  // Create new session
+  // Create new session (will get ID from server on first message)
   const createNewSession = useCallback(() => {
-    const newSessionId = generateSessionId()
+    const newSessionId = '' // Empty until server provides ID
     setCurrentSessionId(newSessionId)
     
-    // Save to localStorage
+    // Clear current session from localStorage - will be set when server provides ID
     if (typeof window !== 'undefined') {
-      localStorage.setItem(SESSION_STORAGE_KEYS.CURRENT_SESSION, newSessionId)
+      localStorage.removeItem(SESSION_STORAGE_KEYS.CURRENT_SESSION)
     }
     
     // Invalidate queries to refresh data
-    queryClient.invalidateQueries({ queryKey: chatKeys.session(newSessionId) })
+    if (newSessionId) {
+      queryClient.invalidateQueries({ queryKey: chatKeys.session(newSessionId) })
+    }
     
     return newSessionId
   }, [queryClient])
@@ -204,22 +206,35 @@ export function useChatSession(initialSessionId?: string) {
       localStorage.removeItem(SESSION_STORAGE_KEYS.SESSION_LIST)
       localStorage.removeItem(SESSION_STORAGE_KEYS.CURRENT_SESSION)
       
-      // Create new session
-      const newSessionId = createNewSession()
+      // Create new session (server will provide ID)
+      createNewSession()
       
       // Invalidate all queries
       queryClient.invalidateQueries({ queryKey: chatKeys.all })
       queryClient.invalidateQueries({ queryKey: chatKeys.sessions() })
       
-      return newSessionId
+      return '' // Session ID will be provided by server on first message
     } catch (error) {
       console.warn('Failed to clear all sessions:', error)
     }
   }, [loadAllSessions, createNewSession, queryClient])
 
+  // Set session ID when received from server
+  const setSessionId = useCallback((sessionId: string) => {
+    setCurrentSessionId(sessionId)
+    
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SESSION_STORAGE_KEYS.CURRENT_SESSION, sessionId)
+    }
+    
+    // Invalidate queries to refresh data
+    queryClient.invalidateQueries({ queryKey: chatKeys.session(sessionId) })
+  }, [queryClient])
+
   // Save current session ID to localStorage when it changes
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && currentSessionId) {
       localStorage.setItem(SESSION_STORAGE_KEYS.CURRENT_SESSION, currentSessionId)
     }
   }, [currentSessionId])
@@ -237,6 +252,7 @@ export function useChatSession(initialSessionId?: string) {
     switchToSession,
     deleteSession,
     clearAllSessions,
+    setSessionId, // New function to set session ID from server
     
     // Message persistence
     saveSessionMessages,

@@ -74,12 +74,12 @@ chatHttp.interceptors.response.use(
  * Send a chat message to the inference endpoint
  * @param chatRequest - The chat request payload
  * @param sessionId - Optional session ID for conversation continuity
- * @returns Promise<ChatResponse>
+ * @returns Promise<{data: ChatResponse, sessionId: string}>
  */
 export async function chatInference(
   chatRequest: ChatRequest,
   sessionId?: string
-): Promise<ChatResponse> {
+): Promise<{data: ChatResponse, sessionId: string}> {
   const headers: Record<string, string> = {}
   
   if (sessionId) {
@@ -90,7 +90,13 @@ export async function chatInference(
     headers,
   })
 
-  return response.data
+  // Extract session ID from response headers (server provides this)
+  const responseSessionId = response.headers['x-session-id'] || sessionId || ''
+
+  return {
+    data: response.data,
+    sessionId: responseSessionId
+  }
 }
 
 /**

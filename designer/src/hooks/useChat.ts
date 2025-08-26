@@ -27,7 +27,7 @@ export function useChatInference() {
   const queryClient = useQueryClient()
   
   return useMutation<
-    ChatResponse,
+    { data: ChatResponse; sessionId: string },
     Error,
     { chatRequest: ChatRequest; sessionId?: string },
     { sessionId?: string }
@@ -45,13 +45,17 @@ export function useChatInference() {
       return { sessionId }
     },
     
-    onSuccess: (data, variables) => {
-      const { sessionId } = variables
+    onSuccess: (response, variables) => {
+      const { data, sessionId: responseSessionId } = response
+      const { sessionId: requestSessionId } = variables
       
-      if (sessionId) {
+      // Use the session ID from the response (server-provided) or the request
+      const finalSessionId = responseSessionId || requestSessionId
+      
+      if (finalSessionId) {
         // Update session cache with new message
         queryClient.setQueryData(
-          chatKeys.session(sessionId),
+          chatKeys.session(finalSessionId),
           (oldData: ChatResponse[] | undefined) => {
             return oldData ? [...oldData, data] : [data]
           }
@@ -59,14 +63,12 @@ export function useChatInference() {
         
         // Invalidate related queries
         queryClient.invalidateQueries({ 
-          queryKey: chatKeys.messageHistory(sessionId) 
+          queryKey: chatKeys.messageHistory(finalSessionId) 
         })
       }
     },
     
-    onError: (error, _variables, context) => {
-    
-      
+    onError: (_error, _variables, context) => {
       if (context?.sessionId) {
         // Invalidate potentially stale cache
         queryClient.invalidateQueries({ 
