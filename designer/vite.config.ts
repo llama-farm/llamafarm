@@ -15,7 +15,7 @@ export default defineConfig({
       // Proxy all /api/* requests to the backend server
       // Rewrite /api/v1/* to /v1/* since backend doesn't have /api prefix
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.API_URL || 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
         // Rewrite path to remove /api prefix
