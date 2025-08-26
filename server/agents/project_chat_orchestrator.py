@@ -1,17 +1,19 @@
 import sys
 from pathlib import Path
-from typing import override
 
 import instructor
 from atomic_agents import AgentConfig, AtomicAgent, BaseIOSchema  # type: ignore
-from atomic_agents.agents.atomic_agent import ChatHistory, SystemPromptGenerator  # type: ignore
+from atomic_agents.agents.atomic_agent import (  # type: ignore
+    ChatHistory,
+    SystemPromptGenerator,
+)
 from openai import OpenAI
 
 from core.settings import settings  # type: ignore
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
-from config.datamodel import LlamaFarmConfig, Provider  # noqa: E402
+from config.datamodel import LlamaFarmConfig, Prompt, Provider  # noqa: E402
 
 
 class ProjectChatOrchestratorAgentInputSchema(BaseIOSchema):
@@ -37,13 +39,7 @@ class ProjectChatOrchestratorAgent(
     ]
 ):
     def __init__(self, project_config: LlamaFarmConfig):
-        history = ChatHistory()
-        history.add_message(
-            "assistant",
-            ProjectChatOrchestratorAgentOutputSchema(
-                chat_message="Hello! How can I assist you today?"
-            ),
-        )
+        history = _get_history(project_config)
         client = _get_client(project_config)
         super().__init__(
             config=AgentConfig(
@@ -53,7 +49,6 @@ class ProjectChatOrchestratorAgent(
                 system_prompt_generator=LFSystemPromptGenerator(
                     project_config=project_config
                 ),
-                system_role="system",
                 model_api_parameters=project_config.runtime.model_api_parameters,
             )
         )
@@ -61,44 +56,69 @@ class ProjectChatOrchestratorAgent(
 
 class LFSystemPromptGenerator(SystemPromptGenerator):
     def __init__(self, project_config: LlamaFarmConfig):
-        self.prompt = project_config.prompts[0]
+        self.system_prompts = [
+            prompt for prompt in project_config.prompts if prompt.role == "system"
+        ]
         super().__init__()
 
-    def _generate_prompt_from_sections(self) -> str:
-        sections = [
-            (section.title, section.content) for section in self.prompt.sections or []
-        ]
-
-        prompt_parts = []
-
-        for title, content in sections:
-            if content:
-                prompt_parts.append(f"# {title}")
-                prompt_parts.extend(f"- {item}" for item in content)
-                prompt_parts.append("")
-
-        if self.context_providers:
-            prompt_parts.append("# EXTRA INFORMATION AND CONTEXT")
-            for provider in self.context_providers.values():
-                if info := provider.get_info():
-                    prompt_parts.extend((f"## {provider.title}", info, ""))
-        return "\n".join(prompt_parts).strip()
-
     def generate_prompt(self) -> str:
-        if self.prompt.raw_text:
-            return self.prompt.raw_text
-        elif self.prompt.sections:
-            return self._generate_prompt_from_sections()
-        return ""
+        return "\n".join([prompt.content for prompt in self.system_prompts])
+
+
+def _prompt_to_content_schema(prompt: Prompt) -> BaseIOSchema:
+    if prompt.role == "assistant":
+        return ProjectChatOrchestratorAgentOutputSchema(
+            chat_message=prompt.content,
+        )
+    elif prompt.role == "user":
+        return ProjectChatOrchestratorAgentInputSchema(
+            chat_message=prompt.content,
+        )
+    else:
+        raise ValueError(f"Unsupported role: {prompt.role}")
+
+
+def _populate_history_with_non_system_prompts(
+    history: ChatHistory, project_config: LlamaFarmConfig
+):
+    for prompt in project_config.prompts:
+        # Only add non-system prompts to the history
+        if prompt.role != "system":
+            history.add_message(
+                role=prompt.role,
+                content=_prompt_to_content_schema(prompt),
+            )
+
+
+def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
+    history = ChatHistory()
+    _populate_history_with_non_system_prompts(history, project_config)
+    return history
 
 
 def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor:
+    mode = (
+        instructor.mode.Mode[project_config.runtime.instructor_mode.upper()]
+        if project_config.runtime.instructor_mode is not None
+        else instructor.Mode.TOOLS
+    )
+
     if project_config.runtime.provider == Provider.openai:
         return instructor.from_openai(
             OpenAI(
                 api_key=project_config.runtime.api_key,
                 base_url=project_config.runtime.base_url,
-            )
+            ),
+            mode=mode,
+        )
+    if project_config.runtime.provider == Provider.ollama:
+        return instructor.from_openai(
+            OpenAI(
+                api_key=project_config.runtime.api_key or settings.ollama_api_key,
+                base_url=project_config.runtime.base_url
+                or f"{settings.ollama_host}/v1",
+            ),
+            mode=mode,
         )
     else:
         raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")

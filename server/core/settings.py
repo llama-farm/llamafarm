@@ -6,6 +6,7 @@ load_dotenv()
 
 default_data_dir = user_data_dir("LlamaFarm", "LlamaFarm")
 
+
 class Settings(BaseSettings, env_file=".env"):
     LOG_JSON_FORMAT: bool = False
     LOG_LEVEL: str = "INFO"
@@ -15,13 +16,12 @@ class Settings(BaseSettings, env_file=".env"):
     lf_use_data_dir: bool = False
     lf_project_dir: str | None = None
     lf_data_dir: str = default_data_dir
-    # Config template settings
-    lf_template_dir: str | None = None  # e.g. absolute path to config/templates
     lf_config_template: str = "default"  # e.g. default, rag, completion, chat
 
     # Ollama Configuration
-    ollama_host: str = "http://localhost:11434/v1"
+    ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_api_key: str = "ollama"
+
 
 settings = Settings()

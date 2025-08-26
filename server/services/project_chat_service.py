@@ -140,13 +140,11 @@ class ProjectChatService:
 
         response_message = agent_response.chat_message
 
-        # model_name should come from the project config
-        # model_name = request.model or settings.ollama_model
         completion = ChatCompletion(
             id=f"chat-{uuid.uuid4()}",
             object="chat.completion",
             created=int(time.time()),
-            model="todo: use model from project config",
+            model=project_config.runtime.model,
             choices=[
                 Choice(
                     index=0,

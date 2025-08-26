@@ -8,7 +8,7 @@ from api.errors import (
     NamespaceNotFoundError,
     ProjectConfigError,
     ProjectNotFoundError,
-    SchemaNotFoundError,
+    ConfigTemplateNotFoundError,
 )
 from api.middleware.client_cwd import client_cwd
 from core.logging import FastAPIStructLogger
@@ -103,33 +103,23 @@ class ProjectService:
         Resolve a config template name to a concrete filesystem path.
 
         The resolution order is:
-        - If settings.lf_template_dir is set: {lf_template_dir}/{template}.yaml
+        - If settings.lf_templates_dir is set: {lf_templates_dir}/{template}.yaml
         - Otherwise, look under repo 'config/templates/{template}.yaml'
         - Finally, fall back to 'rag/schemas/consolidated.yaml' as a generic schema
         """
-        default_template = settings.lf_config_template
-        template = config_template if config_template is not None else default_template
-        schema_dir = settings.lf_template_dir
+        template = config_template or settings.lf_config_template
 
-        if schema_dir is None:
-            candidate_paths = [
-                Path(__file__).parent.parent.parent
-                / "config"
-                / "templates"
-                / f"{template}.yaml",
-                Path(__file__).parent.parent.parent
-                / "rag"
-                / "schemas"
-                / "consolidated.yaml",
-            ]
-        else:
-            candidate_paths = [Path(schema_dir) / f"{template}.yaml"]
+        absolute_path = (
+            Path(__file__).parent.parent.parent
+            / "config"
+            / "templates"
+            / f"{template}.yaml"
+        )
 
-        for candidate in candidate_paths:
-            if candidate.exists():
-                return candidate
+        if not absolute_path.exists():
+            raise ConfigTemplateNotFoundError(template, [str(absolute_path)])
 
-        raise SchemaNotFoundError(template, [str(p) for p in candidate_paths])
+        return absolute_path
 
     @classmethod
     def list_projects(cls, namespace: str) -> list[Project]:
@@ -139,15 +129,15 @@ class ProjectService:
         elif settings.lf_project_dir is not None:
             project_dir = settings.lf_project_dir
         if project_dir:
-          logger.info(f"Listing projects in {project_dir}")
-          cfg = load_config(directory=project_dir, validate=False)
-          return [
-              Project(
-                  namespace=namespace,
-                  name=cfg.name,
-                  config=cfg,
-              )
-          ]
+            logger.info(f"Listing projects in {project_dir}")
+            cfg = load_config(directory=project_dir, validate=False)
+            return [
+                Project(
+                    namespace=namespace,
+                    name=cfg.name,
+                    config=cfg,
+                )
+            ]
 
         namespace_dir = cls.get_namespace_dir(namespace)
         logger.info(f"Listing projects in {namespace_dir}")

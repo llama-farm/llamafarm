@@ -26,6 +26,7 @@ class TestConfigWriter:
             "prompts": [
                 {
                     "name": "test_prompt",
+                    "content": "This is a test prompt for configuration testing.",
                     "sections": [
                         {
                             "title": "default",

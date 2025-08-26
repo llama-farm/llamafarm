@@ -61,8 +61,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -295,8 +295,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -373,8 +373,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -449,8 +449,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={

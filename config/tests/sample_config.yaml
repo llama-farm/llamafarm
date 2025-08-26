@@ -5,6 +5,7 @@ namespace: test
 
 prompts:
   - name: "customer_support"
+    content: "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
     sections:
       - title: "background"
         content:

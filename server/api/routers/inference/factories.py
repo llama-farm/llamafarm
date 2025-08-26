@@ -51,7 +51,7 @@ class ModelManager:
     def create_client(capabilities: ModelCapabilities) -> Any:
         """Create instructor client with appropriate mode"""
         ollama_client = OpenAI(
-            base_url=settings.ollama_host,
+            base_url=f"{settings.ollama_host}/v1",
             api_key=settings.ollama_api_key,
         )
 

@@ -189,7 +189,7 @@ func isHostOllamaAvailable() bool {
 		return pingURL(strings.TrimSpace(baseURL)) == nil
 	}
 	// Try default local port
-	return pingURL("http://localhost:11434/v1") == nil
+	return pingURL("http://localhost:11434") == nil
 }
 
 func pingURL(base string) error {

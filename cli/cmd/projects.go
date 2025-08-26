@@ -131,10 +131,16 @@ Examples:
 		// Get the config file path from the flag
 		configPath, _ := cmd.Flags().GetString("config")
 
-        // Get server configuration (lenient: namespace/project optional)
-        serverConfig, err := config.GetServerConfigLenient(configPath, serverURL, namespace, projectID)
+		// Get server configuration (lenient: namespace/project optional)
+		serverConfig, err := config.GetServerConfigLenient(configPath, serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Ensure server is up (auto-start locally if needed)
+		if err := ensureServerAvailable(serverURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
 			os.Exit(1)
 		}
 
