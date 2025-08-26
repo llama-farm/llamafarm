@@ -10,11 +10,11 @@ const Tabs = ({ activeTab, setActiveTab, tabs }: TabsProps) => {
       {tabs.map(tab => (
         <button
           key={tab.id}
-          className={`h-fit border-b-2 border-solid ${
+          className={`h-fit border-b-2 ${
             activeTab === tab.id
-              ? 'border-blue-200 dark:border-green-100'
-              : 'border-blue-50 dark:border-blue-600'
-          } pb-1 pl-4 w-full text-left`}
+              ? 'border-primary text-foreground'
+              : 'border-border text-muted-foreground'
+          } pb-1 pl-4 w-full text-left hover:text-foreground`}
           onClick={() => setActiveTab(tab.id)}
         >
           {tab.label}
