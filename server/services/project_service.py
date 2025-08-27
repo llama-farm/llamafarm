@@ -5,12 +5,12 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from api.errors import (
+    ConfigTemplateNotFoundError,
     NamespaceNotFoundError,
     ProjectConfigError,
     ProjectNotFoundError,
-    ConfigTemplateNotFoundError,
+    ReservedNamespaceError,
 )
-from api.middleware.client_cwd import client_cwd
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
@@ -26,6 +26,8 @@ from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 logger = FastAPIStructLogger()
 
+RESERVED_NAMESPACES = ["llamafarm"]
+
 
 class Project(BaseModel):
     namespace: str
@@ -40,36 +42,25 @@ class ProjectService:
 
     @classmethod
     def get_namespace_dir(cls, namespace: str):
-        if settings.lf_project_dir is None:
-            base_path = os.path.join(settings.lf_data_dir, "projects")
-            raw_path = os.path.join(base_path, namespace)
-            norm_path = os.path.normpath(raw_path)
-            # Ensure the normalized path is within the base_path
-            if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
-                raise NamespaceNotFoundError(
-                    "Invalid namespace: path traversal detected"
-                )
-            return norm_path
-        else:
-            return None
+        base_path = os.path.join(settings.lf_data_dir, "projects")
+        raw_path = os.path.join(base_path, namespace)
+        norm_path = os.path.normpath(raw_path)
+        # Ensure the normalized path is within the base_path
+        if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
+            raise NamespaceNotFoundError("Invalid namespace: path traversal detected")
+        return norm_path
 
     @classmethod
     def get_project_dir(cls, namespace: str, project_id: str):
-        if not settings.lf_use_data_dir:
-            # Prefer client CWD (localhost CLI) when available; fallback to server CWD
-            return client_cwd.get() or os.getcwd()
-        if settings.lf_project_dir is None:
-            base_path = os.path.join(settings.lf_data_dir, "projects")
-            raw_path = os.path.join(base_path, namespace, project_id)
-            norm_path = os.path.normpath(raw_path)
-            # Ensure the normalized path is within the base_path
-            if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
-                raise NamespaceNotFoundError(
-                    "Invalid namespace or project_id: path traversal detected"
-                )
-            return norm_path
-        else:
-            return settings.lf_project_dir
+        base_path = os.path.join(settings.lf_data_dir, "projects")
+        raw_path = os.path.join(base_path, namespace, project_id)
+        norm_path = os.path.normpath(raw_path)
+        # Ensure the normalized path is within the base_path
+        if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
+            raise NamespaceNotFoundError(
+                "Invalid namespace or project_id: path traversal detected"
+            )
+        return norm_path
 
     @classmethod
     def create_project(
@@ -82,6 +73,9 @@ class ProjectService:
         Create a new project.
         @param project_id: The ID of the project to create. (e.g. MyNamespace/MyProject)
         """
+        if namespace in RESERVED_NAMESPACES:
+            raise ReservedNamespaceError(namespace)
+
         project_dir = cls.get_project_dir(namespace, project_id)
         os.makedirs(project_dir, exist_ok=True)
 
@@ -123,22 +117,6 @@ class ProjectService:
 
     @classmethod
     def list_projects(cls, namespace: str) -> list[Project]:
-        project_dir: str | None
-        if not settings.lf_use_data_dir and client_cwd.get() is not None:
-            project_dir = client_cwd.get()
-        elif settings.lf_project_dir is not None:
-            project_dir = settings.lf_project_dir
-        if project_dir:
-            logger.info(f"Listing projects in {project_dir}")
-            cfg = load_config(directory=project_dir, validate=False)
-            return [
-                Project(
-                    namespace=namespace,
-                    name=cfg.name,
-                    config=cfg,
-                )
-            ]
-
         namespace_dir = cls.get_namespace_dir(namespace)
         logger.info(f"Listing projects in {namespace_dir}")
 

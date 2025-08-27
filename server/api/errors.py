@@ -53,6 +53,14 @@ class ConfigTemplateNotFoundError(NotFoundError):
         super().__init__(message)
 
 
+class ReservedNamespaceError(Exception):
+    """Raised when a namespace is reserved."""
+
+    def __init__(self, namespace: str):
+        self.namespace = namespace
+        super().__init__(f"Namespace {namespace} is reserved")
+
+
 # FastAPI exception handlers kept alongside their corresponding error types for cohesion
 class ErrorResponse(BaseModel):
     error: str
@@ -85,6 +93,13 @@ async def _handle_generic_not_found(request: Request, exc: Exception) -> Respons
     return JSONResponse(status_code=404, content=payload.model_dump())
 
 
+async def _handle_reserved_namespace_error(
+    request: Request, exc: ReservedNamespaceError
+) -> Response:
+    payload = ErrorResponse(error="ReservedNamespace", message=str(exc))
+    return JSONResponse(status_code=400, content=payload.model_dump())
+
+
 async def _handle_unexpected_error(request: Request, exc: Exception) -> Response:
     payload = ErrorResponse(
         error="InternalServerError",
@@ -99,6 +114,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ProjectNotFoundError, _handle_project_not_found)
     app.add_exception_handler(ProjectConfigError, _handle_project_config_error)
     app.add_exception_handler(ConfigTemplateNotFoundError, _handle_schema_not_found)
+    app.add_exception_handler(ReservedNamespaceError, _handle_reserved_namespace_error)
     # ConfigError comes from config package; import locally to avoid
     # hard dependency at import time
     from config import ConfigError  # type: ignore

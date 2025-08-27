@@ -65,7 +65,6 @@ func checkServerHealth(serverURL string) error {
 	if err != nil {
 		return err
 	}
-	_ = addLocalhostCWDHeader(req)
 
 	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {

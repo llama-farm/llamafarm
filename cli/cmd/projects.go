@@ -7,12 +7,13 @@ import (
 	"io"
 	"net/http"
 	"os"
-    "os/signal"
+	"os/signal"
 	"strings"
-    "syscall"
+	"syscall"
+
+	"llamafarm-cli/cmd/config"
 
 	"github.com/spf13/cobra"
-	"llamafarm-cli/cmd/config"
 )
 
 var (
@@ -21,7 +22,7 @@ var (
 	sessionID   string
 	temperature float64
 	maxTokens   int
-    streaming   bool
+	streaming   bool
 )
 
 // Chat client types and helpers are defined in chat_client.go
@@ -42,76 +43,75 @@ Available commands:
 
 // projectsListCmd lists projects for a namespace from the server
 var projectsListCmd = &cobra.Command{
-    Use:   "list",
-    Short: "List projects in a namespace",
-    Long:  "List projects available in the specified namespace on the LlamaFarm server.",
-    Run: func(cmd *cobra.Command, args []string) {
-        // Resolve config path from persistent flag
-        configPath, _ := cmd.Flags().GetString("config")
+	Use:   "list",
+	Short: "List projects in a namespace",
+	Long:  "List projects available in the specified namespace on the LlamaFarm server.",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Resolve config path from persistent flag
+		configPath, _ := cmd.Flags().GetString("config")
 
-        // Resolve server URL and namespace (project is not required for list)
-        serverCfg, err := config.GetServerConfigLenient(configPath, serverURL, namespace, "")
-        if err != nil {
-            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-            os.Exit(1)
-        }
-        serverURL = serverCfg.URL
-        ns := strings.TrimSpace(serverCfg.Namespace)
+		// Resolve server URL and namespace (project is not required for list)
+		serverCfg, err := config.GetServerConfigLenient(configPath, serverURL, namespace, "")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		serverURL = serverCfg.URL
+		ns := strings.TrimSpace(serverCfg.Namespace)
 
-        if ns == "" {
-            fmt.Fprintln(os.Stderr, "Error: namespace is required. Provide --namespace or set it in llamafarm.yaml")
-            os.Exit(1)
-        }
+		if ns == "" {
+			fmt.Fprintln(os.Stderr, "Error: namespace is required. Provide --namespace or set it in llamafarm.yaml")
+			os.Exit(1)
+		}
 
-        // Ensure server is up (auto-start locally if needed)
-        if err := ensureServerAvailable(serverURL); err != nil {
-            fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
-            os.Exit(1)
-        }
+		// Ensure server is up (auto-start locally if needed)
+		if err := ensureServerAvailable(serverURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+			os.Exit(1)
+		}
 
-        // Build request
-        url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
-        req, err := http.NewRequest(http.MethodGet, url, nil)
-        if err != nil {
-            fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
-            os.Exit(1)
-        }
-        _ = addLocalhostCWDHeader(req)
+		// Build request
+		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+			os.Exit(1)
+		}
 
-        // Execute
-        resp, err := getHTTPClient().Do(req)
-        if err != nil {
-            fmt.Fprintf(os.Stderr, "Error requesting server: %v\n", err)
-            os.Exit(1)
-        }
-        defer resp.Body.Close()
-        body, _ := io.ReadAll(resp.Body)
-        if resp.StatusCode != http.StatusOK {
-            fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, string(body))
-            os.Exit(1)
-        }
+		// Execute
+		resp, err := getHTTPClient().Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error requesting server: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, string(body))
+			os.Exit(1)
+		}
 
-        var listResp struct {
-            Total    int `json:"total"`
-            Projects []struct {
-                Namespace string `json:"namespace"`
-                Name      string `json:"name"`
-            } `json:"projects"`
-        }
-        if err := json.Unmarshal(body, &listResp); err != nil {
-            fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
-            os.Exit(1)
-        }
+		var listResp struct {
+			Total    int `json:"total"`
+			Projects []struct {
+				Namespace string `json:"namespace"`
+				Name      string `json:"name"`
+			} `json:"projects"`
+		}
+		if err := json.Unmarshal(body, &listResp); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
+			os.Exit(1)
+		}
 
-        if listResp.Total == 0 || len(listResp.Projects) == 0 {
-            fmt.Printf("No projects found in namespace %s\n", ns)
-            return
-        }
+		if listResp.Total == 0 || len(listResp.Projects) == 0 {
+			fmt.Printf("No projects found in namespace %s\n", ns)
+			return
+		}
 
-        for _, p := range listResp.Projects {
-            fmt.Printf("%s/%s\n", p.Namespace, p.Name)
-        }
-    },
+		for _, p := range listResp.Projects {
+			fmt.Printf("%s/%s\n", p.Namespace, p.Name)
+		}
+	},
 }
 
 // chatCmd represents the chat command
@@ -154,26 +154,26 @@ Examples:
 }
 
 func startChatSession() {
-    // Handle Ctrl+C gracefully
-    sigCh := make(chan os.Signal, 1)
-    signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-    go func() {
-        <-sigCh
-        fmt.Print("\n^C\n")
-        // Try to end the server session gracefully (best-effort)
-        if sessionID != "" {
-            _ = deleteChatSession()
-        }
-        fmt.Println("👋 You have left the pasture. Safe travels, little llama!")
-        os.Exit(0)
-    }()
+	// Handle Ctrl+C gracefully
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Print("\n^C\n")
+		// Try to end the server session gracefully (best-effort)
+		if sessionID != "" {
+			_ = deleteChatSession()
+		}
+		fmt.Println("👋 You have left the pasture. Safe travels, little llama!")
+		os.Exit(0)
+	}()
 	fmt.Printf("🌾 Starting LlamaFarm chat session...\n")
 	fmt.Printf("📡 Server: %s\n", serverURL)
-        if namespace != "" || projectID != "" {
-            fmt.Printf("📁 Project: %s/%s\n", namespace, projectID)
-        } else {
-            fmt.Printf("📁 Project: (not specified)\n")
-        }
+	if namespace != "" || projectID != "" {
+		fmt.Printf("📁 Project: %s/%s\n", namespace, projectID)
+	} else {
+		fmt.Printf("📁 Project: (not specified)\n")
+	}
 	if sessionID != "" {
 		fmt.Printf("🆔 Session: %s\n", sessionID)
 	}
@@ -216,30 +216,30 @@ func startChatSession() {
 		}
 		conversationHistory = append(conversationHistory, userMessage)
 
-        // Send request to server
-        fmt.Print("Assistant: ")
-        if streaming {
-            assistantMessage, err := sendChatRequestStream(conversationHistory)
-            if err != nil {
-                fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-                continue
-            }
-            fmt.Printf("\n\n")
-            conversationHistory = append(conversationHistory, ChatMessage{Role: "assistant", Content: assistantMessage})
-        } else {
-            response, err := sendChatRequest(conversationHistory)
-            if err != nil {
-                fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-                continue
-            }
-            if len(response.Choices) > 0 {
-                assistantMessage := response.Choices[0].Message.Content
-                fmt.Printf("%s\n\n", assistantMessage)
-                conversationHistory = append(conversationHistory, ChatMessage{Role: "assistant", Content: assistantMessage})
-            } else {
-                fmt.Println("No response received.")
-            }
-        }
+		// Send request to server
+		fmt.Print("Assistant: ")
+		if streaming {
+			assistantMessage, err := sendChatRequestStream(conversationHistory)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				continue
+			}
+			fmt.Printf("\n\n")
+			conversationHistory = append(conversationHistory, ChatMessage{Role: "assistant", Content: assistantMessage})
+		} else {
+			response, err := sendChatRequest(conversationHistory)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				continue
+			}
+			if len(response.Choices) > 0 {
+				assistantMessage := response.Choices[0].Message.Content
+				fmt.Printf("%s\n\n", assistantMessage)
+				conversationHistory = append(conversationHistory, ChatMessage{Role: "assistant", Content: assistantMessage})
+			} else {
+				fmt.Println("No response received.")
+			}
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -274,7 +274,7 @@ func init() {
 	chatCmd.Flags().StringVar(&sessionID, "session-id", "", "Existing session ID to continue conversation")
 	chatCmd.Flags().Float64Var(&temperature, "temperature", 0.7, "Sampling temperature (0.0 to 2.0)")
 	chatCmd.Flags().IntVar(&maxTokens, "max-tokens", 1000, "Maximum number of tokens to generate")
-    chatCmd.Flags().BoolVar(&streaming, "stream", true, "Stream assistant responses")
+	chatCmd.Flags().BoolVar(&streaming, "stream", true, "Stream assistant responses")
 
 	// No flags are required now - they can come from config file
 
