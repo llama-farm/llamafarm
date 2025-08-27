@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useChatInference, useDeleteChatSession } from './useChat'
 import { createChatRequest } from '../api/chatService'
 import { generateMessageId } from '../utils/idGenerator'
@@ -25,28 +25,54 @@ export function useChatbox(initialSessionId?: string) {
   const [messages, setMessages] = useState<ChatboxMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [hasInitialSync, setHasInitialSync] = useState(false)
+  
+  // Ref for debounced save timeout
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // API hooks
   const chatMutation = useChatInference()
   const deleteSessionMutation = useDeleteChatSession()
   
+  // Debounced save function to avoid blocking on every message change
+  const debouncedSave = useCallback((sessionId: string, messages: ChatboxMessage[]) => {
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    
+    // Set new timeout for debounced save
+    saveTimeoutRef.current = setTimeout(() => {
+      saveSessionMessages(sessionId, messages)
+    }, 500) // 500ms delay
+  }, [saveSessionMessages])
+
   // Sync persisted messages with local state ONLY on initial load
   useEffect(() => {
-    // Only sync from persistence if we don't have any current messages
-    // This prevents overwriting live updates
-    if (messages.length === 0) {
-      if (persistedMessages && persistedMessages.length > 0) {
-        setMessages(persistedMessages)
+    // Only sync from persistence if we haven't done initial sync yet,
+    // we don't have current messages, and we have persisted messages
+    if (!hasInitialSync && messages.length === 0 && persistedMessages.length > 0) {
+      setMessages(persistedMessages)
+      setHasInitialSync(true)
+    }
+  }, [messages, persistedMessages, hasInitialSync])
+  
+  // Save messages to persistence when they change (with debouncing)
+  useEffect(() => {
+    // Always save, even when messages array is empty (for clearing)
+    if (hasInitialSync && sessionId) {
+      debouncedSave(sessionId, messages)
+    }
+  }, [messages, sessionId, debouncedSave, hasInitialSync])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
       }
     }
-  }, [persistedMessages, isLoadingSession])
-  
-  // Save messages to persistence when they change
-  useEffect(() => {
-    if (messages.length > 0) {
-      saveSessionMessages(sessionId, messages)
-    }
-  }, [messages, sessionId, saveSessionMessages])
+  }, [])
   
   // Add message to state
   const addMessage = useCallback((message: Omit<ChatboxMessage, 'id'>) => {
@@ -150,6 +176,9 @@ export function useChatbox(initialSessionId?: string) {
       // Clear local messages and errors
       setMessages([])
       setError(null)
+      
+      // Reset initial sync flag to allow fresh sync with new session
+      setHasInitialSync(false)
 
       // Create new session (this will update sessionId and trigger persistence)
       createNewSession()
@@ -179,6 +208,10 @@ export function useChatbox(initialSessionId?: string) {
     setMessages([])
     setError(null)
     setInputValue('')
+    
+    // Reset initial sync flag to allow fresh sync with new session
+    setHasInitialSync(false)
+    
     return newSessionId
   }, [createNewSession])
 
