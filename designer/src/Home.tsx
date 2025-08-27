@@ -5,14 +5,17 @@ import FontIcon from './common/FontIcon'
 import ProjectModal, { ProjectModalMode } from './components/Project/ProjectModal'
 import useChatbox from './hooks/useChatbox'
 import {
+  useProjects,
+  useCreateProject,
+  useUpdateProject,
+  useDeleteProject,
+} from './hooks/useProjects'
+import {
   DEFAULT_PROJECT_NAMES,
-  getProjectsList,
-  saveProjectsList,
   setActiveProject,
   filterProjectsBySearch,
-  updateProjectInList,
-  removeProjectFromList,
 } from './utils/projectUtils'
+import { getCurrentNamespace } from './utils/namespaceUtils'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
@@ -29,14 +32,35 @@ function Home() {
     { id: 4, text: 'Recommendation System for E-commerce' },
   ]
 
-  const [projectsList, setProjectsList] = useState<string[]>(getProjectsList)
+  const namespace = getCurrentNamespace()
+  
+  // API hooks
+  const { data: projectsResponse } = useProjects(namespace)
+  const createProjectMutation = useCreateProject()
+  const updateProjectMutation = useUpdateProject()
+  const deleteProjectMutation = useDeleteProject()
+  
+  // Convert API projects to project names for UI compatibility
+  const projectsList = useMemo(() => {
+    if (projectsResponse?.projects) {
+      return projectsResponse.projects.map(p => p.name)
+    }
+    return DEFAULT_PROJECT_NAMES
+  }, [projectsResponse])
+  
+  const [localProjectsList, setLocalProjectsList] = useState<string[]>(projectsList)
+  
+  // Sync local state with API data
+  useEffect(() => {
+    setLocalProjectsList(projectsList)
+  }, [projectsList])
 
   const filteredProjectNames = useMemo(() => {
     return filterProjectsBySearch(
-      projectsList.map(name => ({ name })),
+      localProjectsList.map(name => ({ name })),
       search
     ).map(item => item.name)
-  }, [projectsList, search])
+  }, [localProjectsList, search])
 
   const handleOptionClick = (option: { id: number; text: string }) => {
     setInputValue(option.text)
@@ -342,35 +366,57 @@ function Home() {
         initialName={modalProjectName}
         initialDescription={''}
         onClose={() => setIsModalOpen(false)}
-        onSave={(name: string) => {
+        onSave={async (name: string) => {
           try {
-            const currentList = getProjectsList()
-            if (currentList.includes(name) && name !== modalProjectName) {
+            if (modalMode === 'create') {
+              // Create new project via API
+              await createProjectMutation.mutateAsync({
+                namespace,
+                request: { name, config_template: 'default' }
+              })
+              
+              setActiveProject(name)
               setIsModalOpen(false)
-              return
+              // Navigate to the new project
+              navigate('/chat/dashboard')
+            } else {
+              // Edit existing project
+              if (localProjectsList.includes(name) && name !== modalProjectName) {
+                setIsModalOpen(false)
+                return
+              }
+              
+              // Update via API
+              await updateProjectMutation.mutateAsync({
+                namespace,
+                projectId: modalProjectName,
+                request: { config: {} } // TODO: Get actual config
+              })
+              
+              setActiveProject(name)
+              // Local state will be updated via React Query invalidation
+              setIsModalOpen(false)
             }
-            const updated = updateProjectInList(currentList, modalProjectName, name)
-            saveProjectsList(updated)
-            setActiveProject(name)
-            setProjectsList(updated)
-            setIsModalOpen(false)
-          } catch {
+          } catch (error) {
             setIsModalOpen(false)
           }
         }}
-        onDelete={() => {
+        onDelete={async () => {
           try {
-            const currentList = getProjectsList()
-            const updated = removeProjectFromList(currentList, modalProjectName)
-            saveProjectsList(updated)
-            const next = updated[0] || DEFAULT_PROJECT_NAMES[0]
+            await deleteProjectMutation.mutateAsync({
+              namespace,
+              projectId: modalProjectName
+            })
+            
+            const remaining = localProjectsList.filter(n => n !== modalProjectName)
+            const next = remaining[0] || DEFAULT_PROJECT_NAMES[0]
             setActiveProject(next)
-            setProjectsList(updated)
             setIsModalOpen(false)
-          } catch {
+          } catch (error) {
             setIsModalOpen(false)
           }
         }}
+        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending}
       />
     </div>
   )

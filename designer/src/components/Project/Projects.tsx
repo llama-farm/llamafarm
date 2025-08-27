@@ -3,16 +3,19 @@ import FontIcon from '../../common/FontIcon'
 import { useNavigate } from 'react-router-dom'
 import ProjectModal, { ProjectModalMode } from './ProjectModal'
 import {
+  useProjects,
+  useCreateProject,
+  useUpdateProject,
+  useDeleteProject,
+} from '../../hooks/useProjects'
+import {
   DEFAULT_PROJECTS,
-  getProjectsList,
-  saveProjectsList,
-  setActiveProject,
-  namesToProjectItems,
+  apiProjectsToProjectItems,
   filterProjectsBySearch,
-  updateProjectInList,
-  removeProjectFromList,
-  addProjectToList,
+  setActiveProject,
 } from '../../utils/projectUtils'
+import { getCurrentNamespace } from '../../utils/namespaceUtils'
+import Loader from '../../common/Loader'
 
 const Projects = () => {
   const [search, setSearch] = useState('')
@@ -22,6 +25,13 @@ const Projects = () => {
     name: string
   }>({ name: '' })
   const navigate = useNavigate()
+  const namespace = getCurrentNamespace()
+  
+  // API hooks
+  const { data: projectsResponse, isLoading, error } = useProjects(namespace)
+  const createProjectMutation = useCreateProject()
+  const updateProjectMutation = useUpdateProject()
+  const deleteProjectMutation = useDeleteProject()
 
   // Open create modal if signaled by header
   useEffect(() => {
@@ -41,11 +51,16 @@ const Projects = () => {
     }
   }, [])
 
-  const projectsList = getProjectsList()
-  const projects = useMemo(() => namesToProjectItems(projectsList), [projectsList])
+  // Convert API projects to UI format
+  const projects = useMemo(() => {
+    if (projectsResponse?.projects) {
+      return apiProjectsToProjectItems(projectsResponse.projects)
+    }
+    return DEFAULT_PROJECTS
+  }, [projectsResponse])
+  
   const filteredProjects = useMemo(() => {
-    const base = projects.length > 0 ? projects : DEFAULT_PROJECTS
-    return filterProjectsBySearch(base, search)
+    return filterProjectsBySearch(projects, search)
   }, [projects, search])
 
   const openProject = (name: string) => {
@@ -67,30 +82,68 @@ const Projects = () => {
 
 
 
-  const handleSave = (name: string) => {
+  const handleSave = async (name: string) => {
     if (modalMode === 'create') {
-      const updated = addProjectToList(projectsList, name)
-      saveProjectsList(updated)
-      setActiveProject(name)
-      setIsModalOpen(false)
-      navigate('/chat/dashboard')
+      try {
+        await createProjectMutation.mutateAsync({
+          namespace,
+          request: { name, config_template: 'default' }
+        })
+        setActiveProject(name)
+        setIsModalOpen(false)
+        navigate('/chat/dashboard')
+      } catch (error) {
+        console.error('Failed to create project:', error)
+        // Error handling is done by React Query and apiClient
+      }
     } else {
-      const updated = updateProjectInList(projectsList, modalProject.name, name)
-      saveProjectsList(updated)
-      setActiveProject(name)
-      setIsModalOpen(false)
+      try {
+        await updateProjectMutation.mutateAsync({
+          namespace,
+          projectId: modalProject.name,
+          request: { config: {} } // TODO: Get actual config from form
+        })
+        setActiveProject(name)
+        setIsModalOpen(false)
+      } catch (error) {
+        console.error('Failed to update project:', error)
+      }
     }
   }
 
-  const handleDelete = () => {
-    const updated = removeProjectFromList(projectsList, modalProject.name)
-    saveProjectsList(updated)
-    setIsModalOpen(false)
+  const handleDelete = async () => {
+    try {
+      await deleteProjectMutation.mutateAsync({
+        namespace,
+        projectId: modalProject.name
+      })
+      setIsModalOpen(false)
+    } catch (error) {
+      console.error('Failed to delete project:', error)
+    }
   }
 
+  if (error) {
+    return (
+      <div className="w-full h-full transition-colors bg-background pt-16">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col gap-6">
+          <div className="text-center py-8">
+            <p className="text-destructive">Failed to load projects: {error.message}</p>
+            <p className="text-muted-foreground mt-2">Showing default projects instead.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
   return (
     <div className="w-full h-full transition-colors bg-background pt-16">
       <div className="max-w-6xl mx-auto px-6 flex flex-col gap-6">
+        {isLoading && (
+          <div className="flex justify-center py-8">
+            <Loader />
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <h2 className="text-2xl text-foreground">Projects</h2>
           <div className="flex items-center gap-2">
@@ -117,7 +170,7 @@ const Projects = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-8">
-          {filteredProjects.map(p => (
+          {!isLoading && filteredProjects.map(p => (
             <div
               key={p.id}
               className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer"
@@ -160,6 +213,7 @@ const Projects = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSave}
         onDelete={modalMode === 'edit' ? handleDelete : undefined}
+        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending}
       />
     </div>
   )

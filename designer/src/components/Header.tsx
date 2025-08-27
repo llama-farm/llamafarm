@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import FontIcon from '../common/FontIcon'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
@@ -9,7 +9,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu'
-import { getProjectsList, getActiveProject, setActiveProject as setActiveProjectUtil } from '../utils/projectUtils'
+import { useProjects } from '../hooks/useProjects'
+import { setActiveProject as setActiveProjectUtil, getActiveProject } from '../utils/projectUtils'
+import { getCurrentNamespace } from '../utils/namespaceUtils'
 
 function Header() {
   const [isBuilding, setIsBuilding] = useState(false)
@@ -20,8 +22,19 @@ function Header() {
 
   // Project dropdown state
   const [isProjectOpen, setIsProjectOpen] = useState(false)
-  const [projects] = useState<string[]>(getProjectsList)
   const [activeProject, setActiveProject] = useState<string>(getActiveProject)
+  const namespace = getCurrentNamespace()
+  
+  // API hooks
+  const { data: projectsResponse } = useProjects(namespace)
+  
+  // Convert API projects to project names for dropdown
+  const projects = useMemo(() => {
+    if (projectsResponse?.projects) {
+      return projectsResponse.projects.map(p => p.name)
+    }
+    return [] // Will fall back to empty dropdown if no API data
+  }, [projectsResponse])
   const projectRef = useRef<HTMLDivElement>(null)
 
   // Page switching overlay (fade only)

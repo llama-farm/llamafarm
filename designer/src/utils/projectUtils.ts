@@ -1,4 +1,8 @@
 // Shared project management utilities
+// NOTE: This file provides backward compatibility and localStorage management
+// while the main API operations use the new Project API hooks
+
+import { Project } from '../types/project'
 
 export interface ProjectItem {
   id: number
@@ -8,6 +12,7 @@ export interface ProjectItem {
   description?: string
 }
 
+// Legacy default project names for backward compatibility
 export const DEFAULT_PROJECT_NAMES = [
   'aircraft-mx-flow',
   'Option 1',
@@ -16,6 +21,7 @@ export const DEFAULT_PROJECT_NAMES = [
   'Option 4',
 ]
 
+// Legacy default projects for UI fallback when API is not available
 export const DEFAULT_PROJECTS: ProjectItem[] = [
   { id: 1, name: 'Aircraft MX', model: 'TinyLama', lastEdited: '8/15/2025' },
   { id: 2, name: 'SkyGuard', model: 'TinyLama', lastEdited: '8/15/2025' },
@@ -59,11 +65,17 @@ export const saveProjectsList = (projects: string[]): void => {
  * Get active project from localStorage
  */
 export const getActiveProject = (): string => {
-  return localStorage.getItem('activeProject') ?? 'aircraft-mx-flow'
+  try {
+    return localStorage.getItem('activeProject') ?? DEFAULT_PROJECT_NAMES[0]
+  } catch (error) {
+    console.error('Failed to get active project:', error)
+    return DEFAULT_PROJECT_NAMES[0]
+  }
 }
 
 /**
  * Set active project in localStorage and dispatch event
+ * @param projectName - The project name to set as active
  */
 export const setActiveProject = (projectName: string): void => {
   try {
@@ -76,8 +88,22 @@ export const setActiveProject = (projectName: string): void => {
   }
 }
 
+
+
 /**
- * Convert project names to ProjectItem objects
+ * Convert API Project objects to UI ProjectItem objects
+ */
+export const apiProjectsToProjectItems = (projects: Project[]): ProjectItem[] => {
+  return projects.map((project, idx) => ({
+    id: idx + 1,
+    name: project.name,
+    model: 'TinyLama', // TODO: Extract from project.config when available
+    lastEdited: '8/15/2025', // TODO: Use actual lastModified from API
+  }))
+}
+
+/**
+ * Convert project names to ProjectItem objects (legacy compatibility)
  */
 export const namesToProjectItems = (names: string[]): ProjectItem[] => {
   return names.map((name, idx) => ({

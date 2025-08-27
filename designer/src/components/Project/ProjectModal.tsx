@@ -17,6 +17,7 @@ interface ProjectModalProps {
   onClose: () => void
   onSave: (name: string) => void
   onDelete?: () => void
+  isLoading?: boolean
 }
 
 const ProjectModal: React.FC<ProjectModalProps> = ({
@@ -27,6 +28,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  isLoading = false,
 }) => {
   const [name, setName] = useState(initialName)
   const [desc, setDesc] = useState(initialDescription)
@@ -40,7 +42,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   const title = mode === 'create' ? 'Create new project' : 'Edit project'
   const cta = mode === 'create' ? 'Create' : 'Save'
-  const isValid = name.trim().length > 0
+  const isValid = name.trim().length > 0 && !isLoading
 
   const handleDelete = () => {
     if (!onDelete) return
@@ -82,19 +84,21 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         <DialogFooter className="flex items-center justify-between gap-2">
           {mode === 'edit' ? (
             <button
-              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
               onClick={handleDelete}
+              disabled={isLoading}
               type="button"
             >
-              Delete
+              {isLoading ? 'Deleting...' : 'Delete'}
             </button>
           ) : (
             <div />
           )}
           <div className="flex items-center gap-2 ml-auto">
             <button
-              className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+              className="px-3 py-2 rounded-md text-sm text-primary hover:underline disabled:opacity-50"
               onClick={onClose}
+              disabled={isLoading}
               type="button"
             >
               Cancel
@@ -106,8 +110,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
               }`}
               onClick={() => isValid && onSave(name.trim())}
+              disabled={!isValid}
             >
-              {cta}
+              {isLoading ? (mode === 'create' ? 'Creating...' : 'Saving...') : cta}
             </button>
           </div>
         </DialogFooter>

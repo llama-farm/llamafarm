@@ -13,19 +13,25 @@ import DataCards from './DataCards'
 import ProjectModal, { ProjectModalMode } from '../../components/Project/ProjectModal'  
 import ConfigEditor from '../ConfigEditor'
 import {
+  useUpdateProject,
+  useDeleteProject,
+} from '../../hooks/useProjects'
+import {
   DEFAULT_PROJECT_NAMES,
-  getProjectsList,
-  saveProjectsList,
   setActiveProject,
-  updateProjectInList,
-  removeProjectFromList,
 } from '../../utils/projectUtils'
+import { getCurrentNamespace } from '../../utils/namespaceUtils'
 
 const Dashboard = () => {
   const { theme } = useTheme()
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('designer')
   const [projectName, setProjectName] = useState<string>('Dashboard')
+  const namespace = getCurrentNamespace()
+  
+  // API hooks
+  const updateProjectMutation = useUpdateProject()
+  const deleteProjectMutation = useDeleteProject()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
 
@@ -287,38 +293,39 @@ const Dashboard = () => {
         initialName={projectName}
         initialDescription={''}
         onClose={() => setIsModalOpen(false)}
-        onSave={(name: string) => {
+        onSave={async (name: string) => {
           try {
-            const currentList = getProjectsList()
-            // prevent duplicate names
-            if (currentList.includes(name) && name !== projectName) {
-              console.warn('Project rename skipped: duplicate name', name)
-              setIsModalOpen(false)
-              return
-            }
-            const updated = updateProjectInList(currentList, projectName, name)
-            saveProjectsList(updated)
+            // Update via API
+            await updateProjectMutation.mutateAsync({
+              namespace,
+              projectId: projectName,
+              request: { config: {} } // TODO: Get actual config from form
+            })
+            
             setActiveProject(name)
             setProjectName(name)
           } catch (err) {
-            console.error('Failed to update project in localStorage:', err)
+            console.error('Failed to update project:', err)
           }
           setIsModalOpen(false)
         }}
-        onDelete={() => {
+        onDelete={async () => {
           try {
-            const currentList = getProjectsList()
-            const updated = removeProjectFromList(currentList, projectName)
-            saveProjectsList(updated)
-            // pick a fallback active project if any
-            const next = updated[0] || DEFAULT_PROJECT_NAMES[0]
+            await deleteProjectMutation.mutateAsync({
+              namespace,
+              projectId: projectName
+            })
+            
+            // pick a fallback active project
+            const next = DEFAULT_PROJECT_NAMES[0]
             setActiveProject(next)
             setProjectName(next)
           } catch (err) {
-            console.error('Failed to delete project from localStorage:', err)
+            console.error('Failed to delete project:', err)
           }
           setIsModalOpen(false)
         }}
+        isLoading={updateProjectMutation.isPending || deleteProjectMutation.isPending}
       />
     </>
   )
