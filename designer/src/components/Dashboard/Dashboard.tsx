@@ -10,8 +10,16 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ModeToggle, { Mode } from '../ModeToggle'
 import DataCards from './DataCards'
-import ProjectModal, { ProjectModalMode } from '../ProjectModal'
+import ProjectModal, { ProjectModalMode } from '../../components/Project/ProjectModal'  
 import ConfigEditor from '../ConfigEditor'
+import {
+  DEFAULT_PROJECT_NAMES,
+  getProjectsList,
+  saveProjectsList,
+  setActiveProject,
+  updateProjectInList,
+  removeProjectFromList,
+} from '../../utils/projectUtils'
 
 const Dashboard = () => {
   const { theme } = useTheme()
@@ -281,25 +289,17 @@ const Dashboard = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={(name: string) => {
           try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
+            const currentList = getProjectsList()
             // prevent duplicate names
-            if (list.includes(name) && name !== projectName) {
+            if (currentList.includes(name) && name !== projectName) {
               console.warn('Project rename skipped: duplicate name', name)
               setIsModalOpen(false)
               return
             }
-            const updated = list.map(n => (n === projectName ? name : n))
-            localStorage.setItem('projectsList', JSON.stringify(updated))
-            localStorage.setItem('activeProject', name)
+            const updated = updateProjectInList(currentList, projectName, name)
+            saveProjectsList(updated)
+            setActiveProject(name)
             setProjectName(name)
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: name })
-              )
-            } catch (err) {
-              console.error('Failed to dispatch lf-active-project event:', err)
-            }
           } catch (err) {
             console.error('Failed to update project in localStorage:', err)
           }
@@ -307,21 +307,13 @@ const Dashboard = () => {
         }}
         onDelete={() => {
           try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
-            const updated = list.filter(n => n !== projectName)
-            localStorage.setItem('projectsList', JSON.stringify(updated))
+            const currentList = getProjectsList()
+            const updated = removeProjectFromList(currentList, projectName)
+            saveProjectsList(updated)
             // pick a fallback active project if any
-            const next = updated[0] || 'aircraft-mx-flow'
-            localStorage.setItem('activeProject', next)
+            const next = updated[0] || DEFAULT_PROJECT_NAMES[0]
+            setActiveProject(next)
             setProjectName(next)
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: next })
-              )
-            } catch (err) {
-              console.error('Failed to dispatch lf-active-project event:', err)
-            }
           } catch (err) {
             console.error('Failed to delete project from localStorage:', err)
           }

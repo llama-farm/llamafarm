@@ -5,7 +5,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from './ui/dialog'
+} from '../ui/dialog'
 
 export type ProjectModalMode = 'create' | 'edit'
 
@@ -15,7 +15,7 @@ interface ProjectModalProps {
   initialName?: string
   initialDescription?: string
   onClose: () => void
-  onSave: (name: string, description: string) => void
+  onSave: (name: string) => void
   onDelete?: () => void
 }
 
@@ -105,7 +105,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   ? 'bg-primary text-primary-foreground hover:opacity-90'
                   : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
               }`}
-              onClick={() => isValid && onSave(name.trim(), desc.trim())}
+              onClick={() => isValid && onSave(name.trim())}
             >
               {cta}
             </button>

@@ -2,8 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 // removed decorative llama image
 import FontIcon from './common/FontIcon'
-import ProjectModal, { ProjectModalMode } from './components/ProjectModal'
+import ProjectModal, { ProjectModalMode } from './components/Project/ProjectModal'
 import useChatbox from './hooks/useChatbox'
+import {
+  DEFAULT_PROJECT_NAMES,
+  getProjectsList,
+  saveProjectsList,
+  setActiveProject,
+  filterProjectsBySearch,
+  updateProjectInList,
+  removeProjectFromList,
+} from './utils/projectUtils'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
@@ -20,27 +29,13 @@ function Home() {
     { id: 4, text: 'Recommendation System for E-commerce' },
   ]
 
-  const defaultProjectNames = [
-    'aircraft-mx-flow',
-    'Option 1',
-    'Option 2',
-    'Option 3',
-    'Option 4',
-  ]
-
-  const [projectsList, setProjectsList] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('projectsList')
-      if (stored) return JSON.parse(stored) as string[]
-    } catch {}
-    return defaultProjectNames
-  })
+  const [projectsList, setProjectsList] = useState<string[]>(getProjectsList)
 
   const filteredProjectNames = useMemo(() => {
-    if (!search) return projectsList
-    return projectsList.filter(name =>
-      name.toLowerCase().includes(search.toLowerCase())
-    )
+    return filterProjectsBySearch(
+      projectsList.map(name => ({ name })),
+      search
+    ).map(item => item.name)
   }, [projectsList, search])
 
   const handleOptionClick = (option: { id: number; text: string }) => {
@@ -76,9 +71,7 @@ function Home() {
   }
 
   const openProject = (name: string) => {
-    try {
-      localStorage.setItem('activeProject', name)
-    } catch {}
+    setActiveProject(name)
     navigate('/chat/dashboard')
   }
 
@@ -349,25 +342,17 @@ function Home() {
         initialName={modalProjectName}
         initialDescription={''}
         onClose={() => setIsModalOpen(false)}
-        onSave={(name: string /* desc */) => {
+        onSave={(name: string) => {
           try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
-            if (list.includes(name) && name !== modalProjectName) {
+            const currentList = getProjectsList()
+            if (currentList.includes(name) && name !== modalProjectName) {
               setIsModalOpen(false)
               return
             }
-            const updated = list.map(n => (n === modalProjectName ? name : n))
-            localStorage.setItem('projectsList', JSON.stringify(updated))
-            localStorage.setItem('activeProject', name)
-            // Update local state for immediate UI sync
+            const updated = updateProjectInList(currentList, modalProjectName, name)
+            saveProjectsList(updated)
+            setActiveProject(name)
             setProjectsList(updated)
-            // Best-effort refresh via event for header/project dropdown consumers
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: name })
-              )
-            } catch {}
             setIsModalOpen(false)
           } catch {
             setIsModalOpen(false)
@@ -375,18 +360,12 @@ function Home() {
         }}
         onDelete={() => {
           try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
-            const updated = list.filter(n => n !== modalProjectName)
-            localStorage.setItem('projectsList', JSON.stringify(updated))
-            const next = updated[0] || 'aircraft-mx-flow'
-            localStorage.setItem('activeProject', next)
+            const currentList = getProjectsList()
+            const updated = removeProjectFromList(currentList, modalProjectName)
+            saveProjectsList(updated)
+            const next = updated[0] || DEFAULT_PROJECT_NAMES[0]
+            setActiveProject(next)
             setProjectsList(updated)
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: next })
-              )
-            } catch {}
             setIsModalOpen(false)
           } catch {
             setIsModalOpen(false)

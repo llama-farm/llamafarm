@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu'
+import { getProjectsList, getActiveProject, setActiveProject as setActiveProjectUtil } from '../utils/projectUtils'
 
 function Header() {
   const [isBuilding, setIsBuilding] = useState(false)
@@ -18,26 +19,9 @@ function Header() {
   const { theme, setTheme } = useTheme()
 
   // Project dropdown state
-  const defaultProjectNames = [
-    'aircraft-mx-flow',
-    'Option 1',
-    'Option 2',
-    'Option 3',
-    'Option 4',
-  ]
   const [isProjectOpen, setIsProjectOpen] = useState(false)
-  const [projects /* setProjects */] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('projectsList')
-      if (stored) return JSON.parse(stored)
-    } catch (err) {
-      console.error('Failed to read projectsList from localStorage:', err)
-    }
-    return defaultProjectNames
-  })
-  const [activeProject, setActiveProject] = useState<string>(
-    () => localStorage.getItem('activeProject') ?? 'aircraft-mx-flow'
-  )
+  const [projects] = useState<string[]>(getProjectsList)
+  const [activeProject, setActiveProject] = useState<string>(getActiveProject)
   const projectRef = useRef<HTMLDivElement>(null)
 
   // Page switching overlay (fade only)
@@ -50,11 +34,11 @@ function Header() {
 
   // Keep activeProject in sync with localStorage when route changes (e.g., from Projects click)
   useEffect(() => {
-    const stored = localStorage.getItem('activeProject')
+    const stored = getActiveProject()
     if (stored && stored !== activeProject) {
       setActiveProject(stored)
     }
-  }, [location.pathname])
+  }, [location.pathname, activeProject])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -68,25 +52,12 @@ function Header() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  // const persistProjects = (list: string[]) => {
-  //   try {
-  //     localStorage.setItem('projectsList', JSON.stringify(list))
-  //   } catch {}
-  // }
-
-  // (removed unused handleCreateProject)
+  // (removed unused persistProjects and handleCreateProject)
 
   const handleSelectProject = (name: string) => {
     const isDifferent = name !== activeProject
     setActiveProject(name)
-    localStorage.setItem('activeProject', name)
-    try {
-      window.dispatchEvent(
-        new CustomEvent<string>('lf-active-project', { detail: name })
-      )
-    } catch (err) {
-      console.error('Failed to dispatch lf-active-project event:', err)
-    }
+    setActiveProjectUtil(name)
     setIsProjectOpen(false)
     if (isDifferent) {
       setIsSwitching(true)

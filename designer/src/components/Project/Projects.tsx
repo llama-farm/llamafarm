@@ -1,37 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import FontIcon from '../common/FontIcon'
+import FontIcon from '../../common/FontIcon'
 import { useNavigate } from 'react-router-dom'
 import ProjectModal, { ProjectModalMode } from './ProjectModal'
-
-interface ProjectItem {
-  id: number
-  name: string
-  model: string
-  lastEdited: string
-  description?: string
-}
-
-const defaultProjectNames = [
-  'aircraft-mx-flow',
-  'Option 1',
-  'Option 2',
-  'Option 3',
-  'Option 4',
-]
-const defaultProjects: ProjectItem[] = [
-  { id: 1, name: 'Aircraft MX', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 2, name: 'SkyGuard', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 3, name: 'FalconEye', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 4, name: 'EagleVision', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 5, name: 'ThunderStrike', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 6, name: 'ViperWatch', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 7, name: 'HawkEye', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 8, name: 'StealthOps MX', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 9, name: 'JetStream', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 10, name: 'RaptorControl', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 11, name: 'AeroSentinel', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 12, name: 'CloudSurge', model: 'TinyLama', lastEdited: '8/15/2025' },
-]
+import {
+  DEFAULT_PROJECTS,
+  getProjectsList,
+  saveProjectsList,
+  setActiveProject,
+  namesToProjectItems,
+  filterProjectsBySearch,
+  updateProjectInList,
+  removeProjectFromList,
+  addProjectToList,
+} from '../../utils/projectUtils'
 
 const Projects = () => {
   const [search, setSearch] = useState('')
@@ -39,8 +20,7 @@ const Projects = () => {
   const [modalMode, setModalMode] = useState<ProjectModalMode>('create')
   const [modalProject, setModalProject] = useState<{
     name: string
-    description: string
-  }>({ name: '', description: '' })
+  }>({ name: '' })
   const navigate = useNavigate()
 
   // Open create modal if signaled by header
@@ -49,88 +29,61 @@ const Projects = () => {
     if (flag === '1') {
       localStorage.removeItem('openCreateProjectModal')
       setModalMode('create')
-      setModalProject({ name: '', description: '' })
+      setModalProject({ name: '' })
       setIsModalOpen(true)
     }
     const editName = localStorage.getItem('openEditProject')
     if (editName) {
       localStorage.removeItem('openEditProject')
       setModalMode('edit')
-      setModalProject({ name: editName, description: '' })
+      setModalProject({ name: editName })
       setIsModalOpen(true)
     }
   }, [])
 
-  // Pull list from localStorage to mirror dropdown, fallback to defaults
-  const listFromStorage = (() => {
-    try {
-      const stored = localStorage.getItem('projectsList')
-      if (stored) return JSON.parse(stored) as string[]
-    } catch {}
-    return defaultProjectNames
-  })()
-
-  const mirroredProjects = useMemo<ProjectItem[]>(() => {
-    // Map the names to card objects; if name not in demo list, still show it
-    return listFromStorage.map((name, idx) => ({
-      id: idx + 1,
-      name,
-      model: 'TinyLama',
-      lastEdited: '8/15/2025',
-    }))
-  }, [listFromStorage])
-
-  const filtered = useMemo(() => {
-    const base =
-      mirroredProjects.length > 0 ? mirroredProjects : defaultProjects
-    if (!search) return base
-    return base.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-  }, [mirroredProjects, search])
+  const projectsList = getProjectsList()
+  const projects = useMemo(() => namesToProjectItems(projectsList), [projectsList])
+  const filteredProjects = useMemo(() => {
+    const base = projects.length > 0 ? projects : DEFAULT_PROJECTS
+    return filterProjectsBySearch(base, search)
+  }, [projects, search])
 
   const openProject = (name: string) => {
-    localStorage.setItem('activeProject', name)
+    setActiveProject(name)
     navigate('/chat/dashboard')
   }
 
   const openCreate = () => {
     setModalMode('create')
-    setModalProject({ name: '', description: '' })
+    setModalProject({ name: '' })
     setIsModalOpen(true)
   }
 
   const openEdit = (name: string) => {
     setModalMode('edit')
-    setModalProject({ name, description: '' })
+    setModalProject({ name })
     setIsModalOpen(true)
   }
 
-  const saveProjectsList = (names: string[]) => {
-    try {
-      localStorage.setItem('projectsList', JSON.stringify(names))
-    } catch {}
-  }
 
-  const handleSave = (name: string /* description: string */) => {
+
+  const handleSave = (name: string) => {
     if (modalMode === 'create') {
-      const exists = listFromStorage.includes(name)
-      const updated = exists ? listFromStorage : [...listFromStorage, name]
+      const updated = addProjectToList(projectsList, name)
       saveProjectsList(updated)
-      localStorage.setItem('activeProject', name)
+      setActiveProject(name)
       setIsModalOpen(false)
       navigate('/chat/dashboard')
     } else {
-      // edit: rename in list
-      const updated = listFromStorage.map(n =>
-        n === modalProject.name ? name : n
-      )
+      const updated = updateProjectInList(projectsList, modalProject.name, name)
       saveProjectsList(updated)
-      localStorage.setItem('activeProject', name)
+      setActiveProject(name)
       setIsModalOpen(false)
     }
   }
 
   const handleDelete = () => {
-    const updated = listFromStorage.filter(n => n !== modalProject.name)
+    const updated = removeProjectFromList(projectsList, modalProject.name)
     saveProjectsList(updated)
     setIsModalOpen(false)
   }
@@ -164,7 +117,7 @@ const Projects = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-8">
-          {filtered.map(p => (
+          {filteredProjects.map(p => (
             <div
               key={p.id}
               className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer"
@@ -203,7 +156,7 @@ const Projects = () => {
         isOpen={isModalOpen}
         mode={modalMode}
         initialName={modalProject.name}
-        initialDescription={modalProject.description}
+        initialDescription={''}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSave}
         onDelete={modalMode === 'edit' ? handleDelete : undefined}
