@@ -54,13 +54,17 @@ export function useChatbox(initialSessionId?: string) {
     if (!hasInitialSync && messages.length === 0 && persistedMessages.length > 0) {
       setMessages(persistedMessages)
       setHasInitialSync(true)
+    } else if (!hasInitialSync && messages.length === 0 && persistedMessages.length === 0) {
+      setHasInitialSync(true)
     }
-  }, [messages, persistedMessages, hasInitialSync])
+  }, [messages, persistedMessages, hasInitialSync, sessionId])
   
   // Save messages to persistence when they change (with debouncing)
   useEffect(() => {
-    // Always save, even when messages array is empty (for clearing)
-    if (hasInitialSync && sessionId) {
+    // Save if we have a valid session ID and either:
+    // 1. We've done initial sync (loaded from persistence), OR
+    // 2. We have messages to save (new session with messages)
+    if (sessionId && (hasInitialSync || messages.length > 0)) {
       debouncedSave(sessionId, messages)
     }
   }, [messages, sessionId, debouncedSave, hasInitialSync])
@@ -127,6 +131,10 @@ export function useChatbox(initialSessionId?: string) {
       // Set session ID if received from server (for new sessions)
       if (response.sessionId && response.sessionId !== sessionId) {
         setSessionId(response.sessionId)
+        // Mark as having initial sync since this is a new session with messages
+        if (!hasInitialSync) {
+          setHasInitialSync(true)
+        }
       }
 
       // Update assistant message with response

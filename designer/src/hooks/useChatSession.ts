@@ -113,7 +113,11 @@ export function useChatSession(initialSessionId?: string) {
         createdAt: existingIndex >= 0 ? sessions[existingIndex].createdAt : new Date(),
         lastActivity: new Date(),
         messageCount: messages.length,
-        title: messages.length > 0 && messages[0].content ? messages[0].content.substring(0, 50) + '...' : 'New Chat'
+        title: messages.length > 0 && messages[0].content
+          ? messages[0].content.length > 50
+            ? messages[0].content.substring(0, 50) + '...'
+            : messages[0].content
+          : 'New Chat'
       }
       
       if (existingIndex >= 0) {
@@ -230,7 +234,7 @@ export function useChatSession(initialSessionId?: string) {
     
     // Invalidate queries to refresh data
     queryClient.invalidateQueries({ queryKey: chatKeys.session(sessionId) })
-  }, [queryClient])
+  }, [queryClient, currentSessionId])
 
   // Save current session ID to localStorage when it changes
   useEffect(() => {
