@@ -34,6 +34,7 @@ export function useChatSession(initialSessionId?: string) {
     queryFn: () => loadSessionMessages(currentSessionId),
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 30, // 30 minutes
+    enabled: !!currentSessionId, // Don't query if no session ID
   })
 
   // Query for session list

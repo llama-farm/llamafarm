@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useChatInference, useDeleteChatSession } from './useChat'
+import { useQueryClient } from '@tanstack/react-query'
+import { useChatInference, useDeleteChatSession, chatKeys } from './useChat'
 import { createChatRequest } from '../api/chatService'
 import { generateMessageId } from '../utils/idGenerator'
 import useChatSession from './useChatSession'
@@ -31,6 +32,7 @@ export function useChatbox(initialSessionId?: string) {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // API hooks
+  const queryClient = useQueryClient()
   const chatMutation = useChatInference()
   const deleteSessionMutation = useDeleteChatSession()
   
@@ -47,17 +49,17 @@ export function useChatbox(initialSessionId?: string) {
     }, 500) // 500ms delay
   }, [saveSessionMessages])
 
-  // Sync persisted messages with local state ONLY on initial load
+  // Sync persisted messages with local state ONLY on true initial load
   useEffect(() => {
-    // Only sync from persistence if we haven't done initial sync yet,
-    // we don't have current messages, and we have persisted messages
-    if (!hasInitialSync && messages.length === 0 && persistedMessages.length > 0) {
-      setMessages(persistedMessages)
-      setHasInitialSync(true)
-    } else if (!hasInitialSync && messages.length === 0 && persistedMessages.length === 0) {
+    // CRITICAL: Only load from persistence on TRUE component mount (not navigation)
+    // We determine this by checking if this is genuinely the first load for this session
+    if (!hasInitialSync && messages.length === 0) {
+      if (persistedMessages.length > 0) {
+        setMessages(persistedMessages)
+      }
       setHasInitialSync(true)
     }
-  }, [messages, persistedMessages, hasInitialSync, sessionId])
+  }, [persistedMessages, hasInitialSync, messages.length, sessionId])
   
   // Save messages to persistence when they change (with debouncing)
   useEffect(() => {
@@ -66,8 +68,11 @@ export function useChatbox(initialSessionId?: string) {
     // 2. We have messages to save (new session with messages)
     if (sessionId && (hasInitialSync || messages.length > 0)) {
       debouncedSave(sessionId, messages)
+      
+      // IMMEDIATELY update React Query cache for cross-component access
+      queryClient.setQueryData(chatKeys.session(sessionId), messages)
     }
-  }, [messages, sessionId, debouncedSave, hasInitialSync])
+  }, [messages, sessionId, debouncedSave, hasInitialSync, queryClient])
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -91,9 +96,12 @@ export function useChatbox(initialSessionId?: string) {
 
   // Update message by ID
   const updateMessage = useCallback((id: string, updates: Partial<ChatboxMessage>) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === id ? { ...msg, ...updates } : msg
-    ))
+    setMessages(prev => {
+      const updated = prev.map(msg => 
+        msg.id === id ? { ...msg, ...updates } : msg
+      )
+      return updated
+    })
   }, [])
 
   // Handle sending message with API integration
