@@ -1,10 +1,11 @@
-from appdirs import user_data_dir  # type: ignore
+from pathlib import Path
+
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
 load_dotenv()
 
-default_data_dir = user_data_dir("LlamaFarm", "LlamaFarm")
+default_data_dir = str(Path.home() / ".llamafarm")
 
 
 class Settings(BaseSettings, env_file=".env"):
