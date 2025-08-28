@@ -19,7 +19,7 @@ class Settings(BaseSettings, env_file=".env"):
 
     # Ollama Configuration
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "llama3.1:8b"
+    ollama_model: str = "qwen3:8b"
     ollama_api_key: str = "ollama"
 
 
