@@ -69,7 +69,7 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     root_logger = logging.getLogger()
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
-    
+
     # Add our single structlog handler to the root logger
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
@@ -86,6 +86,7 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
         # uvicorn_logger.propagate = True
         uvicorn_logger.name = "uvicorn"
         uvicorn_logger.setLevel(log_level.upper())
+
 
 class FastAPIStructLogger:
     def __init__(self, log_name=settings.LOG_NAME):

@@ -30,6 +30,7 @@ dependencies = [
     "asgi-correlation-id>=4.3.4",
     "atomic-agents>=2.0.1",
     "jsonref>=1.1.0",
+    "celery>=5.5.3",
 ]
 
 [project.optional-dependencies]

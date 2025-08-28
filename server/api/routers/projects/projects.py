@@ -4,6 +4,7 @@ import threading
 import uuid
 from pathlib import Path
 
+import celery.result
 from atomic_agents import AtomicAgent  # type: ignore
 from fastapi import APIRouter, Header, HTTPException, Response
 from openai.types.chat import ChatCompletion
@@ -13,6 +14,7 @@ from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
 from api.routers.shared.response_utils import set_session_header
+from core.celery import app
 from services.project_chat_service import project_chat_service
 from services.project_service import ProjectService
 
@@ -232,3 +234,29 @@ async def chat(
     set_session_header(response, session_id)
 
     return completion
+
+
+@router.get("/{namespace}/{project_id}/tasks/{task_id}")
+async def get_task(namespace: str, project_id: str, task_id: str):
+    """Return state, progress meta, and result/error if available."""
+    res: celery.result.AsyncResult = app.AsyncResult(task_id)
+
+    payload = {
+        "task_id": task_id,
+        "state": res.state,
+        "meta": None,
+        "result": None,
+        "error": None,
+        "traceback": None,
+    }
+
+    if res.info:
+        payload["meta"] = res.info
+
+    if res.state == "SUCCESS":
+        payload["result"] = res.result
+    elif res.state == "FAILURE":
+        payload["error"] = str(res.result)
+        payload["traceback"] = res.traceback
+
+    return payload
