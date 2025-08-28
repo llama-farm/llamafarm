@@ -37,6 +37,8 @@ def process_dataset_task(self: Task, namespace: str, project: str, dataset: str)
     files_ingested = []
     for file_hash in dataset_config.files:
         file_path = path_to_raw_dir / file_hash
+        if not file_path.exists():
+            raise FileNotFoundError(f"Raw file not found: {file_path}")
         logger.info(f"Ingesting file {file_path}")
         if not ingest_file_with_rag(strategy, str(file_path)):
             raise Exception(f"Failed to ingest file {file_path}")
