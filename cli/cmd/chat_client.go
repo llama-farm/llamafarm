@@ -52,10 +52,6 @@ type ChatResponse struct {
 	Choices []ChatChoice `json:"choices"`
 }
 
-// onFirstStreamToken, if set, will be called once when the first streamed
-// token is received. The caller is responsible for setting and clearing it.
-var onFirstStreamToken func()
-
 // ChatSessionContext encapsulates CLI session and connection state.
 type ChatSessionContext struct {
 	ServerURL   string
