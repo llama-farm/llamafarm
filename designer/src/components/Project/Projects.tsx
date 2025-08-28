@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import ProjectModal, { ProjectModalMode } from './ProjectModal'
 import {
   useProjects,
+  useProject,
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
@@ -15,6 +16,7 @@ import {
   setActiveProject,
 } from '../../utils/projectUtils'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
+import { validateProjectConfig, mergeProjectConfig } from '../../utils/projectConfigUtils'
 import Loader from '../../common/Loader'
 
 const Projects = () => {
@@ -23,12 +25,18 @@ const Projects = () => {
   const [modalMode, setModalMode] = useState<ProjectModalMode>('create')
   const [modalProject, setModalProject] = useState<{
     name: string
+    config?: Record<string, any>
   }>({ name: '' })
   const navigate = useNavigate()
   const namespace = getCurrentNamespace()
   
   // API hooks
   const { data: projectsResponse, isLoading, error } = useProjects(namespace)
+  const { data: currentProjectResponse, isLoading: isLoadingProject } = useProject(
+    namespace, 
+    modalProject.name, 
+    modalMode === 'edit' && !!modalProject.name && isModalOpen
+  )
   const createProjectMutation = useCreateProject()
   const updateProjectMutation = useUpdateProject()
   const deleteProjectMutation = useDeleteProject()
@@ -50,6 +58,16 @@ const Projects = () => {
       setIsModalOpen(true)
     }
   }, [])
+
+  // Update modal project state when current project is loaded
+  useEffect(() => {
+    if (modalMode === 'edit' && currentProjectResponse?.project) {
+      setModalProject(prev => ({
+        ...prev,
+        config: currentProjectResponse.project.config
+      }))
+    }
+  }, [modalMode, currentProjectResponse])
 
   // Convert API projects to UI format
   const projects = useMemo(() => {
@@ -98,10 +116,27 @@ const Projects = () => {
       }
     } else {
       try {
+        if (!modalProject.config) {
+          console.error('Cannot update project: config not loaded')
+          return
+        }
+        
+        // Update the config with the new name while preserving all other properties
+        const updatedConfig = mergeProjectConfig(modalProject.config, {
+          name: name.trim(),
+          namespace: namespace
+        })
+        
+        // Validate the config before sending
+        if (!validateProjectConfig(updatedConfig)) {
+          console.error('Invalid project config, aborting update')
+          return
+        }
+        
         await updateProjectMutation.mutateAsync({
           namespace,
           projectId: modalProject.name,
-          request: { config: {} } // TODO: Get actual config from form
+          request: { config: updatedConfig }
         })
         setActiveProject(name)
         setIsModalOpen(false)
@@ -213,7 +248,7 @@ const Projects = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSave}
         onDelete={modalMode === 'edit' ? handleDelete : undefined}
-        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending}
+        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending || isLoadingProject}
       />
     </div>
   )

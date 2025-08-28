@@ -13,6 +13,7 @@ import DataCards from './DataCards'
 import ProjectModal, { ProjectModalMode } from '../../components/Project/ProjectModal'  
 import ConfigEditor from '../ConfigEditor'
 import {
+  useProject,
   useUpdateProject,
   useDeleteProject,
 } from '../../hooks/useProjects'
@@ -21,19 +22,35 @@ import {
   setActiveProject,
 } from '../../utils/projectUtils'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
+import { validateProjectConfig, mergeProjectConfig } from '../../utils/projectConfigUtils'
 
 const Dashboard = () => {
   const { theme } = useTheme()
   const navigate = useNavigate()
-  const [mode, setMode] = useState<Mode>('designer')
-  const [projectName, setProjectName] = useState<string>('Dashboard')
   const namespace = getCurrentNamespace()
   
-  // API hooks
-  const updateProjectMutation = useUpdateProject()
-  const deleteProjectMutation = useDeleteProject()
+  // All state declarations first
+  const [mode, setMode] = useState<Mode>('designer')
+  const [projectName, setProjectName] = useState<string>('Dashboard')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
+  const [currentProjectConfig, setCurrentProjectConfig] = useState<Record<string, any> | null>(null)
+  
+  // API hooks that depend on state variables
+  const { data: currentProjectResponse, isLoading: isLoadingProject } = useProject(
+    namespace, 
+    projectName, 
+    modalMode === 'edit' && !!projectName && isModalOpen
+  )
+  const updateProjectMutation = useUpdateProject()
+  const deleteProjectMutation = useDeleteProject()
+
+  // Update current project config when loaded
+  useEffect(() => {
+    if (modalMode === 'edit' && currentProjectResponse?.project) {
+      setCurrentProjectConfig(currentProjectResponse.project.config)
+    }
+  }, [modalMode, currentProjectResponse])
 
   useEffect(() => {
     const refresh = () => {
@@ -295,11 +312,30 @@ const Dashboard = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={async (name: string) => {
           try {
+            if (!currentProjectConfig) {
+              console.error('Cannot update project: config not loaded')
+              setIsModalOpen(false)
+              return
+            }
+            
+            // Update the config with the new name while preserving all other properties
+            const updatedConfig = mergeProjectConfig(currentProjectConfig, {
+              name: name.trim(),
+              namespace: namespace
+            })
+            
+            // Validate the config before sending
+            if (!validateProjectConfig(updatedConfig)) {
+              console.error('Invalid project config, aborting update')
+              setIsModalOpen(false)
+              return
+            }
+            
             // Update via API
             await updateProjectMutation.mutateAsync({
               namespace,
               projectId: projectName,
-              request: { config: {} } // TODO: Get actual config from form
+              request: { config: updatedConfig }
             })
             
             setActiveProject(name)
@@ -325,7 +361,7 @@ const Dashboard = () => {
           }
           setIsModalOpen(false)
         }}
-        isLoading={updateProjectMutation.isPending || deleteProjectMutation.isPending}
+        isLoading={updateProjectMutation.isPending || deleteProjectMutation.isPending || isLoadingProject}
       />
     </>
   )

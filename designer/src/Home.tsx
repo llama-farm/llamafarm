@@ -6,6 +6,7 @@ import ProjectModal, { ProjectModalMode } from './components/Project/ProjectModa
 import useChatbox from './hooks/useChatbox'
 import {
   useProjects,
+  useProject,
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
@@ -16,6 +17,7 @@ import {
   filterProjectsBySearch,
 } from './utils/projectUtils'
 import { getCurrentNamespace } from './utils/namespaceUtils'
+import { validateProjectConfig, mergeProjectConfig } from './utils/projectConfigUtils'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
@@ -34,11 +36,24 @@ function Home() {
 
   const namespace = getCurrentNamespace()
   
+  // Modal state for Home (declared early for API hooks)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [modalProjectName, setModalProjectName] = useState('')
+  const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
+  
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
+  const { data: currentProjectResponse, isLoading: isLoadingProject } = useProject(
+    namespace, 
+    modalProjectName, 
+    modalMode === 'edit' && !!modalProjectName && isModalOpen
+  )
   const createProjectMutation = useCreateProject()
   const updateProjectMutation = useUpdateProject()
   const deleteProjectMutation = useDeleteProject()
+  
+  // Store current project config for editing
+  const [currentProjectConfig, setCurrentProjectConfig] = useState<Record<string, any> | null>(null)
   
   // Convert API projects to project names for UI compatibility
   const projectsList = useMemo(() => {
@@ -54,6 +69,13 @@ function Home() {
   useEffect(() => {
     setLocalProjectsList(projectsList)
   }, [projectsList])
+  
+  // Update current project config when loaded
+  useEffect(() => {
+    if (modalMode === 'edit' && currentProjectResponse?.project) {
+      setCurrentProjectConfig(currentProjectResponse.project.config)
+    }
+  }, [modalMode, currentProjectResponse])
 
   const filteredProjectNames = useMemo(() => {
     return filterProjectsBySearch(
@@ -105,10 +127,7 @@ function Home() {
     setIsModalOpen(true)
   }
 
-  // Local edit modal state for Home
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalProjectName, setModalProjectName] = useState('')
-  const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
+
 
   const handleEditClick = (name: string) => {
     setModalProjectName(name)
@@ -387,10 +406,29 @@ function Home() {
               }
               
               // Update via API
+              if (!currentProjectConfig) {
+                console.error('Cannot update project: config not loaded')
+                setIsModalOpen(false)
+                return
+              }
+              
+              // Update the config with the new name while preserving all other properties
+              const updatedConfig = mergeProjectConfig(currentProjectConfig, {
+                name: name.trim(),
+                namespace: namespace
+              })
+              
+              // Validate the config before sending
+              if (!validateProjectConfig(updatedConfig)) {
+                console.error('Invalid project config, aborting update')
+                setIsModalOpen(false)
+                return
+              }
+              
               await updateProjectMutation.mutateAsync({
                 namespace,
                 projectId: modalProjectName,
-                request: { config: {} } // TODO: Get actual config
+                request: { config: updatedConfig }
               })
               
               setActiveProject(name)
@@ -416,7 +454,7 @@ function Home() {
             setIsModalOpen(false)
           }
         }}
-        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending}
+        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending || isLoadingProject}
       />
     </div>
   )
