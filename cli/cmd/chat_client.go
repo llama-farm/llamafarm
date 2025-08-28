@@ -69,12 +69,8 @@ type ChatSessionContext struct {
 }
 
 func newDefaultContextFromGlobals() *ChatSessionContext {
-	effectiveURL := serverURL
-	if strings.TrimSpace(effectiveURL) == "" {
-		effectiveURL = "http://localhost:8000"
-	}
 	return &ChatSessionContext{
-		ServerURL:   effectiveURL,
+		ServerURL:   serverURL,
 		Namespace:   namespace,
 		ProjectID:   projectID,
 		SessionID:   sessionID,
@@ -95,86 +91,6 @@ func buildChatAPIURL(ctx *ChatSessionContext) string {
 		return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID)
 	}
 	return fmt.Sprintf("%s/v1/inference/chat", base)
-}
-
-func sendChatRequest(messages []ChatMessage) (*ChatResponse, error) {
-	ctx := newDefaultContextFromGlobals()
-	resp, err := sendChatRequestWithContext(messages, ctx)
-	sessionID = ctx.SessionID
-	return resp, err
-}
-
-func sendChatRequestWithContext(messages []ChatMessage, ctx *ChatSessionContext) (*ChatResponse, error) {
-	url := buildChatAPIURL(ctx)
-	// Log request details
-	logMsg := fmt.Sprintf("Sending chat request to %s", url)
-	if len(messages) > 0 {
-		lastMsg := messages[len(messages)-1]
-		logMsg += fmt.Sprintf("Last message (%s): %s", lastMsg.Role, lastMsg.Content)
-	}
-	if ctx.SessionID != "" {
-		logMsg += fmt.Sprintf("Session ID: %s", ctx.SessionID)
-	}
-	logDebug(dim(logMsg))
-	request := ChatRequest{Messages: messages}
-	if !strings.Contains(url, "/v1/projects/") {
-		meta := map[string]string{}
-		if ctx.Namespace != "" {
-			meta["namespace"] = ctx.Namespace
-		}
-		if ctx.ProjectID != "" {
-			meta["project_id"] = ctx.ProjectID
-		}
-		request.Metadata = meta
-	}
-
-	if ctx.Temperature >= 0 {
-		request.Temperature = &ctx.Temperature
-	}
-	if ctx.MaxTokens > 0 {
-		request.MaxTokens = &ctx.MaxTokens
-	}
-
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if ctx.SessionID != "" {
-		req.Header.Set("X-Session-ID", ctx.SessionID)
-	}
-
-	client := ctx.HTTPClient
-	if client == nil {
-		client = getHTTPClient()
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned error %d: %s", resp.StatusCode, prettyServerError(resp, body))
-	}
-
-	var chatResponse ChatResponse
-	if err := json.Unmarshal(body, &chatResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
-		ctx.SessionID = sessionIDHeader
-	}
-	return &chatResponse, nil
 }
 
 // sendChatRequestStream connects to the server with stream=true and returns the full assistant message.
@@ -245,7 +161,6 @@ func startChatStream(messages []ChatMessage) (<-chan string, <-chan error, func(
 		if ctx.SessionID != "" {
 			req.Header.Set("X-Session-ID", ctx.SessionID)
 		}
-		// _ = addLocalhostCWDHeader(req)
 		logDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
 		logHeaders("request", req.Header)
 		logDebug(fmt.Sprintf("  -> body: %s", req.Body))

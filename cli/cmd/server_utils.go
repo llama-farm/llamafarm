@@ -65,7 +65,6 @@ func checkServerHealth(serverURL string) error {
 	if err != nil {
 		return err
 	}
-	_ = addLocalhostCWDHeader(req)
 
 	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {
@@ -189,7 +188,7 @@ func isHostOllamaAvailable() bool {
 		return pingURL(strings.TrimSpace(baseURL)) == nil
 	}
 	// Try default local port
-	return pingURL("http://localhost:11434/v1") == nil
+	return pingURL("http://localhost:11434") == nil
 }
 
 func pingURL(base string) error {

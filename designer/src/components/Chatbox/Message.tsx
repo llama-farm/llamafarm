@@ -1,11 +1,11 @@
-import { Message as MessageType } from './Chatbox'
+import { ChatboxMessage } from '../../types/chatbox'
 
 export interface MessageProps {
-  message: MessageType
+  message: ChatboxMessage
 }
 
 const Message: React.FC<MessageProps> = ({ message }) => {
-  const { type, content } = message
+  const { type, content, isLoading } = message
 
   const getMessageStyles = (): string => {
     const baseStyles = 'flex flex-col mb-4'
@@ -37,7 +37,13 @@ const Message: React.FC<MessageProps> = ({ message }) => {
 
   return (
     <div className={getMessageStyles()}>
-      <div className={getContentStyles()}>{content}</div>
+      <div className={getContentStyles()}>
+        {isLoading && type === 'assistant' ? (
+          <span className="italic opacity-70">{content}</span>
+        ) : (
+          content
+        )}
+      </div>
     </div>
   )
 }

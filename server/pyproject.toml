@@ -15,7 +15,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "appdirs>=1.4.4",
     "dotenv>=0.9.9",
     "fastapi>=0.116.1",
     "pre-commit>=4.2.0",

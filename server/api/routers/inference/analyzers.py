@@ -44,7 +44,7 @@ class LLMAnalyzer:
         """Initialize the instructor client for structured outputs"""
         try:
             ollama_client = OpenAI(
-                base_url=settings.ollama_host,
+                base_url=f"{settings.ollama_host}/v1",
                 api_key=settings.ollama_api_key,
             )
             self.client = instructor.from_openai(

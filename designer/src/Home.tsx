@@ -3,11 +3,15 @@ import { useNavigate } from 'react-router-dom'
 // removed decorative llama image
 import FontIcon from './common/FontIcon'
 import ProjectModal, { ProjectModalMode } from './components/ProjectModal'
+import useChatbox from './hooks/useChatbox'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
+  
+  // Initialize chat functionality
+  const { sendMessage, isSending } = useChatbox()
 
   const projectOptions = [
     { id: 1, text: 'AI Agent for Enterprise Product' },
@@ -43,8 +47,32 @@ function Home() {
     setInputValue(option.text)
   }
 
-  const handleSendClick = () => {
-    navigate('/chat/data')
+  const handleSendClick = async () => {
+    if (isSending) return
+    
+    const messageContent = inputValue.trim()
+    
+    // If empty string, just navigate to show most recent conversation
+    if (!messageContent) {
+      navigate('/chat/data')
+      return
+    }
+    
+    try {
+      // Submit the chat message first
+      const success = await sendMessage(messageContent)
+      
+      if (success) {
+        // Clear the input after successful submission
+        setInputValue('')
+        
+        // Then navigate to the chat page
+        navigate('/chat/data')
+      }
+    } catch (error) {
+      // Still navigate even if chat fails, for better UX
+      navigate('/chat/data')
+    }
   }
 
   const openProject = (name: string) => {
@@ -116,13 +144,21 @@ function Home() {
             <textarea
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
-              className="w-full h-24 sm:h-28 bg-transparent border-none resize-none p-4 pr-12 placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed text-foreground placeholder-foreground/50"
-              placeholder="I'm building an agent that will work with my app..."
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSendClick()
+                }
+              }}
+              disabled={isSending}
+              className="w-full h-24 sm:h-28 bg-transparent border-none resize-none p-4 pr-12 placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed text-foreground placeholder-foreground/50 disabled:opacity-70"
+              placeholder={isSending ? "Sending message..." : "I'm building an agent that will work with my app..."}
             />
             <button
               onClick={handleSendClick}
-              className="absolute bottom-2 right-2 p-0 bg-transparent text-primary hover:opacity-90"
-              aria-label="Send"
+              disabled={isSending}
+              className="absolute bottom-2 right-2 p-0 bg-transparent text-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label={isSending ? "Sending..." : inputValue.trim() ? "Send" : "Go to Chat"}
             >
               <FontIcon type="arrow-filled" className="w-6 h-6 text-primary" />
             </button>

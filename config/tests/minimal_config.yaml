@@ -44,6 +44,7 @@ datasets:
 
 prompts:
   - name: "minimal_prompt"
+    content: "This is a minimal prompt."
     sections:
       - title: "default"
         content:

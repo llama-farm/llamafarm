@@ -219,25 +219,17 @@ async def chat(
     if latest_user_message is None:
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
 
-    # Streaming support via SSE, like inference endpoint
-    if request.stream:
-        stream_iter = project_chat_service.stream_chat(
+    try:
+        completion = project_chat_service.chat(
             project_config=project_config,
             chat_agent=agent,
             message=latest_user_message,
         )
-        set_session_header(response, session_id)
-        return create_streaming_response_from_iterator(
-            request,
-            stream_iter,
-            session_id,
-        )
-
-    completion = project_chat_service.chat(
-        project_config=project_config,
-        chat_agent=agent,
-        message=latest_user_message,
-    )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chat service failed to generate a response: {e}",
+        ) from e
 
     set_session_header(response, session_id)
     return completion

@@ -218,7 +218,6 @@ var projectsListCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
 			os.Exit(1)
 		}
-		_ = addLocalhostCWDHeader(req)
 
 		// Execute
 		resp, err := getHTTPClient().Do(req)
@@ -280,6 +279,12 @@ Examples:
 			os.Exit(1)
 		}
 
+		// Ensure server is up (auto-start locally if needed)
+		if err := ensureServerAvailable(serverURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
+			os.Exit(1)
+		}
+
 		// Update global variables with resolved values
 		serverURL = serverConfig.URL
 		namespace = serverConfig.Namespace
@@ -290,14 +295,6 @@ Examples:
 }
 
 func startChatSession() {
-	// Handle Ctrl+C gracefully
-	// sigCh := make(chan os.Signal, 1)
-	// signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	// go func() {
-	// 	<-sigCh
-	// 	safePrint("\n^C\n")
-	// 	quitChat()
-	// }()
 	// Resolve server URL and ensure it's reachable (auto-start if localhost)
 	if strings.TrimSpace(serverURL) == "" {
 		serverURL = "http://localhost:8000"

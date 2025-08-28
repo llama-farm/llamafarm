@@ -22,7 +22,7 @@ rag:
           type: OllamaEmbedder
           config:
             model: nomic-embed-text
-            base_url: http://localhost:11434/
+            base_url: http://localhost:11434/ # FIXME: This is not going to work very well within a docker container
             dimension: 768
             batch_size: 16
             timeout: 60
@@ -42,7 +42,7 @@ rag:
   strategy_templates: {}
 datasets: []
 runtime:
-  provider: openai
-  base_url: http://localhost:11434/v1
-  api_key: ollama
+  provider: ollama
   model: llama3.1:8b
+  model_api_parameters:
+    temperature: 0.5

@@ -4,7 +4,18 @@ import ConfigEditor from '../ConfigEditor'
 import GeneratedOutputs from './GeneratedOutput/GeneratedOutputs'
 
 const Prompt = () => {
-  const [hasGeneratedOutputs, setHasGeneratedOutputs] = useState(false)
+  // Persist onboarding state per active project
+  const [hasGeneratedOutputs, setHasGeneratedOutputs] = useState<boolean>(
+    () => {
+      try {
+        const project = localStorage.getItem('activeProject') || 'default'
+        const key = `prompt.onboarding.completed:${project}`
+        return localStorage.getItem(key) === '1'
+      } catch {
+        return false
+      }
+    }
+  )
   const [mode, setMode] = useState<Mode>('designer')
 
   if (hasGeneratedOutputs) {
@@ -75,7 +86,15 @@ const Prompt = () => {
           </div>
           <button
             className="bg-primary text-primary-foreground rounded-lg px-4 py-2 w-fit self-end"
-            onClick={() => setHasGeneratedOutputs(true)}
+            onClick={() => {
+              setHasGeneratedOutputs(true)
+              try {
+                const project =
+                  localStorage.getItem('activeProject') || 'default'
+                const key = `prompt.onboarding.completed:${project}`
+                localStorage.setItem(key, '1')
+              } catch {}
+            }}
           >
             Generate outputs
           </button>

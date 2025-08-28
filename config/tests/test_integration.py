@@ -194,6 +194,7 @@ datasets:
 
 prompts:
   - name: "dev_prompt"
+    content: "This is a dev prompt."
     prompt: "This is a dev prompt."
     description: "This is a description of the dev prompt."
 """
@@ -252,6 +253,7 @@ datasets:
 
 prompts:
   - name: "prod_prompt"
+    content: "This is a prod prompt."
     prompt: "This is a prod prompt."
     description: "This is a description of the prod prompt."
 """
@@ -357,8 +359,8 @@ def test_cross_module_config_sharing():
     # Module 3: Prompt Service
     class PromptService:
         def __init__(self, config: LlamaFarmConfig):
-            prompts = config.prompts
-            self.prompt_lookup = {p.name: p for p in prompts if p.name}
+            # New schema Prompt has only role/content; keep as list for typed access
+            self.prompts = config.prompts
 
     # Initialize all services with shared config
     rag_service = RAGService(shared_config)
@@ -372,15 +374,11 @@ def test_cross_module_config_sharing():
     assert embedder_type == "OllamaEmbedder"
     assert collection_type == "ChromaStore"
 
-    if "customer_support" in prompt_service.prompt_lookup:
-        cs_prompt = prompt_service.prompt_lookup["customer_support"]
-        if getattr(cs_prompt, "raw_text", None):
-            assert "assistant" in cs_prompt.raw_text.lower()
-        elif getattr(cs_prompt, "sections", None):
-            contents = []
-            for section in cs_prompt.sections:
-                contents.extend(section.content)
-            assert any("assistant" in c.lower() for c in contents)
+    # Typed prompts don't carry names in the new schema; validate first prompt content
+    if prompt_service.prompts:
+        cs_prompt = prompt_service.prompts[0]
+        assert hasattr(cs_prompt, "content") and isinstance(cs_prompt.content, str)
+        assert "assistant" in cs_prompt.content.lower()
 
     # Test that all services are working with the same config version
     assert getattr(shared_config.version, "value", shared_config.version) == "v1"

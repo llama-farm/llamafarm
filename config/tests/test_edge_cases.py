@@ -142,6 +142,7 @@ prompts:
         # Add 100 prompts
         for i in range(100):
             large_config += f"""  - name: "prompt_{i}"
+    content: "This is prompt number {i} with some content."
     prompt: "This is prompt number {i} with some content."
     description: "Description for prompt {i}"
 """
@@ -167,6 +168,7 @@ namespace: test
 
 prompts:
   - name: "multilingual_support"
+    content: "你好, こんにちは, Здравствуйте, مرحبا"
     sections:
       - title: "default"
         content:
@@ -282,6 +284,7 @@ datasets:
 
 prompts:
   - name: "deep_path_prompt"
+    content: "This is a prompt with a deep path."
     sections:
       - title: "default"
         content:
@@ -302,6 +305,7 @@ namespace: test
 
 prompts:
   - name: "special_chars"
+    content: "Handle chars: @#$%^&*()_+-=[]{}|;',./<>?"
     sections:
       - title: "default"
         content:

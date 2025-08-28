@@ -33,8 +33,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -86,8 +86,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -159,8 +159,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -369,8 +369,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -423,8 +423,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -477,8 +477,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    name="default",
-                    raw_text="You are a helpful assistant.",
+                    role="system",
+                    content="You are a helpful assistant.",
                 )
             ],
             rag={
@@ -552,8 +552,8 @@ class TestDatasetServiceIntegration:
                     namespace=namespace,
                     prompts=[
                         Prompt(
-                            name="default",
-                            raw_text="You are a helpful assistant.",
+                            role="system",
+                            content="You are a helpful assistant.",
                         )
                     ],
                     rag={

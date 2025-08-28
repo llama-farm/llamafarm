@@ -19,7 +19,6 @@ type DefaultHTTPClient struct{}
 
 // Do implements the HTTPClient interface
 func (c *DefaultHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	_ = addLocalhostCWDHeader(req)
 	client := &http.Client{Timeout: 30 * time.Second}
 	return client.Do(req)
 }
@@ -34,7 +33,6 @@ func (v *VerboseHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if inner == nil {
 		inner = &DefaultHTTPClient{}
 	}
-	_ = addLocalhostCWDHeader(req)
 	logDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
 	logHeaders("request", req.Header)
 	logDebug(fmt.Sprintf("  -> body: %s", req.Body))

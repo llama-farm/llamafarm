@@ -5,16 +5,19 @@ namespace = "test"
 
 [[prompts]]
 name = "customer_support"
+content = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
 prompt = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
 description = "Default customer support prompt for handling user inquiries"
 
 [[prompts]]
 name = "technical_documentation"
+content = "You are a technical documentation assistant. Provide clear, accurate, and detailed explanations of technical concepts."
 prompt = "You are a technical documentation assistant. Provide clear, accurate, and detailed explanations of technical concepts."
 description = "Prompt for generating technical documentation and explanations"
 
 [[prompts]]
 name = "code_review"
+content = "You are a code review assistant. Analyze code for best practices, potential bugs, and improvements."
 prompt = "You are a code review assistant. Analyze code for best practices, potential bugs, and improvements."
 description = "Prompt for conducting code reviews and providing feedback"
 
