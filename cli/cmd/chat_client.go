@@ -250,7 +250,6 @@ func deleteChatSession() error {
 	if err != nil {
 		return nil
 	}
-	_ = addLocalhostCWDHeader(req)
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
 		return nil

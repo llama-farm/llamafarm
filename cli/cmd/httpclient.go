@@ -51,20 +51,6 @@ func getHTTPClient() HTTPClient {
 	return &VerboseHTTPClient{Inner: httpClient}
 }
 
-// addLocalhostCWDHeader attaches the current working directory as X-LF-Client-CWD
-// if the request is targeting a localhost URL.
-func addLocalhostCWDHeader(req *http.Request) error {
-	host := strings.ToLower(req.URL.Hostname())
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-		if wd, err := getEffectiveCWD(); err == nil {
-			req.Header.Set("X-LF-Client-CWD", wd)
-		} else {
-			return err
-		}
-	}
-	return nil
-}
-
 func logHeaders(kind string, hdr http.Header) {
 	if len(hdr) == 0 {
 		return

@@ -35,7 +35,7 @@ func TestSendChatRequestStream_SSE(t *testing.T) {
 
 	// Prepare messages
 	msgs := []ChatMessage{{Role: "user", Content: "hi"}}
-	got, err := sendChatRequest(msgs)
+	got, err := sendChatRequest(msgs, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
