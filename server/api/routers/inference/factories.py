@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 
 import instructor
@@ -7,7 +8,7 @@ from atomic_agents import (
     BasicChatInputSchema,
     BasicChatOutputSchema,
 )
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 
 from core.logging import FastAPIStructLogger
 from core.settings import settings
@@ -26,6 +27,7 @@ TOOL_CALLING_MODELS = [
     "mistral-nemo",
     "firefunction-v2",
     "hermes3",
+    "qwen3:8b",
 ]
 
 
@@ -50,7 +52,7 @@ class ModelManager:
     @staticmethod
     def create_client(capabilities: ModelCapabilities) -> Any:
         """Create instructor client with appropriate mode"""
-        ollama_client = OpenAI(
+        ollama_client = AsyncOpenAI(
             base_url=f"{settings.ollama_host}/v1",
             api_key=settings.ollama_api_key,
         )
@@ -143,7 +145,9 @@ Format project lists in a readable way with bullet points."""
         return agent
 
     @staticmethod
-    def create_json_chat_agent() -> AtomicAgent[BasicChatInputSchema, BasicChatOutputSchema]:
+    def create_json_chat_agent() -> AtomicAgent[
+        BasicChatInputSchema, BasicChatOutputSchema
+    ]:
         """Create an agent configured for JSON-mode narration (no tools).
 
         This is used to stream the assistant's final narrated response after tools run,

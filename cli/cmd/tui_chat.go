@@ -190,7 +190,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.thinking = true
 			m.printing = true
 			// Start channel-based streaming
-			chunks, errs, _ := startChatStream(m.messages)
+			chunks, errs, _ := startChatStream(m.messages, nil)
 			ch := make(chan tea.Msg, 32)
 			m.streamCh = ch
 			go func() {

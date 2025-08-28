@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator
 
 from fastapi import Response
 from starlette.responses import StreamingResponse
@@ -120,7 +120,7 @@ def create_streaming_response(
 
 
 def create_streaming_response_from_iterator(
-    request: ChatRequest, stream_source: AsyncIterator[str] | Iterator[str], session_id: str
+    request: ChatRequest, stream_source: AsyncGenerator[str], session_id: str
 ) -> StreamingResponse:
     created_ts = int(time.time())
 
@@ -141,8 +141,7 @@ def create_streaming_response_from_iterator(
         yield f"data: {json.dumps(preface)}\n\n".encode()
         await asyncio.sleep(0)
 
-        if hasattr(stream_source, "__aiter__"):
-            async for piece in stream_source:  # type: ignore[operator]
+        async for piece in stream_source:
                 if not piece:
                     continue
                 payload = {
@@ -159,16 +158,10 @@ def create_streaming_response_from_iterator(
                     ],
                 }
                 yield f"data: {json.dumps(payload)}\n\n".encode()
+                # Sleep(0) yields control back to event loop, preventing blocking
+                # This allows other coroutines to run between stream chunks
                 await asyncio.sleep(0)
-        else:
-            iterator: Iterator[str] = iter(stream_source)
-            _sentinel = object()
-            while True:
-                piece = await asyncio.to_thread(next, iterator, _sentinel)
-                if piece is _sentinel:
-                    break
-                if not piece:
-                    continue
+
                 payload = {
                     "id": f"chat-{uuid.uuid4()}",
                     "object": "chat.completion.chunk",

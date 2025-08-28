@@ -93,9 +93,9 @@ func buildChatAPIURL(ctx *ChatSessionContext) string {
 	return fmt.Sprintf("%s/v1/inference/chat", base)
 }
 
-// sendChatRequestStream connects to the server with stream=true and returns the full assistant message.
-func sendChatRequestStream(messages []ChatMessage) (string, error) {
-	chunks, errs, cancel := startChatStream(messages)
+// sendChatRequest connects to the server with stream=true and returns the full assistant message.
+func sendChatRequest(messages []ChatMessage, ctx *ChatSessionContext) (string, error) {
+	chunks, errs, cancel := startChatStream(messages, ctx)
 	defer cancel()
 	var builder strings.Builder
 	for {
@@ -116,14 +116,16 @@ func sendChatRequestStream(messages []ChatMessage) (string, error) {
 // startChatStream opens a streaming chat request and returns a channel of
 // content chunks and an error channel. The caller should read until the
 // chunks channel is closed. The returned cancel function aborts the stream.
-func startChatStream(messages []ChatMessage) (<-chan string, <-chan error, func()) {
+func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan string, <-chan error, func()) {
 	outCh := make(chan string, 16)
 	errCh := make(chan error, 1)
 	var cancelFn context.CancelFunc = func() {}
 
 	go func() {
 		defer close(outCh)
-		ctx := newDefaultContextFromGlobals()
+		if ctx == nil {
+			ctx = newDefaultContextFromGlobals()
+		}
 
 		url := buildChatAPIURL(ctx)
 		streamTrue := true

@@ -1,4 +1,3 @@
-
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException, Response
@@ -16,6 +15,7 @@ router = APIRouter(
     tags=["inference"],
 )
 
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -28,10 +28,11 @@ async def chat(
         if not session_id:
             session_id = str(uuid.uuid4())
 
+        stream_iter = ChatProcessor.process_chat(request, session_id)
+        set_session_header(response, session_id)
+
         # If client requested streaming, return Server-Sent Events stream using agent-native streaming when possible
         if request.stream:
-            stream_iter = ChatProcessor.stream_chat(request, session_id)
-            set_session_header(response, session_id)
             return create_streaming_response_from_iterator(
                 request,
                 stream_iter,
@@ -39,14 +40,13 @@ async def chat(
             )
 
         # Non-streaming path
-        response_message, _tool_info = ChatProcessor.process_chat(request, session_id)
-        set_session_header(response, session_id)
-        return build_chat_response(request.model, response_message)
+        return build_chat_response(request.model, stream_iter)
 
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error processing chat: {str(e)}"
         ) from e
+
 
 @router.delete("/chat/session/{session_id}")
 async def delete_chat_session(session_id: str):
