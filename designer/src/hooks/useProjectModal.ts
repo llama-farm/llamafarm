@@ -61,7 +61,7 @@ export const useProjectModal = ({
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<ProjectModalMode>('create')
   const [projectName, setProjectName] = useState('')
-  const [projectError, setprojectError] = useState<string | null>(null)
+  const [projectError, setProjectError] = useState<string | null>(null)
   
   // API hooks
   const { data: currentProjectResponse, isLoading: isProjectLoading } = useProject(
@@ -87,21 +87,21 @@ export const useProjectModal = ({
   const openCreateModal = () => {
     setModalMode('create')
     setProjectName('')
-    setprojectError(null)
+    setProjectError(null)
     setIsModalOpen(true)
   }
   
   const openEditModal = (name: string) => {
     setModalMode('edit')
     setProjectName(name)
-    setprojectError(null)
+    setProjectError(null)
     setIsModalOpen(true)
   }
   
   const closeModal = () => {
     setIsModalOpen(false)
     setProjectName('')
-    setprojectError(null)
+    setProjectError(null)
   }
   
   // Name validation with better error handling
@@ -113,11 +113,11 @@ export const useProjectModal = ({
     )
     
     if (!validation.isValid) {
-      setprojectError(validation.error || 'Invalid project name')
+      setProjectError(validation.error || 'Invalid project name')
       return false
     }
     
-    setprojectError(null)
+    setProjectError(null)
     return true
   }
   
@@ -146,7 +146,7 @@ export const useProjectModal = ({
       } else {
         // Edit mode - update existing project
         if (!currentProject?.config) {
-          setprojectError('Cannot update project: configuration not loaded')
+          setProjectError('Cannot update project: configuration not loaded')
           return
         }
         
@@ -158,7 +158,7 @@ export const useProjectModal = ({
         
         // Basic validation (backend will do detailed validation)
         if (!validateProjectConfig(updatedConfig)) {
-          setprojectError('Invalid project configuration')
+          setProjectError('Invalid project configuration')
           return
         }
         
@@ -177,13 +177,13 @@ export const useProjectModal = ({
       
       // Handle backend validation errors gracefully
       if (error?.response?.status === 409) {
-        setprojectError('Project name already exists')
+        setProjectError('Project name already exists')
       } else if (error?.response?.status === 422) {
-        setprojectError('Invalid project configuration')
+        setProjectError('Invalid project configuration')
       } else if (error?.response?.status === 400) {
-        setprojectError('Invalid request. Please check your input.')
+        setProjectError('Invalid request. Please check your input.')
       } else {
-        setprojectError(`Failed to ${modalMode} project. Please try again.`)
+        setProjectError(`Failed to ${modalMode} project. Please try again.`)
       }
     }
   }
@@ -205,11 +205,11 @@ export const useProjectModal = ({
       
       // Handle delete errors gracefully
       if (error?.response?.status === 404) {
-        setprojectError('Project not found')
+        setProjectError('Project not found')
       } else if (error?.response?.status === 403) {
-        setprojectError('Not authorized to delete this project')
+        setProjectError('Not authorized to delete this project')
       } else {
-        setprojectError('Failed to delete project. Please try again.')
+        setProjectError('Failed to delete project. Please try again.')
       }
     }
   }
