@@ -10,19 +10,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ModeToggle, { Mode } from '../ModeToggle'
 import DataCards from './DataCards'
-import ProjectModal, { ProjectModalMode } from '../../components/Project/ProjectModal'  
+import ProjectModal from '../../components/Project/ProjectModal'  
 import ConfigEditor from '../ConfigEditor'
-import {
-  useProject,
-  useUpdateProject,
-  useDeleteProject,
-} from '../../hooks/useProjects'
-import {
-  DEFAULT_PROJECT_NAMES,
-  setActiveProject,
-} from '../../utils/projectUtils'
+import { useProjectModal } from '../../hooks/useProjectModal'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
-import { validateProjectConfig, mergeProjectConfig } from '../../utils/projectConfigUtils'
 
 const Dashboard = () => {
   const { theme } = useTheme()
@@ -32,25 +23,17 @@ const Dashboard = () => {
   // All state declarations first
   const [mode, setMode] = useState<Mode>('designer')
   const [projectName, setProjectName] = useState<string>('Dashboard')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
-  const [currentProjectConfig, setCurrentProjectConfig] = useState<Record<string, any> | null>(null)
   
-  // API hooks that depend on state variables
-  const { data: currentProjectResponse, isLoading: isLoadingProject } = useProject(
-    namespace, 
-    projectName, 
-    modalMode === 'edit' && !!projectName && isModalOpen
-  )
-  const updateProjectMutation = useUpdateProject()
-  const deleteProjectMutation = useDeleteProject()
-
-  // Update current project config when loaded
-  useEffect(() => {
-    if (modalMode === 'edit' && currentProjectResponse?.project) {
-      setCurrentProjectConfig(currentProjectResponse.project.config)
+  // Shared modal hook
+  const projectModal = useProjectModal({
+    namespace,
+    existingProjects: [], // Dashboard doesn't need duplicate checking since it edits current project
+    onSuccess: (newProjectName, mode) => {
+      if (mode === 'edit' && newProjectName) {
+        setProjectName(newProjectName)
+      }
     }
-  }, [modalMode, currentProjectResponse])
+  })
 
   useEffect(() => {
     const refresh = () => {
@@ -83,8 +66,7 @@ const Dashboard = () => {
               <button
                 className="rounded-sm hover:opacity-80"
                 onClick={() => {
-                  setModalMode('edit')
-                  setIsModalOpen(true)
+                  projectModal.openEditModal(projectName)
                 }}
               >
                 <FontIcon type="edit" className="w-5 h-5 text-primary" />
@@ -305,63 +287,18 @@ const Dashboard = () => {
         )}
       </div>
       <ProjectModal
-        isOpen={isModalOpen}
-        mode={modalMode}
-        initialName={projectName}
+        isOpen={projectModal.isModalOpen}
+        mode={projectModal.modalMode}
+        initialName={projectModal.projectName}
         initialDescription={''}
-        onClose={() => setIsModalOpen(false)}
-        onSave={async (name: string) => {
-          try {
-            if (!currentProjectConfig) {
-              console.error('Cannot update project: config not loaded')
-              setIsModalOpen(false)
-              return
-            }
-            
-            // Update the config with the new name while preserving all other properties
-            const updatedConfig = mergeProjectConfig(currentProjectConfig, {
-              name: name.trim(),
-              namespace: namespace
-            })
-            
-            // Validate the config before sending
-            if (!validateProjectConfig(updatedConfig)) {
-              console.error('Invalid project config, aborting update')
-              setIsModalOpen(false)
-              return
-            }
-            
-            // Update via API
-            await updateProjectMutation.mutateAsync({
-              namespace,
-              projectId: projectName,
-              request: { config: updatedConfig }
-            })
-            
-            setActiveProject(name)
-            setProjectName(name)
-          } catch (err) {
-            console.error('Failed to update project:', err)
-          }
-          setIsModalOpen(false)
-        }}
-        onDelete={async () => {
-          try {
-            await deleteProjectMutation.mutateAsync({
-              namespace,
-              projectId: projectName
-            })
-            
-            // pick a fallback active project
-            const next = DEFAULT_PROJECT_NAMES[0]
-            setActiveProject(next)
-            setProjectName(next)
-          } catch (err) {
-            console.error('Failed to delete project:', err)
-          }
-          setIsModalOpen(false)
-        }}
-        isLoading={updateProjectMutation.isPending || deleteProjectMutation.isPending || isLoadingProject}
+        onClose={projectModal.closeModal}
+        onSave={projectModal.saveProject}
+        onDelete={projectModal.modalMode === 'edit' ? async () => {
+          await projectModal.deleteProject()
+          // Navigate to projects page after deletion
+          navigate('/chat/projects')
+        } : undefined}
+        isLoading={projectModal.isLoading}
       />
     </>
   )

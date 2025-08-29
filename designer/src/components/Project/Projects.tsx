@@ -1,80 +1,52 @@
 import { useEffect, useMemo, useState } from 'react'
 import FontIcon from '../../common/FontIcon'
 import { useNavigate } from 'react-router-dom'
-import ProjectModal, { ProjectModalMode } from './ProjectModal'
-import {
-  useProjects,
-  useProject,
-  useCreateProject,
-  useUpdateProject,
-  useDeleteProject,
-} from '../../hooks/useProjects'
-import {
-  DEFAULT_PROJECTS,
-  apiProjectsToProjectItems,
-  filterProjectsBySearch,
-  setActiveProject,
-} from '../../utils/projectUtils'
+import ProjectModal from './ProjectModal'
+import { useProjects } from '../../hooks/useProjects'
+import { useProjectModal } from '../../hooks/useProjectModal'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
-import { validateProjectConfig, mergeProjectConfig } from '../../utils/projectConfigUtils'
+import { getProjectsForUI, filterProjectsBySearch, getProjectsList } from '../../utils/projectConstants'
 import Loader from '../../common/Loader'
 
 const Projects = () => {
   const [search, setSearch] = useState('')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<ProjectModalMode>('create')
-  const [modalProject, setModalProject] = useState<{
-    name: string
-    config?: Record<string, any>
-  }>({ name: '' })
   const navigate = useNavigate()
   const namespace = getCurrentNamespace()
   
   // API hooks
   const { data: projectsResponse, isLoading, error } = useProjects(namespace)
-  const { data: currentProjectResponse, isLoading: isLoadingProject } = useProject(
-    namespace, 
-    modalProject.name, 
-    modalMode === 'edit' && !!modalProject.name && isModalOpen
-  )
-  const createProjectMutation = useCreateProject()
-  const updateProjectMutation = useUpdateProject()
-  const deleteProjectMutation = useDeleteProject()
+  
+  // Get existing project names for validation
+  const existingProjects = useMemo(() => getProjectsList(projectsResponse), [projectsResponse])
+  
+  // Shared modal hook
+  const projectModal = useProjectModal({
+    namespace,
+    existingProjects,
+    onSuccess: (_, mode) => {
+      if (mode === 'create') {
+        navigate('/chat/dashboard')
+      }
+    }
+  })
 
   // Open create modal if signaled by header
   useEffect(() => {
     const flag = localStorage.getItem('openCreateProjectModal')
     if (flag === '1') {
       localStorage.removeItem('openCreateProjectModal')
-      setModalMode('create')
-      setModalProject({ name: '' })
-      setIsModalOpen(true)
+      projectModal.openCreateModal()
     }
     const editName = localStorage.getItem('openEditProject')
     if (editName) {
       localStorage.removeItem('openEditProject')
-      setModalMode('edit')
-      setModalProject({ name: editName })
-      setIsModalOpen(true)
+      projectModal.openEditModal(editName)
     }
-  }, [])
-
-  // Update modal project state when current project is loaded
-  useEffect(() => {
-    if (modalMode === 'edit' && currentProjectResponse?.project) {
-      setModalProject(prev => ({
-        ...prev,
-        config: currentProjectResponse.project.config
-      }))
-    }
-  }, [modalMode, currentProjectResponse])
+  }, [projectModal])
 
   // Convert API projects to UI format
   const projects = useMemo(() => {
-    if (projectsResponse?.projects) {
-      return apiProjectsToProjectItems(projectsResponse.projects)
-    }
-    return DEFAULT_PROJECTS
+    return getProjectsForUI(projectsResponse)
   }, [projectsResponse])
   
   const filteredProjects = useMemo(() => {
@@ -82,81 +54,13 @@ const Projects = () => {
   }, [projects, search])
 
   const openProject = (name: string) => {
-    setActiveProject(name)
+    localStorage.setItem('activeProject', name)
     navigate('/chat/dashboard')
   }
 
-  const openCreate = () => {
-    setModalMode('create')
-    setModalProject({ name: '' })
-    setIsModalOpen(true)
-  }
-
-  const openEdit = (name: string) => {
-    setModalMode('edit')
-    setModalProject({ name })
-    setIsModalOpen(true)
-  }
 
 
 
-  const handleSave = async (name: string) => {
-    if (modalMode === 'create') {
-      try {
-        await createProjectMutation.mutateAsync({
-          namespace,
-          request: { name, config_template: 'default' }
-        })
-        setActiveProject(name)
-        setIsModalOpen(false)
-        navigate('/chat/dashboard')
-      } catch (error) {
-        console.error('Failed to create project:', error)
-        // Error handling is done by React Query and apiClient
-      }
-    } else {
-      try {
-        if (!modalProject.config) {
-          console.error('Cannot update project: config not loaded')
-          return
-        }
-        
-        // Update the config with the new name while preserving all other properties
-        const updatedConfig = mergeProjectConfig(modalProject.config, {
-          name: name.trim(),
-          namespace: namespace
-        })
-        
-        // Validate the config before sending
-        if (!validateProjectConfig(updatedConfig)) {
-          console.error('Invalid project config, aborting update')
-          return
-        }
-        
-        await updateProjectMutation.mutateAsync({
-          namespace,
-          projectId: modalProject.name,
-          request: { config: updatedConfig }
-        })
-        setActiveProject(name)
-        setIsModalOpen(false)
-      } catch (error) {
-        console.error('Failed to update project:', error)
-      }
-    }
-  }
-
-  const handleDelete = async () => {
-    try {
-      await deleteProjectMutation.mutateAsync({
-        namespace,
-        projectId: modalProject.name
-      })
-      setIsModalOpen(false)
-    } catch (error) {
-      console.error('Failed to delete project:', error)
-    }
-  }
 
   if (error) {
     return (
@@ -187,7 +91,7 @@ const Projects = () => {
             </button>
             <button
               className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
-              onClick={openCreate}
+              onClick={projectModal.openCreateModal}
             >
               New project
             </button>
@@ -228,7 +132,7 @@ const Projects = () => {
                   className="flex items-center gap-1 text-primary hover:opacity-80"
                   onClick={e => {
                     e.stopPropagation()
-                    openEdit(p.name)
+                    projectModal.openEditModal(p.name)
                   }}
                 >
                   <FontIcon type="edit" className="w-5 h-5 text-primary" />
@@ -241,14 +145,14 @@ const Projects = () => {
       </div>
 
       <ProjectModal
-        isOpen={isModalOpen}
-        mode={modalMode}
-        initialName={modalProject.name}
+        isOpen={projectModal.isModalOpen}
+        mode={projectModal.modalMode}
+        initialName={projectModal.projectName}
         initialDescription={''}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSave}
-        onDelete={modalMode === 'edit' ? handleDelete : undefined}
-        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending || isLoadingProject}
+        onClose={projectModal.closeModal}
+        onSave={projectModal.saveProject}
+        onDelete={projectModal.modalMode === 'edit' ? projectModal.deleteProject : undefined}
+        isLoading={projectModal.isLoading}
       />
     </div>
   )

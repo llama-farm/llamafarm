@@ -12,6 +12,7 @@ import {
 import { useProjects } from '../hooks/useProjects'
 import { setActiveProject as setActiveProjectUtil, getActiveProject } from '../utils/projectUtils'
 import { getCurrentNamespace } from '../utils/namespaceUtils'
+import { getProjectsList } from '../utils/projectConstants'
 
 function Header() {
   const [isBuilding, setIsBuilding] = useState(false)
@@ -28,12 +29,9 @@ function Header() {
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
   
-  // Convert API projects to project names for dropdown
+  // Convert API projects to project names for dropdown with fallback
   const projects = useMemo(() => {
-    if (projectsResponse?.projects) {
-      return projectsResponse.projects.map(p => p.name)
-    }
-    return [] // Will fall back to empty dropdown if no API data
+    return getProjectsList(projectsResponse)
   }, [projectsResponse])
   const projectRef = useRef<HTMLDivElement>(null)
 

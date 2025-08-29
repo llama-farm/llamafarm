@@ -2,22 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 // removed decorative llama image
 import FontIcon from './common/FontIcon'
-import ProjectModal, { ProjectModalMode } from './components/Project/ProjectModal'
+import ProjectModal from './components/Project/ProjectModal'
 import useChatbox from './hooks/useChatbox'
-import {
-  useProjects,
-  useProject,
-  useCreateProject,
-  useUpdateProject,
-  useDeleteProject,
-} from './hooks/useProjects'
-import {
-  DEFAULT_PROJECT_NAMES,
-  setActiveProject,
-  filterProjectsBySearch,
-} from './utils/projectUtils'
+import { useProjects } from './hooks/useProjects'
+import { useProjectModal } from './hooks/useProjectModal'
+import { filterProjectsBySearch, getProjectsList } from './utils/projectConstants'
 import { getCurrentNamespace } from './utils/namespaceUtils'
-import { validateProjectConfig, mergeProjectConfig } from './utils/projectConfigUtils'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
@@ -36,53 +26,29 @@ function Home() {
 
   const namespace = getCurrentNamespace()
   
-  // Modal state for Home (declared early for API hooks)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalProjectName, setModalProjectName] = useState('')
-  const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
-  
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
-  const { data: currentProjectResponse, isLoading: isLoadingProject } = useProject(
-    namespace, 
-    modalProjectName, 
-    modalMode === 'edit' && !!modalProjectName && isModalOpen
-  )
-  const createProjectMutation = useCreateProject()
-  const updateProjectMutation = useUpdateProject()
-  const deleteProjectMutation = useDeleteProject()
-  
-  // Store current project config for editing
-  const [currentProjectConfig, setCurrentProjectConfig] = useState<Record<string, any> | null>(null)
   
   // Convert API projects to project names for UI compatibility
-  const projectsList = useMemo(() => {
-    if (projectsResponse?.projects) {
-      return projectsResponse.projects.map(p => p.name)
+  const projectsList = useMemo(() => getProjectsList(projectsResponse), [projectsResponse])
+  
+  // Shared modal hook
+  const projectModal = useProjectModal({
+    namespace,
+    existingProjects: projectsList,
+    onSuccess: (_, mode) => {
+      if (mode === 'create') {
+        navigate('/chat/dashboard')
+      }
     }
-    return DEFAULT_PROJECT_NAMES
-  }, [projectsResponse])
-  
-  const [localProjectsList, setLocalProjectsList] = useState<string[]>(projectsList)
-  
-  // Sync local state with API data
-  useEffect(() => {
-    setLocalProjectsList(projectsList)
-  }, [projectsList])
-  
-  // Update current project config when loaded
-  useEffect(() => {
-    if (modalMode === 'edit' && currentProjectResponse?.project) {
-      setCurrentProjectConfig(currentProjectResponse.project.config)
-    }
-  }, [modalMode, currentProjectResponse])
+  })
 
   const filteredProjectNames = useMemo(() => {
     return filterProjectsBySearch(
-      localProjectsList.map(name => ({ name })),
+      projectsList.map(name => ({ name })),
       search
     ).map(item => item.name)
-  }, [localProjectsList, search])
+  }, [projectsList, search])
 
   const handleOptionClick = (option: { id: number; text: string }) => {
     setInputValue(option.text)
@@ -117,23 +83,15 @@ function Home() {
   }
 
   const openProject = (name: string) => {
-    setActiveProject(name)
+    localStorage.setItem('activeProject', name)
     navigate('/chat/dashboard')
   }
 
-  const openCreate = () => {
-    setModalMode('create')
-    setModalProjectName('')
-    setIsModalOpen(true)
-  }
 
 
 
-  const handleEditClick = (name: string) => {
-    setModalProjectName(name)
-    setModalMode('edit')
-    setIsModalOpen(true)
-  }
+
+
 
   // Listen for header-triggered create intent and scroll
   useEffect(() => {
@@ -142,9 +100,7 @@ function Home() {
       // @ts-ignore - history state type
       const state = window.history.state && window.history.state.usr
       if (state?.openCreate) {
-        setModalMode('create')
-        setModalProjectName('')
-        setIsModalOpen(true)
+        projectModal.openCreateModal()
       }
       if (state?.scrollTo === 'projects') {
         const el = document.getElementById('projects')
@@ -154,14 +110,12 @@ function Home() {
       const createFlag = localStorage.getItem('homeOpenCreate')
       if (createFlag === '1') {
         localStorage.removeItem('homeOpenCreate')
-        setModalMode('create')
-        setModalProjectName('')
-        setIsModalOpen(true)
+        projectModal.openCreateModal()
         const el = document.getElementById('projects')
         el?.scrollIntoView({ behavior: 'smooth' })
       }
     } catch {}
-  }, [])
+  }, [projectModal])
 
   return (
     <div className="min-h-screen flex flex-col items-stretch px-4 sm:px-6 lg:px-8 pt-24 md:pt-28 pb-8 bg-background">
@@ -259,7 +213,7 @@ function Home() {
             </button>
             <button
               className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
-              onClick={openCreate}
+              onClick={projectModal.openCreateModal}
             >
               New project
             </button>
@@ -272,7 +226,7 @@ function Home() {
           </button>
           <button
             className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
-            onClick={openCreate}
+            onClick={projectModal.openCreateModal}
           >
             New project
           </button>
@@ -315,7 +269,7 @@ function Home() {
                   className="flex items-center gap-1 text-primary hover:opacity-80"
                   onClick={e => {
                     e.stopPropagation()
-                    handleEditClick(name)
+                    projectModal.openEditModal(name)
                   }}
                 >
                   <FontIcon type="edit" className="w-5 h-5 text-primary" />
@@ -380,81 +334,14 @@ function Home() {
       </div>
       {/* Project edit modal over Home */}
       <ProjectModal
-        isOpen={isModalOpen}
-        mode={modalMode}
-        initialName={modalProjectName}
+        isOpen={projectModal.isModalOpen}
+        mode={projectModal.modalMode}
+        initialName={projectModal.projectName}
         initialDescription={''}
-        onClose={() => setIsModalOpen(false)}
-        onSave={async (name: string) => {
-          try {
-            if (modalMode === 'create') {
-              // Create new project via API
-              await createProjectMutation.mutateAsync({
-                namespace,
-                request: { name, config_template: 'default' }
-              })
-              
-              setActiveProject(name)
-              setIsModalOpen(false)
-              // Navigate to the new project
-              navigate('/chat/dashboard')
-            } else {
-              // Edit existing project
-              if (localProjectsList.includes(name) && name !== modalProjectName) {
-                setIsModalOpen(false)
-                return
-              }
-              
-              // Update via API
-              if (!currentProjectConfig) {
-                console.error('Cannot update project: config not loaded')
-                setIsModalOpen(false)
-                return
-              }
-              
-              // Update the config with the new name while preserving all other properties
-              const updatedConfig = mergeProjectConfig(currentProjectConfig, {
-                name: name.trim(),
-                namespace: namespace
-              })
-              
-              // Validate the config before sending
-              if (!validateProjectConfig(updatedConfig)) {
-                console.error('Invalid project config, aborting update')
-                setIsModalOpen(false)
-                return
-              }
-              
-              await updateProjectMutation.mutateAsync({
-                namespace,
-                projectId: modalProjectName,
-                request: { config: updatedConfig }
-              })
-              
-              setActiveProject(name)
-              // Local state will be updated via React Query invalidation
-              setIsModalOpen(false)
-            }
-          } catch (error) {
-            setIsModalOpen(false)
-          }
-        }}
-        onDelete={async () => {
-          try {
-            await deleteProjectMutation.mutateAsync({
-              namespace,
-              projectId: modalProjectName
-            })
-            
-            const remaining = localProjectsList.filter(n => n !== modalProjectName)
-            const next = remaining[0] || DEFAULT_PROJECT_NAMES[0]
-            setActiveProject(next)
-            setIsModalOpen(false)
-          } catch (error) {
-            setIsModalOpen(false)
-          }
-        }}
-        isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || deleteProjectMutation.isPending || isLoadingProject}
+        onClose={projectModal.closeModal}
+        onSave={projectModal.saveProject}
+        onDelete={projectModal.modalMode === 'edit' ? projectModal.deleteProject : undefined}
+        isLoading={projectModal.isLoading}
       />
     </div>
   )

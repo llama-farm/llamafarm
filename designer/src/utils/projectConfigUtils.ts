@@ -3,46 +3,16 @@
  */
 
 /**
- * Validates that a project config has the required structure
+ * Simple config validation for UX
  * @param config - The project config to validate
- * @returns true if valid, false otherwise
+ * @returns true if basic structure is ok, false otherwise
  */
 export function validateProjectConfig(config: any): boolean {
+  // Only basic structure check
   if (!config || typeof config !== 'object') {
-    console.error('Project config validation failed: config is not an object', config)
     return false
   }
-
-  // Check for required top-level properties
-  const requiredFields = ['version', 'name', 'namespace']
-  for (const field of requiredFields) {
-    if (!(field in config)) {
-      console.error(`Project config validation failed: missing required field '${field}'`, config)
-      return false
-    }
-  }
-
-  // Validate nested structures exist (they can be empty but should be defined)
-  if (config.rag && typeof config.rag !== 'object') {
-    console.error('Project config validation failed: rag must be an object', config)
-    return false
-  }
-
-  if (config.runtime && typeof config.runtime !== 'object') {
-    console.error('Project config validation failed: runtime must be an object', config)
-    return false
-  }
-
-  if (config.prompts && !Array.isArray(config.prompts)) {
-    console.error('Project config validation failed: prompts must be an array', config)
-    return false
-  }
-
-  if (config.datasets && !Array.isArray(config.datasets)) {
-    console.error('Project config validation failed: datasets must be an array', config)
-    return false
-  }
-
+  
   return true
 }
 

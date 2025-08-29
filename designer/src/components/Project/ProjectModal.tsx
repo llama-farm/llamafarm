@@ -18,6 +18,7 @@ interface ProjectModalProps {
   onSave: (name: string) => void
   onDelete?: () => void
   isLoading?: boolean
+  projectError?: string | null
 }
 
 const ProjectModal: React.FC<ProjectModalProps> = ({
@@ -29,6 +30,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   onSave,
   onDelete,
   isLoading = false,
+  projectError = null,
 }) => {
   const [name, setName] = useState(initialName)
   const [desc, setDesc] = useState(initialDescription)
@@ -63,11 +65,16 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               Project name
             </label>
             <input
-              className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+              className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border text-foreground ${
+                projectError ? 'border-destructive' : 'border-input'
+              }`}
               placeholder="Enter name"
               value={name}
               onChange={e => setName(e.target.value)}
             />
+            {projectError && (
+              <p className="text-xs text-destructive mt-1">{projectError}</p>
+            )}
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Description</label>
