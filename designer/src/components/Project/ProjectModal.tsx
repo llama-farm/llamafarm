@@ -42,6 +42,20 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     }
   }, [isOpen, initialName, initialDescription])
 
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isLoading) {
+        onClose()
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape)
+      return () => document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen, isLoading, onClose])
+
   const title = mode === 'create' ? 'Create new project' : 'Edit project'
   const cta = mode === 'create' ? 'Create' : 'Save'
   const isValid = name.trim().length > 0 && !isLoading
@@ -52,8 +66,20 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     if (ok) onDelete()
   }
 
+  const handleCancel = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onClose()
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      onClose()
+    }
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={v => (!v ? onClose() : undefined)}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-lg text-foreground">{title}</DialogTitle>
@@ -104,7 +130,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           <div className="flex items-center gap-2 ml-auto">
             <button
               className="px-3 py-2 rounded-md text-sm text-primary hover:underline disabled:opacity-50"
-              onClick={onClose}
+              onClick={handleCancel}
               disabled={isLoading}
               type="button"
             >
@@ -116,8 +142,14 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   ? 'bg-primary text-primary-foreground hover:opacity-90'
                   : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
               }`}
-              onClick={() => isValid && onSave(name.trim())}
+              onClick={(e) => {
+                e.preventDefault()
+                if (isValid) {
+                  onSave(name.trim())
+                }
+              }}
               disabled={!isValid}
+              type="button"
             >
               {isLoading ? (mode === 'create' ? 'Creating...' : 'Saving...') : cta}
             </button>
