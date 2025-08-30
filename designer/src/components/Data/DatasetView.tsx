@@ -20,6 +20,8 @@ import {
 } from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useUploadFileToDataset } from '../../hooks/useDatasets'
 
 type Dataset = {
   id: string
@@ -36,6 +38,10 @@ function DatasetView() {
   const navigate = useNavigate()
   const { datasetId } = useParams()
   const { toast } = useToast()
+
+  // Get current active project for API calls
+  const activeProject = useActiveProject()
+  const uploadMutation = useUploadFileToDataset()
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const datasetName = useMemo(
@@ -462,11 +468,19 @@ function DatasetView() {
           type="file"
           className="hidden"
           multiple
-          onChange={e => {
-            if (!datasetId) return
+          onChange={async (e) => {
+            if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
+              toast({
+                message: 'Missing required information for upload',
+                variant: 'destructive'
+              })
+              return
+            }
+            
             const list = e.target.files ? Array.from(e.target.files) : []
             if (list.length === 0) return
-            // Convert to RawFile shape
+            
+            // Convert to RawFile shape for UI
             const converted: RawFile[] = list.map(f => ({
               id: `${f.name}:${f.size}:${f.lastModified}`,
               name: f.name,
@@ -474,14 +488,43 @@ function DatasetView() {
               lastModified: f.lastModified,
               type: f.type,
             }))
+            
             try {
+              // Set processing status for UI feedback
               setUploadStatus(prev => ({
                 ...prev,
                 ...Object.fromEntries(
                   converted.map(rf => [rf.id, 'processing' as const])
                 ),
               }))
-              // Persist raw files (dedupe by id)
+              
+              // Upload each file to the API
+              for (const file of list) {
+                try {
+                  await uploadMutation.mutateAsync({
+                    namespace: activeProject.namespace,
+                    project: activeProject.project,
+                    dataset: datasetId,
+                    file
+                  })
+                } catch (error) {
+                  console.error(`Failed to upload ${file.name}:`, error)
+                  toast({
+                    message: `Failed to upload ${file.name}`,
+                    variant: 'destructive'
+                  })
+                  // Remove from processing status on error
+                  const fileId = `${file.name}:${file.size}:${file.lastModified}`
+                  setUploadStatus(prev => {
+                    const next = { ...prev }
+                    delete (next as any)[fileId]
+                    return next
+                  })
+                  continue
+                }
+              }
+              
+              // Also persist to localStorage for backward compatibility
               const storedRaw = localStorage.getItem('lf_raw_files')
               const existing: RawFile[] = storedRaw ? JSON.parse(storedRaw) : []
               const existingIds = new Set(existing.map(r => r.id))
@@ -489,7 +532,7 @@ function DatasetView() {
               const updatedRaw = [...existing, ...deduped]
               localStorage.setItem('lf_raw_files', JSON.stringify(updatedRaw))
 
-              // Assign to this dataset
+              // Assign to this dataset in localStorage
               const storedAssign = localStorage.getItem('lf_file_assignments')
               const assignments: Record<string, string[]> = storedAssign
                 ? JSON.parse(storedAssign)
@@ -514,6 +557,8 @@ function DatasetView() {
                 const add = nowAssigned.filter(n => !seen.has(n.id))
                 return [...prev, ...add]
               })
+              
+              // Show success status
               setTimeout(() => {
                 setUploadStatus(prev => ({
                   ...prev,
@@ -521,6 +566,12 @@ function DatasetView() {
                     converted.map(rf => [rf.id, 'done' as const])
                   ),
                 }))
+                toast({
+                  message: `Successfully uploaded ${list.length} file${list.length > 1 ? 's' : ''}`,
+                  variant: 'default'
+                })
+                
+                // Clear status after delay
                 setTimeout(() => {
                   setUploadStatus(prev => {
                     const next = { ...prev }
@@ -528,9 +579,23 @@ function DatasetView() {
                     return next
                   })
                 }, 1500)
-              }, 1500)
-            } catch {}
-            // reset input so same files can be picked again
+              }, 500)
+              
+            } catch (error) {
+              console.error('Upload error:', error)
+              toast({
+                message: 'Failed to upload files',
+                variant: 'destructive'
+              })
+              // Clear processing status on error
+              setUploadStatus(prev => {
+                const next = { ...prev }
+                for (const rf of converted) delete (next as any)[rf.id]
+                return next
+              })
+            }
+            
+            // Reset input so same files can be picked again
             e.currentTarget.value = ''
           }}
         />
