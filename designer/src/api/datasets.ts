@@ -21,14 +21,9 @@ export async function listDatasets(
   namespace: string,
   project: string
 ): Promise<ListDatasetsResponse> {
-  // Debug logging to verify correct parameters
-  console.log('🔍 Fetching datasets for:', { namespace, project })
-  
   const response = await apiClient.get<ListDatasetsResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/`
   )
-  
-  console.log('✅ Datasets API response:', response.data)
   return response.data
 }
 

@@ -28,10 +28,8 @@ import SearchInput from '../ui/search-input'
 import { useNavigate } from 'react-router-dom'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets, useCreateDataset } from '../../hooks/useDatasets'
-import type { UIDataset, UIFile } from '../../types/datasets'
+import type { UIFile } from '../../types/datasets'
 
-// Use the types from the types file, but keep local aliases for compatibility
-type Dataset = UIDataset
 type RawFile = UIFile
 
 const Data = () => {
@@ -65,37 +63,9 @@ const Data = () => {
   const createDatasetMutation = useCreateDataset()
   // const deleteDatasetMutation = useDeleteDataset() // TODO: Implement dataset deletion with API
 
-  // Mock datasets state (fallback when API is not available)
-  const [localDatasets, setLocalDatasets] = useState<Dataset[]>(() => {
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      if (stored) {
-        const parsed = JSON.parse(stored) as Array<
-          Omit<Dataset, 'lastRun'> & { lastRun: string }
-        >
-        return parsed.map(d => ({ ...d, lastRun: new Date(d.lastRun) }))
-      }
-    } catch {}
-    return [
-      {
-        id: 'default',
-        name: 'default-dataset',
-        lastRun: new Date(),
-        embedModel: 'text-embedding-3-large',
-        numChunks: 28500,
-        processedPercent: 100,
-        version: 'v2',
-        description: '',
-        rag_strategy: 'auto',
-        files: [],
-      },
-    ]
-  })
-
-  // Use API datasets if available, otherwise fall back to localStorage
+  // Convert API datasets to UI format
   const datasets = useMemo(() => {
-    if (apiDatasets?.datasets && !datasetsError) {
-      // Convert API datasets to UI format
+    if (apiDatasets?.datasets) {
       return apiDatasets.datasets.map((dataset) => ({
         id: dataset.name,
         name: dataset.name,
@@ -109,36 +79,12 @@ const Data = () => {
         description: '',
       }))
     }
-    return localDatasets
-  }, [apiDatasets, datasetsError, localDatasets])
+    return []
+  }, [apiDatasets])
 
-  // Function to update local datasets (for localStorage fallback)
-  const setDatasets = useCallback((updater: React.SetStateAction<Dataset[]>) => {
-    if (typeof updater === 'function') {
-      setLocalDatasets(prev => {
-        const updated = updater(prev)
-        // Persist to localStorage
-        try {
-          const serializable = updated.map(d => ({
-            ...d,
-            lastRun: d.lastRun.toISOString(),
-          }))
-          localStorage.setItem('lf_datasets', JSON.stringify(serializable))
-        } catch {}
-        return updated
-      })
-    } else {
-      setLocalDatasets(updater)
-      // Persist to localStorage
-      try {
-        const serializable = updater.map(d => ({
-          ...d,
-          lastRun: d.lastRun.toISOString(),
-        }))
-        localStorage.setItem('lf_datasets', JSON.stringify(serializable))
-      } catch {}
-    }
-  }, [])
+
+
+
 
   // Map of fileKey -> array of dataset ids
   const [fileAssignments, setFileAssignments] = useState<
@@ -225,52 +171,28 @@ const Data = () => {
   const [newDatasetName, setNewDatasetName] = useState('')
   const [newDatasetDescription, setNewDatasetDescription] = useState('')
 
-  const slugify = (value: string) =>
-    value
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
+
 
   const handleCreateDataset = async () => {
     const name = newDatasetName.trim()
     if (!name) return
 
+    if (!activeProject?.namespace || !activeProject?.project) {
+      toast({ 
+        message: 'No active project selected', 
+        variant: 'destructive' 
+      })
+      return
+    }
+
     try {
-      if (activeProject?.namespace && activeProject?.project && !datasetsError) {
-        // Use API to create dataset
-        await createDatasetMutation.mutateAsync({
-          namespace: activeProject.namespace,
-          project: activeProject.project,
-          name,
-          rag_strategy: 'auto', // Default strategy
-        })
-        toast({ message: 'Dataset created successfully', variant: 'default' })
-      } else {
-        // Fallback to localStorage
-        const baseId = slugify(name) || 'dataset'
-        let id = baseId
-        let counter = 1
-        const existingIds = new Set(datasets.map(d => d.id))
-        while (existingIds.has(id)) {
-          id = `${baseId}-${counter++}`
-        }
-        const created: Dataset = {
-          id,
-          name,
-          description: newDatasetDescription.trim(),
-          lastRun: new Date(),
-          embedModel: datasets[0]?.embedModel || 'text-embedding-3-large',
-          numChunks: 0,
-          processedPercent: 0,
-          version: 'v1',
-          rag_strategy: 'auto',
-          files: [],
-        }
-        setDatasets(prev => [...prev, created])
-        toast({ message: 'Dataset created locally', variant: 'default' })
-      }
+      await createDatasetMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        name,
+        rag_strategy: 'auto', // Default strategy
+      })
+      toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
       setNewDatasetDescription('')

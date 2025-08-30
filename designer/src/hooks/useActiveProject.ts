@@ -22,14 +22,11 @@ export function useActiveProject(): ActiveProject | null {
         const projectName = getActiveProjectName()
         
         if (namespace && projectName) {
-          const newActiveProject = {
+          setActiveProject({
             namespace,
             project: projectName
-          }
-          console.log('🔄 Active project initialized:', newActiveProject)
-          setActiveProject(newActiveProject)
+          })
         } else {
-          console.log('⚠️ Active project cleared: missing namespace or project name')
           setActiveProject(null)
         }
       } catch (error) {

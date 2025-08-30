@@ -91,14 +91,21 @@ function DatasetView() {
     } catch {}
   }, [datasetId])
 
+  // TODO: Load dataset metadata from API instead of localStorage
   useEffect(() => {
-    try {
-      const storedDatasets = localStorage.getItem('lf_datasets')
-      if (!storedDatasets || !datasetId) return
-      const list = JSON.parse(storedDatasets) as Dataset[]
-      const current = list.find(d => d.id === datasetId) || null
-      setDataset(current)
-    } catch {}
+    if (!datasetId) return
+    // For now, create a minimal dataset object
+    // This should be replaced with an API call to get dataset details
+    setDataset({
+      id: datasetId,
+      name: datasetId,
+      lastRun: new Date(),
+      embedModel: 'text-embedding-3-large',
+      numChunks: 0,
+      processedPercent: 100,
+      version: 'v1',
+      description: '',
+    })
   }, [datasetId])
 
   // Load versions for this dataset (or seed from dataset.version)
@@ -181,59 +188,26 @@ function DatasetView() {
     setIsEditOpen(true)
   }
 
-  const saveDatasets = (arr: Dataset[]) => {
-    try {
-      localStorage.setItem(
-        'lf_datasets',
-        JSON.stringify(
-          arr.map(d => ({ ...d, lastRun: new Date(d.lastRun).toISOString() }))
-        )
-      )
-    } catch {}
-  }
+
 
   const handleSaveEdit = () => {
     if (!dataset || !datasetId) return
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      const list = stored ? (JSON.parse(stored) as Dataset[]) : []
-      const updated = list.map(d =>
-        d.id === datasetId
-          ? {
-              ...d,
-              name: editName.trim() || d.name,
-              description: editDescription,
-            }
-          : d
-      )
-      saveDatasets(updated)
-      const current = updated.find(d => d.id === datasetId) || null
-      setDataset(current)
-      setIsEditOpen(false)
-    } catch {}
+    // TODO: Replace with API call to update dataset
+    const updatedDataset = {
+      ...dataset,
+      name: editName.trim() || dataset.name,
+      description: editDescription,
+    }
+    setDataset(updatedDataset)
+    setIsEditOpen(false)
+    console.warn('Dataset edit saved locally - should use API instead')
   }
 
   const handleDelete = () => {
     if (!datasetId) return
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      const list = stored ? (JSON.parse(stored) as Dataset[]) : []
-      const updated = list.filter(d => d.id !== datasetId)
-      saveDatasets(updated)
-      // remove dataset from assignments
-      const storedAssignments = localStorage.getItem('lf_file_assignments')
-      if (storedAssignments) {
-        const assignments: Record<string, string[]> =
-          JSON.parse(storedAssignments)
-        const cleaned: Record<string, string[]> = {}
-        for (const [k, arr] of Object.entries(assignments)) {
-          const next = arr.filter(id => id !== datasetId)
-          if (next.length > 0) cleaned[k] = next
-        }
-        localStorage.setItem('lf_file_assignments', JSON.stringify(cleaned))
-      }
-      navigate('/chat/data')
-    } catch {}
+    // TODO: Replace with API call to delete dataset
+    console.warn('Dataset delete called - should use API instead')
+    navigate('/chat/data')
   }
 
   return (
@@ -290,22 +264,15 @@ function DatasetView() {
                 setVersions(list)
                 setSelectedVersionId(nextId)
                 persistVersions(list, nextId)
-                // Also bump dataset version/lastRun
-                try {
-                  const stored = localStorage.getItem('lf_datasets')
-                  const arr = stored ? (JSON.parse(stored) as Dataset[]) : []
-                  const updated = arr.map(d =>
-                    d.id === datasetId
-                      ? {
-                          ...d,
-                          version: nextId,
-                          lastRun: new Date().toISOString(),
-                        }
-                      : d
-                  )
-                  localStorage.setItem('lf_datasets', JSON.stringify(updated))
-                  setDataset(updated.find(d => d.id === datasetId) || null)
-                } catch {}
+                // TODO: Replace with API call to trigger dataset reprocessing
+                if (dataset) {
+                  setDataset({
+                    ...dataset,
+                    version: nextId,
+                    lastRun: new Date(),
+                  })
+                }
+                console.warn('Dataset reprocess triggered - should use API instead')
               }}
             >
               Reprocess
@@ -524,37 +491,10 @@ function DatasetView() {
                 }
               }
               
-              // Also persist to localStorage for backward compatibility
-              const storedRaw = localStorage.getItem('lf_raw_files')
-              const existing: RawFile[] = storedRaw ? JSON.parse(storedRaw) : []
-              const existingIds = new Set(existing.map(r => r.id))
-              const deduped = converted.filter(r => !existingIds.has(r.id))
-              const updatedRaw = [...existing, ...deduped]
-              localStorage.setItem('lf_raw_files', JSON.stringify(updatedRaw))
-
-              // Assign to this dataset in localStorage
-              const storedAssign = localStorage.getItem('lf_file_assignments')
-              const assignments: Record<string, string[]> = storedAssign
-                ? JSON.parse(storedAssign)
-                : {}
-              for (const rf of converted) {
-                const arr = assignments[rf.id] ?? []
-                if (!arr.includes(datasetId)) {
-                  assignments[rf.id] = [...arr, datasetId]
-                }
-              }
-              localStorage.setItem(
-                'lf_file_assignments',
-                JSON.stringify(assignments)
-              )
-
-              // Update local list (only those assigned to this dataset)
-              const nowAssigned = converted.filter(rf =>
-                (assignments[rf.id] ?? []).includes(datasetId)
-              )
+              // Update local file list for UI
               setFiles(prev => {
                 const seen = new Set(prev.map(p => p.id))
-                const add = nowAssigned.filter(n => !seen.has(n.id))
+                const add = converted.filter(n => !seen.has(n.id))
                 return [...prev, ...add]
               })
               
