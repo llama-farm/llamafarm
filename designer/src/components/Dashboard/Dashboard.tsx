@@ -10,16 +10,30 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ModeToggle, { Mode } from '../ModeToggle'
 import DataCards from './DataCards'
-import ProjectModal, { ProjectModalMode } from '../ProjectModal'
+import ProjectModal from '../../components/Project/ProjectModal'  
 import ConfigEditor from '../ConfigEditor'
+import { useProjectModal } from '../../hooks/useProjectModal'
+import { getCurrentNamespace } from '../../utils/namespaceUtils'
 
 const Dashboard = () => {
   const { theme } = useTheme()
   const navigate = useNavigate()
+  const namespace = getCurrentNamespace()
+  
+  // All state declarations first
   const [mode, setMode] = useState<Mode>('designer')
   const [projectName, setProjectName] = useState<string>('Dashboard')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
+  
+  // Shared modal hook
+  const projectModal = useProjectModal({
+    namespace,
+    existingProjects: [], // Dashboard doesn't need duplicate checking since it edits current project
+    onSuccess: (newProjectName, mode) => {
+      if (mode === 'edit' && newProjectName) {
+        setProjectName(newProjectName)
+      }
+    }
+  })
 
   useEffect(() => {
     const refresh = () => {
@@ -52,8 +66,7 @@ const Dashboard = () => {
               <button
                 className="rounded-sm hover:opacity-80"
                 onClick={() => {
-                  setModalMode('edit')
-                  setIsModalOpen(true)
+                  projectModal.openEditModal(projectName)
                 }}
               >
                 <FontIcon type="edit" className="w-5 h-5 text-primary" />
@@ -274,59 +287,18 @@ const Dashboard = () => {
         )}
       </div>
       <ProjectModal
-        isOpen={isModalOpen}
-        mode={modalMode}
-        initialName={projectName}
+        isOpen={projectModal.isModalOpen}
+        mode={projectModal.modalMode}
+        initialName={projectModal.projectName}
         initialDescription={''}
-        onClose={() => setIsModalOpen(false)}
-        onSave={(name: string) => {
-          try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
-            // prevent duplicate names
-            if (list.includes(name) && name !== projectName) {
-              console.warn('Project rename skipped: duplicate name', name)
-              setIsModalOpen(false)
-              return
-            }
-            const updated = list.map(n => (n === projectName ? name : n))
-            localStorage.setItem('projectsList', JSON.stringify(updated))
-            localStorage.setItem('activeProject', name)
-            setProjectName(name)
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: name })
-              )
-            } catch (err) {
-              console.error('Failed to dispatch lf-active-project event:', err)
-            }
-          } catch (err) {
-            console.error('Failed to update project in localStorage:', err)
-          }
-          setIsModalOpen(false)
-        }}
-        onDelete={() => {
-          try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
-            const updated = list.filter(n => n !== projectName)
-            localStorage.setItem('projectsList', JSON.stringify(updated))
-            // pick a fallback active project if any
-            const next = updated[0] || 'aircraft-mx-flow'
-            localStorage.setItem('activeProject', next)
-            setProjectName(next)
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: next })
-              )
-            } catch (err) {
-              console.error('Failed to dispatch lf-active-project event:', err)
-            }
-          } catch (err) {
-            console.error('Failed to delete project from localStorage:', err)
-          }
-          setIsModalOpen(false)
-        }}
+        onClose={projectModal.closeModal}
+        onSave={projectModal.saveProject}
+        onDelete={projectModal.modalMode === 'edit' ? async () => {
+          await projectModal.deleteProject()
+          // Navigate to projects page after deletion
+          navigate('/chat/projects')
+        } : undefined}
+        isLoading={projectModal.isLoading}
       />
     </>
   )

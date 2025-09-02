@@ -5,7 +5,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from './ui/dialog'
+} from '../ui/dialog'
 
 export type ProjectModalMode = 'create' | 'edit'
 
@@ -15,8 +15,10 @@ interface ProjectModalProps {
   initialName?: string
   initialDescription?: string
   onClose: () => void
-  onSave: (name: string, description: string) => void
+  onSave: (name: string) => void
   onDelete?: () => void
+  isLoading?: boolean
+  projectError?: string | null
 }
 
 const ProjectModal: React.FC<ProjectModalProps> = ({
@@ -27,6 +29,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  isLoading = false,
+  projectError = null,
 }) => {
   const [name, setName] = useState(initialName)
   const [desc, setDesc] = useState(initialDescription)
@@ -38,9 +42,23 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     }
   }, [isOpen, initialName, initialDescription])
 
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isLoading) {
+        onClose()
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape)
+      return () => document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen, isLoading, onClose])
+
   const title = mode === 'create' ? 'Create new project' : 'Edit project'
   const cta = mode === 'create' ? 'Create' : 'Save'
-  const isValid = name.trim().length > 0
+  const isValid = name.trim().length > 0 && !isLoading
 
   const handleDelete = () => {
     if (!onDelete) return
@@ -48,8 +66,20 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     if (ok) onDelete()
   }
 
+  const handleCancel = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onClose()
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      onClose()
+    }
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={v => (!v ? onClose() : undefined)}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-lg text-foreground">{title}</DialogTitle>
@@ -61,11 +91,16 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               Project name
             </label>
             <input
-              className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+              className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border text-foreground ${
+                projectError ? 'border-destructive' : 'border-input'
+              }`}
               placeholder="Enter name"
               value={name}
               onChange={e => setName(e.target.value)}
             />
+            {projectError && (
+              <p className="text-xs text-destructive mt-1">{projectError}</p>
+            )}
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Description</label>
@@ -82,19 +117,21 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         <DialogFooter className="flex items-center justify-between gap-2">
           {mode === 'edit' ? (
             <button
-              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
               onClick={handleDelete}
+              disabled={isLoading}
               type="button"
             >
-              Delete
+              {isLoading ? 'Deleting...' : 'Delete'}
             </button>
           ) : (
             <div />
           )}
           <div className="flex items-center gap-2 ml-auto">
             <button
-              className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-              onClick={onClose}
+              className="px-3 py-2 rounded-md text-sm text-primary hover:underline disabled:opacity-50"
+              onClick={handleCancel}
+              disabled={isLoading}
               type="button"
             >
               Cancel
@@ -105,9 +142,16 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   ? 'bg-primary text-primary-foreground hover:opacity-90'
                   : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
               }`}
-              onClick={() => isValid && onSave(name.trim(), desc.trim())}
+              onClick={(e) => {
+                e.preventDefault()
+                if (isValid) {
+                  onSave(name.trim())
+                }
+              }}
+              disabled={!isValid}
+              type="button"
             >
-              {cta}
+              {isLoading ? (mode === 'create' ? 'Creating...' : 'Saving...') : cta}
             </button>
           </div>
         </DialogFooter>

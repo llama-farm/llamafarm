@@ -114,10 +114,13 @@ def run_rag_cli_with_config(
 
 def ingest_file_with_rag(strategy, source_path: str) -> bool:
     """Ingest a single file using rag CLI and provided strategy components."""
+    logger.info(f"Ingesting file {source_path} with strategy {strategy.name}")
     cfg = build_v1_config_from_strategy(strategy)
     exit_code, stdout, stderr = run_rag_cli_with_config(["ingest", source_path], cfg)
     if exit_code != 0:
-        logger.error("RAG ingest failed", exit_code=exit_code, stderr=stderr)
+        logger.error(
+            "RAG ingest failed", exit_code=exit_code, stderr=stderr, stdout=stdout
+        )
         return False
     logger.info("RAG ingest succeeded", stdout=stdout)
     return True

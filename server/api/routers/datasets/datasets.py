@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from core.celery.tasks import process_dataset_task
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, FileExistsInAnotherDatasetError
 from services.dataset_service import Dataset, DatasetService
@@ -68,6 +69,35 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
         return DeleteDatasetResponse(dataset=deleted_dataset)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class DatasetActionRequest(BaseModel):
+    action_type: str
+
+
+@router.post("/{dataset}/actions")
+async def actions(
+    namespace: str, project: str, dataset: str, request: DatasetActionRequest
+):
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+
+    action_type = request.action_type
+
+    def task_uri(task_id: str):
+        return (
+            f"http://localhost:8000/v1/projects/{namespace}/{project}/tasks/{task_id}"
+        )
+
+    if action_type == "ingest":
+        task = process_dataset_task.delay(namespace, project, dataset)
+        return {
+            "message": "Accepted",
+            "task_uri": task_uri(task.id),
+        }
+    else:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid action type: {action_type}"
+        )
 
 
 @router.post("/{dataset}/data")
