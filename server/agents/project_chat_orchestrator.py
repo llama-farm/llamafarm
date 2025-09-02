@@ -7,7 +7,7 @@ from atomic_agents.agents.atomic_agent import (  # type: ignore
     ChatHistory,
     SystemPromptGenerator,
 )
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from core.settings import settings  # type: ignore
 
@@ -105,7 +105,7 @@ def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor
 
     if project_config.runtime.provider == Provider.openai:
         return instructor.from_openai(
-            OpenAI(
+            AsyncOpenAI(
                 api_key=project_config.runtime.api_key,
                 base_url=project_config.runtime.base_url,
             ),
@@ -113,7 +113,7 @@ def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor
         )
     if project_config.runtime.provider == Provider.ollama:
         return instructor.from_openai(
-            OpenAI(
+            AsyncOpenAI(
                 api_key=project_config.runtime.api_key or settings.ollama_api_key,
                 base_url=project_config.runtime.base_url
                 or f"{settings.ollama_host}/v1",

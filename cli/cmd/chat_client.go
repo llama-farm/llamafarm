@@ -8,8 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v2"
 )
 
 // ChatMessage represents a single chat message
@@ -86,7 +90,7 @@ func buildChatAPIURL(ctx *ChatSessionContext) string {
 	if ctx.Namespace != "" && ctx.ProjectID != "" {
 		return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID)
 	}
-	return fmt.Sprintf("%s/v1/inference/chat", base)
+	return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID)
 }
 
 // sendChatRequest connects to the server with stream=true and returns the full assistant message.
@@ -123,19 +127,19 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 			ctx = newDefaultContextFromGlobals()
 		}
 
+		// Read existing session context if available
+		if existingContext, err := readSessionContext(); err != nil {
+			logDebug(fmt.Sprintf("Failed to read session context: %v", err))
+		} else if existingContext != nil && existingContext.SessionID != "" {
+			// Use existing session ID if found
+			ctx.SessionID = existingContext.SessionID
+			sessionID = existingContext.SessionID
+			logDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
+		}
+
 		url := buildChatAPIURL(ctx)
 		streamTrue := true
 		request := ChatRequest{Messages: messages, Stream: &streamTrue}
-		if !strings.Contains(url, "/v1/projects/") {
-			meta := map[string]string{}
-			if ctx.Namespace != "" {
-				meta["namespace"] = ctx.Namespace
-			}
-			if ctx.ProjectID != "" {
-				meta["project_id"] = ctx.ProjectID
-			}
-			request.Metadata = meta
-		}
 
 		jsonData, err := json.Marshal(request)
 		logDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))
@@ -185,6 +189,10 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 		if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
 			ctx.SessionID = sessionIDHeader
 			sessionID = sessionIDHeader
+			// Write session context to YAML file
+			if err := writeSessionContext(sessionIDHeader); err != nil {
+				logDebug(fmt.Sprintf("Failed to write session context: %v", err))
+			}
 		}
 
 		reader := bufio.NewReader(resp.Body)
@@ -234,12 +242,110 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 	return outCh, errCh, func() { cancelFn() }
 }
 
-// deleteChatSession attempts to close the current server-side session.
-func deleteChatSession() error {
+// SessionContext represents the structure of the session context file
+type SessionContext struct {
+	SessionID string `yaml:"session_id"`
+	Timestamp string `yaml:"timestamp"`
+}
+
+// readSessionContext reads the session context from the YAML file if it exists
+func readSessionContext() (*SessionContext, error) {
+	// Get effective working directory from config
+	cwd, err := getEffectiveCWD()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine effective working directory: %w", err)
+	}
+	if cwd == "" {
+		return nil, fmt.Errorf("failed to determine effective working directory")
+	}
+
+	// Check if context file exists
+	contextFile := filepath.Join(cwd, ".llamafarm", "context.yaml")
+	if _, err := os.Stat(contextFile); os.IsNotExist(err) {
+		// File doesn't exist, return nil (no existing session)
+		return nil, nil
+	}
+
+	// Read the context file
+	data, err := os.ReadFile(contextFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read context file: %w", err)
+	}
+
+	// Parse the YAML
+	var context SessionContext
+	if err := yaml.Unmarshal(data, &context); err != nil {
+		return nil, fmt.Errorf("failed to parse context YAML: %w", err)
+	}
+
+	// Validate the session ID
+	if context.SessionID == "" {
+		return nil, nil // Invalid context, treat as no session
+	}
+
+	return &context, nil
+}
+
+// writeSessionContext writes the current session ID to a YAML file in the .llamafarm directory
+func writeSessionContext(sessionID string) error {
 	if sessionID == "" {
 		return nil
 	}
-	url := fmt.Sprintf("%s/v1/inference/chat/session/%s", strings.TrimSuffix(serverURL, "/"), sessionID)
+
+	// Get effective working directory from config
+	cwd, err := getEffectiveCWD()
+	if err != nil {
+		return fmt.Errorf("failed to determine effective working directory: %w", err)
+	}
+	if cwd == "" {
+		return fmt.Errorf("failed to determine effective working directory")
+	}
+
+	// Create .llamafarm directory if it doesn't exist
+	llamafarmDir := filepath.Join(cwd, ".llamafarm")
+	if err := os.MkdirAll(llamafarmDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .llamafarm directory: %w", err)
+	}
+
+	// Create context data structure
+	contextData := map[string]interface{}{
+		"session_id": sessionID,
+		"timestamp":  time.Now().Format(time.RFC3339),
+	}
+
+	// Convert to YAML
+	yamlData, err := yaml.Marshal(contextData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal context data to YAML: %w", err)
+	}
+
+	// Write to context.yaml file
+	contextFile := filepath.Join(llamafarmDir, "context.yaml")
+	if err := os.WriteFile(contextFile, yamlData, 0644); err != nil {
+		return fmt.Errorf("failed to write context file: %w", err)
+	}
+
+	return nil
+}
+
+// deleteChatSession attempts to close the current server-side session.
+func deleteChatSession() error {
+	// If we don't have a session ID, try to read it from context file
+	if sessionID == "" {
+		if existingContext, err := readSessionContext(); err != nil {
+			logDebug(fmt.Sprintf("Failed to read session context for deletion: %v", err))
+		} else if existingContext != nil && existingContext.SessionID != "" {
+			sessionID = existingContext.SessionID
+		} else {
+			// No session to delete
+			return nil
+		}
+	}
+
+	if sessionID == "" {
+		return nil
+	}
+	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/session/%s", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)

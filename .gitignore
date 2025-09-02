@@ -743,3 +743,5 @@ models/demos/demo_outputs_vision/batch_results/people_results.json
 models/demos/demo_outputs_vision/batch_results/street_scene_results.json
 models/demos/demo_outputs_vision/people_detected.jpg
 models/demos/demo_outputs_vision/street_scene_detected.jpg
+
+.llamafarm/

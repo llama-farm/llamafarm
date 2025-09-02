@@ -11,7 +11,7 @@ import (
 )
 
 var debug bool
-var serverURL string
+var serverURL string = "http://localhost:8000"
 var serverStartTimeout time.Duration
 var overrideCwd string
 

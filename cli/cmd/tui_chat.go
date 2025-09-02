@@ -21,6 +21,15 @@ var (
 	sessionPrompt = "🆔 Session:"
 )
 
+var chatCtx = &ChatSessionContext{
+	ServerURL:   serverURL,
+	Namespace:   "llamafarm",
+	ProjectID:   "project-seed",
+	Temperature: temperature,
+	MaxTokens:   maxTokens,
+	HTTPClient:  getHTTPClient(),
+}
+
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
 func runChatSessionTUI() {
 	m := newChatModel()
@@ -190,7 +199,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.thinking = true
 			m.printing = true
 			// Start channel-based streaming
-			chunks, errs, _ := startChatStream(m.messages, nil)
+			chunks, errs, _ := startChatStream(m.messages, chatCtx)
 			ch := make(chan tea.Msg, 32)
 			m.streamCh = ch
 			go func() {
@@ -288,30 +297,44 @@ func listen(ch <-chan tea.Msg) tea.Cmd {
 
 func (m chatModel) View() string {
 	var b strings.Builder
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Render(serverPrompt) + " " + serverURL + "\n")
+	serverLine := serverPrompt + " " + serverURL
+	wrappedServer := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(serverLine)
+	b.WriteString(wrappedServer + "\n")
 
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Render(projectPrompt) + " " + namespace + "/" + projectID + "\n")
+	projectLine := projectPrompt + " " + namespace + "/" + projectID
+	wrappedProject := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(projectLine)
+	b.WriteString(wrappedProject + "\n")
 
 	if m.err != nil {
-		return fmt.Sprintf("\nWe had some trouble: %v\n\n", m.err)
+		errorText := fmt.Sprintf("We had some trouble: %v", m.err)
+		wrappedError := lipgloss.NewStyle().Width(m.width - 2).Render(errorText)
+		return "\n" + wrappedError + "\n\n"
 	}
 
 	if sessionID != "" {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Render(sessionPrompt) + " " + sessionID + "\n")
+		sessionLine := sessionPrompt + " " + sessionID
+		wrappedSession := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(sessionLine)
+		b.WriteString(wrappedSession + "\n")
 	}
 	b.WriteString("\n")
 	for _, line := range m.transcript {
-		b.WriteString(line + "\n\n")
+		// Wrap the line to fit within the terminal width
+		wrappedLine := lipgloss.NewStyle().Width(m.width - 2).Render(line)
+		b.WriteString(wrappedLine + "\n\n")
 	}
 	if m.thinking {
 		dots := m.thinkFrame + 1
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(farmerPrompt) + " " + m.spin.View() + "Thinking" + strings.Repeat(".", dots) + "\n\n")
+		thinkingText := farmerPrompt + " " + m.spin.View() + "Thinking" + strings.Repeat(".", dots)
+		wrappedThinking := lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Width(m.width - 2).Render(thinkingText)
+		b.WriteString(wrappedThinking + "\n\n")
 	}
 
 	if !m.thinking && !m.printing {
 		b.WriteString(m.input.View())
 		b.WriteString("\n")
-		b.WriteString(lipgloss.NewStyle().Faint(true).Render("Type 'exit' to quit, 'clear' to reset. Up/Down for history."))
+		helpText := "Type 'exit' to quit, 'clear' to reset. Up/Down for history."
+		wrappedHelp := lipgloss.NewStyle().Faint(true).Width(m.width - 2).Render(helpText)
+		b.WriteString(wrappedHelp)
 	}
 	return b.String()
 }

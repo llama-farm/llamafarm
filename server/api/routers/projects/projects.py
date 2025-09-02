@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 import celery.result
-from atomic_agents import AtomicAgent  # type: ignore
+from atomic_agents import AtomicAgent
 from fastapi import APIRouter, Header, HTTPException, Response
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel
@@ -13,7 +13,10 @@ from pydantic import BaseModel
 from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
-from api.routers.shared.response_utils import set_session_header
+from api.routers.shared.response_utils import (
+    create_streaming_response_from_iterator,
+    set_session_header,
+)
 from core.celery import app
 from services.project_chat_service import project_chat_service
 from services.project_service import ProjectService
@@ -218,8 +221,19 @@ async def chat(
     if latest_user_message is None:
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
 
+    if request.stream:
+        return create_streaming_response_from_iterator(
+            request,
+            project_chat_service.stream_chat(
+                project_config=project_config,
+                chat_agent=agent,
+                message=latest_user_message,
+            ),
+            session_id,
+        )
+
     try:
-        completion = project_chat_service.chat(
+        completion = await project_chat_service.chat(
             project_config=project_config,
             chat_agent=agent,
             message=latest_user_message,
