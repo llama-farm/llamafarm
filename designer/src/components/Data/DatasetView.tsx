@@ -426,26 +426,27 @@ function DatasetView() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">Embedding model</h3>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                navigate(`/chat/data/${datasetId}/change-embedding`)
+              }
+            >
               Change
             </Button>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="default" size="sm" className="rounded-xl">
-            text-embedding-3-large
+            {dataset?.embedModel || '—'}
           </Badge>
           <Badge variant="secondary" size="sm" className="rounded-xl">
             Active
           </Badge>
           <Badge variant="secondary" size="sm" className="rounded-xl">
-            Run v3
+            {selectedVersionId || dataset?.version || 'v1'}
           </Badge>
-        </div>
-        <div className="mt-2 text-xs">
-          <a className="text-primary hover:underline" href="#">
-            OpenAI API (source here)
-          </a>
         </div>
       </section>
 

@@ -9,6 +9,7 @@ import Prompt from './components/Prompt/Prompt'
 import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
 import Models from './components/Models/Models'
+import ChangeEmbeddingModel from './components/Data/ChangeEmbeddingModel'
 // Projects standalone page removed; Home now hosts projects section
 
 function App() {
@@ -25,6 +26,10 @@ function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="data" element={<Data />} />
               <Route path="data/:datasetId" element={<DatasetView />} />
+              <Route
+                path="data/:datasetId/change-embedding"
+                element={<ChangeEmbeddingModel />}
+              />
               <Route path="models" element={<Models />} />
               <Route path="prompt" element={<Prompt />} />
               <Route path="test" element={<Test />} />
