@@ -6,12 +6,6 @@ import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import SearchInput from '../ui/search-input'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -63,13 +57,6 @@ function DatasetView() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [fileToDelete, setFileToDelete] = useState<RawFile | null>(null)
 
-  type DatasetVersion = {
-    id: string // e.g., v1, v2
-    createdAt: string // ISO
-  }
-  const [versions, setVersions] = useState<DatasetVersion[]>([])
-  const [selectedVersionId, setSelectedVersionId] = useState<string>('')
-
   useEffect(() => {
     try {
       const storedFiles = localStorage.getItem('lf_raw_files')
@@ -94,80 +81,6 @@ function DatasetView() {
       setDataset(current)
     } catch {}
   }, [datasetId])
-
-  // Load versions for this dataset (or seed from dataset.version)
-  useEffect(() => {
-    if (!datasetId) return
-    try {
-      const key = `lf_dataset_versions_${datasetId}`
-      const selKey = `lf_dataset_selected_version_${datasetId}`
-      const stored = localStorage.getItem(key)
-      if (stored) {
-        const parsed = JSON.parse(stored) as DatasetVersion[]
-        setVersions(parsed)
-        const sel =
-          localStorage.getItem(selKey) || parsed[parsed.length - 1]?.id || 'v1'
-        setSelectedVersionId(sel)
-        return
-      }
-      // Seed from dataset.version if available
-      const count = Math.max(
-        1,
-        Number(String(dataset?.version || '').replace(/[^0-9]/g, '')) || 1
-      )
-      const baseTime = dataset?.lastRun
-        ? new Date(dataset.lastRun).getTime()
-        : Date.now()
-      const seeded: DatasetVersion[] = Array.from(
-        { length: count },
-        (_, i) => ({
-          id: `v${i + 1}`,
-          createdAt: new Date(
-            baseTime - (count - 1 - i) * 60 * 60 * 1000
-          ).toISOString(),
-        })
-      )
-      setVersions(seeded)
-      setSelectedVersionId(seeded[seeded.length - 1]?.id || 'v1')
-      localStorage.setItem(key, JSON.stringify(seeded))
-      localStorage.setItem(selKey, seeded[seeded.length - 1]?.id || 'v1')
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasetId, dataset?.version, dataset?.lastRun])
-
-  const persistVersions = (list: DatasetVersion[], selectedId: string) => {
-    if (!datasetId) return
-    try {
-      localStorage.setItem(
-        `lf_dataset_versions_${datasetId}`,
-        JSON.stringify(list)
-      )
-      localStorage.setItem(
-        `lf_dataset_selected_version_${datasetId}`,
-        selectedId
-      )
-    } catch (err) {
-      console.error('Failed to persist dataset versions to localStorage:', err)
-    }
-  }
-
-  const formatRun = (iso: string) => {
-    const d = new Date(iso)
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: '2-digit',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(d)
-  }
-  const lastVersionId =
-    versions.length > 0 ? versions[versions.length - 1].id : 'v1'
-  const selectedVersion = versions.find(v => v.id === selectedVersionId)
-  const selectedCreatedAt =
-    selectedVersion?.createdAt || new Date().toISOString()
-  const isLatestSelected =
-    (selectedVersionId || lastVersionId) === lastVersionId
 
   const openEdit = () => {
     setEditName(dataset?.name ?? '')
@@ -214,7 +127,6 @@ function DatasetView() {
       const list = stored ? (JSON.parse(stored) as Dataset[]) : []
       const updated = list.filter(d => d.id !== datasetId)
       saveDatasets(updated)
-      // remove dataset from assignments
       const storedAssignments = localStorage.getItem('lf_file_assignments')
       if (storedAssignments) {
         const assignments: Record<string, string[]> =
@@ -229,6 +141,49 @@ function DatasetView() {
       navigate('/chat/data')
     } catch {}
   }
+
+  // Derived RAG strategy info for this dataset
+  const strategyName = useMemo(() => {
+    if (!datasetId) return 'PDF Simple'
+    try {
+      return (
+        localStorage.getItem(`lf_dataset_strategy_name_${datasetId}`) ||
+        'PDF Simple'
+      )
+    } catch {
+      return 'PDF Simple'
+    }
+  }, [datasetId])
+
+  const slugify = (v: string) =>
+    v
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+
+  const strategyId = useMemo(() => slugify(strategyName), [strategyName])
+
+  const docType = useMemo(() => {
+    const id = strategyId
+    if (id.includes('pdf')) return 'PDFs'
+    if (id.includes('csv')) return 'CSVs'
+    if (id.includes('chat')) return 'Conversations'
+    if (id.includes('json')) return 'JSON'
+    return 'Documents'
+  }, [strategyId])
+
+  const embeddingModel = useMemo(() => {
+    try {
+      return (
+        localStorage.getItem(`lf_strategy_embedding_model_${strategyId}`) ||
+        'text-embedding-3-large'
+      )
+    } catch {
+      return 'text-embedding-3-large'
+    }
+  }, [strategyId])
 
   return (
     <div className="h-full w-full flex flex-col gap-3 pb-40">
@@ -267,24 +222,13 @@ function DatasetView() {
           <div className="flex items-center gap-2">
             <Badge variant="secondary" size="sm" className="rounded-xl">
               {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
-              {dataset?.processedPercent ?? 0}% processed •{' '}
-              {selectedVersionId || dataset?.version || 'v1'}
+              {dataset?.processedPercent ?? 0}% processed
             </Badge>
             <Button
               size="sm"
               onClick={() => {
                 if (!datasetId) return
-                const nextNum = (versions.length || 0) + 1
-                const nextId = `v${nextNum}`
-                const next: DatasetVersion = {
-                  id: nextId,
-                  createdAt: new Date().toISOString(),
-                }
-                const list = [...versions, next]
-                setVersions(list)
-                setSelectedVersionId(nextId)
-                persistVersions(list, nextId)
-                // Also bump dataset version/lastRun
+                // Reprocess: bump lastRun timestamp
                 try {
                   const stored = localStorage.getItem('lf_datasets')
                   const arr = stored ? (JSON.parse(stored) as Dataset[]) : []
@@ -292,13 +236,13 @@ function DatasetView() {
                     d.id === datasetId
                       ? {
                           ...d,
-                          version: nextId,
                           lastRun: new Date().toISOString(),
                         }
                       : d
                   )
                   localStorage.setItem('lf_datasets', JSON.stringify(updated))
                   setDataset(updated.find(d => d.id === datasetId) || null)
+                  toast({ message: 'Reprocess started', variant: 'default' })
                 } catch {}
               }}
             >
@@ -308,47 +252,58 @@ function DatasetView() {
         </div>
       </div>
 
-      {/* Version selector */}
-      <section className="rounded-lg border border-border bg-card p-3">
-        <div className="flex items-center gap-3">
-          <div className="text-sm font-medium">Version</div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="h-9 min-w-[480px] px-3 rounded-lg border border-input bg-background text-foreground text-sm flex items-center justify-between">
-                <span className="flex items-center gap-3 truncate">
-                  <span className="font-semibold">
-                    {selectedVersionId || 'v1'}
-                  </span>
-                  <span className="text-muted-foreground truncate">
-                    {formatRun(selectedCreatedAt)}
-                    {isLatestSelected ? ' (latest)' : ''}
-                  </span>
-                </span>
-                <FontIcon type="chevron-down" className="w-4 h-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[560px]">
-              {versions.map(v => {
-                const latest = v.id === lastVersionId
-                return (
-                  <DropdownMenuItem
-                    key={v.id}
-                    onClick={() => {
-                      setSelectedVersionId(v.id)
-                      persistVersions(versions, v.id)
-                    }}
-                    className="flex items-center justify-between"
-                  >
-                    <span className="font-medium">{v.id}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatRun(v.createdAt)}
-                      {latest ? ' (latest)' : ''}
-                    </span>
-                  </DropdownMenuItem>
-                )
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* RAG Strategy card */}
+      <section className="rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium">RAG strategy</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/chat/rag/${strategyId}`)}
+          >
+            Configure
+          </Button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <Badge variant="default" size="sm" className="rounded-xl">
+            {strategyName}
+          </Badge>
+          <Badge variant="secondary" size="sm" className="rounded-xl">
+            Last processed{' '}
+            {dataset?.lastRun
+              ? new Date(dataset.lastRun).toLocaleString()
+              : '—'}
+          </Badge>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Document type</div>
+            <Input value={docType} readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Search</div>
+            <Input value="Hybrid" readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Embedding model</div>
+            <Input value={embeddingModel} readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Chunks</div>
+            <Input
+              value={dataset?.numChunks?.toLocaleString?.() || '—'}
+              readOnly
+              className="bg-background"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Results</div>
+            <Input value="8" readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Avg query time</div>
+            <Input value="180ms" readOnly className="bg-background" />
+          </div>
         </div>
       </section>
 
@@ -395,53 +350,6 @@ function DatasetView() {
         </DialogContent>
       </Dialog>
 
-      {/* Processing strategy */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Processing strategy</h3>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm">
-              Change
-            </Button>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Parsing</div>
-            <Input value="PDF-aware" readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Chunk size</div>
-            <Input value="800" readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Overlap</div>
-            <Input value="100" readOnly className="bg-background" />
-          </div>
-        </div>
-      </section>
-
-      {/* Embedding model */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Embedding model</h3>
-          <div className="flex items-center gap-2">
-            {/* Change action removed; embedding change now managed under RAG strategies */}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="default" size="sm" className="rounded-xl">
-            {dataset?.embedModel || '—'}
-          </Badge>
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            Active
-          </Badge>
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            {selectedVersionId || dataset?.version || 'v1'}
-          </Badge>
-        </div>
-      </section>
-
       {/* Raw data */}
       <section className="rounded-lg border border-border bg-card p-4 mb-40">
         <div className="flex items-center justify-between mb-3">
@@ -459,7 +367,6 @@ function DatasetView() {
             if (!datasetId) return
             const list = e.target.files ? Array.from(e.target.files) : []
             if (list.length === 0) return
-            // Convert to RawFile shape
             const converted: RawFile[] = list.map(f => ({
               id: `${f.name}:${f.size}:${f.lastModified}`,
               name: f.name,
@@ -474,7 +381,6 @@ function DatasetView() {
                   converted.map(rf => [rf.id, 'processing' as const])
                 ),
               }))
-              // Persist raw files (dedupe by id)
               const storedRaw = localStorage.getItem('lf_raw_files')
               const existing: RawFile[] = storedRaw ? JSON.parse(storedRaw) : []
               const existingIds = new Set(existing.map(r => r.id))
@@ -482,7 +388,6 @@ function DatasetView() {
               const updatedRaw = [...existing, ...deduped]
               localStorage.setItem('lf_raw_files', JSON.stringify(updatedRaw))
 
-              // Assign to this dataset
               const storedAssign = localStorage.getItem('lf_file_assignments')
               const assignments: Record<string, string[]> = storedAssign
                 ? JSON.parse(storedAssign)
@@ -498,7 +403,6 @@ function DatasetView() {
                 JSON.stringify(assignments)
               )
 
-              // Update local list (only those assigned to this dataset)
               const nowAssigned = converted.filter(rf =>
                 (assignments[rf.id] ?? []).includes(datasetId)
               )
@@ -523,7 +427,6 @@ function DatasetView() {
                 }, 1500)
               }, 1500)
             } catch {}
-            // reset input so same files can be picked again
             e.currentTarget.value = ''
           }}
         />
@@ -556,11 +459,9 @@ function DatasetView() {
                       {f.name}
                     </span>
                     <div className="w-1/2 flex items-center justify-between gap-4">
-                      {/* Size column (middle) */}
                       <div className="text-xs text-muted-foreground">
                         {Math.ceil(f.size / 1024)} KB
                       </div>
-                      {/* Right actions: status + trash */}
                       <div className="flex items-center gap-6">
                         {uploadStatus[f.id] === 'processing' && (
                           <div className="flex items-center gap-1 text-muted-foreground">
@@ -616,7 +517,6 @@ function DatasetView() {
               variant="destructive"
               onClick={() => {
                 if (!fileToDelete || !datasetId) return
-                // remove assignment only
                 try {
                   const stored = localStorage.getItem('lf_file_assignments')
                   const assignments: Record<string, string[]> = stored

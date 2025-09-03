@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuItem,
 } from '../ui/dropdown-menu'
 import {
   Dialog,
@@ -182,6 +183,84 @@ const Data = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newDatasetName, setNewDatasetName] = useState('')
   const [newDatasetDescription, setNewDatasetDescription] = useState('')
+
+  // Edit dataset dialog state (from overflow menu)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editDatasetId, setEditDatasetId] = useState<string>('')
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+
+  // Delete dataset dialog state
+  const [isDeleteDatasetOpen, setIsDeleteDatasetOpen] = useState(false)
+  const [datasetToDelete, setDatasetToDelete] = useState<Dataset | null>(null)
+
+  const openEditDataset = (ds: Dataset) => {
+    setEditDatasetId(ds.id)
+    setEditName(ds.name)
+    setEditDescription(ds.description || '')
+    setIsEditOpen(true)
+  }
+
+  const saveEditDataset = () => {
+    const id = editDatasetId
+    if (!id || !editName.trim()) return
+    setDatasets(prev =>
+      prev.map(d =>
+        d.id === id
+          ? { ...d, name: editName.trim(), description: editDescription }
+          : d
+      )
+    )
+    setIsEditOpen(false)
+  }
+
+  const deleteDataset = (id: string) => {
+    setDatasets(prev => prev.filter(d => d.id !== id))
+    try {
+      // Clean up file assignments, and delete project files not used elsewhere
+      const storedAssignments = localStorage.getItem('lf_file_assignments')
+      const storedRaw = localStorage.getItem('lf_raw_files')
+      const assignments: Record<string, string[]> = storedAssignments
+        ? JSON.parse(storedAssignments)
+        : {}
+      let rawFiles: Array<{
+        id: string
+        name: string
+        size: number
+        lastModified: number
+        type?: string
+      }> = storedRaw ? JSON.parse(storedRaw) : []
+
+      const remainingAssignments: Record<string, string[]> = {}
+      const keepRawIds = new Set<string>()
+      for (const [fileId, arr] of Object.entries(assignments)) {
+        const nextArr = arr.filter(x => x !== id)
+        if (nextArr.length > 0) {
+          remainingAssignments[fileId] = nextArr
+          keepRawIds.add(fileId)
+        }
+      }
+      // Filter raw files to only those still referenced
+      rawFiles = rawFiles.filter(f => keepRawIds.has(f.id))
+      localStorage.setItem(
+        'lf_file_assignments',
+        JSON.stringify(remainingAssignments)
+      )
+      localStorage.setItem('lf_raw_files', JSON.stringify(rawFiles))
+
+      // Remove any dataset-scoped keys
+      try {
+        localStorage.removeItem(`lf_dataset_strategy_name_${id}`)
+      } catch {}
+      try {
+        localStorage.removeItem(`lf_dataset_versions_${id}`)
+      } catch {}
+      try {
+        localStorage.removeItem(`lf_dataset_selected_version_${id}`)
+      } catch {}
+    } catch {}
+    toast({ message: 'Dataset deleted', variant: 'default' })
+  }
 
   const slugify = (value: string) =>
     value
@@ -451,276 +530,170 @@ const Data = () => {
           </div>
         ) : (
           <div>
-            {mode === 'designer' && rawFiles.length <= 0 ? (
-              <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                Datasets will appear here when they’re ready
-              </div>
-            ) : (
-              mode === 'designer' && (
-                <div className="grid grid-cols-2 gap-2 mb-6">
-                  {datasets.map(ds => (
-                    <div
-                      key={ds.id}
-                      className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/chat/data/${ds.id}`)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          navigate(`/chat/data/${ds.id}`)
-                        }
-                      }}
-                    >
-                      <button
-                        className="absolute right-3 top-3 text-xs bg-transparent text-primary hover:opacity-80 rounded-lg px-2 py-1"
-                        onClick={e => {
-                          e.stopPropagation()
-                          navigate(`/chat/data/${ds.id}`)
-                        }}
-                      >
-                        View
-                      </button>
-                      <div className="text-sm font-medium">{ds.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Last run on {formatLastRun(ds.lastRun)}
-                      </div>
-                      <div className="flex flex-row gap-2 items-center">
-                        <Badge
-                          variant="default"
-                          size="sm"
-                          className="rounded-xl"
-                        >
-                          {ds.embedModel}
-                        </Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {ds.numChunks.toLocaleString()} chunks •{' '}
-                        {ds.processedPercent}% processed • {ds.version}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
             {mode === 'designer' && (
-              <div className="mb-4 flex items-center justify-between">
-                <div>Raw data files</div>
-                <Button size="sm" onClick={() => fileInputRef.current?.click()}>
-                  Upload data
-                </Button>
+              <div className="grid grid-cols-2 gap-2 mb-6">
+                {datasets.map(ds => (
+                  <div
+                    key={ds.id}
+                    className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/chat/data/${ds.id}`)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        navigate(`/chat/data/${ds.id}`)
+                      }
+                    }}
+                  >
+                    <div className="absolute right-3 top-3">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                            onClick={e => e.stopPropagation()}
+                            aria-label="Dataset actions"
+                          >
+                            <FontIcon type="overflow" className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="min-w-[10rem] w-[10rem]"
+                        >
+                          <DropdownMenuItem
+                            onClick={e => {
+                              e.stopPropagation()
+                              openEditDataset(ds)
+                            }}
+                          >
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={e => {
+                              e.stopPropagation()
+                              navigate(`/chat/data/${ds.id}`)
+                            }}
+                          >
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={e => {
+                              e.stopPropagation()
+                              setDatasetToDelete(ds)
+                              setIsDeleteDatasetOpen(true)
+                            }}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <div className="text-sm font-medium">{ds.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Last run on {formatLastRun(ds.lastRun)}
+                    </div>
+                    <div className="flex flex-row gap-2 items-center">
+                      <Badge variant="default" size="sm" className="rounded-xl">
+                        {(() => {
+                          try {
+                            return (
+                              localStorage.getItem(
+                                `lf_dataset_strategy_name_${ds.id}`
+                              ) || 'PDF Simple'
+                            )
+                          } catch {
+                            return 'PDF Simple'
+                          }
+                        })()}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {ds.numChunks.toLocaleString()} chunks •{' '}
+                      {ds.processedPercent}% processed • {ds.version}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            {isLoading && rawFiles.length <= 0 ? (
-              <div className="w-full flex flex-col items-center justify-center border border-solid rounded-lg p-4 gap-2 transition-colors border-input">
-                <div className="flex flex-col items-center justify-center gap-4 text-center my-[40px]">
-                  <div className="text-xl text-foreground">
-                    Processing your data...
-                  </div>
-                  <Loader size={72} className="border-primary" />
-                  <LoadingSteps />
-                </div>
-              </div>
-            ) : (
-              mode === 'designer' &&
-              rawFiles.length <= 0 && (
-                <div className="w-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
-                  <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px]">
-                    <FontIcon
-                      type="upload"
-                      className="w-10 h-10 text-foreground"
-                    />
-                    <div className="text-xl text-foreground">
-                      Drop data here to start
-                    </div>
-                    <button
-                      className="text-sm py-2 px-6 border border-solid border-foreground rounded-lg hover:bg-secondary hover:border-secondary hover:text-secondary-foreground"
-                      onClick={() => {
-                        fileInputRef.current?.click()
-                      }}
-                    >
-                      Or choose files
-                    </button>
-                  </div>
-                  <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
-                    You can upload PDFs, explore various list formats, or draw
-                    inspiration from other data sources to enhance your project
-                    with LlaMaFarm.
-                  </p>
-                </div>
-              )
-            )}
-            {mode === 'designer' && filteredFiles.length > 0 && (
-              <div>
-                <div className="w-full flex flex-row gap-2">
-                  <div className="w-3/4">
-                    <SearchInput
-                      placeholder="Search files"
-                      value={searchValue}
-                      onChange={handleSearch}
-                    />
-                  </div>
-                  <div className="w-1/4 text-sm text-foreground flex items-center bg-card rounded-lg px-3 justify-between border border-input">
-                    <div>All datasets</div>
-                    <FontIcon
-                      type="chevron-down"
-                      className="w-4 h-4 text-foreground"
-                    />
-                  </div>
-                </div>
-                <div className="rounded-md border border-input bg-background p-0 text-xs mt-2 mb-20">
-                  <ul>
-                    {filteredFiles.map((file, i) => (
-                      <li
-                        key={i}
-                        className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
-                      >
-                        <span className="font-mono text-xs text-muted-foreground truncate max-w-[60%]">
-                          {file.name}
-                        </span>
-                        <div className="w-1/2 grid grid-cols-[1fr_88px_auto] items-center gap-4">
-                          {/* Dataset assignment dropdown */}
-                          <div className="flex items-center gap-2">
-                            {(() => {
-                              const key = getFileKey(file)
-                              const assignedIds = fileAssignments[key] ?? []
-                              const assignedNames = assignedIds
-                                .map(
-                                  id => datasets.find(d => d.id === id)?.name
-                                )
-                                .filter(Boolean) as string[]
-                              const label =
-                                assignedNames.length === 0
-                                  ? 'Unassigned'
-                                  : assignedNames.length === 1
-                                    ? assignedNames[0]
-                                    : `${assignedNames.length} datasets`
-                              return (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button className="text-xs flex items-center gap-2 border border-input rounded-md px-2 py-1 bg-card text-foreground">
-                                      <span className="truncate max-w-[160px]">
-                                        {label}
-                                      </span>
-                                      <FontIcon
-                                        type="chevron-down"
-                                        className="w-3 h-3 text-muted-foreground"
-                                      />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent className="w-56">
-                                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                                      Assign to datasets
-                                    </div>
-                                    {datasets.map(ds => (
-                                      <DropdownMenuCheckboxItem
-                                        key={ds.id}
-                                        checked={(
-                                          fileAssignments[key] ?? []
-                                        ).includes(ds.id)}
-                                        onCheckedChange={() =>
-                                          toggleFileDataset(file, ds.id)
-                                        }
-                                      >
-                                        {ds.name}
-                                      </DropdownMenuCheckboxItem>
-                                    ))}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )
-                            })()}
-                          </div>
-                          {/* File size column */}
-                          <div className="text-xs text-muted-foreground">
-                            {Math.ceil((file as any).size / 1024)} KB
-                          </div>
-                          {/* Right actions: status + trash */}
-                          <div className="flex items-center gap-6">
-                            {(() => {
-                              const key = getFileKey(file)
-                              const status = uploadStatus[key]
-                              if (status === 'processing') {
-                                return (
-                                  <div className="flex items-center gap-1 text-muted-foreground">
-                                    <FontIcon type="fade" className="w-4 h-4" />
-                                    <div className="text-xs">Processing</div>
-                                  </div>
-                                )
-                              }
-                              if (status === 'done') {
-                                return (
-                                  <FontIcon
-                                    type="checkmark-outline"
-                                    className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                                  />
-                                )
-                              }
-                              return null
-                            })()}
-                            <button
-                              className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-foreground"
-                              onClick={() => openDeleteProjectFile(file)}
-                              aria-label={`Remove ${file.name} from project`}
-                            >
-                              <FontIcon type="trashcan" className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                {/* Delete project file dialog */}
-                <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Remove file from project</DialogTitle>
-                    </DialogHeader>
-                    <div className="text-sm">
-                      <div className="mb-2 text-muted-foreground">
-                        This file will be removed from the project and from all
-                        datasets it belongs to. This action cannot be undone.
-                      </div>
-                      <div className="font-mono text-xs break-all">
-                        {fileToDelete?.name}
-                      </div>
-                      {fileToDelete &&
-                        (fileAssignments[fileToDelete.id] ?? []).length > 0 && (
-                          <div className="mt-3">
-                            <div className="text-xs text-muted-foreground mb-1">
-                              Currently in datasets:
-                            </div>
-                            <ul className="list-disc pl-5 text-xs">
-                              {(fileAssignments[fileToDelete.id] ?? [])
-                                .map(
-                                  id => datasets.find(d => d.id === id)?.name
-                                )
-                                .filter(Boolean)
-                                .map(name => (
-                                  <li key={name as string}>{name}</li>
-                                ))}
-                            </ul>
-                          </div>
-                        )}
-                    </div>
-                    <div className="mt-4 flex items-center justify-end gap-2">
-                      <DialogClose asChild>
-                        <Button variant="secondary">Cancel</Button>
-                      </DialogClose>
-                      <Button
-                        variant="destructive"
-                        onClick={confirmDeleteProjectFile}
-                      >
-                        Yes, remove
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            )}
+            {/* Project-level raw files UI removed: files now only exist within datasets. */}
           </div>
         )}
       </div>
+
+      {/* Edit dataset dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit dataset</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Name</label>
+              <Input
+                autoFocus
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                placeholder="Dataset name"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">
+                Description
+              </label>
+              <Textarea
+                value={editDescription}
+                onChange={e => setEditDescription(e.target.value)}
+                placeholder="Optional description"
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button onClick={saveEditDataset} disabled={!editName.trim()}>
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete dataset dialog */}
+      <Dialog open={isDeleteDatasetOpen} onOpenChange={setIsDeleteDatasetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete dataset?</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm">
+            Are you sure you want to delete this dataset and all the files
+            within it?
+            <div className="mt-2 font-medium">{datasetToDelete?.name}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              This action cannot be undone.
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (datasetToDelete) {
+                  deleteDataset(datasetToDelete.id)
+                }
+                setIsDeleteDatasetOpen(false)
+                setDatasetToDelete(null)
+              }}
+            >
+              Yes, delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
