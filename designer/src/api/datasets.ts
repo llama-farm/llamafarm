@@ -9,6 +9,7 @@ import {
   FileUploadResponse,
   FileDeleteResponse,
   FileDeleteParams,
+  TaskStatusResponse,
 } from '../types/datasets'
 
 /**
@@ -160,6 +161,52 @@ export async function ingestDataset(
 }
 
 /**
+ * Get the status of a task
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param taskId - The task identifier
+ * @returns Promise<TaskStatusResponse> - The task status information
+ */
+export async function getTaskStatus(
+  namespace: string,
+  project: string,
+  taskId: string
+): Promise<TaskStatusResponse> {
+  const response = await apiClient.get<TaskStatusResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/tasks/${encodeURIComponent(taskId)}`
+  )
+  return response.data
+}
+
+/**
+ * Delete a file from a dataset
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param dataset - The dataset name
+ * @param fileHash - The file hash to delete
+ * @param removeFromDisk - Whether to also remove the file from disk
+ * @returns Promise<FileDeleteResponse> - The delete response with file hash
+ */
+export async function deleteDatasetFile(
+  namespace: string,
+  project: string,
+  dataset: string,
+  fileHash: string,
+  removeFromDisk: boolean = true
+): Promise<FileDeleteResponse> {
+  const queryParams = new URLSearchParams()
+  if (removeFromDisk !== undefined) {
+    queryParams.append('remove_from_disk', removeFromDisk.toString())
+  }
+
+  const url = `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/${encodeURIComponent(fileHash)}`
+  const fullUrl = queryParams.toString() ? `${url}?${queryParams.toString()}` : url
+
+  const response = await apiClient.delete<FileDeleteResponse>(fullUrl)
+  return response.data
+}
+
+/**
  * Default export with all dataset service functions
  */
 export default {
@@ -170,4 +217,6 @@ export default {
   uploadFileToDataset,
   deleteFileFromDataset,
   ingestDataset,
+  getTaskStatus,
+  deleteDatasetFile,
 }

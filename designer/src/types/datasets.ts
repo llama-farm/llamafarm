@@ -89,6 +89,24 @@ export interface FileDeleteResponse {
 }
 
 /**
+ * Response from checking task status
+ */
+export interface TaskStatusResponse {
+  /** Task identifier */
+  task_id: string
+  /** Current task state */
+  state: 'PENDING' | 'SUCCESS' | 'FAILURE' | 'RETRY' | 'REVOKED'
+  /** Task metadata (progress info, etc.) */
+  meta: any | null
+  /** Task result when successful */
+  result: any | null
+  /** Error message when failed */
+  error: string | null
+  /** Error traceback when failed */
+  traceback: string | null
+}
+
+/**
  * Parameters for API calls that require path parameters
  */
 export interface DatasetPathParams {

@@ -21,7 +21,7 @@ import {
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import { useUploadFileToDataset } from '../../hooks/useDatasets'
+import { useUploadFileToDataset, useReIngestDataset, useTaskStatus, useListDatasets, useDeleteDatasetFile, useDeleteDataset } from '../../hooks/useDatasets'
 
 type Dataset = {
   id: string
@@ -32,6 +32,7 @@ type Dataset = {
   processedPercent: number
   version: string
   description?: string
+  files?: string[] // Array of file hashes from API
 }
 
 function DatasetView() {
@@ -42,6 +43,25 @@ function DatasetView() {
   // Get current active project for API calls
   const activeProject = useActiveProject()
   const uploadMutation = useUploadFileToDataset()
+
+  // Fetch datasets from API to get file information
+  const { data: datasetsResponse } = useListDatasets(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject }
+  )
+
+  // Task tracking state and hooks
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
+  const reIngestMutation = useReIngestDataset()
+  const deleteFileMutation = useDeleteDatasetFile()
+  const deleteDatasetMutation = useDeleteDataset()
+  const { data: taskStatus } = useTaskStatus(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    currentTaskId,
+    { enabled: !!currentTaskId && !!activeProject }
+  )
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const datasetName = useMemo(
@@ -55,19 +75,38 @@ function DatasetView() {
     size: number
     lastModified: number
     type?: string
+    fullHash?: string // For API files, stores the complete hash
   }
 
-  const [files, setFiles] = useState<RawFile[]>([])
+  // Get current dataset from API response
+  const currentApiDataset = useMemo(() => {
+    if (!datasetsResponse?.datasets || !datasetId) return null
+    return datasetsResponse.datasets.find(d => d.name === datasetId)
+  }, [datasetsResponse, datasetId])
+
+  // Files from API data only
+  const files = useMemo(() => {
+    if (!currentApiDataset?.files) return []
+    return currentApiDataset.files.map((fileHash) => ({
+      id: fileHash,
+      name: `${fileHash.substring(0, 12)}...${fileHash.substring(-8)}`, // Show first 12 and last 8 chars
+      size: 0, // We don't have size info from API
+      lastModified: Date.now(),
+      type: 'unknown',
+      fullHash: fileHash, // Store full hash for operations
+    }))
+  }, [currentApiDataset])
+
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadStatus, setUploadStatus] = useState<
     Record<string, 'processing' | 'done'>
   >({})
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-  const [fileToDelete, setFileToDelete] = useState<RawFile | null>(null)
+ 
 
   type DatasetVersion = {
     id: string // e.g., v1, v2
@@ -76,37 +115,93 @@ function DatasetView() {
   const [versions, setVersions] = useState<DatasetVersion[]>([])
   const [selectedVersionId, setSelectedVersionId] = useState<string>('')
 
-  useEffect(() => {
-    try {
-      const storedFiles = localStorage.getItem('lf_raw_files')
-      const storedAssignments = localStorage.getItem('lf_file_assignments')
-      if (!storedFiles || !storedAssignments || !datasetId) return
-      const all: RawFile[] = JSON.parse(storedFiles)
-      const assignments: Record<string, string[]> =
-        JSON.parse(storedAssignments)
-      const filtered = all.filter(r =>
-        (assignments[r.id] ?? []).includes(datasetId)
-      )
-      setFiles(filtered)
-    } catch {}
-  }, [datasetId])
 
-  // TODO: Load dataset metadata from API instead of localStorage
+
+  // Load dataset metadata from API or create fallback
   useEffect(() => {
     if (!datasetId) return
-    // For now, create a minimal dataset object
-    // This should be replaced with an API call to get dataset details
-    setDataset({
-      id: datasetId,
-      name: datasetId,
-      lastRun: new Date(),
-      embedModel: 'text-embedding-3-large',
-      numChunks: 0,
-      processedPercent: 100,
-      version: 'v1',
-      description: '',
-    })
-  }, [datasetId])
+    
+    if (currentApiDataset) {
+      // Use API data when available
+      setDataset({
+        id: datasetId,
+        name: currentApiDataset.name,
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: currentApiDataset.files?.length || 0,
+        processedPercent: 100,
+        version: 'v1',
+        description: '',
+        files: currentApiDataset.files,
+      })
+    } else {
+      // Fallback to minimal dataset object
+      setDataset({
+        id: datasetId,
+        name: datasetId,
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: 0,
+        processedPercent: 100,
+        version: 'v1',
+        description: '',
+        files: [],
+      })
+    }
+  }, [datasetId, currentApiDataset])
+
+  // Handle task completion
+  useEffect(() => {
+    if (!taskStatus) return
+
+    if (taskStatus.state === 'SUCCESS') {
+      // Task completed successfully
+      setCurrentTaskId(null)
+      toast({ 
+        message: 'Dataset reprocessing completed successfully', 
+        variant: 'default' 
+      })
+      
+      // Create a new version
+      if (datasetId) {
+        const nextNum = (versions.length || 0) + 1
+        const nextId = `v${nextNum}`
+        const next: DatasetVersion = {
+          id: nextId,
+          createdAt: new Date().toISOString(),
+        }
+        const list = [...versions, next]
+        setVersions(list)
+        setSelectedVersionId(nextId)
+        persistVersions(list, nextId)
+        
+        // Update dataset version/lastRun
+        try {
+          const stored = localStorage.getItem('lf_datasets')
+          const arr = stored ? (JSON.parse(stored) as Dataset[]) : []
+          const updated = arr.map(d =>
+            d.id === datasetId
+              ? {
+                  ...d,
+                  version: nextId,
+                  lastRun: new Date().toISOString(),
+                }
+              : d
+          )
+          localStorage.setItem('lf_datasets', JSON.stringify(updated))
+          setDataset(updated.find(d => d.id === datasetId) || null)
+        } catch {}
+      }
+    } else if (taskStatus.state === 'FAILURE') {
+      // Task failed
+      setCurrentTaskId(null)
+      const errorMessage = taskStatus.error || 'Unknown error occurred'
+      toast({ 
+        message: `Dataset reprocessing failed: ${errorMessage}`, 
+        variant: 'destructive' 
+      })
+    }
+  }, [taskStatus?.state, taskStatus?.error, datasetId, versions, toast])
 
   // Load versions for this dataset (or seed from dataset.version)
   useEffect(() => {
@@ -203,11 +298,80 @@ function DatasetView() {
     console.warn('Dataset edit saved locally - should use API instead')
   }
 
-  const handleDelete = () => {
-    if (!datasetId) return
-    // TODO: Replace with API call to delete dataset
-    console.warn('Dataset delete called - should use API instead')
-    navigate('/chat/data')
+  const handleDeleteClick = () => {
+    setShowDeleteConfirmation(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId) return
+
+    try {
+      await deleteDatasetMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+      })
+      
+      setShowDeleteConfirmation(false)
+      setIsEditOpen(false)
+      
+      toast({
+        message: 'Dataset deleted successfully',
+        variant: 'default',
+      })
+      
+      // Navigate away since the dataset no longer exists
+      navigate('/chat/data')
+      
+    } catch (error) {
+      console.error('Dataset deletion failed:', error)
+      toast({
+        message: 'Failed to delete dataset. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirmation(false)
+  }
+
+  const handleDeleteFile = async (fileHash: string) => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId) return
+
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to delete this file?\n\nFile: ${fileHash.substring(0, 12)}...\n\nThis action cannot be undone.`
+    )
+    
+    if (!confirmed) return
+
+    try {
+      await deleteFileMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+        fileHash,
+        removeFromDisk: true
+      })
+      
+      toast({
+        message: 'File deleted successfully',
+        variant: 'default',
+      })
+    } catch (error) {
+      console.error('Delete failed:', error)
+      toast({
+        message: 'Failed to delete file. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Helper function to check if a specific file is being deleted
+  const isFileDeleting = (fileHash: string) => {
+    return deleteFileMutation.isPending && 
+           deleteFileMutation.variables?.fileHash === fileHash
   }
 
   return (
@@ -252,30 +416,40 @@ function DatasetView() {
             </Badge>
             <Button
               size="sm"
-              onClick={() => {
-                if (!datasetId) return
-                const nextNum = (versions.length || 0) + 1
-                const nextId = `v${nextNum}`
-                const next: DatasetVersion = {
-                  id: nextId,
-                  createdAt: new Date().toISOString(),
-                }
-                const list = [...versions, next]
-                setVersions(list)
-                setSelectedVersionId(nextId)
-                persistVersions(list, nextId)
-                // TODO: Replace with API call to trigger dataset reprocessing
-                if (dataset) {
-                  setDataset({
-                    ...dataset,
-                    version: nextId,
-                    lastRun: new Date(),
+              onClick={async () => {
+                if (!datasetId || !activeProject?.namespace || !activeProject?.project) return
+                
+                try {
+                  const result = await reIngestMutation.mutateAsync({
+                    namespace: activeProject.namespace,
+                    project: activeProject.project,
+                    dataset: datasetId,
+                  })
+                  
+                  // Extract task ID from task_uri (e.g., "http://localhost:8000/v1/projects/ns/proj/tasks/abc-123" -> "abc-123")
+                  const taskId = result.task_uri.split('/').pop()
+                  if (taskId) {
+                    setCurrentTaskId(taskId)
+                    toast({ 
+                      message: 'Dataset reprocessing started...', 
+                      variant: 'default' 
+                    })
+                  }
+                } catch (error) {
+                  console.error('Failed to start reprocessing:', error)
+                  toast({ 
+                    message: 'Failed to start reprocessing. Please try again.', 
+                    variant: 'destructive' 
                   })
                 }
-                console.warn('Dataset reprocess triggered - should use API instead')
               }}
+              disabled={reIngestMutation.isPending || !!currentTaskId}
             >
-              Reprocess
+              {reIngestMutation.isPending 
+                ? 'Starting...' 
+                : currentTaskId && taskStatus?.state === 'PENDING'
+                  ? 'Processing...'
+                  : 'Reprocess'}
             </Button>
           </div>
         </div>
@@ -325,46 +499,98 @@ function DatasetView() {
         </div>
       </section>
 
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+      <Dialog 
+        open={isEditOpen} 
+        onOpenChange={(open) => {
+          setIsEditOpen(open)
+          if (!open) {
+            // Reset confirmation state when modal closes
+            setShowDeleteConfirmation(false)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit dataset</DialogTitle>
+            <DialogTitle>
+              {showDeleteConfirmation ? 'Delete Dataset' : 'Edit dataset'}
+            </DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Name</label>
-              <Input
-                autoFocus
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                placeholder="Dataset name"
-              />
+          
+          {showDeleteConfirmation ? (
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-red-600">Confirm Deletion</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Are you sure you want to delete the dataset "{datasetName}"?
+                </p>
+                <p className="mt-1 text-xs text-red-500">
+                  This action cannot be undone. All files and data will be permanently deleted.
+                </p>
+              </div>
+              
+              <div className="flex gap-3 justify-center">
+                <Button
+                  variant="secondary"
+                  onClick={handleCancelDelete}
+                  disabled={deleteDatasetMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteDatasetMutation.isPending}
+                >
+                  {deleteDatasetMutation.isPending ? (
+                    <>
+                      <span className="inline-block animate-spin mr-2">⟳</span>
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Dataset'
+                  )}
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">
-                Description
-              </label>
-              <Textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
-            <div className="flex items-center gap-2">
-              <DialogClose asChild>
-                <Button variant="secondary">Cancel</Button>
-              </DialogClose>
-              <Button onClick={handleSaveEdit} disabled={!editName.trim()}>
-                Save
-              </Button>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">Name</label>
+                  <Input
+                    autoFocus
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    placeholder="Dataset name"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">
+                    Description
+                  </label>
+                  <Textarea
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    placeholder="Optional description"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button variant="destructive" onClick={handleDeleteClick}>
+                  Delete
+                </Button>
+                <div className="flex items-center gap-2">
+                  <DialogClose asChild>
+                    <Button variant="secondary">Cancel</Button>
+                  </DialogClose>
+                  <Button onClick={handleSaveEdit} disabled={!editName.trim()}>
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -491,12 +717,7 @@ function DatasetView() {
                 }
               }
               
-              // Update local file list for UI
-              setFiles(prev => {
-                const seen = new Set(prev.map(p => p.id))
-                const add = converted.filter(n => !seen.has(n.id))
-                return [...prev, ...add]
-              })
+              // Files will be updated via API refresh after upload completes
               
               // Show success status
               setTimeout(() => {
@@ -552,10 +773,23 @@ function DatasetView() {
           {files.length === 0 ? (
             <div className="p-3 text-muted-foreground">
               No files assigned yet.
+              {/* Debug info */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-2 text-xs">
+                  <div>API Dataset: {currentApiDataset ? 'Found' : 'Not found'}</div>
+                  <div>API Files: {currentApiDataset?.files?.length || 0}</div>
+                </div>
+              )}
             </div>
           ) : (
-            <ul>
-              {files
+            <div>
+              <div className="p-3 border-b border-border/60 bg-muted/20">
+                <div className="text-xs font-medium">
+                  {files.length} file{files.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+              <ul>
+                {files
                 .filter(f =>
                   f.name.toLowerCase().includes(searchValue.toLowerCase())
                 )
@@ -564,13 +798,22 @@ function DatasetView() {
                     key={f.id}
                     className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
                   >
-                    <span className="font-mono text-xs text-muted-foreground truncate max-w-[60%]">
-                      {f.name}
-                    </span>
+                    <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
+                      <span>{f.fullHash ? f.name : f.name}</span>
+                      {f.fullHash && (
+                        <button
+                          onClick={() => navigator.clipboard.writeText(f.fullHash!)}
+                          className="text-xs text-blue-600 hover:text-blue-800 text-left"
+                          title="Click to copy full hash"
+                        >
+                          Copy full hash
+                        </button>
+                      )}
+                    </div>
                     <div className="w-1/2 flex items-center justify-between gap-4">
                       {/* Size column (middle) */}
                       <div className="text-xs text-muted-foreground">
-                        {Math.ceil(f.size / 1024)} KB
+                        {f.fullHash ? 'File hash' : `${Math.ceil(f.size / 1024)} KB`}
                       </div>
                       {/* Right actions: status + trash */}
                       <div className="flex items-center gap-6">
@@ -587,76 +830,29 @@ function DatasetView() {
                           />
                         )}
                         <button
-                          className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            setFileToDelete(f)
-                            setIsDeleteOpen(true)
-                          }}
-                          aria-label={`Remove ${f.name} from this dataset`}
+                          className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                          onClick={() => f.fullHash && handleDeleteFile(f.fullHash)}
+                          disabled={f.fullHash ? isFileDeleting(f.fullHash) : true}
+                          aria-label={`Delete ${f.name} from dataset`}
+                          title="Delete file"
                         >
-                          <FontIcon type="trashcan" className="w-4 h-4" />
+                          {f.fullHash && isFileDeleting(f.fullHash) ? (
+                            <span className="text-xs">...</span>
+                          ) : (
+                            <FontIcon type="trashcan" className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     </div>
                   </li>
                 ))}
-            </ul>
+              </ul>
+            </div>
           )}
         </div>
       </section>
 
-      {/* Delete from dataset dialog */}
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove file from this dataset</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm">
-            <div className="mb-2 text-muted-foreground">
-              This will remove the file from this dataset only. It will remain
-              available in the project.
-            </div>
-            <div className="font-mono text-xs break-all">
-              {fileToDelete?.name}
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!fileToDelete || !datasetId) return
-                // remove assignment only
-                try {
-                  const stored = localStorage.getItem('lf_file_assignments')
-                  const assignments: Record<string, string[]> = stored
-                    ? JSON.parse(stored)
-                    : {}
-                  const arr = assignments[fileToDelete.id] ?? []
-                  assignments[fileToDelete.id] = arr.filter(
-                    id => id !== datasetId
-                  )
-                  localStorage.setItem(
-                    'lf_file_assignments',
-                    JSON.stringify(assignments)
-                  )
-                } catch {}
-                setFiles(prev => prev.filter(x => x.id !== fileToDelete.id))
-                setIsDeleteOpen(false)
-                setFileToDelete(null)
-                toast({
-                  message: 'File removed from dataset',
-                  variant: 'default',
-                })
-              }}
-            >
-              Yes, remove
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* File deletion now handled directly via API calls with confirmation dialog */}
     </div>
   )
 }

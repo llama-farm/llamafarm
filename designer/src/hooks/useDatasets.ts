@@ -226,6 +226,110 @@ export function useUploadMultipleFiles() {
 }
 
 /**
+ * Hook to check task status with automatic polling
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param taskId - The task identifier (null to disable)
+ * @param options - Additional query options
+ * @returns Query result with task status
+ */
+export function useTaskStatus(
+  namespace: string,
+  project: string,
+  taskId: string | null,
+  options?: {
+    enabled?: boolean
+    refetchInterval?: number
+  }
+) {
+  const query = useQuery({
+    queryKey: ['task-status', namespace, project, taskId],
+    queryFn: () => datasetService.getTaskStatus(namespace, project, taskId!),
+    enabled: !!taskId && !!namespace && !!project && (options?.enabled !== false),
+    refetchInterval: options?.refetchInterval || 2000, // Poll every 2 seconds by default
+    staleTime: 0, // Always consider stale to ensure fresh polling
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes after unmount
+  })
+
+  // Stop polling when task is complete
+  const isComplete = query.data && (
+    query.data.state === 'SUCCESS' || 
+    query.data.state === 'FAILURE' || 
+    query.data.state === 'REVOKED'
+  )
+
+  // Disable refetching when complete by updating the query
+  if (isComplete && query.isRefetching) {
+    // The polling will naturally stop on the next interval check
+  }
+
+  return query
+}
+
+/**
+ * Hook to re-ingest a dataset (trigger reprocessing)
+ * @returns Mutation for re-ingesting datasets
+ */
+export function useReIngestDataset() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: {
+      namespace: string
+      project: string
+      dataset: string
+    }) =>
+      datasetService.executeDatasetAction(
+        data.namespace,
+        data.project,
+        data.dataset,
+        { action_type: 'ingest' }
+      ),
+    onSuccess: (_, variables) => {
+      // Invalidate datasets list to refresh any status changes
+      queryClient.invalidateQueries({
+        queryKey: datasetKeys.list(variables.namespace, variables.project),
+      })
+    },
+  })
+}
+
+/**
+ * Hook to delete a file from a dataset
+ * @returns Mutation for deleting files from datasets
+ */
+export function useDeleteDatasetFile() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: {
+      namespace: string
+      project: string
+      dataset: string
+      fileHash: string
+      removeFromDisk?: boolean
+    }) =>
+      datasetService.deleteDatasetFile(
+        data.namespace,
+        data.project,
+        data.dataset,
+        data.fileHash,
+        data.removeFromDisk ?? true
+      ),
+    onSuccess: (result, variables) => {
+      // Invalidate datasets list to refresh the files list
+      queryClient.invalidateQueries({
+        queryKey: datasetKeys.list(variables.namespace, variables.project),
+      })
+      
+    },
+    onError: (error, variables) => {
+      console.error(`Failed to delete file ${variables.fileHash}:`, error)
+    },
+  })
+}
+
+/**
  * Default export with all dataset hooks
  */
 export default {
@@ -237,5 +341,8 @@ export default {
   useUploadFileToDataset,
   useDeleteFileFromDataset,
   useUploadMultipleFiles,
+  useTaskStatus,
+  useReIngestDataset,
+  useDeleteDatasetFile,
   datasetKeys,
 }
