@@ -21,6 +21,7 @@ import {
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
 import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProjectSwitchNavigation } from '../../hooks/useProjectSwitchNavigation'
 import { useUploadFileToDataset, useReIngestDataset, useTaskStatus, useListDatasets, useDeleteDatasetFile, useDeleteDataset } from '../../hooks/useDatasets'
 
 type Dataset = {
@@ -42,6 +43,9 @@ function DatasetView() {
 
   // Get current active project for API calls
   const activeProject = useActiveProject()
+  
+  // Handle automatic navigation when project changes
+  useProjectSwitchNavigation()
   const uploadMutation = useUploadFileToDataset()
 
   // Fetch datasets from API to get file information
