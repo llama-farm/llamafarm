@@ -398,7 +398,7 @@ function ExtractionSettings() {
             <ToggleDropdown
               value={tableDetection}
               onChange={setTableDetection}
-              options={[ 'Enabled', 'Disabled' ]}
+              options={['Enabled', 'Disabled']}
             />
           </div>
           <div className="flex flex-col gap-1 py-1.5">
