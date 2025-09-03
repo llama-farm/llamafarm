@@ -6,6 +6,8 @@ import {
   FileDeleteParams,
 } from '../types/datasets'
 
+export const DEFAULT_DATASET_LIST_STALE_TIME = 600_000 // 10 minutes
+
 /**
  * Query keys for dataset-related queries
  * Follows the pattern used in existing project hooks
@@ -37,7 +39,7 @@ export function useListDatasets(
     queryKey: datasetKeys.list(namespace, project),
     queryFn: () => datasetService.listDatasets(namespace, project),
     enabled: options?.enabled !== false && !!namespace && !!project,
-    staleTime: options?.staleTime ?? 60_000, // 1 minute default
+    staleTime: options?.staleTime ?? DEFAULT_DATASET_LIST_STALE_TIME,
   })
 }
 
@@ -242,7 +244,7 @@ export function useTaskStatus(
     refetchInterval?: number
   }
 ) {
-  const query = useQuery({
+  return useQuery({
     queryKey: ['task-status', namespace, project, taskId],
     queryFn: () => datasetService.getTaskStatus(namespace, project, taskId!),
     enabled: !!taskId && !!namespace && !!project && (options?.enabled !== false),
@@ -250,20 +252,6 @@ export function useTaskStatus(
     staleTime: 0, // Always consider stale to ensure fresh polling
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes after unmount
   })
-
-  // Stop polling when task is complete
-  const isComplete = query.data && (
-    query.data.state === 'SUCCESS' || 
-    query.data.state === 'FAILURE' || 
-    query.data.state === 'REVOKED'
-  )
-
-  // Disable refetching when complete by updating the query
-  if (isComplete && query.isRefetching) {
-    // The polling will naturally stop on the next interval check
-  }
-
-  return query
 }
 
 /**

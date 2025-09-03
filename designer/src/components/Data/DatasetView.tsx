@@ -91,20 +91,32 @@ function DatasetView() {
   // Files from API data only
   const files = useMemo(() => {
     if (!currentApiDataset?.files) return []
-    return currentApiDataset.files.map((fileHash) => ({
-      id: fileHash,
-      name: `${fileHash.substring(0, 12)}...${fileHash.substring(-8)}`, // Show first 12 and last 8 chars
-      size: 0, // We don't have size info from API
-      lastModified: Date.now(),
-      type: 'unknown',
-      fullHash: fileHash, // Store full hash for operations
-    }))
+    return currentApiDataset.files.map((fileObj: any) => {
+      const fileHash = typeof fileObj === 'string' ? fileObj : (fileObj?.id || fileObj || '')
+      const size = (typeof fileObj === 'object' && fileObj !== null && 'size' in fileObj && fileObj.size !== undefined)
+        ? fileObj.size
+        : 'unknown'
+      const lastModified = (typeof fileObj === 'object' && fileObj !== null && 'lastModified' in fileObj && fileObj.lastModified !== undefined)
+        ? fileObj.lastModified
+        : 'unknown'
+      return {
+        id: fileHash,
+        name: `${fileHash.substring(0, 12)}...${fileHash.substring(fileHash.length - 8)}`, // Show first 12 and last 8 chars
+        size,
+        lastModified,
+        type: 'unknown',
+        fullHash: fileHash, // Store full hash for operations
+      }
+    })
   }, [currentApiDataset])
 
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
+  const [pendingDeleteFileHash, setPendingDeleteFileHash] = useState<string | null>(null)
+  const [showDeleteFileConfirmation, setShowDeleteFileConfirmation] = useState(false)
+  const [copyStatus, setCopyStatus] = useState<{ [id: string]: string | undefined }>({})
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadStatus, setUploadStatus] = useState<
@@ -340,22 +352,25 @@ function DatasetView() {
     setShowDeleteConfirmation(false)
   }
 
-  const handleDeleteFile = async (fileHash: string) => {
+  const handleDeleteFile = (fileHash: string) => {
     if (!activeProject?.namespace || !activeProject?.project || !datasetId) return
+    setPendingDeleteFileHash(fileHash)
+    setShowDeleteFileConfirmation(true)
+  }
 
-    // Show confirmation dialog
-    const confirmed = window.confirm(
-      `Are you sure you want to delete this file?\n\nFile: ${fileHash.substring(0, 12)}...\n\nThis action cannot be undone.`
-    )
-    
-    if (!confirmed) return
+  const handleConfirmDeleteFile = async () => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId || !pendingDeleteFileHash) {
+      setShowDeleteFileConfirmation(false)
+      setPendingDeleteFileHash(null)
+      return
+    }
 
     try {
       await deleteFileMutation.mutateAsync({
         namespace: activeProject.namespace,
         project: activeProject.project,
         dataset: datasetId,
-        fileHash,
+        fileHash: pendingDeleteFileHash,
         removeFromDisk: true
       })
       
@@ -364,12 +379,20 @@ function DatasetView() {
         variant: 'default',
       })
     } catch (error) {
-      console.error('Delete failed:', error)
+      console.error('File deletion failed:', error)
       toast({
         message: 'Failed to delete file. Please try again.',
         variant: 'destructive',
       })
+    } finally {
+      setShowDeleteFileConfirmation(false)
+      setPendingDeleteFileHash(null)
     }
+  }
+
+  const handleCancelDeleteFile = () => {
+    setShowDeleteFileConfirmation(false)
+    setPendingDeleteFileHash(null)
   }
 
   // Helper function to check if a specific file is being deleted
@@ -598,6 +621,37 @@ function DatasetView() {
         </DialogContent>
       </Dialog>
 
+      {/* File deletion confirmation modal */}
+      {showDeleteFileConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full mx-4 border border-border">
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Delete File</h3>
+            <p className="text-muted-foreground mb-4">
+              Are you sure you want to delete this file?
+            </p>
+            <p className="text-sm text-muted-foreground mb-6 font-mono bg-muted p-2 rounded">
+              {pendingDeleteFileHash?.substring(0, 20)}...
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCancelDeleteFile}
+                className="px-4 py-2 border border-border rounded hover:bg-muted"
+                disabled={deleteFileMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteFile}
+                disabled={deleteFileMutation.isPending}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteFileMutation.isPending ? 'Deleting...' : 'Delete File'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Processing strategy */}
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
@@ -805,19 +859,36 @@ function DatasetView() {
                     <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
                       <span>{f.fullHash ? f.name : f.name}</span>
                       {f.fullHash && (
-                        <button
-                          onClick={() => navigator.clipboard.writeText(f.fullHash!)}
-                          className="text-xs text-blue-600 hover:text-blue-800 text-left"
-                          title="Click to copy full hash"
-                        >
-                          Copy full hash
-                        </button>
+                        <>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(f.fullHash!)
+                                setCopyStatus((prev) => ({ ...prev, [f.id]: 'Copied!' }))
+                              } catch (err) {
+                                setCopyStatus((prev) => ({ ...prev, [f.id]: 'Failed to copy' }))
+                              }
+                              setTimeout(() => {
+                                setCopyStatus((prev) => ({ ...prev, [f.id]: undefined }))
+                              }, 1500)
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 text-left"
+                            title="Click to copy full hash"
+                          >
+                            Copy full hash
+                          </button>
+                          {copyStatus?.[f.id] && (
+                            <span className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}>
+                              {copyStatus[f.id]}
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="w-1/2 flex items-center justify-between gap-4">
                       {/* Size column (middle) */}
                       <div className="text-xs text-muted-foreground">
-                        {f.fullHash ? 'File hash' : `${Math.ceil(f.size / 1024)} KB`}
+                        {f.size === 'unknown' || f.fullHash ? 'N/A' : `${Math.ceil(f.size / 1024)} KB`}
                       </div>
                       {/* Right actions: status + trash */}
                       <div className="flex items-center gap-6">

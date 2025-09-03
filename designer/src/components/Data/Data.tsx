@@ -73,7 +73,7 @@ const Data = () => {
         files: dataset.files,
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
-        numChunks: dataset.files.length * 100, // Estimate based on files
+        numChunks: dataset.files.length ? `~${dataset.files.length * 100}` : 'unknown', // Estimated, or 'unknown' if unavailable
         processedPercent: 100,
         version: 'v1',
         description: '',
@@ -190,7 +190,7 @@ const Data = () => {
         namespace: activeProject.namespace,
         project: activeProject.project,
         name,
-        rag_strategy: 'auto', // Default strategy
+        rag_strategy: 'default', // Default strategy
       })
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
@@ -364,7 +364,15 @@ const Data = () => {
           <div className="mb-2 flex flex-row gap-2 justify-between items-end">
             <div>Datasets</div>
             <div className="flex items-center gap-2">
-              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <Dialog 
+                open={isCreateOpen} 
+                onOpenChange={(open) => {
+                  // Prevent closing dialog during mutation
+                  if (!createDatasetMutation.isPending) {
+                    setIsCreateOpen(open)
+                  }
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button variant="secondary" size="sm">
                     Create new
@@ -399,7 +407,7 @@ const Data = () => {
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogClose asChild>
+                    <DialogClose asChild disabled={createDatasetMutation.isPending}>
                       <Button variant="secondary">Cancel</Button>
                     </DialogClose>
                     <Button

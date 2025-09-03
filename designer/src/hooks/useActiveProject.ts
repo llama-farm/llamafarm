@@ -67,26 +67,31 @@ export function useActiveProject(): ActiveProject | null {
 
   // Listen for custom events dispatched by setActiveProject
   useEffect(() => {
-    const handleActiveProjectChange = (e: CustomEvent<string>) => {
-      try {
-        const namespace = getCurrentNamespace()
-        const projectName = e.detail
-        
-        if (namespace && projectName) {
-          setActiveProject({
-            namespace,
-            project: projectName
-          })
-        } else {
-          setActiveProject(null)
+    const handleActiveProjectChange = (event: Event) => {
+      if (event instanceof CustomEvent && event.detail) {
+        try {
+          const projectData = event.detail
+          if (projectData && typeof projectData === 'string') {
+            const namespace = getCurrentNamespace()
+            const projectName = projectData
+            
+            if (namespace && projectName) {
+              setActiveProject({
+                namespace,
+                project: projectName
+              })
+            } else {
+              setActiveProject(null)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to handle active project change:', error)
         }
-      } catch (error) {
-        console.error('Failed to handle active project change event:', error)
       }
     }
 
-    window.addEventListener('lf-active-project', handleActiveProjectChange as EventListener)
-    return () => window.removeEventListener('lf-active-project', handleActiveProjectChange as EventListener)
+    window.addEventListener('lf-active-project', handleActiveProjectChange)
+    return () => window.removeEventListener('lf-active-project', handleActiveProjectChange)
   }, [])
 
   return activeProject
