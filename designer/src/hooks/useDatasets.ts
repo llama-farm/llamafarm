@@ -322,6 +322,11 @@ export function useDeleteDatasetFile() {
         queryKey: datasetKeys.list(variables.namespace, variables.project),
       })
       
+      // Result contains the deleted file details which can be accessed
+      // by the component for more specific user feedback
+      if (result?.file_hash) {
+        // File deletion confirmed - the component can access this via the mutation result
+      }
     },
     onError: (error, variables) => {
       console.error(`Failed to delete file ${variables.fileHash}:`, error)
