@@ -113,7 +113,7 @@ function Rag() {
           {filtered.map(s => (
             <div
               key={s.id}
-              className="w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
+              className="w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors"
               onClick={() => navigate(`/chat/rag/${s.id}`)}
               role="button"
               tabIndex={0}

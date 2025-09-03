@@ -12,6 +12,7 @@ import Models from './components/Models/Models'
 import Rag from './components/Rag/Rag'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
+import ExtractionSettings from './components/Rag/ExtractionSettings'
 // Projects standalone page removed; Home now hosts projects section
 
 function App() {
@@ -34,6 +35,10 @@ function App() {
               <Route
                 path="rag/:strategyId/change-embedding"
                 element={<ChangeEmbeddingModel />}
+              />
+              <Route
+                path="rag/:strategyId/extraction"
+                element={<ExtractionSettings />}
               />
               <Route path="prompt" element={<Prompt />} />
               <Route path="test" element={<Test />} />

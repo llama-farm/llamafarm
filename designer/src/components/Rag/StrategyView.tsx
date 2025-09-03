@@ -84,6 +84,40 @@ function StrategyView() {
       )
   }, [strategyId])
 
+  const docTypeFromExtraction = useMemo(() => {
+    try {
+      if (!strategyId) return null
+      const raw = localStorage.getItem(`lf_strategy_extraction_${strategyId}`)
+      if (!raw) return null
+      const cfg = JSON.parse(raw)
+      return cfg?.documentType || null
+    } catch {
+      return null
+    }
+  }, [strategyId])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      try {
+        // @ts-ignore custom event
+        const { strategyId: sid } = (e as CustomEvent).detail || {}
+        if (sid && strategyId && sid === strategyId) {
+          // force state update by reading localStorage
+          setCurrentModel(prev => prev) // no-op to trigger rerender alongside below
+        }
+      } catch {}
+    }
+    window.addEventListener(
+      'lf:strategyExtractionUpdated',
+      handler as EventListener
+    )
+    return () =>
+      window.removeEventListener(
+        'lf:strategyExtractionUpdated',
+        handler as EventListener
+      )
+  }, [strategyId])
+
   const hasChanges = useMemo(
     () => currentModel !== savedModel,
     [currentModel, savedModel]
@@ -168,14 +202,22 @@ function StrategyView() {
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">Extraction settings</h3>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/chat/rag/${strategyId}/extraction`)}
+          >
             Configure
           </Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="flex flex-col gap-1">
             <div className="text-xs text-muted-foreground">Document type</div>
-            <Input value="PDFs ?" readOnly className="bg-background" />
+            <Input
+              value={docTypeFromExtraction ?? 'PDFs ?'}
+              readOnly
+              className="bg-background"
+            />
           </div>
           <div className="flex flex-col gap-1">
             <div className="text-xs text-muted-foreground">OCR Fallback</div>
