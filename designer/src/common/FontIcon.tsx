@@ -34,6 +34,7 @@ const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
 const Info = lazy(() => import('../assets/icons/Info'))
 const Eye = lazy(() => import('../assets/icons/Eye'))
 const EyeOff = lazy(() => import('../assets/icons/EyeOff'))
+const Rag = lazy(() => import('../assets/icons/Rag'))
 
 type FontIconTypes =
   | 'add'
@@ -70,6 +71,7 @@ type FontIconTypes =
   | 'info'
   | 'eye'
   | 'eye-off'
+  | 'rag'
 
 export interface FontIconProps {
   className?: string
@@ -156,6 +158,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Eye />
       case 'eye-off':
         return <EyeOff />
+      case 'rag':
+        return <Rag />
     }
   }, [type])
 

@@ -21,40 +21,40 @@ import {
   DialogTitle,
 } from '../ui/dialog'
 
-type Dataset = {
-  id: string
-  name: string
-  lastRun: string | Date
-  embedModel: string
-  numChunks: number
-  processedPercent: number
-  version: string
-  description?: string
-}
-
 function ChangeEmbeddingModel() {
   const navigate = useNavigate()
-  const { datasetId } = useParams()
+  const { strategyId } = useParams()
   const { toast } = useToast()
 
-  const [dataset, setDataset] = useState<Dataset | null>(null)
-  const datasetName = useMemo(
-    () => dataset?.name || datasetId || 'dataset',
-    [dataset?.name, datasetId]
+  const strategyName = useMemo(() => {
+    if (!strategyId) return 'Strategy'
+    return strategyId
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase())
+  }, [strategyId])
+
+  const [currentModel, setCurrentModel] = useState<string>(
+    'text-embedding-3-large'
   )
 
-  // Load dataset details from localStorage (keeps in sync with DatasetView)
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('lf_datasets')
-      if (!stored || !datasetId) return
-      const list = JSON.parse(stored) as Dataset[]
-      const current = list.find(d => d.id === datasetId) || null
-      setDataset(current)
+      if (!strategyId) return
+      const storedCfg = localStorage.getItem(
+        `lf_strategy_embedding_config_${strategyId}`
+      )
+      if (storedCfg) {
+        const parsed = JSON.parse(storedCfg)
+        if (parsed?.modelId) setCurrentModel(parsed.modelId)
+      }
+      const storedModel = localStorage.getItem(
+        `lf_strategy_embedding_model_${strategyId}`
+      )
+      if (storedModel) setCurrentModel(storedModel)
     } catch {}
-  }, [datasetId])
+  }, [strategyId])
 
-  // UI state (matches style used in Models → AddOrChangeModels)
+  // UI state (same structure as original component)
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
   const [query, setQuery] = useState('')
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
@@ -67,7 +67,6 @@ function ChangeEmbeddingModel() {
     quality: string
     download: string
   }
-
   type LocalGroup = {
     id: number
     name: string
@@ -168,102 +167,6 @@ function ChangeEmbeddingModel() {
         },
       ],
     },
-    {
-      id: 5,
-      name: 'Alibaba — GTE',
-      dim: '768–1024',
-      quality: 'General',
-      ramVram: '≥6–8GB',
-      download: '300–700MB',
-      variants: [
-        {
-          id: 'gte-base',
-          label: 'gte-base',
-          dim: '768',
-          quality: 'General',
-          download: '300MB',
-        },
-        {
-          id: 'gte-large',
-          label: 'gte-large',
-          dim: '1024',
-          quality: 'General',
-          download: '700MB',
-        },
-      ],
-    },
-    {
-      id: 6,
-      name: 'HKUNLP — Instructor',
-      dim: '768–1024',
-      quality: 'Task tuned',
-      ramVram: '≥6–8GB',
-      download: '500–900MB',
-      variants: [
-        {
-          id: 'Instructor-large',
-          label: 'Instructor-large',
-          dim: '768',
-          quality: 'Task tuned',
-          download: '500MB',
-        },
-        {
-          id: 'Instructor-xl',
-          label: 'Instructor-xl',
-          dim: '1024',
-          quality: 'Task tuned',
-          download: '900MB',
-        },
-      ],
-    },
-    {
-      id: 7,
-      name: 'Google (open weights) — multilingual-e5',
-      dim: '768–1024',
-      quality: 'Multilingual',
-      ramVram: '≥8GB',
-      download: '450–900MB',
-      variants: [
-        {
-          id: 'multilingual-e5-base',
-          label: 'multilingual-e5-base',
-          dim: '768',
-          quality: 'Multilingual',
-          download: '450MB',
-        },
-        {
-          id: 'multilingual-e5-large',
-          label: 'multilingual-e5-large',
-          dim: '1024',
-          quality: 'Multilingual',
-          download: '900MB',
-        },
-      ],
-    },
-    {
-      id: 8,
-      name: 'Jina — embeddings v2 (OSS)',
-      dim: '384–768',
-      quality: 'General',
-      ramVram: '≥4–6GB',
-      download: '150–350MB',
-      variants: [
-        {
-          id: 'jina-embeddings-v2-small-en',
-          label: 'jina-embeddings-v2-small-en',
-          dim: '384',
-          quality: 'General',
-          download: '150MB',
-        },
-        {
-          id: 'jina-embeddings-v2-base-en',
-          label: 'jina-embeddings-v2-base-en',
-          dim: '768',
-          quality: 'General',
-          download: '350MB',
-        },
-      ],
-    },
   ]
 
   const filteredGroups: LocalGroup[] = useMemo(() => {
@@ -281,7 +184,6 @@ function ChangeEmbeddingModel() {
       )
   }, [query])
 
-  // Cloud models flow (copied structure from Models → CloudModelsForm)
   const providerOptions = [
     'OpenAI',
     'Google',
@@ -308,7 +210,6 @@ function ChangeEmbeddingModel() {
     'Ollama (remote)': ['nomic-embed-text', 'bge-m3', 'Custom'],
   }
 
-  // Only show providers with embedding support in this flow
   const filteredProviderOptions = providerOptions.filter(
     p => (modelMap as any)[p]?.length > 0
   )
@@ -341,7 +242,6 @@ function ChangeEmbeddingModel() {
   const [pendingLocalModelId, setPendingLocalModelId] = useState<string | null>(
     null
   )
-  // Provider-specific config
   const [azureDeployment, setAzureDeployment] = useState('')
   const [azureResource, setAzureResource] = useState('')
   const [azureApiVersion, setAzureApiVersion] = useState('')
@@ -351,10 +251,9 @@ function ChangeEmbeddingModel() {
   const [bedrockRegion, setBedrockRegion] = useState('')
 
   const modelsForProvider = [...modelMap[provider]]
-  // Validation helpers
   const isModelChosen =
     model === 'Custom' ? customModel.trim().length > 0 : !!model
-  const hasApiAuth = apiKey.trim().length > 0 // secretRef not implemented yet
+  const hasApiAuth = apiKey.trim().length > 0
   const providerRequiredOk =
     (provider !== 'Azure OpenAI' ||
       (azureDeployment.trim() && azureResource.trim())) &&
@@ -376,7 +275,6 @@ function ChangeEmbeddingModel() {
     'cohere.embed-english-v3': { dim: '1024', tokens: '5120' },
     'amazon.titan-embed-text-v2:0': { dim: '1024', tokens: '8192' },
     'bge-m3': { dim: '1024', tokens: '8192' },
-    // Local popular aliases
     'bge-small-en-v1.5': { dim: '384', tokens: '8192' },
     'bge-base-en-v1.5': { dim: '768', tokens: '8192' },
     'e5-base-v2': { dim: '768', tokens: '8192' },
@@ -389,16 +287,42 @@ function ChangeEmbeddingModel() {
   const selectedKey = model === 'Custom' ? customModel.trim() : model
   const meta = hasPickedModel ? embeddingMeta[selectedKey] : undefined
 
+  const persistForStrategy = (payload: any) => {
+    if (!strategyId) return
+    try {
+      localStorage.setItem(
+        'lf_last_embedding_provider_config',
+        JSON.stringify(payload)
+      )
+      localStorage.setItem(
+        `lf_strategy_embedding_config_${strategyId}`,
+        JSON.stringify(payload)
+      )
+      if (payload?.modelId) {
+        localStorage.setItem(
+          `lf_strategy_embedding_model_${strategyId}`,
+          payload.modelId
+        )
+      }
+      if (typeof window !== 'undefined') {
+        try {
+          // Notify listeners (e.g., StrategyView) of model change
+          window.dispatchEvent(
+            new CustomEvent('lf:strategyEmbeddingUpdated', {
+              detail: { strategyId, modelId: payload?.modelId },
+            })
+          )
+        } catch {}
+      }
+    } catch {}
+  }
+
   const handleApplyCloud = () => {
-    if (!datasetId || submitState === 'loading') return
-    // Build and set inline errors on invalid submit
+    if (!strategyId || submitState === 'loading') return
     const nextErrors: Record<string, string> = {}
-    if (model === 'Custom' && !customModel.trim()) {
+    if (model === 'Custom' && !customModel.trim())
       nextErrors.customModel = 'Enter a custom model id'
-    }
-    if (!apiKey.trim()) {
-      nextErrors.apiKey = 'API key is required'
-    }
+    if (!apiKey.trim()) nextErrors.apiKey = 'API key is required'
     if (provider === 'Azure OpenAI') {
       if (!azureDeployment.trim())
         nextErrors.azureDeployment = 'Deployment name is required'
@@ -419,7 +343,6 @@ function ChangeEmbeddingModel() {
     if (!canApply) return
     const chosen = model === 'Custom' ? customModel.trim() : model
 
-    // Build EmbeddingProviderConfig-like payload with metadata
     const metaVals = embeddingMeta[chosen] || { dim: '1536', tokens: '8192' }
     const payload: any = {
       runtime: 'cloud',
@@ -452,70 +375,38 @@ function ChangeEmbeddingModel() {
       similarity: 'cosine',
     }
 
-    // Persist or emit for other parts of the app (no-op if unused)
-    try {
-      localStorage.setItem(
-        'lf_last_embedding_provider_config',
-        JSON.stringify(payload)
-      )
-      if (datasetId) {
-        localStorage.setItem(
-          `lf_dataset_embedding_config_${datasetId}`,
-          JSON.stringify(payload)
-        )
-      }
-    } catch {}
-    try {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('lf:addEmbeddingProviderConfig', { detail: payload })
-        )
-      }
-    } catch {}
+    persistForStrategy(payload)
 
     setSubmitState('loading')
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      const list = stored ? (JSON.parse(stored) as Dataset[]) : []
-      const updated = list.map(d =>
-        d.id === datasetId ? { ...d, embedModel: chosen } : d
-      )
-      localStorage.setItem('lf_datasets', JSON.stringify(updated))
-    } catch {}
     setTimeout(() => {
       setSubmitState('success')
+      setCurrentModel(chosen)
       setTimeout(() => {
         toast({
           message: `Embedding model set to ${chosen}`,
           variant: 'default',
         })
-        navigate(`/chat/data/${datasetId}`)
+        navigate(`/chat/rag/${strategyId}`)
         setSubmitState('idle')
       }, 500)
     }, 800)
   }
 
   const applyEmbedding = (modelId: string) => {
-    if (!datasetId) return
+    if (!strategyId) return
     setIsApplying(modelId)
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      const list = stored ? (JSON.parse(stored) as Dataset[]) : []
-      const updated = list.map(d =>
-        d.id === datasetId ? { ...d, embedModel: modelId } : d
-      )
-      localStorage.setItem('lf_datasets', JSON.stringify(updated))
-    } catch {}
+    persistForStrategy({ runtime: 'local', provider: 'local', modelId })
     setTimeout(() => {
+      setCurrentModel(modelId)
       toast({
         message: `Embedding model set to ${modelId}`,
         variant: 'default',
       })
-      navigate(`/chat/data/${datasetId}`)
+      navigate(`/chat/rag/${strategyId}`)
     }, 400)
   }
 
-  const openConfirmLocal = (group: LocalGroup, variant: Variant) => {
+  const openConfirmLocal = (group: any, variant: Variant) => {
     const metaVals = embeddingMeta[variant.id] || {
       dim: group.dim,
       tokens: '8192',
@@ -543,18 +434,18 @@ function ChangeEmbeddingModel() {
       <nav className="text-sm md:text-base flex items-center gap-1.5 mb-3">
         <button
           className="text-teal-600 dark:text-teal-400 hover:underline"
-          onClick={() => navigate('/chat/data')}
+          onClick={() => navigate('/chat/rag')}
         >
-          Data
+          RAG
         </button>
-        <span className="text-muted-foreground px-1">\</span>
+        <span className="text-muted-foreground px-1">/</span>
         <button
           className="text-teal-600 dark:text-teal-400 hover:underline"
-          onClick={() => navigate(`/chat/data/${datasetId}`)}
+          onClick={() => navigate(`/chat/rag/${strategyId}`)}
         >
-          {datasetName}
+          {strategyName}
         </button>
-        <span className="text-muted-foreground px-1">\</span>
+        <span className="text-muted-foreground px-1">/</span>
         <span className="text-foreground">Change embedding model</span>
       </nav>
 
@@ -566,7 +457,7 @@ function ChangeEmbeddingModel() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate(`/chat/data/${datasetId}`)}
+          onClick={() => navigate(`/chat/rag/${strategyId}`)}
         >
           Back
         </Button>
@@ -584,44 +475,32 @@ function ChangeEmbeddingModel() {
           <Input
             readOnly
             className="bg-background max-w-xl"
-            value={dataset?.embedModel || 'text-embedding-3-large'}
+            value={currentModel}
           />
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            Run v3
-          </Badge>
           <Badge variant="secondary" size="sm" className="rounded-xl">
             1536-d
           </Badge>
         </div>
       </section>
 
-      {/* Change model */}
+      {/* The rest mirrors the original ChangeEmbeddingModel UI */}
       <section className="rounded-lg border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
         <div className="text-sm text-muted-foreground">
           Select a new embedding model. This mirrors the models flow and uses
           the same styles.
         </div>
 
-        {/* Source switcher */}
         <div className="w-full flex items-center">
-          <div className="flex w-full max-w-xl rounded-lg overflow-hidden border border-border">
+          <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
             <button
-              className={`flex-1 h-10 text-sm ${
-                sourceTab === 'local'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
+              className={`flex-1 h-10 text-sm ${sourceTab === 'local' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
               onClick={() => setSourceTab('local')}
               aria-pressed={sourceTab === 'local'}
             >
               Local models
             </button>
             <button
-              className={`flex-1 h-10 text-sm ${
-                sourceTab === 'cloud'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
+              className={`flex-1 h-10 text-sm ${sourceTab === 'cloud' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
               onClick={() => setSourceTab('cloud')}
               aria-pressed={sourceTab === 'cloud'}
             >
@@ -630,7 +509,6 @@ function ChangeEmbeddingModel() {
           </div>
         </div>
 
-        {/* Search (local only) */}
         {sourceTab === 'local' && (
           <div className="relative w-full">
             <FontIcon
@@ -646,7 +524,6 @@ function ChangeEmbeddingModel() {
           </div>
         )}
 
-        {/* Local models table */}
         {sourceTab === 'local' && (
           <div className="w-full overflow-hidden rounded-lg border border-border">
             <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
@@ -743,7 +620,6 @@ function ChangeEmbeddingModel() {
           </div>
         )}
 
-        {/* Cloud models form (visual parity with Models tab) */}
         {sourceTab === 'cloud' && (
           <div className="w-full rounded-lg border border-border p-4 md:p-6 flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -814,7 +690,6 @@ function ChangeEmbeddingModel() {
                   {errors.customModel}
                 </div>
               )}
-              {/* Metadata fields */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-1">
                 <div className="flex flex-col gap-1">
                   <Label className="text-xs text-muted-foreground">
@@ -850,7 +725,6 @@ function ChangeEmbeddingModel() {
                   />
                 </div>
               </div>
-              {/* Provider specific fields */}
               {provider === 'Azure OpenAI' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <div className="flex flex-col gap-1">
@@ -1123,16 +997,22 @@ function ChangeEmbeddingModel() {
         )}
       </section>
 
-      {/* Confirm change dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
-          <DialogTitle>Change embedding model?</DialogTitle>
+          <DialogTitle>Use this embedding model?</DialogTitle>
           <DialogDescription>
             {confirmCtx && (
               <div className="mt-2 text-sm">
-                You’re switching this dataset to {confirmCtx.modelId} (
-                {confirmCtx.provider}). We’ll create a new run and reprocess so
-                results stay accurate.
+                Are you sure you want to start using
+                <span className="mx-1 font-medium text-foreground">
+                  {confirmCtx.modelId}
+                </span>
+                for the
+                <span className="mx-1 font-medium text-foreground">
+                  {strategyName}
+                </span>
+                strategy? We’ll download the model if needed and reprocess to
+                keep results accurate.
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                   <div className="text-muted-foreground">Runtime</div>
                   <div>{confirmCtx.runtime}</div>
@@ -1153,23 +1033,12 @@ function ChangeEmbeddingModel() {
                     </>
                   )}
                 </div>
-                <div className="mt-4 flex items-center gap-2">
-                  <input type="checkbox" checked readOnly className="h-4 w-4" />
-                  <div>
-                    <div className="text-sm">
-                      Apply this model’s recommended processing
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Adjust chunking/parsing to this model.
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
           </DialogDescription>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-              Back to edit
+              Cancel
             </Button>
             <Button
               onClick={() => {
@@ -1182,9 +1051,7 @@ function ChangeEmbeddingModel() {
                 }
               }}
             >
-              {confirmCtx?.runtime === 'Local'
-                ? 'Download & Reprocess'
-                : 'Reprocess now'}
+              Download and use
             </Button>
           </DialogFooter>
         </DialogContent>

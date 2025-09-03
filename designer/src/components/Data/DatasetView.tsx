@@ -426,15 +426,7 @@ function DatasetView() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">Embedding model</h3>
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                navigate(`/chat/data/${datasetId}/change-embedding`)
-              }
-            >
-              Change
-            </Button>
+            {/* Change action removed; embedding change now managed under RAG strategies */}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
