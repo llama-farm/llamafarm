@@ -56,7 +56,7 @@ const Dashboard = () => {
 
   return (
     <>
-      <div className="w-full flex flex-col">
+      <div className="w-full flex flex-col pb-32">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl ">

@@ -84,7 +84,7 @@ function Rag() {
   }, [query])
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-4 pb-32">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl">RAG</h2>
       </div>

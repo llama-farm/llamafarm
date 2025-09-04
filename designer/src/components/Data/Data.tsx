@@ -427,7 +427,7 @@ const Data = () => {
 
   return (
     <div
-      className="h-full w-full flex flex-col gap-2 pb-20"
+      className="h-full w-full flex flex-col gap-2 pb-32"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

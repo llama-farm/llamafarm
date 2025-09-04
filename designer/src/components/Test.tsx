@@ -189,7 +189,7 @@ const Test = () => {
   const [mode, setMode] = useState<Mode>('designer')
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-4 pb-32">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl ">
           {mode === 'designer' ? 'Test' : 'Config editor'}
