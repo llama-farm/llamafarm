@@ -85,12 +85,12 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
 // namespace and project are set. If both are provided, it uses the
 // project-scoped chat completions endpoint; otherwise it falls back
 // to the inference chat endpoint.
-func buildChatAPIURL(ctx *ChatSessionContext) string {
+func buildChatAPIURL(ctx *ChatSessionContext) (string, error) {
 	base := strings.TrimSuffix(ctx.ServerURL, "/")
-	if ctx.Namespace != "" && ctx.ProjectID != "" {
-		return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID)
+	if ctx.Namespace == "" || ctx.ProjectID == "" {
+		return "", fmt.Errorf("namespace and project id are required to build chat API URL")
 	}
-	return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID)
+	return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID), nil
 }
 
 // sendChatRequest connects to the server with stream=true and returns the full assistant message.
@@ -137,7 +137,11 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 			logDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
 		}
 
-		url := buildChatAPIURL(ctx)
+		url, err := buildChatAPIURL(ctx)
+		if err != nil {
+			errCh <- fmt.Errorf("failed to build chat API URL: %w", err)
+			return
+		}
 		streamTrue := true
 		request := ChatRequest{Messages: messages, Stream: &streamTrue}
 

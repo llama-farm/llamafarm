@@ -12,18 +12,21 @@ import (
 
 func TestBuildChatAPIURL(t *testing.T) {
 	ctx := &ChatSessionContext{ServerURL: "http://localhost:8000"}
+	var got string
 	// Inference path when no ns/project
-	got := buildChatAPIURL(ctx)
-	want := "http://localhost:8000/v1/inference/chat"
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
+	_, err := buildChatAPIURL(ctx)
+	if err == nil {
+		t.Fatalf("expected error, got %v", err)
 	}
 
 	// Project-scoped path when ns/project provided
 	ctx.Namespace = "org"
 	ctx.ProjectID = "proj"
-	got = buildChatAPIURL(ctx)
-	want = "http://localhost:8000/v1/projects/org/proj/chat/completions"
+	got, err = buildChatAPIURL(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	want := "http://localhost:8000/v1/projects/org/proj/chat/completions"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}

@@ -24,13 +24,19 @@ func InitDebugLogger(path string) error {
 		if path == "" {
 			path = "debug.log"
 		}
+
+		// Use Bubble Tea's LogToFile which handles file creation and setup properly
 		f, err := tea.LogToFile(path, "debug")
 		if err != nil {
 			initErr = err
 			return
 		}
+
+		// Store the file handle for proper cleanup
 		debugFile = f
-		debugLogger = log.New(io.MultiWriter(f), "", log.LstdFlags)
+		// Bubble Tea's LogToFile already sets up a logger, but we create our own
+		// that writes to both the file and stderr as per project requirements
+		debugLogger = log.New(io.MultiWriter(f, os.Stderr), "", log.LstdFlags)
 	})
 	return initErr
 }
@@ -38,6 +44,7 @@ func InitDebugLogger(path string) error {
 // CloseDebugLogger closes the underlying debug log file if it was opened.
 func CloseDebugLogger() {
 	if debugFile != nil {
+		_ = debugFile.Sync() // Ensure all data is written to disk
 		_ = debugFile.Close()
 	}
 }
