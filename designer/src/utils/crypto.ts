@@ -81,7 +81,7 @@ export async function decryptJson<T = unknown>(
   }
 }
 
-function toBase64(buf: ArrayBuffer | Uint8Array): string {
+function toBase64(buf: ArrayBufferLike | Uint8Array): string {
   const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
   return window.btoa(String.fromCharCode(...u8))
 }
