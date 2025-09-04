@@ -54,12 +54,12 @@ async function encryptAPIKey(apiKey: string, secret: string) {
     enc.encode(apiKey)
   )
   // encode salt, iv, ciphertext as base64 for storage
-  function base64(arrayBuffer: ArrayBufferLike) {
+  function base64(arrayBuffer: ArrayBuffer) {
     return window.btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
   }
   return JSON.stringify({
-    salt: base64(salt),
-    iv: base64(iv),
+    salt: base64(salt.buffer),
+    iv: base64(iv.buffer),
     data: base64(ciphertext),
   })
 }
