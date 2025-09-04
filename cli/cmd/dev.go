@@ -17,6 +17,10 @@ var devCmd = &cobra.Command{
 		if strings.TrimSpace(serverURL) == "" {
 			serverURL = "http://localhost:8000"
 		}
+		if err := ensureInferenceRuntimeAvailable(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error ensuring inference runtime availability: %v\n", err)
+			os.Exit(1)
+		}
 		if err := ensureServerAvailable(serverURL); err != nil {
 			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
 		}
@@ -27,8 +31,4 @@ var devCmd = &cobra.Command{
 func init() {
 	// Attach to root
 	rootCmd.AddCommand(devCmd)
-	// Provide a hint if server URL isn't set
-	if serverURL == "" {
-		fmt.Fprintln(os.Stderr, "Hint: use --server-url to point to a specific server")
-	}
 }

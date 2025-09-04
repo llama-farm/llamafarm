@@ -97,7 +97,7 @@ func startLocalServerViaDocker(serverURL string) error {
 
 	port := resolvePort(serverURL, 8000)
 	containerName := "llamafarm-server"
-	image := "ghcr.io/llama-farm/llamafarm/server:latest"
+	image := "llamafarm-server"
 
 	// If a container with this name exists and is running, nothing to do
 	if isContainerRunning(containerName) {
@@ -106,18 +106,18 @@ func startLocalServerViaDocker(serverURL string) error {
 
 	fmt.Fprintln(os.Stderr, "Starting local LlamaFarm server via Docker...")
 
-	// Try to start existing stopped container first
-	if containerExists(containerName) {
-		startCmd := exec.Command("docker", "start", containerName)
-		startCmd.Stdout = os.Stdout
-		startCmd.Stderr = os.Stderr
-		if err := startCmd.Run(); err == nil {
-			return nil
-		}
-	}
+	// // Try to start existing stopped container first
+	// if containerExists(containerName) {
+	// 	startCmd := exec.Command("docker", "start", containerName)
+	// 	startCmd.Stdout = os.Stdout
+	// 	startCmd.Stderr = os.Stderr
+	// 	if err := startCmd.Run(); err == nil {
+	// 		return nil
+	// 	}
+	// }
 
-	// Pull latest image (best effort)
-	_ = pullImage(image)
+	// // Pull latest image (best effort)
+	// _ = pullImage(image)
 
 	// Run new container
 	runArgs := []string{
@@ -125,6 +125,7 @@ func startLocalServerViaDocker(serverURL string) error {
 		"-d",
 		"--name", containerName,
 		"-p", fmt.Sprintf("%d:8000", port),
+		"-v", fmt.Sprintf("%s:%s", os.ExpandEnv("$HOME/.llamafarm"), "/var/lib/llamafarm"),
 	}
 
 	// Mount effective working directory into the container at the same path
@@ -140,7 +141,7 @@ func startLocalServerViaDocker(serverURL string) error {
 	} else if isHostOllamaAvailable() {
 		// Ensure the container can resolve host.docker.internal on Linux
 		runArgs = append(runArgs, "--add-host", "host.docker.internal:host-gateway")
-		runArgs = append(runArgs, "-e", "OLLAMA_HOST=http://host.docker.internal:11434/v1")
+		runArgs = append(runArgs, "-e", "OLLAMA_HOST=http://host.docker.internal:11435")
 	}
 	// Also pass through OLLAMA_HOST/OLLAMA_PORT if explicitly set by the user
 	if v, ok := os.LookupEnv("OLLAMA_HOST"); ok && strings.TrimSpace(v) != "" {

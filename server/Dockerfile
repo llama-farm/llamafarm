@@ -2,6 +2,7 @@
 FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
 
 ENV UV_COMPILE_BYTECODE=1
+ENV LF_DATA_DIR=/var/lib/llamafarm
 
 RUN apt update && apt install -y curl && rm -rf /var/lib/apt/lists/*
 
