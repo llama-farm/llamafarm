@@ -35,12 +35,8 @@ function ExtractionSettings() {
   // Shared focus style for inputs (match edit modal behavior)
   const inputClass =
     'bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0'
-  const inputEvents = {
-    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) =>
-      e.stopPropagation(),
-    onClick: (e: React.MouseEvent<HTMLInputElement>) => e.stopPropagation(),
-    onMouseDown: (e: React.MouseEvent<HTMLInputElement>) => e.stopPropagation(),
-  }
+  // Remove event propagation blockers so inputs behave normally
+  const inputEvents = {}
 
   // Collapsible states (collapsed by default)
   const [pdfOpen, setPdfOpen] = useState(false)
@@ -271,7 +267,6 @@ function ExtractionSettings() {
       <DropdownMenuTrigger asChild>
         <button
           className={`h-9 w-full rounded-md border border-input bg-background px-3 text-left ${inputClass}`}
-          onMouseDown={e => e.stopPropagation()}
         >
           {value}
         </button>

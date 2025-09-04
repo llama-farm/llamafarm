@@ -234,7 +234,11 @@ function StrategyView() {
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">Parsing Strategy</h3>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/chat/rag/${strategyId}/parsing`)}
+          >
             Configure
           </Button>
         </div>
@@ -262,7 +266,11 @@ function StrategyView() {
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">Retrieval Method</h3>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/chat/rag/${strategyId}/retrieval`)}
+          >
             Configure
           </Button>
         </div>
