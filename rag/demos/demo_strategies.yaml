@@ -79,22 +79,13 @@ strategies:
         config:
           collection_name: "research_papers"
           persist_directory: "./demos/vectordb/research_papers"
-          distance_metric: "cosine"  # Best for semantic similarity
+          distance_function: "cosine"  # Best for semantic similarity
       
       retrieval_strategy:
         type: "BasicSimilarityStrategy"
         config:
           distance_metric: "cosine"
           top_k: 3
-    
-    optimization:
-      performance_priority: "accuracy"
-      batch_settings:
-        batch_size: 3
-        max_batch_wait_ms: 100
-      caching:
-        enabled: true
-        ttl_seconds: 3600
 
   # =============================================================================
   # DEMO 2: CUSTOMER SUPPORT STRATEGY
@@ -114,10 +105,10 @@ strategies:
           recursive: false
           include_patterns: ["*.csv", "*.txt"]
           parser_map:
-            ".csv": "CustomerSupportCSVParser"
+            ".csv": "CSVParser"
             ".txt": "PlainTextParser"
           parser_configs:
-            CustomerSupportCSVParser:
+            CSVParser:
               content_fields: ["description"]
               metadata_fields: ["ticket_id", "customer_name", "customer_email", "priority", "category", "issue_type", "status", "agent_name"]
               priority_mapping:
@@ -147,7 +138,7 @@ strategies:
         - type: "PatternExtractor"
           priority: 90
           config:
-            patterns: ["email", "phone", "url", "ip_address"]
+            predefined_patterns: ["email", "phone", "url", "ip_address"]
             include_context: true
         
         - type: "SummaryExtractor"
@@ -171,6 +162,7 @@ strategies:
         config:
           collection_name: "customer_support"
           persist_directory: "./demos/vectordb/customer_support"
+          distance_function: "cosine"
       
       retrieval_strategy:
         type: "MetadataFilteredStrategy"
@@ -180,17 +172,6 @@ strategies:
             priority: ["Critical", "High"]
           filter_mode: "post"
           fallback_multiplier: 2
-    
-    optimization:
-      performance_priority: "balanced"
-      resource_constraints:
-        max_memory_gb: 2
-        max_cpu_cores: 2
-    
-    validation:
-      required_metadata: ["ticket_id", "priority", "category"]
-      min_document_length: 10
-      max_document_length: 5000
 
   # =============================================================================
   # DEMO 3: CODE DOCUMENTATION STRATEGY
@@ -247,14 +228,13 @@ strategies:
         - type: "PatternExtractor"
           priority: 90
           config:
-            patterns: ["url", "file_path"]
+            predefined_patterns: ["url", "file_path"]
             include_context: true
         
         - type: "YAKEExtractor"
           priority: 80
           config:
             max_keywords: 15
-            min_keyword_length: 3
       
       embedder:
         type: "OllamaEmbedder"
@@ -268,6 +248,7 @@ strategies:
         config:
           collection_name: "code_documentation"
           persist_directory: "./demos/vectordb/code_documentation"
+          distance_function: "cosine"
       
       retrieval_strategy:
         type: "HybridUniversalStrategy"
@@ -288,12 +269,6 @@ strategies:
           
           combination_method: "weighted_average"
           final_k: 5
-    
-    optimization:
-      performance_priority: "balanced"
-      caching:
-        enabled: true
-        ttl_seconds: 7200
 
   # =============================================================================
   # DEMO 4: NEWS ANALYSIS STRATEGY
@@ -364,6 +339,7 @@ strategies:
         config:
           collection_name: "news_analysis"
           persist_directory: "./demos/vectordb/news_analysis"
+          distance_function: "cosine"
       
       retrieval_strategy:
         type: "RerankedStrategy"
@@ -477,6 +453,7 @@ strategies:
         config:
           collection_name: "business_reports"
           persist_directory: "./demos/vectordb/business_reports"
+          distance_function: "cosine"
       
       retrieval_strategy:
         type: "MetadataFilteredStrategy"
@@ -484,16 +461,6 @@ strategies:
           top_k: 10
           filter_mode: "pre"
           fallback_multiplier: 2
-    
-    optimization:
-      performance_priority: "accuracy"
-      batch_settings:
-        batch_size: 4
-        max_batch_wait_ms: 200
-    
-    validation:
-      max_document_length: 100000
-      min_document_length: 100
 
   # =============================================================================
   # DEMO 6: DOCUMENT MANAGEMENT STRATEGY
@@ -529,7 +496,7 @@ strategies:
         - type: "PatternExtractor"
           priority: 90
           config:
-            patterns: ["version", "date"]
+            predefined_patterns: ["version", "date"]
             include_context: true
       
       embedder:
@@ -544,25 +511,113 @@ strategies:
         config:
           collection_name: "document_management"
           persist_directory: "./demos/vectordb/document_management"
+          distance_function: "cosine"
       
       retrieval_strategy:
         type: "BasicSimilarityStrategy"
         config:
           top_k: 5
-    
-    optimization:
-      performance_priority: "balanced"
-      resource_constraints:
-        max_memory_gb: 1
-        max_cpu_cores: 2
-    
-    validation:
-      min_document_length: 10
-      max_document_length: 100000
 
 # =============================================================================
 # STRATEGY TEMPLATES
 # =============================================================================
+
+  # =============================================================================
+  # DEMO 7: AIRCRAFT OPERATIONS STRATEGY
+  # =============================================================================
+  - name: "aircraft_operations_demo"
+    description: "Strategy for aircraft operations manual analysis (737 FCOM)"
+    tags: ["demo", "aviation", "technical", "operations", "pdf"]
+    use_cases:
+      - "Aircraft operations manual search"
+      - "Technical procedure retrieval"
+      - "Safety documentation analysis"
+    
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          chunk_size: 2000  # Larger chunks for technical manual
+          chunk_overlap: 300  # Good overlap for procedures
+          chunk_strategy: pages  # Page-based for technical docs
+          respect_sentence_boundaries: true
+          respect_paragraph_boundaries: true
+          min_chunk_size: 200
+          extract_metadata: true
+          extract_page_structure: true
+          combine_pages: false  # Keep pages separate for reference
+          page_separator: "\n\n=== Page Break ===\n\n"
+          min_text_length: 50
+          include_page_numbers: true
+          extract_outline: true  # Important for navigation
+      
+      extractors:
+        - type: "HeadingExtractor"
+          config:
+            max_level: 4
+            include_hierarchy: true
+            extract_outline: true
+            min_heading_length: 3
+        
+        - type: "PatternExtractor"
+          config:
+            custom_patterns:
+              - name: "flight_level"
+                pattern: "FL\\d{2,3}"
+                description: "Flight levels"
+              - name: "speed"
+                pattern: "\\d+\\s*(?:kts|KIAS|KTAS|M\\.\\d+)"
+                description: "Aircraft speeds"
+              - name: "weight"
+                pattern: "\\d+(?:,\\d{3})*\\s*(?:lbs?|kg)"
+                description: "Aircraft weights"
+              - name: "altitude"
+                pattern: "\\d+(?:,\\d{3})*\\s*(?:ft|feet|FL)"
+                description: "Altitudes"
+            include_context: true
+        
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["ORG", "FAC", "LOC", "PRODUCT"]
+            use_fallback: true
+            confidence_threshold: 0.7
+        
+        - type: "TableExtractor"
+          config:
+            output_format: "dict"
+            extract_headers: true
+            min_rows: 2
+        
+        - type: "StatisticsExtractor"
+          config:
+            include_structure: true
+            include_readability: false
+            include_vocabulary: true
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 3  # Smaller batch for large chunks
+          timeout: 90  # Longer timeout for technical content
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "aircraft_operations"
+          persist_directory: "./demos/vectordb/aircraft_operations"
+          distance_function: "cosine"
+      
+      retrieval_strategy:
+        type: "RerankedStrategy"
+        config:
+          initial_k: 15
+          final_k: 5
+          rerank_factors:
+            similarity_weight: 0.6
+            recency_weight: 0.1
+            metadata_weight: 0.3  # Important for page/section context
+          normalize_scores: true
 
   # ==============================================================================
   # TEST STRATEGY FOR CLI TESTING  
@@ -579,11 +634,10 @@ strategies:
         type: "DirectoryParser"
         config:
           recursive: false
-          file_extensions: [".txt", ".md"]
+          include_patterns: ["*.txt", "*.md"]
       
       extractors:
         - type: "KeywordExtractor"
-          priority: 100
           config:
             max_keywords: 5
       
@@ -598,7 +652,7 @@ strategies:
         config:
           collection_name: "test_cli_collection"
           persist_directory: "./vectordb/test_cli_collection"
-          distance_metric: "cosine"
+          distance_function: "cosine"
       
       retrieval_strategy:
         type: "BasicSimilarityStrategy"
@@ -617,7 +671,7 @@ strategy_templates:
         type: "PlainTextParser"
         config:
           chunk_size: 1000
-          overlap: 200
+          chunk_overlap: 200
       
       embedder:
         type: "OllamaEmbedder"
@@ -630,6 +684,7 @@ strategy_templates:
         config:
           collection_name: "demo"
           persist_directory: "./demos/vectordb/demo"
+          distance_function: "cosine"
       
       retrieval_strategy:
         type: "BasicSimilarityStrategy"

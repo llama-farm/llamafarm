@@ -394,7 +394,7 @@ class StrategyManager:
                 f.write(header)
                 yaml.dump(config, f, default_flow_style=False, indent=2)
             
-            logger.info(f"Strategy '{strategy_name}' exported to {output_file}")
+            logger.debug(f"Strategy '{strategy_name}' exported to {output_file}")
             return True
             
         except Exception as e:
