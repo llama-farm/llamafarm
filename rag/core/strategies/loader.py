@@ -65,7 +65,7 @@ class StrategyLoader:
                 self._load_legacy_format(data)
             
             self._loaded = True
-            logger.info(f"Loaded {len(self._strategies)} strategies from {self.strategies_file}")
+            logger.debug(f"Loaded {len(self._strategies)} strategies from {self.strategies_file}")
             
         except Exception as e:
             logger.error(f"Failed to load strategies file {self.strategies_file}: {e}")

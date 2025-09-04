@@ -158,5 +158,54 @@ class ProjectChatService:
         )
         return completion
 
+    def stream_chat(
+        self,
+        project_config: LlamaFarmConfig,
+        chat_agent: ProjectChatOrchestratorAgent,
+        message: str,
+    ):
+        """Yield assistant content chunks, using agent-native streaming if available."""
+        context_provider = ProjectChatContextProvider(title="Project Chat Context")
+        chat_agent.register_context_provider("project_chat_context", context_provider)
+
+        rag_results = self._perform_rag_search(project_config, message)
+        for idx, result in enumerate(rag_results):
+            chunk_item = ChunkItem(
+                content=result.content,
+                metadata={
+                    "source": result.metadata.get("source", "unknown"),
+                    "score": getattr(result, "score", 0.0),
+                    "chunk_index": idx,
+                    "retrieval_method": "rag_search",
+                    **result.metadata,
+                },
+            )
+            context_provider.chunks.append(chunk_item)
+
+        input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
+        stream_method = getattr(chat_agent, "run_stream", None)
+        if callable(stream_method):
+            try:
+                for chunk in stream_method(input_schema):  # type: ignore[misc]
+                    if not chunk:
+                        continue
+                    yield getattr(chunk, "chat_message", str(chunk))
+                return
+            except Exception:  # best effort fallback
+                logger.error(
+                    "Project chat run_stream failed; falling back to non-streaming",
+                    exc_info=True,
+                )
+
+        # Fallback: run once and split
+        try:
+            agent_response = chat_agent.run(input_schema)
+            response_message = getattr(agent_response, "chat_message", str(agent_response))
+        except Exception as e:
+            response_message = f"I encountered an error while processing your request: {str(e)}"
+
+        for i in range(0, len(response_message), 80):
+            yield response_message[i : i + 80]
+
 
 project_chat_service = ProjectChatService()

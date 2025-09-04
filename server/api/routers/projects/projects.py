@@ -230,9 +230,7 @@ async def chat(
             detail=f"Chat service failed to generate a response: {e}",
         ) from e
 
-    # Set session header
     set_session_header(response, session_id)
-
     return completion
 
 

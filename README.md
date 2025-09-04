@@ -126,6 +126,14 @@ git clone https://github.com/llama-farm/llamafarm.git
 cd llamafarm
 ```
 
+Full Dev Mode:
+
+```bash
+npm install -g nx  
+nx init --useDotNxInstallation --interactive=false
+nx start server
+```
+
 ### 🎯 Getting Started
 
 > **💡 Important:** All our demos use the **REAL CLI** and **REAL configuration system** - what you see in the demos is exactly how you'll use LlamaFarm in production!
@@ -465,15 +473,6 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         <a href="https://github.com/llama-farm/llamafarm/commits?author=rachradulo" title="Code">💻</a>
       </td>
       <td align="center" valign="top" width="14.28%">
-        <a href="https://github.com/davon-davis">
-          <img src="https://avatars.githubusercontent.com/u/77517056?v=4?v=4&s=100" width="100px;" alt="Davon Davis"/>
-          <br />
-          <sub><b>Davon Davis</b></sub>
-        </a>
-        <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=davon-davis" title="Code">💻</a>
-      </td>
-      <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/rachmlenig">
           <img src="https://avatars.githubusercontent.com/u/106166434?v=4?v=4&s=100" width="100px;" alt="Racheal Ochalek"/>
           <br />
@@ -481,6 +480,15 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         </a>
         <br />
         <a href="https://github.com/llama-farm/llamafarm/commits?author=rachmlenig" title="Code">💻</a>
+      </td>
+      <td align="center" valign="top" width="14.28%">
+        <a href="https://github.com/davon-davis">
+          <img src="https://avatars.githubusercontent.com/u/77517056?v=4?v=4&s=100" width="100px;" alt="Davon Davis"/>
+          <br />
+          <sub><b>Davon Davis</b></sub>
+        </a>
+        <br />
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=davon-davis" title="Code">💻</a>
       </td>
       <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/apps/github-actions">

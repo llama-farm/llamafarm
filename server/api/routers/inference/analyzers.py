@@ -85,7 +85,7 @@ Examples:
 - "create project myapp" → create, namespace: test, project_id: myapp
 - "list projects in production" → list, namespace: production, project_id: null
 - "show me my projects" → list, namespace: test, project_id: null
-- "make a new project called demo in dev namespace" 
+- "make a new project called demo in dev namespace"
 → create, namespace: dev, project_id: demo
 """
 
@@ -118,6 +118,151 @@ Examples:
             project_id=result["project_id"],
             confidence=result["confidence"],
             reasoning=result["reasoning"] + " (LLM unavailable)",
+        )
+
+
+# Generic, LLM-first intent classification for routing tools/actions
+class IntentAnalysis(BaseModel):
+    """Structured intent for selecting a tool and action with parameters"""
+
+    tool_name: str = Field(description="One of the available tools by name")
+    action: str = Field(description="Action to perform for the selected tool")
+    parameters: dict | None = Field(
+        default_factory=dict,
+        description="Key-value parameters for the tool input schema",
+    )
+    namespace: str | None = Field(default=None, description="Project namespace if relevant")
+    project_id: str | None = Field(default=None, description="Project id if relevant")
+    confidence: float = Field(description="Confidence score between 0 and 1")
+    reasoning: str = Field(description="Why this tool and action were chosen")
+
+
+class IntentClassifier:
+    """LLM-first classifier to select tool/action and parameters from a user message"""
+
+    def __init__(self):
+        self.client = None
+        self._initialize_client()
+
+    def _initialize_client(self):
+        try:
+            ollama_client = OpenAI(
+                base_url=settings.ollama_host,
+                api_key=settings.ollama_api_key,
+            )
+            self.client = instructor.from_openai(ollama_client, mode=instructor.Mode.JSON)
+        except Exception as e:
+            logger.warning("Failed to initialize IntentClassifier client", error=str(e))
+            self.client = None
+
+    def classify(
+        self,
+        message: str,
+        available_tools: list[str],
+        request_namespace: str | None = None,
+        request_project_id: str | None = None,
+    ) -> IntentAnalysis:
+        """Classify a user message into tool/action selection.
+
+        Falls back to heuristics if LLM is unavailable.
+        """
+        if not self.client:
+            return self._fallback_classify(message, available_tools, request_namespace, request_project_id)
+
+        try:
+            tools_as_bullets = "\n".join(f"- {t}" for t in available_tools)
+            system_prompt = f"""
+You are a routing assistant. Given a user message and a list of available tools, select the best tool,
+the action to perform, and any parameters required by that tool. Use only these tools:
+{tools_as_bullets}
+
+Guidelines:
+- If the user is asking about projects (list/create), choose 'projects' with action 'list' or 'create'.
+- If the user wants to view or change project configuration, choose 'project_config' with actions like
+  'get_schema', 'analyze_config', 'suggest_changes', or 'modify_config'.
+- If the user wants help crafting prompts via follow-up Q&A, choose 'prompt_engineering' with actions like
+  'start_engineering' (use user_input), 'continue_conversation' (use user_response),
+  'generate_prompts', or 'save_prompts'.
+- Prefer using the provided namespace/project_id if given. If missing, leave them null.
+- Provide concise reasoning and a confidence between 0 and 1.
+"""
+
+            analysis: IntentAnalysis = self.client.chat.completions.create(
+                model=settings.ollama_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"message: {message}\n\n"
+                            f"namespace: {request_namespace or 'null'}\n"
+                            f"project_id: {request_project_id or 'null'}\n"
+                        ),
+                    },
+                ],
+                response_model=IntentAnalysis,
+                temperature=0.1,
+                max_retries=2,
+            )
+
+            # Ensure request overrides are respected when provided
+            if request_namespace is not None:
+                analysis.namespace = request_namespace
+            if request_project_id is not None:
+                analysis.project_id = request_project_id
+
+            return analysis
+        except Exception as e:
+            logger.warning("LLM intent classification failed; using heuristics", error=str(e))
+            return self._fallback_classify(message, available_tools, request_namespace, request_project_id)
+
+    def _fallback_classify(
+        self,
+        message: str,
+        available_tools: list[str],
+        request_namespace: str | None,
+        request_project_id: str | None,
+    ) -> IntentAnalysis:
+        """Rule-based fallback classification"""
+        msg = message.lower()
+        tool = "project_config" if "config" in msg or "schema" in msg else None
+        if any(k in msg for k in ["project", "namespace", "list", "create"]):
+            tool = "projects"
+        if any(k in msg for k in ["prompt", "generate", "few shot", "examples"]):
+            tool = "prompt_engineering"
+
+        if tool is None or tool not in available_tools:
+            # Default to prompt_engineering for conversational assistance
+            tool = "prompt_engineering" if "prompt_engineering" in available_tools else available_tools[0]
+
+        # Basic action heuristics
+        action = "start_engineering"
+        params: dict = {}
+        if tool == "projects":
+            action = "create" if "create" in msg or "new" in msg or "make" in msg else "list"
+        elif tool == "project_config":
+            if any(k in msg for k in ["analyze", "status", "current"]):
+                action = "analyze_config"
+            elif any(k in msg for k in ["suggest", "recommend"]):
+                action = "suggest_changes"
+            elif any(k in msg for k in ["modify", "change", "set", "update"]):
+                action = "modify_config"
+            else:
+                action = "get_schema"
+            if action in ("suggest_changes", "modify_config"):
+                params["user_intent"] = message
+        elif tool == "prompt_engineering":
+            action = "start_engineering"
+            params["user_input"] = message
+
+        return IntentAnalysis(
+            tool_name=tool,
+            action=action,
+            parameters=params,
+            namespace=request_namespace,
+            project_id=request_project_id,
+            confidence=0.55,
+            reasoning="Heuristic fallback classification",
         )
 
 

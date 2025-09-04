@@ -127,8 +127,8 @@ func startLocalServerViaDocker(serverURL string) error {
 		"-p", fmt.Sprintf("%d:8000", port),
 	}
 
-	// Mount current working directory into the container at the same path
-	if cwd, err := os.Getwd(); err == nil && strings.TrimSpace(cwd) != "" {
+	// Mount effective working directory into the container at the same path
+	if cwd, err := getEffectiveCWD(); err == nil && strings.TrimSpace(cwd) != "" {
 		runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s", cwd, cwd))
 	} else {
 		fmt.Fprintln(os.Stderr, "Warning: could not determine current directory; continuing without volume mount")

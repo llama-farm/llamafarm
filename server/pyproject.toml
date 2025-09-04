@@ -28,7 +28,7 @@ dependencies = [
     "requests>=2.25.0",
     "structlog>=25.4.0",
     "asgi-correlation-id>=4.3.4",
-    "atomic-agents>=2.0.1",
+    "atomic-agents==2.1.0",
     "jsonref>=1.1.0",
     "celery>=5.5.3",
 ]

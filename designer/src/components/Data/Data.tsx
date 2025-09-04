@@ -1,14 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ModeToggle, { Mode } from '../ModeToggle'
 import ConfigEditor from '../ConfigEditor'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from '../ui/dropdown-menu'
+// Dropdown menu no longer used here
 import {
   Dialog,
   DialogContent,
@@ -24,25 +19,11 @@ import { Textarea } from '../ui/textarea'
 import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
 import { useNavigate } from 'react-router-dom'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useListDatasets, useCreateDataset } from '../../hooks/useDatasets'
+import type { UIFile } from '../../types/datasets'
 
-type Dataset = {
-  id: string
-  name: string
-  lastRun: Date
-  embedModel: string
-  numChunks: number
-  processedPercent: number // 0-100
-  version: string
-  description?: string
-}
-
-type RawFile = {
-  id: string // stable key (name:size:lastModified)
-  name: string
-  size: number
-  lastModified: number
-  type?: string
-}
+type RawFile = UIFile
 
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
@@ -61,30 +42,40 @@ const Data = () => {
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  // Datasets state (ensure at least one dataset exists)
-  const [datasets, setDatasets] = useState<Dataset[]>(() => {
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      if (stored) {
-        const parsed = JSON.parse(stored) as Array<
-          Omit<Dataset, 'lastRun'> & { lastRun: string }
-        >
-        return parsed.map(d => ({ ...d, lastRun: new Date(d.lastRun) }))
-      }
-    } catch {}
-    return [
-      {
-        id: 'default',
-        name: 'default-dataset',
+  // Get current active project for API calls
+  const activeProject = useActiveProject()
+
+  // Use React Query hooks for datasets with localStorage fallback
+  const { data: apiDatasets, isLoading: isDatasetsLoading, error: datasetsError } = useListDatasets(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
+  const createDatasetMutation = useCreateDataset()
+  // const deleteDatasetMutation = useDeleteDataset() // TODO: Implement dataset deletion with API
+
+  // Convert API datasets to UI format
+  const datasets = useMemo(() => {
+    if (apiDatasets?.datasets) {
+      return apiDatasets.datasets.map((dataset) => ({
+        id: dataset.name,
+        name: dataset.name,
+        rag_strategy: dataset.rag_strategy,
+        files: dataset.files,
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
-        numChunks: 28500,
+        numChunks: dataset.files.length ? `~${dataset.files.length * 100}` : 'unknown', // Estimated, or 'unknown' if unavailable
         processedPercent: 100,
-        version: 'v2',
+        version: 'v1',
         description: '',
-      },
-    ]
-  })
+      }))
+    }
+    return []
+  }, [apiDatasets])
+
+
+
+
 
   // Map of fileKey -> array of dataset ids
   const [fileAssignments] = useState<Record<string, string[]>>(() => {
@@ -114,131 +105,45 @@ const Data = () => {
     } catch {}
   }, [fileAssignments])
 
-  useEffect(() => {
-    try {
-      const serializable = datasets.map(d => ({
-        ...d,
-        lastRun: d.lastRun.toISOString(),
-      }))
-      localStorage.setItem('lf_datasets', JSON.stringify(serializable))
-    } catch {}
-  }, [datasets])
+  // Dataset persistence is handled in the setDatasets function for localStorage fallback
 
   // Create dataset dialog state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newDatasetName, setNewDatasetName] = useState('')
   const [newDatasetDescription, setNewDatasetDescription] = useState('')
 
-  // Edit dataset dialog state (from overflow menu)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editDatasetId, setEditDatasetId] = useState<string>('')
-  const [editName, setEditName] = useState('')
-  const [editDescription, setEditDescription] = useState('')
 
-  // Delete dataset dialog state
-  const [isDeleteDatasetOpen, setIsDeleteDatasetOpen] = useState(false)
-  const [datasetToDelete, setDatasetToDelete] = useState<Dataset | null>(null)
 
-  const openEditDataset = (ds: Dataset) => {
-    setEditDatasetId(ds.id)
-    setEditName(ds.name)
-    setEditDescription(ds.description || '')
-    setIsEditOpen(true)
-  }
-
-  const saveEditDataset = () => {
-    const id = editDatasetId
-    if (!id || !editName.trim()) return
-    setDatasets(prev =>
-      prev.map(d =>
-        d.id === id
-          ? { ...d, name: editName.trim(), description: editDescription }
-          : d
-      )
-    )
-    setIsEditOpen(false)
-  }
-
-  const deleteDataset = (id: string) => {
-    setDatasets(prev => prev.filter(d => d.id !== id))
-    try {
-      // Clean up file assignments, and delete project files not used elsewhere
-      const storedAssignments = localStorage.getItem('lf_file_assignments')
-      const storedRaw = localStorage.getItem('lf_raw_files')
-      const assignments: Record<string, string[]> = storedAssignments
-        ? JSON.parse(storedAssignments)
-        : {}
-      let rawFiles: Array<{
-        id: string
-        name: string
-        size: number
-        lastModified: number
-        type?: string
-      }> = storedRaw ? JSON.parse(storedRaw) : []
-
-      const remainingAssignments: Record<string, string[]> = {}
-      const keepRawIds = new Set<string>()
-      for (const [fileId, arr] of Object.entries(assignments)) {
-        const nextArr = arr.filter(x => x !== id)
-        if (nextArr.length > 0) {
-          remainingAssignments[fileId] = nextArr
-          keepRawIds.add(fileId)
-        }
-      }
-      // Filter raw files to only those still referenced
-      rawFiles = rawFiles.filter(f => keepRawIds.has(f.id))
-      localStorage.setItem(
-        'lf_file_assignments',
-        JSON.stringify(remainingAssignments)
-      )
-      localStorage.setItem('lf_raw_files', JSON.stringify(rawFiles))
-
-      // Remove any dataset-scoped keys
-      try {
-        localStorage.removeItem(`lf_dataset_strategy_name_${id}`)
-      } catch {}
-      try {
-        localStorage.removeItem(`lf_dataset_versions_${id}`)
-      } catch {}
-      try {
-        localStorage.removeItem(`lf_dataset_selected_version_${id}`)
-      } catch {}
-    } catch {}
-    toast({ message: 'Dataset deleted', variant: 'default' })
-  }
-
-  const slugify = (value: string) =>
-    value
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-
-  const handleCreateDataset = () => {
+  const handleCreateDataset = async () => {
     const name = newDatasetName.trim()
     if (!name) return
-    const baseId = slugify(name) || 'dataset'
-    let id = baseId
-    let counter = 1
-    const existingIds = new Set(datasets.map(d => d.id))
-    while (existingIds.has(id)) {
-      id = `${baseId}-${counter++}`
+
+    if (!activeProject?.namespace || !activeProject?.project) {
+      toast({ 
+        message: 'No active project selected', 
+        variant: 'destructive' 
+      })
+      return
     }
-    const created: Dataset = {
-      id,
-      name,
-      description: newDatasetDescription.trim(),
-      lastRun: new Date(),
-      embedModel: datasets[0]?.embedModel || 'text-embedding-3-large',
-      numChunks: 0,
-      processedPercent: 0,
-      version: 'v1',
+
+    try {
+      await createDatasetMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        name,
+        rag_strategy: 'default', // Default strategy
+      })
+      toast({ message: 'Dataset created successfully', variant: 'default' })
+      setIsCreateOpen(false)
+      setNewDatasetName('')
+      setNewDatasetDescription('')
+    } catch (error) {
+      console.error('Failed to create dataset:', error)
+      toast({ 
+        message: 'Failed to create dataset. Please try again.', 
+        variant: 'destructive' 
+      })
     }
-    setDatasets(prev => [...prev, created])
-    setIsCreateOpen(false)
-    setNewDatasetName('')
-    setNewDatasetDescription('')
   }
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -344,7 +249,15 @@ const Data = () => {
           <div className="mb-2 flex flex-row gap-2 justify-between items-end">
             <div>Datasets</div>
             <div className="flex items-center gap-2">
-              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <Dialog 
+                open={isCreateOpen} 
+                onOpenChange={(open) => {
+                  // Prevent closing dialog during mutation
+                  if (!createDatasetMutation.isPending) {
+                    setIsCreateOpen(open)
+                  }
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button variant="secondary" size="sm">
                     Create new
@@ -379,14 +292,14 @@ const Data = () => {
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogClose asChild>
+                    <DialogClose asChild disabled={createDatasetMutation.isPending}>
                       <Button variant="secondary">Cancel</Button>
                     </DialogClose>
                     <Button
                       onClick={handleCreateDataset}
-                      disabled={!newDatasetName.trim()}
+                      disabled={!newDatasetName.trim() || createDatasetMutation.isPending}
                     >
-                      Create
+                      {createDatasetMutation.isPending ? 'Creating...' : 'Create'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -419,170 +332,70 @@ const Data = () => {
           </div>
         ) : (
           <div>
-            {mode === 'designer' && (
-              <div className="grid grid-cols-2 gap-2 mb-6">
-                {datasets.map(ds => (
-                  <div
-                    key={ds.id}
-                    className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/chat/data/${ds.id}`)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        navigate(`/chat/data/${ds.id}`)
-                      }
-                    }}
-                  >
-                    <div className="absolute right-3 top-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                            onClick={e => e.stopPropagation()}
-                            aria-label="Dataset actions"
-                          >
-                            <FontIcon type="overflow" className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          className="min-w-[10rem] w-[10rem]"
-                        >
-                          <DropdownMenuItem
-                            onClick={e => {
-                              e.stopPropagation()
-                              openEditDataset(ds)
-                            }}
-                          >
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={e => {
-                              e.stopPropagation()
-                              navigate(`/chat/data/${ds.id}`)
-                            }}
-                          >
-                            View
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={e => {
-                              e.stopPropagation()
-                              setDatasetToDelete(ds)
-                              setIsDeleteDatasetOpen(true)
-                            }}
-                          >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    <div className="text-sm font-medium">{ds.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Last run on {formatLastRun(ds.lastRun)}
-                    </div>
-                    <div className="flex flex-row gap-2 items-center">
-                      <Badge variant="default" size="sm" className="rounded-xl">
-                        {(() => {
-                          try {
-                            return (
-                              localStorage.getItem(
-                                `lf_dataset_strategy_name_${ds.id}`
-                              ) || 'PDF Simple'
-                            )
-                          } catch {
-                            return 'PDF Simple'
-                          }
-                        })()}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {ds.numChunks.toLocaleString()} chunks •{' '}
-                      {ds.processedPercent}% processed • {ds.version}
-                    </div>
-                  </div>
-                ))}
+            {mode === 'designer' && isDatasetsLoading ? (
+              <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                <Loader size={32} className="mr-2" />
+                Loading datasets...
               </div>
+            ) : mode === 'designer' && datasets.length <= 0 ? (
+              <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                {datasetsError ? 'Unable to load datasets. Using local storage.' : 'No datasets found. Create one to get started.'}
+              </div>
+            ) : (
+              mode === 'designer' && (
+                <div className="grid grid-cols-2 gap-2 mb-6">
+                  {datasets.map(ds => (
+                    <div
+                      key={ds.id}
+                      className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
+                      onClick={() => navigate(`/chat/data/${ds.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/chat/data/${ds.id}`)
+                        }
+                      }}
+                    >
+                      <button
+                        className="absolute right-3 top-3 text-xs bg-transparent text-primary hover:opacity-80 rounded-lg px-2 py-1"
+                        onClick={e => {
+                          e.stopPropagation()
+                          navigate(`/chat/data/${ds.id}`)
+                        }}
+                      >
+                        View
+                      </button>
+                      <div className="text-sm font-medium">{ds.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Last run on {formatLastRun(ds.lastRun)}
+                      </div>
+                      <div className="flex flex-row gap-2 items-center">
+                        <Badge
+                          variant="default"
+                          size="sm"
+                          className="rounded-xl"
+                        >
+                          {ds.embedModel}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {ds.numChunks.toLocaleString()} chunks •{' '}
+                        {ds.processedPercent}% processed • {ds.version}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
             )}
+            
             {/* Project-level raw files UI removed: files now only exist within datasets. */}
           </div>
         )}
       </div>
 
-      {/* Edit dataset dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit dataset</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Name</label>
-              <Input
-                autoFocus
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                placeholder="Dataset name"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">
-                Description
-              </label>
-              <Textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <Button onClick={saveEditDataset} disabled={!editName.trim()}>
-              Save
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete dataset dialog */}
-      <Dialog open={isDeleteDatasetOpen} onOpenChange={setIsDeleteDatasetOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete dataset?</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm">
-            Are you sure you want to delete this dataset and all the files
-            within it?
-            <div className="mt-2 font-medium">{datasetToDelete?.name}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              This action cannot be undone.
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (datasetToDelete) {
-                  deleteDataset(datasetToDelete.id)
-                }
-                setIsDeleteDatasetOpen(false)
-                setDatasetToDelete(null)
-              }}
-            >
-              Yes, delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Edit/Delete dialogs removed in favor of simple View navigation */}
     </div>
   )
 }

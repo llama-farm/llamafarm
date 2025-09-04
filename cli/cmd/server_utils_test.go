@@ -142,22 +142,22 @@ func TestVerboseHTTPClient_Logs(t *testing.T) {
 	debug = true
 	defer func() { httpClient = prev; debug = prevDebug }()
 
-	// capture stderr
-	r, w, _ := os.Pipe()
-	old := os.Stderr
-	os.Stderr = w
-	defer func() { w.Close(); os.Stderr = old }()
+	// enable file-based debug logging and ensure a clean log file
+	oldEnv := os.Getenv("DEBUG")
+	_ = os.Setenv("DEBUG", "1")
+	defer os.Setenv("DEBUG", oldEnv)
+	_ = os.Remove("debug.log")
 
 	req, _ := http.NewRequest(http.MethodGet, "http://localhost:8000/foo", nil)
 	client := getHTTPClient()
 	gotResp, err := client.Do(req)
-	// flush writer
-	w.Close()
 
-	// read stderr
-	var b strings.Builder
-	_, _ = io.Copy(&b, r)
-	out := b.String()
+	// read debug log
+	data, readErr := os.ReadFile("debug.log")
+	if readErr != nil {
+		t.Fatalf("expected to read debug.log, got error: %v", readErr)
+	}
+	out := string(data)
 
 	if err != nil {
 		t.Fatalf("unexpected error from VerboseHTTPClient: %v", err)

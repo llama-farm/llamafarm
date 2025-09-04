@@ -1,0 +1,625 @@
+version: v1
+name: advanced
+namespace: default
+prompts: []
+rag:
+  strategies:
+  - name: "research_papers_demo"
+    description: "Optimized strategy for academic research paper analysis demo"
+    tags: ["demo", "research", "academic", "papers"]
+    use_cases: 
+      - "Academic research analysis"
+      - "Literature review"
+      - "Paper summarization"
+    
+    components:
+      parser:
+        type: "DirectoryParser"
+        config:
+          recursive: true
+          include_patterns: ["*.txt", "*.md"]
+          parser_map:
+            ".txt": "PlainTextParser"
+            ".md": "MarkdownParser"
+          parser_configs:
+            PlainTextParser:
+              chunk_size: 1500  # Larger chunks for academic papers
+              chunk_overlap: 200  # Good overlap for academic context
+              chunk_strategy: paragraphs  # Paragraph-aware chunking for research papers
+              respect_sentence_boundaries: true
+              respect_paragraph_boundaries: true  # Keep paragraphs intact for academic context
+              min_chunk_size: 100
+              preserve_line_breaks: true
+              strip_empty_lines: true
+              detect_structure: true
+            MarkdownParser:
+              chunk_size: 2000  # Even larger for markdown academic papers
+              chunk_overlap: 300
+              chunk_strategy: headings  # Use heading structure for academic papers
+              respect_sentence_boundaries: true
+              respect_paragraph_boundaries: true
+              min_chunk_size: 150
+      
+      extractors:
+        - type: "ContentStatisticsExtractor"
+          priority: 100
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+            include_sentiment_indicators: true
+        
+        - type: "EntityExtractor"
+          priority: 90
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT", "PRODUCT"]
+            use_fallback: true
+            min_entity_length: 2
+        
+        - type: "SummaryExtractor"
+          priority: 80
+          config:
+            summary_sentences: 3
+            min_sentence_length: 10
+            max_sentence_length: 500
+            include_key_phrases: true
+            include_statistics: true
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 3
+          timeout: 60
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "research_papers"
+          persist_directory: "./demos/vectordb/research_papers"
+          distance_function: "cosine"  # Best for semantic similarity
+      
+      retrieval_strategy:
+        type: "BasicSimilarityStrategy"
+        config:
+          distance_metric: "cosine"
+          top_k: 3
+
+  # =============================================================================
+  # DEMO 2: CUSTOMER SUPPORT STRATEGY
+  # =============================================================================
+  - name: "customer_support_demo"
+    description: "Optimized strategy for customer support system demo"
+    tags: ["demo", "support", "customer-service", "helpdesk"]
+    use_cases:
+      - "Customer support ticketing"
+      - "Knowledge base search"
+      - "Support automation"
+    
+    components:
+      parser:
+        type: "DirectoryParser"
+        config:
+          recursive: false
+          include_patterns: ["*.csv", "*.txt"]
+          parser_map:
+            ".csv": "CSVParser"
+            ".txt": "PlainTextParser"
+          parser_configs:
+            CSVParser:
+              content_fields: ["description"]
+              metadata_fields: ["ticket_id", "customer_name", "customer_email", "priority", "category", "issue_type", "status", "agent_name"]
+              priority_mapping:
+                "Critical": 1
+                "High": 2
+                "Medium": 3
+                "Low": 4
+            PlainTextParser:
+              chunk_size: 800  # Optimal for customer support knowledge base
+              chunk_overlap: 100  # Maintain context between chunks
+              chunk_strategy: sentences  # Use sentence-aware chunking for better readability
+              respect_sentence_boundaries: true  # Don't break sentences
+              respect_paragraph_boundaries: false  # Allow paragraph breaks for better chunk sizes
+              min_chunk_size: 50  # Minimum chunk size
+              preserve_line_breaks: true
+              strip_empty_lines: true
+              detect_structure: true  # Detect headers, lists, etc.
+      
+      extractors:
+        - type: "EntityExtractor"
+          priority: 95
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT", "PRODUCT"]
+            use_fallback: true
+            min_entity_length: 2
+        
+        - type: "PatternExtractor"
+          priority: 90
+          config:
+            predefined_patterns: ["email", "phone", "url", "ip_address"]
+            include_context: true
+        
+        - type: "SummaryExtractor"
+          priority: 85
+          config:
+            summary_sentences: 2
+            min_sentence_length: 10
+            max_sentence_length: 300
+            include_key_phrases: true
+            include_statistics: false
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 5
+          timeout: 60
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "customer_support"
+          persist_directory: "./demos/vectordb/customer_support"
+          distance_function: "cosine"
+      
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          top_k: 5
+          filters:
+            priority: ["Critical", "High"]
+          filter_mode: "post"
+          fallback_multiplier: 2
+
+  # =============================================================================
+  # DEMO 3: CODE DOCUMENTATION STRATEGY
+  # =============================================================================
+  - name: "code_documentation_demo"
+    description: "Optimized strategy for code documentation demo"
+    tags: ["demo", "code", "documentation", "technical"]
+    use_cases:
+      - "API documentation search"
+      - "Code examples retrieval"
+      - "Technical documentation"
+    
+    components:
+      parser:
+        type: "DirectoryParser"
+        config:
+          recursive: true
+          include_patterns: ["*.md", "*.py", "*.txt"]
+          exclude_patterns: ["__pycache__", "*.pyc"]
+          parser_map:
+            ".md": "MarkdownParser"
+            ".py": "PlainTextParser"
+            ".txt": "PlainTextParser"
+          parser_configs:
+            MarkdownParser:
+              chunk_size: 1200  # Medium chunks for code documentation
+              chunk_overlap: 150
+              chunk_strategy: headings  # Use heading structure for documentation
+              respect_sentence_boundaries: true
+              respect_paragraph_boundaries: true  # Preserve code block structure
+              min_chunk_size: 80
+              extract_headings: true
+              extract_code_blocks: true
+              preserve_formatting: false
+            PlainTextParser:
+              chunk_size: 1000  # Smaller chunks for code files
+              chunk_overlap: 100
+              chunk_strategy: characters  # Character-based with boundary protection
+              respect_sentence_boundaries: true
+              respect_paragraph_boundaries: false  # Allow breaking for code
+              min_chunk_size: 60
+              preserve_line_breaks: true  # Important for code
+              strip_empty_lines: false  # Keep code formatting
+              detect_structure: true
+      
+      extractors:
+        - type: "HeadingExtractor"
+          priority: 100
+          config:
+            max_level: 4
+            include_hierarchy: true
+            extract_outline: true
+        
+        - type: "PatternExtractor"
+          priority: 90
+          config:
+            predefined_patterns: ["url", "file_path"]
+            include_context: true
+        
+        - type: "YAKEExtractor"
+          priority: 80
+          config:
+            max_keywords: 15
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 4
+          timeout: 60
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "code_documentation"
+          persist_directory: "./demos/vectordb/code_documentation"
+          distance_function: "cosine"
+      
+      retrieval_strategy:
+        type: "HybridUniversalStrategy"
+        config:
+          strategies:
+            - type: "BasicSimilarityStrategy"
+              weight: 0.6
+              config:
+                top_k: 10
+                distance_metric: "cosine"
+            
+            - type: "MultiQueryStrategy"
+              weight: 0.4
+              config:
+                num_queries: 3
+                top_k: 10
+                aggregation_method: "weighted"
+          
+          combination_method: "weighted_average"
+          final_k: 5
+
+  # =============================================================================
+  # DEMO 4: NEWS ANALYSIS STRATEGY
+  # =============================================================================
+  - name: "news_analysis_demo"
+    description: "Optimized strategy for news article analysis demo"
+    tags: ["demo", "news", "analysis", "media"]
+    use_cases:
+      - "News article analysis"
+      - "Trend detection"
+      - "Content summarization"
+    
+    components:
+      parser:
+        type: "DirectoryParser"
+        config:
+          recursive: true
+          include_patterns: ["*.html", "*.htm"]
+          exclude_patterns: []
+          parser_map:
+            ".html": "HTMLParser"
+            ".htm": "HTMLParser"
+          parser_configs:
+            HTMLParser:
+              chunk_size: 1400  # Good size for news articles
+              chunk_overlap: 180
+              chunk_strategy: elements  # Use HTML semantic elements for news
+              respect_sentence_boundaries: true
+              respect_paragraph_boundaries: true
+              min_chunk_size: 100
+              extract_metadata: true
+              extract_links: true
+              remove_scripts: true
+              remove_styles: true
+              preserve_structure: false  # Focus on content, not HTML structure
+      
+      extractors:
+        - type: "EntityExtractor"
+          priority: 100
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "MONEY", "EVENT"]
+            use_fallback: true
+            confidence_threshold: 0.7
+        
+        - type: "DateTimeExtractor"
+          priority: 95
+          config:
+            fuzzy_parsing: true
+            extract_relative: true
+            date_format: "ISO"
+        
+        - type: "SummaryExtractor"
+          priority: 85
+          config:
+            summary_sentences: 3
+            algorithm: "textrank"
+            include_key_phrases: true
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 5
+          timeout: 60
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "news_analysis"
+          persist_directory: "./demos/vectordb/news_analysis"
+          distance_function: "cosine"
+      
+      retrieval_strategy:
+        type: "RerankedStrategy"
+        config:
+          initial_k: 20
+          final_k: 5
+          rerank_factors:
+            similarity_weight: 0.5
+            recency_weight: 0.3
+            metadata_weight: 0.2
+          normalize_scores: true
+    
+    monitoring:
+      metrics_enabled: true
+      log_level: "INFO"
+
+  # =============================================================================
+  # DEMO 5: BUSINESS REPORTS STRATEGY
+  # =============================================================================
+  - name: "business_reports_demo"
+    description: "Optimized strategy for business reports analysis demo"
+    tags: ["demo", "business", "reports", "analytics"]
+    use_cases:
+      - "Financial report analysis"
+      - "Business intelligence"
+      - "Market analysis"
+    
+    components:
+      parser:
+        type: "DirectoryParser"
+        config:
+          recursive: true
+          include_patterns: ["*.pdf", "*.docx", "*.xlsx"]
+          exclude_patterns: []
+          parser_map:
+            ".pdf": "PDFParser"
+            ".docx": "DocxParser"
+            ".xlsx": "ExcelParser"
+          parser_configs:
+            PDFParser:
+              chunk_size: 1800  # Larger chunks for business reports
+              chunk_overlap: 250
+              chunk_strategy: pages  # Use page-based chunking for PDFs
+              respect_sentence_boundaries: true
+              respect_paragraph_boundaries: false
+              min_chunk_size: 200
+              extract_metadata: true
+              combine_pages: true
+              extract_outline: true
+            DocxParser:
+              chunk_size: 1600  # Good for Word business documents
+              chunk_overlap: 200
+              chunk_strategy: sections  # Use Word's built-in sections
+              respect_sentence_boundaries: true
+              respect_paragraph_boundaries: true
+              min_chunk_size: 150
+              extract_metadata: true
+              extract_tables: true
+              extract_comments: false
+      
+      extractors:
+        - type: "TableExtractor"
+          priority: 100
+          config:
+            output_format: "dict"
+            extract_headers: true
+            min_rows: 3
+        
+        - type: "PatternExtractor"
+          priority: 95
+          config:
+            custom_patterns:
+              - name: "currency_amount"
+                pattern: "\\$[0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{2})?"
+                description: "USD currency amounts"
+              - name: "percentage"
+                pattern: "\\b\\d{1,3}(?:\\.\\d{1,2})?%"
+                description: "Percentage values"
+        
+        - type: "SentimentExtractor"
+          priority: 90
+          config:
+            analyze_business_tone: true
+            extract_confidence: true
+            categories: ["positive", "negative", "neutral", "mixed"]
+        
+        - type: "EntityExtractor"
+          priority: 88
+          config:
+            entity_types: ["ORG", "MONEY", "PERCENT", "DATE", "PRODUCT"]
+            use_fallback: true
+            confidence_threshold: 0.7
+        
+        - type: "StatisticsExtractor"
+          priority: 85
+          config:
+            include_readability: false
+            include_vocabulary: false
+            include_structure: true
+            include_sentiment_indicators: true
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 4
+          timeout: 60
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "business_reports"
+          persist_directory: "./demos/vectordb/business_reports"
+          distance_function: "cosine"
+      
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          top_k: 10
+          filter_mode: "pre"
+          fallback_multiplier: 2
+
+  # =============================================================================
+  # DEMO 6: DOCUMENT MANAGEMENT STRATEGY
+  # =============================================================================
+  - name: "document_management_demo"
+    description: "Strategy for document lifecycle management demo"
+    tags: ["demo", "management", "operations", "vector-db"]
+    use_cases:
+      - "Document lifecycle operations"
+      - "Vector database management"
+      - "Deduplication testing"
+    
+    components:
+      parser:
+        type: "PlainTextParser"
+        config:
+          chunk_size: null  # No chunking for document lifecycle demo
+          chunk_strategy: characters  # Strategy doesn't matter when chunk_size is null
+          respect_sentence_boundaries: true
+          respect_paragraph_boundaries: false
+          min_chunk_size: 50  # Ignored when chunk_size is null
+          detect_structure: true
+          preserve_line_breaks: true
+          strip_empty_lines: true
+      
+      extractors:
+        - type: "EntityExtractor"
+          priority: 95
+          config:
+            entity_types: ["PERSON", "ORG", "DATE", "VERSION"]
+            use_fallback: true
+        
+        - type: "PatternExtractor"
+          priority: 90
+          config:
+            predefined_patterns: ["version", "date"]
+            include_context: true
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 1
+          timeout: 60
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "document_management"
+          persist_directory: "./demos/vectordb/document_management"
+          distance_function: "cosine"
+      
+      retrieval_strategy:
+        type: "BasicSimilarityStrategy"
+        config:
+          top_k: 5
+
+# =============================================================================
+# STRATEGY TEMPLATES
+# =============================================================================
+
+  # =============================================================================
+  # DEMO 7: AIRCRAFT OPERATIONS STRATEGY
+  # =============================================================================
+  - name: "aircraft_operations_demo"
+    description: "Strategy for aircraft operations manual analysis (737 FCOM)"
+    tags: ["demo", "aviation", "technical", "operations", "pdf"]
+    use_cases:
+      - "Aircraft operations manual search"
+      - "Technical procedure retrieval"
+      - "Safety documentation analysis"
+    
+    components:
+      parser:
+        type: "PDFParser"
+        config:
+          chunk_size: 2000  # Larger chunks for technical manual
+          chunk_overlap: 300  # Good overlap for procedures
+          chunk_strategy: pages  # Page-based for technical docs
+          respect_sentence_boundaries: true
+          respect_paragraph_boundaries: true
+          min_chunk_size: 200
+          extract_metadata: true
+          extract_page_structure: true
+          combine_pages: false  # Keep pages separate for reference
+          page_separator: "\n\n=== Page Break ===\n\n"
+          min_text_length: 50
+          include_page_numbers: true
+          extract_outline: true  # Important for navigation
+      
+      extractors:
+        - type: "HeadingExtractor"
+          config:
+            max_level: 4
+            include_hierarchy: true
+            extract_outline: true
+            min_heading_length: 3
+        
+        - type: "PatternExtractor"
+          config:
+            custom_patterns:
+              - name: "flight_level"
+                pattern: "FL\\d{2,3}"
+                description: "Flight levels"
+              - name: "speed"
+                pattern: "\\d+\\s*(?:kts|KIAS|KTAS|M\\.\\d+)"
+                description: "Aircraft speeds"
+              - name: "weight"
+                pattern: "\\d+(?:,\\d{3})*\\s*(?:lbs?|kg)"
+                description: "Aircraft weights"
+              - name: "altitude"
+                pattern: "\\d+(?:,\\d{3})*\\s*(?:ft|feet|FL)"
+                description: "Altitudes"
+            include_context: true
+        
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["ORG", "FAC", "LOC", "PRODUCT"]
+            use_fallback: true
+            confidence_threshold: 0.7
+        
+        - type: "TableExtractor"
+          config:
+            output_format: "dict"
+            extract_headers: true
+            min_rows: 2
+        
+        - type: "StatisticsExtractor"
+          config:
+            include_structure: true
+            include_readability: false
+            include_vocabulary: true
+      
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 3  # Smaller batch for large chunks
+          timeout: 90  # Longer timeout for technical content
+      
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "aircraft_operations"
+          persist_directory: "./demos/vectordb/aircraft_operations"
+          distance_function: "cosine"
+      
+      retrieval_strategy:
+        type: "RerankedStrategy"
+        config:
+          initial_k: 15
+          final_k: 5
+          rerank_factors:
+            similarity_weight: 0.6
+            recency_weight: 0.1
+            metadata_weight: 0.3  # Important for page/section context
+          normalize_scores: true
+  strategy_templates: {}
+datasets: []
+runtime:
+  provider: ollama
+  model: llama3.1:8b
+  model_api_parameters:
+    temperature: 0.5

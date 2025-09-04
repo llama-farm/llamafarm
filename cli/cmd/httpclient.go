@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -34,23 +33,22 @@ func (v *VerboseHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if inner == nil {
 		inner = &DefaultHTTPClient{}
 	}
-	fmt.Fprintf(os.Stderr, "HTTP %s %s\n", req.Method, req.URL.String())
+	logDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
 	logHeaders("request", req.Header)
+	logDebug(fmt.Sprintf("  -> body: %s", req.Body))
 	resp, err := inner.Do(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "  -> error: %v\n", err)
+		logDebug(fmt.Sprintf("  -> error: %v", err))
 		return nil, err
 	}
-	fmt.Fprintf(os.Stderr, "  -> %d %s\n", resp.StatusCode, http.StatusText(resp.StatusCode))
+	logDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
 	logHeaders("response", resp.Header)
+	logDebug(fmt.Sprintf("  -> body: %s", resp.Body))
 	return resp, nil
 }
 
 func getHTTPClient() HTTPClient {
-	if debug {
-		return &VerboseHTTPClient{Inner: httpClient}
-	}
-	return httpClient
+	return &VerboseHTTPClient{Inner: httpClient}
 }
 
 func logHeaders(kind string, hdr http.Header) {
@@ -65,7 +63,7 @@ func logHeaders(kind string, hdr http.Header) {
 	for _, k := range keys {
 		vals := hdr.Values(k)
 		for _, v := range vals {
-			fmt.Fprintf(os.Stderr, "  %s header: %s: %s\n", kind, k, v)
+			logDebug(fmt.Sprintf("  %s header: %s: %s", kind, k, v))
 		}
 	}
 }
