@@ -1,7 +1,10 @@
 # Use Python 3.12 slim image
 FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
 
-ENV UV_COMPILE_BYTECODE=1
+# Disable/limit bytecode compilation to avoid CI stalls
+ENV UV_COMPILE_BYTECODE=0
+ENV UV_COMPILE_BYTECODE_WORKERS=1
+ENV UV_COMPILE_BYTECODE_TIMEOUT=15
 
 RUN apt update && apt install -y curl && rm -rf /var/lib/apt/lists/*
 
