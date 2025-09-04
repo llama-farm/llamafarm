@@ -298,7 +298,6 @@ function Header() {
                 <FontIcon type="moon-filled" className="w-4 h-4" />
               </button>
             </div>
-            <FontIcon type="user-avatar" className="w-6 h-6 text-foreground" />
           </div>
         </div>
       </div>
