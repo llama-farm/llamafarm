@@ -81,14 +81,14 @@ export async function decryptJson<T = unknown>(
   }
 }
 
-function toBase64(buf: ArrayBufferLike | Uint8Array): string {
+function toBase64(buf: ArrayBuffer | Uint8Array): string {
   const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
   return window.btoa(String.fromCharCode(...u8))
 }
 
-function fromBase64(b64: string): Uint8Array {
+function fromBase64(b64: string): ArrayBuffer {
   const binary = window.atob(b64)
   const out = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
-  return out
+  return out.buffer
 }
