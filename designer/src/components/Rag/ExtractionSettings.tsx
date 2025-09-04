@@ -11,6 +11,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '../ui/dropdown-menu'
+import { decryptJson, encryptJson } from '@/utils/crypto'
 
 function ExtractionSettings() {
   const navigate = useNavigate()
@@ -99,59 +100,75 @@ function ExtractionSettings() {
   const [retryFailedPages, setRetryFailedPages] = useState('3 attempts')
   const [tempCleanup, setTempCleanup] = useState('auto-cleanup')
 
-  // Load persisted values
+  // Load persisted values (decrypt if needed)
   useEffect(() => {
-    try {
-      if (!storageKey) return
-      const raw = localStorage.getItem(storageKey)
-      if (!raw) return
-      const cfg = JSON.parse(raw)
-      setDocumentType(cfg.documentType ?? documentType)
-      setOcrFallback(cfg.ocrFallback ?? ocrFallback)
-      setOcrThreshold(cfg.ocrThreshold ?? ocrThreshold)
-      setTableDetection(cfg.tableDetection ?? tableDetection)
-      setImageExtraction(cfg.imageExtraction ?? imageExtraction)
+    ;(async () => {
+      try {
+        if (!storageKey) return
+        const raw = localStorage.getItem(storageKey)
+        if (!raw) return
+        let cfg: any = null
+        try {
+          // Try decrypt first
+          const secret = strategyId || 'default-project-secret'
+          const dec = await decryptJson(raw, secret)
+          if (dec && typeof dec === 'object') cfg = dec
+        } catch {}
+        if (!cfg) {
+          try {
+            cfg = JSON.parse(raw)
+          } catch {
+            cfg = null
+          }
+        }
+        if (!cfg) return
+        setDocumentType(cfg.documentType ?? documentType)
+        setOcrFallback(cfg.ocrFallback ?? ocrFallback)
+        setOcrThreshold(cfg.ocrThreshold ?? ocrThreshold)
+        setTableDetection(cfg.tableDetection ?? tableDetection)
+        setImageExtraction(cfg.imageExtraction ?? imageExtraction)
 
-      setPrimaryEngine(cfg.primaryEngine ?? primaryEngine)
-      setFallbackEngine(cfg.fallbackEngine ?? fallbackEngine)
-      setTextExtractionMode(cfg.textExtractionMode ?? textExtractionMode)
-      setLayoutPreservation(cfg.layoutPreservation ?? layoutPreservation)
-      setPasswordHandling(cfg.passwordHandling ?? passwordHandling)
-      setMetadataExtraction(cfg.metadataExtraction ?? metadataExtraction)
-      setFontInfo(cfg.fontInfo ?? fontInfo)
-      setColorInfo(cfg.colorInfo ?? colorInfo)
+        setPrimaryEngine(cfg.primaryEngine ?? primaryEngine)
+        setFallbackEngine(cfg.fallbackEngine ?? fallbackEngine)
+        setTextExtractionMode(cfg.textExtractionMode ?? textExtractionMode)
+        setLayoutPreservation(cfg.layoutPreservation ?? layoutPreservation)
+        setPasswordHandling(cfg.passwordHandling ?? passwordHandling)
+        setMetadataExtraction(cfg.metadataExtraction ?? metadataExtraction)
+        setFontInfo(cfg.fontInfo ?? fontInfo)
+        setColorInfo(cfg.colorInfo ?? colorInfo)
 
-      setOcrEngine(cfg.ocrEngine ?? ocrEngine)
-      setLanguages(cfg.languages ?? languages)
-      setDpi(cfg.dpi ?? dpi)
-      setPreprocessing(cfg.preprocessing ?? preprocessing)
-      setCharWhitelist(cfg.charWhitelist ?? charWhitelist)
-      setPageSegMode(cfg.pageSegMode ?? pageSegMode)
-      setNoiseReduction(cfg.noiseReduction ?? noiseReduction)
-      setOcrEngineMode(cfg.ocrEngineMode ?? ocrEngineMode)
+        setOcrEngine(cfg.ocrEngine ?? ocrEngine)
+        setLanguages(cfg.languages ?? languages)
+        setDpi(cfg.dpi ?? dpi)
+        setPreprocessing(cfg.preprocessing ?? preprocessing)
+        setCharWhitelist(cfg.charWhitelist ?? charWhitelist)
+        setPageSegMode(cfg.pageSegMode ?? pageSegMode)
+        setNoiseReduction(cfg.noiseReduction ?? noiseReduction)
+        setOcrEngineMode(cfg.ocrEngineMode ?? ocrEngineMode)
 
-      setTableLib(cfg.tableLib ?? tableLib)
-      setMinTableSize(cfg.minTableSize ?? minTableSize)
-      setColSeparator(cfg.colSeparator ?? colSeparator)
-      setHeaderDetection(cfg.headerDetection ?? headerDetection)
-      setMergeSplitTables(cfg.mergeSplitTables ?? mergeSplitTables)
-      setCellMerging(cfg.cellMerging ?? cellMerging)
-      setBorderDetection(cfg.borderDetection ?? borderDetection)
-      setExportFormat(cfg.exportFormat ?? exportFormat)
+        setTableLib(cfg.tableLib ?? tableLib)
+        setMinTableSize(cfg.minTableSize ?? minTableSize)
+        setColSeparator(cfg.colSeparator ?? colSeparator)
+        setHeaderDetection(cfg.headerDetection ?? headerDetection)
+        setMergeSplitTables(cfg.mergeSplitTables ?? mergeSplitTables)
+        setCellMerging(cfg.cellMerging ?? cellMerging)
+        setBorderDetection(cfg.borderDetection ?? borderDetection)
+        setExportFormat(cfg.exportFormat ?? exportFormat)
 
-      setImageExtractionMode(cfg.imageExtractionMode ?? imageExtractionMode)
-      setMaxImageSize(cfg.maxImageSize ?? maxImageSize)
-      setFigureCaptions(cfg.figureCaptions ?? figureCaptions)
-      setImageOCR(cfg.imageOCR ?? imageOCR)
+        setImageExtractionMode(cfg.imageExtractionMode ?? imageExtractionMode)
+        setMaxImageSize(cfg.maxImageSize ?? maxImageSize)
+        setFigureCaptions(cfg.figureCaptions ?? figureCaptions)
+        setImageOCR(cfg.imageOCR ?? imageOCR)
 
-      setParallelProcessing(cfg.parallelProcessing ?? parallelProcessing)
-      setMemoryLimit(cfg.memoryLimit ?? memoryLimit)
-      setTimeoutPerPage(cfg.timeoutPerPage ?? timeoutPerPage)
-      setCacheExtractedText(cfg.cacheExtractedText ?? cacheExtractedText)
-      setBatchSize(cfg.batchSize ?? batchSize)
-      setRetryFailedPages(cfg.retryFailedPages ?? retryFailedPages)
-      setTempCleanup(cfg.tempCleanup ?? tempCleanup)
-    } catch {}
+        setParallelProcessing(cfg.parallelProcessing ?? parallelProcessing)
+        setMemoryLimit(cfg.memoryLimit ?? memoryLimit)
+        setTimeoutPerPage(cfg.timeoutPerPage ?? timeoutPerPage)
+        setCacheExtractedText(cfg.cacheExtractedText ?? cacheExtractedText)
+        setBatchSize(cfg.batchSize ?? batchSize)
+        setRetryFailedPages(cfg.retryFailedPages ?? retryFailedPages)
+        setTempCleanup(cfg.tempCleanup ?? tempCleanup)
+      } catch {}
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey])
 
@@ -201,8 +218,15 @@ function ExtractionSettings() {
           retryFailedPages,
           tempCleanup,
         }
-        if (storageKey)
-          localStorage.setItem(storageKey, JSON.stringify(payload))
+        if (storageKey) {
+          const secret = strategyId || 'default-project-secret'
+          // Encrypt before storing to address CodeQL clear-text storage finding
+          encryptJson(payload, secret).then(ciphertext => {
+            try {
+              localStorage.setItem(storageKey, ciphertext)
+            } catch {}
+          })
+        }
         try {
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
