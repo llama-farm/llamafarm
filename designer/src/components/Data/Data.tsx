@@ -1,14 +1,12 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
-import LoadingSteps from '../../common/LoadingSteps'
 import ModeToggle, { Mode } from '../ModeToggle'
 import ConfigEditor from '../ConfigEditor'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
   DropdownMenuItem,
 } from '../ui/dropdown-menu'
 import {
@@ -25,7 +23,6 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
-import SearchInput from '../ui/search-input'
 import { useNavigate } from 'react-router-dom'
 
 type Dataset = {
@@ -50,7 +47,6 @@ type RawFile = {
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [rawFiles, setRawFiles] = useState<RawFile[]>(() => {
     try {
       const stored = localStorage.getItem('lf_raw_files')
@@ -60,7 +56,6 @@ const Data = () => {
     }
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [searchValue, setSearchValue] = useState('')
   const [mode, setMode] = useState<Mode>('designer')
 
   const navigate = useNavigate()
@@ -92,9 +87,7 @@ const Data = () => {
   })
 
   // Map of fileKey -> array of dataset ids
-  const [fileAssignments, setFileAssignments] = useState<
-    Record<string, string[]>
-  >(() => {
+  const [fileAssignments] = useState<Record<string, string[]>>(() => {
     try {
       const stored = localStorage.getItem('lf_file_assignments')
       return stored ? (JSON.parse(stored) as Record<string, string[]>) : {}
@@ -102,54 +95,6 @@ const Data = () => {
       return {}
     }
   })
-
-  const [uploadStatus, setUploadStatus] = useState<
-    Record<string, 'processing' | 'done'>
-  >({})
-
-  // Delete file (project-wide) dialog state
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-  const [fileToDelete, setFileToDelete] = useState<RawFile | null>(null)
-
-  const openDeleteProjectFile = (file: RawFile) => {
-    setFileToDelete(file)
-    setIsDeleteOpen(true)
-  }
-
-  const confirmDeleteProjectFile = () => {
-    if (!fileToDelete) return
-    const id = fileToDelete.id
-    // remove from raw files
-    setRawFiles(prev => prev.filter(f => f.id !== id))
-    // remove from assignments
-    setFileAssignments(prev => {
-      const next = { ...prev }
-      delete (next as any)[id]
-      return next
-    })
-    setIsDeleteOpen(false)
-    setFileToDelete(null)
-    toast({ message: 'File removed from project', variant: 'default' })
-  }
-
-  const getFileKey = useCallback((file: RawFile) => {
-    return file.id
-  }, [])
-
-  const toggleFileDataset = useCallback(
-    (file: RawFile, datasetId: string) => {
-      const key = getFileKey(file)
-      setFileAssignments(prev => {
-        const current = prev[key] ?? []
-        const isAssigned = current.includes(datasetId)
-        const next = isAssigned
-          ? current.filter(id => id !== datasetId)
-          : [...current, datasetId]
-        return { ...prev, [key]: next }
-      })
-    },
-    [getFileKey]
-  )
 
   // (initial state is loaded from localStorage)
 
@@ -308,7 +253,6 @@ const Data = () => {
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     setIsDropped(true)
-    setIsLoading(true)
 
     setTimeout(() => {
       setIsDragging(false)
@@ -324,32 +268,11 @@ const Data = () => {
         lastModified: f.lastModified,
         type: f.type,
       }))
-      setUploadStatus(prev => ({
-        ...prev,
-        ...Object.fromEntries(
-          converted.map(rf => [rf.id, 'processing' as const])
-        ),
-      }))
       setRawFiles(prev => {
         const existingIds = new Set(prev.map(r => r.id))
         const deduped = converted.filter(r => !existingIds.has(r.id))
         return [...prev, ...deduped]
       })
-      setIsLoading(false)
-      setTimeout(() => {
-        setUploadStatus(prev => ({
-          ...prev,
-          ...Object.fromEntries(converted.map(rf => [rf.id, 'done' as const])),
-        }))
-        // remove the status after a short delay for a brief fade-out effect
-        setTimeout(() => {
-          setUploadStatus(prev => {
-            const next = { ...prev }
-            for (const rf of converted) delete (next as any)[rf.id]
-            return next
-          })
-        }, 1500)
-      }, 1500)
     }, 4000)
 
     // console.log('Dropped files:', files)
@@ -360,7 +283,6 @@ const Data = () => {
     if (files.length === 0) return
 
     setIsDropped(true)
-    setIsLoading(true)
 
     setTimeout(() => {
       const converted: RawFile[] = files.map(f => ({
@@ -370,49 +292,16 @@ const Data = () => {
         lastModified: f.lastModified,
         type: f.type,
       }))
-      setUploadStatus(prev => ({
-        ...prev,
-        ...Object.fromEntries(
-          converted.map(rf => [rf.id, 'processing' as const])
-        ),
-      }))
       setRawFiles(prev => {
         const existingIds = new Set(prev.map(r => r.id))
         const deduped = converted.filter(r => !existingIds.has(r.id))
         return [...prev, ...deduped]
       })
       setIsDropped(false)
-      setIsLoading(false)
-      setTimeout(() => {
-        setUploadStatus(prev => ({
-          ...prev,
-          ...Object.fromEntries(converted.map(rf => [rf.id, 'done' as const])),
-        }))
-        setTimeout(() => {
-          setUploadStatus(prev => {
-            const next = { ...prev }
-            for (const rf of converted) delete (next as any)[rf.id]
-            return next
-          })
-        }, 1500)
-      }, 1500)
     }, 4000)
 
     // console.log('Selected files:', files)
   }
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setSearchValue(value)
-  }
-
-  const filteredFiles = useMemo(
-    () =>
-      rawFiles.filter(file =>
-        file.name.toLowerCase().includes(searchValue.toLowerCase())
-      ),
-    [rawFiles, searchValue]
-  )
 
   const formatLastRun = (d: Date) => {
     if (!(d instanceof Date) || isNaN(d.getTime())) {
