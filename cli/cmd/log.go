@@ -34,9 +34,8 @@ func InitDebugLogger(path string) error {
 
 		// Store the file handle for proper cleanup
 		debugFile = f
-		// Bubble Tea's LogToFile already sets up a logger, but we create our own
-		// that writes to both the file and stderr as per project requirements
-		debugLogger = log.New(io.MultiWriter(f, os.Stderr), "", log.LstdFlags)
+
+		debugLogger = log.New(io.MultiWriter(f), "", log.LstdFlags)
 	})
 	return initErr
 }

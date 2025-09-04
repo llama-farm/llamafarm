@@ -126,6 +126,14 @@ git clone https://github.com/llama-farm/llamafarm.git
 cd llamafarm
 ```
 
+Full Dev Mode:
+
+```bash
+npm install -g nx  
+nx init --useDotNxInstallation --interactive=false
+nx start server
+```
+
 ### 🎯 Getting Started
 
 > **💡 Important:** All our demos use the **REAL CLI** and **REAL configuration system** - what you see in the demos is exactly how you'll use LlamaFarm in production!

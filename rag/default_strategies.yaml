@@ -57,15 +57,14 @@ strategies:
     
     components:
       parser:
-        type: "CustomerSupportCSVParser"
+        type: "CSVParser"
         config:
+          content_fields: ["subject", "body", "answer"]
+          metadata_fields: ["ticket_id", "type", "priority", "status", "customer", "created_at", "updated_at"]
           id_field: "ticket_id"
-          description_field: "description"
-          subject_field: "subject"
-          metadata_fields: ["type", "priority", "status", "customer"]
-          date_fields: ["created_at", "updated_at"]
-          combine_subject_description: true
-          priority_map:
+          combine_content: true
+          content_separator: "\n\n---\n\n"
+          priority_mapping:
             "Critical": 1
             "High": 2
             "Medium": 3
@@ -74,23 +73,19 @@ strategies:
       extractors:
         - type: "EntityExtractor"
           config:
-            entities: ["PERSON", "ORG", "DATE", "PRODUCT"]
+            entity_types: ["PERSON", "ORG", "DATE", "PRODUCT"]
             model: "en_core_web_sm"
         
         - type: "PatternExtractor"
           config:
-            patterns:
-              "EMAIL": "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
-              "PHONE": "\\b\\d{3}-\\d{3}-\\d{4}\\b"
-              "URL": "https?://[^\\s]+"
-              "IP_ADDRESS": "\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b"
+            predefined_patterns: ["email", "phone", "url", "ip"]
             include_context: true
-            context_window: 50
-        
+
         - type: "SummaryExtractor"
           config:
-            max_sentences: 3
-            include_keywords: true
+            summary_sentences: 3
+            include_key_phrases: true
+            include_statistics: true
       
       embedder:
         type: "OllamaEmbedder"
@@ -598,6 +593,217 @@ strategies:
 # - Use ChromaDB-specific strategies for better ChromaDB performance
 # - Add more extractors for richer metadata (slower processing)
 # - Use HybridUniversalStrategy for better accuracy (slower retrieval)
+
+  # =============================================================================
+  # CSV DATA PROCESSING STRATEGIES
+  # =============================================================================
+
+  - name: "survey_analysis"
+    description: "Process survey responses and feedback data from CSV files"
+    tags: ["csv", "survey", "feedback", "analytics"]
+    use_cases:
+      - "Survey response analysis"
+      - "Customer feedback processing"
+      - "Market research data"
+      - "NPS and satisfaction analysis"
+
+    components:
+      parser:
+        type: "CSVParser"
+        config:
+          content_fields: ["response_text", "comments", "feedback", "suggestions"]
+          metadata_fields: ["respondent_id", "survey_date", "rating", "age_group", "location", "segment"]
+          id_field: "response_id"
+          combine_content: true
+          content_separator: "\n\n---\n\n"
+
+      extractors:
+        - type: "EntityExtractor"
+          priority: 90
+          config:
+            entity_types: ["PERSON", "ORG", "DATE", "MONEY", "PERCENT"]
+            use_fallback: true
+        - type: "PatternExtractor"
+          priority: 85
+          config:
+            predefined_patterns: ["email", "phone"]
+            include_context: true
+
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 10
+
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "survey_responses"
+          distance_function: "cosine"
+
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          filters:
+            rating: [1, 2, 3, 4, 5]
+          filter_mode: "post"
+          fallback_multiplier: 2
+
+  - name: "product_catalog"
+    description: "Process e-commerce product catalogs and inventory data"
+    tags: ["csv", "ecommerce", "products", "catalog"]
+    use_cases:
+      - "Product search and recommendations"
+      - "Inventory management"
+      - "Price comparison analysis"
+      - "Product categorization"
+
+    components:
+      parser:
+        type: "CSVParser"
+        config:
+          content_fields: ["name", "description", "features", "specifications"]
+          metadata_fields: ["sku", "category", "brand", "price", "availability", "rating"]
+          id_field: "sku"
+          combine_content: true
+          content_separator: "\n\n"
+
+      extractors:
+        - type: "PatternExtractor"
+          priority: 95
+          config:
+            predefined_patterns: ["file_path", "url"]
+            include_context: true
+        - type: "EntityExtractor"
+          priority: 90
+          config:
+            entity_types: ["PRODUCT", "ORG", "MONEY", "PERCENT"]
+            use_fallback: true
+
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 12
+
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "product_catalog"
+          distance_function: "cosine"
+
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          filters:
+            availability: ["in_stock", "available"]
+          filter_mode: "pre"
+          fallback_multiplier: 1.5
+
+  - name: "contact_management"
+    description: "Process contact lists and CRM data from CSV exports"
+    tags: ["csv", "crm", "contacts", "business"]
+    use_cases:
+      - "Contact search and lookup"
+      - "Lead qualification"
+      - "Customer relationship management"
+      - "Business networking"
+
+    components:
+      parser:
+        type: "CSVParser"
+        config:
+          content_fields: ["notes", "bio", "description", "comments"]
+          metadata_fields: ["name", "email", "phone", "company", "role", "industry", "location"]
+          id_field: "contact_id"
+          combine_content: false
+
+      extractors:
+        - type: "PatternExtractor"
+          priority: 95
+          config:
+            predefined_patterns: ["email", "phone", "url"]
+            include_context: true
+        - type: "EntityExtractor"
+          priority: 90
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "EMAIL"]
+            use_fallback: true
+
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 15
+
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "contacts"
+          distance_function: "cosine"
+
+      retrieval_strategy:
+        type: "BasicSimilarityStrategy"
+        config:
+          distance_metric: "cosine"
+          top_k: 5
+
+  - name: "log_analysis"
+    description: "Process application logs and system events from CSV exports"
+    tags: ["csv", "logs", "monitoring", "devops"]
+    use_cases:
+      - "Log analysis and troubleshooting"
+      - "Error pattern detection"
+      - "System monitoring"
+      - "Performance analysis"
+
+    components:
+      parser:
+        type: "CSVParser"
+        config:
+          content_fields: ["message", "error_details", "stack_trace", "context"]
+          metadata_fields: ["timestamp", "level", "service", "user_id", "session_id", "ip_address"]
+          id_field: "log_id"
+          combine_content: true
+          content_separator: " | "
+
+      extractors:
+        - type: "PatternExtractor"
+          priority: 95
+          config:
+            predefined_patterns: ["ip", "version", "file_path"]
+            custom_patterns:
+              - name: "error_code"
+                pattern: "(ERROR|WARN|INFO|DEBUG):\\s*\\[([^\\]]+)\\]"
+                description: "Extract error codes and levels"
+              - name: "http_status"
+                pattern: "\\b\\d{3}\\b"
+                description: "Extract HTTP status codes"
+            include_context: true
+        - type: "DateTimeExtractor"
+          priority: 90
+          config:
+            fuzzy_parsing: true
+
+      embedder:
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+          batch_size: 20
+
+      vector_store:
+        type: "ChromaStore"
+        config:
+          collection_name: "system_logs"
+          distance_function: "cosine"
+
+      retrieval_strategy:
+        type: "MetadataFilteredStrategy"
+        config:
+          filters:
+            level: ["ERROR", "WARN"]
+          filter_mode: "pre"
+          fallback_multiplier: 3
 
 # Scaling Considerations:
 # - Switch from Ollama to OpenAI embeddings for higher quality

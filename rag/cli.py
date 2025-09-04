@@ -50,16 +50,44 @@ def setup_logging(level: str = "INFO", quiet: bool = False):
         # Simplified format for normal use
         format_str = "%(message)s"
     
-    logging.basicConfig(
-        level=getattr(logging, level.upper()),
-        format=format_str,
-    )
+    # Configure logging with proper stream handling to avoid "Error:" prefix and duplicates
+    import sys
+
+    # Create a custom handler that sends INFO and below to stdout, WARNING+ to stderr
+    class InfoStdoutFilter(logging.Filter):
+        def filter(self, record):
+            return record.levelno <= logging.INFO
+
+    # Clear any existing handlers to prevent duplicates
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(getattr(logging, level.upper()))
+    
+    # Create formatter
+    formatter = logging.Formatter(format_str)
+    
+    # Add stderr handler for WARNING and above
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.WARNING)
+    stderr_handler.setFormatter(formatter)
+    root_logger.addHandler(stderr_handler)
+    
+    # Add stdout handler for INFO and below to avoid "Error:" prefix
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(logging.DEBUG)
+    stdout_handler.setFormatter(formatter)
+    stdout_handler.addFilter(InfoStdoutFilter())
+    root_logger.addHandler(stdout_handler)
+    
+    # Prevent propagation to avoid duplicate messages
+    root_logger.propagate = False
     
     # Suppress specific noisy loggers
     if level != "DEBUG":
         logging.getLogger("chromadb").setLevel(logging.WARNING)
         logging.getLogger("chromadb.telemetry").setLevel(logging.ERROR)
-        logging.getLogger("strategies.loader").setLevel(logging.WARNING)
+        logging.getLogger("rag.core.strategies.loader").setLevel(logging.WARNING)
+        logging.getLogger("rag.core.strategies.manager").setLevel(logging.WARNING)
         logging.getLogger("components.parsers").setLevel(logging.WARNING)
         logging.getLogger("components.stores").setLevel(logging.WARNING)
 
@@ -1502,11 +1530,15 @@ def handle_delete_command(args, doc_manager: DocumentManager, tracker: LlamaProg
         elif hasattr(args, 'all') and args.all:
             tracker.print_warning("⚠️  DELETING ALL DOCUMENTS IN COLLECTION")
             if not args.dry_run:
+                # Get count before deletion for reporting
+                collection_info = doc_manager.vector_store.get_collection_info()
+                doc_count = collection_info.get("count", 0)
+                
                 # For actual deletion, delete the entire collection
                 if hasattr(doc_manager.vector_store, 'delete_collection'):
                     doc_manager.vector_store.delete_collection()
-                    results = {"deleted_count": "ALL", "errors": []}
-                    tracker.print_success("✅ Successfully deleted entire collection")
+                    results = {"deleted_count": doc_count, "errors": []}
+                    tracker.print_success(f"✅ Successfully deleted entire collection ({doc_count} documents)")
                 else:
                     # Fallback: use deletion manager with broad criteria
                     # This will delete all documents regardless of age
@@ -1532,12 +1564,15 @@ def handle_delete_command(args, doc_manager: DocumentManager, tracker: LlamaProg
             
             deleted_count = results.get("deleted_count", 0)
             archived_count = results.get("archived_count", 0)
-            
+
+            # deleted_count should always be an integer now
             if deleted_count > 0:
                 tracker.print_success(f"✅ Successfully deleted {deleted_count} documents")
+
             if archived_count > 0:
                 tracker.print_success(f"📦 Successfully archived {archived_count} documents")
-            
+
+            # Show "no documents" message if no documents were deleted or archived
             if deleted_count == 0 and archived_count == 0:
                 tracker.print_info("ℹ️  No documents matched the deletion criteria")
         
