@@ -16,7 +16,14 @@ import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectSwitchNavigation } from '../../hooks/useProjectSwitchNavigation'
-import { useUploadFileToDataset, useReIngestDataset, useTaskStatus, useListDatasets, useDeleteDatasetFile, useDeleteDataset } from '../../hooks/useDatasets'
+import {
+  useUploadFileToDataset,
+  useReIngestDataset,
+  useTaskStatus,
+  useListDatasets,
+  useDeleteDatasetFile,
+  useDeleteDataset,
+} from '../../hooks/useDatasets'
 
 type Dataset = {
   id: string
@@ -37,7 +44,7 @@ function DatasetView() {
 
   // Get current active project for API calls
   const activeProject = useActiveProject()
-  
+
   // Handle automatic navigation when project changes
   useProjectSwitchNavigation()
   const uploadMutation = useUploadFileToDataset()
@@ -86,13 +93,22 @@ function DatasetView() {
   const files = useMemo(() => {
     if (!currentApiDataset?.files) return []
     return currentApiDataset.files.map((fileObj: any) => {
-      const fileHash = typeof fileObj === 'string' ? fileObj : (fileObj?.id || fileObj || '')
-      const size = (typeof fileObj === 'object' && fileObj !== null && 'size' in fileObj && fileObj.size !== undefined)
-        ? fileObj.size
-        : 'unknown'
-      const lastModified = (typeof fileObj === 'object' && fileObj !== null && 'lastModified' in fileObj && fileObj.lastModified !== undefined)
-        ? fileObj.lastModified
-        : 'unknown'
+      const fileHash =
+        typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
+      const size =
+        typeof fileObj === 'object' &&
+        fileObj !== null &&
+        'size' in fileObj &&
+        fileObj.size !== undefined
+          ? fileObj.size
+          : 'unknown'
+      const lastModified =
+        typeof fileObj === 'object' &&
+        fileObj !== null &&
+        'lastModified' in fileObj &&
+        fileObj.lastModified !== undefined
+          ? fileObj.lastModified
+          : 'unknown'
       return {
         id: fileHash,
         name: `${fileHash.substring(0, 12)}...${fileHash.substring(fileHash.length - 8)}`, // Show first 12 and last 8 chars
@@ -108,9 +124,14 @@ function DatasetView() {
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
-  const [pendingDeleteFileHash, setPendingDeleteFileHash] = useState<string | null>(null)
-  const [showDeleteFileConfirmation, setShowDeleteFileConfirmation] = useState(false)
-  const [copyStatus, setCopyStatus] = useState<{ [id: string]: string | undefined }>({})
+  const [pendingDeleteFileHash, setPendingDeleteFileHash] = useState<
+    string | null
+  >(null)
+  const [showDeleteFileConfirmation, setShowDeleteFileConfirmation] =
+    useState(false)
+  const [copyStatus, setCopyStatus] = useState<{
+    [id: string]: string | undefined
+  }>({})
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadStatus, setUploadStatus] = useState<
@@ -123,11 +144,10 @@ function DatasetView() {
   }
   const [versions, setVersions] = useState<DatasetVersion[]>([])
 
-
   // Load dataset metadata from API or create fallback
   useEffect(() => {
     if (!datasetId) return
-    
+
     if (currentApiDataset) {
       // Use API data when available
       setDataset({
@@ -164,11 +184,11 @@ function DatasetView() {
     if (taskStatus.state === 'SUCCESS') {
       // Task completed successfully
       setCurrentTaskId(null)
-      toast({ 
-        message: 'Dataset reprocessing completed successfully', 
-        variant: 'default' 
+      toast({
+        message: 'Dataset reprocessing completed successfully',
+        variant: 'default',
       })
-      
+
       // Create a new version
       if (datasetId) {
         const nextNum = (versions.length || 0) + 1
@@ -179,7 +199,7 @@ function DatasetView() {
         }
         const list = [...versions, next]
         setVersions(list)
-        
+
         // Update dataset version/lastRun
         try {
           const stored = localStorage.getItem('lf_datasets')
@@ -201,9 +221,9 @@ function DatasetView() {
       // Task failed
       setCurrentTaskId(null)
       const errorMessage = taskStatus.error || 'Unknown error occurred'
-      toast({ 
-        message: `Dataset reprocessing failed: ${errorMessage}`, 
-        variant: 'destructive' 
+      toast({
+        message: `Dataset reprocessing failed: ${errorMessage}`,
+        variant: 'destructive',
       })
     }
   }, [taskStatus?.state, taskStatus?.error, datasetId, versions, toast])
@@ -213,8 +233,6 @@ function DatasetView() {
     setEditDescription(dataset?.description ?? '')
     setIsEditOpen(true)
   }
-
-
 
   const handleSaveEdit = () => {
     if (!dataset || !datasetId) return
@@ -234,7 +252,8 @@ function DatasetView() {
   }
 
   const handleConfirmDelete = async () => {
-    if (!activeProject?.namespace || !activeProject?.project || !datasetId) return
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId)
+      return
 
     try {
       await deleteDatasetMutation.mutateAsync({
@@ -242,18 +261,17 @@ function DatasetView() {
         project: activeProject.project,
         dataset: datasetId,
       })
-      
+
       setShowDeleteConfirmation(false)
       setIsEditOpen(false)
-      
+
       toast({
         message: 'Dataset deleted successfully',
         variant: 'default',
       })
-      
+
       // Navigate away since the dataset no longer exists
       navigate('/chat/data')
-      
     } catch (error) {
       console.error('Dataset deletion failed:', error)
       toast({
@@ -268,13 +286,19 @@ function DatasetView() {
   }
 
   const handleDeleteFile = (fileHash: string) => {
-    if (!activeProject?.namespace || !activeProject?.project || !datasetId) return
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId)
+      return
     setPendingDeleteFileHash(fileHash)
     setShowDeleteFileConfirmation(true)
   }
 
   const handleConfirmDeleteFile = async () => {
-    if (!activeProject?.namespace || !activeProject?.project || !datasetId || !pendingDeleteFileHash) {
+    if (
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !datasetId ||
+      !pendingDeleteFileHash
+    ) {
       setShowDeleteFileConfirmation(false)
       setPendingDeleteFileHash(null)
       return
@@ -286,9 +310,9 @@ function DatasetView() {
         project: activeProject.project,
         dataset: datasetId,
         fileHash: pendingDeleteFileHash,
-        removeFromDisk: true
+        removeFromDisk: true,
       })
-      
+
       toast({
         message: 'File deleted successfully',
         variant: 'default',
@@ -312,8 +336,10 @@ function DatasetView() {
 
   // Helper function to check if a specific file is being deleted
   const isFileDeleting = (fileHash: string) => {
-    return deleteFileMutation.isPending && 
-           deleteFileMutation.variables?.fileHash === fileHash
+    return (
+      deleteFileMutation.isPending &&
+      deleteFileMutation.variables?.fileHash === fileHash
+    )
   }
 
   // Derived RAG strategy info for this dataset
@@ -401,36 +427,41 @@ function DatasetView() {
             <Button
               size="sm"
               onClick={async () => {
-                if (!datasetId || !activeProject?.namespace || !activeProject?.project) return
-                
+                if (
+                  !datasetId ||
+                  !activeProject?.namespace ||
+                  !activeProject?.project
+                )
+                  return
+
                 try {
                   const result = await reIngestMutation.mutateAsync({
                     namespace: activeProject.namespace,
                     project: activeProject.project,
                     dataset: datasetId,
                   })
-                  
+
                   // Extract task ID from task_uri (e.g., "http://localhost:8000/v1/projects/ns/proj/tasks/abc-123" -> "abc-123")
                   const taskId = result.task_uri.split('/').pop()
                   if (taskId) {
                     setCurrentTaskId(taskId)
-                    toast({ 
-                      message: 'Dataset reprocessing started...', 
-                      variant: 'default' 
+                    toast({
+                      message: 'Dataset reprocessing started...',
+                      variant: 'default',
                     })
                   }
                 } catch (error) {
                   console.error('Failed to start reprocessing:', error)
-                  toast({ 
-                    message: 'Failed to start reprocessing. Please try again.', 
-                    variant: 'destructive' 
+                  toast({
+                    message: 'Failed to start reprocessing. Please try again.',
+                    variant: 'destructive',
                   })
                 }
               }}
               disabled={reIngestMutation.isPending || !!currentTaskId}
             >
-              {reIngestMutation.isPending 
-                ? 'Starting...' 
+              {reIngestMutation.isPending
+                ? 'Starting...'
                 : currentTaskId && taskStatus?.state === 'PENDING'
                   ? 'Processing...'
                   : 'Reprocess'}
@@ -494,9 +525,9 @@ function DatasetView() {
         </div>
       </section>
 
-      <Dialog 
-        open={isEditOpen} 
-        onOpenChange={(open) => {
+      <Dialog
+        open={isEditOpen}
+        onOpenChange={open => {
           setIsEditOpen(open)
           if (!open) {
             // Reset confirmation state when modal closes
@@ -510,19 +541,22 @@ function DatasetView() {
               {showDeleteConfirmation ? 'Delete Dataset' : 'Edit dataset'}
             </DialogTitle>
           </DialogHeader>
-          
+
           {showDeleteConfirmation ? (
             <div className="space-y-4">
               <div className="text-center">
-                <h3 className="text-lg font-semibold text-red-600">Confirm Deletion</h3>
+                <h3 className="text-lg font-semibold text-red-600">
+                  Confirm Deletion
+                </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Are you sure you want to delete the dataset "{datasetName}"?
                 </p>
                 <p className="mt-1 text-xs text-red-500">
-                  This action cannot be undone. All files and data will be permanently deleted.
+                  This action cannot be undone. All files and data will be
+                  permanently deleted.
                 </p>
               </div>
-              
+
               <div className="flex gap-3 justify-center">
                 <Button
                   variant="secondary"
@@ -593,7 +627,9 @@ function DatasetView() {
       {showDeleteFileConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full mx-4 border border-border">
-            <h3 className="text-lg font-semibold text-red-600 mb-2">Delete File</h3>
+            <h3 className="text-lg font-semibold text-red-600 mb-2">
+              Delete File
+            </h3>
             <p className="text-muted-foreground mb-4">
               Are you sure you want to delete this file?
             </p>
@@ -687,18 +723,22 @@ function DatasetView() {
           type="file"
           className="hidden"
           multiple
-          onChange={async (e) => {
-            if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
+          onChange={async e => {
+            if (
+              !datasetId ||
+              !activeProject?.namespace ||
+              !activeProject?.project
+            ) {
               toast({
                 message: 'Missing required information for upload',
-                variant: 'destructive'
+                variant: 'destructive',
               })
               return
             }
-            
+
             const list = e.target.files ? Array.from(e.target.files) : []
             if (list.length === 0) return
-            
+
             // Convert to RawFile shape for UI
             const converted: RawFile[] = list.map(f => ({
               id: `${f.name}:${f.size}:${f.lastModified}`,
@@ -707,7 +747,7 @@ function DatasetView() {
               lastModified: f.lastModified,
               type: f.type,
             }))
-            
+
             try {
               // Set processing status for UI feedback
               setUploadStatus(prev => ({
@@ -716,7 +756,7 @@ function DatasetView() {
                   converted.map(rf => [rf.id, 'processing' as const])
                 ),
               }))
-              
+
               // Upload each file to the API
               for (const file of list) {
                 try {
@@ -724,13 +764,13 @@ function DatasetView() {
                     namespace: activeProject.namespace,
                     project: activeProject.project,
                     dataset: datasetId,
-                    file
+                    file,
                   })
                 } catch (error) {
                   console.error(`Failed to upload ${file.name}:`, error)
                   toast({
                     message: `Failed to upload ${file.name}`,
-                    variant: 'destructive'
+                    variant: 'destructive',
                   })
                   // Remove from processing status on error
                   const fileId = `${file.name}:${file.size}:${file.lastModified}`
@@ -742,9 +782,9 @@ function DatasetView() {
                   continue
                 }
               }
-              
+
               // Files will be updated via API refresh after upload completes
-              
+
               // Show success status
               setTimeout(() => {
                 setUploadStatus(prev => ({
@@ -755,9 +795,9 @@ function DatasetView() {
                 }))
                 toast({
                   message: `Successfully uploaded ${list.length} file${list.length > 1 ? 's' : ''}`,
-                  variant: 'default'
+                  variant: 'default',
                 })
-                
+
                 // Clear status after delay
                 setTimeout(() => {
                   setUploadStatus(prev => {
@@ -767,12 +807,11 @@ function DatasetView() {
                   })
                 }, 1500)
               }, 500)
-              
             } catch (error) {
               console.error('Upload error:', error)
               toast({
                 message: 'Failed to upload files',
-                variant: 'destructive'
+                variant: 'destructive',
               })
               // Clear processing status on error
               setUploadStatus(prev => {
@@ -781,7 +820,7 @@ function DatasetView() {
                 return next
               })
             }
-            
+
             // Reset input so same files can be picked again
             e.currentTarget.value = ''
           }}
@@ -802,7 +841,9 @@ function DatasetView() {
               {/* Debug info */}
               {process.env.NODE_ENV === 'development' && (
                 <div className="mt-2 text-xs">
-                  <div>API Dataset: {currentApiDataset ? 'Found' : 'Not found'}</div>
+                  <div>
+                    API Dataset: {currentApiDataset ? 'Found' : 'Not found'}
+                  </div>
                   <div>API Files: {currentApiDataset?.files?.length || 0}</div>
                 </div>
               )}
@@ -816,77 +857,96 @@ function DatasetView() {
               </div>
               <ul>
                 {files
-                .filter(f =>
-                  f.name.toLowerCase().includes(searchValue.toLowerCase())
-                )
-                .map(f => (
-                  <li
-                    key={f.id}
-                    className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
-                  >
-                    <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
-                      <span>{f.fullHash ? f.name : f.name}</span>
-                      {f.fullHash && (
-                        <>
+                  .filter(f =>
+                    f.name.toLowerCase().includes(searchValue.toLowerCase())
+                  )
+                  .map(f => (
+                    <li
+                      key={f.id}
+                      className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
+                    >
+                      <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
+                        <span>{f.fullHash ? f.name : f.name}</span>
+                        {f.fullHash && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(
+                                    f.fullHash!
+                                  )
+                                  setCopyStatus(prev => ({
+                                    ...prev,
+                                    [f.id]: 'Copied!',
+                                  }))
+                                } catch (err) {
+                                  setCopyStatus(prev => ({
+                                    ...prev,
+                                    [f.id]: 'Failed to copy',
+                                  }))
+                                }
+                                setTimeout(() => {
+                                  setCopyStatus(prev => ({
+                                    ...prev,
+                                    [f.id]: undefined,
+                                  }))
+                                }, 1500)
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800 text-left"
+                              title="Click to copy full hash"
+                            >
+                              Copy full hash
+                            </button>
+                            {copyStatus?.[f.id] && (
+                              <span
+                                className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}
+                              >
+                                {copyStatus[f.id]}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div className="w-1/2 flex items-center justify-between gap-4">
+                        <div className="text-xs text-muted-foreground">
+                          {f.size === 'unknown' || f.fullHash
+                            ? 'N/A'
+                            : `${Math.ceil(f.size / 1024)} KB`}
+                        </div>
+                        <div className="flex items-center gap-6">
+                          {uploadStatus[f.id] === 'processing' && (
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <FontIcon type="fade" className="w-4 h-4" />
+                              <span className="text-xs">Processing</span>
+                            </div>
+                          )}
+                          {uploadStatus[f.id] === 'done' && (
+                            <FontIcon
+                              type="checkmark-outline"
+                              className="w-4 h-4 text-teal-600 dark:text-teal-400"
+                            />
+                          )}
                           <button
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(f.fullHash!)
-                                setCopyStatus((prev) => ({ ...prev, [f.id]: 'Copied!' }))
-                              } catch (err) {
-                                setCopyStatus((prev) => ({ ...prev, [f.id]: 'Failed to copy' }))
-                              }
-                              setTimeout(() => {
-                                setCopyStatus((prev) => ({ ...prev, [f.id]: undefined }))
-                              }, 1500)
-                            }}
-                            className="text-xs text-blue-600 hover:text-blue-800 text-left"
-                            title="Click to copy full hash"
+                            className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                            onClick={() =>
+                              f.fullHash && handleDeleteFile(f.fullHash)
+                            }
+                            disabled={
+                              f.fullHash ? isFileDeleting(f.fullHash) : true
+                            }
+                            aria-label={`Delete ${f.name} from dataset`}
+                            title="Delete file"
                           >
-                            Copy full hash
+                            {f.fullHash && isFileDeleting(f.fullHash) ? (
+                              <span className="text-xs">...</span>
+                            ) : (
+                              <FontIcon type="trashcan" className="w-4 h-4" />
+                            )}
                           </button>
-                          {copyStatus?.[f.id] && (
-                            <span className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}>
-                              {copyStatus[f.id]}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <div className="w-1/2 flex items-center justify-between gap-4">
-                      <div className="text-xs text-muted-foreground">
-                        {f.size === 'unknown' || f.fullHash ? 'N/A' : `${Math.ceil(f.size / 1024)} KB`}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-6">
-                        {uploadStatus[f.id] === 'processing' && (
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <FontIcon type="fade" className="w-4 h-4" />
-                            <span className="text-xs">Processing</span>
-                          </div>
-                        )}
-                        {uploadStatus[f.id] === 'done' && (
-                          <FontIcon
-                            type="checkmark-outline"
-                            className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                          />
-                        )}
-                        <button
-                          className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
-                          onClick={() => f.fullHash && handleDeleteFile(f.fullHash)}
-                          disabled={f.fullHash ? isFileDeleting(f.fullHash) : true}
-                          aria-label={`Delete ${f.name} from dataset`}
-                          title="Delete file"
-                        >
-                          {f.fullHash && isFileDeleting(f.fullHash) ? (
-                            <span className="text-xs">...</span>
-                          ) : (
-                            <FontIcon type="trashcan" className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  ))}
               </ul>
             </div>
           )}
