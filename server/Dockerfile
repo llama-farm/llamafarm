@@ -17,15 +17,15 @@ COPY models/ ./models/
 
 # Install each package with its own dependencies
 RUN ls -la config
-RUN cd config && uv sync --locked
-RUN cd rag && uv sync --locked
-RUN cd models && uv sync --locked
+RUN cd config && uv sync --locked  --verbose
+RUN cd rag && uv sync --locked  --verbose
+RUN cd models && uv sync --locked  --verbose
 
 # Copy server dependency files and README
 COPY server/pyproject.toml server/uv.lock server/README.md ./server/
 
 # Install server dependencies
-RUN cd server && uv sync --locked
+RUN cd server && uv sync --locked --verbose
 
 # Copy server source code
 COPY server/ ./server/
