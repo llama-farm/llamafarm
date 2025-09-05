@@ -16,6 +16,8 @@ import {
 } from '../utils/projectUtils'
 import { getCurrentNamespace } from '../utils/namespaceUtils'
 import { getProjectsList } from '../utils/projectConstants'
+import { useQueryClient } from '@tanstack/react-query'
+import { projectKeys } from '../hooks/useProjects'
 
 function Header() {
   const [isBuilding, setIsBuilding] = useState(false)
@@ -31,7 +33,7 @@ function Header() {
 
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
-
+  const queryClient = useQueryClient()
   // Convert API projects to project names for dropdown with fallback
   const projects = useMemo(() => {
     return getProjectsList(projectsResponse)
@@ -70,13 +72,22 @@ function Header() {
 
   const handleSelectProject = (name: string) => {
     const isDifferent = name !== activeProject
-    setActiveProject(name)
-    setActiveProjectUtil(name)
-    setIsProjectOpen(false)
+    
     if (isDifferent) {
+      // Invalidate the current project query to force refetch
+      const currentProjectKey = projectKeys.detail(namespace, activeProject)
+      queryClient.invalidateQueries({ queryKey: currentProjectKey })
+      
+      // Set the new active project
+      setActiveProject(name)
+      setActiveProjectUtil(name)
+      
+      // Show switching animation
       setIsSwitching(true)
       setTimeout(() => setIsSwitching(false), 900)
     }
+    
+    setIsProjectOpen(false)
   }
 
   const isHomePage = location.pathname === '/'

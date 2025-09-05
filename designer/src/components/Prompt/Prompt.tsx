@@ -100,7 +100,9 @@ const Prompt = () => {
           </button>
         </div>
       ) : (
-        <ConfigEditor />
+        <div className="flex-1 overflow-hidden">
+          <ConfigEditor className="h-full" />
+        </div>
       )}
     </div>
   )

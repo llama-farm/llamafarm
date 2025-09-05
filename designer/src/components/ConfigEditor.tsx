@@ -1,210 +1,377 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
+import { EditorView, lineNumbers, keymap } from '@codemirror/view'
+import { EditorState, StateEffect } from '@codemirror/state'
+import { json } from '@codemirror/lang-json'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { defaultKeymap } from '@codemirror/commands'
+import { bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, HighlightStyle } from '@codemirror/language'
+import { highlightSelectionMatches } from '@codemirror/search'
+import { tags } from '@lezer/highlight'
+import { useTheme } from '../contexts/ThemeContext'
+import { useProject } from '../hooks/useProjects'
+import { useActiveProject } from '../hooks/useActiveProject'
+import Loader from '../common/Loader'
 import FontIcon from '../common/FontIcon'
 
-type FileId =
-  | 'prompts.json'
-  | 'training.json'
-  | 'data.json'
-  | 'config.yaml'
-  | 'models.json'
-  | 'rag.yaml'
+// Custom light theme for CodeMirror with proper syntax highlighting
+const lightTheme = EditorView.theme({
+  '&': {
+    color: '#24292f',
+    backgroundColor: '#ffffff'
+  },
+  '.cm-content': {
+    padding: '16px',
+    minHeight: '200px'
+  },
+  '.cm-focused': {
+    outline: 'none'
+  },
+  '.cm-editor': {
+    borderRadius: '8px'
+  },
+  '.cm-scroller': {
+    lineHeight: '1.5'
+  },
+  '.cm-cursor': {
+    display: 'none' // Hide cursor in read-only mode
+  },
+  '.cm-gutters': {
+    backgroundColor: '#f6f8fa',
+    color: '#656d76',
+    border: 'none',
+    borderRight: '1px solid #d1d9e0'
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: '#f6f8fa'
+  },
+  '.cm-foldGutter .cm-gutterElement': {
+    color: '#656d76'
+  },
+  '.cm-selectionBackground': {
+    backgroundColor: '#0969da26'
+  },
+  '.cm-scroller::-webkit-scrollbar': {
+    width: '12px'
+  },
+  '.cm-scroller::-webkit-scrollbar-track': {
+    backgroundColor: '#f6f8fa'
+  },
+  '.cm-scroller::-webkit-scrollbar-thumb': {
+    backgroundColor: '#d1d9e0',
+    borderRadius: '6px',
+    border: '2px solid #f6f8fa'
+  },
+  '.cm-scroller::-webkit-scrollbar-thumb:hover': {
+    backgroundColor: '#afb8c1'
+  }
+}, { dark: false })
 
-interface OpenTab {
-  id: FileId
-  label: string
+// Custom syntax highlighting for light theme
+const lightHighlightStyle = HighlightStyle.define([
+  { tag: tags.keyword, color: '#cf222e' },
+  { tag: tags.atom, color: '#0969da' },
+  { tag: tags.bool, color: '#0969da' },
+  { tag: tags.url, color: '#0969da' },
+  { tag: tags.labelName, color: '#116329' },
+  { tag: tags.inserted, color: '#116329' },
+  { tag: tags.deleted, color: '#d1242f' },
+  { tag: tags.literal, color: '#0969da' },
+  { tag: tags.string, color: '#0a3069' },
+  { tag: tags.number, color: '#0969da' },
+  { tag: [tags.regexp, tags.escape, tags.special(tags.string)], color: '#bc4c00' },
+  { tag: tags.definition(tags.variableName), color: '#24292f' },
+  { tag: tags.local(tags.variableName), color: '#24292f' },
+  { tag: [tags.typeName, tags.namespace], color: '#8250df' },
+  { tag: tags.className, color: '#8250df' },
+  { tag: [tags.special(tags.variableName), tags.macroName], color: '#0969da' },
+  { tag: tags.definition(tags.propertyName), color: '#0969da' },
+  { tag: tags.propertyName, color: '#0969da' },
+  { tag: tags.comment, color: '#656d76', fontStyle: 'italic' },
+  { tag: tags.meta, color: '#656d76' },
+  { tag: tags.invalid, color: '#d1242f' },
+  { tag: tags.punctuation, color: '#24292f' },
+  { tag: tags.bracket, color: '#24292f' }
+])
+
+/**
+ * ProjectConfigViewer - A CodeMirror-based read-only configuration viewer
+ * 
+ * Features:
+ * - Loads project configuration from the API using useProject hook
+ * - JSON syntax highlighting with CodeMirror 6
+ * - Dynamic theme switching (light/dark) matching app theme
+ * - Read-only mode with proper error handling and loading states
+ * - Responsive design using Tailwind CSS
+ */
+interface ConfigEditorProps {
+  className?: string
 }
 
-const initialFiles: { id: FileId; label: string; group: string }[] = [
-  { id: 'prompts.json', label: 'prompts.json', group: 'Config' },
-  { id: 'training.json', label: 'training.json', group: 'Config' },
-  { id: 'data.json', label: 'data.json', group: 'Data' },
-  { id: 'config.yaml', label: 'config.yaml', group: 'Config' },
-  { id: 'models.json', label: 'models.json', group: 'Models' },
-  { id: 'rag.yaml', label: 'rag.yaml', group: 'RAG' },
-]
+const ConfigEditor: React.FC<ConfigEditorProps> = ({ 
+  className = '' 
+}) => {
+  const { theme } = useTheme()
+  const editorRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
+  
+  // Get current project info using reactive hook
+  const activeProject = useActiveProject()
+  
+  // Fetch project data with improved loading state
+  const { 
+    data: projectResponse, 
+    isLoading, 
+    error,
+    refetch
+  } = useProject(
+    activeProject?.namespace || '', 
+    activeProject?.project || '',
+    !!activeProject?.namespace && !!activeProject?.project // Only enable when we have both values
+  )
 
-const dummyContent: Record<FileId, string> = {
-  'prompts.json':
-    '{\n  "system": "You are LlamaFarm.",\n  "templates": []\n}\n',
-  'training.json': '{\n  "dataset": [],\n  "strategy": "grid-search"\n}\n',
-  'data.json': '{\n  "sources": ["./data/logs/*.pdf"]\n}\n',
-  'config.yaml': 'project: aircraft-mx-flow\nfeatures:\n  - rag\n  - prompts\n',
-  'models.json': '{\n  "default": "llama3:8b",\n  "adapters": []\n}\n',
-  'rag.yaml': 'retriever:\n  strategy: hybrid\n',
-}
 
-function ConfigEditor() {
-  const [query, setQuery] = useState('')
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    Config: true,
-    Data: true,
-    Models: true,
-    RAG: true,
-  })
-  const [openTabs, setOpenTabs] = useState<OpenTab[]>([
-    { id: 'prompts.json', label: 'prompts.json' },
-  ])
-  const [activeId, setActiveId] = useState<FileId>('prompts.json')
-  const [content, setContent] = useState<Record<FileId, string>>(dummyContent)
 
-  const filesByGroup = useMemo(() => {
-    const groups: Record<string, { id: FileId; label: string }[]> = {}
-    for (const f of initialFiles) {
-      if (query && !f.label.toLowerCase().includes(query.toLowerCase()))
-        continue
-      if (!groups[f.group]) groups[f.group] = []
-      groups[f.group].push({ id: f.id, label: f.label })
+  // Create extensions configuration
+  const createExtensions = useMemo(() => {
+    return () => [
+      // Language support
+      json(),
+      
+      // Editor features
+      lineNumbers(),
+      foldGutter(),
+      bracketMatching(),
+      indentOnInput(),
+      highlightSelectionMatches(),
+      
+      // Read-only configuration
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+      
+      // Keymaps (limited for read-only)
+      keymap.of([
+        ...defaultKeymap.filter(binding => {
+          // Allow navigation and selection commands only
+          const allowedKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']
+          const allowedCommands = ['selectAll', 'copy', 'cursorDocStart', 'cursorDocEnd', 'cursorLineStart', 'cursorLineEnd']
+          return allowedKeys.includes(binding.key || '') || 
+                 allowedCommands.some(cmd => binding.run?.name?.includes(cmd))
+        })
+      ]),
+      
+      // Typography theme (applied to both light and dark)
+      EditorView.theme({
+        '&': {
+          fontSize: '14px',
+          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+        }
+      }),
+      
+      // Theme extensions with syntax highlighting
+      ...(theme === 'dark' 
+        ? [
+            oneDark,
+            EditorView.theme({
+              '.cm-scroller::-webkit-scrollbar': {
+                width: '12px'
+              },
+              '.cm-scroller::-webkit-scrollbar-track': {
+                backgroundColor: '#1c2028'
+              },
+              '.cm-scroller::-webkit-scrollbar-thumb': {
+                backgroundColor: '#3e4451',
+                borderRadius: '6px',
+                border: '2px solid #1c2028'
+              },
+              '.cm-scroller::-webkit-scrollbar-thumb:hover': {
+                backgroundColor: '#5c6370'
+              }
+            }, { dark: true })
+          ]
+        : [lightTheme, syntaxHighlighting(lightHighlightStyle)]
+      )
+    ]
+  }, [theme])
+
+  // Format project configuration as JSON
+  const formattedConfig = useMemo(() => {
+    // Always show something - even if no project or data
+    if (!activeProject) {
+      return JSON.stringify({
+        message: "No active project",
+        note: "Select a project from the dropdown to view its configuration"
+      }, null, 2)
     }
-    return groups
-  }, [query])
+    
+    if (!projectResponse) {
+      return JSON.stringify({
+        message: "Loading project data...",
+        project: activeProject.project,
+        namespace: activeProject.namespace
+      }, null, 2)
+    }
+    
+    if (error) {
+      return JSON.stringify({
+        message: "Error loading project configuration",
+        error: error.message || 'Unknown error',
+        project: activeProject.project
+      }, null, 2)
+    }
 
-  const openFile = (id: FileId, label: string) => {
-    setActiveId(id)
-    setOpenTabs(prev =>
-      prev.find(t => t.id === id) ? prev : [...prev, { id, label }]
+    const config = projectResponse.project?.config
+    
+    // Always show the config, even if empty
+    return JSON.stringify({
+      name: projectResponse.project?.name || activeProject.project,
+      namespace: projectResponse.project?.namespace || activeProject.namespace,
+      configuration: config || {},
+      message: config && Object.keys(config).length > 2 ? 
+        "Project configuration loaded" : 
+        "Project has minimal configuration - add data, models, and prompts using the tabs above"
+    }, null, 2)
+  }, [activeProject, projectResponse, error])
+
+  // Initialize CodeMirror
+  useEffect(() => {
+    if (!editorRef.current) return
+    
+    // Clean up previous editor if it exists
+    if (viewRef.current) {
+      viewRef.current.destroy()
+      viewRef.current = null
+      setIsInitialized(false)
+    }
+    
+    // DEBUG: Log scrollbar elements
+    console.log('🔍 SCROLLBAR DEBUG - Theme:', theme)
+    const scrollableElements = document.querySelectorAll('[style*="overflow"], .cm-scroller, .cm-editor')
+    scrollableElements.forEach((el, i) => {
+      console.log(`Element ${i}:`, el, getComputedStyle(el).overflow)
+    })
+
+    const extensions = createExtensions()
+
+    const state = EditorState.create({
+      doc: formattedConfig,
+      extensions
+    })
+
+    const view = new EditorView({
+      state,
+      parent: editorRef.current
+    })
+
+    viewRef.current = view
+    setIsInitialized(true)
+
+    return () => {
+      view.destroy()
+      viewRef.current = null
+      setIsInitialized(false)
+    }
+  }, []) // Only initialize once
+
+  // Update content when project data changes
+  useEffect(() => {
+    if (!viewRef.current || !isInitialized) return
+
+    const currentDoc = viewRef.current.state.doc.toString()
+    if (currentDoc !== formattedConfig) {
+      viewRef.current.dispatch({
+        changes: {
+          from: 0,
+          to: viewRef.current.state.doc.length,
+          insert: formattedConfig
+        }
+      })
+    }
+  }, [formattedConfig, isInitialized])
+
+  // Update theme when it changes
+  useEffect(() => {
+    if (!viewRef.current || !isInitialized) return
+    
+    viewRef.current.dispatch({
+      effects: StateEffect.reconfigure.of(createExtensions())
+    })
+  }, [theme, isInitialized, createExtensions])
+
+  // Only show loading on initial load, not for subsequent fetches
+  const isActuallyLoading = isLoading && !projectResponse
+  
+  if (isActuallyLoading) {
+    return (
+      <div className={`w-full h-full max-h-full rounded-lg bg-card border border-border flex items-center justify-center ${className}`}>
+        <div className="flex flex-col items-center gap-4">
+          <Loader />
+          <p className="text-muted-foreground text-sm">Loading project configuration...</p>
+          <p className="text-xs text-muted-foreground">
+            Fetching: {activeProject?.namespace || 'unknown'}/{activeProject?.project || 'unknown'}
+          </p>
+        </div>
+      </div>
     )
   }
 
-  const closeTab = (id: FileId) => {
-    setOpenTabs(prev => {
-      const remaining = prev.filter(t => t.id !== id)
-      // Prevent closing the last tab; keep at least one open
-      if (remaining.length === 0) return prev
-      if (activeId === id) {
-        setActiveId(remaining[0].id)
-      }
-      return remaining
-    })
+  if (error) {
+    return (
+      <div className={`w-full h-full max-h-full rounded-lg bg-card border border-border flex items-center justify-center ${className}`}>
+        <div className="flex flex-col items-center gap-4 p-6 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+            <FontIcon type="info" className="w-6 h-6 text-destructive" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-lg font-semibold text-foreground">Failed to load configuration</h3>
+            <p className="text-muted-foreground text-sm max-w-md">
+              {error instanceof Error ? error.message : 'An unknown error occurred while fetching the project configuration.'}
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="w-full h-[70vh] min-h-[420px] rounded-lg overflow-hidden flex bg-card">
-      {/* Sidebar */}
-      <div className="w-64 shrink-0 border-r border-border p-3 space-y-3">
-        <div className="flex items-center gap-2 bg-card rounded-md px-2 py-1 border border-input">
-          <FontIcon
-            type="search"
-            className="w-4 h-4 text-gray-800 dark:text-white"
-          />
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search config"
-            className="w-full bg-transparent text-sm focus:outline-none text-foreground"
-          />
-        </div>
-
-        {Object.entries(filesByGroup).map(([group, files]) => (
-          <div key={group} className="text-sm">
-            <button
-              className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-accent/20"
-              onClick={() => setOpenGroups(g => ({ ...g, [group]: !g[group] }))}
-            >
-              <span className="text-foreground">{group}</span>
-              <FontIcon
-                type="chevron-down"
-                className={`w-4 h-4 text-foreground transition-transform ${
-                  openGroups[group] ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-            {openGroups[group] && (
-              <div className="mt-1 space-y-1">
-                {files.map(f => (
-                  <button
-                    key={f.id}
-                    className={`w-full text-left px-2 py-1 rounded-md hover:bg-accent/20 ${
-                      activeId === f.id ? 'bg-accent/30' : ''
-                    }`}
-                    onClick={() => openFile(f.id, f.label)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            )}
+    <div className={`config-editor w-full h-full max-h-full rounded-lg bg-card border border-border overflow-hidden ${className}`}>
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-border bg-card">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FontIcon type="code" className="w-4 h-4 text-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">
+              Project Configuration
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              ({activeProject?.project || 'No project'})
+            </span>
           </div>
-        ))}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Read-only</span>
+            <FontIcon type="eye-off" className="w-3 h-3 text-muted-foreground" />
+          </div>
+        </div>
       </div>
 
-      {/* Main */}
-      <div className="flex-1 flex flex-col">
-        {/* Tabs */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-card">
-          {openTabs.map(tab => (
-            <div
-              key={tab.id}
-              className={`flex items-center gap-2 px-2 py-1 rounded-md text-sm cursor-default ${
-                activeId === tab.id
-                  ? 'bg-accent/30 text-foreground'
-                  : 'text-muted-foreground'
-              }`}
-            >
-              <button
-                className="outline-none"
-                onClick={() => setActiveId(tab.id)}
-              >
-                {tab.label}
-              </button>
-              <FontIcon
-                isButton
-                type="close"
-                className="w-4 h-4"
-                handleOnClick={() => closeTab(tab.id)}
-              />
-            </div>
-          ))}
-        </div>
-
-        {/* Editor area */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3 p-3">
-          <div className="col-span-1">
-            <textarea
-              className="w-full h-full resize-none bg-background text-foreground rounded-md p-3 font-mono text-sm"
-              spellCheck={false}
-              autoComplete="off"
-              value={content[activeId] ?? ''}
-              onChange={e =>
-                setContent(prev => ({ ...prev, [activeId]: e.target.value }))
-              }
-            />
+      {/* Editor */}
+      <div 
+        ref={editorRef} 
+        className="config-editor-content flex-1 overflow-auto bg-background custom-scrollbar"
+        style={{ height: 'calc(100% - 57px)' }}
+      >
+        {/* Fallback content if CodeMirror fails to initialize */}
+        {!isInitialized && (
+          <div className="p-4 text-sm text-muted-foreground font-mono overflow-auto h-full custom-scrollbar">
+            <pre className="whitespace-pre-wrap">{formattedConfig}</pre>
           </div>
-          <div className="hidden lg:block col-span-1">
-            <div className="w-full h-full rounded-md p-3 font-mono text-[13px] leading-6 bg-card border border-border overflow-auto">
-              <pre className="whitespace-pre-wrap">
-                <code>
-                  <span className="text-foreground">project:</span>{' '}
-                  <span className="text-teal-500 dark:text-teal-300">
-                    aircraft-mx-flow
-                  </span>
-                  {'\n'}
-                  <span className="text-foreground">features:</span>
-                  {'\n'} -{' '}
-                  <span className="text-teal-500 dark:text-teal-300">rag</span>
-                  {'\n'} -{' '}
-                  <span className="text-teal-500 dark:text-teal-300">
-                    prompts
-                  </span>
-                  {'\n'} -{' '}
-                  <span className="text-teal-500 dark:text-teal-300">
-                    models
-                  </span>
-                  {'\n'}
-                  <span className="text-foreground">retriever:</span>
-                  {'\n'} <span className="text-foreground">strategy:</span>{' '}
-                  <span className="text-teal-500 dark:text-teal-300">
-                    hybrid
-                  </span>
-                  {'\n'} <span className="text-foreground">top_k:</span>{' '}
-                  <span className="text-teal-500 dark:text-teal-300">8</span>
-                  {'\n'}{' '}
-                  <span className="text-foreground">score_threshold:</span>{' '}
-                  <span className="text-teal-500 dark:text-teal-300">0.72</span>
-                </code>
-              </pre>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

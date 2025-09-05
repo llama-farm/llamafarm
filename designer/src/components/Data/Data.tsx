@@ -308,7 +308,9 @@ const Data = () => {
           </div>
         )}
         {mode !== 'designer' ? (
-          <ConfigEditor />
+          <div className="flex-1 overflow-hidden">
+            <ConfigEditor className="h-full" />
+          </div>
         ) : isDragging ? (
           <div
             className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}

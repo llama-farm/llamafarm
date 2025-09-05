@@ -204,7 +204,9 @@ const Test = () => {
 
       {/* New test case accordion */}
       {mode !== 'designer' ? (
-        <ConfigEditor />
+        <div className="flex-1 overflow-hidden">
+          <ConfigEditor className="h-full" />
+        </div>
       ) : (
         <div className="w-full rounded-xl bg-card p-4">
           <div className="flex items-center justify-between">

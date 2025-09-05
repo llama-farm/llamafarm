@@ -56,7 +56,7 @@ const Dashboard = () => {
 
   return (
     <>
-      <div className="w-full flex flex-col pb-32">
+      <div className="w-full flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl ">
@@ -81,7 +81,9 @@ const Dashboard = () => {
           </div>
         </div>
         {mode !== 'designer' ? (
-          <ConfigEditor />
+          <div className="flex-1 overflow-hidden">
+            <ConfigEditor className="h-full" />
+          </div>
         ) : (
           <>
             <DataCards />
