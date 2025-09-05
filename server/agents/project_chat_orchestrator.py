@@ -15,6 +15,10 @@ repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig, Prompt, Provider  # noqa: E402
 
+from core.logging import FastAPIStructLogger  # noqa: E402
+
+logger = FastAPIStructLogger(__name__)
+
 
 class ProjectChatOrchestratorAgentInputSchema(BaseIOSchema):
     """
@@ -41,28 +45,47 @@ class ProjectChatOrchestratorAgent(
     def __init__(self, project_config: LlamaFarmConfig):
         history = _get_history(project_config)
         client = _get_client(project_config)
-        super().__init__(
-            config=AgentConfig(
-                client=client,
-                model=project_config.runtime.model,
-                history=history,
-                system_prompt_generator=LFSystemPromptGenerator(
-                    project_config=project_config
-                ),
-                model_api_parameters=project_config.runtime.model_api_parameters,
-            )
+
+        agent_config = AgentConfig(
+            client=client,
+            model=project_config.runtime.model,
+            history=history,
+            system_prompt_generator=LFSystemPromptGenerator(
+                project_config=project_config
+            ),
+            model_api_parameters=project_config.runtime.model_api_parameters,
         )
+        logger.info(f"Agent config: {agent_config}")
+        super().__init__(config=agent_config)
 
 
 class LFSystemPromptGenerator(SystemPromptGenerator):
     def __init__(self, project_config: LlamaFarmConfig):
+        logger.info(f"Project config: {project_config}")
         self.system_prompts = [
-            prompt for prompt in project_config.prompts if prompt.role == "system"
+            prompt
+            for prompt in (project_config.prompts or [])
+            if prompt.role == "system"
         ]
         super().__init__()
 
     def generate_prompt(self) -> str:
-        return "\n".join([prompt.content for prompt in self.system_prompts])
+        # return "\nYou are a helpful assistant that can answer questions and help with tasks."
+        prompt_parts = []
+        for prompt in self.system_prompts:
+            prompt_parts.append(prompt.content)
+            prompt_parts.append("")
+
+        if self.context_providers:
+            prompt_parts.append("# EXTRA INFORMATION AND CONTEXT")
+            for provider in self.context_providers.values():
+                info = provider.get_info()
+                if info:
+                    prompt_parts.append(f"## {provider.title}")
+                    prompt_parts.append(info)
+                    prompt_parts.append("")
+
+        return "\n".join(prompt_parts)
 
 
 def _prompt_to_content_schema(prompt: Prompt) -> BaseIOSchema:
@@ -81,7 +104,7 @@ def _prompt_to_content_schema(prompt: Prompt) -> BaseIOSchema:
 def _populate_history_with_non_system_prompts(
     history: ChatHistory, project_config: LlamaFarmConfig
 ):
-    for prompt in project_config.prompts:
+    for prompt in project_config.prompts or []:
         # Only add non-system prompts to the history
         if prompt.role != "system":
             history.add_message(
