@@ -15,6 +15,10 @@ repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig, Prompt, Provider  # noqa: E402
 
+from core.logging import FastAPIStructLogger  # noqa: E402
+
+logger = FastAPIStructLogger(__name__)
+
 
 class ProjectChatOrchestratorAgentInputSchema(BaseIOSchema):
     """
