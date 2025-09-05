@@ -133,7 +133,6 @@ body,
   scrollbar-color: hsl(var(--border)) hsl(var(--muted));
 }
 
-/* URGENT FIX: Force dark mode scrollbar with multiple targeting approaches */
 /* Target the main editor container */
 .dark *::-webkit-scrollbar {
   width: 12px !important;
@@ -190,6 +189,36 @@ body,
 .dark * {
   scrollbar-width: thin !important;
   scrollbar-color: #3e4451 #1c2028 !important;
+}
+
+/* Config Editor Height Fix - Ensure CodeMirror fills container */
+.config-editor-content .cm-editor {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.config-editor-content .cm-scroller {
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: none !important;
+}
+
+.config-editor-content .cm-content {
+  min-height: 100% !important;
+}
+
+/* Ensure the editor container itself fills available space */
+.config-editor {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.config-editor-content {
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* NUCLEAR OPTION: Target ALL possible scrollbar containers in dark mode */

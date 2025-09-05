@@ -17,20 +17,23 @@ import FontIcon from '../common/FontIcon'
 const lightTheme = EditorView.theme({
   '&': {
     color: '#24292f',
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
+    height: '100%'
   },
   '.cm-content': {
     padding: '16px',
-    minHeight: '200px'
+    minHeight: '100%'
   },
   '.cm-focused': {
     outline: 'none'
   },
   '.cm-editor': {
-    borderRadius: '8px'
+    borderRadius: '8px',
+    height: '100%'
   },
   '.cm-scroller': {
-    lineHeight: '1.5'
+    lineHeight: '1.5',
+    height: '100%'
   },
   '.cm-cursor': {
     display: 'none' // Hide cursor in read-only mode
@@ -173,6 +176,18 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
         ? [
             oneDark,
             EditorView.theme({
+              '&': {
+                height: '100%'
+              },
+              '.cm-editor': {
+                height: '100%'
+              },
+              '.cm-scroller': {
+                height: '100%'
+              },
+              '.cm-content': {
+                minHeight: '100%'
+              },
               '.cm-scroller::-webkit-scrollbar': {
                 width: '12px'
               },
@@ -340,9 +355,9 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
   }
 
   return (
-    <div className={`config-editor w-full h-full max-h-full rounded-lg bg-card border border-border overflow-hidden ${className}`}>
+    <div className={`config-editor w-full h-full max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col ${className}`}>
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border bg-card">
+      <div className="px-4 py-3 border-b border-border bg-card flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FontIcon type="code" className="w-4 h-4 text-foreground" />
@@ -363,12 +378,11 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
       {/* Editor */}
       <div 
         ref={editorRef} 
-        className="config-editor-content flex-1 overflow-auto bg-background custom-scrollbar"
-        style={{ height: 'calc(100% - 57px)' }}
+        className="config-editor-content flex-1 min-h-0 overflow-auto bg-background custom-scrollbar"
       >
         {/* Fallback content if CodeMirror fails to initialize */}
         {!isInitialized && (
-          <div className="p-4 text-sm text-muted-foreground font-mono overflow-auto h-full custom-scrollbar">
+          <div className="p-4 text-sm text-muted-foreground font-mono overflow-auto flex-1 custom-scrollbar">
             <pre className="whitespace-pre-wrap">{formattedConfig}</pre>
           </div>
         )}
