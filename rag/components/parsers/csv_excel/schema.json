@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CSV/Excel Parser Configuration",
+  "description": "Configuration schema for CSV and Excel parser",
+  "type": "object",
+  "properties": {
+    "chunk_size": {
+      "type": ["integer", "null"],
+      "minimum": 50,
+      "maximum": 10000,
+      "description": "Size of text chunks. null means no chunking"
+    },
+    "chunk_overlap": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000,
+      "default": 0,
+      "description": "Number of characters to overlap between chunks"
+    },
+    "chunk_strategy": {
+      "type": "string",
+      "enum": ["characters", "rows"],
+      "default": "characters",
+      "description": "Strategy for splitting data into chunks"
+    },
+    "convert_to": {
+      "type": "string",
+      "enum": ["markdown", "json", "text"],
+      "default": "markdown",
+      "description": "Format to convert table data to"
+    },
+    "include_headers": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include column headers in output"
+    },
+    "sheet_names": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      },
+      "description": "Specific sheets to process. null means all sheets"
+    },
+    "max_rows": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Maximum rows to process. null means all rows"
+    },
+    "summarize_large_tables": {
+      "type": "boolean",
+      "default": true,
+      "description": "Add statistical summary for large tables"
+    }
+  },
+  "additionalProperties": false
+}

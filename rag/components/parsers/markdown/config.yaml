@@ -1,0 +1,66 @@
+parsers:
+  - name: MarkdownParser_Python
+    display_name: Markdown Parser (Python)
+    tool: Python
+    version: 1.0.0
+    description: Markdown parser using native Python with regex parsing
+    
+    supported_extensions:
+      - .md
+      - .markdown
+      - .mdown
+      - .mkd
+    
+    mime_types:
+      - text/markdown
+      - text/x-markdown
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - header_extraction
+      - code_block_extraction
+      - link_extraction
+      - frontmatter_parsing
+    
+    dependencies:
+      required: []
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      chunk_strategy: sections  # sections, paragraphs, characters
+      extract_metadata: true
+      extract_code_blocks: true
+      extract_links: true
+
+  - name: MarkdownParser_Mistune
+    display_name: Markdown Parser (Mistune)
+    tool: Mistune
+    version: 1.0.0
+    description: Fast Markdown parser using Mistune library
+    
+    supported_extensions:
+      - .md
+      - .markdown
+    
+    mime_types:
+      - text/markdown
+      - text/x-markdown
+    
+    capabilities:
+      - text_extraction
+      - html_conversion
+      - ast_parsing
+      - plugin_support
+    
+    dependencies:
+      required:
+        - mistune
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      render_html: false
+      plugins: ["strikethrough", "table", "task_lists"]

@@ -1,0 +1,104 @@
+parsers:
+  - name: PDFParser_PyPDF2
+    display_name: PDF Parser (PyPDF2)
+    tool: PyPDF2
+    version: 1.0.0
+    description: Simple PDF parser using PyPDF2 library
+    
+    supported_extensions:
+      - .pdf
+    
+    mime_types:
+      - application/pdf
+      - application/x-pdf
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+    
+    dependencies:
+      required:
+        - PyPDF2
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: sentences
+      extract_metadata: true
+
+  - name: PDFParser_LlamaIndex
+    display_name: PDF Parser (LlamaIndex)
+    tool: LlamaIndex
+    version: 2.0.0
+    description: Advanced PDF parser using LlamaIndex with OCR and table support
+    
+    supported_extensions:
+      - .pdf
+    
+    mime_types:
+      - application/pdf
+      - application/x-pdf
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - table_extraction
+      - ocr
+      - metadata_extraction
+      - image_extraction
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-readers-file
+        - pypdf2
+      optional:
+        - pdfplumber
+        - pytesseract
+        - pdf2image
+        - camelot-py
+        - tabula-py
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: sentences
+      return_full_document: false
+      extract_tables: false
+      extract_images: false
+      ocr_enabled: false
+      ocr_language: eng
+
+  - name: PDFParser_PDFPlumber
+    display_name: PDF Parser (PDFPlumber)
+    tool: PDFPlumber
+    version: 1.0.0
+    description: PDF parser with excellent table extraction using PDFPlumber
+    
+    supported_extensions:
+      - .pdf
+    
+    mime_types:
+      - application/pdf
+    
+    capabilities:
+      - text_extraction
+      - table_extraction
+      - metadata_extraction
+      - layout_analysis
+    
+    dependencies:
+      required:
+        - pdfplumber
+      optional:
+        - pandas
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      extract_tables: true
+      table_settings:
+        vertical_strategy: lines
+        horizontal_strategy: lines

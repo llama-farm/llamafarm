@@ -203,6 +203,13 @@ definitions:
           - DocxParser
           - ExcelParser
           - PlainTextParser
+          - SmartRouter
+          - LlamaIndexTextParser
+          - LlamaIndexPDFParser
+          - LlamaIndexCSVExcelParser
+          - LlamaIndexDocxParser
+          - LlamaIndexMarkdownParser
+          - LlamaIndexWebParser
       config:
         type: object
         oneOf:
@@ -214,6 +221,13 @@ definitions:
           - $ref: "#/definitions/parsers/docxParserConfig"
           - $ref: "#/definitions/parsers/excelParserConfig"
           - $ref: "#/definitions/parsers/plainTextParserConfig"
+          - $ref: "#/definitions/parsers/smartRouterConfig"
+          - $ref: "#/definitions/parsers/llamaIndexTextParserConfig"
+          - $ref: "#/definitions/parsers/llamaIndexPDFParserConfig"
+          - $ref: "#/definitions/parsers/llamaIndexCSVExcelParserConfig"
+          - $ref: "#/definitions/parsers/llamaIndexDocxParserConfig"
+          - $ref: "#/definitions/parsers/llamaIndexMarkdownParserConfig"
+          - $ref: "#/definitions/parsers/llamaIndexWebParserConfig"
   parsers:
     directoryParserConfig:
       type: object
@@ -687,6 +701,409 @@ definitions:
           type: boolean
           default: false
           description: Preserve whitespace
+    smartRouterConfig:
+      type: object
+      title: Smart Router Configuration
+      additionalProperties: false
+      properties:
+        fallback_chain:
+          type: array
+          items:
+            type: string
+          default: ["PlainTextParser", "MarkdownParser"]
+          description: Fallback parsers to try in order
+        content_detection_enabled:
+          type: boolean
+          default: true
+          description: Enable content-based file type detection
+        max_file_size_mb:
+          type: integer
+          default: 100
+          minimum: 1
+          maximum: 1000
+          description: Maximum file size in MB to process
+        enable_magic:
+          type: boolean
+          default: true
+          description: Enable python-magic for file type detection
+    llamaIndexTextParserConfig:
+      type: object
+      title: LlamaIndex Text Parser Configuration
+      additionalProperties: false
+      properties:
+        encoding:
+          type: string
+          default: auto
+          description: Text encoding (auto-detect or specify)
+        chunk_size:
+          type: [integer, "null"]
+          default: null
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters (null for no chunking)
+        chunk_overlap:
+          type: integer
+          default: 0
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
+          type: string
+          enum: [characters, sentences, paragraphs, tokens]
+          default: characters
+          description: Chunking strategy for LlamaIndex
+        respect_sentence_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting sentences in the middle
+        respect_paragraph_boundaries:
+          type: boolean
+          default: false
+          description: Avoid splitting paragraphs in the middle
+        min_chunk_size:
+          type: integer
+          default: 50
+          minimum: 10
+          maximum: 1000
+          description: Minimum chunk size to avoid creating tiny chunks
+        preserve_line_breaks:
+          type: boolean
+          default: true
+          description: Preserve line breaks in the text
+        strip_empty_lines:
+          type: boolean
+          default: true
+          description: Remove empty lines while preserving paragraph structure
+        detect_structure:
+          type: boolean
+          default: true
+          description: Detect and extract structural elements
+    llamaIndexPDFParserConfig:
+      type: object
+      title: LlamaIndex PDF Parser Configuration
+      additionalProperties: false
+      properties:
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract PDF metadata
+        extract_page_structure:
+          type: boolean
+          default: true
+          description: Extract page-level structure
+        combine_pages:
+          type: boolean
+          default: true
+          description: Combine all pages into single document
+        page_separator:
+          type: string
+          default: "\n\n--- Page Break ---\n\n"
+          description: Separator between pages
+        min_text_length:
+          type: integer
+          default: 10
+          minimum: 0
+          description: Minimum text length to include page
+        include_page_numbers:
+          type: boolean
+          default: true
+          description: Include page numbers in text
+        extract_outline:
+          type: boolean
+          default: true
+          description: Extract document outline
+        fallback_strategies:
+          type: array
+          items:
+            type: string
+            enum: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
+          default: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
+          description: PDF parsing strategies to try in order
+        chunk_size:
+          type: [integer, "null"]
+          default: null
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters (null for no chunking)
+        chunk_overlap:
+          type: integer
+          default: 0
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
+          type: string
+          enum: [characters, sentences, paragraphs, tokens]
+          default: characters
+          description: Chunking strategy for LlamaIndex
+        respect_sentence_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting sentences in the middle
+        respect_paragraph_boundaries:
+          type: boolean
+          default: false
+          description: Avoid splitting paragraphs in the middle
+        min_chunk_size:
+          type: integer
+          default: 50
+          minimum: 10
+          maximum: 1000
+          description: Minimum chunk size to avoid creating tiny chunks
+    llamaIndexCSVExcelParserConfig:
+      type: object
+      title: LlamaIndex CSV/Excel Parser Configuration
+      additionalProperties: false
+      properties:
+        content_fields:
+          type: array
+          items:
+            type: string
+          default: ["subject", "body", "content", "description"]
+          description: Columns to use as document content
+        metadata_fields:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Columns to include as metadata
+        id_field:
+          type: ["string", "null"]
+          default: null
+          description: Column to use as document ID
+        combine_content:
+          type: boolean
+          default: true
+          description: Combine multiple content fields into one document
+        content_separator:
+          type: string
+          default: "\n\n"
+          description: Separator when combining content fields
+        priority_mapping:
+          type: object
+          additionalProperties:
+            type: ["string", "number"]
+          description: Mapping for priority field values
+        table_format:
+          type: string
+          enum: [csv, markdown, json, text]
+          default: markdown
+          description: Table output format for Excel
+        sheet_names:
+          type: ["array", "null"]
+          items:
+            type: string
+          default: null
+          description: Specific sheets to parse (Excel only)
+        combine_sheets:
+          type: boolean
+          default: false
+          description: Combine all sheets (Excel only)
+        header_row:
+          type: integer
+          default: 0
+          minimum: 0
+          description: Header row index (Excel only)
+    llamaIndexDocxParserConfig:
+      type: object
+      title: LlamaIndex DOCX Parser Configuration
+      additionalProperties: false
+      properties:
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract document properties
+        extract_headers_footers:
+          type: boolean
+          default: true
+          description: Include headers and footers
+        extract_comments:
+          type: boolean
+          default: false
+          description: Extract comments
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract tables
+        extract_images:
+          type: boolean
+          default: false
+          description: Extract images
+        preserve_formatting:
+          type: boolean
+          default: false
+          description: Preserve text formatting
+        chunk_size:
+          type: [integer, "null"]
+          default: null
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters (null for no chunking)
+        chunk_overlap:
+          type: integer
+          default: 0
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
+          type: string
+          enum: [characters, sentences, paragraphs, tokens]
+          default: paragraphs
+          description: Chunking strategy for LlamaIndex
+        respect_sentence_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting sentences in the middle
+        respect_paragraph_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting paragraphs in the middle
+        min_chunk_size:
+          type: integer
+          default: 100
+          minimum: 10
+          maximum: 1000
+          description: Minimum chunk size to avoid creating tiny chunks
+    llamaIndexMarkdownParserConfig:
+      type: object
+      title: LlamaIndex Markdown Parser Configuration
+      additionalProperties: false
+      properties:
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract YAML frontmatter
+        extract_headings:
+          type: boolean
+          default: true
+          description: Extract heading structure
+        extract_links:
+          type: boolean
+          default: true
+          description: Extract all links
+        extract_code_blocks:
+          type: boolean
+          default: true
+          description: Extract code blocks
+        chunk_by_headings:
+          type: boolean
+          default: false
+          description: Split by headings
+        preserve_formatting:
+          type: boolean
+          default: false
+          description: Preserve Markdown formatting
+        heading_level_split:
+          type: integer
+          default: 2
+          minimum: 1
+          maximum: 6
+          description: Heading level for splitting
+        chunk_size:
+          type: [integer, "null"]
+          default: null
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters (null for no chunking)
+        chunk_overlap:
+          type: integer
+          default: 0
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
+          type: string
+          enum: [characters, sentences, paragraphs, headings, tokens]
+          default: headings
+          description: Chunking strategy - headings preserves markdown structure
+        respect_sentence_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting sentences in the middle
+        respect_paragraph_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting paragraphs in the middle
+        min_chunk_size:
+          type: integer
+          default: 100
+          minimum: 10
+          maximum: 1000
+          description: Minimum chunk size to avoid creating tiny chunks
+    llamaIndexWebParserConfig:
+      type: object
+      title: LlamaIndex Web Parser Configuration
+      additionalProperties: false
+      properties:
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract meta tags
+        extract_links:
+          type: boolean
+          default: true
+          description: Extract hyperlinks
+        extract_images:
+          type: boolean
+          default: true
+          description: Extract image sources
+        preserve_structure:
+          type: boolean
+          default: false
+          description: Preserve HTML structure
+        remove_scripts:
+          type: boolean
+          default: true
+          description: Remove JavaScript
+        remove_styles:
+          type: boolean
+          default: true
+          description: Remove CSS
+        text_only:
+          type: boolean
+          default: false
+          description: Extract only text
+        request_timeout:
+          type: integer
+          default: 30
+          minimum: 5
+          maximum: 300
+          description: Request timeout for URLs in seconds
+        user_agent:
+          type: string
+          default: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          description: User agent for web requests
+        chunk_size:
+          type: [integer, "null"]
+          default: null
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters (null for no chunking)
+        chunk_overlap:
+          type: integer
+          default: 0
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
+          type: string
+          enum: [characters, sentences, paragraphs, elements, tokens]
+          default: elements
+          description: Chunking strategy - elements uses HTML semantic structure
+        respect_sentence_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting sentences in the middle
+        respect_paragraph_boundaries:
+          type: boolean
+          default: true
+          description: Avoid splitting paragraphs in the middle
+        min_chunk_size:
+          type: integer
+          default: 100
+          minimum: 10
+          maximum: 1000
+          description: Minimum chunk size to avoid creating tiny chunks
   extractorConfig:
     type: object
     title: Extractor Configuration

@@ -19,28 +19,34 @@ strategies:
         type: "DirectoryParser"
         config:
           recursive: true
-          include_patterns: ["*.txt", "*.md"]
+          include_patterns: ["*.txt", "*.md", "*.pdf"]
           parser_map:
-            ".txt": "PlainTextParser"
-            ".md": "MarkdownParser"
+            ".txt": "text"
+            ".md": "markdown"
+            ".pdf": "pdf"
           parser_configs:
-            PlainTextParser:
+            text:
               chunk_size: 1500  # Larger chunks for academic papers
               chunk_overlap: 200  # Good overlap for academic context
-              chunk_strategy: paragraphs  # Paragraph-aware chunking for research papers
-              respect_sentence_boundaries: true
-              respect_paragraph_boundaries: true  # Keep paragraphs intact for academic context
-              min_chunk_size: 100
-              preserve_line_breaks: true
-              strip_empty_lines: true
-              detect_structure: true
-            MarkdownParser:
+              chunk_strategy: sentences  # Sentence-aware chunking for research papers
+              clean_text: true
+              preserve_whitespace: false
+              extract_metadata: true
+            markdown:
               chunk_size: 2000  # Even larger for markdown academic papers
               chunk_overlap: 300
-              chunk_strategy: headings  # Use heading structure for academic papers
-              respect_sentence_boundaries: true
-              respect_paragraph_boundaries: true
-              min_chunk_size: 150
+              chunk_strategy: markdown_aware  # Use markdown structure for academic papers
+              preserve_structure: true
+              extract_code_blocks: true
+              extract_links: true
+              extract_images: true
+            pdf:
+              chunk_size: 1500
+              chunk_overlap: 200
+              chunk_strategy: sentences
+              extract_tables: false  # Don't extract tables for demos
+              ocr_enabled: false  # Disable OCR for demos
+              extract_metadata: true
       
       extractors:
         - type: "ContentStatisticsExtractor"
@@ -105,27 +111,21 @@ strategies:
           recursive: false
           include_patterns: ["*.csv", "*.txt"]
           parser_map:
-            ".csv": "CSVParser"
-            ".txt": "PlainTextParser"
+            ".csv": "csv_excel"
+            ".txt": "text"
           parser_configs:
-            CSVParser:
-              content_fields: ["description"]
-              metadata_fields: ["ticket_id", "customer_name", "customer_email", "priority", "category", "issue_type", "status", "agent_name"]
-              priority_mapping:
-                "Critical": 1
-                "High": 2
-                "Medium": 3
-                "Low": 4
-            PlainTextParser:
+            csv_excel:
+              convert_to: markdown  # Convert to readable format
+              include_headers: true
+              summarize_large_tables: true
+              chunk_size: null  # Don't chunk CSV data
+            text:
               chunk_size: 800  # Optimal for customer support knowledge base
               chunk_overlap: 100  # Maintain context between chunks
               chunk_strategy: sentences  # Use sentence-aware chunking for better readability
-              respect_sentence_boundaries: true  # Don't break sentences
-              respect_paragraph_boundaries: false  # Allow paragraph breaks for better chunk sizes
-              min_chunk_size: 50  # Minimum chunk size
-              preserve_line_breaks: true
-              strip_empty_lines: true
-              detect_structure: true  # Detect headers, lists, etc.
+              clean_text: true
+              preserve_whitespace: false
+              extract_metadata: true
       
       extractors:
         - type: "EntityExtractor"
@@ -192,30 +192,25 @@ strategies:
           include_patterns: ["*.md", "*.py", "*.txt"]
           exclude_patterns: ["__pycache__", "*.pyc"]
           parser_map:
-            ".md": "MarkdownParser"
-            ".py": "PlainTextParser"
-            ".txt": "PlainTextParser"
+            ".md": "markdown"
+            ".py": "text"
+            ".txt": "text"
           parser_configs:
-            MarkdownParser:
+            markdown:
               chunk_size: 1200  # Medium chunks for code documentation
               chunk_overlap: 150
-              chunk_strategy: headings  # Use heading structure for documentation
-              respect_sentence_boundaries: true
-              respect_paragraph_boundaries: true  # Preserve code block structure
-              min_chunk_size: 80
-              extract_headings: true
+              chunk_strategy: markdown_aware  # Use markdown structure for documentation
+              preserve_structure: true
               extract_code_blocks: true
-              preserve_formatting: false
-            PlainTextParser:
+              extract_links: true
+              extract_images: true
+            text:
               chunk_size: 1000  # Smaller chunks for code files
               chunk_overlap: 100
-              chunk_strategy: characters  # Character-based with boundary protection
-              respect_sentence_boundaries: true
-              respect_paragraph_boundaries: false  # Allow breaking for code
-              min_chunk_size: 60
-              preserve_line_breaks: true  # Important for code
-              strip_empty_lines: false  # Keep code formatting
-              detect_structure: true
+              chunk_strategy: characters  # Character-based for code
+              clean_text: false  # Keep code formatting
+              preserve_whitespace: true  # Important for code
+              extract_metadata: true
       
       extractors:
         - type: "HeadingExtractor"
@@ -289,21 +284,19 @@ strategies:
           include_patterns: ["*.html", "*.htm"]
           exclude_patterns: []
           parser_map:
-            ".html": "HTMLParser"
-            ".htm": "HTMLParser"
+            ".html": "web"
+            ".htm": "web"
           parser_configs:
-            HTMLParser:
+            web:
               chunk_size: 1400  # Good size for news articles
               chunk_overlap: 180
-              chunk_strategy: elements  # Use HTML semantic elements for news
-              respect_sentence_boundaries: true
-              respect_paragraph_boundaries: true
-              min_chunk_size: 100
+              chunk_strategy: paragraphs  # Use paragraph chunking for news
+              use_beautiful_soup: true
               extract_metadata: true
-              extract_links: true
               remove_scripts: true
               remove_styles: true
-              preserve_structure: false  # Focus on content, not HTML structure
+              extract_links: true
+              extract_images: false
       
       extractors:
         - type: "EntityExtractor"
@@ -375,30 +368,32 @@ strategies:
           include_patterns: ["*.pdf", "*.docx", "*.xlsx"]
           exclude_patterns: []
           parser_map:
-            ".pdf": "PDFParser"
-            ".docx": "DocxParser"
-            ".xlsx": "ExcelParser"
+            ".pdf": "pdf"
+            ".docx": "docx"
+            ".xlsx": "csv_excel"
           parser_configs:
-            PDFParser:
+            pdf:
               chunk_size: 1800  # Larger chunks for business reports
               chunk_overlap: 250
-              chunk_strategy: pages  # Use page-based chunking for PDFs
-              respect_sentence_boundaries: true
-              respect_paragraph_boundaries: false
-              min_chunk_size: 200
-              extract_metadata: true
-              combine_pages: true
-              extract_outline: true
-            DocxParser:
-              chunk_size: 1600  # Good for Word business documents
-              chunk_overlap: 200
-              chunk_strategy: sections  # Use Word's built-in sections
-              respect_sentence_boundaries: true
-              respect_paragraph_boundaries: true
-              min_chunk_size: 150
+              chunk_strategy: sentences
               extract_metadata: true
               extract_tables: true
-              extract_comments: false
+              ocr_enabled: false
+            docx:
+              chunk_size: 1600  # Good for Word business documents
+              chunk_overlap: 200
+              chunk_strategy: paragraphs  # Use paragraph-based chunking
+              extract_metadata: true
+              extract_headers_footers: true
+              extract_tables: true
+              extract_images: false
+              preserve_formatting: false
+            csv_excel:
+              convert_to: markdown
+              include_headers: true
+              sheet_names: null  # Process all sheets
+              summarize_large_tables: true
+              chunk_size: null  # Don't chunk tables
       
       extractors:
         - type: "TableExtractor"
@@ -475,7 +470,7 @@ strategies:
     
     components:
       parser:
-        type: "PlainTextParser"
+        type: "LlamaIndexTextParser"
         config:
           chunk_size: null  # No chunking for document lifecycle demo
           chunk_strategy: characters  # Strategy doesn't matter when chunk_size is null
@@ -485,6 +480,7 @@ strategies:
           detect_structure: true
           preserve_line_breaks: true
           strip_empty_lines: true
+          encoding: "auto"
       
       extractors:
         - type: "EntityExtractor"
@@ -535,13 +531,14 @@ strategies:
     
     components:
       parser:
-        type: "PDFParser"
+        type: "pdf"
         config:
           chunk_size: 2000  # Larger chunks for technical manual
           chunk_overlap: 300  # Good overlap for procedures
-          chunk_strategy: pages  # Page-based for technical docs
-          respect_sentence_boundaries: true
-          respect_paragraph_boundaries: true
+          chunk_strategy: sentences
+          extract_tables: true  # Extract tables for procedures
+          extract_metadata: true
+          ocr_enabled: false
           min_chunk_size: 200
           extract_metadata: true
           extract_page_structure: true
@@ -550,6 +547,7 @@ strategies:
           min_text_length: 50
           include_page_numbers: true
           extract_outline: true  # Important for navigation
+          fallback_strategies: ["llama_pdf_reader", "llama_pymupdf_reader", "direct_pymupdf", "pypdf2_fallback"]
       
       extractors:
         - type: "HeadingExtractor"
@@ -635,6 +633,9 @@ strategies:
         config:
           recursive: false
           include_patterns: ["*.txt", "*.md"]
+          parser_map:
+            ".txt": "LlamaIndexTextParser"
+            ".md": "LlamaIndexMarkdownParser"
       
       extractors:
         - type: "KeywordExtractor"
@@ -668,10 +669,13 @@ strategy_templates:
     
     components:
       parser:
-        type: "PlainTextParser"
+        type: "LlamaIndexTextParser"
         config:
           chunk_size: 1000
           chunk_overlap: 200
+          chunk_strategy: characters
+          respect_sentence_boundaries: true
+          min_chunk_size: 50
       
       embedder:
         type: "OllamaEmbedder"

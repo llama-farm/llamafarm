@@ -1,0 +1,275 @@
+parsers:
+  csv_excel:
+    capabilities:
+    - table_extraction
+    - chunking
+    - metadata_extraction
+    - multi_sheet_support
+    - statistical_summary
+    - delimiter_detection
+    - encoding_detection
+    default_config:
+      auto_detect_delimiter: true
+      chunk_overlap: 0
+      chunk_size: null
+      chunk_strategy: characters
+      convert_to: markdown
+      encoding: auto
+      include_headers: true
+      max_rows: null
+      sheet_names: null
+      summarize_large_tables: true
+    dependencies:
+      optional:
+      - openpyxl
+      - xlrd
+      - xlsxwriter
+      - tabulate
+      required:
+      - pandas
+    description: Parser for CSV and Excel files with table-to-text conversion
+    display_name: CSV/Excel Parser
+    mime_types:
+    - text/csv
+    - application/vnd.ms-excel
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    - application/vnd.ms-excel.sheet.macroEnabled.12
+    - text/tab-separated-values
+    name: csv_excel
+    supported_extensions:
+    - .csv
+    - .xls
+    - .xlsx
+    - .xlsm
+    - .tsv
+    - .tab
+    version: 2.0.0
+  docx:
+    capabilities:
+    - text_extraction
+    - chunking
+    - table_extraction
+    - image_extraction
+    - metadata_extraction
+    - style_preservation
+    - header_footer_extraction
+    default_config:
+      chunk_overlap: 100
+      chunk_size: 1000
+      chunk_strategy: paragraphs
+      extract_headers_footers: false
+      extract_images: false
+      extract_tables: true
+      preserve_formatting: false
+    dependencies:
+      optional:
+      - mammoth
+      - python-docx2txt
+      required:
+      - llama-index
+      - llama-index-readers-file
+      - python-docx
+    description: Microsoft Word document parser with structure preservation
+    display_name: DOCX Parser
+    mime_types:
+    - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    - application/msword
+    - application/vnd.oasis.opendocument.text
+    - application/rtf
+    - text/rtf
+    name: docx
+    supported_extensions:
+    - .docx
+    - .doc
+    - .odt
+    - .rtf
+    version: 2.0.0
+  markdown:
+    capabilities:
+    - text_extraction
+    - chunking
+    - structure_preservation
+    - code_block_extraction
+    - link_extraction
+    - table_extraction
+    - heading_hierarchy
+    default_config:
+      chunk_overlap: 100
+      chunk_size: 1000
+      chunk_strategy: markdown_aware
+      extract_code_blocks: true
+      extract_images: true
+      extract_links: true
+      preserve_structure: true
+    dependencies:
+      optional:
+      - markdown2
+      - mistune
+      - pymdown-extensions
+      required:
+      - llama-index
+      - llama-index-readers-file
+    description: Markdown parser with structure-aware chunking
+    display_name: Markdown Parser
+    mime_types:
+    - text/markdown
+    - text/x-markdown
+    name: markdown
+    supported_extensions:
+    - .md
+    - .markdown
+    - .mdown
+    - .mkd
+    - .mdwn
+    - .mdtxt
+    - .mdtext
+    version: 2.0.0
+  pdf:
+    capabilities:
+    - text_extraction
+    - chunking
+    - table_extraction
+    - ocr
+    - metadata_extraction
+    - image_extraction
+    - form_extraction
+    default_config:
+      chunk_overlap: 100
+      chunk_size: 1000
+      chunk_strategy: sentences
+      clean_text: true
+      extract_forms: false
+      extract_images: false
+      extract_metadata: true
+      extract_tables: false
+      ocr_dpi: 300
+      ocr_enabled: false
+      ocr_language: eng
+      preserve_formatting: false
+      return_full_document: false
+    dependencies:
+      optional:
+      - pdfplumber
+      - pytesseract
+      - pdf2image
+      - camelot-py
+      - tabula-py
+      required:
+      - llama-index
+      - llama-index-readers-file
+      - pypdf2
+    description: Advanced PDF parser with OCR and table extraction support
+    display_name: PDF Parser
+    mime_types:
+    - application/pdf
+    - application/x-pdf
+    - application/acrobat
+    - application/vnd.pdf
+    - text/pdf
+    - text/x-pdf
+    name: pdf
+    supported_extensions:
+    - .pdf
+    version: 2.0.0
+  text:
+    capabilities:
+    - text_extraction
+    - chunking
+    - encoding_detection
+    - metadata_extraction
+    - format_preservation
+    default_config:
+      chunk_overlap: 100
+      chunk_size: 1000
+      chunk_strategy: sentences
+      clean_text: true
+      encoding: auto
+      extract_metadata: true
+      preserve_whitespace: false
+    dependencies:
+      optional:
+      - chardet
+      - ftfy
+      required:
+      - llama-index
+      - llama-index-readers-file
+    description: Plain text parser with encoding detection and flexible chunking
+    display_name: Text Parser
+    mime_types:
+    - text/plain
+    - text/x-log
+    - text/markdown
+    - text/x-markdown
+    - text/x-rst
+    - text/x-tex
+    - text/rtf
+    - application/x-yaml
+    - application/json
+    - text/xml
+    - text/csv
+    name: text
+    supported_extensions:
+    - .txt
+    - .text
+    - .log
+    - .md
+    - .markdown
+    - .rst
+    - .tex
+    - .rtf
+    - .asc
+    - .ascii
+    - .conf
+    - .cfg
+    - .ini
+    - .yaml
+    - .yml
+    - .json
+    - .xml
+    - .csv
+    - .tsv
+    version: 2.0.0
+  web:
+    capabilities:
+    - text_extraction
+    - chunking
+    - metadata_extraction
+    - link_extraction
+    - structured_data_extraction
+    - javascript_rendering
+    - css_selector_extraction
+    default_config:
+      chunk_overlap: 100
+      chunk_size: 1000
+      chunk_strategy: paragraphs
+      extract_images: false
+      extract_links: true
+      extract_metadata: true
+      remove_scripts: true
+      remove_styles: true
+      use_beautiful_soup: true
+    dependencies:
+      optional:
+      - lxml
+      - html5lib
+      - requests
+      - selenium
+      - playwright
+      required:
+      - llama-index
+      - llama-index-readers-web
+      - beautifulsoup4
+    description: Web page and HTML parser with content extraction
+    display_name: Web Parser
+    mime_types:
+    - text/html
+    - application/xhtml+xml
+    - application/xml
+    - text/xml
+    name: web
+    supported_extensions:
+    - .html
+    - .htm
+    - .xhtml
+    - .xml
+    version: 2.0.0

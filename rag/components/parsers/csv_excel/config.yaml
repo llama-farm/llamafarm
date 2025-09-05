@@ -1,0 +1,85 @@
+parser:
+  name: csv_excel
+  display_name: CSV/Excel Parser
+  version: 2.0.0
+  description: Parser for CSV and Excel files with table-to-text conversion
+  
+  # File type support
+  supported_extensions:
+    - .csv
+    - .xls
+    - .xlsx
+    - .xlsm
+    - .tsv
+    - .tab
+  
+  mime_types:
+    - text/csv
+    - application/vnd.ms-excel
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    - application/vnd.ms-excel.sheet.macroEnabled.12
+    - text/tab-separated-values
+  
+  # Parser capabilities
+  capabilities:
+    - table_extraction
+    - chunking
+    - metadata_extraction
+    - multi_sheet_support
+    - statistical_summary
+    - delimiter_detection
+    - encoding_detection
+  
+  # Dependencies
+  dependencies:
+    required:
+      - pandas
+    optional:
+      - openpyxl  # For Excel files
+      - xlrd  # For older Excel files
+      - xlsxwriter  # For Excel output
+      - tabulate  # For markdown tables
+  
+  # Default configuration
+  default_config:
+    # Chunking settings
+    chunk_size: null  # No chunking by default for tables
+    chunk_overlap: 0
+    chunk_strategy: characters
+    
+    # Conversion settings
+    convert_to: markdown  # markdown, json, text
+    include_headers: true
+    sheet_names: null  # null means all sheets
+    max_rows: null  # null means all rows
+    summarize_large_tables: true
+    
+    # Format detection
+    auto_detect_delimiter: true
+    encoding: auto
+
+# Configuration profiles
+profiles:
+  large_datasets:
+    description: For large CSV/Excel files
+    max_rows: 1000
+    summarize_large_tables: true
+    chunk_size: 1000
+    
+  financial:
+    description: For financial spreadsheets
+    convert_to: json
+    include_headers: true
+    sheet_names: null  # Process all sheets
+    
+  simple:
+    description: Simple text conversion
+    convert_to: text
+    include_headers: false
+    max_rows: 100
+    
+  analytics:
+    description: For data analysis
+    convert_to: json
+    summarize_large_tables: true
+    include_headers: true

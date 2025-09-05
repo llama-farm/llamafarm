@@ -1,0 +1,101 @@
+parser:
+  name: text
+  display_name: Text Parser
+  version: 2.0.0
+  description: Plain text parser with encoding detection and flexible chunking
+  
+  # File type support
+  supported_extensions:
+    - .txt
+    - .text
+    - .log
+    - .md
+    - .markdown
+    - .rst
+    - .tex
+    - .rtf
+    - .asc
+    - .ascii
+    - .conf
+    - .cfg
+    - .ini
+    - .yaml
+    - .yml
+    - .json
+    - .xml
+    - .csv
+    - .tsv
+  
+  mime_types:
+    - text/plain
+    - text/x-log
+    - text/markdown
+    - text/x-markdown
+    - text/x-rst
+    - text/x-tex
+    - text/rtf
+    - application/x-yaml
+    - application/json
+    - text/xml
+    - text/csv
+  
+  # Parser capabilities
+  capabilities:
+    - text_extraction
+    - chunking
+    - encoding_detection
+    - metadata_extraction
+    - format_preservation
+  
+  # Dependencies
+  dependencies:
+    required:
+      - llama-index
+      - llama-index-readers-file
+    optional:
+      - chardet  # Better encoding detection
+      - ftfy  # Fix text encoding issues
+  
+  # Default configuration
+  default_config:
+    # Chunking settings
+    chunk_size: 1000
+    chunk_overlap: 100
+    chunk_strategy: sentences  # characters, sentences, paragraphs
+    
+    # Text processing
+    encoding: auto  # auto, utf-8, latin-1, etc.
+    clean_text: true
+    preserve_whitespace: false
+    
+    # Metadata extraction
+    extract_metadata: true
+
+# Configuration profiles
+profiles:
+  logs:
+    description: For log files
+    chunk_size: 500
+    chunk_strategy: characters
+    preserve_whitespace: true
+    clean_text: false
+    
+  code:
+    description: For source code files
+    chunk_size: 1000
+    chunk_strategy: paragraphs
+    preserve_whitespace: true
+    clean_text: false
+    
+  markdown:
+    description: For markdown documents
+    chunk_size: 1000
+    chunk_strategy: paragraphs
+    preserve_whitespace: false
+    clean_text: true
+    
+  config:
+    description: For configuration files
+    chunk_size: null  # No chunking
+    preserve_whitespace: true
+    clean_text: false

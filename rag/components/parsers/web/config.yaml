@@ -1,0 +1,49 @@
+parser:
+  name: web
+  display_name: Web Parser
+  version: 2.0.0
+  description: Web page and HTML parser with content extraction
+  
+  supported_extensions:
+    - .html
+    - .htm
+    - .xhtml
+    - .xml
+  
+  mime_types:
+    - text/html
+    - application/xhtml+xml
+    - application/xml
+    - text/xml
+  
+  capabilities:
+    - text_extraction
+    - chunking
+    - metadata_extraction
+    - link_extraction
+    - structured_data_extraction
+    - javascript_rendering
+    - css_selector_extraction
+  
+  dependencies:
+    required:
+      - llama-index
+      - llama-index-readers-web
+      - beautifulsoup4
+    optional:
+      - lxml
+      - html5lib
+      - requests
+      - selenium
+      - playwright
+  
+  default_config:
+    chunk_size: 1000
+    chunk_overlap: 100
+    chunk_strategy: paragraphs
+    use_beautiful_soup: true
+    extract_metadata: true
+    remove_scripts: true
+    remove_styles: true
+    extract_links: true
+    extract_images: false

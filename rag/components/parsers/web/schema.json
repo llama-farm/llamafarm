@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Web Parser Configuration",
+  "description": "Configuration schema for Web/HTML parser",
+  "type": "object",
+  "properties": {
+    "chunk_size": {
+      "type": ["integer", "null"],
+      "minimum": 50,
+      "maximum": 10000,
+      "description": "Size of text chunks. null means no chunking"
+    },
+    "chunk_overlap": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000,
+      "default": 0,
+      "description": "Number of characters to overlap between chunks"
+    },
+    "chunk_strategy": {
+      "type": "string",
+      "enum": ["paragraphs", "sentences", "characters"],
+      "default": "paragraphs",
+      "description": "Strategy for splitting content into chunks"
+    },
+    "use_beautiful_soup": {
+      "type": "boolean",
+      "default": true,
+      "description": "Use BeautifulSoup for better HTML parsing"
+    },
+    "extract_metadata": {
+      "type": "boolean",
+      "default": true,
+      "description": "Extract page metadata (title, description, etc.)"
+    },
+    "remove_scripts": {
+      "type": "boolean",
+      "default": true,
+      "description": "Remove JavaScript code from content"
+    },
+    "remove_styles": {
+      "type": "boolean",
+      "default": true,
+      "description": "Remove CSS styles from content"
+    },
+    "extract_links": {
+      "type": "boolean",
+      "default": true,
+      "description": "Extract all links from the page"
+    },
+    "extract_images": {
+      "type": "boolean",
+      "default": false,
+      "description": "Extract image URLs"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,488 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RAG Parser Configuration",
+  "description": "Unified configuration schema for all RAG parsers",
+  "type": "object",
+  "properties": {
+    "parser_type": {
+      "type": "string",
+      "enum": [
+        "web",
+        "markdown",
+        "csv_excel",
+        "pdf",
+        "text",
+        "docx"
+      ],
+      "description": "Type of parser to use"
+    },
+    "parser_config": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "parser_type": {
+              "const": "web"
+            },
+            "parser_config": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "Web Parser Configuration",
+              "description": "Configuration schema for Web/HTML parser",
+              "type": "object",
+              "properties": {
+                "chunk_size": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 50,
+                  "maximum": 10000,
+                  "description": "Size of text chunks. null means no chunking"
+                },
+                "chunk_overlap": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 0,
+                  "description": "Number of characters to overlap between chunks"
+                },
+                "chunk_strategy": {
+                  "type": "string",
+                  "enum": [
+                    "paragraphs",
+                    "sentences",
+                    "characters"
+                  ],
+                  "default": "paragraphs",
+                  "description": "Strategy for splitting content into chunks"
+                },
+                "use_beautiful_soup": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Use BeautifulSoup for better HTML parsing"
+                },
+                "extract_metadata": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract page metadata (title, description, etc.)"
+                },
+                "remove_scripts": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Remove JavaScript code from content"
+                },
+                "remove_styles": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Remove CSS styles from content"
+                },
+                "extract_links": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract all links from the page"
+                },
+                "extract_images": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Extract image URLs"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "parser_type": {
+              "const": "markdown"
+            },
+            "parser_config": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "Markdown Parser Configuration",
+              "description": "Configuration schema for Markdown parser",
+              "type": "object",
+              "properties": {
+                "chunk_size": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 50,
+                  "maximum": 10000,
+                  "description": "Size of text chunks. null means no chunking"
+                },
+                "chunk_overlap": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 0,
+                  "description": "Number of characters to overlap between chunks"
+                },
+                "chunk_strategy": {
+                  "type": "string",
+                  "enum": [
+                    "markdown_aware",
+                    "paragraphs",
+                    "sentences",
+                    "characters"
+                  ],
+                  "default": "markdown_aware",
+                  "description": "Strategy for splitting markdown into chunks"
+                },
+                "preserve_structure": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Preserve markdown heading hierarchy"
+                },
+                "extract_code_blocks": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract code blocks as separate chunks"
+                },
+                "extract_links": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract and store link references"
+                },
+                "extract_images": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract image references"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "parser_type": {
+              "const": "csv_excel"
+            },
+            "parser_config": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "CSV/Excel Parser Configuration",
+              "description": "Configuration schema for CSV and Excel parser",
+              "type": "object",
+              "properties": {
+                "chunk_size": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 50,
+                  "maximum": 10000,
+                  "description": "Size of text chunks. null means no chunking"
+                },
+                "chunk_overlap": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 0,
+                  "description": "Number of characters to overlap between chunks"
+                },
+                "chunk_strategy": {
+                  "type": "string",
+                  "enum": [
+                    "characters",
+                    "rows"
+                  ],
+                  "default": "characters",
+                  "description": "Strategy for splitting data into chunks"
+                },
+                "convert_to": {
+                  "type": "string",
+                  "enum": [
+                    "markdown",
+                    "json",
+                    "text"
+                  ],
+                  "default": "markdown",
+                  "description": "Format to convert table data to"
+                },
+                "include_headers": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Include column headers in output"
+                },
+                "sheet_names": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Specific sheets to process. null means all sheets"
+                },
+                "max_rows": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Maximum rows to process. null means all rows"
+                },
+                "summarize_large_tables": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Add statistical summary for large tables"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "parser_type": {
+              "const": "pdf"
+            },
+            "parser_config": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "PDF Parser Configuration",
+              "description": "Configuration schema for PDF parser",
+              "type": "object",
+              "properties": {
+                "chunk_size": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 50,
+                  "maximum": 10000,
+                  "description": "Size of text chunks. null means no chunking"
+                },
+                "chunk_overlap": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 0,
+                  "description": "Number of characters/tokens to overlap between chunks"
+                },
+                "chunk_strategy": {
+                  "type": "string",
+                  "enum": [
+                    "characters",
+                    "sentences",
+                    "paragraphs",
+                    "semantic"
+                  ],
+                  "default": "sentences",
+                  "description": "Strategy for splitting text into chunks"
+                },
+                "return_full_document": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Return entire PDF as single document vs per-page"
+                },
+                "extract_tables": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Extract tables using camelot or pdfplumber"
+                },
+                "extract_images": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Extract and process images from PDF"
+                },
+                "extract_forms": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Extract form fields and values"
+                },
+                "ocr_enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Enable OCR for scanned PDFs"
+                },
+                "ocr_language": {
+                  "type": "string",
+                  "default": "eng",
+                  "description": "Tesseract language code for OCR"
+                },
+                "ocr_dpi": {
+                  "type": "integer",
+                  "minimum": 72,
+                  "maximum": 600,
+                  "default": 300,
+                  "description": "DPI for OCR image conversion"
+                },
+                "preserve_formatting": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Preserve original formatting (bold, italic, etc.)"
+                },
+                "extract_metadata": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract PDF metadata (author, title, etc.)"
+                },
+                "clean_text": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Clean extracted text (remove extra spaces, etc.)"
+                },
+                "page_range": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "Page range to extract [start, end]. null for all pages"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "parser_type": {
+              "const": "text"
+            },
+            "parser_config": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "Text Parser Configuration",
+              "description": "Configuration schema for text parser",
+              "type": "object",
+              "properties": {
+                "chunk_size": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 50,
+                  "maximum": 10000,
+                  "description": "Size of text chunks. null means no chunking"
+                },
+                "chunk_overlap": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 0,
+                  "description": "Number of characters to overlap between chunks"
+                },
+                "chunk_strategy": {
+                  "type": "string",
+                  "enum": [
+                    "characters",
+                    "sentences",
+                    "paragraphs"
+                  ],
+                  "default": "sentences",
+                  "description": "Strategy for splitting text into chunks"
+                },
+                "encoding": {
+                  "type": "string",
+                  "default": "auto",
+                  "description": "Text encoding (auto, utf-8, latin-1, etc.)"
+                },
+                "clean_text": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Clean and normalize text content"
+                },
+                "preserve_whitespace": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Preserve original whitespace and formatting"
+                },
+                "extract_metadata": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract file metadata (size, line count, etc.)"
+                },
+                "max_file_size_mb": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "default": 100,
+                  "description": "Maximum file size to process in MB"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "parser_type": {
+              "const": "docx"
+            },
+            "parser_config": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "DOCX Parser Configuration",
+              "description": "Configuration schema for DOCX parser",
+              "type": "object",
+              "properties": {
+                "chunk_size": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 50,
+                  "maximum": 10000,
+                  "description": "Size of text chunks. null means no chunking"
+                },
+                "chunk_overlap": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 0,
+                  "description": "Number of characters to overlap between chunks"
+                },
+                "chunk_strategy": {
+                  "type": "string",
+                  "enum": [
+                    "characters",
+                    "sentences",
+                    "paragraphs"
+                  ],
+                  "default": "paragraphs",
+                  "description": "Strategy for splitting text into chunks"
+                },
+                "extract_images": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Extract embedded images"
+                },
+                "preserve_formatting": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Preserve text formatting (bold, italic, etc.)"
+                },
+                "extract_tables": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Extract and convert tables"
+                },
+                "extract_headers_footers": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Extract document headers and footers"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "parser_type"
+  ],
+  "additionalProperties": false
+}

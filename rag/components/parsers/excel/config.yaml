@@ -1,0 +1,107 @@
+parsers:
+  - name: ExcelParser_OpenPyXL
+    display_name: Excel Parser (OpenPyXL)
+    tool: OpenPyXL
+    version: 1.0.0
+    description: Excel parser using OpenPyXL for XLSX files with formula support
+    
+    supported_extensions:
+      - .xlsx
+      - .xlsm
+      - .xltx
+      - .xltm
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel.sheet.macroEnabled.12
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - formula_extraction
+      - multi_sheet
+      - merged_cells
+    
+    dependencies:
+      required:
+        - openpyxl
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      extract_formulas: false
+      extract_metadata: true
+      sheets: null  # null = all sheets
+      data_only: true  # true = values, false = formulas
+
+  - name: ExcelParser_Pandas
+    display_name: Excel Parser (Pandas)
+    tool: Pandas
+    version: 1.0.0
+    description: Excel parser using Pandas with data analysis capabilities
+    
+    supported_extensions:
+      - .xlsx
+      - .xls
+      - .xlsm
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - statistics
+      - data_analysis
+      - multi_sheet
+    
+    dependencies:
+      required:
+        - pandas
+        - openpyxl
+      optional:
+        - xlrd  # For older .xls files
+    
+    default_config:
+      chunk_size: 1000
+      sheets: null  # null = all sheets
+      extract_metadata: true
+      skiprows: null
+      na_values: ["", "NA", "N/A", "null", "None"]
+
+  - name: ExcelParser_XLWings
+    display_name: Excel Parser (XLWings)
+    tool: XLWings
+    version: 1.0.0
+    description: Excel parser with full Excel API access (requires Excel installation)
+    
+    supported_extensions:
+      - .xlsx
+      - .xls
+      - .xlsm
+      - .xlsb
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+    
+    capabilities:
+      - text_extraction
+      - formula_extraction
+      - macro_extraction
+      - charts
+      - pivot_tables
+      - vba_code
+    
+    dependencies:
+      required:
+        - xlwings
+      optional: []
+    
+    default_config:
+      visible: false
+      include_charts: false
+      include_vba: false

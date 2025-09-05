@@ -3,21 +3,29 @@
 from typing import Dict, Any, Type
 from core.base import Parser, Embedder, VectorStore
 
-# Import parsers
-from components.parsers.csv_parser.csv_parser import CSVParser, CustomerSupportCSVParser
-from components.parsers.markdown_parser.markdown_parser import MarkdownParser
-from components.parsers.docx_parser.docx_parser import DocxParser
-from components.parsers.text_parser.text_parser import PlainTextParser
-from components.parsers.html_parser.html_parser import HtmlParser as HTMLParser
-from components.parsers.excel_parser.excel_parser import ExcelParser
-from components.parsers.directory_parser.directory_parser import DirectoryParser
+# Import parsers using the new modular system
+from components.parsers import (
+    ParserFactory as NewParserFactory,
+    DirectoryParser,
+    LlamaIndexTextParser,
+    LlamaIndexPDFParser,
+    LlamaIndexCSVExcelParser,
+    LlamaIndexDocxParser,
+    LlamaIndexMarkdownParser,
+    LlamaIndexWebParser
+)
 
-# Conditional import for PDF parser
-try:
-    from components.parsers.pdf_parser.pdf_parser import PDFParser
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
+# Create aliases for backward compatibility
+PlainTextParser = LlamaIndexTextParser
+PDFParser = LlamaIndexPDFParser
+CSVParser = LlamaIndexCSVExcelParser
+DocxParser = LlamaIndexDocxParser
+MarkdownParser = LlamaIndexMarkdownParser
+HTMLParser = LlamaIndexWebParser
+ExcelParser = LlamaIndexCSVExcelParser
+CustomerSupportCSVParser = LlamaIndexCSVExcelParser
+
+PDF_AVAILABLE = True  # Always available through fallback
 
 # Import embedders
 from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
@@ -111,23 +119,28 @@ class ComponentFactory:
         return list(cls._registry.keys())
 
 
-class ParserFactory(ComponentFactory):
-    """Factory for creating parser instances."""
+class ParserFactoryWrapper(ComponentFactory):
+    """Factory for creating parser instances using the new modular system."""
 
-    _registry = {
-        "CSVParser": CSVParser,
-        "CustomerSupportCSVParser": CustomerSupportCSVParser,
-        "MarkdownParser": MarkdownParser,
-        "DocxParser": DocxParser,
-        "PlainTextParser": PlainTextParser,
-        "HTMLParser": HTMLParser,
-        "ExcelParser": ExcelParser,
-        "DirectoryParser": DirectoryParser,
-    }
+    @classmethod
+    def create(cls, component_type: str, config: Dict[str, Any] = None):
+        """Create a parser instance using the new ParserFactory."""
+        # Use the new ParserFactory from components.parsers
+        return NewParserFactory.create_parser(component_type, config)
     
-    # Add PDF parser conditionally
-    if PDF_AVAILABLE:
-        _registry["PDFParser"] = PDFParser
+    @classmethod
+    def list_available(cls):
+        """List available parsers."""
+        return [
+            "CSVParser", "CustomerSupportCSVParser", "MarkdownParser",
+            "DocxParser", "PlainTextParser", "HTMLParser", "ExcelParser",
+            "DirectoryParser", "PDFParser",
+            # New names
+            "text", "pdf", "csv_excel", "docx", "markdown", "web"
+        ]
+
+# Keep the name ParserFactory for backward compatibility but use the wrapper
+ParserFactory = ParserFactoryWrapper
 
 
 class EmbedderFactory(ComponentFactory):

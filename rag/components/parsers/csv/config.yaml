@@ -1,0 +1,99 @@
+parsers:
+  - name: CSVParser_Pandas
+    display_name: CSV Parser (Pandas)
+    tool: Pandas
+    version: 1.0.0
+    description: Advanced CSV parser using Pandas with data analysis capabilities
+    
+    supported_extensions:
+      - .csv
+      - .tsv
+    
+    mime_types:
+      - text/csv
+      - text/tab-separated-values
+      - application/csv
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - statistics
+      - data_analysis
+      - column_processing
+    
+    dependencies:
+      required:
+        - pandas
+      optional:
+        - numpy
+    
+    default_config:
+      chunk_size: 1000
+      chunk_strategy: rows  # rows, columns, full
+      extract_metadata: true
+      encoding: utf-8
+      delimiter: ","
+      na_values: ["", "NA", "N/A", "null", "None"]
+
+  - name: CSVParser_Python
+    display_name: CSV Parser (Python)
+    tool: Python csv
+    version: 1.0.0
+    description: Simple CSV parser using native Python csv module
+    
+    supported_extensions:
+      - .csv
+      - .tsv
+    
+    mime_types:
+      - text/csv
+      - text/tab-separated-values
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - basic_metadata
+    
+    dependencies:
+      required: []
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      encoding: utf-8
+      delimiter: ","
+      quotechar: '"'
+
+  - name: CSVParser_DuckDB
+    display_name: CSV Parser (DuckDB)
+    tool: DuckDB
+    version: 1.0.0
+    description: High-performance CSV parser with SQL query capabilities
+    
+    supported_extensions:
+      - .csv
+      - .tsv
+    
+    mime_types:
+      - text/csv
+      - text/tab-separated-values
+    
+    capabilities:
+      - text_extraction
+      - sql_queries
+      - chunking
+      - metadata_extraction
+      - aggregations
+      - joins
+    
+    dependencies:
+      required:
+        - duckdb
+      optional: []
+    
+    default_config:
+      chunk_size: 10000
+      sql_query: null  # Optional SQL to run on data
+      auto_detect: true
+      header: true
