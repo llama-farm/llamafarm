@@ -5,12 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"llamafarm-cli/cmd/config"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
+
+// CreateProjectResponse represents the server response when creating a project.
+// It contains the created project and its configuration under project.config.
+type CreateProjectResponse struct {
+	Project struct {
+		Config map[string]interface{} `json:"config"`
+	} `json:"project"`
+}
 
 // initCmd represents the init command
 var initCmd = &cobra.Command{
@@ -19,10 +29,10 @@ var initCmd = &cobra.Command{
 	Long:  `Initialize a new LlamaFarm project in the current directory (or a target path).`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Initializing a new LlamaFarm project...")
-
+		fmt.Print("Initializing a new LlamaFarm project")
 		// Determine target directory
-		projectDir := "."
+		cwd := getEffectiveCWD()
+		projectDir := cwd
 		if len(args) > 0 {
 			projectDir = args[0]
 		}
@@ -34,18 +44,15 @@ var initCmd = &cobra.Command{
 		}
 
 		// Derive project name from directory
-		var projectName string
-		if projectDir == "." {
-			if wd, err := getEffectiveCWD(); err == nil {
-				projectName = filepath.Base(wd)
-			} else if wd, err2 := os.Getwd(); err2 == nil {
-				projectName = filepath.Base(wd)
-			} else {
-				fmt.Fprintf(os.Stderr, "Failed to determine working directory: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			projectName = filepath.Base(projectDir)
+		absProjectDir, _ := filepath.Abs(projectDir)
+		projectName := filepath.Base(absProjectDir)
+
+		fmt.Println(" in", projectDir)
+
+		// Use config.FindConfigFile to check if a llamafarm config file already exists in the target directory
+		if configPath, err := config.FindConfigFile(projectDir); err == nil && configPath != "" {
+			fmt.Fprintf(os.Stderr, "Error: Project already exists (found %s)\n", configPath)
+			os.Exit(1)
 		}
 
 		ns := namespace
@@ -78,7 +85,6 @@ var initCmd = &cobra.Command{
 		}
 		bodyBytes, _ := json.Marshal(createProjectRequest{Name: projectName, ConfigTemplate: tplPtr})
 
-		// Change CWD for localhost header if targeting a different path
 		origWD, _ := os.Getwd()
 		needChdir := projectDir != "."
 		if needChdir {
@@ -110,20 +116,26 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Success message
-		absPath := projectDir
-		if projectDir == "." {
-			if wd, err := getEffectiveCWD(); err == nil {
-				absPath = wd
-			} else if wd, err2 := os.Getwd(); err2 == nil {
-				absPath = wd
-			}
-		} else {
-			if p, err := filepath.Abs(projectDir); err == nil {
-				absPath = p
-			}
+		// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
+		var createResp CreateProjectResponse
+		if err := json.Unmarshal(respBody, &createResp); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
+			os.Exit(1)
 		}
-		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absPath)
+
+		yamlBytes, err := yaml.Marshal(createResp.Project.Config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
+			os.Exit(1)
+		}
+
+		yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
+		if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absProjectDir)
 	},
 }
 

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"llamafarm-cli/cmd/config"
@@ -20,25 +21,23 @@ func StartConfigWatcher(namespace, project string) error {
 	}
 
 	// Get the effective current working directory
-	cwd, err := getEffectiveCWD()
-	if err != nil {
-		return fmt.Errorf("failed to get effective working directory: %w", err)
-	}
+	cwd := getEffectiveCWD()
 
 	// Find config files in both locations
 	cwdConfigPath, err := config.FindConfigFile(cwd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: No config file found in current directory: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: No llamafarm config file found in current directory: %v\n", err)
 	}
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	homeConfigDir := filepath.Join(homeDir, ".llamafarm", namespace, project)
-	homeConfigPath, err := config.FindConfigFile(homeConfigDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: No config file found in home directory: %v\n", err)
+	homeConfigDir := filepath.Join(homeDir, ".llamafarm", "projects", namespace, project)
+
+	// Watch home directory (create if needed)
+	if err := os.MkdirAll(homeConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create home config directory: %w", err)
 	}
 
 	// Create watcher
@@ -47,18 +46,53 @@ func StartConfigWatcher(namespace, project string) error {
 		return fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
+	homeConfigPath, _ := config.FindConfigFile(homeConfigDir)
+	if homeConfigPath == "" {
+		homeConfigPath = filepath.Join(homeConfigDir, "llamafarm.yaml")
+	}
+
+	// Compute the config file name
+	var configFileName string
+	if cwdConfigPath != "" {
+		configFileName = filepath.Base(cwdConfigPath)
+	} else if homeConfigPath != "" {
+		configFileName = filepath.Base(homeConfigPath)
+	} else {
+		configFileName = "llamafarm.yaml"
+	}
+
+	if homeConfigPath == "" {
+		homeConfigPath = filepath.Join(homeConfigDir, configFileName)
+	}
+
+	if cwdConfigPath == "" {
+		cwdConfigPath = filepath.Join(cwd, configFileName)
+	}
+
+	if err := watcher.Add(homeConfigDir); err != nil {
+		return fmt.Errorf("failed to watch home config directory: %w", err)
+	}
+
 	// Watch directories for config file creation/changes
 	// Watch current directory
 	if err := watcher.Add(cwd); err != nil {
 		return fmt.Errorf("failed to watch current directory: %w", err)
 	}
 
-	// Watch home directory (create if needed)
-	if err := os.MkdirAll(homeConfigDir, 0755); err != nil {
-		return fmt.Errorf("failed to create home config directory: %w", err)
-	}
-	if err := watcher.Add(homeConfigDir); err != nil {
-		return fmt.Errorf("failed to watch home config directory: %w", err)
+	logDebug(fmt.Sprintf("cwdConfigPath: %s, homeConfigPath: %s", cwdConfigPath, homeConfigPath))
+	cwdConfigInfo, ciErr := os.Stat(cwdConfigPath)
+	homeConfigInfo, hiErr := os.Stat(homeConfigPath)
+	logDebug(fmt.Sprintf("cwdConfigInfo: %v, homeConfigInfo: %v", cwdConfigInfo, homeConfigInfo))
+	logDebug(fmt.Sprintf("ciErr: %v, hiErr: %v", ciErr, hiErr))
+	// logDebug(fmt.Sprintf("cwdConfigInfo.ModTime(): %v, homeConfigInfo.ModTime(): %v", cwdConfigInfo.ModTime(), homeConfigInfo.ModTime()))
+	if ciErr == nil && (hiErr != nil || cwdConfigInfo.ModTime().After(homeConfigInfo.ModTime())) {
+		if err := syncConfigFiles(cwdConfigPath, homeConfigPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+		}
+	} else if hiErr == nil && (ciErr != nil || homeConfigInfo.ModTime().After(cwdConfigInfo.ModTime())) {
+		if err := syncConfigFiles(homeConfigPath, cwdConfigPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+		}
 	}
 
 	// Also watch existing config files if they exist
@@ -124,7 +158,7 @@ func StartConfigWatcher(namespace, project string) error {
 						// Source is in current directory, target should be in home directory
 						targetBaseName := filepath.Base(sourcePath)
 						targetPath = filepath.Join(homeConfigDir, targetBaseName)
-					} else if filepath.HasPrefix(sourcePath, homeConfigDir) {
+					} else if strings.HasPrefix(sourcePath, homeConfigDir) {
 						// Source is in home directory, target should be in current directory
 						targetBaseName := filepath.Base(sourcePath)
 						targetPath = filepath.Join(cwd, targetBaseName)
@@ -153,15 +187,9 @@ func StartConfigWatcher(namespace, project string) error {
 		}
 	}()
 
-	fmt.Fprintf(os.Stderr, "Config watcher started for namespace: %s, project: %s\n", namespace, project)
-	fmt.Fprintf(os.Stderr, "Watching directory: %s\n", cwd)
-	fmt.Fprintf(os.Stderr, "Watching directory: %s\n", homeConfigDir)
-	if cwdConfigPath != "" {
-		fmt.Fprintf(os.Stderr, "Watching config file: %s\n", cwdConfigPath)
-	}
-	if homeConfigPath != "" {
-		fmt.Fprintf(os.Stderr, "Watching config file: %s\n", homeConfigPath)
-	}
+	fmt.Fprintf(os.Stderr, "Watching project: %s\n", cwd)
+	logDebug(fmt.Sprintf("Watching target directory: %s\n", cwdConfigPath))
+	logDebug(fmt.Sprintf("Watching home directory: %s\n", homeConfigDir))
 
 	return nil
 }

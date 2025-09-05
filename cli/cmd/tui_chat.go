@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"llamafarm-cli/cmd/config"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,8 +32,8 @@ var chatCtx = &ChatSessionContext{
 }
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
-func runChatSessionTUI() {
-	m := newChatModel()
+func runChatSessionTUI(projectInfo *config.ProjectInfo) {
+	m := newChatModel(projectInfo)
 	p := tea.NewProgram(m)
 	m.program = p
 	if _, err := p.Run(); err != nil {
@@ -41,6 +42,7 @@ func runChatSessionTUI() {
 }
 
 type chatModel struct {
+	projectInfo *config.ProjectInfo
 	input       textinput.Model
 	spin        spinner.Model
 	transcript  []string
@@ -67,7 +69,7 @@ type responseMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
 
-func newChatModel() chatModel {
+func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	in := textinput.New()
 	in.Placeholder = "Type a message"
 	in.Prompt = "You> "
@@ -82,6 +84,7 @@ func newChatModel() chatModel {
 	hPath := getHistoryPath()
 	h := loadHistory(hPath)
 	return chatModel{
+		projectInfo: projectInfo,
 		input:       in,
 		spin:        s,
 		transcript:  []string{},
@@ -301,7 +304,7 @@ func (m chatModel) View() string {
 	wrappedServer := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(serverLine)
 	b.WriteString(wrappedServer + "\n")
 
-	projectLine := projectPrompt + " " + namespace + "/" + projectID
+	projectLine := projectPrompt + " " + m.projectInfo.Namespace + "/" + m.projectInfo.Project
 	wrappedProject := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(projectLine)
 	b.WriteString(wrappedProject + "\n")
 

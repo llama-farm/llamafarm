@@ -255,10 +255,7 @@ type SessionContext struct {
 // readSessionContext reads the session context from the YAML file if it exists
 func readSessionContext() (*SessionContext, error) {
 	// Get effective working directory from config
-	cwd, err := getEffectiveCWD()
-	if err != nil {
-		return nil, fmt.Errorf("failed to determine effective working directory: %w", err)
-	}
+	cwd := getEffectiveCWD()
 	if cwd == "" {
 		return nil, fmt.Errorf("failed to determine effective working directory")
 	}
@@ -297,10 +294,7 @@ func writeSessionContext(sessionID string) error {
 	}
 
 	// Get effective working directory from config
-	cwd, err := getEffectiveCWD()
-	if err != nil {
-		return fmt.Errorf("failed to determine effective working directory: %w", err)
-	}
+	cwd := getEffectiveCWD()
 	if cwd == "" {
 		return fmt.Errorf("failed to determine effective working directory")
 	}

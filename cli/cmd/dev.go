@@ -21,7 +21,7 @@ var devCmd = &cobra.Command{
 		}
 
 		// Load config to get namespace and project for watcher
-		cwd, _ := getEffectiveCWD()
+		cwd := getEffectiveCWD()
 		cfg, err := config.LoadConfig(cwd)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "No config file found in target directory. Run `lf init` to create a new project.\n")
@@ -41,7 +41,7 @@ var devCmd = &cobra.Command{
 		if err := ensureServerAvailable(serverURL); err != nil {
 			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
 		}
-		runChatSessionTUI()
+		runChatSessionTUI(projectInfo)
 	},
 }
 

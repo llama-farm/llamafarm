@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,8 +23,21 @@ func InitDebugLogger(path string) error {
 	var initErr error
 	debugOnce.Do(func() {
 		if path == "" {
-			path = "debug.log"
+			cwd := getEffectiveCWD()
+			path = filepath.Join(cwd, "debug.log")
 		}
+
+		absPath, _ := filepath.Abs(path)
+
+		fmt.Printf(
+			"[DEBUG] Logging to: %s\n",
+			func() string {
+				if absPath != "" {
+					return absPath
+				}
+				return path
+			}(),
+		)
 
 		// Use Bubble Tea's LogToFile which handles file creation and setup properly
 		f, err := tea.LogToFile(path, "debug")
@@ -49,7 +63,7 @@ func CloseDebugLogger() {
 }
 
 func logDebug(msg string) {
-	if len(os.Getenv("DEBUG")) == 0 {
+	if !debug {
 		return
 	}
 	if debugLogger == nil {
