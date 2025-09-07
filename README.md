@@ -443,7 +443,7 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
           <sub><b>Bobby Radford</b></sub>
         </a>
         <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a>
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
       </td>
       <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/mhamann">
