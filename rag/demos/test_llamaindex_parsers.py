@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Test that LlamaIndex parsers are properly exposed."""
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
+
 from components.parsers.parser_factory import ToolAwareParserFactory
 from components.parsers.parser_registry import ParserRegistry
 
