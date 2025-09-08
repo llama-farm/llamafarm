@@ -99,7 +99,7 @@ def demonstrate_customer_support_cli():
     
     # Check if collection exists
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy customer_support_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy csv_processing_customer_support_db",
         quiet=True
     )
     
@@ -110,7 +110,7 @@ def demonstrate_customer_support_cli():
     print_section_header("Customer Data Ingestion", "📥")
     
     console.print("[bold cyan]🔄 Processing customer support tickets and knowledge base...[/bold cyan]")
-    console.print("[dim]💡 Using customer_support_demo strategy from demo_strategies.yaml[/dim]")
+    console.print("[dim]💡 Using csv_processing_customer_support_db strategy from demo_strategies.yaml[/dim]")
     
     # Show what files we're ingesting
     support_files = [
@@ -138,7 +138,7 @@ def demonstrate_customer_support_cli():
     
     # Ingest with verbose output to show processing
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy customer_support_demo demos/static_samples/customer_support/"
+        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy csv_processing_customer_support_db demos/static_samples/customer_support/"
     )
     
     if returncode == 0:
@@ -155,7 +155,7 @@ def demonstrate_customer_support_cli():
     console.print("📈 [bold cyan]Analyzing customer support database...[/bold cyan]")
     
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py info --strategy customer_support_demo"
+        "python cli.py info --strategy csv_processing_customer_support_db"
     )
     
     if returncode == 0:
@@ -193,7 +193,7 @@ def demonstrate_customer_support_cli():
         
         # Run search with appropriate verbosity
         returncode, stdout, stderr = run_cli_command(
-            f'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy customer_support_demo "{query}" --top-k 3',
+            f'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy csv_processing_customer_support_db "{query}" --top-k 3',
             verbose=(i <= 2)  # Show verbose for first 2 queries
         )
         
@@ -221,7 +221,7 @@ def demonstrate_customer_support_cli():
     # High priority tickets search
     console.print("\n[bold]1. Finding high-priority tickets:[/bold]")
     returncode, stdout, stderr = run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy customer_support_demo "urgent critical system down" --top-k 5'
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy csv_processing_customer_support_db "urgent critical system down" --top-k 5'
     )
     
     if "high" in stdout.lower() or "critical" in stdout.lower():
@@ -230,7 +230,7 @@ def demonstrate_customer_support_cli():
     # Knowledge base search
     console.print("\n[bold]2. Searching knowledge base for solutions:[/bold]")
     returncode, stdout, stderr = run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy customer_support_demo "troubleshooting steps reset" --top-k 3'
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy csv_processing_customer_support_db "troubleshooting steps reset" --top-k 3'
     )
     
     if "knowledge" in stdout.lower() or "solution" in stdout.lower():
@@ -243,7 +243,7 @@ def demonstrate_customer_support_cli():
     console.print("[dim]💡 Useful for integrating with ticketing systems or chatbots[/dim]")
     
     returncode, stdout, stderr = run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --quiet search --strategy customer_support_demo "password reset"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --quiet search --strategy csv_processing_customer_support_db "password reset"',
         quiet=True
     )
     
@@ -263,15 +263,15 @@ def demonstrate_customer_support_cli():
     
     integration_table.add_row(
         "Ticket Auto-Response",
-        "cli.py search --quiet --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<ticket_content>'"
+        "cli.py search --quiet --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db '<ticket_content>'"
     )
     integration_table.add_row(
         "Priority Detection",
-        "cli.py search --verbose --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<ticket>'"
+        "cli.py search --verbose --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db '<ticket>'"
     )
     integration_table.add_row(
         "Knowledge Base Lookup",
-        "cli.py search --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<customer_question>'"
+        "cli.py search --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db '<customer_question>'"
     )
     integration_table.add_row(
         "Batch Processing",
@@ -279,7 +279,7 @@ def demonstrate_customer_support_cli():
     )
     integration_table.add_row(
         "Daily Stats",
-        "cli.py --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo info"
+        "cli.py --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db info"
     )
     
     console.print(integration_table)
@@ -305,23 +305,23 @@ def demonstrate_customer_support_cli():
     console.print("🔄 Continuous learning from new tickets")
     
     console.print(f"\n[bold]CLI Commands for Support Teams:[/bold]")
-    console.print("📥 `cli.py ingest --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo tickets.csv`")
-    console.print("🔍 `cli.py search --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo '<issue>'`")
-    console.print("📊 `cli.py info --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo`")
+    console.print("📥 `cli.py ingest --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db tickets.csv`")
+    console.print("🔍 `cli.py search --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db '<issue>'`")
+    console.print("📊 `cli.py info --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db`")
     console.print("🔇 `cli.py --quiet` for integration with other systems")
     console.print("📝 `cli.py --verbose` for detailed analysis")
     
     console.print(f"\n📁 Support database saved to: [bold]./demos/vectordb/customer_support[/bold]")
     console.print("🔄 Continue using these commands to manage your support system:")
-    console.print("[dim]$ python cli.py search --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo 'customer issue'[/dim]")
-    console.print("[dim]$ python cli.py ingest --strategy-file demos/demo_strategies.yaml --strategy customer_support_demo new_tickets.csv[/dim]")
+    console.print("[dim]$ python cli.py search --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db 'customer issue'[/dim]")
+    console.print("[dim]$ python cli.py ingest --strategy-file demos/demo_strategies.yaml --strategy csv_processing_customer_support_db new_tickets.csv[/dim]")
     
     # Clean up the database after demo
     console.print("\n🧹 [bold cyan]Cleaning up demo database...[/bold cyan]")
     console.print("[dim]💡 Removing demo data to keep your system clean[/dim]")
     
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy customer_support_demo delete --all"
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy csv_processing_customer_support_db delete --all"
     )
     
     if returncode == 0:

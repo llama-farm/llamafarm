@@ -107,7 +107,7 @@ def demonstrate_research_paper_rag_cli():
     
     # First, let's check if the collection already exists
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy research_papers_demo"
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy text_processing_research_papers_db"
     )
     
     if "document_count" in stdout:
@@ -123,7 +123,7 @@ def demonstrate_research_paper_rag_cli():
     
     # Run ingestion with verbose output
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --verbose --strategy-file demos/demo_strategies.yaml ingest --strategy research_papers_demo demos/static_samples/research_papers/"
+        "python cli.py --verbose --strategy-file demos/demo_strategies.yaml ingest --strategy text_processing_research_papers_db demos/static_samples/research_papers/"
     )
     
     if returncode == 0:
@@ -145,7 +145,7 @@ def demonstrate_research_paper_rag_cli():
     console.print("📈 [bold cyan]Retrieving collection statistics...[/bold cyan]")
     
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy research_papers_demo"
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy text_processing_research_papers_db"
     )
     
     if returncode == 0 and stdout:
@@ -179,7 +179,7 @@ def demonstrate_research_paper_rag_cli():
         
         # Run search with verbose output
         returncode, stdout, stderr = run_cli_command(
-            f'python cli.py --verbose --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo "{query}"'
+            f'python cli.py --verbose --strategy-file demos/demo_strategies.yaml search --strategy text_processing_research_papers_db "{query}"'
         )
         
         if returncode == 0:
@@ -198,7 +198,7 @@ def demonstrate_research_paper_rag_cli():
     console.print("[dim]💡 Useful for parsing output in scripts[/dim]")
     
     returncode, stdout, stderr = run_cli_command(
-        'python cli.py --quiet --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo "transformer performance"'
+        'python cli.py --quiet --strategy-file demos/demo_strategies.yaml search --strategy text_processing_research_papers_db "transformer performance"'
     )
     
     console.print("\n[bold]Quiet mode output (structured for scripts):[/bold]")
@@ -274,15 +274,15 @@ def demonstrate_research_paper_rag_cli():
     
     console.print(f"\n📁 Research database saved to: [bold]./demos/vectordb/research_papers[/bold]")
     console.print("🔄 You can continue using these CLI commands to query the database:")
-    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo 'your query here'[/dim]")
-    console.print("[dim]$ python cli.py --verbose --strategy-file demos/demo_strategies.yaml search --strategy research_papers_demo 'detailed results'[/dim]")
+    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy text_processing_research_papers_db 'your query here'[/dim]")
+    console.print("[dim]$ python cli.py --verbose --strategy-file demos/demo_strategies.yaml search --strategy text_processing_research_papers_db 'detailed results'[/dim]")
     
     # Clean up the database after demo
     console.print("\n🧹 [bold cyan]Cleaning up demo database...[/bold cyan]")
     console.print("[dim]💡 Removing demo data to keep your system clean[/dim]")
     
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy research_papers_demo delete --all"
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy text_processing_research_papers_db delete --all"
     )
     
     if returncode == 0:

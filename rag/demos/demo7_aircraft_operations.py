@@ -108,7 +108,7 @@ def demonstrate_aircraft_operations_cli():
     
     console.print("\n[bold green]This demo showcases:[/bold green]")
     console.print("• [bold cyan]Large PDF processing[/bold cyan] (21MB technical manual)")
-    console.print("• Strategy-first configuration (aircraft_operations_demo)")
+    console.print("• Strategy-first configuration (llamaindex_pdf_processing_main_chroma_db)")
     console.print("• Page-based PDF parsing with structure preservation")
     console.print("• Aviation-specific pattern extraction")
     console.print("• Table extraction for operational data")
@@ -119,7 +119,7 @@ def demonstrate_aircraft_operations_cli():
     print_section_header("Strategy Information", "📋")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml strategies show aircraft_operations_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml strategies show llamaindex_pdf_processing_main_chroma_db",
         "Viewing aircraft operations strategy configuration"
     )
     
@@ -129,7 +129,7 @@ def demonstrate_aircraft_operations_cli():
     print_section_header("Database Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy aircraft_operations_demo delete --all",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy llamaindex_pdf_processing_main_chroma_db delete --all",
         "Cleaning up any existing aircraft operations collection"
     )
     
@@ -146,7 +146,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("• [cyan]Indexing[/cyan]: Storing in vector database\n")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy aircraft_operations_demo demos/static_samples/747/ryanair-737-700-800-fcom-rev-30.pdf",
+        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy llamaindex_pdf_processing_main_chroma_db demos/static_samples/747/ryanair-737-700-800-fcom-rev-30.pdf",
         "Starting ingestion of 737 Flight Crew Operations Manual (FCOM)"
     )
     
@@ -157,7 +157,7 @@ def demonstrate_aircraft_operations_cli():
     print_section_header("Collection Statistics", "📊")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy aircraft_operations_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy llamaindex_pdf_processing_main_chroma_db",
         "Viewing collection statistics and extracted metadata"
     )
     
@@ -173,7 +173,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[bold yellow]Query 1: Emergency Procedures[/bold yellow]")
     console.print("[dim]Looking for critical safety information...[/dim]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy aircraft_operations_demo "engine failure emergency procedures" --top-k 3',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy llamaindex_pdf_processing_main_chroma_db "engine failure emergency procedures" --top-k 3',
         "Searching for engine failure procedures"
     )
     
@@ -184,7 +184,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[bold yellow]Query 2: Aircraft Performance Limits[/bold yellow]")
     console.print("[dim]Retrieving operational ceiling and performance data...[/dim]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy aircraft_operations_demo "maximum altitude service ceiling FL410" --top-k 3',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy llamaindex_pdf_processing_main_chroma_db "maximum altitude service ceiling FL410" --top-k 3',
         "Finding aircraft performance limitations"
     )
     
@@ -195,7 +195,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[bold yellow]Query 3: Takeoff Procedures[/bold yellow]")
     console.print("[dim]Searching for V-speeds and rotation procedures...[/dim]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy aircraft_operations_demo "takeoff speeds V1 VR V2 rotation" --top-k 3',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy llamaindex_pdf_processing_main_chroma_db "takeoff speeds V1 VR V2 rotation" --top-k 3',
         "Searching for takeoff speed procedures"
     )
     
@@ -206,7 +206,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[bold yellow]Query 4: Aircraft Systems[/bold yellow]")
     console.print("[dim]Querying hydraulic system specifications...[/dim]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy aircraft_operations_demo "hydraulic system pressure PSI operation" --top-k 3',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy llamaindex_pdf_processing_main_chroma_db "hydraulic system pressure PSI operation" --top-k 3',
         "Finding hydraulic system information"
     )
     
@@ -217,7 +217,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[bold yellow]Query 5: Landing Configuration[/bold yellow]")
     console.print("[dim]Looking up approach speeds and landing configuration...[/dim]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy aircraft_operations_demo "landing flaps approach speed VREF" --top-k 3',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy llamaindex_pdf_processing_main_chroma_db "landing flaps approach speed VREF" --top-k 3',
         "Searching for landing procedures"
     )
     
@@ -227,7 +227,7 @@ def demonstrate_aircraft_operations_cli():
     # Step 6: Demonstrate metadata extraction
     print_section_header("Extracted Metadata Showcase", "🎯")
     
-    console.print("\n[bold]The aircraft_operations_demo strategy extracts:[/bold]")
+    console.print("\n[bold]The llamaindex_pdf_processing_main_chroma_db strategy extracts:[/bold]")
     console.print("• [cyan]HeadingExtractor[/cyan]: Document structure and sections")
     console.print("• [cyan]PatternExtractor[/cyan]: Flight levels, speeds, weights, altitudes")
     console.print("• [cyan]TableExtractor[/cyan]: Performance tables and checklists")
@@ -264,7 +264,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[bold yellow]Complex Query: Weight and Balance[/bold yellow]")
     console.print("[dim]Combining MTOW and CG limit search...[/dim]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy aircraft_operations_demo "maximum takeoff weight MTOW center of gravity CG limits" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy llamaindex_pdf_processing_main_chroma_db "maximum takeoff weight MTOW center of gravity CG limits" --top-k 2',
         "Searching for weight and balance information"
     )
     
@@ -274,7 +274,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[bold yellow]Complex Query: Weather Limitations[/bold yellow]")
     console.print("[dim]Retrieving weather minima and approach categories...[/dim]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy aircraft_operations_demo "crosswind limits visibility RVR CAT III approach" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy llamaindex_pdf_processing_main_chroma_db "crosswind limits visibility RVR CAT III approach" --top-k 2',
         "Finding weather operating limitations"
     )
     
@@ -288,13 +288,13 @@ def demonstrate_aircraft_operations_cli():
     
     export_commands = [
         ("Quick reference lookup:", 
-         "python cli.py search --strategy aircraft_operations_demo 'V-speeds' --format json"),
+         "python cli.py search --strategy llamaindex_pdf_processing_main_chroma_db 'V-speeds' --format json"),
         ("Emergency checklist:",
-         "python cli.py search --strategy aircraft_operations_demo 'emergency checklist' --top-k 1"),
+         "python cli.py search --strategy llamaindex_pdf_processing_main_chroma_db 'emergency checklist' --top-k 1"),
         ("Performance data:",
-         "python cli.py search --strategy aircraft_operations_demo 'performance tables' --verbose"),
+         "python cli.py search --strategy llamaindex_pdf_processing_main_chroma_db 'performance tables' --verbose"),
         ("System limitations:",
-         "python cli.py search --strategy aircraft_operations_demo 'operating limitations' --format csv")
+         "python cli.py search --strategy llamaindex_pdf_processing_main_chroma_db 'operating limitations' --format csv")
     ]
     
     table = Table(show_header=True, header_style="bold magenta")
@@ -327,9 +327,9 @@ def demonstrate_aircraft_operations_cli():
     console.print(summary_table)
     
     console.print("\n[bold cyan]Aircraft operations collection ready for use![/bold cyan]")
-    console.print(f"[dim]Collection: aircraft_operations (strategy: aircraft_operations_demo)[/dim]")
+    console.print(f"[dim]Collection: aircraft_operations (strategy: llamaindex_pdf_processing_main_chroma_db)[/dim]")
     console.print(f"[dim]To query this collection later:[/dim]")
-    console.print('[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy aircraft_operations_demo "your query"[/dim]')
+    console.print('[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy llamaindex_pdf_processing_main_chroma_db "your query"[/dim]')
     
     # Final cleanup
     print_section_header("Final Cleanup", "🧹")
@@ -337,7 +337,7 @@ def demonstrate_aircraft_operations_cli():
     console.print("\n[yellow]Removing all indexed documents to free up space...[/yellow]")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy aircraft_operations_demo delete --all",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy llamaindex_pdf_processing_main_chroma_db delete --all",
         "Cleaning up ALL documents in the collection"
     )
     
@@ -353,5 +353,5 @@ if __name__ == "__main__":
         sys.exit(0)
     except Exception as e:
         console.print(f"\n\n❌ Aircraft operations demo failed: {str(e)}", style="red")
-        console.print("Ensure the CLI is working and demo_strategies.yaml contains aircraft_operations_demo", style="dim")
+        console.print("Ensure the CLI is working and demo_strategies.yaml contains llamaindex_pdf_processing_main_chroma_db", style="dim")
         sys.exit(1)

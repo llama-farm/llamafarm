@@ -1,48 +1,282 @@
 version: v1
 name: default-project
+namespace: default
+
+# =============================================================================
+# RUNTIME CONFIGURATION (required - most important)
+# =============================================================================
+runtime:
+  provider: ollama
+  model: llama3.2
+  base_url: http://localhost:11434
+  temperature: 0.5
+  # api_key: optional, not needed for ollama
+  # instructor_mode: optional
+  # model_api_parameters: optional additional parameters
+
+# =============================================================================
+# PROMPTS CONFIGURATION
+# =============================================================================
 prompts: []
+
+# =============================================================================
+# DATASETS CONFIGURATION
+# =============================================================================
+datasets: []
+
+# =============================================================================
+# RAG CONFIGURATION
+# =============================================================================
 rag:
-  strategies:
-    - name: default
-      description: Default RAG strategy
-      components:
-        parser:
-          type: PlainTextParser
+  # =============================================================================
+  # DATABASE CONFIGURATIONS
+  # =============================================================================
+  databases:
+    # Main vector database for general documents
+    - name: "main_database"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/chroma_db"
+        distance_function: "cosine"
+        collection_name: "documents"
+        port: 8000
+      # Default strategies for this database
+      default_embedding_strategy: "default_embeddings"
+      default_retrieval_strategy: "basic_search"
+      # Available embedding strategies
+      embedding_strategies:
+        - name: "default_embeddings"
+          type: "OllamaEmbedder"
           config:
-            encoding: auto
-            chunk_overlap: 0
-            chunk_strategy: characters
-            respect_sentence_boundaries: true
-            respect_paragraph_boundaries: false
-            min_chunk_size: 50
-            preserve_line_breaks: true
-            strip_empty_lines: true
-            detect_structure: true
-        embedder:
-          type: OllamaEmbedder
-          config:
-            model: nomic-embed-text
-            base_url: http://localhost:11434/ # FIXME: This is not going to work very well within a docker container
+            model: "nomic-embed-text"
+            base_url: "http://localhost:11434/"
             dimension: 768
             batch_size: 16
             timeout: 60
             auto_pull: true
-        vector_store:
-          type: ChromaStore
+        - name: "fast_embeddings"
+          type: "OllamaEmbedder"
           config:
-            collection_name: documents
-            persist_directory: ./data/chroma_db
-            port: 8000
-            distance_function: cosine
-        retrieval_strategy:
-          type: BasicSimilarityStrategy
+            model: "nomic-embed-text"
+            base_url: "http://localhost:11434/"
+            dimension: 768
+            batch_size: 32
+            timeout: 30
+            auto_pull: true
+      # Available retrieval strategies
+      retrieval_strategies:
+        - name: "basic_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 10
+          default: true
+        - name: "filtered_search"
+          type: "MetadataFilteredStrategy"
           config:
             top_k: 10
-            distance_metric: cosine
-  strategy_templates: {}
-datasets: []
-runtime:
-  provider: ollama
-  model: llama3.1:8b
-  model_api_parameters:
-    temperature: 0.5
+            filter_mode: "post"
+            fallback_multiplier: 2
+
+  # =============================================================================
+  # DATA PROCESSING STRATEGIES
+  # =============================================================================
+  data_processing_strategies:
+    # Basic PDF processing
+    - name: "pdf_processing"
+      description: "Standard PDF document processing"
+      parsers:
+        - type: "PDFParser_PyPDF2"
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            chunk_strategy: "paragraphs"
+            extract_metadata: true
+      extractors:
+        - type: "ContentStatisticsExtractor"
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT"]
+            use_fallback: true
+            min_entity_length: 2
+        - type: "KeywordExtractor"
+          config:
+            algorithm: "yake"
+            max_keywords: 10
+            min_keyword_length: 3
+
+    # Basic text processing
+    - name: "text_processing"
+      description: "Plain text document processing"
+      parsers:
+        - type: "TextParser_Python"
+          config:
+            encoding: "utf-8"
+            chunk_size: 1200
+            chunk_overlap: 200
+            chunk_strategy: "sentences"
+            clean_text: true
+      extractors:
+        - type: "ContentStatisticsExtractor"
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT", "PRODUCT"]
+            use_fallback: true
+            min_entity_length: 2
+
+    # Markdown processing
+    - name: "markdown_processing"
+      description: "Markdown document processing with structure preservation"
+      parsers:
+        - type: "MarkdownParser_Python"
+          config:
+            chunk_size: 1000
+            chunk_strategy: "sections"
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+      extractors:
+        - type: "ContentStatisticsExtractor"
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "PRODUCT", "CARDINAL", "GPE"]
+            use_fallback: true
+            min_entity_length: 2
+
+    # CSV/structured data processing
+    - name: "csv_processing"
+      description: "CSV and structured data processing"
+      parsers:
+        - type: "CSVParser_Pandas"
+          config:
+            chunk_size: 500
+            chunk_strategy: "rows"
+            extract_metadata: true
+      extractors:
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT"]
+            use_fallback: true
+            min_entity_length: 2
+        - type: "DateTimeExtractor"
+          config:
+            formats: ["ISO8601", "US", "EU"]
+            extract_relative: true
+
+    # Multi-format processing with LlamaIndex parsers
+    - name: "multi_format_llamaindex"
+      description: "Multi-format document processing using LlamaIndex parsers"
+      # Strategy accepts multiple document types
+      allowed_mime_types: [
+        "application/pdf",
+        "text/csv",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/markdown",
+        "text/plain"
+      ]
+      allowed_extensions: [".pdf", ".csv", ".docx", ".xlsx", ".md", ".txt"]
+      parsers:
+        # PDF parser with high priority
+        - type: "PDFParser_LlamaIndex"
+          mime_types: ["application/pdf"]
+          file_extensions: [".pdf", ".PDF"]
+          priority: 10
+          config:
+            chunk_strategy: "semantic"
+            chunk_size: 1000
+            chunk_overlap: 200
+            preserve_equations: true
+            extract_images: false
+            extract_metadata: true
+            fallback_strategies: ["pypdf2_fallback"]
+        # CSV parser for structured data
+        - type: "CSVParser_LlamaIndex"
+          mime_types: ["text/csv", "text/tab-separated-values"]
+          file_extensions: [".csv", ".tsv", ".CSV", ".TSV"]
+          priority: 10
+          config:
+            chunk_size: 500
+            chunk_overlap: 50
+            extract_metadata: true
+        # Word document parser
+        - type: "DocxParser_LlamaIndex"
+          mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"]
+          file_extensions: [".docx", ".doc", ".DOCX", ".DOC"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            extract_metadata: true
+        # Excel parser
+        - type: "ExcelParser_LlamaIndex"
+          mime_types: [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel"
+          ]
+          file_extensions: [".xlsx", ".xls", ".XLSX", ".XLS"]
+          priority: 10
+          config:
+            chunk_size: 500
+            extract_metadata: true
+        # Markdown parser
+        - type: "MarkdownParser_LlamaIndex"
+          mime_types: ["text/markdown", "text/x-markdown"]
+          file_extensions: [".md", ".markdown", ".mdown", ".mkd"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            extract_metadata: true
+        # Plain text parser as fallback
+        - type: "TextParser_LlamaIndex"
+          mime_types: ["text/plain"]
+          file_extensions: [".txt", ".log", ".text"]
+          priority: 5  # Lower priority as fallback
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            extract_metadata: true
+      extractors:
+        - type: "ContentStatisticsExtractor"
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT", "MONEY", "PERCENT"]
+            use_fallback: true
+  
+    # Generic text processing (fallback for unknown file types)
+    - name: "auto_processing"
+      description: "Generic text processing for various file types"
+      parsers:
+        - type: "TextParser_Python"
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sentences"
+            extract_metadata: true
+      extractors:
+        - type: "ContentStatisticsExtractor"
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT"]
+            use_fallback: true

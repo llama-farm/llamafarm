@@ -10,11 +10,11 @@ import os
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from core.base import Document
-from components.parsers.text_parser.text_parser import PlainTextParser
+from components.parsers.text.python_parser import TextParser_Python
 
 
-class TestPlainTextParser:
-    """Test PlainTextParser functionality."""
+class TestTextParser_Python:
+    """Test TextParser_Python functionality."""
     
     @pytest.fixture
     def sample_text_content(self):
@@ -60,7 +60,7 @@ The document concludes with this final section that summarizes the content."""
     @pytest.fixture
     def default_parser(self):
         """Create default text parser."""
-        return PlainTextParser(name="PlainTextParser", config={
+        return TextParser_Python(name="TextParser_Python", config={
             "encoding": "utf-8",
             "chunk_size": None,
             "preserve_line_breaks": True,
@@ -71,24 +71,28 @@ The document concludes with this final section that summarizes the content."""
     def test_parser_initialization(self):
         """Test parser initialization with different configs."""
         # Default config
-        parser = PlainTextParser(name="PlainTextParser")
+        parser = TextParser_Python(name="TextParser_Python")
         assert parser is not None
-        assert parser.encoding == "auto"
-        assert parser.preserve_line_breaks == True
+        assert parser.encoding == "utf-8"
+        assert parser.clean_text == True
+        assert parser.chunk_size == 1000
+        assert parser.chunk_overlap == 100
+        assert parser.chunk_strategy == "sentences"
         
         # Custom config
         custom_config = {
-            "encoding": "utf-8",
-            "chunk_size": 1000,
-            "preserve_line_breaks": False,
-            "strip_empty_lines": False,
-            "detect_structure": False
+            "encoding": "latin-1",
+            "chunk_size": 2000,
+            "chunk_overlap": 200,
+            "chunk_strategy": "paragraphs",
+            "clean_text": False
         }
-        parser = PlainTextParser(name="PlainTextParser", config=custom_config)
-        assert parser.encoding == "utf-8"
-        assert parser.chunk_size == 1000
-        assert parser.preserve_line_breaks == False
-        assert parser.detect_structure == False
+        parser = TextParser_Python(name="TextParser_Python", config=custom_config)
+        assert parser.encoding == "latin-1"
+        assert parser.chunk_size == 2000
+        assert parser.chunk_overlap == 200
+        assert parser.chunk_strategy == "paragraphs"
+        assert parser.clean_text == False
     
     def test_basic_text_parsing(self, default_parser, temp_text_file):
         """Test basic text file parsing."""
@@ -114,15 +118,15 @@ The document concludes with this final section that summarizes the content."""
         doc = result.documents[0]
         
         # Should have file metadata
-        assert "file_path" in doc.metadata
+        assert "source" in doc.metadata
         assert "file_name" in doc.metadata
         assert "file_size" in doc.metadata
-        assert "parser_type" in doc.metadata
-        assert doc.metadata["parser_type"] == "PlainTextParser"
+        assert "parser" in doc.metadata
+        assert doc.metadata["parser"] == "TextParser_Python"
         
         # Should have content statistics
         assert "line_count" in doc.metadata
-        assert "character_count" in doc.metadata
+        assert "char_count" in doc.metadata
         assert "word_count" in doc.metadata
         assert doc.metadata["word_count"] > 0
     
@@ -142,7 +146,7 @@ The document concludes with this final section that summarizes the content."""
     def test_chunking_functionality(self, sample_text_content):  
         """Test document chunking with size limits."""
         # Create parser with small chunk size
-        chunking_parser = PlainTextParser(name="PlainTextParser", config={
+        chunking_parser = TextParser_Python(name="TextParser_Python", config={
             "chunk_size": 200,  # Small chunk size
             "preserve_line_breaks": True
         })
@@ -237,7 +241,7 @@ The document concludes with this final section that summarizes the content."""
     
     def test_supported_extensions(self):
         """Test supported file extensions."""
-        extensions = PlainTextParser.get_supported_extensions()
+        extensions = TextParser_Python.get_supported_extensions()
         
         assert isinstance(extensions, list)
         assert ".txt" in extensions
@@ -250,12 +254,12 @@ The document concludes with this final section that summarizes the content."""
         content_with_empty_lines = sample_text_content + "\n\n\n\nExtra content\n\n\n"
         
         # Parser with strip_empty_lines=True
-        strip_parser = PlainTextParser(name="PlainTextParser", config={
+        strip_parser = TextParser_Python(name="TextParser_Python", config={
             "strip_empty_lines": True
         })
         
         # Parser with strip_empty_lines=False  
-        no_strip_parser = PlainTextParser(name="PlainTextParser", config={
+        no_strip_parser = TextParser_Python(name="TextParser_Python", config={
             "strip_empty_lines": False
         })
         
@@ -280,12 +284,12 @@ The document concludes with this final section that summarizes the content."""
     def test_preserve_line_breaks_option(self, sample_text_content):
         """Test line break preservation option."""
         # Parser that preserves line breaks
-        preserve_parser = PlainTextParser(name="PlainTextParser", config={
+        preserve_parser = TextParser_Python(name="TextParser_Python", config={
             "preserve_line_breaks": True
         })
         
         # Parser that doesn't preserve line breaks
-        no_preserve_parser = PlainTextParser(name="PlainTextParser", config={
+        no_preserve_parser = TextParser_Python(name="TextParser_Python", config={
             "preserve_line_breaks": False
         })
         
@@ -314,7 +318,7 @@ The document concludes with this final section that summarizes the content."""
     
     def test_get_description(self):
         """Test parser description method."""
-        description = PlainTextParser.get_description()
+        description = TextParser_Python.get_description()
         assert isinstance(description, str)
         assert len(description) > 0
         assert "plain text" in description.lower()

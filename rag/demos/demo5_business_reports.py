@@ -106,7 +106,7 @@ def demonstrate_business_reports_cli():
     
     console.print("\n[bold green]This demo showcases:[/bold green]")
     console.print("• [bold cyan]100% CLI-based operation[/bold cyan] - no hardcoded logic!")
-    console.print("• Strategy-first configuration (business_reports_demo)")
+    console.print("• Strategy-first configuration (business_processing_main_chroma_db)")
     console.print("• PDF parsing for business documents")
     console.print("• Table and financial data extraction")
     console.print("• Pattern recognition for amounts and percentages")
@@ -117,7 +117,7 @@ def demonstrate_business_reports_cli():
     print_section_header("Strategy Information", "📋")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml strategies show business_reports_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml strategies show business_processing_main_chroma_db",
         "Viewing business reports strategy configuration"
     )
     
@@ -127,7 +127,7 @@ def demonstrate_business_reports_cli():
     print_section_header("Database Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy business_reports_demo delete --all",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy business_processing_main_chroma_db delete --all",
         "Cleaning up any existing business reports collection"
     )
     
@@ -135,7 +135,7 @@ def demonstrate_business_reports_cli():
     print_section_header("Business Reports Ingestion", "📥")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy business_reports_demo demos/static_samples/business_reports/the-state-of-ai-how-organizations-are-rewiring-to-capture-value_final.pdf",
+        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy business_processing_main_chroma_db demos/static_samples/business_reports/the-state-of-ai-how-organizations-are-rewiring-to-capture-value_final.pdf",
         "Ingesting business reports with strategy-configured components (verbose mode shows extractors)"
     )
     
@@ -145,7 +145,7 @@ def demonstrate_business_reports_cli():
     print_section_header("Collection Statistics", "📊")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy business_reports_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy business_processing_main_chroma_db",
         "Viewing collection statistics and extracted metadata"
     )
     
@@ -155,7 +155,7 @@ def demonstrate_business_reports_cli():
     # Query 1: Financial metrics
     console.print("\n[bold yellow]Query 1: Financial Metrics Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_reports_demo "revenue growth profit margins" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_processing_main_chroma_db "revenue growth profit margins" --top-k 2',
         "Searching for financial performance metrics (showing metadata)"
     )
     
@@ -164,7 +164,7 @@ def demonstrate_business_reports_cli():
     # Query 2: Market analysis
     console.print("\n[bold yellow]Query 2: Market Analysis Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_reports_demo "market share competitive analysis" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_processing_main_chroma_db "market share competitive analysis" --top-k 2',
         "Finding market position information (with extracted entities)"
     )
     
@@ -173,7 +173,7 @@ def demonstrate_business_reports_cli():
     # Query 3: Risk factors
     console.print("\n[bold yellow]Query 3: Risk Assessment Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_reports_demo "risk factors compliance regulatory" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_processing_main_chroma_db "risk factors compliance regulatory" --top-k 2',
         "Identifying business risks and compliance issues (with sentiment analysis)"
     )
     
@@ -182,7 +182,7 @@ def demonstrate_business_reports_cli():
     # Query 4: Investment data
     console.print("\n[bold yellow]Query 4: Investment Analysis Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_reports_demo "capital expenditure ROI investment returns" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy business_processing_main_chroma_db "capital expenditure ROI investment returns" --top-k 2',
         "Analyzing investment performance (with financial pattern extraction)"
     )
     
@@ -191,14 +191,14 @@ def demonstrate_business_reports_cli():
     # Query 5: Operational metrics
     console.print("\n[bold yellow]Query 5: Operational Metrics Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose --content-length 200 search --strategy business_reports_demo "operational efficiency productivity KPIs" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose --content-length 200 search --strategy business_processing_main_chroma_db "operational efficiency productivity KPIs" --top-k 2',
         "Finding operational performance indicators (with full metadata display)"
     )
     
     # Step 6: Demonstrate extraction capabilities
     print_section_header("Data Extraction Features", "🎯")
     
-    console.print("\n[bold]The business_reports_demo strategy includes:[/bold]")
+    console.print("\n[bold]The business_processing_main_chroma_db strategy includes:[/bold]")
     console.print("• [cyan]TableExtractor[/cyan]: Extracts financial tables")
     console.print("• [cyan]PatternExtractor[/cyan]: Finds currency amounts and percentages")
     console.print("• [cyan]StatisticsExtractor[/cyan]: Analyzes document structure")
@@ -222,13 +222,13 @@ def demonstrate_business_reports_cli():
     
     export_commands = [
         ("Generate executive summary:", 
-         "python cli.py --strategy-file demos/demo_strategies.yaml search --strategy business_reports_demo 'executive summary' --top-k 1"),
+         "python cli.py --strategy-file demos/demo_strategies.yaml search --strategy business_processing_main_chroma_db 'executive summary' --top-k 1"),
         ("Export financial data as CSV:",
-         "python cli.py export --strategy business_reports_demo --format csv --filter 'financial'"),
+         "python cli.py export --strategy business_processing_main_chroma_db --format csv --filter 'financial'"),
         ("Create quarterly report:",
-         "python cli.py report --strategy business_reports_demo --period Q4 --year 2024"),
+         "python cli.py report --strategy business_processing_main_chroma_db --period Q4 --year 2024"),
         ("Analyze trends over time:",
-         "python cli.py trends --strategy business_reports_demo --metric revenue --period 12m")
+         "python cli.py trends --strategy business_processing_main_chroma_db --metric revenue --period 12m")
     ]
     
     table = Table(show_header=True, header_style="bold magenta")
@@ -281,9 +281,9 @@ def demonstrate_business_reports_cli():
     console.print(summary_table)
     
     console.print("\n[bold cyan]Business reports collection ready for production use![/bold cyan]")
-    console.print(f"[dim]Collection: business_reports (strategy: business_reports_demo)[/dim]")
+    console.print(f"[dim]Collection: business_reports (strategy: business_processing_main_chroma_db)[/dim]")
     console.print(f"[dim]To query this collection later:[/dim]")
-    console.print('[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy business_reports_demo "your query"[/dim]')
+    console.print('[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy business_processing_main_chroma_db "your query"[/dim]')
     
     # Integration examples
     print_section_header("Integration Examples", "🔗")
@@ -298,7 +298,7 @@ def demonstrate_business_reports_cli():
     print_section_header("Final Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy business_reports_demo delete --all",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy business_processing_main_chroma_db delete --all",
         "Cleaning up ALL documents in the collection"
     )
 
@@ -311,5 +311,5 @@ if __name__ == "__main__":
         sys.exit(0)
     except Exception as e:
         console.print(f"\n\n❌ Business reports demo failed: {str(e)}", style="red")
-        console.print("Ensure the CLI is working and demo_strategies.yaml contains business_reports_demo", style="dim")
+        console.print("Ensure the CLI is working and demo_strategies.yaml contains business_processing_main_chroma_db", style="dim")
         sys.exit(1)

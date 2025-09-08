@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from components.parsers.csv_parser import CSVParser, CustomerSupportCSVParser
+from components.parsers.csv.pandas_parser import CSVParser_Pandas
 
 
 class TestCSVParser:
@@ -11,7 +11,7 @@ class TestCSVParser:
 
     def test_basic_parsing(self, sample_csv_file: str):
         """Test basic CSV parsing functionality."""
-        parser = CSVParser(
+        parser = CSVParser_Pandas(
             config={
                 "content_fields": ["subject", "body"],
                 "metadata_fields": ["type", "priority"],

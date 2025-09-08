@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from components.parsers.pdf_parser import PDFParser
+from components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
 from core.base import Document
 
 
@@ -24,7 +24,7 @@ class TestPDFParser:
             "extract_outline": True
         }
         
-        parser = PDFParser(config=config)
+        parser = PDFParser_PyPDF2(config=config)
         
         assert parser.extract_metadata is True
         assert parser.extract_page_structure is True
@@ -36,7 +36,7 @@ class TestPDFParser:
 
     def test_parser_default_config(self):
         """Test parser with default configuration."""
-        parser = PDFParser()
+        parser = PDFParser_PyPDF2()
         
         assert parser.extract_metadata is True
         assert parser.extract_page_structure is True
@@ -59,7 +59,7 @@ class TestPDFParser:
 
     def test_parse_nonexistent_file(self):
         """Test parsing of non-existent file."""
-        parser = PDFParser()
+        parser = PDFParser_PyPDF2()
         result = parser.parse("nonexistent_file.pdf")
         
         assert len(result.documents) == 0
@@ -68,7 +68,7 @@ class TestPDFParser:
 
     def test_parse_non_pdf_file(self):
         """Test parsing of non-PDF file."""
-        parser = PDFParser()
+        parser = PDFParser_PyPDF2()
         
         # Create a temporary text file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
@@ -87,7 +87,7 @@ class TestPDFParser:
                        reason="Test PDF not available")
     def test_parse_real_pdf(self):
         """Test parsing a real PDF file."""
-        parser = PDFParser()
+        parser = PDFParser_PyPDF2()
         result = parser.parse("samples/pdfs/test_document.pdf")
         
         # Should successfully parse the PDF

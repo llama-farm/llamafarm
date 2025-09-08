@@ -33,18 +33,40 @@ A strategy defines a complete RAG pipeline including:
 
 ### Basic Structure
 
-According to the schema, strategies must be defined in an array under a `strategies` key:
+The RAG system now uses a modular architecture with separate databases and data processing strategies:
 
 ```yaml
-strategies:
-  - name: "strategy_name"
-    description: "Human-readable description"
-    tags: ["tag1", "tag2"]  # Optional tags for categorization
-    use_cases: 
-      - "Use case 1"
-      - "Use case 2"
-    
-    components:
+rag:
+  databases:
+    - name: "main_database"
+      type: "ChromaStore" 
+      config:
+        persist_directory: "./data/chroma_db"
+        distance_function: "cosine"
+        collection_name: "documents"
+      default_embedding_strategy: "default_embeddings"
+      default_retrieval_strategy: "basic_search"
+      embedding_strategies:
+        - name: "default_embeddings"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+            dimension: 768
+      retrieval_strategies:
+        - name: "basic_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            top_k: 10
+  
+  data_processing_strategies:
+    - name: "pdf_processing"
+      description: "Standard PDF document processing"
+      parsers:
+        - type: "PDFParser_PyPDF2"
+          config:
+            chunk_size: 1000
+            extract_metadata: true
+      extractors:
       # Document parsing
       parser:
         type: "ParserType"

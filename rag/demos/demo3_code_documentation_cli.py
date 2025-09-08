@@ -105,7 +105,7 @@ def demonstrate_code_documentation_cli():
     
     # Check collection status
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy code_documentation_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy markdown_processing_main_chroma_db",
         quiet=True
     )
     
@@ -121,7 +121,7 @@ def demonstrate_code_documentation_cli():
     print_section_header("Documentation Ingestion", "📥")
     
     console.print("[bold cyan]🔄 Processing technical documentation files...[/bold cyan]")
-    console.print("[dim]💡 Using code_documentation_demo strategy for optimal parsing[/dim]")
+    console.print("[dim]💡 Using markdown_processing_main_chroma_db strategy for optimal parsing[/dim]")
     
     # Show what we're ingesting
     docs_table = Table(show_header=True, header_style="bold yellow")
@@ -149,7 +149,7 @@ def demonstrate_code_documentation_cli():
     
     # Ingest with verbose output
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy code_documentation_demo demos/static_samples/code_documentation/"
+        "python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy markdown_processing_main_chroma_db demos/static_samples/code_documentation/"
     )
     
     if returncode == 0:
@@ -168,7 +168,7 @@ def demonstrate_code_documentation_cli():
     console.print("📈 [bold cyan]Analyzing documentation database...[/bold cyan]")
     
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy code_documentation_demo"
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy markdown_processing_main_chroma_db"
     )
     
     if returncode == 0:
@@ -205,7 +205,7 @@ def demonstrate_code_documentation_cli():
         verbose = (i <= 2)
         
         returncode, stdout, stderr = run_cli_command(
-            f'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy code_documentation_demo "{query}" --top-k 2',
+            f'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy markdown_processing_main_chroma_db "{query}" --top-k 2',
             verbose=verbose
         )
         
@@ -238,7 +238,7 @@ def demonstrate_code_documentation_cli():
         console.print(f"\n[bold]{search_type} Search:[/bold]")
         
         returncode, stdout, stderr = run_cli_command(
-            f'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy code_documentation_demo "{query}" --top-k 1',
+            f'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy markdown_processing_main_chroma_db "{query}" --top-k 1',
             quiet=False
         )
         
@@ -304,11 +304,11 @@ result = subprocess.run(
 )
 
 [bold]Vim Plugin:[/bold]
-:!python cli.py --strategy-file demos/demo_strategies.yaml search "<cword>" --strategy code_documentation_demo
+:!python cli.py --strategy-file demos/demo_strategies.yaml search "<cword>" --strategy markdown_processing_main_chroma_db
 
 [bold]Shell Function:[/bold]
 docsearch() {
-    python cli.py --strategy-file demos/demo_strategies.yaml search "$1" --strategy code_documentation_demo
+    python cli.py --strategy-file demos/demo_strategies.yaml search "$1" --strategy markdown_processing_main_chroma_db
 }
 
 [bold]Git Hook:[/bold]
@@ -342,23 +342,23 @@ python cli.py --quiet search "TODO FIXME" | grep -q "Result" && exit 1
     console.print("📈 Searchable documentation metrics")
     
     console.print(f"\n[bold]CLI Commands for Developers:[/bold]")
-    console.print("📥 `cli.py --strategy-file demos/demo_strategies.yaml --strategy code_documentation_demo ingest docs/`")
-    console.print("🔍 `cli.py --strategy-file demos/demo_strategies.yaml --strategy code_documentation_demo search '<query>'`")
-    console.print("📊 `cli.py --strategy-file demos/demo_strategies.yaml --strategy code_documentation_demo info`")
+    console.print("📥 `cli.py --strategy-file demos/demo_strategies.yaml --strategy markdown_processing_main_chroma_db ingest docs/`")
+    console.print("🔍 `cli.py --strategy-file demos/demo_strategies.yaml --strategy markdown_processing_main_chroma_db search '<query>'`")
+    console.print("📊 `cli.py --strategy-file demos/demo_strategies.yaml --strategy markdown_processing_main_chroma_db info`")
     console.print("🤫 `cli.py --quiet` for tool integration")
     console.print("📝 `cli.py --verbose` for detailed results")
     
     console.print(f"\n📁 Documentation database: [bold]./demos/vectordb/code_documentation[/bold]")
     console.print("🔄 Continue using these commands in your development workflow:")
-    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search 'your question' --strategy code_documentation_demo[/dim]")
-    console.print("[dim]$ alias docsearch='python cli.py --strategy-file demos/demo_strategies.yaml search --strategy code_documentation_demo'[/dim]")
+    console.print("[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search 'your question' --strategy markdown_processing_main_chroma_db[/dim]")
+    console.print("[dim]$ alias docsearch='python cli.py --strategy-file demos/demo_strategies.yaml search --strategy markdown_processing_main_chroma_db'[/dim]")
     
     # Clean up the database after demo
     console.print("\n🧹 [bold cyan]Cleaning up demo database...[/bold cyan]")
     console.print("[dim]💡 Removing demo data to keep your system clean[/dim]")
     
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy code_documentation_demo delete --all"
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy markdown_processing_main_chroma_db delete --all"
     )
     
     if returncode == 0:

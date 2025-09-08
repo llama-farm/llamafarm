@@ -76,11 +76,11 @@ def show_demo_menu():
     menu_table.add_column("Strategy", style="green")
     
     demos = [
-        ("1", "Research Papers", "Academic paper analysis with extractors", "research_papers_demo"),
-        ("2", "Customer Support", "Ticket processing and knowledge base", "customer_support_demo"),
-        ("3", "Code Documentation", "Technical docs and API references", "code_documentation_demo"),
-        ("4", "News Analysis", "News articles with entity extraction", "news_analysis_demo"),
-        ("5", "Business Reports", "Financial docs with pattern extraction", "business_reports_demo"),
+        ("1", "Research Papers", "Academic paper analysis with extractors", "text_processing_research_papers_db"),
+        ("2", "Customer Support", "Ticket processing and knowledge base", "csv_processing_customer_support_db"),
+        ("3", "Code Documentation", "Technical docs and API references", "markdown_processing_main_chroma_db"),
+        ("4", "News Analysis", "News articles with entity extraction", "news_processing_main_chroma_db"),
+        ("5", "Business Reports", "Financial docs with pattern extraction", "business_processing_main_chroma_db"),
         ("6", "Document Management", "Vector DB operations and lifecycle", "CLI-only")
     ]
     
@@ -178,19 +178,19 @@ def main():
 [dim]cd /path/to/llamafarm-1/rag[/dim]
 
 1. Search any collection:
-   [dim]python cli.py --strategy-file demos/demo_strategies.yaml search "transformer architecture" --strategy research_papers_demo[/dim]
+   [dim]python cli.py --strategy-file demos/demo_strategies.yaml search "transformer architecture" --strategy text_processing_research_papers_db[/dim]
 
 2. Ingest new documents:
-   [dim]python cli.py --strategy-file demos/demo_strategies.yaml ingest new_tickets.csv --strategy customer_support_demo[/dim]
+   [dim]python cli.py --strategy-file demos/demo_strategies.yaml ingest new_tickets.csv --strategy csv_processing_customer_support_db[/dim]
 
 3. Get collection info:
-   [dim]python cli.py --strategy-file demos/demo_strategies.yaml info --strategy code_documentation_demo[/dim]
+   [dim]python cli.py --strategy-file demos/demo_strategies.yaml info --strategy markdown_processing_main_chroma_db[/dim]
 
 4. Use verbose mode for details:
-   [dim]python cli.py --strategy-file demos/demo_strategies.yaml --verbose search "AI breakthrough" --strategy news_analysis_demo[/dim]
+   [dim]python cli.py --strategy-file demos/demo_strategies.yaml --verbose search "AI breakthrough" --strategy news_processing_main_chroma_db[/dim]
 
 5. Use quiet mode for scripting:
-   [dim]python cli.py --strategy-file demos/demo_strategies.yaml --quiet search "revenue growth" --strategy business_reports_demo[/dim]
+   [dim]python cli.py --strategy-file demos/demo_strategies.yaml --quiet search "revenue growth" --strategy business_processing_main_chroma_db[/dim]
 
 [bold]All configurations are in:[/bold] demos/demo_strategies.yaml
 [bold]Databases saved to:[/bold] demos/vectordb/

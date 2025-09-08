@@ -321,7 +321,9 @@ def load_config_with_strategy_support(
     strategy_name: Optional[str] = None, 
     strategy_overrides: Optional[str] = None,
     base_dir: str = None,
-    strategy_file: Optional[str] = None
+    strategy_file: Optional[str] = None,
+    embedding_strategy: Optional[str] = None,
+    retrieval_strategy: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Load configuration with strategy support.
@@ -332,6 +334,8 @@ def load_config_with_strategy_support(
         strategy_overrides: JSON string of strategy overrides
         base_dir: Base directory for path resolution
         strategy_file: Path to custom strategy YAML file
+        embedding_strategy: Override embedding strategy name
+        retrieval_strategy: Override retrieval strategy name
         
     Returns:
         Configuration dictionary
@@ -348,6 +352,17 @@ def load_config_with_strategy_support(
             except json.JSONDecodeError as e:
                 print(f"❌ Invalid strategy overrides JSON: {e}")
                 sys.exit(1)
+        
+        # Add embedding and retrieval strategy overrides if provided
+        if embedding_strategy:
+            if 'embedder' not in overrides:
+                overrides['embedder'] = {}
+            overrides['embedder']['_strategy_name'] = embedding_strategy
+            
+        if retrieval_strategy:
+            if 'retrieval_strategy' not in overrides:
+                overrides['retrieval_strategy'] = {}
+            overrides['retrieval_strategy']['_strategy_name'] = retrieval_strategy
         
         # Convert strategy to config
         config = strategy_manager.convert_strategy_to_config(strategy_name, overrides)
@@ -458,6 +473,8 @@ def ingest_command(args):
             strategy_name=getattr(args, 'strategy', None),
             strategy_file=getattr(args, 'strategy_file', None),
             strategy_overrides=getattr(args, 'strategy_overrides', None),
+            embedding_strategy=getattr(args, 'embedding_strategy', None),
+            retrieval_strategy=getattr(args, 'retrieval_strategy', None),
             base_dir=args.base_dir if hasattr(args, "base_dir") else None
         )
         
@@ -681,6 +698,8 @@ def search_command(args):
         strategy_name=getattr(args, 'strategy', None),
         strategy_file=getattr(args, 'strategy_file', None),
         strategy_overrides=getattr(args, 'strategy_overrides', None),
+        embedding_strategy=getattr(args, 'embedding_strategy', None),
+        retrieval_strategy=getattr(args, 'retrieval_strategy', None),
         base_dir=base_dir
     )
     
@@ -2274,8 +2293,12 @@ def main():
     # Add strategy support to main commands
     ingest_parser.add_argument("--strategy", help="Strategy name to use instead of config file")
     ingest_parser.add_argument("--strategy-overrides", help="JSON overrides for strategy")
+    ingest_parser.add_argument("--embedding-strategy", help="Override embedding strategy (use strategy name from database config)")
+    ingest_parser.add_argument("--retrieval-strategy", help="Override retrieval strategy (use strategy name from database config)")
     search_parser.add_argument("--strategy", help="Strategy name to use instead of config file")
     search_parser.add_argument("--strategy-overrides", help="JSON overrides for strategy")
+    search_parser.add_argument("--embedding-strategy", help="Override embedding strategy (use strategy name from database config)")
+    search_parser.add_argument("--retrieval-strategy", help="Override retrieval strategy (use strategy name from database config)")
 
     args = parser.parse_args()
 

@@ -102,7 +102,7 @@ def demonstrate_news_analysis_cli():
     
     console.print("\n[bold green]This demo showcases:[/bold green]")
     console.print("• [bold cyan]100% CLI-based operation[/bold cyan] - no hardcoded logic!")
-    console.print("• Strategy-first configuration (news_analysis_demo)")
+    console.print("• Strategy-first configuration (news_processing_main_chroma_db)")
     console.print("• HTML news article parsing")
     console.print("• Entity and date extraction")
     console.print("• Sentiment analysis")
@@ -113,7 +113,7 @@ def demonstrate_news_analysis_cli():
     print_section_header("Strategy Information", "📋")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml strategies show news_analysis_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml strategies show news_processing_main_chroma_db",
         "Viewing news analysis strategy configuration"
     )
     
@@ -123,7 +123,7 @@ def demonstrate_news_analysis_cli():
     print_section_header("Database Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_analysis_demo delete --all",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_processing_main_chroma_db delete --all",
         "Cleaning up any existing news collection (dry run first)"
     )
     
@@ -131,7 +131,7 @@ def demonstrate_news_analysis_cli():
     print_section_header("News Article Ingestion", "📥")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml ingest --strategy news_analysis_demo demos/static_samples/news_articles/",
+        "python cli.py --strategy-file demos/demo_strategies.yaml ingest --strategy news_processing_main_chroma_db demos/static_samples/news_articles/",
         "Ingesting news articles with strategy-configured components"
     )
     
@@ -141,7 +141,7 @@ def demonstrate_news_analysis_cli():
     print_section_header("Collection Statistics", "📊")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy news_analysis_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy news_processing_main_chroma_db",
         "Viewing collection statistics"
     )
     
@@ -151,7 +151,7 @@ def demonstrate_news_analysis_cli():
     # Query 1: Breaking news
     console.print("\n[bold yellow]Query 1: Breaking News Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo "breaking news technology AI"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db "breaking news technology AI"',
         "Searching for breaking technology news"
     )
     
@@ -160,7 +160,7 @@ def demonstrate_news_analysis_cli():
     # Query 2: Entity search
     console.print("\n[bold yellow]Query 2: Entity-based Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo "major tech companies announcements"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db "major tech companies announcements"',
         "Finding news about tech companies"
     )
     
@@ -169,7 +169,7 @@ def demonstrate_news_analysis_cli():
     # Query 3: Event search
     console.print("\n[bold yellow]Query 3: Event Timeline Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo "recent product launches events"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db "recent product launches events"',
         "Searching for product launch events"
     )
     
@@ -178,7 +178,7 @@ def demonstrate_news_analysis_cli():
     # Query 4: Topic search
     console.print("\n[bold yellow]Query 4: Topic Analysis Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo "artificial intelligence regulation policy"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db "artificial intelligence regulation policy"',
         "Finding AI regulation news"
     )
     
@@ -187,14 +187,14 @@ def demonstrate_news_analysis_cli():
     # Query 5: Sentiment search
     console.print("\n[bold yellow]Query 5: Market Sentiment Search[/bold yellow]")
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo "stock market trends analysis"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db "stock market trends analysis"',
         "Analyzing market sentiment"
     )
     
     # Step 6: Advanced filtering (if metadata filtering is configured)
     print_section_header("Advanced Filtering", "🎯")
     
-    console.print("[dim]Note: The RerankedStrategy in news_analysis_demo prioritizes:")
+    console.print("[dim]Note: The RerankedStrategy in news_processing_main_chroma_db prioritizes:")
     console.print("  • Similarity to query (50% weight)")
     console.print("  • Recency of articles (30% weight)")
     console.print("[dim]  • Metadata relevance (20% weight)[/dim]")
@@ -206,13 +206,13 @@ def demonstrate_news_analysis_cli():
     
     export_commands = [
         ("Export search results as JSON:", 
-         "python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo 'AI news' --format json > results.json"),
+         "python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db 'AI news' --format json > results.json"),
         ("Batch process multiple queries:",
-         "python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo --batch queries.txt"),
+         "python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db --batch queries.txt"),
         ("Monitor collection growth:",
-         "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_analysis_demo stats"),
+         "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_processing_main_chroma_db stats"),
         ("API endpoint for integration:",
-         "python cli.py --strategy-file demos/demo_strategies.yaml serve --strategy news_analysis_demo --port 8000")
+         "python cli.py --strategy-file demos/demo_strategies.yaml serve --strategy news_processing_main_chroma_db --port 8000")
     ]
     
     table = Table(show_header=True, header_style="bold magenta")
@@ -245,15 +245,15 @@ def demonstrate_news_analysis_cli():
     console.print(summary_table)
     
     console.print("\n[bold cyan]News collection ready for production use![/bold cyan]")
-    console.print(f"[dim]Collection: news_analysis (strategy: news_analysis_demo)[/dim]")
+    console.print(f"[dim]Collection: news_analysis (strategy: news_processing_main_chroma_db)[/dim]")
     console.print(f"[dim]To query this collection later:[/dim]")
-    console.print('[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_analysis_demo "your query"[/dim]')
+    console.print('[dim]$ python cli.py --strategy-file demos/demo_strategies.yaml search --strategy news_processing_main_chroma_db "your query"[/dim]')
     
     # Final cleanup
     print_section_header("Final Cleanup", "🧹")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_analysis_demo delete --all",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy news_processing_main_chroma_db delete --all",
         "Cleaning up ALL documents in the collection"
     )
 
@@ -266,5 +266,5 @@ if __name__ == "__main__":
         sys.exit(0)
     except Exception as e:
         console.print(f"\n\n❌ News analysis demo failed: {str(e)}", style="red")
-        console.print("Ensure the CLI is working and demo_strategies.yaml contains news_analysis_demo", style="dim")
+        console.print("Ensure the CLI is working and demo_strategies.yaml contains news_processing_main_chroma_db", style="dim")
         sys.exit(1)
