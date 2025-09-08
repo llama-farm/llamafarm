@@ -18,6 +18,10 @@ import (
 // server via Docker, then waits for readiness. Returns an error if it
 // ultimately cannot ensure availability.
 func ensureServerAvailable(serverURL string) error {
+	if err := pingURL(ollamaHost); err != nil {
+		fmt.Fprintf(os.Stderr, "no Ollama server detected on the host. Please start Ollama (https://ollama.com/download) before launching LlamaFarm, or set --ollama-host to a reachable Ollama instance")
+	}
+
 	if serverURL == "" {
 		serverURL = "http://localhost:8000"
 	}
@@ -106,13 +110,14 @@ func startLocalServerViaDocker(serverURL string) error {
 
 	fmt.Fprintln(os.Stderr, "Starting local LlamaFarm server via Docker...")
 
-	// Try to start existing stopped container first
+	// If a container with this name exists, remove it to ensure we always use the latest image
 	if containerExists(containerName) {
-		startCmd := exec.Command("docker", "start", containerName)
-		startCmd.Stdout = os.Stdout
-		startCmd.Stderr = os.Stderr
-		if err := startCmd.Run(); err == nil {
-			return nil
+		fmt.Fprintln(os.Stderr, "Removing existing LlamaFarm server container to ensure latest image and arguments...")
+		rmCmd := exec.Command("docker", "rm", "-f", containerName)
+		rmCmd.Stdout = os.Stdout
+		rmCmd.Stderr = os.Stderr
+		if err := rmCmd.Run(); err != nil {
+			return fmt.Errorf("failed to remove existing container %s: %v", containerName, err)
 		}
 	}
 
@@ -125,27 +130,25 @@ func startLocalServerViaDocker(serverURL string) error {
 		"-d",
 		"--name", containerName,
 		"-p", fmt.Sprintf("%d:8000", port),
+		"-v", fmt.Sprintf("%s:%s", os.ExpandEnv("$HOME/.llamafarm"), "/var/lib/llamafarm"),
 	}
 
 	// Mount effective working directory into the container at the same path
-	if cwd, err := getEffectiveCWD(); err == nil && strings.TrimSpace(cwd) != "" {
+	if cwd := getEffectiveCWD(); strings.TrimSpace(cwd) != "" {
 		runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s", cwd, cwd))
 	} else {
 		fmt.Fprintln(os.Stderr, "Warning: could not determine current directory; continuing without volume mount")
 	}
 
 	// Pass through or configure Ollama access inside the container
-	if v, ok := os.LookupEnv("OLLAMA_HOST"); ok && strings.TrimSpace(v) != "" {
-		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_HOST=%s", v))
-	} else if isHostOllamaAvailable() {
-		// Ensure the container can resolve host.docker.internal on Linux
+	if isLocalhost(ollamaHost) {
+		port := resolvePort(ollamaHost, 11434)
 		runArgs = append(runArgs, "--add-host", "host.docker.internal:host-gateway")
-		runArgs = append(runArgs, "-e", "OLLAMA_HOST=http://host.docker.internal:11434/v1")
+		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_HOST=http://host.docker.internal:%d", port))
+	} else {
+		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_HOST=%s", ollamaHost))
 	}
-	// Also pass through OLLAMA_HOST/OLLAMA_PORT if explicitly set by the user
-	if v, ok := os.LookupEnv("OLLAMA_HOST"); ok && strings.TrimSpace(v) != "" {
-		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_HOST=%s", v))
-	}
+
 	if v, ok := os.LookupEnv("OLLAMA_PORT"); ok && strings.TrimSpace(v) != "" {
 		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_PORT=%s", v))
 	}
@@ -178,17 +181,6 @@ func resolvePort(serverURL string, defaultPort int) int {
 		return 80
 	}
 	return defaultPort
-}
-
-// isHostOllamaAvailable returns true if an Ollama server on the host appears reachable
-// at the default localhost port 11434 or via OLLAMA_HOST.
-func isHostOllamaAvailable() bool {
-	// Respect explicit OLLAMA_HOST
-	if baseURL, ok := os.LookupEnv("OLLAMA_HOST"); ok && strings.TrimSpace(baseURL) != "" {
-		return pingURL(strings.TrimSpace(baseURL)) == nil
-	}
-	// Try default local port
-	return pingURL("http://localhost:11434") == nil
 }
 
 func pingURL(base string) error {

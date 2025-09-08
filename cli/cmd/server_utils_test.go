@@ -148,14 +148,25 @@ func TestVerboseHTTPClient_Logs(t *testing.T) {
 	defer os.Setenv("DEBUG", oldEnv)
 	_ = os.Remove("debug.log")
 
+	// Use a unique log file for this test to avoid conflicts
+	testLogFile := "test_debug.log"
+	_ = os.Remove(testLogFile)
+	defer os.Remove(testLogFile) // Clean up after test
+
+	// Initialize debug logger BEFORE making the HTTP request
+	if initErr := InitDebugLogger(testLogFile); initErr != nil {
+		t.Fatalf("failed to initialize debug logger: %v", initErr)
+	}
+	defer CloseDebugLogger() // Ensure cleanup even if test fails
+
 	req, _ := http.NewRequest(http.MethodGet, "http://localhost:8000/foo", nil)
 	client := getHTTPClient()
 	gotResp, err := client.Do(req)
 
 	// read debug log
-	data, readErr := os.ReadFile("debug.log")
+	data, readErr := os.ReadFile(testLogFile)
 	if readErr != nil {
-		t.Fatalf("expected to read debug.log, got error: %v", readErr)
+		t.Fatalf("expected to read %s, got error: %v", testLogFile, readErr)
 	}
 	out := string(data)
 

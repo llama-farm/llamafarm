@@ -6,6 +6,8 @@ ENV UV_COMPILE_BYTECODE=0
 ENV UV_COMPILE_BYTECODE_WORKERS=1
 ENV UV_COMPILE_BYTECODE_TIMEOUT=15
 
+ENV LF_DATA_DIR=/var/lib/llamafarm
+
 RUN apt update && apt install -y curl && rm -rf /var/lib/apt/lists/*
 
 

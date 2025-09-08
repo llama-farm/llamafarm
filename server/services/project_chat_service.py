@@ -1,6 +1,7 @@
 import sys
 import time
 import uuid
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
@@ -18,11 +19,12 @@ from context_providers.project_chat_context_provider import (
 from core.logging import FastAPIStructLogger
 from services.rag_subprocess import search_with_rag
 
-logger = FastAPIStructLogger()
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
 from config.datamodel import LlamaFarmConfig  # noqa: E402
+
+logger = FastAPIStructLogger()
 
 
 class ProjectChatService:
@@ -80,6 +82,12 @@ class ProjectChatService:
         This implementation shells out to the rag subsystem in its own
         Python environment to avoid cross-venv import issues.
         """
+
+        # First, make sure rag is enabled
+        if not project_config.rag:
+            logger.warning("RAG is not enabled in project config. Skipping.")
+            return []
+
         logger.info(f"Performing RAG search for message: {message}")
 
         # For now, use the first available strategy
@@ -108,7 +116,7 @@ class ProjectChatService:
         logger.info(f"RAG search returned {len(normalized)} results")
         return normalized
 
-    def chat(
+    async def chat(
         self,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
@@ -136,7 +144,9 @@ class ProjectChatService:
             context_provider.chunks.append(chunk_item)
 
         input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
-        agent_response = chat_agent.run(input_schema)
+        logger.info(f"Input schema: {input_schema}")
+        agent_response = await chat_agent.run_async(input_schema)
+        logger.info(f"Agent response: {agent_response}")
 
         response_message = agent_response.chat_message
 
@@ -158,12 +168,12 @@ class ProjectChatService:
         )
         return completion
 
-    def stream_chat(
+    async def stream_chat(
         self,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
-    ):
+    ) -> AsyncGenerator[str, None]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
@@ -183,29 +193,33 @@ class ProjectChatService:
             context_provider.chunks.append(chunk_item)
 
         input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
-        stream_method = getattr(chat_agent, "run_stream", None)
-        if callable(stream_method):
-            try:
-                for chunk in stream_method(input_schema):  # type: ignore[misc]
-                    if not chunk:
-                        continue
-                    yield getattr(chunk, "chat_message", str(chunk))
-                return
-            except Exception:  # best effort fallback
-                logger.error(
-                    "Project chat run_stream failed; falling back to non-streaming",
-                    exc_info=True,
-                )
-
-        # Fallback: run once and split
         try:
-            agent_response = chat_agent.run(input_schema)
-            response_message = getattr(agent_response, "chat_message", str(agent_response))
-        except Exception as e:
-            response_message = f"I encountered an error while processing your request: {str(e)}"
+            logger.info("Running async stream")
+            previous_response = ""
+            async for chunk in chat_agent.run_async_stream(input_schema):
+                if hasattr(chunk, "chat_message") and chunk.chat_message:
+                    logger.info("Processing partial response", message=chunk)
+                    current_response = chunk.chat_message
 
-        for i in range(0, len(response_message), 80):
-            yield response_message[i : i + 80]
+                    # Skip duplicates
+                    if current_response == previous_response:
+                        continue
+
+                    # If this is the first chunk, yield it entirely
+                    if not previous_response:
+                        yield current_response
+                    # Otherwise, yield only the incremental part
+                    elif len(current_response) > len(previous_response):
+                        incremental = current_response[len(previous_response) :]
+                        yield incremental
+
+                    previous_response = current_response
+            return
+        except Exception:
+            logger.error(
+                "Model call failed",
+                exc_info=True,
+            )
 
 
 project_chat_service = ProjectChatService()

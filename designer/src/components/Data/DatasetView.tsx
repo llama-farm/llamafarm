@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
+import Loader from '../../common/Loader'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
@@ -11,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
+  DialogTrigger,
 } from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
@@ -24,6 +26,7 @@ import {
   useDeleteDatasetFile,
   useDeleteDataset,
 } from '../../hooks/useDatasets'
+import { defaultStrategies } from '../Rag/strategies'
 
 type Dataset = {
   id: string
@@ -73,15 +76,6 @@ function DatasetView() {
     () => dataset?.name || datasetId || 'dataset',
     [dataset?.name, datasetId]
   )
-
-  type RawFile = {
-    id: string
-    name: string
-    size: number
-    lastModified: number
-    type?: string
-    fullHash?: string // For API files, stores the complete hash
-  }
 
   // Get current dataset from API response
   const currentApiDataset = useMemo(() => {
@@ -134,15 +128,123 @@ function DatasetView() {
   }>({})
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploadStatus, setUploadStatus] = useState<
-    Record<string, 'processing' | 'done'>
-  >({})
+  type FileUploadStatus = {
+    id: string
+    name: string
+    status: 'pending' | 'uploading' | 'success' | 'error'
+    error?: string
+  }
+  const [fileUploadStatuses, setFileUploadStatuses] = useState<
+    FileUploadStatus[]
+  >([])
 
   type DatasetVersion = {
     id: string // e.g., v1, v2
     createdAt: string // ISO
   }
   const [versions, setVersions] = useState<DatasetVersion[]>([])
+
+  // Drag-and-drop state
+  const [isDragging, setIsDragging] = useState(false)
+  const [isDropped, setIsDropped] = useState(false)
+  // Strategy modal search
+  const [strategyQuery, setStrategyQuery] = useState('')
+
+  // Helpers to validate available strategies for this view
+  type RagStrategyType = import('../Rag/strategies').RagStrategy
+  const isValidRagStrategy = (s: any): s is RagStrategyType => {
+    return (
+      !!s &&
+      typeof s.id === 'string' &&
+      typeof s.name === 'string' &&
+      typeof s.description === 'string' &&
+      typeof s.isDefault === 'boolean' &&
+      typeof s.datasetsUsing === 'number'
+    )
+  }
+  const getCustomStrategies = (): RagStrategyType[] => {
+    try {
+      const raw = localStorage.getItem('lf_custom_strategies')
+      if (!raw) return []
+      const arr = JSON.parse(raw) as RagStrategyType[]
+      if (!Array.isArray(arr)) return []
+      return arr.filter(isValidRagStrategy)
+    } catch {
+      return []
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleFilesUpload = async (list: File[]) => {
+    if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
+      toast({
+        message: 'Missing required information for upload',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (list.length === 0) return
+
+    // Initialize upload statuses
+    const initialStatuses: FileUploadStatus[] = list.map(f => ({
+      id: `${f.name}:${f.size}:${f.lastModified}`,
+      name: f.name,
+      status: 'pending',
+    }))
+    setFileUploadStatuses(initialStatuses)
+
+    await Promise.all(
+      list.map(async (file, idx) => {
+        setFileUploadStatuses(prev =>
+          prev.map((s, i) => (i === idx ? { ...s, status: 'uploading' } : s))
+        )
+        try {
+          await uploadMutation.mutateAsync({
+            namespace: activeProject.namespace!,
+            project: activeProject.project!,
+            dataset: datasetId!,
+            file,
+          })
+          setFileUploadStatuses(prev =>
+            prev.map((s, i) => (i === idx ? { ...s, status: 'success' } : s))
+          )
+        } catch (error: any) {
+          console.error(`Failed to upload ${file.name}:`, error)
+          toast({
+            message: `Failed to upload ${file.name}`,
+            variant: 'destructive',
+          })
+          setFileUploadStatuses(prev =>
+            prev.map((s, i) =>
+              i === idx
+                ? {
+                    ...s,
+                    status: 'error',
+                    error: error?.message || 'Upload failed',
+                  }
+                : s
+            )
+          )
+        }
+      })
+    )
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDropped(true)
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files)
+    handleFilesUpload(files).finally(() => setIsDropped(false))
+  }
 
   // Load dataset metadata from API or create fallback
   useEffect(() => {
@@ -343,15 +445,24 @@ function DatasetView() {
   }
 
   // Derived RAG strategy info for this dataset
-  const strategyName = useMemo(() => {
-    if (!datasetId) return 'PDF Simple'
+  const [strategyName, setStrategyName] = useState<string>('PDF Simple')
+  useEffect(() => {
+    if (!datasetId) return
     try {
-      return (
-        localStorage.getItem(`lf_dataset_strategy_name_${datasetId}`) ||
-        'PDF Simple'
+      const stored = localStorage.getItem(
+        `lf_dataset_strategy_name_${datasetId}`
       )
+      const availableNames = [
+        ...defaultStrategies,
+        ...getCustomStrategies(),
+      ].map(s => s.name)
+      if (typeof stored === 'string' && availableNames.includes(stored)) {
+        setStrategyName(stored)
+      } else {
+        setStrategyName('PDF Simple')
+      }
     } catch {
-      return 'PDF Simple'
+      setStrategyName('PDF Simple')
     }
   }, [datasetId])
 
@@ -386,7 +497,12 @@ function DatasetView() {
   }, [strategyId])
 
   return (
-    <div className="h-full w-full flex flex-col gap-3 pb-40">
+    <div
+      className="h-full w-full flex flex-col gap-3 pb-40"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <nav className="text-sm md:text-base flex items-center gap-1.5 mb-3">
         <button
           className="text-teal-600 dark:text-teal-400 hover:underline"
@@ -474,13 +590,103 @@ function DatasetView() {
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">RAG strategy</h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/chat/rag/${strategyId}`)}
-          >
-            Configure
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/chat/rag/${strategyId}`)}
+            >
+              Configure
+            </Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm">Change</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Choose a RAG strategy</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col gap-3">
+                  <div className="w-full">
+                    <SearchInput
+                      placeholder="Search strategies"
+                      value={strategyQuery}
+                      onChange={e => setStrategyQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="max-h-[360px] overflow-auto rounded-md border border-border/60">
+                    <ul>
+                      {defaultStrategies
+                        .filter(s =>
+                          [s.name, s.description]
+                            .join(' ')
+                            .toLowerCase()
+                            .includes(strategyQuery.toLowerCase())
+                        )
+                        .map(s => (
+                          <li
+                            key={s.id}
+                            className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="default"
+                                size="sm"
+                                className="rounded-xl"
+                              >
+                                {s.name}
+                              </Badge>
+                              <div className="text-xs text-muted-foreground">
+                                {s.description}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/chat/rag/${s.id}`)}
+                              >
+                                Configure
+                              </Button>
+                              <DialogClose asChild>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    if (!datasetId) return
+                                    try {
+                                      localStorage.setItem(
+                                        `lf_dataset_strategy_name_${datasetId}`,
+                                        s.name
+                                      )
+                                    } catch {}
+                                    setStrategyName(s.name)
+                                    toast({
+                                      message: `RAG strategy set to ${s.name}`,
+                                      variant: 'default',
+                                    })
+                                  }}
+                                >
+                                  Use
+                                </Button>
+                              </DialogClose>
+                            </div>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                  <div className="mt-3 flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate('/chat/rag')}
+                    >
+                      Manage or add strategies
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <Badge variant="default" size="sm" className="rounded-xl">
@@ -656,59 +862,27 @@ function DatasetView() {
         </div>
       )}
 
-      {/* Processing strategy */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Processing strategy</h3>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm">
-              Change
-            </Button>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Parsing</div>
-            <Input value="PDF-aware" readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Chunk size</div>
-            <Input value="800" readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Overlap</div>
-            <Input value="100" readOnly className="bg-background" />
-          </div>
-        </div>
-      </section>
+      {/* Processing strategy and Embedding model sections removed per request */}
 
-      {/* Embedding model */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Embedding model</h3>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm">
-              Change
-            </Button>
+      {isDragging && (
+        <div className="w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
+          <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
+            {isDropped ? (
+              <Loader />
+            ) : (
+              <FontIcon
+                type="upload"
+                className="w-10 h-10 text-blue-200 dark:text-white"
+              />
+            )}
+            <div className="text-xl text-foreground">Drop data here</div>
           </div>
+          <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
+            You can upload PDFs, CSVs, or other documents directly to this
+            dataset.
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="default" size="sm" className="rounded-xl">
-            text-embedding-3-large
-          </Badge>
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            Active
-          </Badge>
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            Run v3
-          </Badge>
-        </div>
-        <div className="mt-2 text-xs">
-          <a className="text-primary hover:underline" href="#">
-            OpenAI API (source here)
-          </a>
-        </div>
-      </section>
+      )}
 
       {/* Raw data */}
       <section className="rounded-lg border border-border bg-card p-4 mb-40">
@@ -739,87 +913,9 @@ function DatasetView() {
             const list = e.target.files ? Array.from(e.target.files) : []
             if (list.length === 0) return
 
-            // Convert to RawFile shape for UI
-            const converted: RawFile[] = list.map(f => ({
-              id: `${f.name}:${f.size}:${f.lastModified}`,
-              name: f.name,
-              size: f.size,
-              lastModified: f.lastModified,
-              type: f.type,
-            }))
-
             try {
-              // Set processing status for UI feedback
-              setUploadStatus(prev => ({
-                ...prev,
-                ...Object.fromEntries(
-                  converted.map(rf => [rf.id, 'processing' as const])
-                ),
-              }))
-
-              // Upload each file to the API
-              for (const file of list) {
-                try {
-                  await uploadMutation.mutateAsync({
-                    namespace: activeProject.namespace,
-                    project: activeProject.project,
-                    dataset: datasetId,
-                    file,
-                  })
-                } catch (error) {
-                  console.error(`Failed to upload ${file.name}:`, error)
-                  toast({
-                    message: `Failed to upload ${file.name}`,
-                    variant: 'destructive',
-                  })
-                  // Remove from processing status on error
-                  const fileId = `${file.name}:${file.size}:${file.lastModified}`
-                  setUploadStatus(prev => {
-                    const next = { ...prev }
-                    delete (next as any)[fileId]
-                    return next
-                  })
-                  continue
-                }
-              }
-
-              // Files will be updated via API refresh after upload completes
-
-              // Show success status
-              setTimeout(() => {
-                setUploadStatus(prev => ({
-                  ...prev,
-                  ...Object.fromEntries(
-                    converted.map(rf => [rf.id, 'done' as const])
-                  ),
-                }))
-                toast({
-                  message: `Successfully uploaded ${list.length} file${list.length > 1 ? 's' : ''}`,
-                  variant: 'default',
-                })
-
-                // Clear status after delay
-                setTimeout(() => {
-                  setUploadStatus(prev => {
-                    const next = { ...prev }
-                    for (const rf of converted) delete (next as any)[rf.id]
-                    return next
-                  })
-                }, 1500)
-              }, 500)
-            } catch (error) {
-              console.error('Upload error:', error)
-              toast({
-                message: 'Failed to upload files',
-                variant: 'destructive',
-              })
-              // Clear processing status on error
-              setUploadStatus(prev => {
-                const next = { ...prev }
-                for (const rf of converted) delete (next as any)[rf.id]
-                return next
-              })
-            }
+              await handleFilesUpload(list)
+            } catch {}
 
             // Reset input so same files can be picked again
             e.currentTarget.value = ''
@@ -914,13 +1010,15 @@ function DatasetView() {
                             : `${Math.ceil(f.size / 1024)} KB`}
                         </div>
                         <div className="flex items-center gap-6">
-                          {uploadStatus[f.id] === 'processing' && (
+                          {fileUploadStatuses.find(s => s.id === f.id)
+                            ?.status === 'uploading' && (
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <FontIcon type="fade" className="w-4 h-4" />
                               <span className="text-xs">Processing</span>
                             </div>
                           )}
-                          {uploadStatus[f.id] === 'done' && (
+                          {fileUploadStatuses.find(s => s.id === f.id)
+                            ?.status === 'success' && (
                             <FontIcon
                               type="checkmark-outline"
                               className="w-4 h-4 text-teal-600 dark:text-teal-400"

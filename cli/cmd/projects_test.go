@@ -30,8 +30,8 @@ func TestSendChatRequestStream_SSE(t *testing.T) {
 	// Point globals to test server
 	serverURL = ts.URL
 	sessionID = ""
-	namespace = ""
-	projectID = ""
+	namespace = "llamafarm"
+	projectID = "project-seed"
 
 	// Prepare messages
 	msgs := []ChatMessage{{Role: "user", Content: "hi"}}

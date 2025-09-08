@@ -3,7 +3,12 @@ import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ModeToggle, { Mode } from '../ModeToggle'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
-// Dropdown menu no longer used here
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '../ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -20,7 +25,11 @@ import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
 import { useNavigate } from 'react-router-dom'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import { useListDatasets, useCreateDataset } from '../../hooks/useDatasets'
+import {
+  useListDatasets,
+  useCreateDataset,
+  useDeleteDataset,
+} from '../../hooks/useDatasets'
 import type { UIFile } from '../../types/datasets'
 
 type RawFile = UIFile
@@ -46,36 +55,78 @@ const Data = () => {
   const activeProject = useActiveProject()
 
   // Use React Query hooks for datasets with localStorage fallback
-  const { data: apiDatasets, isLoading: isDatasetsLoading, error: datasetsError } = useListDatasets(
+  const {
+    data: apiDatasets,
+    isLoading: isDatasetsLoading,
+    error: datasetsError,
+  } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
     { enabled: !!activeProject?.namespace && !!activeProject?.project }
   )
   const createDatasetMutation = useCreateDataset()
-  // const deleteDatasetMutation = useDeleteDataset() // TODO: Implement dataset deletion with API
+  const deleteDatasetMutation = useDeleteDataset()
 
-  // Convert API datasets to UI format
+  // Convert API datasets to UI format; provide demo fallback if none
   const datasets = useMemo(() => {
-    if (apiDatasets?.datasets) {
-      return apiDatasets.datasets.map((dataset) => ({
+    if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
+      return apiDatasets.datasets.map(dataset => ({
         id: dataset.name,
         name: dataset.name,
         rag_strategy: dataset.rag_strategy,
         files: dataset.files,
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
-        numChunks: dataset.files.length ? `~${dataset.files.length * 100}` : 'unknown', // Estimated, or 'unknown' if unavailable
+        // Estimate chunk count numerically for display
+        numChunks: Array.isArray(dataset.files)
+          ? Math.max(0, dataset.files.length * 100)
+          : 0,
         processedPercent: 100,
         version: 'v1',
         description: '',
       }))
     }
-    return []
+
+    // Demo fallback datasets to populate the grid when API has none
+    try {
+      const stored = localStorage.getItem('lf_demo_datasets')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+
+    const demo = [
+      {
+        id: 'demo-arxiv',
+        name: 'arxiv-papers',
+        rag_strategy: 'PDF Simple',
+        files: [],
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: 12800,
+        processedPercent: 100,
+        version: 'v1',
+        description: 'Demo dataset of academic PDFs',
+      },
+      {
+        id: 'demo-handbook',
+        name: 'company-handbook',
+        rag_strategy: 'Markdown',
+        files: [],
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: 4200,
+        processedPercent: 100,
+        version: 'v2',
+        description: 'Demo employee handbook and policies',
+      },
+    ]
+    try {
+      localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
+    } catch {}
+    return demo
   }, [apiDatasets])
-
-
-
-
 
   // Map of fileKey -> array of dataset ids
   const [fileAssignments] = useState<Record<string, string[]>>(() => {
@@ -112,16 +163,20 @@ const Data = () => {
   const [newDatasetName, setNewDatasetName] = useState('')
   const [newDatasetDescription, setNewDatasetDescription] = useState('')
 
-
+  // Simple edit modal state
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editDatasetId, setEditDatasetId] = useState<string>('')
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
 
   const handleCreateDataset = async () => {
     const name = newDatasetName.trim()
     if (!name) return
 
     if (!activeProject?.namespace || !activeProject?.project) {
-      toast({ 
-        message: 'No active project selected', 
-        variant: 'destructive' 
+      toast({
+        message: 'No active project selected',
+        variant: 'destructive',
       })
       return
     }
@@ -139,9 +194,9 @@ const Data = () => {
       setNewDatasetDescription('')
     } catch (error) {
       console.error('Failed to create dataset:', error)
-      toast({ 
-        message: 'Failed to create dataset. Please try again.', 
-        variant: 'destructive' 
+      toast({
+        message: 'Failed to create dataset. Please try again.',
+        variant: 'destructive',
       })
     }
   }
@@ -249,9 +304,9 @@ const Data = () => {
           <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
             <div>Datasets</div>
             <div className="flex items-center gap-2">
-              <Dialog 
-                open={isCreateOpen} 
-                onOpenChange={(open) => {
+              <Dialog
+                open={isCreateOpen}
+                onOpenChange={open => {
                   // Prevent closing dialog during mutation
                   if (!createDatasetMutation.isPending) {
                     setIsCreateOpen(open)
@@ -292,14 +347,22 @@ const Data = () => {
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogClose asChild disabled={createDatasetMutation.isPending}>
+                    <DialogClose
+                      asChild
+                      disabled={createDatasetMutation.isPending}
+                    >
                       <Button variant="secondary">Cancel</Button>
                     </DialogClose>
                     <Button
                       onClick={handleCreateDataset}
-                      disabled={!newDatasetName.trim() || createDatasetMutation.isPending}
+                      disabled={
+                        !newDatasetName.trim() ||
+                        createDatasetMutation.isPending
+                      }
                     >
-                      {createDatasetMutation.isPending ? 'Creating...' : 'Create'}
+                      {createDatasetMutation.isPending
+                        ? 'Creating...'
+                        : 'Create'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -343,7 +406,9 @@ const Data = () => {
               </div>
             ) : mode === 'designer' && datasets.length <= 0 ? (
               <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                {datasetsError ? 'Unable to load datasets. Using local storage.' : 'No datasets found. Create one to get started.'}
+                {datasetsError
+                  ? 'Unable to load datasets. Using local storage.'
+                  : 'No datasets found. Create one to get started.'}
               </div>
             ) : (
               mode === 'designer' && (
@@ -362,15 +427,74 @@ const Data = () => {
                         }
                       }}
                     >
-                      <button
-                        className="absolute right-3 top-3 text-xs bg-transparent text-primary hover:opacity-80 rounded-lg px-2 py-1"
-                        onClick={e => {
-                          e.stopPropagation()
-                          navigate(`/chat/data/${ds.id}`)
-                        }}
-                      >
-                        View
-                      </button>
+                      <div className="absolute right-3 top-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                              onClick={e => e.stopPropagation()}
+                              aria-label="Dataset actions"
+                            >
+                              <FontIcon type="overflow" className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-[10rem] w-[10rem]"
+                          >
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                // open simple edit modal
+                                setEditDatasetId(ds.id)
+                                setEditName(ds.name)
+                                setEditDescription(ds.description || '')
+                                setIsEditOpen(true)
+                              }}
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                navigate(`/chat/data/${ds.id}`)
+                              }}
+                            >
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={async e => {
+                                e.stopPropagation()
+                                if (
+                                  !activeProject?.namespace ||
+                                  !activeProject?.project
+                                )
+                                  return
+                                try {
+                                  await deleteDatasetMutation.mutateAsync({
+                                    namespace: activeProject.namespace,
+                                    project: activeProject.project,
+                                    dataset: ds.id,
+                                  })
+                                  toast({
+                                    message: 'Dataset deleted',
+                                    variant: 'default',
+                                  })
+                                } catch (err) {
+                                  console.error('Delete failed', err)
+                                  toast({
+                                    message: 'Failed to delete dataset',
+                                    variant: 'destructive',
+                                  })
+                                }
+                              }}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                       <div className="text-sm font-medium">{ds.name}</div>
                       <div className="text-xs text-muted-foreground">
                         Last run on {formatLastRun(ds.lastRun)}
@@ -393,7 +517,7 @@ const Data = () => {
                 </div>
               )
             )}
-            
+
             {/* Project-level raw files UI removed: files now only exist within datasets. */}
               </div>
             )}
@@ -401,7 +525,59 @@ const Data = () => {
         )}
       </div>
 
-      {/* Edit/Delete dialogs removed in favor of simple View navigation */}
+      {/* Edit dataset dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit dataset</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Name</label>
+              <Input
+                autoFocus
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                placeholder="Dataset name"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">
+                Description
+              </label>
+              <Textarea
+                value={editDescription}
+                onChange={e => setEditDescription(e.target.value)}
+                placeholder="Optional description"
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button
+              onClick={() => {
+                const id = editDatasetId.trim()
+                const name = editName.trim()
+                if (!id || !name) return
+                try {
+                  localStorage.setItem(`lf_dataset_name_${id}`, name)
+                  localStorage.setItem(
+                    `lf_dataset_description_${id}`,
+                    editDescription
+                  )
+                } catch {}
+                setIsEditOpen(false)
+              }}
+              disabled={!editName.trim()}
+            >
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
