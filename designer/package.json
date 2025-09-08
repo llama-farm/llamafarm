@@ -53,5 +53,8 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.2.2",
     "vite": "^6.3.5"
+  },
+  "overrides": {
+    "strip-ansi": "^7.1.2"
   }
 }
