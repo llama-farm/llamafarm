@@ -17,7 +17,10 @@ export interface CodeMirrorModules {
   bracketMatching: any // Extension function
   indentOnInput: any // Extension function
   foldGutter: any // Extension function
+  syntaxHighlighting: any // Extension function
+  HighlightStyle: typeof HighlightStyle
   highlightSelectionMatches: any // Extension function
+  tags: typeof tags
   oneDark: any // Dark theme extension
 }
 
