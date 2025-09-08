@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.0.2](https://github.com/llama-farm/llamafarm/compare/v0.0.1...v0.0.2) (2025-09-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* Changed schema from oneOf to anyOf for extractor configs to allow more flexible configurations
+
+### Features
+
+* add comprehensive schema updates and universal strategies system ([#115](https://github.com/llama-farm/llamafarm/issues/115)) ([2359242](https://github.com/llama-farm/llamafarm/commit/2359242cf43e348b037555973ec84bb4b93a0f2b))
+* **cli:** add ollama arg and fix docker bugs ([#124](https://github.com/llama-farm/llamafarm/issues/124)) ([1282dd3](https://github.com/llama-farm/llamafarm/commit/1282dd39f4084a5b039a16c59584952fcce4168f))
+* **config:** update prompts schema to use role and content ([ba735d1](https://github.com/llama-farm/llamafarm/commit/ba735d1199b234b13d29f5d4c6b90695d2cf0a4a))
+* **designer:** add overflow menu, hide cards on dataset view ([d02be98](https://github.com/llama-farm/llamafarm/commit/d02be98cb0ed491a46444c07dbf4c93050bb5f97))
+* **designer:** Add RAG tab for processing strategies  ([#116](https://github.com/llama-farm/llamafarm/issues/116)) ([16c6f04](https://github.com/llama-farm/llamafarm/commit/16c6f0423b04f40e601f998ff564b5bb22f39182))
+* **designer:** change RAG strategy for a dataset ([32a6a25](https://github.com/llama-farm/llamafarm/commit/32a6a25785936834db35a03a5e757c2e044c96a2))
+* **designer:** change rag strategy from dataset page ([2c95e25](https://github.com/llama-farm/llamafarm/commit/2c95e25e21e02ddb6c6da76228cb69dba5fa103a))
+* **designer:** connect chat component to api ([#98](https://github.com/llama-farm/llamafarm/issues/98)) ([d697070](https://github.com/llama-farm/llamafarm/commit/d697070c1075b9390c660977a60270481963aac8))
+* **designer:** connect data component to api ([#110](https://github.com/llama-farm/llamafarm/issues/110)) ([fe9b9b8](https://github.com/llama-farm/llamafarm/commit/fe9b9b8564e764ce6b9de91a9b7759121a309d27))
+* **designer:** create new rag strategy, duplicate strat, update description ([6749c42](https://github.com/llama-farm/llamafarm/commit/6749c42d70ee7fad25b418b18e51e5ea0ec7bcba))
+* **designer:** datasets page ([4429ff1](https://github.com/llama-farm/llamafarm/commit/4429ff15dfbd44eaba42d6333c12d24a88219d18))
+* **designer:** edit rag strategy, edit, delete, rename (reset button for now) ([121db2b](https://github.com/llama-farm/llamafarm/commit/121db2bad6d6344ded15e35e272ecab620db7d8f))
+* **designer:** project api integration ([#107](https://github.com/llama-farm/llamafarm/issues/107)) ([de7c101](https://github.com/llama-farm/llamafarm/commit/de7c101d721c3fd61423c600cdc0577331a3c357))
+* **server:** add celery as a task manager for processing entire data… ([#108](https://github.com/llama-farm/llamafarm/issues/108)) ([d9231d6](https://github.com/llama-farm/llamafarm/commit/d9231d62645304e35719e1b353b8a13cc44c0fbd))
+* **server:** segment ollama for designer and runtime; handle new prompts ([b66eaae](https://github.com/llama-farm/llamafarm/commit/b66eaaef255156f3cc245851a233364c003bc72e))
+* **server:** use instructor_mode from runtime config with openai ([af2930b](https://github.com/llama-farm/llamafarm/commit/af2930b378b3840c2ef819860d235ced995e6b78))
+* use llamafarm to build llamafarm ([#112](https://github.com/llama-farm/llamafarm/issues/112)) ([dda49a1](https://github.com/llama-farm/llamafarm/commit/dda49a10097f629e0caef148ecf2d1dcb4d7c901))
+* use shared directory for all projects ([#105](https://github.com/llama-farm/llamafarm/issues/105)) ([e813f72](https://github.com/llama-farm/llamafarm/commit/e813f72472a256fba9849f7067e9bb8af6b7ae32))
+
+
+### Bug Fixes
+
+* **chat:** streaming responses ([#99](https://github.com/llama-farm/llamafarm/issues/99)) ([c2e92cf](https://github.com/llama-farm/llamafarm/commit/c2e92cfa4c4cf135774af760d1bb3230d85af115))
+* **cli:** check for ollama running with the correct URL ([e098d87](https://github.com/llama-farm/llamafarm/commit/e098d87ad4639026bf0c75f65d77009dbd66f702))
+* **cli:** ensure server is running for projects chat cmd ([748ad61](https://github.com/llama-farm/llamafarm/commit/748ad6150970e1ec3e6ecbf596fde5285ec8c5c2))
+* **config:** revert  removal ([a1a1a94](https://github.com/llama-farm/llamafarm/commit/a1a1a94c080c49c6a420ad0964ecd814060b6607))
+* **config:** update tests to use new prompts schema ([4937cbe](https://github.com/llama-farm/llamafarm/commit/4937cbee66bba01e0eae088e8ce19ebebce0c885))
+* **designer:** add shadcn components and functionality to the 'prompt' page ([#102](https://github.com/llama-farm/llamafarm/issues/102)) ([014f583](https://github.com/llama-farm/llamafarm/commit/014f583f6670e38f09e49ab886469eefbb93c725))
+* **designer:** addressing sourcery comments ([c8c51d7](https://github.com/llama-farm/llamafarm/commit/c8c51d7dcc27f2c36b067d8834c4cec343dcd4c6))
+* **designer:** build error fix ([cea7da3](https://github.com/llama-farm/llamafarm/commit/cea7da3857256ec8871f27921034c18a0330d9cb))
+* **designer:** build issue ([6fd2785](https://github.com/llama-farm/llamafarm/commit/6fd2785a6a5e51e9ee554d5ea48bdb4da053d7a1))
+* **designer:** gitignore stuff ([ea063f6](https://github.com/llama-farm/llamafarm/commit/ea063f6bec733155631d828bef93da6d77bec056))
+* **designer:** remove 'password updated' notificaiton ([a238524](https://github.com/llama-farm/llamafarm/commit/a2385244598c2c76bcb4321496c07bd2bdf7430b))
+* **designer:** remove auto-complete from API secret field in model change ([d43f8e3](https://github.com/llama-farm/llamafarm/commit/d43f8e32ca05822cebec7fa2d4d538d6d5bb5a73))
+* **designer:** sourcery comments ([ee1c56e](https://github.com/llama-farm/llamafarm/commit/ee1c56e98c50091c9698325dd8f35e2395e6aba2))
+* **designer:** sourcery comments and updates ([9761801](https://github.com/llama-farm/llamafarm/commit/9761801efe377ff1aa20e35a3d4320cb8d9128a8))
+* **designer:** sourecery updates pt 2 ([7bb9994](https://github.com/llama-farm/llamafarm/commit/7bb9994c47ff5124283bcee85dc16a744ddfadb3))
+* **server:** fix celery logging configuration ([#113](https://github.com/llama-farm/llamafarm/issues/113)) ([5827dc9](https://github.com/llama-farm/llamafarm/commit/5827dc9857e18e2fbf6e46101b7679fc6937049f))
+* **server:** remove ollama_host segmentation ([31cc859](https://github.com/llama-farm/llamafarm/commit/31cc859bd45f0c9af81d94a14e4e312fb6430f72))
+* **server:** update tests to use new prompts schema ([e7c277e](https://github.com/llama-farm/llamafarm/commit/e7c277eebc8f9e7fbed80d69aadfb2ee6d79ea1b))
+
+
+### Miscellaneous Chores
+
+* release 0.0.2 ([e2d1aee](https://github.com/llama-farm/llamafarm/commit/e2d1aee7af0bad10bdf4fbb7ce0a102aef22faa3))
+
 ## 0.0.1 (2025-08-21)
 
 
