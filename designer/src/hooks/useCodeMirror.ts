@@ -156,10 +156,11 @@ export function useCodeMirror(
           backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : 'hsl(var(--background))',
         },
         '.cm-content': {
-          padding: '16px',
+          padding: '20px 20px 40px 20px', // Add extra bottom padding to show last line
           minHeight: '100%',
           caretColor: defaultConfig.theme === 'dark' ? '#ffffff' : '#000000',
           backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : 'hsl(var(--background))',
+          margin: '0',
         },
         '.cm-focused': {
           outline: 'none'
@@ -177,6 +178,20 @@ export function useCodeMirror(
           scrollbarColor: defaultConfig.theme === 'dark' 
             ? '#3a4a5c #10182e' 
             : 'hsl(var(--border)) hsl(var(--muted))',
+          padding: '0',
+          margin: '0',
+          paddingBottom: '20px', // Extra space at bottom to ensure last line visibility
+        },
+        '.cm-gutters': {
+          paddingRight: '8px',
+          backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : 'hsl(var(--background))',
+          border: 'none',
+        },
+        '.cm-lineNumbers .cm-gutterElement': {
+          paddingRight: '12px',
+          paddingLeft: '8px',
+          color: defaultConfig.theme === 'dark' ? '#5c6370' : 'hsl(var(--muted-foreground))',
+          fontSize: '14px',
         },
         // Fix webkit scrollbar selectors (make them separate, not nested)
         '.cm-scroller::-webkit-scrollbar': {
