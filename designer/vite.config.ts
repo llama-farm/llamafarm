@@ -1,14 +1,67 @@
 import { defineConfig } from 'vite'
 import path from 'path'
 import react from '@vitejs/plugin-react'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    visualizer({
+      filename: 'dist/stats.html',
+      open: true,
+      gzipSize: true,
+      brotliSize: true,
+    })
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // CodeMirror core packages (loaded together as they're tightly coupled)
+          'codemirror-core': [
+            '@codemirror/state',
+            '@codemirror/view'
+          ],
+          // CodeMirror language and features (loaded on-demand)
+          'codemirror-features': [
+            '@codemirror/language',
+            '@codemirror/commands',
+            '@codemirror/lang-json',
+            '@codemirror/search',
+            '@codemirror/theme-one-dark',
+            '@lezer/highlight'
+          ],
+          // React vendor libraries
+          'react-vendor': [
+            'react',
+            'react-dom',
+            'react-router-dom'
+          ],
+          // UI vendor libraries
+          'ui-vendor': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-label',
+            '@radix-ui/react-slot'
+          ],
+          // Data fetching and utilities
+          'utils-vendor': [
+            '@tanstack/react-query',
+            'axios'
+          ]
+        }
+      }
+    },
+    // Increase chunk size warning limit since we're intentionally chunking
+    chunkSizeWarningLimit: 600,
+    // Enable source maps for better debugging
+    sourcemap: true
   },
   server: {
     proxy: {
