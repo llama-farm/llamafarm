@@ -36,35 +36,3 @@ parsers:
       extract_footers: false
       extract_comments: false
 
-  - name: DocxParser_LlamaIndex
-    display_name: DOCX Parser (LlamaIndex)
-    tool: LlamaIndex
-    version: 1.0.0
-    description: Advanced Word document parser using LlamaIndex
-    
-    supported_extensions:
-      - .docx
-      - .doc
-    
-    mime_types:
-      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
-      - application/msword
-    
-    capabilities:
-      - text_extraction
-      - chunking
-      - metadata_extraction
-      - semantic_chunking
-      - image_extraction
-    
-    dependencies:
-      required:
-        - llama-index
-        - llama-index-readers-file
-      optional:
-        - python-docx
-    
-    default_config:
-      chunk_size: 1000
-      chunk_overlap: 100
-      return_full_document: false

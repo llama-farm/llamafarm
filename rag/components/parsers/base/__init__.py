@@ -1,13 +1,20 @@
-"""Base parser infrastructure for RAG system."""
+"""Base parser components."""
 
-from .base_parser import BaseParser
-from .llama_parser import LlamaIndexParser
-from .parser_registry import ParserRegistry
-from .smart_router import SmartRouter
+try:
+    from .base_parser import BaseParser, ParserConfig
+except ImportError:
+    BaseParser = None
+    ParserConfig = None
 
-__all__ = [
-    "BaseParser",
-    "LlamaIndexParser",
-    "ParserRegistry",
-    "SmartRouter",
-]
+try:
+    from .llama_parser import LlamaIndexParser
+except ImportError:
+    LlamaIndexParser = None
+
+try:
+    from .smart_router import SmartRouter, ParserRegistry
+except ImportError:
+    SmartRouter = None
+    ParserRegistry = None
+
+__all__ = ['BaseParser', 'ParserConfig', 'LlamaIndexParser', 'SmartRouter', 'ParserRegistry']

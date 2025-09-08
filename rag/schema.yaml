@@ -195,6 +195,17 @@ definitions:
       type:
         type: string
         enum:
+          # Tool-specific parsers from registry
+          - PDFParser_PyPDF2
+          - CSVParser_Pandas
+          - CSVParser_Python
+          - ExcelParser_OpenPyXL
+          - ExcelParser_Pandas
+          - DocxParser_PythonDocx
+          - MarkdownParser_Python
+          - TextParser_Python
+          - TextParser_LlamaIndex
+          # Legacy parsers for backward compatibility
           - DirectoryParser
           - CSVParser
           - PDFParser
@@ -213,6 +224,17 @@ definitions:
       config:
         type: object
         oneOf:
+          # Tool-specific parser configurations
+          - $ref: "#/definitions/parsers/pdfParserPyPDF2Config"
+          - $ref: "#/definitions/parsers/csvParserPandasConfig"
+          - $ref: "#/definitions/parsers/csvParserPythonConfig"
+          - $ref: "#/definitions/parsers/excelParserOpenPyXLConfig"
+          - $ref: "#/definitions/parsers/excelParserPandasConfig"
+          - $ref: "#/definitions/parsers/docxParserPythonDocxConfig"
+          - $ref: "#/definitions/parsers/markdownParserPythonConfig"
+          - $ref: "#/definitions/parsers/textParserPythonConfig"
+          - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
+          # Legacy parser configurations
           - $ref: "#/definitions/parsers/directoryParserConfig"
           - $ref: "#/definitions/parsers/csvParserConfig"
           - $ref: "#/definitions/parsers/pdfParserConfig"
@@ -229,6 +251,356 @@ definitions:
           - $ref: "#/definitions/parsers/llamaIndexMarkdownParserConfig"
           - $ref: "#/definitions/parsers/llamaIndexWebParserConfig"
   parsers:
+    # Tool-specific parser configurations based on actual implementations
+    pdfParserPyPDF2Config:
+      type: object
+      title: PDF Parser (PyPDF2) Configuration
+      description: Enhanced PDF parser using PyPDF2 with comprehensive capabilities
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
+          type: string
+          enum: [paragraphs, sentences, characters]
+          default: paragraphs
+          description: Chunking strategy using PyPDF2 text structure
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract PDF metadata using PyPDF2
+        preserve_layout:
+          type: boolean
+          default: true
+          description: Use PyPDF2 layout-preserving extraction mode
+        extract_page_info:
+          type: boolean
+          default: true
+          description: Extract page numbers and rotation info
+        extract_annotations:
+          type: boolean
+          default: false
+          description: Extract PDF annotations using PyPDF2
+        extract_links:
+          type: boolean
+          default: false
+          description: Extract hyperlinks
+        extract_form_fields:
+          type: boolean
+          default: false
+          description: Extract form fields using PyPDF2
+        extract_outlines:
+          type: boolean
+          default: false
+          description: Extract document outlines/bookmarks
+        extract_images:
+          type: boolean
+          default: false
+          description: Extract embedded images using PyPDF2
+        extract_xmp_metadata:
+          type: boolean
+          default: false
+          description: Extract XMP metadata using PyPDF2
+        clean_text:
+          type: boolean
+          default: true
+          description: Clean extracted text
+    
+    csvParserPandasConfig:
+      type: object
+      title: CSV Parser (Pandas) Configuration
+      description: Advanced CSV parser using Pandas with data analysis capabilities
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        chunk_strategy:
+          type: string
+          enum: [rows, columns, full]
+          default: rows
+          description: How to chunk the CSV data
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract data statistics and metadata
+        encoding:
+          type: string
+          default: utf-8
+          description: File encoding
+        delimiter:
+          type: string
+          default: ","
+          description: CSV delimiter
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as NaN
+    
+    csvParserPythonConfig:
+      type: object
+      title: CSV Parser (Python) Configuration
+      description: Simple CSV parser using native Python csv module
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        encoding:
+          type: string
+          default: utf-8
+          description: File encoding
+        delimiter:
+          type: string
+          default: ","
+          description: CSV delimiter
+        quotechar:
+          type: string
+          default: '"'
+          description: Quote character
+    
+    excelParserOpenPyXLConfig:
+      type: object
+      title: Excel Parser (OpenPyXL) Configuration
+      description: Excel parser using OpenPyXL for XLSX files with formula support
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        extract_formulas:
+          type: boolean
+          default: false
+          description: Extract cell formulas using OpenPyXL
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract workbook metadata
+        sheets:
+          type: [array, "null"]
+          items:
+            type: string
+          default: null
+          description: Specific sheets to process (null = all)
+        data_only:
+          type: boolean
+          default: true
+          description: Extract values instead of formulas
+    
+    excelParserPandasConfig:
+      type: object
+      title: Excel Parser (Pandas) Configuration
+      description: Excel parser using Pandas with data analysis capabilities
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        sheets:
+          type: [array, "null"]
+          items:
+            type: string
+          default: null
+          description: Specific sheets to process (null = all)
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract data statistics
+        skiprows:
+          type: ["integer", "null"]
+          default: null
+          description: Rows to skip at beginning
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as NaN
+    
+    docxParserPythonDocxConfig:
+      type: object
+      title: DOCX Parser (python-docx) Configuration
+      description: Word document parser using python-docx library
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Chunk size in characters
+        chunk_strategy:
+          type: string
+          enum: [paragraphs, sentences, characters]
+          default: paragraphs
+          description: Chunking strategy
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract document metadata
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract tables using python-docx
+        extract_headers:
+          type: boolean
+          default: true
+          description: Extract headers
+        extract_footers:
+          type: boolean
+          default: false
+          description: Extract footers
+        extract_comments:
+          type: boolean
+          default: false
+          description: Extract comments
+    
+    markdownParserPythonConfig:
+      type: object
+      title: Markdown Parser (Python) Configuration
+      description: Markdown parser using native Python with regex parsing
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Chunk size in characters
+        chunk_strategy:
+          type: string
+          enum: [sections, paragraphs, characters]
+          default: sections
+          description: Chunking strategy - sections uses markdown headers
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract YAML frontmatter
+        extract_code_blocks:
+          type: boolean
+          default: true
+          description: Extract code blocks
+        extract_links:
+          type: boolean
+          default: true
+          description: Extract markdown links
+    
+    textParserPythonConfig:
+      type: object
+      title: Text Parser (Python) Configuration
+      description: Text parser using native Python with encoding detection
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [sentences, paragraphs, characters]
+          default: sentences
+          description: Text chunking strategy
+        encoding:
+          type: string
+          default: utf-8
+          description: Text encoding (utf-8 or auto-detect)
+        clean_text:
+          type: boolean
+          default: true
+          description: Remove excessive whitespace
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract file statistics
+    
+    textParserLlamaIndexConfig:
+      type: object
+      title: Text Parser (LlamaIndex) Configuration
+      description: Advanced text parser using LlamaIndex with semantic splitting, code parsing, and multi-format support
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [characters, sentences, paragraphs, tokens, semantic, code]
+          default: semantic
+          description: Advanced chunking strategy - semantic uses content-based splitting, code preserves syntax
+        encoding:
+          type: string
+          default: utf-8
+          description: Text encoding
+        clean_text:
+          type: boolean
+          default: true
+          description: Clean extracted text
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract comprehensive file and content metadata
+        semantic_buffer_size:
+          type: integer
+          default: 1
+          minimum: 1
+          maximum: 10
+          description: Buffer size for semantic chunking
+        semantic_breakpoint_percentile_threshold:
+          type: integer
+          default: 95
+          minimum: 50
+          maximum: 99
+          description: Percentile threshold for semantic breakpoints
+        token_model:
+          type: string
+          default: gpt-3.5-turbo
+          description: Tokenizer model for token-based chunking
+        preserve_code_structure:
+          type: boolean
+          default: true
+          description: Preserve code syntax and structure when parsing code files
+        detect_language:
+          type: boolean
+          default: true
+          description: Automatically detect programming language for code files
+        include_prev_next_rel:
+          type: boolean
+          default: true
+          description: Include relationships between chunks for better context
+
     directoryParserConfig:
       type: object
       title: Directory Parser Configuration

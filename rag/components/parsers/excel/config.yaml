@@ -72,36 +72,3 @@ parsers:
       skiprows: null
       na_values: ["", "NA", "N/A", "null", "None"]
 
-  - name: ExcelParser_XLWings
-    display_name: Excel Parser (XLWings)
-    tool: XLWings
-    version: 1.0.0
-    description: Excel parser with full Excel API access (requires Excel installation)
-    
-    supported_extensions:
-      - .xlsx
-      - .xls
-      - .xlsm
-      - .xlsb
-    
-    mime_types:
-      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-      - application/vnd.ms-excel
-    
-    capabilities:
-      - text_extraction
-      - formula_extraction
-      - macro_extraction
-      - charts
-      - pivot_tables
-      - vba_code
-    
-    dependencies:
-      required:
-        - xlwings
-      optional: []
-    
-    default_config:
-      visible: false
-      include_charts: false
-      include_vba: false

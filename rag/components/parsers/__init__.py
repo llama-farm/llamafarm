@@ -41,6 +41,13 @@ legacy_parser_mapping = {
     "HTMLParser": "web"
 }
 
+# Import the new parser factory
+try:
+    from .parser_factory import ToolAwareParserFactory, ParserFactory as NewParserFactory
+except ImportError:
+    ToolAwareParserFactory = None
+    NewParserFactory = None
+
 # Create parser factory wrapper
 class ParserFactory:
     """Factory for creating parser instances."""
@@ -63,6 +70,13 @@ class ParserFactory:
         Returns:
             Parser instance
         """
+        # Try the new ToolAwareParserFactory first
+        if ToolAwareParserFactory:
+            try:
+                return ToolAwareParserFactory.create_parser(parser_name=name, config=config)
+            except Exception as e:
+                logger.debug(f"ToolAwareParserFactory failed for {name}: {e}")
+        
         # Map legacy names to new names
         if name in legacy_parser_mapping:
             new_name = legacy_parser_mapping[name]
@@ -291,10 +305,16 @@ class DirectoryParser:
         # Check explicit parser mapping
         if extension in self.parser_map:
             parser_name = self.parser_map[extension]
-            # Get the config - might be under the mapped name or original parser name
+            # Get the config for this specific parser
             parser_config = self.parser_configs.get(parser_name, {})
-            if not parser_config:
-                # Check for config under original name (e.g., "LlamaIndexTextParser")
+            
+            # Try to create the parser
+            try:
+                return ParserFactory.create_parser(parser_name, parser_config)
+            except Exception as e:
+                logger.warning(f"Failed to create parser {parser_name}: {e}")
+                
+                # Fallback logic for legacy names
                 for orig_name, mapped_name in legacy_parser_mapping.items():
                     if mapped_name == parser_name:
                         parser_config = self.parser_configs.get(orig_name, {})

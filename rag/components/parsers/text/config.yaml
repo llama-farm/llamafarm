@@ -1,101 +1,151 @@
-parser:
-  name: text
-  display_name: Text Parser
-  version: 2.0.0
-  description: Plain text parser with encoding detection and flexible chunking
-  
-  # File type support
-  supported_extensions:
-    - .txt
-    - .text
-    - .log
-    - .md
-    - .markdown
-    - .rst
-    - .tex
-    - .rtf
-    - .asc
-    - .ascii
-    - .conf
-    - .cfg
-    - .ini
-    - .yaml
-    - .yml
-    - .json
-    - .xml
-    - .csv
-    - .tsv
-  
-  mime_types:
-    - text/plain
-    - text/x-log
-    - text/markdown
-    - text/x-markdown
-    - text/x-rst
-    - text/x-tex
-    - text/rtf
-    - application/x-yaml
-    - application/json
-    - text/xml
-    - text/csv
-  
-  # Parser capabilities
-  capabilities:
-    - text_extraction
-    - chunking
-    - encoding_detection
-    - metadata_extraction
-    - format_preservation
-  
-  # Dependencies
-  dependencies:
-    required:
-      - llama-index
-      - llama-index-readers-file
-    optional:
-      - chardet  # Better encoding detection
-      - ftfy  # Fix text encoding issues
-  
-  # Default configuration
-  default_config:
-    # Chunking settings
-    chunk_size: 1000
-    chunk_overlap: 100
-    chunk_strategy: sentences  # characters, sentences, paragraphs
+parsers:
+  - name: TextParser_Python
+    display_name: Text Parser (Python)
+    tool: Python
+    version: 1.0.0
+    description: Text parser using native Python with encoding detection
     
-    # Text processing
-    encoding: auto  # auto, utf-8, latin-1, etc.
-    clean_text: true
-    preserve_whitespace: false
+    supported_extensions:
+      - .txt
+      - .text
+      - .log
+      - .rst
+      - .tex
+      - .rtf
+      - .asc
+      - .ascii
+      - .conf
+      - .cfg
+      - .ini
+      - .yaml
+      - .yml
+      - .json
+      - .xml
     
-    # Metadata extraction
-    extract_metadata: true
+    mime_types:
+      - text/plain
+      - text/x-log
+      - text/x-rst
+      - text/x-tex
+      - text/rtf
+      - application/x-yaml
+      - application/json
+      - text/xml
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - encoding_detection
+      - metadata_extraction
+      - basic_statistics
+    
+    dependencies:
+      required: []
+      optional:
+        - chardet  # Better encoding detection
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: sentences  # characters, sentences, paragraphs
+      encoding: utf-8
+      clean_text: true
+      extract_metadata: true
 
-# Configuration profiles
-profiles:
-  logs:
-    description: For log files
-    chunk_size: 500
-    chunk_strategy: characters
-    preserve_whitespace: true
-    clean_text: false
+  - name: TextParser_LlamaIndex
+    display_name: Text Parser (LlamaIndex)
+    tool: LlamaIndex
+    version: 1.0.0
+    description: Advanced text parser using LlamaIndex with semantic splitting and multi-format support
     
-  code:
-    description: For source code files
-    chunk_size: 1000
-    chunk_strategy: paragraphs
-    preserve_whitespace: true
-    clean_text: false
+    supported_extensions:
+      - .txt
+      - .text
+      - .log
+      - .rst
+      - .tex
+      - .rtf
+      - .asc
+      - .ascii
+      - .conf
+      - .cfg
+      - .ini
+      - .yaml
+      - .yml
+      - .json
+      - .xml
+      - .py
+      - .js
+      - .java
+      - .cpp
+      - .c
+      - .h
+      - .cs
+      - .php
+      - .rb
+      - .go
+      - .rs
+      - .swift
+      - .kt
+      - .scala
+      - .r
+      - .sql
+      - .sh
+      - .bash
+      - .zsh
+      - .ps1
+      - .bat
     
-  markdown:
-    description: For markdown documents
-    chunk_size: 1000
-    chunk_strategy: paragraphs
-    preserve_whitespace: false
-    clean_text: true
+    mime_types:
+      - text/plain
+      - text/x-log
+      - text/x-rst
+      - text/x-tex
+      - text/rtf
+      - application/x-yaml
+      - application/json
+      - text/xml
+      - text/x-python
+      - text/javascript
+      - text/x-java-source
+      - text/x-c
+      - text/x-csrc
+      - text/x-chdr
     
-  config:
-    description: For configuration files
-    chunk_size: null  # No chunking
-    preserve_whitespace: true
-    clean_text: false
+    capabilities:
+      - text_extraction
+      - chunking
+      - semantic_chunking
+      - token_based_chunking
+      - code_aware_parsing
+      - language_detection
+      - structure_preservation
+      - metadata_extraction
+      - json_parsing
+      - yaml_parsing
+      - xml_parsing
+      - code_syntax_parsing
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-core
+      optional:
+        - transformers  # For semantic splitting
+        - tiktoken      # For token counting
+        - tree-sitter   # For code parsing
+        - pygments      # For syntax highlighting
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: semantic  # characters, sentences, paragraphs, tokens, semantic, code
+      encoding: utf-8
+      clean_text: true
+      extract_metadata: true
+      semantic_buffer_size: 1
+      semantic_breakpoint_percentile_threshold: 95
+      token_model: gpt-3.5-turbo
+      preserve_code_structure: true
+      detect_language: true
+      include_prev_next_rel: true

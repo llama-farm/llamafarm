@@ -1,0 +1,7 @@
+{
+  "logging": {
+    "level": "INFO"
+  },
+  "default_strategy": "simple_pdf",
+  "base_directory": "./data"
+}

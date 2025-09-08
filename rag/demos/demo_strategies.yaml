@@ -21,31 +21,27 @@ strategies:
           recursive: true
           include_patterns: ["*.txt", "*.md", "*.pdf"]
           parser_map:
-            ".txt": "text"
-            ".md": "markdown"
-            ".pdf": "pdf"
+            ".txt": "TextParser_Python"  # Using tool-specific parser
+            ".md": "MarkdownParser_Python"  # Using tool-specific parser
+            ".pdf": "PDFParser_PyPDF2"  # Using tool-specific parser
           parser_configs:
-            text:
+            TextParser_Python:
               chunk_size: 1500  # Larger chunks for academic papers
               chunk_overlap: 200  # Good overlap for academic context
               chunk_strategy: sentences  # Sentence-aware chunking for research papers
               clean_text: true
-              preserve_whitespace: false
               extract_metadata: true
-            markdown:
+            MarkdownParser_Python:
               chunk_size: 2000  # Even larger for markdown academic papers
               chunk_overlap: 300
-              chunk_strategy: markdown_aware  # Use markdown structure for academic papers
-              preserve_structure: true
+              chunk_strategy: sections  # Use markdown structure for academic papers
+              extract_metadata: true
               extract_code_blocks: true
               extract_links: true
-              extract_images: true
-            pdf:
+            PDFParser_PyPDF2:
               chunk_size: 1500
               chunk_overlap: 200
               chunk_strategy: sentences
-              extract_tables: false  # Don't extract tables for demos
-              ocr_enabled: false  # Disable OCR for demos
               extract_metadata: true
       
       extractors:
@@ -111,15 +107,10 @@ strategies:
           recursive: false
           include_patterns: ["*.csv", "*.txt"]
           parser_map:
-            ".csv": "csv_excel"
-            ".txt": "text"
+            ".csv": "TextParser_Python"  # CSV parser not implemented yet - using text parser
+            ".txt": "TextParser_Python"  # Using Python text parser
           parser_configs:
-            csv_excel:
-              convert_to: markdown  # Convert to readable format
-              include_headers: true
-              summarize_large_tables: true
-              chunk_size: null  # Don't chunk CSV data
-            text:
+            TextParser_Python:
               chunk_size: 800  # Optimal for customer support knowledge base
               chunk_overlap: 100  # Maintain context between chunks
               chunk_strategy: sentences  # Use sentence-aware chunking for better readability
@@ -192,24 +183,23 @@ strategies:
           include_patterns: ["*.md", "*.py", "*.txt"]
           exclude_patterns: ["__pycache__", "*.pyc"]
           parser_map:
-            ".md": "markdown"
-            ".py": "text"
-            ".txt": "text"
+            ".md": "MarkdownParser_Python"  # Using Python markdown parser
+            ".py": "TextParser_Python"  # Code as text
+            ".txt": "TextParser_Python"  # Documentation text
           parser_configs:
-            markdown:
+            MarkdownParser_Python:
               chunk_size: 1200  # Medium chunks for code documentation
               chunk_overlap: 150
-              chunk_strategy: markdown_aware  # Use markdown structure for documentation
+              chunk_strategy: sections  # Use markdown structure for documentation
               preserve_structure: true
               extract_code_blocks: true
               extract_links: true
               extract_images: true
-            text:
+            TextParser_Python:
               chunk_size: 1000  # Smaller chunks for code files
               chunk_overlap: 100
               chunk_strategy: characters  # Character-based for code
               clean_text: false  # Keep code formatting
-              preserve_whitespace: true  # Important for code
               extract_metadata: true
       
       extractors:
@@ -284,10 +274,10 @@ strategies:
           include_patterns: ["*.html", "*.htm"]
           exclude_patterns: []
           parser_map:
-            ".html": "web"
-            ".htm": "web"
+            ".html": "TextParser_Python"  # Parse HTML as text for now
+            ".htm": "TextParser_Python"  # Parse HTML as text for now
           parser_configs:
-            web:
+            TextParser_Python:
               chunk_size: 1400  # Good size for news articles
               chunk_overlap: 180
               chunk_strategy: paragraphs  # Use paragraph chunking for news
@@ -368,32 +358,23 @@ strategies:
           include_patterns: ["*.pdf", "*.docx", "*.xlsx"]
           exclude_patterns: []
           parser_map:
-            ".pdf": "pdf"
-            ".docx": "docx"
-            ".xlsx": "csv_excel"
+            ".pdf": "PDFParser_PyPDF2"  # Using PyPDF2 for PDFs
+            ".docx": "TextParser_Python"  # Word docs not implemented yet - using text parser
+            ".xlsx": "TextParser_Python"  # Excel parser not implemented yet - using text parser
           parser_configs:
-            pdf:
+            PDFParser_PyPDF2:
               chunk_size: 1800  # Larger chunks for business reports
               chunk_overlap: 250
               chunk_strategy: sentences
               extract_metadata: true
               extract_tables: true
               ocr_enabled: false
-            docx:
-              chunk_size: 1600  # Good for Word business documents
+            TextParser_Python:
+              chunk_size: 1600  # Good for business documents
               chunk_overlap: 200
               chunk_strategy: paragraphs  # Use paragraph-based chunking
               extract_metadata: true
-              extract_headers_footers: true
-              extract_tables: true
-              extract_images: false
-              preserve_formatting: false
-            csv_excel:
-              convert_to: markdown
-              include_headers: true
-              sheet_names: null  # Process all sheets
-              summarize_large_tables: true
-              chunk_size: null  # Don't chunk tables
+              clean_text: true
       
       extractors:
         - type: "TableExtractor"
@@ -470,7 +451,7 @@ strategies:
     
     components:
       parser:
-        type: "LlamaIndexTextParser"
+        type: "TextParser_LlamaIndex"
         config:
           chunk_size: null  # No chunking for document lifecycle demo
           chunk_strategy: characters  # Strategy doesn't matter when chunk_size is null
@@ -531,7 +512,7 @@ strategies:
     
     components:
       parser:
-        type: "pdf"
+        type: "PDFParser_PyPDF2"
         config:
           chunk_size: 2000  # Larger chunks for technical manual
           chunk_overlap: 300  # Good overlap for procedures
@@ -634,8 +615,8 @@ strategies:
           recursive: false
           include_patterns: ["*.txt", "*.md"]
           parser_map:
-            ".txt": "LlamaIndexTextParser"
-            ".md": "LlamaIndexMarkdownParser"
+            ".txt": "TextParser_Python"  # Using Python text parser
+            ".md": "MarkdownParser_Python"  # Using Python markdown parser
       
       extractors:
         - type: "KeywordExtractor"
@@ -669,7 +650,7 @@ strategy_templates:
     
     components:
       parser:
-        type: "LlamaIndexTextParser"
+        type: "TextParser_LlamaIndex"
         config:
           chunk_size: 1000
           chunk_overlap: 200

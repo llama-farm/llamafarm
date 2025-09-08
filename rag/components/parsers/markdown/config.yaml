@@ -35,32 +35,3 @@ parsers:
       extract_code_blocks: true
       extract_links: true
 
-  - name: MarkdownParser_Mistune
-    display_name: Markdown Parser (Mistune)
-    tool: Mistune
-    version: 1.0.0
-    description: Fast Markdown parser using Mistune library
-    
-    supported_extensions:
-      - .md
-      - .markdown
-    
-    mime_types:
-      - text/markdown
-      - text/x-markdown
-    
-    capabilities:
-      - text_extraction
-      - html_conversion
-      - ast_parsing
-      - plugin_support
-    
-    dependencies:
-      required:
-        - mistune
-      optional: []
-    
-    default_config:
-      chunk_size: 1000
-      render_html: false
-      plugins: ["strikethrough", "table", "task_lists"]
