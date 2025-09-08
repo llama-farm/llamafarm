@@ -6,12 +6,6 @@ import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import SearchInput from '../ui/search-input'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -20,6 +14,16 @@ import {
 } from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProjectSwitchNavigation } from '../../hooks/useProjectSwitchNavigation'
+import {
+  useUploadFileToDataset,
+  useReIngestDataset,
+  useTaskStatus,
+  useListDatasets,
+  useDeleteDatasetFile,
+  useDeleteDataset,
+} from '../../hooks/useDatasets'
 
 type Dataset = {
   id: string
@@ -30,12 +34,39 @@ type Dataset = {
   processedPercent: number
   version: string
   description?: string
+  files?: string[] // Array of file hashes from API
 }
 
 function DatasetView() {
   const navigate = useNavigate()
   const { datasetId } = useParams()
   const { toast } = useToast()
+
+  // Get current active project for API calls
+  const activeProject = useActiveProject()
+
+  // Handle automatic navigation when project changes
+  useProjectSwitchNavigation()
+  const uploadMutation = useUploadFileToDataset()
+
+  // Fetch datasets from API to get file information
+  const { data: datasetsResponse } = useListDatasets(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject }
+  )
+
+  // Task tracking state and hooks
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
+  const reIngestMutation = useReIngestDataset()
+  const deleteFileMutation = useDeleteDatasetFile()
+  const deleteDatasetMutation = useDeleteDataset()
+  const { data: taskStatus } = useTaskStatus(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    currentTaskId,
+    { enabled: !!currentTaskId && !!activeProject }
+  )
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const datasetName = useMemo(
@@ -49,125 +80,153 @@ function DatasetView() {
     size: number
     lastModified: number
     type?: string
+    fullHash?: string // For API files, stores the complete hash
   }
 
-  const [files, setFiles] = useState<RawFile[]>([])
+  // Get current dataset from API response
+  const currentApiDataset = useMemo(() => {
+    if (!datasetsResponse?.datasets || !datasetId) return null
+    return datasetsResponse.datasets.find(d => d.name === datasetId)
+  }, [datasetsResponse, datasetId])
+
+  // Files from API data only
+  const files = useMemo(() => {
+    if (!currentApiDataset?.files) return []
+    return currentApiDataset.files.map((fileObj: any) => {
+      const fileHash =
+        typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
+      const size =
+        typeof fileObj === 'object' &&
+        fileObj !== null &&
+        'size' in fileObj &&
+        fileObj.size !== undefined
+          ? fileObj.size
+          : 'unknown'
+      const lastModified =
+        typeof fileObj === 'object' &&
+        fileObj !== null &&
+        'lastModified' in fileObj &&
+        fileObj.lastModified !== undefined
+          ? fileObj.lastModified
+          : 'unknown'
+      return {
+        id: fileHash,
+        name: `${fileHash.substring(0, 12)}...${fileHash.substring(fileHash.length - 8)}`, // Show first 12 and last 8 chars
+        size,
+        lastModified,
+        type: 'unknown',
+        fullHash: fileHash, // Store full hash for operations
+      }
+    })
+  }, [currentApiDataset])
+
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
+  const [pendingDeleteFileHash, setPendingDeleteFileHash] = useState<
+    string | null
+  >(null)
+  const [showDeleteFileConfirmation, setShowDeleteFileConfirmation] =
+    useState(false)
+  const [copyStatus, setCopyStatus] = useState<{
+    [id: string]: string | undefined
+  }>({})
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadStatus, setUploadStatus] = useState<
     Record<string, 'processing' | 'done'>
   >({})
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-  const [fileToDelete, setFileToDelete] = useState<RawFile | null>(null)
 
   type DatasetVersion = {
     id: string // e.g., v1, v2
     createdAt: string // ISO
   }
   const [versions, setVersions] = useState<DatasetVersion[]>([])
-  const [selectedVersionId, setSelectedVersionId] = useState<string>('')
 
-  useEffect(() => {
-    try {
-      const storedFiles = localStorage.getItem('lf_raw_files')
-      const storedAssignments = localStorage.getItem('lf_file_assignments')
-      if (!storedFiles || !storedAssignments || !datasetId) return
-      const all: RawFile[] = JSON.parse(storedFiles)
-      const assignments: Record<string, string[]> =
-        JSON.parse(storedAssignments)
-      const filtered = all.filter(r =>
-        (assignments[r.id] ?? []).includes(datasetId)
-      )
-      setFiles(filtered)
-    } catch {}
-  }, [datasetId])
-
-  useEffect(() => {
-    try {
-      const storedDatasets = localStorage.getItem('lf_datasets')
-      if (!storedDatasets || !datasetId) return
-      const list = JSON.parse(storedDatasets) as Dataset[]
-      const current = list.find(d => d.id === datasetId) || null
-      setDataset(current)
-    } catch {}
-  }, [datasetId])
-
-  // Load versions for this dataset (or seed from dataset.version)
+  // Load dataset metadata from API or create fallback
   useEffect(() => {
     if (!datasetId) return
-    try {
-      const key = `lf_dataset_versions_${datasetId}`
-      const selKey = `lf_dataset_selected_version_${datasetId}`
-      const stored = localStorage.getItem(key)
-      if (stored) {
-        const parsed = JSON.parse(stored) as DatasetVersion[]
-        setVersions(parsed)
-        const sel =
-          localStorage.getItem(selKey) || parsed[parsed.length - 1]?.id || 'v1'
-        setSelectedVersionId(sel)
-        return
-      }
-      // Seed from dataset.version if available
-      const count = Math.max(
-        1,
-        Number(String(dataset?.version || '').replace(/[^0-9]/g, '')) || 1
-      )
-      const baseTime = dataset?.lastRun
-        ? new Date(dataset.lastRun).getTime()
-        : Date.now()
-      const seeded: DatasetVersion[] = Array.from(
-        { length: count },
-        (_, i) => ({
-          id: `v${i + 1}`,
-          createdAt: new Date(
-            baseTime - (count - 1 - i) * 60 * 60 * 1000
-          ).toISOString(),
-        })
-      )
-      setVersions(seeded)
-      setSelectedVersionId(seeded[seeded.length - 1]?.id || 'v1')
-      localStorage.setItem(key, JSON.stringify(seeded))
-      localStorage.setItem(selKey, seeded[seeded.length - 1]?.id || 'v1')
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasetId, dataset?.version, dataset?.lastRun])
 
-  const persistVersions = (list: DatasetVersion[], selectedId: string) => {
-    if (!datasetId) return
-    try {
-      localStorage.setItem(
-        `lf_dataset_versions_${datasetId}`,
-        JSON.stringify(list)
-      )
-      localStorage.setItem(
-        `lf_dataset_selected_version_${datasetId}`,
-        selectedId
-      )
-    } catch (err) {
-      console.error('Failed to persist dataset versions to localStorage:', err)
+    if (currentApiDataset) {
+      // Use API data when available
+      setDataset({
+        id: datasetId,
+        name: currentApiDataset.name,
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: currentApiDataset.files?.length || 0,
+        processedPercent: 100,
+        version: 'v1',
+        description: '',
+        files: currentApiDataset.files,
+      })
+    } else {
+      // Fallback to minimal dataset object
+      setDataset({
+        id: datasetId,
+        name: datasetId,
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: 0,
+        processedPercent: 100,
+        version: 'v1',
+        description: '',
+        files: [],
+      })
     }
-  }
+  }, [datasetId, currentApiDataset])
 
-  const formatRun = (iso: string) => {
-    const d = new Date(iso)
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: '2-digit',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(d)
-  }
-  const lastVersionId =
-    versions.length > 0 ? versions[versions.length - 1].id : 'v1'
-  const selectedVersion = versions.find(v => v.id === selectedVersionId)
-  const selectedCreatedAt =
-    selectedVersion?.createdAt || new Date().toISOString()
-  const isLatestSelected =
-    (selectedVersionId || lastVersionId) === lastVersionId
+  // Handle task completion
+  useEffect(() => {
+    if (!taskStatus) return
+
+    if (taskStatus.state === 'SUCCESS') {
+      // Task completed successfully
+      setCurrentTaskId(null)
+      toast({
+        message: 'Dataset reprocessing completed successfully',
+        variant: 'default',
+      })
+
+      // Create a new version
+      if (datasetId) {
+        const nextNum = (versions.length || 0) + 1
+        const nextId = `v${nextNum}`
+        const next: DatasetVersion = {
+          id: nextId,
+          createdAt: new Date().toISOString(),
+        }
+        const list = [...versions, next]
+        setVersions(list)
+
+        // Update dataset version/lastRun
+        try {
+          const stored = localStorage.getItem('lf_datasets')
+          const arr = stored ? (JSON.parse(stored) as Dataset[]) : []
+          const updated = arr.map(d =>
+            d.id === datasetId
+              ? {
+                  ...d,
+                  version: nextId,
+                  lastRun: new Date().toISOString(),
+                }
+              : d
+          )
+          localStorage.setItem('lf_datasets', JSON.stringify(updated))
+          setDataset(updated.find(d => d.id === datasetId) || null)
+        } catch {}
+      }
+    } else if (taskStatus.state === 'FAILURE') {
+      // Task failed
+      setCurrentTaskId(null)
+      const errorMessage = taskStatus.error || 'Unknown error occurred'
+      toast({
+        message: `Dataset reprocessing failed: ${errorMessage}`,
+        variant: 'destructive',
+      })
+    }
+  }, [taskStatus?.state, taskStatus?.error, datasetId, versions, toast])
 
   const openEdit = () => {
     setEditName(dataset?.name ?? '')
@@ -175,60 +234,156 @@ function DatasetView() {
     setIsEditOpen(true)
   }
 
-  const saveDatasets = (arr: Dataset[]) => {
-    try {
-      localStorage.setItem(
-        'lf_datasets',
-        JSON.stringify(
-          arr.map(d => ({ ...d, lastRun: new Date(d.lastRun).toISOString() }))
-        )
-      )
-    } catch {}
-  }
-
   const handleSaveEdit = () => {
     if (!dataset || !datasetId) return
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      const list = stored ? (JSON.parse(stored) as Dataset[]) : []
-      const updated = list.map(d =>
-        d.id === datasetId
-          ? {
-              ...d,
-              name: editName.trim() || d.name,
-              description: editDescription,
-            }
-          : d
-      )
-      saveDatasets(updated)
-      const current = updated.find(d => d.id === datasetId) || null
-      setDataset(current)
-      setIsEditOpen(false)
-    } catch {}
+    // TODO: Replace with API call to update dataset
+    const updatedDataset = {
+      ...dataset,
+      name: editName.trim() || dataset.name,
+      description: editDescription,
+    }
+    setDataset(updatedDataset)
+    setIsEditOpen(false)
+    console.warn('Dataset edit saved locally - should use API instead')
   }
 
-  const handleDelete = () => {
-    if (!datasetId) return
-    try {
-      const stored = localStorage.getItem('lf_datasets')
-      const list = stored ? (JSON.parse(stored) as Dataset[]) : []
-      const updated = list.filter(d => d.id !== datasetId)
-      saveDatasets(updated)
-      // remove dataset from assignments
-      const storedAssignments = localStorage.getItem('lf_file_assignments')
-      if (storedAssignments) {
-        const assignments: Record<string, string[]> =
-          JSON.parse(storedAssignments)
-        const cleaned: Record<string, string[]> = {}
-        for (const [k, arr] of Object.entries(assignments)) {
-          const next = arr.filter(id => id !== datasetId)
-          if (next.length > 0) cleaned[k] = next
-        }
-        localStorage.setItem('lf_file_assignments', JSON.stringify(cleaned))
-      }
-      navigate('/chat/data')
-    } catch {}
+  const handleDeleteClick = () => {
+    setShowDeleteConfirmation(true)
   }
+
+  const handleConfirmDelete = async () => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId)
+      return
+
+    try {
+      await deleteDatasetMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+      })
+
+      setShowDeleteConfirmation(false)
+      setIsEditOpen(false)
+
+      toast({
+        message: 'Dataset deleted successfully',
+        variant: 'default',
+      })
+
+      // Navigate away since the dataset no longer exists
+      navigate('/chat/data')
+    } catch (error) {
+      console.error('Dataset deletion failed:', error)
+      toast({
+        message: 'Failed to delete dataset. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirmation(false)
+  }
+
+  const handleDeleteFile = (fileHash: string) => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId)
+      return
+    setPendingDeleteFileHash(fileHash)
+    setShowDeleteFileConfirmation(true)
+  }
+
+  const handleConfirmDeleteFile = async () => {
+    if (
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !datasetId ||
+      !pendingDeleteFileHash
+    ) {
+      setShowDeleteFileConfirmation(false)
+      setPendingDeleteFileHash(null)
+      return
+    }
+
+    try {
+      await deleteFileMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+        fileHash: pendingDeleteFileHash,
+        removeFromDisk: true,
+      })
+
+      toast({
+        message: 'File deleted successfully',
+        variant: 'default',
+      })
+    } catch (error) {
+      console.error('File deletion failed:', error)
+      toast({
+        message: 'Failed to delete file. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setShowDeleteFileConfirmation(false)
+      setPendingDeleteFileHash(null)
+    }
+  }
+
+  const handleCancelDeleteFile = () => {
+    setShowDeleteFileConfirmation(false)
+    setPendingDeleteFileHash(null)
+  }
+
+  // Helper function to check if a specific file is being deleted
+  const isFileDeleting = (fileHash: string) => {
+    return (
+      deleteFileMutation.isPending &&
+      deleteFileMutation.variables?.fileHash === fileHash
+    )
+  }
+
+  // Derived RAG strategy info for this dataset
+  const strategyName = useMemo(() => {
+    if (!datasetId) return 'PDF Simple'
+    try {
+      return (
+        localStorage.getItem(`lf_dataset_strategy_name_${datasetId}`) ||
+        'PDF Simple'
+      )
+    } catch {
+      return 'PDF Simple'
+    }
+  }, [datasetId])
+
+  const slugify = (v: string) =>
+    v
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+
+  const strategyId = useMemo(() => slugify(strategyName), [strategyName])
+
+  const docType = useMemo(() => {
+    const id = strategyId
+    if (id.includes('pdf')) return 'PDFs'
+    if (id.includes('csv')) return 'CSVs'
+    if (id.includes('chat')) return 'Conversations'
+    if (id.includes('json')) return 'JSON'
+    return 'Documents'
+  }, [strategyId])
+
+  const embeddingModel = useMemo(() => {
+    try {
+      return (
+        localStorage.getItem(`lf_strategy_embedding_model_${strategyId}`) ||
+        'text-embedding-3-large'
+      )
+    } catch {
+      return 'text-embedding-3-large'
+    }
+  }, [strategyId])
 
   return (
     <div className="h-full w-full flex flex-col gap-3 pb-40">
@@ -267,133 +422,239 @@ function DatasetView() {
           <div className="flex items-center gap-2">
             <Badge variant="secondary" size="sm" className="rounded-xl">
               {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
-              {dataset?.processedPercent ?? 0}% processed •{' '}
-              {selectedVersionId || dataset?.version || 'v1'}
+              {dataset?.processedPercent ?? 0}% processed
             </Badge>
             <Button
               size="sm"
-              onClick={() => {
-                if (!datasetId) return
-                const nextNum = (versions.length || 0) + 1
-                const nextId = `v${nextNum}`
-                const next: DatasetVersion = {
-                  id: nextId,
-                  createdAt: new Date().toISOString(),
-                }
-                const list = [...versions, next]
-                setVersions(list)
-                setSelectedVersionId(nextId)
-                persistVersions(list, nextId)
-                // Also bump dataset version/lastRun
+              onClick={async () => {
+                if (
+                  !datasetId ||
+                  !activeProject?.namespace ||
+                  !activeProject?.project
+                )
+                  return
+
                 try {
-                  const stored = localStorage.getItem('lf_datasets')
-                  const arr = stored ? (JSON.parse(stored) as Dataset[]) : []
-                  const updated = arr.map(d =>
-                    d.id === datasetId
-                      ? {
-                          ...d,
-                          version: nextId,
-                          lastRun: new Date().toISOString(),
-                        }
-                      : d
-                  )
-                  localStorage.setItem('lf_datasets', JSON.stringify(updated))
-                  setDataset(updated.find(d => d.id === datasetId) || null)
-                } catch {}
+                  const result = await reIngestMutation.mutateAsync({
+                    namespace: activeProject.namespace,
+                    project: activeProject.project,
+                    dataset: datasetId,
+                  })
+
+                  // Extract task ID from task_uri (e.g., "http://localhost:8000/v1/projects/ns/proj/tasks/abc-123" -> "abc-123")
+                  const taskId = result.task_uri.split('/').pop()
+                  if (taskId) {
+                    setCurrentTaskId(taskId)
+                    toast({
+                      message: 'Dataset reprocessing started...',
+                      variant: 'default',
+                    })
+                  }
+                } catch (error) {
+                  console.error('Failed to start reprocessing:', error)
+                  toast({
+                    message: 'Failed to start reprocessing. Please try again.',
+                    variant: 'destructive',
+                  })
+                }
               }}
+              disabled={reIngestMutation.isPending || !!currentTaskId}
             >
-              Reprocess
+              {reIngestMutation.isPending
+                ? 'Starting...'
+                : currentTaskId && taskStatus?.state === 'PENDING'
+                  ? 'Processing...'
+                  : 'Reprocess'}
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Version selector */}
-      <section className="rounded-lg border border-border bg-card p-3">
-        <div className="flex items-center gap-3">
-          <div className="text-sm font-medium">Version</div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="h-9 min-w-[480px] px-3 rounded-lg border border-input bg-background text-foreground text-sm flex items-center justify-between">
-                <span className="flex items-center gap-3 truncate">
-                  <span className="font-semibold">
-                    {selectedVersionId || 'v1'}
-                  </span>
-                  <span className="text-muted-foreground truncate">
-                    {formatRun(selectedCreatedAt)}
-                    {isLatestSelected ? ' (latest)' : ''}
-                  </span>
-                </span>
-                <FontIcon type="chevron-down" className="w-4 h-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[560px]">
-              {versions.map(v => {
-                const latest = v.id === lastVersionId
-                return (
-                  <DropdownMenuItem
-                    key={v.id}
-                    onClick={() => {
-                      setSelectedVersionId(v.id)
-                      persistVersions(versions, v.id)
-                    }}
-                    className="flex items-center justify-between"
-                  >
-                    <span className="font-medium">{v.id}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatRun(v.createdAt)}
-                      {latest ? ' (latest)' : ''}
-                    </span>
-                  </DropdownMenuItem>
-                )
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* RAG Strategy card */}
+      <section className="rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium">RAG strategy</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/chat/rag/${strategyId}`)}
+          >
+            Configure
+          </Button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <Badge variant="default" size="sm" className="rounded-xl">
+            {strategyName}
+          </Badge>
+          <Badge variant="secondary" size="sm" className="rounded-xl">
+            Last processed{' '}
+            {dataset?.lastRun
+              ? new Date(dataset.lastRun).toLocaleString()
+              : '—'}
+          </Badge>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Document type</div>
+            <Input value={docType} readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Search</div>
+            <Input value="Hybrid" readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Embedding model</div>
+            <Input value={embeddingModel} readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Chunks</div>
+            <Input
+              value={dataset?.numChunks?.toLocaleString?.() || '—'}
+              readOnly
+              className="bg-background"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Results</div>
+            <Input value="8" readOnly className="bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Avg query time</div>
+            <Input value="180ms" readOnly className="bg-background" />
+          </div>
         </div>
       </section>
 
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+      <Dialog
+        open={isEditOpen}
+        onOpenChange={open => {
+          setIsEditOpen(open)
+          if (!open) {
+            // Reset confirmation state when modal closes
+            setShowDeleteConfirmation(false)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit dataset</DialogTitle>
+            <DialogTitle>
+              {showDeleteConfirmation ? 'Delete Dataset' : 'Edit dataset'}
+            </DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Name</label>
-              <Input
-                autoFocus
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                placeholder="Dataset name"
-              />
+
+          {showDeleteConfirmation ? (
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-red-600">
+                  Confirm Deletion
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Are you sure you want to delete the dataset "{datasetName}"?
+                </p>
+                <p className="mt-1 text-xs text-red-500">
+                  This action cannot be undone. All files and data will be
+                  permanently deleted.
+                </p>
+              </div>
+
+              <div className="flex gap-3 justify-center">
+                <Button
+                  variant="secondary"
+                  onClick={handleCancelDelete}
+                  disabled={deleteDatasetMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteDatasetMutation.isPending}
+                >
+                  {deleteDatasetMutation.isPending ? (
+                    <>
+                      <span className="inline-block animate-spin mr-2">⟳</span>
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Dataset'
+                  )}
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">
-                Description
-              </label>
-              <Textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
-            <div className="flex items-center gap-2">
-              <DialogClose asChild>
-                <Button variant="secondary">Cancel</Button>
-              </DialogClose>
-              <Button onClick={handleSaveEdit} disabled={!editName.trim()}>
-                Save
-              </Button>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">Name</label>
+                  <Input
+                    autoFocus
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    placeholder="Dataset name"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">
+                    Description
+                  </label>
+                  <Textarea
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    placeholder="Optional description"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button variant="destructive" onClick={handleDeleteClick}>
+                  Delete
+                </Button>
+                <div className="flex items-center gap-2">
+                  <DialogClose asChild>
+                    <Button variant="secondary">Cancel</Button>
+                  </DialogClose>
+                  <Button onClick={handleSaveEdit} disabled={!editName.trim()}>
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
+
+      {/* File deletion confirmation modal */}
+      {showDeleteFileConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full mx-4 border border-border">
+            <h3 className="text-lg font-semibold text-red-600 mb-2">
+              Delete File
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              Are you sure you want to delete this file?
+            </p>
+            <p className="text-sm text-muted-foreground mb-6 font-mono bg-muted p-2 rounded">
+              {pendingDeleteFileHash?.substring(0, 20)}...
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCancelDeleteFile}
+                className="px-4 py-2 border border-border rounded hover:bg-muted"
+                disabled={deleteFileMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteFile}
+                disabled={deleteFileMutation.isPending}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteFileMutation.isPending ? 'Deleting...' : 'Delete File'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Processing strategy */}
       <section className="rounded-lg border border-border bg-card p-4">
@@ -462,11 +723,23 @@ function DatasetView() {
           type="file"
           className="hidden"
           multiple
-          onChange={e => {
-            if (!datasetId) return
+          onChange={async e => {
+            if (
+              !datasetId ||
+              !activeProject?.namespace ||
+              !activeProject?.project
+            ) {
+              toast({
+                message: 'Missing required information for upload',
+                variant: 'destructive',
+              })
+              return
+            }
+
             const list = e.target.files ? Array.from(e.target.files) : []
             if (list.length === 0) return
-            // Convert to RawFile shape
+
+            // Convert to RawFile shape for UI
             const converted: RawFile[] = list.map(f => ({
               id: `${f.name}:${f.size}:${f.lastModified}`,
               name: f.name,
@@ -474,46 +747,45 @@ function DatasetView() {
               lastModified: f.lastModified,
               type: f.type,
             }))
+
             try {
+              // Set processing status for UI feedback
               setUploadStatus(prev => ({
                 ...prev,
                 ...Object.fromEntries(
                   converted.map(rf => [rf.id, 'processing' as const])
                 ),
               }))
-              // Persist raw files (dedupe by id)
-              const storedRaw = localStorage.getItem('lf_raw_files')
-              const existing: RawFile[] = storedRaw ? JSON.parse(storedRaw) : []
-              const existingIds = new Set(existing.map(r => r.id))
-              const deduped = converted.filter(r => !existingIds.has(r.id))
-              const updatedRaw = [...existing, ...deduped]
-              localStorage.setItem('lf_raw_files', JSON.stringify(updatedRaw))
 
-              // Assign to this dataset
-              const storedAssign = localStorage.getItem('lf_file_assignments')
-              const assignments: Record<string, string[]> = storedAssign
-                ? JSON.parse(storedAssign)
-                : {}
-              for (const rf of converted) {
-                const arr = assignments[rf.id] ?? []
-                if (!arr.includes(datasetId)) {
-                  assignments[rf.id] = [...arr, datasetId]
+              // Upload each file to the API
+              for (const file of list) {
+                try {
+                  await uploadMutation.mutateAsync({
+                    namespace: activeProject.namespace,
+                    project: activeProject.project,
+                    dataset: datasetId,
+                    file,
+                  })
+                } catch (error) {
+                  console.error(`Failed to upload ${file.name}:`, error)
+                  toast({
+                    message: `Failed to upload ${file.name}`,
+                    variant: 'destructive',
+                  })
+                  // Remove from processing status on error
+                  const fileId = `${file.name}:${file.size}:${file.lastModified}`
+                  setUploadStatus(prev => {
+                    const next = { ...prev }
+                    delete (next as any)[fileId]
+                    return next
+                  })
+                  continue
                 }
               }
-              localStorage.setItem(
-                'lf_file_assignments',
-                JSON.stringify(assignments)
-              )
 
-              // Update local list (only those assigned to this dataset)
-              const nowAssigned = converted.filter(rf =>
-                (assignments[rf.id] ?? []).includes(datasetId)
-              )
-              setFiles(prev => {
-                const seen = new Set(prev.map(p => p.id))
-                const add = nowAssigned.filter(n => !seen.has(n.id))
-                return [...prev, ...add]
-              })
+              // Files will be updated via API refresh after upload completes
+
+              // Show success status
               setTimeout(() => {
                 setUploadStatus(prev => ({
                   ...prev,
@@ -521,6 +793,12 @@ function DatasetView() {
                     converted.map(rf => [rf.id, 'done' as const])
                   ),
                 }))
+                toast({
+                  message: `Successfully uploaded ${list.length} file${list.length > 1 ? 's' : ''}`,
+                  variant: 'default',
+                })
+
+                // Clear status after delay
                 setTimeout(() => {
                   setUploadStatus(prev => {
                     const next = { ...prev }
@@ -528,9 +806,22 @@ function DatasetView() {
                     return next
                   })
                 }, 1500)
-              }, 1500)
-            } catch {}
-            // reset input so same files can be picked again
+              }, 500)
+            } catch (error) {
+              console.error('Upload error:', error)
+              toast({
+                message: 'Failed to upload files',
+                variant: 'destructive',
+              })
+              // Clear processing status on error
+              setUploadStatus(prev => {
+                const next = { ...prev }
+                for (const rf of converted) delete (next as any)[rf.id]
+                return next
+              })
+            }
+
+            // Reset input so same files can be picked again
             e.currentTarget.value = ''
           }}
         />
@@ -547,111 +838,122 @@ function DatasetView() {
           {files.length === 0 ? (
             <div className="p-3 text-muted-foreground">
               No files assigned yet.
+              {/* Debug info */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-2 text-xs">
+                  <div>
+                    API Dataset: {currentApiDataset ? 'Found' : 'Not found'}
+                  </div>
+                  <div>API Files: {currentApiDataset?.files?.length || 0}</div>
+                </div>
+              )}
             </div>
           ) : (
-            <ul>
-              {files
-                .filter(f =>
-                  f.name.toLowerCase().includes(searchValue.toLowerCase())
-                )
-                .map(f => (
-                  <li
-                    key={f.id}
-                    className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
-                  >
-                    <span className="font-mono text-xs text-muted-foreground truncate max-w-[60%]">
-                      {f.name}
-                    </span>
-                    <div className="w-1/2 flex items-center justify-between gap-4">
-                      {/* Size column (middle) */}
-                      <div className="text-xs text-muted-foreground">
-                        {Math.ceil(f.size / 1024)} KB
-                      </div>
-                      {/* Right actions: status + trash */}
-                      <div className="flex items-center gap-6">
-                        {uploadStatus[f.id] === 'processing' && (
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <FontIcon type="fade" className="w-4 h-4" />
-                            <span className="text-xs">Processing</span>
-                          </div>
+            <div>
+              <div className="p-3 border-b border-border/60 bg-muted/20">
+                <div className="text-xs font-medium">
+                  {files.length} file{files.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+              <ul>
+                {files
+                  .filter(f =>
+                    f.name.toLowerCase().includes(searchValue.toLowerCase())
+                  )
+                  .map(f => (
+                    <li
+                      key={f.id}
+                      className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
+                    >
+                      <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
+                        <span>{f.fullHash ? f.name : f.name}</span>
+                        {f.fullHash && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(
+                                    f.fullHash!
+                                  )
+                                  setCopyStatus(prev => ({
+                                    ...prev,
+                                    [f.id]: 'Copied!',
+                                  }))
+                                } catch (err) {
+                                  setCopyStatus(prev => ({
+                                    ...prev,
+                                    [f.id]: 'Failed to copy',
+                                  }))
+                                }
+                                setTimeout(() => {
+                                  setCopyStatus(prev => ({
+                                    ...prev,
+                                    [f.id]: undefined,
+                                  }))
+                                }, 1500)
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800 text-left"
+                              title="Click to copy full hash"
+                            >
+                              Copy full hash
+                            </button>
+                            {copyStatus?.[f.id] && (
+                              <span
+                                className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}
+                              >
+                                {copyStatus[f.id]}
+                              </span>
+                            )}
+                          </>
                         )}
-                        {uploadStatus[f.id] === 'done' && (
-                          <FontIcon
-                            type="checkmark-outline"
-                            className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                          />
-                        )}
-                        <button
-                          className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            setFileToDelete(f)
-                            setIsDeleteOpen(true)
-                          }}
-                          aria-label={`Remove ${f.name} from this dataset`}
-                        >
-                          <FontIcon type="trashcan" className="w-4 h-4" />
-                        </button>
                       </div>
-                    </div>
-                  </li>
-                ))}
-            </ul>
+                      <div className="w-1/2 flex items-center justify-between gap-4">
+                        <div className="text-xs text-muted-foreground">
+                          {f.size === 'unknown' || f.fullHash
+                            ? 'N/A'
+                            : `${Math.ceil(f.size / 1024)} KB`}
+                        </div>
+                        <div className="flex items-center gap-6">
+                          {uploadStatus[f.id] === 'processing' && (
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <FontIcon type="fade" className="w-4 h-4" />
+                              <span className="text-xs">Processing</span>
+                            </div>
+                          )}
+                          {uploadStatus[f.id] === 'done' && (
+                            <FontIcon
+                              type="checkmark-outline"
+                              className="w-4 h-4 text-teal-600 dark:text-teal-400"
+                            />
+                          )}
+                          <button
+                            className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                            onClick={() =>
+                              f.fullHash && handleDeleteFile(f.fullHash)
+                            }
+                            disabled={
+                              f.fullHash ? isFileDeleting(f.fullHash) : true
+                            }
+                            aria-label={`Delete ${f.name} from dataset`}
+                            title="Delete file"
+                          >
+                            {f.fullHash && isFileDeleting(f.fullHash) ? (
+                              <span className="text-xs">...</span>
+                            ) : (
+                              <FontIcon type="trashcan" className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
           )}
         </div>
       </section>
 
-      {/* Delete from dataset dialog */}
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove file from this dataset</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm">
-            <div className="mb-2 text-muted-foreground">
-              This will remove the file from this dataset only. It will remain
-              available in the project.
-            </div>
-            <div className="font-mono text-xs break-all">
-              {fileToDelete?.name}
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!fileToDelete || !datasetId) return
-                // remove assignment only
-                try {
-                  const stored = localStorage.getItem('lf_file_assignments')
-                  const assignments: Record<string, string[]> = stored
-                    ? JSON.parse(stored)
-                    : {}
-                  const arr = assignments[fileToDelete.id] ?? []
-                  assignments[fileToDelete.id] = arr.filter(
-                    id => id !== datasetId
-                  )
-                  localStorage.setItem(
-                    'lf_file_assignments',
-                    JSON.stringify(assignments)
-                  )
-                } catch {}
-                setFiles(prev => prev.filter(x => x.id !== fileToDelete.id))
-                setIsDeleteOpen(false)
-                setFileToDelete(null)
-                toast({
-                  message: 'File removed from dataset',
-                  variant: 'default',
-                })
-              }}
-            >
-              Yes, remove
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* File deletion now handled directly via API calls with confirmation dialog */}
     </div>
   )
 }

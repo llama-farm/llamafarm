@@ -23,7 +23,7 @@ const Prompt = () => {
   }
 
   return (
-    <div className="h-full w-full flex flex-col gap-2">
+    <div className="h-full w-full flex flex-col gap-2 pb-32">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl ">
           {mode === 'designer' ? 'Prompt' : 'Config editor'}

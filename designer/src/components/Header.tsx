@@ -10,7 +10,10 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu'
 import { useProjects } from '../hooks/useProjects'
-import { setActiveProject as setActiveProjectUtil, getActiveProject } from '../utils/projectUtils'
+import {
+  setActiveProject as setActiveProjectUtil,
+  getActiveProject,
+} from '../utils/projectUtils'
 import { getCurrentNamespace } from '../utils/namespaceUtils'
 import { getProjectsList } from '../utils/projectConstants'
 
@@ -25,10 +28,10 @@ function Header() {
   const [isProjectOpen, setIsProjectOpen] = useState(false)
   const [activeProject, setActiveProject] = useState<string>(getActiveProject)
   const namespace = getCurrentNamespace()
-  
+
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
-  
+
   // Convert API projects to project names for dropdown with fallback
   const projects = useMemo(() => {
     return getProjectsList(projectsResponse)
@@ -234,6 +237,17 @@ function Header() {
               </button>
               <button
                 className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                  isSelected === 'rag'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => navigate('/chat/rag')}
+              >
+                <FontIcon type="rag" className="w-6 h-6" />
+                <span>RAG</span>
+              </button>
+              <button
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
                   isSelected === 'prompt'
                     ? 'bg-primary text-primary-foreground'
                     : 'text-foreground hover:bg-secondary/80'
@@ -284,7 +298,6 @@ function Header() {
                 <FontIcon type="moon-filled" className="w-4 h-4" />
               </button>
             </div>
-            <FontIcon type="user-avatar" className="w-6 h-6 text-foreground" />
           </div>
         </div>
       </div>
