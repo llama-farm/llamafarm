@@ -106,18 +106,18 @@ func startLocalServerViaDocker(serverURL string) error {
 
 	fmt.Fprintln(os.Stderr, "Starting local LlamaFarm server via Docker...")
 
-	// // Try to start existing stopped container first
-	// if containerExists(containerName) {
-	// 	startCmd := exec.Command("docker", "start", containerName)
-	// 	startCmd.Stdout = os.Stdout
-	// 	startCmd.Stderr = os.Stderr
-	// 	if err := startCmd.Run(); err == nil {
-	// 		return nil
-	// 	}
-	// }
+	// Try to start existing stopped container first
+	if containerExists(containerName) {
+		startCmd := exec.Command("docker", "start", containerName)
+		startCmd.Stdout = os.Stdout
+		startCmd.Stderr = os.Stderr
+		if err := startCmd.Run(); err == nil {
+			return nil
+		}
+	}
 
-	// // Pull latest image (best effort)
-	// _ = pullImage(image)
+	// Pull latest image (best effort)
+	_ = pullImage(image)
 
 	// Run new container
 	runArgs := []string{
