@@ -99,9 +99,7 @@ def create_streaming_response(
             "object": "chat.completion.chunk",
             "created": created_ts,
             "model": request.model,
-            "choices": [
-                {"index": 0, "delta": {}, "finish_reason": "stop"}
-            ],
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
         }
         yield f"data: {json.dumps(done_payload)}\n\n".encode()
         await asyncio.sleep(0)
@@ -142,41 +140,25 @@ def create_streaming_response_from_iterator(
         await asyncio.sleep(0)
 
         async for piece in stream_source:
-                if not piece:
-                    continue
-                payload = {
-                    "id": f"chat-{uuid.uuid4()}",
-                    "object": "chat.completion.chunk",
-                    "created": created_ts,
-                    "model": request.model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"content": str(piece)},
-                            "finish_reason": None,
-                        }
-                    ],
-                }
-                yield f"data: {json.dumps(payload)}\n\n".encode()
-                # Sleep(0) yields control back to event loop, preventing blocking
-                # This allows other coroutines to run between stream chunks
-                await asyncio.sleep(0)
-
-                payload = {
-                    "id": f"chat-{uuid.uuid4()}",
-                    "object": "chat.completion.chunk",
-                    "created": created_ts,
-                    "model": request.model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"content": str(piece)},
-                            "finish_reason": None,
-                        }
-                    ],
-                }
-                yield f"data: {json.dumps(payload)}\n\n".encode()
-                await asyncio.sleep(0)
+            if not piece:
+                continue
+            payload = {
+                "id": f"chat-{uuid.uuid4()}",
+                "object": "chat.completion.chunk",
+                "created": created_ts,
+                "model": request.model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": str(piece)},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            yield f"data: {json.dumps(payload)}\n\n".encode()
+            # Sleep(0) yields control back to event loop, preventing blocking
+            # This allows other coroutines to run between stream chunks
+            await asyncio.sleep(0)
 
         done_payload = {
             "id": f"chat-{uuid.uuid4()}",

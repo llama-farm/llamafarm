@@ -7,9 +7,6 @@ required:
   - version
   - name
   - namespace
-  - prompts
-  - rag
-  - datasets
   - runtime
 properties:
   version:

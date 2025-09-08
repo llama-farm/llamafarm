@@ -11,7 +11,7 @@ import (
 )
 
 var debug bool
-var serverURL string
+var serverURL string = "http://localhost:8000"
 var serverStartTimeout time.Duration
 var overrideCwd string
 
@@ -43,20 +43,30 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
 	rootCmd.PersistentFlags().DurationVar(&serverStartTimeout, "server-start-timeout", 45*time.Second, "How long to wait for local server to become ready when auto-starting (e.g. 45s, 1m)")
 	rootCmd.PersistentFlags().StringVar(&overrideCwd, "cwd", "", "Override the current working directory for CLI operations")
+
+	if debug {
+		InitDebugLogger("")
+	}
 }
 
 // getEffectiveCWD returns the directory to treat as the working directory.
 // If the global --cwd flag is provided, it returns its absolute path; otherwise os.Getwd().
-func getEffectiveCWD() (string, error) {
+func getEffectiveCWD() string {
 	if strings.TrimSpace(overrideCwd) != "" {
 		if filepath.IsAbs(overrideCwd) {
-			return overrideCwd, nil
+			return overrideCwd
 		}
 		abs, err := filepath.Abs(overrideCwd)
 		if err != nil {
-			return "", err
+			return "."
 		}
-		return abs, nil
+		return abs
 	}
-	return os.Getwd()
+
+	wd, _ := os.Getwd()
+	if wd == "" {
+		return "."
+	}
+
+	return wd
 }

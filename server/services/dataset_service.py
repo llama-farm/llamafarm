@@ -160,7 +160,7 @@ class DatasetService:
         Remove a file from a dataset
         """
         project_config = ProjectService.load_config(namespace, project)
-        existing_datasets = project_config.datasets
+        existing_datasets = project_config.datasets or []
         dataset_to_update = next(
             (ds for ds in existing_datasets if ds.name == dataset),
             None,

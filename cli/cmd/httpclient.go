@@ -19,7 +19,7 @@ type DefaultHTTPClient struct{}
 
 // Do implements the HTTPClient interface
 func (c *DefaultHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	return client.Do(req)
 }
 
