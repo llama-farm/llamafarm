@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ModeToggle, { Mode } from '../ModeToggle'
-import ConfigEditor from '../ConfigEditor'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 // Dropdown menu no longer used here
 import {
   Dialog,

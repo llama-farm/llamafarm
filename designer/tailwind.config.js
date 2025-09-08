@@ -108,5 +108,66 @@ export default {
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [
+    require('tailwindcss-animate'),
+    // Custom scrollbar utilities plugin
+    function({ addUtilities, theme }) {
+      const scrollbarUtilities = {
+        // Thin scrollbar for general use
+        '.scrollbar-thin': {
+          'scrollbar-width': 'thin',
+          'scrollbar-color': 'hsl(var(--border)) hsl(var(--muted))',
+          '&::-webkit-scrollbar': {
+            width: '6px',
+            height: '6px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            'background-color': 'rgba(100, 100, 100, 0.5)',
+            'border-radius': '6px',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            'background-color': 'rgba(100, 100, 100, 0.7)',
+          },
+        },
+        // Custom scrollbar for editors
+        '.scrollbar-custom': {
+          'scrollbar-width': 'thin',
+          'scrollbar-color': 'hsl(var(--border)) hsl(var(--muted))',
+          '&::-webkit-scrollbar': {
+            width: '12px',
+          },
+          '&::-webkit-scrollbar-track': {
+            'background-color': 'hsl(var(--muted))',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            'background-color': 'hsl(var(--border))',
+            'border-radius': '6px',
+            border: '2px solid hsl(var(--muted))',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            'background-color': 'hsl(var(--muted-foreground) / 0.3)',
+          },
+        },
+        // Dark mode specific scrollbar
+        '.dark .scrollbar-custom': {
+          'scrollbar-color': '#3e4451 #1c2028',
+          '&::-webkit-scrollbar-track': {
+            background: '#1c2028',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#3e4451',
+            border: '2px solid #1c2028',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            background: '#5c6370',
+          },
+        },
+      }
+      
+      addUtilities(scrollbarUtilities)
+    }
+  ],
 }

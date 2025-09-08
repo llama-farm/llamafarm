@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import FontIcon from '../common/FontIcon'
 import ModeToggle, { Mode } from './ModeToggle'
-import ConfigEditor from './ConfigEditor'
+import ConfigEditor from './ConfigEditor/ConfigEditor'
 
 interface TestCase {
   id: number

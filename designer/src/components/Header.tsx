@@ -68,6 +68,20 @@ function Header() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
+  // Synchronize animation with query loading state
+  useEffect(() => {
+    if (!isSwitching) return
+
+    const currentProjectKey = projectKeys.detail(namespace, activeProject)
+    const isLoading = queryClient.isFetching({ queryKey: currentProjectKey }) > 0
+    
+    if (!isLoading) {
+      // End animation when data is loaded
+      const timer = setTimeout(() => setIsSwitching(false), 100) // Small delay for smoother transition
+      return () => clearTimeout(timer)
+    }
+  }, [queryClient, namespace, activeProject, isSwitching])
+
   // (removed unused persistProjects and handleCreateProject)
 
   const handleSelectProject = (name: string) => {
@@ -82,9 +96,8 @@ function Header() {
       setActiveProject(name)
       setActiveProjectUtil(name)
       
-      // Show switching animation
+      // Show switching animation - will be ended by useEffect when loading completes
       setIsSwitching(true)
-      setTimeout(() => setIsSwitching(false), 900)
     }
     
     setIsProjectOpen(false)

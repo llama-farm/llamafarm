@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import ModeToggle, { Mode } from '../ModeToggle'
-import ConfigEditor from '../ConfigEditor'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import GeneratedOutputs from './GeneratedOutput/GeneratedOutputs'
 
 const Prompt = () => {

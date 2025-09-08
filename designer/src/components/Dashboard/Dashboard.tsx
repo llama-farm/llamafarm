@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import ModeToggle, { Mode } from '../ModeToggle'
 import DataCards from './DataCards'
 import ProjectModal from '../../components/Project/ProjectModal'  
-import ConfigEditor from '../ConfigEditor'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useProjectModal } from '../../hooks/useProjectModal'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
 
