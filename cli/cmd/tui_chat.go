@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	farmerPrompt  = "🌾 Farmer:"
-	serverPrompt  = "📡 Server:"
-	projectPrompt = "📁 Project:"
-	sessionPrompt = "🆔 Session:"
+	farmerPrompt     = "🌾 Farmer:"
+	serverPrompt     = "📡 Server:"
+	ollamaHostPrompt = "🐏 Ollama:"
+	projectPrompt    = "📁 Project:"
+	sessionPrompt    = "🆔 Session:"
 )
 
 var chatCtx = &ChatSessionContext{
@@ -303,6 +304,10 @@ func (m chatModel) View() string {
 	serverLine := serverPrompt + " " + serverURL
 	wrappedServer := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(serverLine)
 	b.WriteString(wrappedServer + "\n")
+
+	ollamaHostLine := ollamaHostPrompt + " " + ollamaHost
+	wrappedOllamaHost := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(ollamaHostLine)
+	b.WriteString(wrappedOllamaHost + "\n")
 
 	projectLine := projectPrompt + " " + m.projectInfo.Namespace + "/" + m.projectInfo.Project
 	wrappedProject := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(projectLine)

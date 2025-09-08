@@ -38,11 +38,6 @@ var devCmd = &cobra.Command{
 			}
 		}
 
-		if err := ensureInferenceRuntimeAvailable(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error ensuring inference runtime availability: %v\n", err)
-			os.Exit(1)
-		}
-
 		if err := ensureServerAvailable(serverURL); err != nil {
 			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
 		}
