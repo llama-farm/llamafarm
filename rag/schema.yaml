@@ -197,41 +197,35 @@ definitions:
         enum:
           # Tool-specific parsers from registry
           - PDFParser_PyPDF2
+          - PDFParser_LlamaIndex
           - CSVParser_Pandas
           - CSVParser_Python
+          - CSVParser_LlamaIndex
           - ExcelParser_OpenPyXL
           - ExcelParser_Pandas
+          - ExcelParser_LlamaIndex
           - DocxParser_PythonDocx
+          - DocxParser_LlamaIndex
           - MarkdownParser_Python
+          - MarkdownParser_LlamaIndex
           - TextParser_Python
           - TextParser_LlamaIndex
-          # Legacy parsers for backward compatibility
-          - DirectoryParser
-          - CSVParser
-          - PDFParser
-          - MarkdownParser
-          - HTMLParser
-          - DocxParser
-          - ExcelParser
-          - PlainTextParser
-          - SmartRouter
-          - LlamaIndexTextParser
-          - LlamaIndexPDFParser
-          - LlamaIndexCSVExcelParser
-          - LlamaIndexDocxParser
-          - LlamaIndexMarkdownParser
-          - LlamaIndexWebParser
       config:
         type: object
         oneOf:
           # Tool-specific parser configurations
           - $ref: "#/definitions/parsers/pdfParserPyPDF2Config"
+          - $ref: "#/definitions/parsers/pdfParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/csvParserPandasConfig"
           - $ref: "#/definitions/parsers/csvParserPythonConfig"
+          - $ref: "#/definitions/parsers/csvParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/excelParserOpenPyXLConfig"
           - $ref: "#/definitions/parsers/excelParserPandasConfig"
+          - $ref: "#/definitions/parsers/excelParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/docxParserPythonDocxConfig"
+          - $ref: "#/definitions/parsers/docxParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/markdownParserPythonConfig"
+          - $ref: "#/definitions/parsers/markdownParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/textParserPythonConfig"
           - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
           # Legacy parser configurations
@@ -600,6 +594,228 @@ definitions:
           type: boolean
           default: true
           description: Include relationships between chunks for better context
+
+    pdfParserLlamaIndexConfig:
+      type: object
+      title: PDF Parser (LlamaIndex) Configuration
+      description: Advanced PDF parser using LlamaIndex with multiple fallback strategies
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [sentences, paragraphs, pages, semantic]
+          default: sentences
+          description: Chunking strategy for PDF content
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract PDF metadata
+        extract_images:
+          type: boolean
+          default: false
+          description: Extract images from PDF
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract tables from PDF
+        fallback_strategies:
+          type: array
+          items:
+            type: string
+            enum: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
+          default: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
+          description: Fallback strategies to try in order
+
+    csvParserLlamaIndexConfig:
+      type: object
+      title: CSV Parser (LlamaIndex) Configuration
+      description: CSV parser using LlamaIndex with Pandas backend for advanced processing
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Number of rows per chunk
+        chunk_strategy:
+          type: string
+          enum: [rows, semantic, full]
+          default: rows
+          description: Chunking strategy
+        field_mapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map CSV columns to standard fields
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract metadata from CSV
+        combine_fields:
+          type: boolean
+          default: true
+          description: Combine fields into text content
+        skiprows:
+          type: integer
+          minimum: 0
+          description: Number of rows to skip at beginning
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as missing
+
+    excelParserLlamaIndexConfig:
+      type: object
+      title: Excel Parser (LlamaIndex) Configuration
+      description: Excel parser using LlamaIndex with Pandas backend for advanced processing
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Number of rows per chunk
+        chunk_strategy:
+          type: string
+          enum: [rows, semantic, full]
+          default: rows
+          description: Chunking strategy
+        sheets:
+          type: ["array", "null"]
+          items:
+            type: string
+          description: Specific sheets to parse (null for all)
+        combine_sheets:
+          type: boolean
+          default: false
+          description: Combine all sheets into one document
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract metadata from Excel
+        extract_formulas:
+          type: boolean
+          default: false
+          description: Extract formulas instead of values
+        header_row:
+          type: integer
+          default: 0
+          minimum: 0
+          description: Row index for headers
+        skiprows:
+          type: integer
+          minimum: 0
+          description: Number of rows to skip
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as missing
+
+    docxParserLlamaIndexConfig:
+      type: object
+      title: DOCX Parser (LlamaIndex) Configuration
+      description: Advanced DOCX parser using LlamaIndex with enhanced chunking
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [paragraphs, sentences, semantic]
+          default: paragraphs
+          description: Chunking strategy
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract document metadata
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract tables from document
+        extract_images:
+          type: boolean
+          default: false
+          description: Extract images from document
+        preserve_formatting:
+          type: boolean
+          default: true
+          description: Preserve text formatting
+        include_header_footer:
+          type: boolean
+          default: false
+          description: Include header and footer content
+
+    markdownParserLlamaIndexConfig:
+      type: object
+      title: Markdown Parser (LlamaIndex) Configuration
+      description: Advanced markdown parser using LlamaIndex with semantic chunking
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [headings, paragraphs, sentences, semantic]
+          default: headings
+          description: Chunking strategy for markdown
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract frontmatter metadata
+        extract_code_blocks:
+          type: boolean
+          default: true
+          description: Extract code blocks separately
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract markdown tables
+        extract_links:
+          type: boolean
+          default: true
+          description: Extract links and references
+        preserve_structure:
+          type: boolean
+          default: true
+          description: Preserve heading hierarchy
 
     directoryParserConfig:
       type: object
@@ -2032,10 +2248,14 @@ definitions:
         enum:
           - OllamaEmbedder
           - HuggingFaceEmbedder
+          - OpenAIEmbedder
+          - SentenceTransformerEmbedder
       config:
         oneOf:
           - $ref: "#/definitions/embedders/ollamaEmbedderConfig"
           - $ref: "#/definitions/embedders/huggingfaceEmbedderConfig"
+          - $ref: "#/definitions/embedders/openaiEmbedderConfig"
+          - $ref: "#/definitions/embedders/sentenceTransformerConfig"
   embedders:
     ollamaEmbedderConfig:
       type: object
@@ -2114,6 +2334,47 @@ definitions:
             - "null"
           default: null
           description: Model cache directory
+    openaiEmbedderConfig:
+      type: object
+      title: OpenAI Embedder Configuration
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+          default: text-embedding-3-small
+          description: OpenAI embedding model
+        api_key:
+          type: string
+          description: OpenAI API key
+        base_url:
+          type:
+            - string
+            - "null"
+          default: null
+          description: OpenAI API base URL
+        organization:
+          type:
+            - string
+            - "null"
+          default: null
+          description: OpenAI organization ID
+        batch_size:
+          type: integer
+          default: 100
+          minimum: 1
+          maximum: 2048
+          description: Batch size for API calls
+        max_retries:
+          type: integer
+          default: 3
+          minimum: 0
+          maximum: 10
+          description: Maximum retry attempts
+        timeout:
+          type: integer
+          default: 60
+          minimum: 10
+          description: Request timeout in seconds
     sentenceTransformerConfig:
       type: object
       title: Sentence Transformer Configuration

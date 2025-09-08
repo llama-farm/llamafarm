@@ -15,7 +15,7 @@ support_ticket_management:
   
   components:
     parser:
-      type: "CSVParser"                # Most ticketing systems export CSV
+      type: "CSVParser_Pandas"                # Most ticketing systems export CSV
       config:
         delimiter: ","
         has_header: true
@@ -131,7 +131,7 @@ support_knowledge_base:
   
   components:
     parser:
-      type: "MarkdownParser"          # KB articles often in Markdown
+      type: "MarkdownParser_Python"          # KB articles often in Markdown
       config:
         preserve_formatting: true
         extract_code_blocks: true     # For technical instructions
@@ -225,7 +225,7 @@ live_chat_conversations:
   
   components:
     parser:
-      type: "ConversationParser"      # Specialized for chat format
+      type: "TextParser_Python"      # Specialized for chat format
       config:
         formats: ["json", "xml", "text"]
         preserve_speakers: true       # Keep agent/customer labels
@@ -307,7 +307,7 @@ product_documentation:
   
   components:
     parser:
-      type: "TechnicalDocParser"      # Handles multiple tech doc formats
+      type: "TextParser_Python"      # Handles multiple tech doc formats
       config:
         formats: ["markdown", "rst", "html"]
         extract_code_blocks: true
@@ -388,7 +388,7 @@ customer_feedback_analysis:
   
   components:
     parser:
-      type: "MultiSourceParser"       # Handle various feedback sources
+      type: "TextParser_Python"       # Handle various feedback sources
       config:
         sources:
           - "surveys"                 # NPS, CSAT surveys

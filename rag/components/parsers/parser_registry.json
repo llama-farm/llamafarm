@@ -40,6 +40,58 @@
       "parser_type": "markdown",
       "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/markdown"
     },
+    "MarkdownParser_LlamaIndex": {
+      "name": "MarkdownParser_LlamaIndex",
+      "display_name": "Markdown Parser (LlamaIndex)",
+      "tool": "LlamaIndex",
+      "version": "1.0.0",
+      "description": "Advanced markdown parser using LlamaIndex with semantic chunking",
+      "supported_extensions": [
+        ".md",
+        ".markdown",
+        ".mdown",
+        ".mkd",
+        ".mdx"
+      ],
+      "mime_types": [
+        "text/markdown",
+        "text/x-markdown",
+        "text/mdx"
+      ],
+      "capabilities": [
+        "text_extraction",
+        "semantic_chunking",
+        "heading_based_splitting",
+        "metadata_extraction",
+        "header_hierarchy",
+        "code_block_extraction",
+        "link_extraction",
+        "frontmatter_parsing",
+        "preserve_structure"
+      ],
+      "dependencies": {
+        "required": [
+          "llama-index",
+          "llama-index-readers-file"
+        ],
+        "optional": [
+          "markdown",
+          "markdown2"
+        ]
+      },
+      "default_config": {
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "headings",
+        "extract_metadata": true,
+        "extract_headings": true,
+        "extract_links": true,
+        "extract_code_blocks": true,
+        "preserve_formatting": false
+      },
+      "parser_type": "markdown",
+      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/markdown"
+    },
     "ExcelParser_OpenPyXL": {
       "name": "ExcelParser_OpenPyXL",
       "display_name": "Excel Parser (OpenPyXL)",
@@ -128,6 +180,64 @@
       "parser_type": "excel",
       "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/excel"
     },
+    "ExcelParser_LlamaIndex": {
+      "name": "ExcelParser_LlamaIndex",
+      "display_name": "Excel Parser (LlamaIndex)",
+      "tool": "LlamaIndex-Pandas",
+      "version": "1.0.0",
+      "description": "Excel parser using LlamaIndex with Pandas backend for advanced processing",
+      "supported_extensions": [
+        ".xlsx",
+        ".xls",
+        ".xlsm"
+      ],
+      "mime_types": [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-excel.sheet.macroEnabled.12"
+      ],
+      "capabilities": [
+        "text_extraction",
+        "semantic_chunking",
+        "metadata_extraction",
+        "statistics",
+        "multi_sheet_processing",
+        "sheet_combination",
+        "formula_extraction",
+        "data_transformation"
+      ],
+      "dependencies": {
+        "required": [
+          "llama-index",
+          "llama-index-readers-file",
+          "pandas",
+          "openpyxl"
+        ],
+        "optional": [
+          "xlrd",
+          "tabulate"
+        ]
+      },
+      "default_config": {
+        "chunk_size": 1000,
+        "chunk_strategy": "rows",
+        "sheets": null,
+        "combine_sheets": false,
+        "extract_metadata": true,
+        "extract_formulas": false,
+        "header_row": 0,
+        "skiprows": null,
+        "na_values": [
+          "",
+          "NA",
+          "N/A",
+          "null",
+          "None"
+        ]
+      },
+      "parser_type": "excel",
+      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/excel"
+    },
     "PDFParser_PyPDF2": {
       "name": "PDFParser_PyPDF2",
       "display_name": "PDF Parser (PyPDF2)",
@@ -175,6 +285,60 @@
         "extract_images": false,
         "extract_xmp_metadata": false,
         "clean_text": true
+      },
+      "parser_type": "pdf",
+      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/pdf"
+    },
+    "PDFParser_LlamaIndex": {
+      "name": "PDFParser_LlamaIndex",
+      "display_name": "PDF Parser (LlamaIndex)",
+      "tool": "LlamaIndex",
+      "version": "1.0.0",
+      "description": "Advanced PDF parser using LlamaIndex with multiple fallback strategies",
+      "supported_extensions": [
+        ".pdf"
+      ],
+      "mime_types": [
+        "application/pdf",
+        "application/x-pdf"
+      ],
+      "capabilities": [
+        "text_extraction",
+        "semantic_chunking",
+        "metadata_extraction",
+        "page_aware_splitting",
+        "table_extraction",
+        "image_extraction",
+        "fallback_strategies",
+        "ocr_support"
+      ],
+      "dependencies": {
+        "required": [
+          "llama-index",
+          "llama-index-readers-file"
+        ],
+        "optional": [
+          "PyMuPDF",
+          "fitz",
+          "PyPDF2",
+          "pdfplumber",
+          "camelot-py"
+        ]
+      },
+      "default_config": {
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "characters",
+        "extract_metadata": true,
+        "extract_images": false,
+        "extract_tables": false,
+        "preserve_layout": false,
+        "fallback_strategies": [
+          "llama_pdf_reader",
+          "llama_pymupdf_reader",
+          "direct_pymupdf",
+          "pypdf2_fallback"
+        ]
       },
       "parser_type": "pdf",
       "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/pdf"
@@ -255,6 +419,62 @@
         "encoding": "utf-8",
         "delimiter": ",",
         "quotechar": "\""
+      },
+      "parser_type": "csv",
+      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/csv"
+    },
+    "CSVParser_LlamaIndex": {
+      "name": "CSVParser_LlamaIndex",
+      "display_name": "CSV Parser (LlamaIndex)",
+      "tool": "LlamaIndex-Pandas",
+      "version": "1.0.0",
+      "description": "CSV parser using LlamaIndex with Pandas backend for advanced processing",
+      "supported_extensions": [
+        ".csv",
+        ".tsv"
+      ],
+      "mime_types": [
+        "text/csv",
+        "text/tab-separated-values",
+        "application/csv"
+      ],
+      "capabilities": [
+        "text_extraction",
+        "semantic_chunking",
+        "metadata_extraction",
+        "field_mapping",
+        "row_based_processing",
+        "column_based_processing",
+        "statistics",
+        "data_transformation"
+      ],
+      "dependencies": {
+        "required": [
+          "llama-index",
+          "llama-index-readers-file",
+          "pandas"
+        ],
+        "optional": [
+          "numpy"
+        ]
+      },
+      "default_config": {
+        "chunk_size": 1000,
+        "chunk_strategy": "rows",
+        "content_fields": null,
+        "metadata_fields": [],
+        "id_field": null,
+        "combine_content": true,
+        "content_separator": "\n\n",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "na_values": [
+          "",
+          "NA",
+          "N/A",
+          "null",
+          "None"
+        ]
       },
       "parser_type": "csv",
       "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/csv"
@@ -459,6 +679,52 @@
       },
       "parser_type": "docx",
       "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/docx"
+    },
+    "DocxParser_LlamaIndex": {
+      "name": "DocxParser_LlamaIndex",
+      "display_name": "DOCX Parser (LlamaIndex)",
+      "tool": "LlamaIndex",
+      "version": "1.0.0",
+      "description": "Advanced DOCX parser using LlamaIndex with enhanced chunking",
+      "supported_extensions": [
+        ".docx",
+        ".docm"
+      ],
+      "mime_types": [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-word.document.macroEnabled.12"
+      ],
+      "capabilities": [
+        "text_extraction",
+        "semantic_chunking",
+        "paragraph_aware_splitting",
+        "metadata_extraction",
+        "table_extraction",
+        "style_preservation",
+        "section_detection"
+      ],
+      "dependencies": {
+        "required": [
+          "llama-index",
+          "llama-index-readers-file"
+        ],
+        "optional": [
+          "python-docx"
+        ]
+      },
+      "default_config": {
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "paragraphs",
+        "extract_metadata": true,
+        "extract_tables": true,
+        "extract_headers_footers": false,
+        "extract_comments": false,
+        "extract_images": false,
+        "preserve_formatting": false
+      },
+      "parser_type": "docx",
+      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/docx"
     }
   },
   "file_extensions": {
@@ -467,12 +733,22 @@
         "parser": "MarkdownParser_Python",
         "tool": "Python",
         "priority": 0
+      },
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex",
+        "priority": 0
       }
     ],
     ".markdown": [
       {
         "parser": "MarkdownParser_Python",
         "tool": "Python",
+        "priority": 0
+      },
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex",
         "priority": 0
       }
     ],
@@ -481,12 +757,29 @@
         "parser": "MarkdownParser_Python",
         "tool": "Python",
         "priority": 0
+      },
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex",
+        "priority": 0
       }
     ],
     ".mkd": [
       {
         "parser": "MarkdownParser_Python",
         "tool": "Python",
+        "priority": 0
+      },
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex",
+        "priority": 0
+      }
+    ],
+    ".mdx": [
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex",
         "priority": 0
       }
     ],
@@ -500,6 +793,11 @@
         "parser": "ExcelParser_Pandas",
         "tool": "Pandas",
         "priority": 0
+      },
+      {
+        "parser": "ExcelParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas",
+        "priority": 0
       }
     ],
     ".xlsm": [
@@ -511,6 +809,11 @@
       {
         "parser": "ExcelParser_Pandas",
         "tool": "Pandas",
+        "priority": 0
+      },
+      {
+        "parser": "ExcelParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas",
         "priority": 0
       }
     ],
@@ -533,12 +836,22 @@
         "parser": "ExcelParser_Pandas",
         "tool": "Pandas",
         "priority": 0
+      },
+      {
+        "parser": "ExcelParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas",
+        "priority": 0
       }
     ],
     ".pdf": [
       {
         "parser": "PDFParser_PyPDF2",
         "tool": "PyPDF2",
+        "priority": 0
+      },
+      {
+        "parser": "PDFParser_LlamaIndex",
+        "tool": "LlamaIndex",
         "priority": 0
       }
     ],
@@ -552,6 +865,11 @@
         "parser": "CSVParser_Python",
         "tool": "Python csv",
         "priority": 0
+      },
+      {
+        "parser": "CSVParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas",
+        "priority": 0
       }
     ],
     ".tsv": [
@@ -563,6 +881,11 @@
       {
         "parser": "CSVParser_Python",
         "tool": "Python csv",
+        "priority": 0
+      },
+      {
+        "parser": "CSVParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas",
         "priority": 0
       }
     ],
@@ -898,12 +1221,22 @@
         "parser": "DocxParser_PythonDocx",
         "tool": "python-docx",
         "priority": 0
+      },
+      {
+        "parser": "DocxParser_LlamaIndex",
+        "tool": "LlamaIndex",
+        "priority": 0
       }
     ],
     ".docm": [
       {
         "parser": "DocxParser_PythonDocx",
         "tool": "python-docx",
+        "priority": 0
+      },
+      {
+        "parser": "DocxParser_LlamaIndex",
+        "tool": "LlamaIndex",
         "priority": 0
       }
     ]
@@ -913,12 +1246,26 @@
       {
         "parser": "MarkdownParser_Python",
         "tool": "Python"
+      },
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex"
       }
     ],
     "text/x-markdown": [
       {
         "parser": "MarkdownParser_Python",
         "tool": "Python"
+      },
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex"
+      }
+    ],
+    "text/mdx": [
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "tool": "LlamaIndex"
       }
     ],
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
@@ -929,30 +1276,50 @@
       {
         "parser": "ExcelParser_Pandas",
         "tool": "Pandas"
+      },
+      {
+        "parser": "ExcelParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas"
       }
     ],
     "application/vnd.ms-excel.sheet.macroEnabled.12": [
       {
         "parser": "ExcelParser_OpenPyXL",
         "tool": "OpenPyXL"
+      },
+      {
+        "parser": "ExcelParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas"
       }
     ],
     "application/vnd.ms-excel": [
       {
         "parser": "ExcelParser_Pandas",
         "tool": "Pandas"
+      },
+      {
+        "parser": "ExcelParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas"
       }
     ],
     "application/pdf": [
       {
         "parser": "PDFParser_PyPDF2",
         "tool": "PyPDF2"
+      },
+      {
+        "parser": "PDFParser_LlamaIndex",
+        "tool": "LlamaIndex"
       }
     ],
     "application/x-pdf": [
       {
         "parser": "PDFParser_PyPDF2",
         "tool": "PyPDF2"
+      },
+      {
+        "parser": "PDFParser_LlamaIndex",
+        "tool": "LlamaIndex"
       }
     ],
     "text/csv": [
@@ -963,6 +1330,10 @@
       {
         "parser": "CSVParser_Python",
         "tool": "Python csv"
+      },
+      {
+        "parser": "CSVParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas"
       }
     ],
     "text/tab-separated-values": [
@@ -973,12 +1344,20 @@
       {
         "parser": "CSVParser_Python",
         "tool": "Python csv"
+      },
+      {
+        "parser": "CSVParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas"
       }
     ],
     "application/csv": [
       {
         "parser": "CSVParser_Pandas",
         "tool": "Pandas"
+      },
+      {
+        "parser": "CSVParser_LlamaIndex",
+        "tool": "LlamaIndex-Pandas"
       }
     ],
     "text/plain": [
@@ -1101,12 +1480,20 @@
       {
         "parser": "DocxParser_PythonDocx",
         "tool": "python-docx"
+      },
+      {
+        "parser": "DocxParser_LlamaIndex",
+        "tool": "LlamaIndex"
       }
     ],
     "application/vnd.ms-word.document.macroEnabled.12": [
       {
         "parser": "DocxParser_PythonDocx",
         "tool": "python-docx"
+      },
+      {
+        "parser": "DocxParser_LlamaIndex",
+        "tool": "LlamaIndex"
       }
     ]
   },
@@ -1134,6 +1521,68 @@
           "encoding_detection",
           "metadata_extraction",
           "basic_statistics"
+        ]
+      }
+    ],
+    "LlamaIndex": [
+      {
+        "parser": "MarkdownParser_LlamaIndex",
+        "type": "markdown",
+        "capabilities": [
+          "text_extraction",
+          "semantic_chunking",
+          "heading_based_splitting",
+          "metadata_extraction",
+          "header_hierarchy",
+          "code_block_extraction",
+          "link_extraction",
+          "frontmatter_parsing",
+          "preserve_structure"
+        ]
+      },
+      {
+        "parser": "PDFParser_LlamaIndex",
+        "type": "pdf",
+        "capabilities": [
+          "text_extraction",
+          "semantic_chunking",
+          "metadata_extraction",
+          "page_aware_splitting",
+          "table_extraction",
+          "image_extraction",
+          "fallback_strategies",
+          "ocr_support"
+        ]
+      },
+      {
+        "parser": "TextParser_LlamaIndex",
+        "type": "text",
+        "capabilities": [
+          "text_extraction",
+          "chunking",
+          "semantic_chunking",
+          "token_based_chunking",
+          "code_aware_parsing",
+          "language_detection",
+          "structure_preservation",
+          "metadata_extraction",
+          "json_parsing",
+          "yaml_parsing",
+          "xml_parsing",
+          "code_syntax_parsing"
+        ]
+      },
+      {
+        "parser": "DocxParser_LlamaIndex",
+        "type": "docx",
+        "capabilities": [
+          "text_extraction",
+          "semantic_chunking",
+          "paragraph_aware_splitting",
+          "metadata_extraction",
+          "table_extraction",
+          "style_preservation",
+          "section_detection"
         ]
       }
     ],
@@ -1177,6 +1626,36 @@
         ]
       }
     ],
+    "LlamaIndex-Pandas": [
+      {
+        "parser": "ExcelParser_LlamaIndex",
+        "type": "excel",
+        "capabilities": [
+          "text_extraction",
+          "semantic_chunking",
+          "metadata_extraction",
+          "statistics",
+          "multi_sheet_processing",
+          "sheet_combination",
+          "formula_extraction",
+          "data_transformation"
+        ]
+      },
+      {
+        "parser": "CSVParser_LlamaIndex",
+        "type": "csv",
+        "capabilities": [
+          "text_extraction",
+          "semantic_chunking",
+          "metadata_extraction",
+          "field_mapping",
+          "row_based_processing",
+          "column_based_processing",
+          "statistics",
+          "data_transformation"
+        ]
+      }
+    ],
     "PyPDF2": [
       {
         "parser": "PDFParser_PyPDF2",
@@ -1205,26 +1684,6 @@
           "text_extraction",
           "chunking",
           "basic_metadata"
-        ]
-      }
-    ],
-    "LlamaIndex": [
-      {
-        "parser": "TextParser_LlamaIndex",
-        "type": "text",
-        "capabilities": [
-          "text_extraction",
-          "chunking",
-          "semantic_chunking",
-          "token_based_chunking",
-          "code_aware_parsing",
-          "language_detection",
-          "structure_preservation",
-          "metadata_extraction",
-          "json_parsing",
-          "yaml_parsing",
-          "xml_parsing",
-          "code_syntax_parsing"
         ]
       }
     ],

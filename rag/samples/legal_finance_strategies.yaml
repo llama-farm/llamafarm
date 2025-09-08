@@ -15,7 +15,7 @@ legal_contract_analysis:
   
   components:
     parser:
-      type: "LegalDocumentParser"
+      type: "PDFParser_PyPDF2"
       config:
         formats: ["pdf", "docx", "txt"]
         extract_metadata: true        # Parties, dates, signatures
@@ -29,7 +29,7 @@ legal_contract_analysis:
     
     extractors:
       # Legal entity extraction
-      - type: "LegalEntityExtractor"
+      - type: "EntityExtractor"
         config:
           entities:
             - "PARTY"                 # Contracting parties
@@ -41,7 +41,7 @@ legal_contract_analysis:
           signatory_extraction: true   # Extract signatories
       
       # Clause identification and extraction
-      - type: "ClauseExtractor"
+      - type: "PatternExtractor"
         config:
           clause_types:
             - "indemnification"
@@ -59,7 +59,7 @@ legal_contract_analysis:
           flag_unusual_terms: true     # Identify non-standard clauses
       
       # Date and deadline extraction
-      - type: "LegalDateExtractor"
+      - type: "DateTimeExtractor"
         config:
           date_types:
             - "effective_date"
@@ -98,7 +98,7 @@ legal_contract_analysis:
           threshold_alerts: true
     
     embedder:
-      type: "LegalBertEmbedder"       # Legal-specific embeddings
+      type: "HuggingFaceEmbedder"       # Legal-specific embeddings
       config:
         model: "nlpaueb/legal-bert-base-uncased"
         dimension: 768
@@ -108,7 +108,7 @@ legal_contract_analysis:
         local_only: true
     
     vector_store:
-      type: "SecureVectorStore"
+      type: "ChromaStore"
       config:
         backend: "chromadb"
         collection_name: "legal_contracts"
@@ -123,7 +123,7 @@ legal_contract_analysis:
           encrypted_fields: ["party_details", "financial_terms"]
     
     retrieval_strategy:
-      type: "LegalRetrievalStrategy"
+      type: "BasicSimilarityStrategy"
       config:
         top_k: 10
         similarity_threshold: 0.75     # Higher threshold for accuracy
@@ -144,7 +144,7 @@ financial_reporting_analysis:
   
   components:
     parser:
-      type: "FinancialDocumentParser"
+      type: "PDFParser_PyPDF2"
       config:
         formats: ["pdf", "xlsx", "xbrl", "html"]
         extract_tables: true           # Financial tables critical
@@ -157,7 +157,7 @@ financial_reporting_analysis:
     
     extractors:
       # Financial metrics extraction
-      - type: "FinancialMetricsExtractor"
+      - type: "StatisticsExtractor"
         config:
           metrics:
             # Income statement
@@ -195,7 +195,7 @@ financial_reporting_analysis:
           map_to_standard: true        # Map to standard metrics
       
       # Table extraction and analysis
-      - type: "FinancialTableExtractor"
+      - type: "TableExtractor"
         config:
           identify_statement_type: true # Income, balance, cash flow
           extract_line_items: true
@@ -222,7 +222,7 @@ financial_reporting_analysis:
           identify_weaknesses: true
     
     embedder:
-      type: "FinancialEmbedder"
+      type: "HuggingFaceEmbedder"
       config:
         model: "yiyanghkust/finbert-pretrain"
         dimension: 768
@@ -230,7 +230,7 @@ financial_reporting_analysis:
         numerical_encoding: true       # Encode numbers specially
     
     vector_store:
-      type: "FinancialVectorStore"
+      type: "ChromaStore"
       config:
         backend: "qdrant"
         collection_name: "financial_reports"
@@ -244,7 +244,7 @@ financial_reporting_analysis:
           numerical_fields: ["revenue", "net_income", "total_assets"]
     
     retrieval_strategy:
-      type: "FinancialAnalysisStrategy"
+      type: "BasicSimilarityStrategy"
       config:
         top_k: 15
         time_series_aware: true        # Consider temporal relationships
@@ -264,7 +264,7 @@ regulatory_compliance_monitoring:
   
   components:
     parser:
-      type: "RegulatoryDocumentParser"
+      type: "TextParser_Python"
       config:
         formats: ["pdf", "html", "xml"]
         extract_structure: true        # Regulatory structure
@@ -325,7 +325,7 @@ regulatory_compliance_monitoring:
           calculate_coverage: true     # Compliance coverage %
     
     embedder:
-      type: "RegulatoryEmbedder"
+      type: "HuggingFaceEmbedder"
       config:
         model: "nlpaueb/legal-bert-base-uncased"
         dimension: 768
@@ -333,7 +333,7 @@ regulatory_compliance_monitoring:
         domain_adaptation: true        # Adapted for regulations
     
     vector_store:
-      type: "ComplianceVectorStore"
+      type: "ChromaStore"
       config:
         backend: "chromadb"
         collection_name: "regulatory_compliance"
@@ -345,7 +345,7 @@ regulatory_compliance_monitoring:
           indexed_fields: ["regulation", "jurisdiction", "effective_date", "industry"]
     
     retrieval_strategy:
-      type: "ComplianceStrategy"
+      type: "BasicSimilarityStrategy"
       config:
         top_k: 20
         jurisdiction_filtering: true   # Filter by jurisdiction
@@ -366,7 +366,7 @@ enterprise_risk_management:
   
   components:
     parser:
-      type: "RiskDocumentParser"
+      type: "TextParser_Python"
       config:
         formats: ["pdf", "docx", "xlsx", "csv"]
         extract_risk_matrices: true    # Risk assessment matrices
@@ -424,7 +424,7 @@ enterprise_risk_management:
           link_to_risks: true          # Link incidents to risks
     
     embedder:
-      type: "RiskEmbedder"
+      type: "HuggingFaceEmbedder"
       config:
         model: "sentence-transformers/all-mpnet-base-v2"
         dimension: 768
@@ -432,7 +432,7 @@ enterprise_risk_management:
         risk_weighting: true           # Weight by risk score
     
     vector_store:
-      type: "RiskVectorStore"
+      type: "ChromaStore"
       config:
         backend: "qdrant"
         collection_name: "risk_management"
@@ -442,7 +442,7 @@ enterprise_risk_management:
           sortable_fields: ["risk_score", "residual_risk"]
     
     retrieval_strategy:
-      type: "RiskPrioritizationStrategy"
+      type: "BasicSimilarityStrategy"
       config:
         top_k: 15
         prioritize_by: "risk_score"    # Sort by risk
@@ -463,7 +463,7 @@ audit_trail_analysis:
   
   components:
     parser:
-      type: "AuditLogParser"
+      type: "TextParser_Python"
       config:
         formats: ["json", "csv", "syslog", "xml"]
         timestamp_parsing: true        # Parse all timestamp formats
@@ -520,7 +520,7 @@ audit_trail_analysis:
           cryptographic_validation: true
     
     embedder:
-      type: "AuditEmbedder"
+      type: "HuggingFaceEmbedder"
       config:
         model: "sentence-transformers/all-MiniLM-L6-v2"
         dimension: 384                # Smaller for high volume
@@ -528,7 +528,7 @@ audit_trail_analysis:
         temporal_encoding: true        # Encode time information
     
     vector_store:
-      type: "AuditVectorStore"
+      type: "ChromaStore"
       config:
         backend: "chromadb"
         collection_name: "audit_trails"
@@ -542,7 +542,7 @@ audit_trail_analysis:
           time_based_partitioning: true
     
     retrieval_strategy:
-      type: "AuditInvestigationStrategy"
+      type: "BasicSimilarityStrategy"
       config:
         top_k: 50                     # More results for investigation
         temporal_correlation: true     # Find related events in time
