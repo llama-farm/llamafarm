@@ -18,6 +18,11 @@ import (
 // server via Docker, then waits for readiness. Returns an error if it
 // ultimately cannot ensure availability.
 func ensureServerAvailable(serverURL string) error {
+	if err := pingURL(ollamaHost); err != nil {
+		fmt.Fprintf(os.Stderr, "no Ollama server detected on the host. Please start Ollama (https://ollama.com/download) before launching LlamaFarm, or set --ollama-host to a reachable Ollama instance")
+		os.Exit(1)
+	}
+
 	if serverURL == "" {
 		serverURL = "http://localhost:8000"
 	}

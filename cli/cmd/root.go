@@ -43,11 +43,6 @@ manage your data, configurations, models,and operations.`,
 			ollamaHost = "http://localhost:11434"
 		}
 
-		if err := pingURL(ollamaHost); err != nil {
-			fmt.Fprintf(os.Stderr, "no Ollama server detected on the host. Please start Ollama (https://ollama.com/download) before launching LlamaFarm, or set --ollama-host to a reachable Ollama instance")
-			os.Exit(1)
-		}
-
 		return nil
 	},
 }
