@@ -9,7 +9,6 @@ const loadCodeMirrorModules = async () => {
     { EditorView, lineNumbers, keymap },
     { EditorState, StateEffect },
     { json },
-    { oneDark },
     { defaultKeymap },
     { bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, HighlightStyle },
     { highlightSelectionMatches },
@@ -18,7 +17,6 @@ const loadCodeMirrorModules = async () => {
     import('@codemirror/view'),
     import('@codemirror/state'),
     import('@codemirror/lang-json'),
-    import('@codemirror/theme-one-dark'),
     import('@codemirror/commands'),
     import('@codemirror/language'),
     import('@codemirror/search'),
@@ -32,7 +30,6 @@ const loadCodeMirrorModules = async () => {
     EditorState,
     StateEffect,
     json,
-    oneDark,
     defaultKeymap,
     bracketMatching,
     indentOnInput,
@@ -95,7 +92,6 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ content, className 
       keymap,
       EditorState,
       json,
-      oneDark,
       defaultKeymap,
       bracketMatching,
       indentOnInput,
@@ -162,6 +158,66 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ content, className 
       }
     }, { dark: false })
 
+    // Custom dark theme for CodeMirror with the specific background color
+    const customDarkTheme = EditorView.theme({
+      '&': {
+        color: '#f0f6fc',
+        backgroundColor: '#10182e',
+        height: '100%'
+      },
+      '.cm-content': {
+        padding: '16px',
+        minHeight: '100%',
+        backgroundColor: '#10182e'
+      },
+      '.cm-focused': {
+        outline: 'none',
+        backgroundColor: '#10182e'
+      },
+      '.cm-editor': {
+        borderRadius: '8px',
+        height: '100%',
+        backgroundColor: '#10182e'
+      },
+      '.cm-scroller': {
+        lineHeight: '1.5',
+        height: '100%',
+        backgroundColor: '#10182e'
+      },
+      '.cm-cursor': {
+        display: 'none' // Hide cursor in read-only mode
+      },
+      '.cm-gutters': {
+        backgroundColor: '#161b22',
+        color: '#7d8590',
+        border: 'none',
+        borderRight: '1px solid #30363d'
+      },
+      '.cm-activeLineGutter': {
+        backgroundColor: '#161b22'
+      },
+      '.cm-foldGutter .cm-gutterElement': {
+        color: '#7d8590'
+      },
+      '.cm-selectionBackground': {
+        backgroundColor: '#264f78'
+      },
+      '.cm-scroller::-webkit-scrollbar': {
+        width: '12px'
+      },
+      '.cm-scroller::-webkit-scrollbar-track': {
+        backgroundColor: '#1c2028'
+      },
+      '.cm-scroller::-webkit-scrollbar-thumb': {
+        backgroundColor: '#30363d',
+        borderRadius: '6px',
+        border: '2px solid #10182e'
+      },
+      '.cm-scroller::-webkit-scrollbar-thumb:hover': {
+        backgroundColor: '#484f58'
+      }
+    }, { dark: true })
+
     // Custom syntax highlighting for light theme
     const lightHighlightStyle = HighlightStyle.define([
       { tag: tags.keyword, color: '#d73a49' },
@@ -212,7 +268,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ content, className 
       
       // Theme extensions with syntax highlighting
       theme === 'dark' 
-        ? [oneDark, syntaxHighlighting(HighlightStyle.define([
+        ? [customDarkTheme, syntaxHighlighting(HighlightStyle.define([
             { tag: tags.keyword, color: '#ff7b72' },
             { tag: tags.string, color: '#a5d6ff' },
             { tag: tags.number, color: '#79c0ff' },
@@ -338,7 +394,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ content, className 
         </div>
 
         {/* Error fallback with plain text */}
-        <div className="flex-1 min-h-0 overflow-auto bg-background custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-auto bg-background dark:bg-[#1c2028] custom-scrollbar">
           <div className="p-4 text-sm text-muted-foreground font-mono overflow-auto flex-1 custom-scrollbar">
             <pre className="whitespace-pre-wrap">{content}</pre>
           </div>
@@ -368,7 +424,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ content, className 
       {/* Editor */}
       <div 
         ref={editorRef} 
-        className="config-editor-content flex-1 min-h-0 overflow-auto bg-background custom-scrollbar"
+        className="config-editor-content flex-1 min-h-0 overflow-auto bg-background dark:bg-[#10182e] custom-scrollbar"
       >
         {/* Fallback content if CodeMirror fails to initialize */}
         {!isInitialized && (
