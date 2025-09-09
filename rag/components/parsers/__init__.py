@@ -243,26 +243,30 @@ class DirectoryParser:
         if not source_path.exists():
             return ProcessingResult(
                 documents=[],
-                errors=[{"error": f"Directory not found: {source}", "source": source}]
-            )
-        
-        if not source_path.is_dir():
-            return ProcessingResult(
-                documents=[],
-                errors=[{"error": f"Path is not a directory: {source}", "source": source}]
+                errors=[{"error": f"Path not found: {source}", "source": source}]
             )
         
         all_documents = []
         all_errors = []
         files_processed = 0
         
-        # Get file list
-        if self.recursive:
-            file_pattern = "**/*"
+        # Handle single file or directory
+        if source_path.is_file():
+            # Single file - process it directly
+            files = [source_path]
+        elif source_path.is_dir():
+            # Directory - get file list
+            if self.recursive:
+                file_pattern = "**/*"
+            else:
+                file_pattern = "*"
+            
+            files = list(source_path.glob(file_pattern))
         else:
-            file_pattern = "*"
-        
-        files = list(source_path.glob(file_pattern))
+            return ProcessingResult(
+                documents=[],
+                errors=[{"error": f"Path is neither file nor directory: {source}", "source": source}]
+            )
         
         # Filter files
         filtered_files = []
