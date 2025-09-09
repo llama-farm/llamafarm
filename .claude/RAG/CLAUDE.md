@@ -3,15 +3,13 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [Architecture](#architecture)
-3. [Schema System](#schema-system)
-4. [MIME Type Filtering](#mime-type-filtering)
+3. [NEW Schema System](#new-schema-system)
+4. [Configuration Examples](#configuration-examples)
 5. [Parser System](#parser-system)
 6. [Directory Structure](#directory-structure)
-7. [Configuration Guide](#configuration-guide)
-8. [Running Demos](#running-demos)
-9. [Testing](#testing)
-10. [CLI Commands](#cli-commands)
-11. [Development Guide](#development-guide)
+7. [Running Demos](#running-demos)
+8. [CLI Commands](#cli-commands)
+9. [Migration Notes](#migration-notes)
 
 ALWAYS USE UV for python!
 
@@ -19,40 +17,50 @@ ALWAYS USE UV for python!
 
 ## Overview
 
-The LlamaFarm RAG (Retrieval-Augmented Generation) system is a comprehensive, schema-driven document processing pipeline with advanced MIME type filtering, modular parsers, and flexible configuration management.
+The LlamaFarm RAG (Retrieval-Augmented Generation) system has been completely migrated to a new schema format with NO backward compatibility. The system now uses a clean separation between databases and data processing strategies.
 
-### Key Features
-- **Schema-Driven Configuration**: All configurations validated against a comprehensive JSON schema
-- **Two-Tier MIME Type Filtering**: Strategy-level and parser-level file type control
-- **Modular Architecture**: Pluggable parsers, extractors, embedders, and stores
-- **Database Abstraction**: Support for multiple vector databases with strategy defaults
-- **Priority-Based Parser Selection**: Intelligent parser routing based on file types
-- **LlamaIndex Integration**: Advanced document parsing with multiple fallback strategies
+### Key Changes (as of 2025-09-09)
+- **NO Legacy Support**: All `_convert_rag_to_legacy` code removed
+- **DirectoryParser Always Active**: Handles both single files and directories at strategy level
+- **Clean Naming**: `handler.py` with `SchemaHandler` class (was `DirectSchemaHandler`)
+- **Deprecated Files**: `config.py.deprecated` and `manager.py.deprecated`
+- **LlamaIndex Parsers**: Used as default fallbacks instead of hacky simple parsers
+- **Strategy Naming**: `{data_processing_strategy}_{database_name}`
 
 ---
 
 ## Architecture
 
-### System Components
+### New Component Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Configuration (YAML)                      │
+│                    NEW RAG SCHEMA (YAML)                     │
 │                         schema.yaml                          │
 └────────────────────────┬────────────────────────────────────┘
                          │
                     ┌────▼────┐
-                    │ Loader  │
+                    │ Strategy│
+                    │ Loader  │ (loader.py - new schema only)
                     └────┬────┘
                          │
         ┌────────────────┼────────────────┐
         │                │                │
    ┌────▼────┐    ┌─────▼─────┐   ┌─────▼─────┐
-   │Database │    │Processing │   │   MIME    │
-   │ Config  │    │Strategies │   │ Filtering │
+   │Database │    │Processing │   │Directory  │
+   │ Configs │    │Strategies │   │  Config   │
    └────┬────┘    └─────┬─────┘   └─────┬─────┘
         │                │                │
         └────────────────┼────────────────┘
+                         │
+                   ┌─────▼─────┐
+                   │  Schema    │ (handler.py)
+                   │  Handler   │
+                   └─────┬─────┘
+                         │
+                ┌────────▼────────┐
+                │ DirectoryParser │ (ALWAYS ACTIVE)
+                └────────┬────────┘
                          │
               ┌──────────┼──────────┐
               │          │          │
@@ -61,157 +69,259 @@ The LlamaFarm RAG (Retrieval-Augmented Generation) system is a comprehensive, sc
          └────────┘ └────────┘ └────────┘
 ```
 
-### Component Flow
+### Key Components
 
-1. **Configuration Loading**: YAML configs validated against schema
-2. **MIME Type Filtering**: Two-tier filtering system
-   - Strategy level: Which file types the strategy accepts
-   - Parser level: Which parser handles each file type
-3. **Document Processing**: Parse → Extract → Embed → Store
-4. **Retrieval**: Query → Embed → Search → Retrieve
+1. **SchemaHandler** (`/core/strategies/handler.py`): Main handler for new schema
+2. **StrategyLoader** (`/core/strategies/loader.py`): Loads only new RAG schema format
+3. **DirectoryParser**: Always active, handles both files and directories
+4. **NO Legacy Components**: No `StrategyManager`, no `StrategyConfig`
 
 ---
 
-## Schema System
+## NEW Schema System
 
-### Schema Location
-- **Main Schema**: `/rag/schema.yaml`
-- **Validator**: `/rag/tests/test_schema_verifier.py`
-
-### Schema Structure
+### Schema Structure (NO BACKWARD COMPATIBILITY)
 
 ```yaml
-# Top-level structure
+# REQUIRED: Top-level 'rag' key
 rag:
-  databases: []           # Vector database configurations
-  data_processing_strategies: []  # Processing pipelines
-
-# Database schema
-databases:
-  - name: string
-    type: string
-    config: object
-    default_embedding_strategy: string  # NEW
-    default_retrieval_strategy: string  # NEW
-    embedding_strategies: []
-    retrieval_strategies: []
-
-# Processing strategy schema
-data_processing_strategies:
-  - name: string
-    description: string
-    allowed_mime_types: []  # Strategy-level filtering
-    allowed_extensions: []  # File extension filtering
-    parsers: []
-    extractors: []
+  # Databases define vector stores and their strategies
+  databases:
+    - name: "my_database"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./vectordb"
+        distance_function: "cosine"
+      # REQUIRED: Default strategies
+      default_embedding_strategy: "my_embeddings"
+      default_retrieval_strategy: "my_retrieval"
+      embedding_strategies:
+        - name: "my_embeddings"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+            batch_size: 5
+          default: true
+      retrieval_strategies:
+        - name: "my_retrieval"
+          type: "BasicSimilarityStrategy"
+          config:
+            top_k: 5
+          default: true
+  
+  # Processing strategies define how documents are processed
+  data_processing_strategies:
+    - name: "my_processing"
+      description: "Process text and PDF files"
+      # DirectoryParser config (ALWAYS ACTIVE)
+      directory_config:
+        recursive: true
+        include_patterns: ["*.txt", "*.pdf", "*.md"]
+        exclude_patterns: ["*.tmp", ".*"]
+        # File filtering happens ONLY here
+        allowed_mime_types: []  # Empty = accept all
+        allowed_extensions: []  # Empty = accept all
+        max_files: 1000
+      # Parsers to use for different file types
+      parsers:
+        - type: "TextParser_LlamaIndex"  # Or TextParser_Python, etc.
+          config:
+            chunk_size: 1500
+            chunk_overlap: 200
+      # Optional extractors
+      extractors:
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "DATE"]
 ```
 
-### Key Schema Features
+### Strategy Naming Convention
 
-1. **Database Defaults**: Each database can specify default embedding and retrieval strategies
-2. **MIME Type Filtering**: Strategies can restrict accepted file types
-3. **Parser Routing**: Parsers specify which MIME types they handle
-4. **Priority System**: Parser selection based on priority when multiple match
+Strategies are named by combining processing strategy and database:
+- Format: `{data_processing_strategy}_{database_name}`
+- Example: `text_processing_research_papers_db`
+- Example: `pdf_processing_main_chroma_db`
 
 ---
 
-## MIME Type Filtering
+## Configuration Examples
 
-### Two-Tier Filtering System
-
-#### 1. Strategy-Level Filtering
-Controls which files a strategy will accept:
+### Example 1: Simple Text Processing
 
 ```yaml
-data_processing_strategies:
-  - name: "pdf_only_strategy"
-    allowed_mime_types: ["application/pdf"]
-    allowed_extensions: [".pdf", ".PDF"]
-    # This strategy ONLY processes PDF files
+rag:
+  databases:
+    - name: "simple_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./simple_vectordb"
+      default_embedding_strategy: "basic"
+      default_retrieval_strategy: "basic"
+      embedding_strategies:
+        - name: "basic"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+          default: true
+      retrieval_strategies:
+        - name: "basic"
+          type: "BasicSimilarityStrategy"
+          config:
+            top_k: 3
+          default: true
+  
+  data_processing_strategies:
+    - name: "simple_text"
+      description: "Basic text file processing"
+      directory_config:
+        recursive: false
+        include_patterns: ["*.txt"]
+      parsers:
+        - type: "TextParser_LlamaIndex"
+          config:
+            chunk_size: 1000
 ```
 
-#### 2. Parser-Level Routing
-Routes accepted files to appropriate parsers:
+Usage: `cli.py ingest --strategy simple_text_simple_db file.txt`
+
+### Example 2: Multi-Parser Strategy for Research
 
 ```yaml
-parsers:
-  - type: "PDFParser_LlamaIndex"
-    mime_types: ["application/pdf"]
-    file_extensions: [".pdf", ".PDF"]
-    priority: 10  # Higher priority wins
+rag:
+  databases:
+    - name: "research_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./research_vectordb"
+        collection_name: "papers"
+      default_embedding_strategy: "academic"
+      default_retrieval_strategy: "filtered"
+      embedding_strategies:
+        - name: "academic"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+            batch_size: 3
+          default: true
+      retrieval_strategies:
+        - name: "filtered"
+          type: "MetadataFilteredStrategy"
+          config:
+            top_k: 5
+            filters:
+              file_type: ["pdf", "txt"]
+          default: true
+  
+  data_processing_strategies:
+    - name: "research"
+      description: "Academic paper processing"
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf", "*.txt", "*.md"]
+        exclude_patterns: ["*.draft.*", "temp_*"]
+        allowed_extensions: [".pdf", ".txt", ".md"]
+      parsers:
+        - type: "PDFParser_LlamaIndex"
+          config:
+            extract_images: false
+            extract_tables: true
+        - type: "TextParser_Python"
+          config:
+            chunk_size: 2000
+            chunk_overlap: 300
+        - type: "MarkdownParser_LlamaIndex"
+          config:
+            preserve_formatting: true
+      extractors:
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "DATE", "GPE"]
+        - type: "SummaryExtractor"
+          config:
+            summary_sentences: 3
 ```
 
-### Filtering Rules
+Usage: `cli.py ingest --strategy research_research_db /path/to/papers/`
 
-1. **Empty Arrays = Accept All**: `allowed_mime_types: []` accepts all files
-2. **Priority-Based Selection**: When multiple parsers match, highest priority wins
-3. **Fallback Support**: Lower priority parsers act as fallbacks
-
-### Example: Multi-Format Strategy
+### Example 3: FDA Letters Processing (Production Example)
 
 ```yaml
-- name: "business_documents"
-  # Accept multiple document types
-  allowed_mime_types: [
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  ]
-  allowed_extensions: [".pdf", ".docx", ".xlsx"]
-  parsers:
-    - type: "PDFParser_LlamaIndex"
-      mime_types: ["application/pdf"]
-      priority: 10
-    - type: "DocxParser_LlamaIndex"
-      mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
-      priority: 10
-    - type: "ExcelParser_LlamaIndex"
-      mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
-      priority: 10
+rag:
+  databases:
+    - name: "fda_letters_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./demos/vectordb/fda_letters"
+        collection_name: "fda_action_letters"
+      default_embedding_strategy: "fda_embeddings"
+      default_retrieval_strategy: "fda_similarity"
+      embedding_strategies:
+        - name: "fda_embeddings"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+            batch_size: 5
+            timeout: 120
+          default: true
+      retrieval_strategies:
+        - name: "fda_similarity"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 5
+          default: true
+  
+  data_processing_strategies:
+    - name: "fda_letters_processing"
+      description: "FDA action letters PDF processing"
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf"]
+        exclude_patterns: ["*.tmp", "~*"]
+        allowed_extensions: [".pdf"]
+        max_files: 1000
+      parsers:
+        - type: "PDFParser_LlamaIndex"
+          config:
+            chunk_size: 1000
+            chunk_overlap: 200
+            extract_metadata: true
+      extractors:
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["ORG", "DATE", "PRODUCT"]
+            use_fallback: true
+        - type: "PatternExtractor"
+          config:
+            predefined_patterns: ["nda_number", "date", "company"]
 ```
 
 ---
 
 ## Parser System
 
-### Available Parsers
+### Parser Types Available
 
-#### Python-Based Parsers
-- `PDFParser_Python`: Basic PDF text extraction
-- `TextParser_Python`: Plain text processing
-- `MarkdownParser_Python`: Markdown with structure preservation
-- `CSVParser_Pandas`: Structured data processing
+All parsers follow the naming convention: `{ParserType}_{Implementation}`
 
-#### LlamaIndex Parsers
-- `PDFParser_LlamaIndex`: Advanced PDF with fallback strategies
-- `DocxParser_LlamaIndex`: Word documents
-- `ExcelParser_LlamaIndex`: Spreadsheets
-- `CSVParser_LlamaIndex`: CSV with schema inference
-- `MarkdownParser_LlamaIndex`: Advanced markdown parsing
-- `TextParser_LlamaIndex`: Fallback text parser
-- `WebParser_LlamaIndex`: HTML content
-- `CodeParser_LlamaIndex`: Source code with AST
+- **Text**: `TextParser_LlamaIndex`, `TextParser_Python`
+- **PDF**: `PDFParser_LlamaIndex`, `PDFParser_PyPDF2`
+- **CSV**: `CSVParser_LlamaIndex`, `CSVParser_Pandas`
+- **Markdown**: `MarkdownParser_LlamaIndex`, `MarkdownParser_Python`
+- **HTML**: `HTMLParser_LlamaIndex`, `HTMLParser_BeautifulSoup`
+- **DOCX**: `DocxParser_LlamaIndex`, `DocxParser_Python`
 
-### Parser Configuration
+### DirectoryParser (ALWAYS ACTIVE)
 
-```yaml
-parsers:
-  - type: "PDFParser_LlamaIndex"
-    mime_types: ["application/pdf"]
-    file_extensions: [".pdf"]
-    priority: 10
-    config:
-      chunk_strategy: "semantic"  # sentences, paragraphs, pages, semantic
-      chunk_size: 1000
-      chunk_overlap: 200
-      extract_metadata: true
-      extract_images: true
-      extract_tables: true
-      fallback_strategies: [
-        "llama_pdf_reader",
-        "llama_pymupdf_reader",
-        "pypdf2_fallback"
-      ]
+The DirectoryParser is automatically active at the strategy level and handles:
+- **Single Files**: Processes individual files directly
+- **Directories**: Recursively processes based on patterns
+- **Filtering**: Applies include/exclude patterns
+
+```python
+# Automatically handles both:
+cli.py ingest --strategy my_strategy /path/to/file.txt     # Single file
+cli.py ingest --strategy my_strategy /path/to/directory/    # Directory
 ```
 
 ---
@@ -219,416 +329,179 @@ parsers:
 ## Directory Structure
 
 ```
-rag/
-├── .claude/                    # Claude-specific documentation
-│   └── CLAUDE.md              # This file
-├── core/                      # Core system components
-│   ├── mime_type_filter.py   # MIME type filtering system
+/rag/
+├── core/
 │   └── strategies/
-│       └── loader.py          # Strategy loader with MIME support
-├── components/                # Modular components
-│   ├── parsers/              # Document parsers
-│   │   ├── __init__.py
-│   │   ├── base.py
-│   │   ├── pdf_parser.py
-│   │   ├── text_parser.py
-│   │   ├── markdown_parser.py
-│   │   ├── csv_parser.py
-│   │   └── llamaindex/       # LlamaIndex parsers
-│   ├── extractors/           # Metadata extractors
-│   ├── embedders/            # Embedding models
-│   └── stores/               # Vector stores
-├── demos/                    # Demo configurations
-│   ├── demo_strategies.yaml # Main demo config
-│   └── static_samples/      # Sample documents
-├── samples/                  # Example configurations
-│   └── llamaindex_parser_strategies.yaml
-├── tests/                    # Test suite
-│   ├── test_schema_verifier.py  # Schema validation
-│   ├── test_mime_filtering.py   # MIME type tests
-│   └── test_data/
-│       └── test_strategies.yaml
-├── schema.yaml              # Main schema definition
-├── test_mime_filtering_demo.py  # MIME demo script
-└── TODO.md                  # Future tasks
-
-../config/templates/
-└── default.yaml            # Default configuration template
+│       ├── __init__.py          # Exports SchemaHandler, StrategyLoader
+│       ├── handler.py           # SchemaHandler class (main)
+│       ├── loader.py            # StrategyLoader (new schema only)
+│       ├── config.py.deprecated # OLD - DO NOT USE
+│       └── manager.py.deprecated # OLD - DO NOT USE
+├── components/
+│   └── parsers/
+│       ├── __init__.py          # DirectoryParser, factory methods
+│       ├── text/                # Text parsers
+│       ├── pdf/                 # PDF parsers
+│       └── ...                  # Other parser types
+├── demos/
+│   ├── demo_strategies.yaml    # Demo strategy configurations
+│   ├── demo1_research_papers_cli.py
+│   ├── demo_fda_letters_interactive.py
+│   └── static_samples/          # Sample data for demos
+└── schema.yaml                  # Main schema definition
 ```
-
----
-
-## Configuration Guide
-
-### Basic Configuration Structure
-
-```yaml
-rag:
-  databases:
-    - name: "main_db"
-      type: "ChromaStore"
-      config:
-        persist_directory: "./vectordb"
-        distance_function: "cosine"
-      # NEW: Default strategies
-      default_embedding_strategy: "primary_embeddings"
-      default_retrieval_strategy: "semantic_search"
-      embedding_strategies:
-        - name: "primary_embeddings"
-          type: "OllamaEmbedder"
-          config:
-            model: "nomic-embed-text"
-          default: true
-      retrieval_strategies:
-        - name: "semantic_search"
-          type: "BasicSimilarityStrategy"
-          config:
-            top_k: 10
-          default: true
-
-  data_processing_strategies:
-    - name: "document_processing"
-      # MIME type filtering
-      allowed_mime_types: ["application/pdf", "text/plain"]
-      allowed_extensions: [".pdf", ".txt"]
-      parsers:
-        - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
-          priority: 10
-        - type: "TextParser_Python"
-          mime_types: ["text/plain"]
-          priority: 5
-      extractors:
-        - type: "EntityExtractor"
-          config:
-            entity_types: ["PERSON", "ORG", "DATE"]
-```
-
-### Configuration Examples
-
-1. **PDF-Only Strategy**: See `samples/llamaindex_parser_strategies.yaml`
-2. **Multi-Format Business**: See `demos/demo_strategies.yaml`
-3. **Generic Processing**: See `config/templates/default.yaml`
 
 ---
 
 ## Running Demos
 
-### Prerequisites
+All demos use the new schema format exclusively:
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Demo 1: Research Papers (12 documents)
+DEMO_MODE=automated uv run python demos/demo1_research_papers_cli.py
 
-# Ensure Ollama is running
-ollama serve
+# Demo 2: Customer Support
+DEMO_MODE=automated uv run python demos/demo2_customer_support_cli.py
 
-# Pull required model
-ollama pull nomic-embed-text
-```
+# Demo 3: Code Documentation (43 documents)
+DEMO_MODE=automated uv run python demos/demo3_code_documentation_cli.py
 
-### Demo Commands
-
-```bash
-# 1. Run MIME type filtering demo
-python test_mime_filtering_demo.py
-
-# 2. Test configuration validation
-python tests/test_schema_verifier.py demos/demo_strategies.yaml
-
-# 3. Run CLI with demo strategy
-python cli.py ingest ./demos/static_samples --strategy text_processing
-
-# 4. Search ingested documents
-python cli.py search "your query" --strategy text_processing
-```
-
-### Demo Strategies Available
-
-1. **text_processing**: Generic text document processing
-2. **csv_processing**: CSV/structured data only
-3. **markdown_processing**: Markdown with structure preservation
-4. **business_processing**: Multi-format business documents
-5. **llamaindex_pdf_processing**: Advanced PDF processing
-6. **multi_format_llamaindex**: LlamaIndex multi-format
-
----
-
-## Testing
-
-### Running Tests
-
-```bash
-# Run all tests with UV
-uv run pytest tests/ -v
-
-# Run specific test categories
-uv run pytest tests/test_mime_filtering.py -v
-uv run pytest tests/test_parsers.py -v
-uv run pytest tests/test_strategies.py -v
-
-# Run schema validation
-python tests/test_schema_verifier.py --summary \
-  demos/demo_strategies.yaml \
-  samples/*.yaml \
-  ../config/templates/default.yaml
-```
-
-### Test Coverage
-
-- **MIME Type Filtering**: `tests/test_mime_filtering.py`
-- **Parser Tests**: `tests/test_parsers.py`
-- **Strategy Loading**: `tests/test_strategies.py`
-- **Schema Validation**: `tests/test_schema_verifier.py`
-
-### Adding Tests
-
-```python
-# Example test for new parser
-def test_new_parser():
-    parser = NewParser(config={...})
-    result = parser.parse("test_file.ext")
-    assert result.success
-    assert len(result.chunks) > 0
+# FDA Demo: Process 40+ FDA letters (706 chunks)
+DEMO_MODE=automated uv run python demos/demo_fda_letters_interactive.py
 ```
 
 ---
 
 ## CLI Commands
 
-### Basic Commands
+### Basic Usage
 
 ```bash
-# Initialize configuration
-python cli.py init
+# View available strategies (combines processing + database)
+uv run python cli.py --strategy-file config.yaml strategies list
 
-# Ingest documents
-python cli.py ingest <path> --strategy <strategy_name>
+# Ingest documents (single file or directory)
+uv run python cli.py --strategy-file config.yaml ingest \
+  --strategy text_processing_main_db /path/to/documents
 
-# Search documents
-python cli.py search "query" --strategy <strategy_name>
+# Search
+uv run python cli.py --strategy-file config.yaml search \
+  --strategy text_processing_main_db "your query"
 
-# List available strategies
-python cli.py info
-
-# Test configuration
-python cli.py test
+# Get info about a collection
+uv run python cli.py --strategy-file config.yaml info \
+  --strategy text_processing_main_db
 ```
 
-### Advanced Options
+### Strategy Naming
 
-```bash
-# Override embedding strategy
-python cli.py ingest ./docs \
-  --strategy business_processing \
-  --embedding-strategy fast_embeddings
-
-# Override retrieval strategy
-python cli.py search "query" \
-  --strategy business_processing \
-  --retrieval-strategy metadata_filtered
-
-# Use custom configuration
-python cli.py --config my_config.yaml ingest ./docs
-```
+Remember: strategies are named as `{processing}_{database}`:
+- `text_processing_research_db`
+- `pdf_processing_fda_db`
+- `markdown_processing_docs_db`
 
 ---
 
-## Development Guide
+## Migration Notes
 
-### Adding a New Parser
+### What Changed (2025-09-09)
 
-1. Create parser file in `components/parsers/`:
+1. **Removed ALL Legacy Code**:
+   - No more `_convert_rag_to_legacy()`
+   - No more `StrategyManager` or `StrategyConfig`
+   - Files renamed to `.deprecated`
 
-```python
-# components/parsers/my_parser.py
-from .base import BaseParser
+2. **DirectoryParser Always Active**:
+   - Configured at strategy level via `directory_config`
+   - Handles both single files and directories
+   - File filtering ONLY in `directory_config`
 
-class MyParser(BaseParser):
-    def parse(self, file_path: str) -> ParseResult:
-        # Implementation
-        pass
-```
+3. **Clean File Structure**:
+   - `handler.py` - Main SchemaHandler
+   - `loader.py` - Loads new schema only
+   - No backward compatibility
 
-2. Register in `components/parsers/__init__.py`:
+4. **Parser Fallbacks**:
+   - LlamaIndex parsers used as defaults
+   - No more `simple_text_parser.py`
 
-```python
-from .my_parser import MyParser
+### Breaking Changes
 
-__all__ = [..., "MyParser"]
-```
+- Old config format will NOT work
+- Must have `rag:` top-level key
+- Strategies must specify both `default_embedding_strategy` and `default_retrieval_strategy`
+- Strategy names must follow `{processing}_{database}` format
 
-3. Add to configuration:
+### How to Migrate Old Configs
 
-```yaml
-parsers:
-  - type: "MyParser"
-    mime_types: ["application/x-myformat"]
-    file_extensions: [".myext"]
-    priority: 10
-    config:
-      # Parser-specific config
-```
-
-### Adding MIME Type Support
-
-1. Add MIME type mapping in `core/mime_type_filter.py`:
-
-```python
-MIME_TYPE_EXTENSIONS = {
-    "application/x-myformat": [".myext", ".MYEXT"],
-    # ...
-}
-```
-
-2. Configure strategy to accept it:
-
-```yaml
-allowed_mime_types: ["application/x-myformat"]
-allowed_extensions: [".myext"]
-```
-
-### Testing Your Changes
-
-```bash
-# Validate configuration
-python tests/test_schema_verifier.py your_config.yaml
-
-# Test MIME filtering
-python test_mime_filtering_demo.py
-
-# Run parser tests
-uv run pytest tests/test_parsers.py::test_your_parser -v
-```
-
----
-
-## Best Practices
-
-### 1. Configuration Design
-
-- **Specialized Strategies**: Create focused strategies for specific file types
-- **Generic Fallbacks**: Include generic strategies for flexibility
-- **Priority Management**: Use priority to control parser selection
-
-### 2. MIME Type Filtering
-
-- **Be Explicit**: Specify exact MIME types when possible
-- **Use Extensions**: Add file extensions as secondary filters
-- **Test Thoroughly**: Validate filtering with test files
-
-### 3. Parser Selection
-
-- **High Priority**: Specialized parsers (priority 10+)
-- **Medium Priority**: General parsers (priority 5-9)
-- **Low Priority**: Fallback parsers (priority 1-4)
-
-### 4. Performance Optimization
-
-- **Batch Processing**: Use appropriate batch sizes
-- **Caching**: Enable embedding caches
-- **Parallel Processing**: Use async parsers when available
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"No parser found for file type"**
-   - Check MIME type detection
-   - Verify parser configuration
-   - Ensure file extensions match
-
-2. **"Strategy rejected file"**
-   - Check `allowed_mime_types`
-   - Verify `allowed_extensions`
-   - Use empty arrays to accept all
-
-3. **"Schema validation failed"**
-   - Run schema verifier
-   - Check required fields
-   - Validate YAML syntax
-
-### Debug Commands
-
-```bash
-# Test MIME type detection
-python -c "from core.mime_type_filter import MimeTypeFilter; 
-          f = MimeTypeFilter(); 
-          print(f.get_mime_type('test.pdf'))"
-
-# Validate all configs
-find . -name "*.yaml" -exec python tests/test_schema_verifier.py {} \;
-
-# Test parser directly
-python -c "from components.parsers import PDFParser_LlamaIndex;
-          p = PDFParser_LlamaIndex();
-          print(p.parse('test.pdf'))"
-```
-
----
-
-## Migration Guide
-
-### From Legacy Format to New RAG Schema
-
-#### Old Format (DEPRECATED):
+Old format:
 ```yaml
 strategies:
-  - name: "my_strategy"
+  my_strategy:
     components:
-      parser: {...}
-      embedder: {...}
-      vector_store: {...}
+      parser: {type: "text"}
+      embedder: {type: "ollama"}
+      vector_store: {type: "chroma"}
 ```
 
-#### New Format (REQUIRED):
+New format:
 ```yaml
 rag:
   databases:
     - name: "my_db"
       type: "ChromaStore"
-      embedding_strategies: [...]
-      retrieval_strategies: [...]
+      config: {}
+      default_embedding_strategy: "my_embed"
+      default_retrieval_strategy: "my_retrieve"
+      embedding_strategies:
+        - name: "my_embed"
+          type: "OllamaEmbedder"
+          config: {}
+      retrieval_strategies:
+        - name: "my_retrieve"
+          type: "BasicSimilarityStrategy"
+          config: {}
   
   data_processing_strategies:
-    - name: "my_strategy"
-      parsers: [...]
-      extractors: [...]
+    - name: "my_processing"
+      directory_config: {}
+      parsers:
+        - type: "TextParser_LlamaIndex"
+          config: {}
 ```
 
-### Key Changes
+---
 
-1. **Separation of Concerns**: Databases and processing strategies are separate
-2. **Default Strategies**: Databases specify default embedding/retrieval
-3. **MIME Type Filtering**: Strategies can restrict file types
-4. **Parser Routing**: Parsers specify which files they handle
-5. **No Legacy Support**: Old format will cause validation errors
+## Testing
+
+Run tests to verify the new schema:
+```bash
+# Test schema validation
+uv run pytest tests/test_schema_verifier.py -v
+
+# Test strategy loading
+uv run pytest tests/test_strategies.py -v
+
+# Test demos
+for i in 1 2 3 4 5 6; do
+  echo "Testing demo$i..."
+  DEMO_MODE=automated timeout 30 uv run python demos/demo${i}_*.py
+done
+```
 
 ---
 
-## Future Roadmap
+## Important Notes
 
-See `TODO.md` for detailed future tasks including:
-- Converting extractors to new format
-- Adding more LlamaIndex parsers
-- Implementing async processing
-- Adding more vector database support
-- Performance optimizations
-
----
-
-## Support
-
-For questions or issues:
-1. Check this documentation
-2. Review example configurations
-3. Run tests to verify setup
-4. Check TODO.md for known limitations
+1. **ALWAYS use `uv run`** for Python commands
+2. **NO backward compatibility** - must use new schema
+3. **DirectoryParser is always active** but handles single files too
+4. **Strategy names** follow `{processing}_{database}` format
+5. **LlamaIndex parsers** are the default fallbacks
+6. **File filtering** happens ONLY in `directory_config`
 
 ---
 
-*Last Updated: 2024*
-*Schema Version: 2.0*
-*Documentation Version: 1.0*
+Last Updated: 2025-09-09
+Migration Complete: All legacy code removed, new schema only!
