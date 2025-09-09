@@ -189,9 +189,7 @@ def _check_celery() -> dict:
         from core.celery.celery import app as celery_app  # type: ignore
 
         try:
-            # Use a very short timeout ping
-            replies = celery_app.control.ping(timeout=0.5)
-            if replies:
+            if replies := celery_app.control.ping(timeout=0.5):
                 return {
                     "name": "celery",
                     "status": "healthy",
