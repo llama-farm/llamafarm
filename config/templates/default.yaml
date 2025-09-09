@@ -85,6 +85,15 @@ rag:
     # Basic PDF processing
     - name: "pdf_processing"
       description: "Standard PDF document processing"
+      # DirectoryParser configuration (ALWAYS ACTIVE)
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf", "*.PDF"]
+        exclude_patterns: ["*.tmp", ".*"]
+        allowed_mime_types: ["application/pdf"]
+        allowed_extensions: [".pdf", ".PDF"]
+        max_files: 1000
+        follow_symlinks: false
       parsers:
         - type: "PDFParser_PyPDF2"
           config:
@@ -112,6 +121,15 @@ rag:
     # Basic text processing
     - name: "text_processing"
       description: "Plain text document processing"
+      # DirectoryParser configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*.txt", "*.text", "*.log"]
+        exclude_patterns: ["*.tmp", ".*"]
+        allowed_mime_types: ["text/plain"]
+        allowed_extensions: [".txt", ".text", ".log"]
+        max_files: 1000
+        follow_symlinks: false
       parsers:
         - type: "TextParser_Python"
           config:
@@ -135,6 +153,15 @@ rag:
     # Markdown processing
     - name: "markdown_processing"
       description: "Markdown document processing with structure preservation"
+      # DirectoryParser configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*.md", "*.markdown", "*.mdown"]
+        exclude_patterns: ["*.tmp", ".*", "node_modules/*"]
+        allowed_mime_types: ["text/markdown", "text/x-markdown"]
+        allowed_extensions: [".md", ".markdown", ".mdown", ".mkd"]
+        max_files: 1000
+        follow_symlinks: false
       parsers:
         - type: "MarkdownParser_Python"
           config:
@@ -158,6 +185,15 @@ rag:
     # CSV/structured data processing
     - name: "csv_processing"
       description: "CSV and structured data processing"
+      # DirectoryParser configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*.csv", "*.tsv"]
+        exclude_patterns: ["*.tmp", ".*"]
+        allowed_mime_types: ["text/csv", "text/tab-separated-values"]
+        allowed_extensions: [".csv", ".tsv", ".CSV", ".TSV"]
+        max_files: 500
+        follow_symlinks: false
       parsers:
         - type: "CSVParser_Pandas"
           config:
@@ -178,22 +214,28 @@ rag:
     # Multi-format processing with LlamaIndex parsers
     - name: "multi_format_llamaindex"
       description: "Multi-format document processing using LlamaIndex parsers"
-      # Strategy accepts multiple document types
-      allowed_mime_types: [
-        "application/pdf",
-        "text/csv",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "text/markdown",
-        "text/plain"
-      ]
-      allowed_extensions: [".pdf", ".csv", ".docx", ".xlsx", ".md", ".txt"]
+      # DirectoryParser configuration - handles ALL file filtering
+      directory_config:
+        recursive: true
+        include_patterns: ["*"]  # Accept all patterns, filter by mime/extension
+        exclude_patterns: ["*.tmp", ".*", "__pycache__/*", "node_modules/*"]
+        # File type filtering happens ONLY here
+        allowed_mime_types: [
+          "application/pdf",
+          "text/csv",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "text/markdown",
+          "text/plain"
+        ]
+        allowed_extensions: [".pdf", ".csv", ".docx", ".xlsx", ".md", ".txt"]
+        max_files: 5000
+        follow_symlinks: false
       parsers:
-        # PDF parser with high priority
+        # PDF parser
         - type: "PDFParser_LlamaIndex"
           mime_types: ["application/pdf"]
           file_extensions: [".pdf", ".PDF"]
-          priority: 10
           config:
             chunk_strategy: "semantic"
             chunk_size: 1000
@@ -201,33 +243,26 @@ rag:
             preserve_equations: true
             extract_images: false
             extract_metadata: true
-            fallback_strategies: ["pypdf2_fallback"]
         # CSV parser for structured data
         - type: "CSVParser_LlamaIndex"
           mime_types: ["text/csv", "text/tab-separated-values"]
           file_extensions: [".csv", ".tsv", ".CSV", ".TSV"]
-          priority: 10
           config:
             chunk_size: 500
             chunk_overlap: 50
             extract_metadata: true
         # Word document parser
         - type: "DocxParser_LlamaIndex"
-          mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"]
-          file_extensions: [".docx", ".doc", ".DOCX", ".DOC"]
-          priority: 10
+          mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+          file_extensions: [".docx", ".DOCX"]
           config:
             chunk_size: 1000
             chunk_overlap: 150
             extract_metadata: true
         # Excel parser
         - type: "ExcelParser_LlamaIndex"
-          mime_types: [
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.ms-excel"
-          ]
-          file_extensions: [".xlsx", ".xls", ".XLSX", ".XLS"]
-          priority: 10
+          mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
+          file_extensions: [".xlsx", ".XLSX"]
           config:
             chunk_size: 500
             extract_metadata: true
@@ -235,7 +270,6 @@ rag:
         - type: "MarkdownParser_LlamaIndex"
           mime_types: ["text/markdown", "text/x-markdown"]
           file_extensions: [".md", ".markdown", ".mdown", ".mkd"]
-          priority: 10
           config:
             chunk_size: 1000
             chunk_overlap: 150
@@ -243,8 +277,7 @@ rag:
         # Plain text parser as fallback
         - type: "TextParser_LlamaIndex"
           mime_types: ["text/plain"]
-          file_extensions: [".txt", ".log", ".text"]
-          priority: 5  # Lower priority as fallback
+          file_extensions: [".txt", ".text", ".log"]
           config:
             chunk_size: 1000
             chunk_overlap: 150
@@ -263,6 +296,16 @@ rag:
     # Generic text processing (fallback for unknown file types)
     - name: "auto_processing"
       description: "Generic text processing for various file types"
+      # DirectoryParser configuration - accepts all files
+      directory_config:
+        recursive: true
+        include_patterns: ["*"]
+        exclude_patterns: ["*.tmp", ".*", "*.pyc", "__pycache__/*"]
+        # Empty arrays = accept all types
+        allowed_mime_types: []
+        allowed_extensions: []
+        max_files: 1000
+        follow_symlinks: false
       parsers:
         - type: "TextParser_Python"
           config:
