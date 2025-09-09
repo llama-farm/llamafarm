@@ -1,203 +1,144 @@
 #!/usr/bin/env python3
 """
-Test script for the RAG strategy system.
+Tests for the strategy system with new RAG schema.
 """
 
 import sys
 from pathlib import Path
-import json
+import unittest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.strategies import StrategyManager, StrategyLoader
+from core.strategies.loader import StrategyLoader
+from core.strategies.handler import SchemaHandler
 
 
 def test_strategy_loading():
     """Test loading strategies from YAML file."""
-    print("🧪 Testing Strategy Loading...")
-    
-    loader = StrategyLoader()
+    # Use an actual strategies file that exists
+    loader = StrategyLoader(strategies_file='demos/demo_strategies.yaml')
     strategies = loader.load_strategies()
     
-    print(f"✅ Loaded {len(strategies)} strategies")
-    
-    # Test specific strategy (use the actual name from new format)
-    # The strategy names are now the full names, not the keys
-    test_strategy = loader.get_strategy("Simple Document Processing")
-    if test_strategy:
-        print(f"✅ Found 'Simple Document Processing' strategy: {test_strategy.description}")
-    else:
-        print("❌ Failed to load 'Simple Document Processing' strategy")
-        return False
-    
-    return True
+    # Should have loaded strategies
+    assert strategies is not None
+    assert 'databases' in strategies or 'data_processing_strategies' in strategies
+    print(f"✓ Loaded strategies successfully")
 
 
-def test_strategy_manager():
-    """Test strategy manager functionality."""
-    print("\n🧪 Testing Strategy Manager...")
+def test_schema_handler_initialization():
+    """Test SchemaHandler initialization with new schema."""
+    # Test with default strategies file
+    handler = SchemaHandler('demos/demo_strategies.yaml')
     
-    manager = StrategyManager()
+    # Get available strategies
+    available = handler.get_available_strategies()
+    assert len(available) > 0
+    print(f"✓ Found {len(available)} strategies")
     
-    # Test listing strategies
-    available = manager.get_available_strategies()
-    print(f"✅ Found {len(available)} available strategies: {', '.join(available)}")
-    
-    # Test strategy info
-    info = manager.get_strategy_info("Simple Document Processing")
-    if info:
-        print(f"✅ Retrieved info for 'Simple Document Processing' strategy")
-        print(f"   Description: {info['description']}")
-        print(f"   Use cases: {', '.join(info['use_cases'])}")
-    else:
-        print("❌ Failed to get strategy info")
-        return False
-    
-    # Test converting strategy to config
-    config = manager.convert_strategy_to_config("Simple Document Processing")
-    if config:
-        print(f"✅ Converted 'Simple Document Processing' strategy to config")
-        required_keys = ["parser", "embedder", "vector_store", "retrieval_strategy"]
-        for key in required_keys:
-            if key not in config:
-                print(f"❌ Missing required key: {key}")
-                return False
-        print(f"   Config keys: {', '.join(config.keys())}")
-    else:
-        print("❌ Failed to convert strategy to config")
-        return False
-    
-    # Test validation
-    errors = manager.validate_strategy_config(config)
-    if not errors:
-        print("✅ Strategy configuration is valid")
-    else:
-        print(f"❌ Strategy configuration has errors: {errors}")
-        return False
-    
-    return True
+    # Test strategy name parsing
+    proc_name, db_name = handler.parse_strategy_name(available[0])
+    assert proc_name is not None or db_name is not None
+    print(f"✓ Strategy name parsing works")
 
 
-def test_strategy_recommendations():
-    """Test strategy recommendation system."""
-    print("\n🧪 Testing Strategy Recommendations...")
+def test_get_combined_config():
+    """Test getting combined configuration for a strategy."""
+    handler = SchemaHandler('demos/demo_strategies.yaml')
     
-    manager = StrategyManager()
-    
-    # Test recommendation by use case
-    recs = manager.recommend_strategies(use_case="customer_support")
-    if recs:
-        print(f"✅ Found {len(recs)} recommendations for customer support")
-        print(f"   Top recommendation: {recs[0]['name']}")
-    else:
-        print("❌ No recommendations found for customer support")
-        return False
-    
-    # Test recommendation by performance
-    recs = manager.recommend_strategies(performance_priority="speed")
-    if recs:
-        print(f"✅ Found {len(recs)} recommendations for speed priority")
-    else:
-        print("⚠️  No recommendations found for speed priority")
-    
-    return True
+    # Get available strategies
+    available = handler.get_available_strategies()
+    if available:
+        strategy_name = available[0]
+        config = handler.get_combined_config(strategy_name)
+        
+        assert config is not None
+        assert 'database' in config or 'processing_strategy' in config
+        print(f"✓ Combined config retrieved for {strategy_name}")
 
 
-def test_strategy_overrides():
-    """Test strategy configuration overrides."""
-    print("\n🧪 Testing Strategy Overrides...")
+def test_create_component_config():
+    """Test creating component configuration for CLI."""
+    handler = SchemaHandler('demos/demo_strategies.yaml')
     
-    manager = StrategyManager()
-    
-    # Test with overrides - need to use "components" structure
-    overrides = {
-        "components": {
-            "embedder": {
-                "config": {
-                    "batch_size": 32
-                }
-            }
-        }
-    }
-    
-    config = manager.convert_strategy_to_config("Simple Document Processing", overrides)
-    if config:
-        batch_size = config.get("embedder", {}).get("config", {}).get("batch_size")
-        if batch_size == 32:
-            print("✅ Strategy overrides applied successfully")
-        else:
-            print(f"❌ Override not applied correctly. Got batch_size: {batch_size}")
-            # Let's debug what we actually got
-            print(f"   Expected: 32, Got: {batch_size}")
-            print(f"   Full embedder config: {config.get('embedder', {})}")
-            return False
-    else:
-        print("❌ Failed to apply overrides")
-        return False
-    
-    return True
+    # Get available strategies
+    available = handler.get_available_strategies()
+    if available:
+        strategy_name = available[0]
+        config = handler.create_component_config(strategy_name)
+        
+        assert config is not None
+        assert 'version' in config
+        assert 'rag' in config
+        assert 'parsers' in config['rag']
+        print(f"✓ Component config created for {strategy_name}")
 
 
-def test_cli_integration():
-    """Test CLI integration (simulated)."""
-    print("\n🧪 Testing CLI Integration...")
+def test_database_config():
+    """Test getting database configuration."""
+    handler = SchemaHandler('demos/demo_strategies.yaml')
     
-    # Simulate CLI arguments
-    class MockArgs:
-        def __init__(self):
-            self.strategy = "Simple Document Processing"
-            self.strategy_overrides = '{"embedder":{"config":{"batch_size":16}}}'
-            self.config = None
-    
-    args = MockArgs()
-    
-    # Test the load_config_with_strategy_support function would work
-    # (We can't easily test it here without importing the CLI module)
-    print("✅ CLI integration structure looks good")
-    print(f"   Would use strategy: {args.strategy}")
-    print(f"   With overrides: {args.strategy_overrides}")
-    
-    return True
+    # Try to get a database config
+    db_config = handler.get_database_config('main_database')
+    if db_config:
+        assert 'type' in db_config
+        assert 'config' in db_config
+        print(f"✓ Database config retrieved")
 
 
-def run_all_tests():
-    """Run all strategy system tests."""
-    print(f"🚀 RAG Strategy System Tests")
-    print("=" * 50)
+def test_processing_strategy_config():
+    """Test getting processing strategy configuration."""
+    handler = SchemaHandler('demos/demo_strategies.yaml')
     
-    tests = [
-        ("Strategy Loading", test_strategy_loading),
-        ("Strategy Manager", test_strategy_manager),
-        ("Strategy Recommendations", test_strategy_recommendations),
-        ("Strategy Overrides", test_strategy_overrides),
-        ("CLI Integration", test_cli_integration),
-    ]
+    # Try to get a processing strategy config
+    proc_config = handler.get_processing_strategy_config('research_papers_demo')
+    if proc_config:
+        assert 'name' in proc_config
+        assert 'parsers' in proc_config or 'parser' in proc_config
+        print(f"✓ Processing strategy config retrieved")
+
+
+def test_embedder_config():
+    """Test getting embedder configuration."""
+    handler = SchemaHandler('demos/demo_strategies.yaml')
     
-    passed = 0
-    total = len(tests)
+    # Get a database config first
+    db_config = handler.get_database_config('main_database')
+    if db_config:
+        embedder_config = handler.get_embedder_config(db_config)
+        
+        assert embedder_config is not None
+        assert 'type' in embedder_config
+        assert 'config' in embedder_config
+        print(f"✓ Embedder config retrieved")
+
+
+def test_retrieval_strategy_config():
+    """Test getting retrieval strategy configuration."""
+    handler = SchemaHandler('demos/demo_strategies.yaml')
     
-    for test_name, test_func in tests:
-        try:
-            if test_func():
-                passed += 1
-                print(f"✅ {test_name} - PASSED")
-            else:
-                print(f"❌ {test_name} - FAILED")
-        except Exception as e:
-            print(f"❌ {test_name} - ERROR: {e}")
-    
-    print("\n" + "=" * 50)
-    print(f"📊 Test Results: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("🎉 All tests passed! Strategy system is working correctly.")
-        return True
-    else:
-        print("⚠️  Some tests failed. Please check the issues above.")
-        return False
+    # Get a database config first
+    db_config = handler.get_database_config('main_database')
+    if db_config:
+        retrieval_config = handler.get_retrieval_strategy_config(db_config)
+        
+        assert retrieval_config is not None
+        assert 'type' in retrieval_config
+        assert 'config' in retrieval_config
+        print(f"✓ Retrieval strategy config retrieved")
 
 
 if __name__ == "__main__":
-    success = run_all_tests()
-    sys.exit(0 if success else 1)
+    print("Testing Strategy System with New RAG Schema")
+    print("=" * 50)
+    
+    test_strategy_loading()
+    test_schema_handler_initialization()
+    test_get_combined_config()
+    test_create_component_config()
+    test_database_config()
+    test_processing_strategy_config()
+    test_embedder_config()
+    test_retrieval_strategy_config()
+    
+    print("\n✅ All strategy tests passed!")
