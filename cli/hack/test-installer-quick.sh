@@ -283,7 +283,7 @@ test_documentation() {
         "install.sh"
         "INSTALL.md"
         "cli/README.md"
-        ".github/workflows/cli-release.yml"
+        ".github/workflows/release-cli.yml"
     )
 
     local missing_files=()

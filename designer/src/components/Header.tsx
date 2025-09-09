@@ -10,9 +10,14 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu'
 import { useProjects } from '../hooks/useProjects'
-import { setActiveProject as setActiveProjectUtil, getActiveProject } from '../utils/projectUtils'
+import {
+  setActiveProject as setActiveProjectUtil,
+  getActiveProject,
+} from '../utils/projectUtils'
 import { getCurrentNamespace } from '../utils/namespaceUtils'
 import { getProjectsList } from '../utils/projectConstants'
+import { useQueryClient } from '@tanstack/react-query'
+import { projectKeys } from '../hooks/useProjects'
 
 function Header() {
   const [isBuilding, setIsBuilding] = useState(false)
@@ -25,10 +30,10 @@ function Header() {
   const [isProjectOpen, setIsProjectOpen] = useState(false)
   const [activeProject, setActiveProject] = useState<string>(getActiveProject)
   const namespace = getCurrentNamespace()
-  
+
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
-  
+  const queryClient = useQueryClient()
   // Convert API projects to project names for dropdown with fallback
   const projects = useMemo(() => {
     return getProjectsList(projectsResponse)
@@ -63,17 +68,39 @@ function Header() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
+  // Synchronize animation with query loading state
+  useEffect(() => {
+    if (!isSwitching) return
+
+    const currentProjectKey = projectKeys.detail(namespace, activeProject)
+    const isLoading = queryClient.isFetching({ queryKey: currentProjectKey }) > 0
+    
+    if (!isLoading) {
+      // End animation when data is loaded
+      const timer = setTimeout(() => setIsSwitching(false), 100) // Small delay for smoother transition
+      return () => clearTimeout(timer)
+    }
+  }, [queryClient, namespace, activeProject, isSwitching])
+
   // (removed unused persistProjects and handleCreateProject)
 
   const handleSelectProject = (name: string) => {
     const isDifferent = name !== activeProject
-    setActiveProject(name)
-    setActiveProjectUtil(name)
-    setIsProjectOpen(false)
+    
     if (isDifferent) {
+      // Invalidate the current project query to force refetch
+      const currentProjectKey = projectKeys.detail(namespace, activeProject)
+      queryClient.invalidateQueries({ queryKey: currentProjectKey })
+      
+      // Set the new active project
+      setActiveProject(name)
+      setActiveProjectUtil(name)
+      
+      // Show switching animation - will be ended by useEffect when loading completes
       setIsSwitching(true)
-      setTimeout(() => setIsSwitching(false), 900)
     }
+    
+    setIsProjectOpen(false)
   }
 
   const isHomePage = location.pathname === '/'
@@ -234,6 +261,17 @@ function Header() {
               </button>
               <button
                 className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                  isSelected === 'rag'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => navigate('/chat/rag')}
+              >
+                <FontIcon type="rag" className="w-6 h-6" />
+                <span>RAG</span>
+              </button>
+              <button
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
                   isSelected === 'prompt'
                     ? 'bg-primary text-primary-foreground'
                     : 'text-foreground hover:bg-secondary/80'
@@ -284,7 +322,6 @@ function Header() {
                 <FontIcon type="moon-filled" className="w-4 h-4" />
               </button>
             </div>
-            <FontIcon type="user-avatar" className="w-6 h-6 text-foreground" />
           </div>
         </div>
       </div>

@@ -892,7 +892,7 @@ const Models = () => {
   }
 
   return (
-    <div className="h-full w-full flex flex-col gap-3">
+    <div className="h-full w-full flex flex-col gap-3 pb-32">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl">Models</h2>
         <Button variant="outline" size="sm" disabled>

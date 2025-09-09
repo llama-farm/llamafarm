@@ -55,7 +55,6 @@ class ProjectChatOrchestratorAgent(
             ),
             model_api_parameters=project_config.runtime.model_api_parameters,
         )
-        logger.info(f"Agent config: {agent_config}")
         super().__init__(config=agent_config)
 
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import ModeToggle, { Mode } from '../ModeToggle'
-import ConfigEditor from '../ConfigEditor'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import GeneratedOutputs from './GeneratedOutput/GeneratedOutputs'
 
 const Prompt = () => {
@@ -23,8 +23,8 @@ const Prompt = () => {
   }
 
   return (
-    <div className="h-full w-full flex flex-col gap-2">
-      <div className="flex items-center justify-between mb-4">
+    <div className="h-full w-full flex flex-col">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h2 className="text-2xl ">
           {mode === 'designer' ? 'Prompt' : 'Config editor'}
         </h2>
@@ -42,7 +42,8 @@ const Prompt = () => {
         </div>
       )}
       {mode === 'designer' ? (
-        <div className="bg-card rounded-lg p-4 flex flex-col">
+        <div className="flex-1 min-h-0 pb-6 overflow-auto">
+          <div className="bg-card rounded-lg p-4 flex flex-col">
           <div className="mb-2">Expected outputs</div>
           <div className="text-sm mb-6">
             Help us generate better results, faster
@@ -98,9 +99,12 @@ const Prompt = () => {
           >
             Generate outputs
           </button>
+          </div>
         </div>
       ) : (
-        <ConfigEditor />
+        <div className="flex-1 min-h-0 overflow-hidden pb-6">
+          <ConfigEditor className="h-full" />
+        </div>
       )}
     </div>
   )

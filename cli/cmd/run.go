@@ -113,10 +113,7 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up (auto-start locally if needed)
-		if err := ensureServerAvailable(serverURL); err != nil {
-			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
-			os.Exit(1)
-		}
+		ensureServerAvailable(serverURL)
 
 		// Construct context and call the project-scoped chat completions via shared helpers
 		ctx := &ChatSessionContext{

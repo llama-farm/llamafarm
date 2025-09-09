@@ -39,6 +39,9 @@ TEST_ENVIRONMENTS=(
     "fedora:38"
 )
 
+# Version used for the simulated release
+TEST_VERSION="test-comprehensive-0.0.0"
+
 # Check prerequisites
 check_prerequisites() {
     info "Checking prerequisites..."
@@ -66,7 +69,7 @@ check_prerequisites() {
 build_test_binaries() {
     info "Building test binaries..."
 
-    local test_dir="test-installer-artifacts"
+    local test_dir="test-installer-artifacts/${TEST_VERSION}"
     rm -rf "$test_dir"
     mkdir -p "$test_dir"
 
@@ -84,15 +87,15 @@ build_test_binaries() {
 
         info "Building test binary for $goos/$goarch..."
 
-        GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=test-comprehensive-1.0.0'" \
-            -o "../$test_dir/lf" .
+        # The installer expects a flat binary named "llamafarm-<os>-<arch>"
+        local out_name="llamafarm-${goos}-${goarch}"
 
-        # Create archive
-        cd "../$test_dir"
-        tar -czf "llamafarm-cli_test-comprehensive-1.0.0_${goos}_${goarch}.tar.gz" lf
-        rm lf
-        cd ../cli
+        GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
+            -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=${TEST_VERSION}'" \
+            -o "../$test_dir/${out_name}" .
+
+        chmod +x "../$test_dir/${out_name}"
+        info "Created test artifact: ${out_name}"
     done
 
     cd ..
@@ -107,7 +110,7 @@ start_test_server() {
 
     # Create fake API response
     mkdir -p api
-    echo '{"tag_name": "test-comprehensive-1.0.0"}' > api/latest
+    echo "{\"tag_name\": \"${TEST_VERSION}\"}" > api/latest
 
     # Start HTTP server
     python3 -m http.server 8099 > server.log 2>&1 &
@@ -149,7 +152,7 @@ create_test_installer() {
     # Fix the API URL pattern to match the actual variable usage
     sed -i.bak 's|https://api.github.com/repos/\$REPO/releases/latest|http://host.docker.internal:8099/api/latest|g' test-install-modified.sh
     # Fix the download URL pattern to match the actual variable usage
-    sed -i.bak 's|https://github.com/\$REPO/releases/download/\$version/|http://host.docker.internal:8099/|g' test-install-modified.sh
+    sed -i.bak 's|https://github.com/\$REPO/releases/download/\$version/|http://host.docker.internal:8099/$version/|g' test-install-modified.sh
 
     chmod +x test-install-modified.sh
     success "Test installer created"
@@ -217,7 +220,7 @@ test_environment() {
             chmod 755 /opt/llamafarm
 
             # Test the installer
-            VERSION=test-comprehensive-1.0.0 INSTALL_DIR=/opt/llamafarm /test-install.sh
+            VERSION=${TEST_VERSION} INSTALL_DIR=/opt/llamafarm /test-install.sh
 
             # Verify installation - check both possible locations
             if [[ -f /opt/llamafarm/lf ]]; then
@@ -317,7 +320,7 @@ test_performance() {
         ubuntu:22.04 \
         bash -c "
             apt-get update -qq && apt-get install -y curl tar gzip > /dev/null
-            time VERSION=test-comprehensive-1.0.0 INSTALL_DIR=/opt/test /test-install.sh
+            time VERSION=${TEST_VERSION} INSTALL_DIR=/opt/test /test-install.sh
         " > performance.log 2>&1
 
     local end_time=$(date +%s)

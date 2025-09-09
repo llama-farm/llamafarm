@@ -9,7 +9,6 @@ models:
 
 runtime:
   provider: "ollama"
-  base_url: "http://localhost:11435/v1"
   model: "qwen3:8b"
   api_key: "ollama"
   instructor_mode: "json"

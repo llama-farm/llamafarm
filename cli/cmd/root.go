@@ -12,6 +12,7 @@ import (
 
 var debug bool
 var serverURL string = "http://localhost:8000"
+var ollamaHost string = "http://localhost:11434"
 var serverStartTimeout time.Duration
 var overrideCwd string
 
@@ -25,6 +26,13 @@ manage your data, configurations, models,and operations.`,
 		// Default behavior when no subcommand is specified
 		fmt.Println("Welcome to LlamaFarm!")
 		cmd.Help()
+	},
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Flags are parsed at this point; honor --debug
+		if debug {
+			InitDebugLogger("")
+		}
+		return nil
 	},
 }
 

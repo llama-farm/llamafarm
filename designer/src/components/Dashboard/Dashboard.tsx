@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import ModeToggle, { Mode } from '../ModeToggle'
 import DataCards from './DataCards'
 import ProjectModal from '../../components/Project/ProjectModal'  
-import ConfigEditor from '../ConfigEditor'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useProjectModal } from '../../hooks/useProjectModal'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
 
@@ -56,8 +56,8 @@ const Dashboard = () => {
 
   return (
     <>
-      <div className="w-full flex flex-col">
-        <div className="flex items-center justify-between mb-4">
+      <div className="w-full h-full flex flex-col">
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl ">
               {mode === 'designer' ? projectName : 'Config editor'}
@@ -81,7 +81,9 @@ const Dashboard = () => {
           </div>
         </div>
         {mode !== 'designer' ? (
-          <ConfigEditor />
+          <div className="flex-1 min-h-0 overflow-hidden pb-6">
+            <ConfigEditor className="h-full" />
+          </div>
         ) : (
           <>
             <DataCards />

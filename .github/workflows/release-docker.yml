@@ -1,0 +1,85 @@
+name: Release - Docker images
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  tag-docker-images:
+    name: Tag Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Tag Docker images
+        env:
+          REGISTRY: ghcr.io
+          IMAGE_NAME: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Determine the release tag
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          echo "Release tag: ${TAG}"
+
+          # Resolve commit SHA for the tag
+          FULL_SHA=$(git rev-list -n 1 "${TAG}")
+          SHORT_SHA=${FULL_SHA:0:7}
+          echo "Full SHA: ${FULL_SHA} | Short SHA: ${SHORT_SHA}"
+
+          # Login to GHCR
+          echo "Logging in to GHCR"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
+
+          # Services to retag
+          SERVICES=(designer server runtime)
+
+          # Try main-<fullsha> first, then main-<shortsha>
+          for SERVICE in "${SERVICES[@]}"; do
+            SRC1="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:main-${FULL_SHA}"
+            SRC2="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:main-${SHORT_SHA}"
+            DST="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:${TAG}"
+
+            echo "Attempting to retag ${SERVICE} from ${SRC1} -> ${DST}"
+            if docker pull "${SRC1}"; then
+              docker tag "${SRC1}" "${DST}"
+              docker push "${DST}"
+              echo "Retagged ${SERVICE} using full SHA"
+              continue
+            fi
+
+            echo "Full SHA tag not found, trying short SHA: ${SRC2}"
+            if docker pull "${SRC2}"; then
+              docker tag "${SRC2}" "${DST}"
+              docker push "${DST}"
+              echo "Retagged ${SERVICE} using short SHA"
+              continue
+            fi
+
+            echo "ERROR: Could not find source image for ${SERVICE} with either ${SRC1} or ${SRC2}" >&2
+            exit 1
+          done
+
+          echo "Docker images retagged for ${TAG}"

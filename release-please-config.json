@@ -1,14 +1,27 @@
 {
-    "bootstrap-sha": "",
-    "manifest": true,
-    "monorepo-tags": true,
-    "plugins": ["node-workspace"],
-    "bump-patch-for-minor-pre-major": true,
-    "packages": {
-      "cli": { "release-type": "go" },
-      "server": { "release-type": "node" },
-      "runtime": { "release-type": "python" },
-      "rag": { "release-type": "python" },
-      "models": { "release-type": "python" }
+  "bootstrap-sha": "",
+  "manifest": true,
+  "monorepo-tags": true,
+  "plugins": [
+    "node-workspace"
+  ],
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "packages": {
+    "cli": {
+      "release-type": "go"
+    },
+    "server": {
+      "release-type": "node"
+    },
+    "runtime": {
+      "release-type": "python"
+    },
+    "rag": {
+      "release-type": "python"
+    },
+    "models": {
+      "release-type": "python"
     }
   }
+}

@@ -9,7 +9,7 @@ set -e
 REPO="llama-farm/llamafarm"
 BINARY_NAME="lf"
 INSTALL_DIR="/usr/local/bin"
-CLI_NAME="llamafarm"
+CLI_NAME="lf"
 
 # Colors for output
 RED='\033[0;31m'

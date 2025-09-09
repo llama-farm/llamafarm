@@ -1,9 +1,9 @@
-name: Build and Release CLI
+name: Release - CLI
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types:
+      - published
   workflow_dispatch:
     inputs:
       version:
@@ -19,7 +19,7 @@ env:
   BINARY_NAME: lf
 
 jobs:
-  build:
+  build-cli:
     name: Build CLI Binaries
     runs-on: ubuntu-latest
     strategy:
@@ -43,7 +43,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
           fi
 
       - name: Copy schema.yaml to CLI config
@@ -60,9 +60,9 @@ jobs:
           CGO_ENABLED: 0
         run: |
           # Set binary name with .exe extension for Windows
-          BINARY_NAME="${{ env.BINARY_NAME }}_${{ steps.version.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          BINARY_NAME="${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [[ "${{ matrix.goos }}" == "windows" ]]; then
-            BINARY_NAME="${BINARY_NAME}_windows_${{ matrix.goarch }}.exe"
+            BINARY_NAME="${BINARY_NAME}-windows-${{ matrix.goarch }}.exe"
           fi
 
           # Build the binary
@@ -74,7 +74,7 @@ jobs:
           echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
 
           # # Create archive
-          # ARCHIVE_NAME="${{ env.CLI_NAME }}_${{ steps.version.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          # ARCHIVE_NAME="${{ env.CLI_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
           # mkdir -p dist
 
           # if [[ "${{ matrix.goos }}" == "windows" ]]; then
@@ -96,14 +96,14 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ steps.build.outputs.binary_name }}*"
-          path: cli/*
+          name: "${{ steps.build.outputs.binary_name }}"
+          path: cli/${{ steps.build.outputs.binary_name }}
 
-  test-install:
+  test-cli-install:
     name: Test Installation Script
-    needs: build
+    needs: build-cli
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'release'
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -119,7 +119,7 @@ jobs:
 
           # Test the install script
           chmod +x install.sh
-          VERSION=${GITHUB_REF#refs/tags/} INSTALL_DIR=$HOME/.local/bin ./install.sh
+          VERSION=${{ github.event.release.tag_name }} INSTALL_DIR=$HOME/.local/bin ./install.sh
 
           # Test the installed binary
           export PATH="$HOME/.local/bin:$PATH"

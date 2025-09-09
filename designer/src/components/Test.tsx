@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import FontIcon from '../common/FontIcon'
 import ModeToggle, { Mode } from './ModeToggle'
-import ConfigEditor from './ConfigEditor'
+import ConfigEditor from './ConfigEditor/ConfigEditor'
 
 interface TestCase {
   id: number
@@ -189,8 +189,8 @@ const Test = () => {
   const [mode, setMode] = useState<Mode>('designer')
 
   return (
-    <div className="w-full flex flex-col gap-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="w-full h-full flex flex-col">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h2 className="text-2xl ">
           {mode === 'designer' ? 'Test' : 'Config editor'}
         </h2>
@@ -204,30 +204,33 @@ const Test = () => {
 
       {/* New test case accordion */}
       {mode !== 'designer' ? (
-        <ConfigEditor />
+        <div className="flex-1 min-h-0 overflow-hidden pb-6">
+          <ConfigEditor className="h-full" />
+        </div>
       ) : (
-        <div className="w-full rounded-xl bg-card p-4">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              className="flex items-center gap-2 text-left"
-              onClick={() => setIsNewOpen(v => !v)}
-            >
-              <span className="text-sm">New test case</span>
-              <FontIcon
-                type="chevron-down"
-                className={`w-4 h-4 text-foreground transition-transform ${isNewOpen ? 'rotate-180' : ''}`}
-              />
-            </button>
-            <button
-              type="button"
-              disabled={!isFormValid}
-              onClick={handleAddTest}
-              className={`text-sm px-3 py-2 rounded-lg ${isFormValid ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed border border-input text-muted-foreground'}`}
-            >
-              Add test case
-            </button>
-          </div>
+        <div className="flex-1 min-h-0 flex flex-col gap-4 pb-6 overflow-auto">
+          <div className="w-full rounded-xl bg-card p-4 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                className="flex items-center gap-2 text-left"
+                onClick={() => setIsNewOpen(v => !v)}
+              >
+                <span className="text-sm">New test case</span>
+                <FontIcon
+                  type="chevron-down"
+                  className={`w-4 h-4 text-foreground transition-transform ${isNewOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              <button
+                type="button"
+                disabled={!isFormValid}
+                onClick={handleAddTest}
+                className={`text-sm px-3 py-2 rounded-lg ${isFormValid ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed border border-input text-muted-foreground'}`}
+              >
+                Add test case
+              </button>
+            </div>
 
           {isNewOpen && (
             <div className="mt-3 flex flex-col gap-3">
@@ -267,12 +270,10 @@ const Test = () => {
               </div>
             </div>
           )}
-        </div>
-      )}
+          </div>
 
-      {/* Table of tests */}
-      {mode === 'designer' && (
-        <div className="w-full rounded-md overflow-hidden border border-border">
+          {/* Table of tests */}
+          <div className="w-full rounded-md overflow-hidden border border-border flex-shrink-0">
           <table className="w-full text-sm">
             <thead className="bg-muted">
               <tr>
@@ -342,6 +343,7 @@ const Test = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

@@ -20,6 +20,16 @@ var devCmd = &cobra.Command{
 			serverURL = "http://localhost:8000"
 		}
 
+		// Resolve ollamaHost for dev: flag > env > default
+		if !cmd.Flags().Changed("ollama-host") {
+			if v := strings.TrimSpace(os.Getenv("OLLAMA_HOST")); v != "" {
+				ollamaHost = v
+			}
+		}
+		if strings.TrimSpace(ollamaHost) == "" {
+			ollamaHost = "http://localhost:11434"
+		}
+
 		// Load config to get namespace and project for watcher
 		cwd := getEffectiveCWD()
 		cfg, err := config.LoadConfig(cwd)
@@ -38,9 +48,7 @@ var devCmd = &cobra.Command{
 			}
 		}
 
-		if err := ensureServerAvailable(serverURL); err != nil {
-			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
-		}
+		ensureServerAvailable(serverURL)
 		runChatSessionTUI(projectInfo)
 	},
 }
@@ -48,8 +56,7 @@ var devCmd = &cobra.Command{
 func init() {
 	// Attach to root
 	rootCmd.AddCommand(devCmd)
-	// Provide a hint if server URL isn't set
-	if serverURL == "" {
-		fmt.Fprintln(os.Stderr, "Hint: use --server-url to point to a specific server")
-	}
+
+	// Add dev-only flags
+	devCmd.Flags().StringVar(&ollamaHost, "ollama-host", ollamaHost, "Ollama host URL")
 }
