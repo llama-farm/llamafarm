@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -13,30 +14,71 @@ import (
 	"time"
 )
 
+var containerName = "llamafarm-server"
+var image = "ghcr.io/llama-farm/llamafarm/server:latest"
+
+type Component struct {
+	Name      string                 `json:"name"`
+	Status    string                 `json:"status"`
+	Message   string                 `json:"message"`
+	LatencyMs int                    `json:"latency_ms"`
+	Details   map[string]interface{} `json:"details,omitempty"`
+	Runtime   map[string]interface{} `json:"runtime,omitempty"`
+}
+type HealthPayload struct {
+	Status     string      `json:"status"`
+	Summary    string      `json:"summary"`
+	Components []Component `json:"components"`
+	Seeds      []Component `json:"seeds"`
+	Timestamp  int64       `json:"timestamp"`
+}
+
+// HealthError wraps a non-healthy /health response.
+type HealthError struct {
+	Status     string
+	HealthResp HealthPayload
+}
+
+func (e *HealthError) Error() string {
+	return fmt.Sprintf("server unhealthy: %s", e.Status)
+}
+
 // ensureServerAvailable verifies the server at serverURL is reachable.
 // If not reachable and the host is localhost, it attempts to start the
 // server via Docker, then waits for readiness. Returns an error if it
 // ultimately cannot ensure availability.
-func ensureServerAvailable(serverURL string) error {
-	if err := pingURL(ollamaHost); err != nil {
-		fmt.Fprintf(os.Stderr, "no Ollama server detected on the host. Please start Ollama (https://ollama.com/download) before launching LlamaFarm, or set --ollama-host to a reachable Ollama instance")
-	}
-
+func ensureServerAvailable(serverURL string) {
 	if serverURL == "" {
 		serverURL = "http://localhost:8000"
 	}
 
 	if err := checkServerHealth(serverURL); err == nil {
-		return nil
+		return
+	} else {
+		// If we already got a health payload, render a clean, readable error
+		url := strings.TrimRight(serverURL, "/") + "/health/liveness"
+		if perr := pingURL(url); perr == nil {
+			// The server is reachable, but not healthy
+			if herr, ok := err.(*HealthError); ok {
+				prettyPrintHealth(os.Stderr, herr.HealthResp)
+				if herr.Status == "unhealthy" {
+					os.Exit(1)
+				} else {
+					return
+				}
+			}
+		}
 	}
 
 	// Only attempt auto-start when pointing to localhost
 	if !isLocalhost(serverURL) {
-		return fmt.Errorf("server %s is not reachable", serverURL)
+		fmt.Fprintf(os.Stderr, "❌ Could not contact server %s\n", serverURL)
+		os.Exit(1)
 	}
 
 	if err := startLocalServerViaDocker(serverURL); err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "❌ Could not start local server: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Poll for readiness
@@ -45,39 +87,61 @@ func ensureServerAvailable(serverURL string) error {
 		timeout = 45 * time.Second
 	}
 	deadline := time.Now().Add(timeout)
+	var lastError error = nil
+
+	fmt.Fprintf(os.Stderr, "Waiting for server to become ready...\n")
 	for {
 		if err := checkServerHealth(serverURL); err == nil {
-			return nil
+			return
+		} else {
+			lastError = err
+			if time.Now().After(deadline) {
+				break
+			}
+			duration := 1 * time.Second
+			time.Sleep(duration)
 		}
-		if time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(1 * time.Second)
 	}
-	return fmt.Errorf("server did not become ready at %s within timeout", serverURL)
+	fmt.Fprintf(os.Stderr, "Server did not become ready at %s within timeout\n", serverURL)
+	if herr, ok := lastError.(*HealthError); ok {
+		// Render once on each failed poll tick to aid diagnosis
+		prettyPrintHealth(os.Stderr, herr.HealthResp)
+		if herr.Status == "unhealthy" {
+			os.Exit(1)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "%v\n", lastError)
+		os.Exit(1)
+	}
 }
 
-// checkServerHealth pings the /info endpoint with a short timeout.
+// checkServerHealth requires /health to be healthy.
 func checkServerHealth(serverURL string) error {
 	base := strings.TrimRight(serverURL, "/")
-	infoURL := base + "/info"
+	healthURL := base + "/health"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, infoURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return err
 	}
-
 	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
+		var payload HealthPayload
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return fmt.Errorf("invalid health payload: %v", err)
+		}
+		if strings.EqualFold(payload.Status, "healthy") {
+			return nil
+		}
+		return &HealthError{Status: payload.Status, HealthResp: payload}
 	}
 	return fmt.Errorf("unexpected health status %d", resp.StatusCode)
 }
@@ -100,8 +164,6 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	port := resolvePort(serverURL, 8000)
-	containerName := "llamafarm-server"
-	image := "ghcr.io/llama-farm/llamafarm/server:latest"
 
 	// If a container with this name exists and is running, nothing to do
 	if isContainerRunning(containerName) {
@@ -183,11 +245,58 @@ func resolvePort(serverURL string, defaultPort int) int {
 	return defaultPort
 }
 
+// prettyPrintHealth decodes a /health payload and renders a concise, readable summary
+func prettyPrintHealth(w io.Writer, hr HealthPayload) {
+	prefix := "❌"
+	if hr.Status == "degraded" {
+		prefix = "⚠️"
+	} else if hr.Status == "healthy" {
+		prefix = "✅"
+	}
+	fmt.Fprintf(w, "%s Server is %s\n", prefix, hr.Status)
+	if strings.TrimSpace(hr.Summary) != "" {
+		fmt.Fprintf(w, "Summary: %s\n", hr.Summary)
+	}
+	if len(hr.Components) > 0 {
+		fmt.Fprintln(w, "Components:")
+		for _, c := range hr.Components {
+			icon := iconForStatus(c.Status)
+			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, c.Name, c.Status, c.Message, c.LatencyMs)
+			for k, v := range c.Details {
+				fmt.Fprintf(w, "      %s: %v\n", k, v)
+			}
+		}
+	}
+	if len(hr.Seeds) > 0 {
+		fmt.Fprintln(w, "Seeds:")
+		for _, s := range hr.Seeds {
+			icon := iconForStatus(s.Status)
+			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs)
+			for k, v := range s.Runtime {
+				fmt.Fprintf(w, "      %s: %v\n", k, v)
+			}
+		}
+	}
+}
+
+func iconForStatus(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "healthy":
+		return "✅"
+	case "degraded":
+		return "⚠️"
+	case "unhealthy":
+		return "❌"
+	default:
+		return "•"
+	}
+}
+
 func pingURL(base string) error {
-	u := strings.TrimRight(base, "/") + "/api/tags"
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base, nil)
 	if err != nil {
 		return err
 	}
