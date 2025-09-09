@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
@@ -49,4 +51,45 @@ func isContainerRunning(name string) bool {
 		}
 	}
 	return false
+}
+
+// resolveImageTag determines the appropriate Docker image tag based on version and environment variables
+func resolveImageTag(component string, defaultTag string) string {
+	// Check for component-specific environment variable first
+	componentEnvVar := fmt.Sprintf("LF_%s_IMAGE_TAG", strings.ToUpper(component))
+	if tag := strings.TrimSpace(os.Getenv(componentEnvVar)); tag != "" {
+		return tag
+	}
+
+	// Check for global override
+	if tag := strings.TrimSpace(os.Getenv("LF_IMAGE_TAG")); tag != "" {
+		return tag
+	}
+
+	// Use version-based logic
+	version := strings.TrimSpace(Version)
+	if version == "" {
+		return defaultTag
+	}
+
+	// Handle version patterns: vX.X.X, vX.X.X-suffix, etc.
+	versionPattern := regexp.MustCompile(`^v\d+\.\d+\.\d+.*`)
+	if versionPattern.MatchString(version) {
+		return version
+	}
+
+	// Handle dev versions
+	if version == "dev" || version == "vdev" {
+		return "latest"
+	}
+
+	// Fallback to default
+	return defaultTag
+}
+
+// getImageURL constructs the full Docker image URL for a given component
+func getImageURL(component string) string {
+	baseURL := "ghcr.io/llama-farm/llamafarm"
+	tag := resolveImageTag(component, "latest")
+	return fmt.Sprintf("%s/%s:%s", baseURL, component, tag)
 }

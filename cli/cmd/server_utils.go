@@ -101,7 +101,7 @@ func startLocalServerViaDocker(serverURL string) error {
 
 	port := resolvePort(serverURL, 8000)
 	containerName := "llamafarm-server"
-	image := "ghcr.io/llama-farm/llamafarm/server:latest"
+	image := getImageURL("server")
 
 	// If a container with this name exists and is running, nothing to do
 	if isContainerRunning(containerName) {
