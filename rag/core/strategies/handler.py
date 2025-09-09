@@ -197,8 +197,8 @@ class SchemaHandler:
     def create_component_config(self, strategy_name: str, source_path: Optional[Path] = None) -> Dict[str, Any]:
         """Create a component configuration that can be used by CLI.
         
-        This creates a flat structure with individual component configs
-        that the CLI can use to create components.
+        This creates a structure that matches what the CLI expects,
+        with components in arrays as per the schema.
         """
         combined = self.get_combined_config(strategy_name, source_path)
         
@@ -208,13 +208,42 @@ class SchemaHandler:
         db_config = combined.get('database', {})
         proc_config = combined.get('processing_strategy', {})
         
+        # Get individual component configs
+        embedder = self.get_embedder_config(db_config)
+        vector_store = self.get_vector_store_config(db_config)
+        retrieval = self.get_retrieval_strategy_config(db_config)
+        parser = self.get_parser_config(proc_config, source_path)
+        extractors = self.get_extractors_config(proc_config)
+        
+        # Return in the format the CLI expects
+        # The CLI's select_parser_config and select_component_config expect
+        # components to be in dictionaries with the component name as key
         return {
-            'embedder': self.get_embedder_config(db_config),
-            'vector_store': self.get_vector_store_config(db_config),
-            'retrieval_strategy': self.get_retrieval_strategy_config(db_config),
-            'parser': self.get_parser_config(proc_config, source_path),
-            'extractors': self.get_extractors_config(proc_config),
-            'strategy_name': strategy_name,
-            'database_name': db_config.get('name'),
-            'processing_strategy_name': proc_config.get('name')
+            'version': 'v1',  # Indicate this is from new schema
+            'rag': {
+                'parsers': {
+                    parser['type']: parser
+                } if parser else {},
+                'embedders': {
+                    embedder['type']: embedder
+                } if embedder else {},
+                'vector_stores': {
+                    vector_store['type']: vector_store
+                } if vector_store else {},
+                'retrieval_strategies': {
+                    retrieval['type']: retrieval
+                } if retrieval else {},
+                'extractors': extractors if extractors else [],
+                'defaults': {
+                    'parser': parser.get('type') if parser else None,
+                    'embedder': embedder.get('type') if embedder else None,
+                    'vector_store': vector_store.get('type') if vector_store else None,
+                    'retrieval_strategy': retrieval.get('type') if retrieval else None
+                }
+            },
+            'metadata': {
+                'strategy_name': strategy_name,
+                'database_name': db_config.get('name'),
+                'processing_strategy_name': proc_config.get('name')
+            }
         }
