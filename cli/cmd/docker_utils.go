@@ -9,6 +9,19 @@ import (
 	"strings"
 )
 
+// versionPattern matches semantic versions with or without leading "v"
+// Examples: v1.0.0, v1.0.0-rc1, v2.0.0-beta.1+build.123, 1.0.0, 1.0.0-alpha
+var versionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+.*`)
+
+// knownComponents lists the valid component names for image URLs
+var knownComponents = map[string]bool{
+	"server":   true,
+	"designer": true,
+	"rag":      true,
+	"runtime":  true,
+	"models":   true,
+}
+
 // ensureDockerAvailable checks whether docker is available on PATH
 func ensureDockerAvailable() error {
 	if err := exec.Command("docker", "--version").Run(); err != nil {
@@ -72,9 +85,12 @@ func resolveImageTag(component string, defaultTag string) string {
 		return defaultTag
 	}
 
-	// Handle version patterns: vX.X.X, vX.X.X-suffix, etc.
-	versionPattern := regexp.MustCompile(`^v\d+\.\d+\.\d+.*`)
+	// Handle version patterns: vX.X.X, X.X.X, with optional suffixes
 	if versionPattern.MatchString(version) {
+		// Ensure version has "v" prefix for Docker tag consistency
+		if !strings.HasPrefix(version, "v") {
+			return "v" + version
+		}
 		return version
 	}
 
@@ -88,8 +104,22 @@ func resolveImageTag(component string, defaultTag string) string {
 }
 
 // getImageURL constructs the full Docker image URL for a given component
-func getImageURL(component string) string {
+func getImageURL(component string) (string, error) {
+	if !knownComponents[component] {
+		return "", fmt.Errorf("unknown component '%s'; valid components are: %s", 
+			component, getKnownComponentsList())
+	}
+
 	baseURL := "ghcr.io/llama-farm/llamafarm"
 	tag := resolveImageTag(component, "latest")
-	return fmt.Sprintf("%s/%s:%s", baseURL, component, tag)
+	return fmt.Sprintf("%s/%s:%s", baseURL, component, tag), nil
+}
+
+// getKnownComponentsList returns a comma-separated list of known components
+func getKnownComponentsList() string {
+	components := make([]string, 0, len(knownComponents))
+	for component := range knownComponents {
+		components = append(components, component)
+	}
+	return strings.Join(components, ", ")
 }

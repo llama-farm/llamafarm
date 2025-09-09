@@ -180,6 +180,20 @@ func TestResolveImageTag(t *testing.T) {
 			componentOverride: "custom-designer",
 			expectedTag:       "custom-designer",
 		},
+		{
+			name:        "semantic version without v prefix",
+			version:     "1.0.0",
+			component:   "server",
+			defaultTag:  "latest",
+			expectedTag: "v1.0.0",
+		},
+		{
+			name:        "prerelease version without v prefix",
+			version:     "2.1.0-rc1",
+			component:   "server",
+			defaultTag:  "latest",
+			expectedTag: "v2.1.0-rc1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -215,12 +229,18 @@ func TestGetImageURL(t *testing.T) {
 	// Clear environment variables
 	os.Unsetenv("LF_IMAGE_TAG")
 	os.Unsetenv("LF_SERVER_IMAGE_TAG")
+	os.Unsetenv("LF_DESIGNER_IMAGE_TAG")
+	os.Unsetenv("LF_RAG_IMAGE_TAG")
 
 	tests := []struct {
-		name        string
-		version     string
-		component   string
-		expectedURL string
+		name              string
+		version           string
+		component         string
+		globalOverride    string
+		componentOverride string
+		expectedURL       string
+		shouldError       bool
+		expectedError     string
 	}{
 		{
 			name:        "server with semantic version",
@@ -240,12 +260,85 @@ func TestGetImageURL(t *testing.T) {
 			component:   "rag",
 			expectedURL: "ghcr.io/llama-farm/llamafarm/rag:v2.0.0-alpha.1",
 		},
+		{
+			name:        "version without v prefix gets normalized",
+			version:     "1.0.0",
+			component:   "server",
+			expectedURL: "ghcr.io/llama-farm/llamafarm/server:v1.0.0",
+		},
+		{
+			name:           "global override applies",
+			version:        "v1.0.0",
+			component:      "server",
+			globalOverride: "custom-global",
+			expectedURL:    "ghcr.io/llama-farm/llamafarm/server:custom-global",
+		},
+		{
+			name:              "component override takes precedence",
+			version:           "v1.0.0",
+			component:         "designer",
+			globalOverride:    "custom-global",
+			componentOverride: "custom-designer",
+			expectedURL:       "ghcr.io/llama-farm/llamafarm/designer:custom-designer",
+		},
+		{
+			name:              "component override without global",
+			version:           "v1.0.0",
+			component:         "rag",
+			componentOverride: "custom-rag",
+			expectedURL:       "ghcr.io/llama-farm/llamafarm/rag:custom-rag",
+		},
+		{
+			name:          "unknown component returns error",
+			version:       "v1.0.0",
+			component:     "unknown",
+			shouldError:   true,
+			expectedError: "unknown component 'unknown'",
+		},
+		{
+			name:          "invalid component returns error",
+			version:       "v1.0.0",
+			component:     "invalid-component",
+			shouldError:   true,
+			expectedError: "unknown component 'invalid-component'",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set up version
 			Version = tt.version
-			result := getImageURL(tt.component)
+
+			// Set up environment variables
+			if tt.globalOverride != "" {
+				os.Setenv("LF_IMAGE_TAG", tt.globalOverride)
+				defer os.Unsetenv("LF_IMAGE_TAG")
+			}
+			if tt.componentOverride != "" {
+				envVar := "LF_" + strings.ToUpper(tt.component) + "_IMAGE_TAG"
+				os.Setenv(envVar, tt.componentOverride)
+				defer os.Unsetenv(envVar)
+			}
+
+			// Test the function
+			result, err := getImageURL(tt.component)
+
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("getImageURL(%q) expected error but got none", tt.component)
+					return
+				}
+				if !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("getImageURL(%q) error = %q, want error containing %q", tt.component, err.Error(), tt.expectedError)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("getImageURL(%q) unexpected error: %v", tt.component, err)
+				return
+			}
+
 			if result != tt.expectedURL {
 				t.Errorf("getImageURL(%q) = %q, want %q", tt.component, result, tt.expectedURL)
 			}

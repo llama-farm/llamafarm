@@ -101,7 +101,10 @@ func startLocalServerViaDocker(serverURL string) error {
 
 	port := resolvePort(serverURL, 8000)
 	containerName := "llamafarm-server"
-	image := getImageURL("server")
+	image, err := getImageURL("server")
+	if err != nil {
+		return fmt.Errorf("failed to resolve server image URL: %v", err)
+	}
 
 	// If a container with this name exists and is running, nothing to do
 	if isContainerRunning(containerName) {
