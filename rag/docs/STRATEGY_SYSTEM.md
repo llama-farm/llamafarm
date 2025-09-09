@@ -1,41 +1,49 @@
 # Strategy System Documentation
 
-The RAG system uses a **strategy-first** approach where entire document processing and retrieval pipelines are configured through YAML files. This provides maximum flexibility while maintaining consistency and reusability.
+The RAG system uses a **new v1 schema** with modular databases and data processing strategies. This architecture provides maximum flexibility while maintaining consistency through DirectoryParser's always-active file routing.
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Strategy Configuration](#strategy-configuration)
-3. [Components](#components)
-4. [Retrieval Strategies](#retrieval-strategies)
-5. [Creating Custom Strategies](#creating-custom-strategies)
-6. [Best Practices](#best-practices)
-7. [Examples](#examples)
+2. [New v1 Schema Structure](#new-v1-schema-structure)
+3. [Strategy Naming Convention](#strategy-naming-convention)
+4. [DirectoryParser Architecture](#directoryparser-architecture)
+5. [Available Components](#available-components)
+6. [Retrieval Strategies](#retrieval-strategies)
+7. [Creating Custom Strategies](#creating-custom-strategies)
+8. [Best Practices](#best-practices)
+9. [Examples](#examples)
 
 ## Overview
 
-A strategy defines a complete RAG pipeline including:
-- **Parsers**: How documents are read and processed
-- **Extractors**: What metadata is extracted from documents
-- **Embedders**: How text is converted to vectors
-- **Vector Stores**: Where and how embeddings are stored
-- **Retrieval**: How documents are searched and ranked
+The v1 schema separates configuration into two main sections:
+- **Databases**: Vector stores with embedding and retrieval strategies
+- **Data Processing Strategies**: Document processing pipelines with parsers and extractors
+
+### Key Changes in v1
+
+- **DirectoryParser Always Active**: Automatic file detection and routing at strategy level
+- **Unified Vector Store**: All strategies can share the same database
+- **Parser Naming Convention**: `{ParserType}_{Implementation}` (e.g., `PDFParser_LlamaIndex`)
+- **Strategy Naming**: `{data_processing_strategy}_{database_name}` for clear organization
 
 ### Benefits
 
 - **No Code Changes**: Modify behavior through configuration
-- **Reusability**: Share strategies across projects
-- **Consistency**: Ensure uniform processing
+- **Automatic File Routing**: DirectoryParser handles file detection
+- **Shared Storage**: Multiple strategies can use the same vector database
+- **Clear Naming**: Consistent naming conventions for all components
 - **Version Control**: Track configuration changes
-- **A/B Testing**: Easy comparison of approaches
 
-## Strategy Configuration
+## New v1 Schema Structure
 
-### Basic Structure
-
-The RAG system now uses a modular architecture with separate databases and data processing strategies:
+The v1 schema uses a clean, organized structure with two main sections under the `rag` key:
 
 ```yaml
+version: v1
+name: project-name
+namespace: default
+
 rag:
   databases:
     - name: "main_database"
@@ -61,177 +69,155 @@ rag:
   data_processing_strategies:
     - name: "pdf_processing"
       description: "Standard PDF document processing"
+      # DirectoryParser configuration (ALWAYS ACTIVE)
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf"]
+        allowed_mime_types: ["application/pdf"]
+        allowed_extensions: [".pdf"]
       parsers:
-        - type: "PDFParser_PyPDF2"
+        - type: "PDFParser_LlamaIndex"
+          mime_types: ["application/pdf"]
+          file_extensions: [".pdf"]
           config:
             chunk_size: 1000
-            extract_metadata: true
+            chunk_overlap: 200
       extractors:
-      # Document parsing
-      parser:
-        type: "ParserType"
-        config:
-          setting1: value1
-          setting2: value2
-      
-      # Metadata extraction
-      extractors:
-        - type: "ExtractorType1"
-          config: {}
-        - type: "ExtractorType2"
-          config:
-            setting: value
-      
-      # Embedding generation
-      embedder:
-        type: "EmbedderType"
-        config:
-          model: "model-name"
-          dimension: 768
-      
-      # Vector storage
-      vector_store:
-        type: "StoreType"
-        config:
-          collection_name: "collection"
-          persist_directory: "./vectordb"
-      
-      # Retrieval configuration
-      retrieval_strategy:
-        type: "StrategyType"
-        config:
-          top_k: 5
-```
-
-**Note:** Multiple strategies can be defined in the same file by adding more items to the `strategies` array.
-
-### Complete Example
-
-```yaml
-strategies:
-  - name: "research_papers_demo"
-    description: "Optimized for academic papers with citations and entities"
-    tags: ["academic", "research", "papers"]
-    use_cases:
-      - "Literature review"
-      - "Research synthesis"
-      - "Citation tracking"
-    
-    components:
-      parser:
-        type: "PDFParser"
-        config:
-          extract_images: false
-          extract_metadata: true
-          chunk_size: 1024
-          chunk_overlap: 200
-      
-      extractors:
-        - type: "HeadingExtractor"
-          config:
-            levels: [1, 2, 3]
-            include_content: true
-        
-        - type: "CitationExtractor"
-          config:
-            formats: ["APA", "MLA", "Chicago"]
-            validate: true
-        
         - type: "EntityExtractor"
           config:
-            entities: ["PERSON", "ORG", "DATE"]
-            confidence_threshold: 0.8
-        
-        - type: "KeywordExtractor"
-          config:
-            max_keywords: 15
-            algorithm: "yake"
-      
-      embedder:
-        type: "OllamaEmbedder"
-        config:
-          model: "nomic-embed-text"
-          dimension: 768
-          batch_size: 32
-          timeout: 60
-      
-      vector_store:
-        type: "ChromaStore"
-        config:
-          collection_name: "research_papers"
-          persist_directory: "./vectordb/research"
-          distance_metric: "cosine"
-      
-      retrieval_strategy:
-        type: "RerankedStrategy"
-        config:
-          initial_k: 20
-          final_k: 5
-          rerank_factors:
-            recency_weight: 0.2
-            citation_weight: 0.3
-            relevance_weight: 0.5
+            entity_types: ["PERSON", "ORG", "DATE"]
 ```
 
-## Components
+## Strategy Naming Convention
+
+When using strategies with the CLI, combine the processing strategy and database names:
+
+```
+{data_processing_strategy}_{database_name}
+```
+
+Examples:
+- `pdf_processing_main_database`
+- `text_processing_main_database`
+- `csv_processing_research_database`
+
+## DirectoryParser Architecture
+
+DirectoryParser is **ALWAYS ACTIVE** at the strategy level and handles:
+- File/directory scanning based on `directory_config`
+- MIME type detection
+- File filtering based on patterns and extensions
+- Routing files to appropriate parsers
+
+The `directory_config` section controls how files are discovered and filtered:
+
+```yaml
+directory_config:
+  recursive: true                           # Scan subdirectories
+  include_patterns: ["*.pdf", "*.txt"]      # Glob patterns to include
+  exclude_patterns: ["*.tmp", ".*"]         # Patterns to exclude
+  allowed_mime_types: ["application/pdf"]   # MIME types to accept
+  allowed_extensions: [".pdf", ".PDF"]      # File extensions to accept
+  max_files: 1000                          # Maximum files to process
+  follow_symlinks: false                   # Whether to follow symbolic links
+```
+
+## Available Components
 
 ### Parsers
 
-Available parsers and their configurations:
+All parsers follow the naming convention: `{ParserType}_{Implementation}`
 
-#### TextParser
+#### PDF Parsers
+
+**PDFParser_LlamaIndex**
 ```yaml
-parser:
-  type: "TextParser"
+- type: "PDFParser_LlamaIndex"
+  mime_types: ["application/pdf"]
+  file_extensions: [".pdf", ".PDF"]
+  config:
+    chunk_size: 1500
+    chunk_overlap: 200
+    chunk_strategy: "semantic"  # semantic, pages, fixed
+    preserve_equations: true
+    extract_images: false
+    extract_metadata: true
+```
+
+**PDFParser_PyPDF2**
+```yaml
+- type: "PDFParser_PyPDF2"
+  mime_types: ["application/pdf"]
+  file_extensions: [".pdf"]
+  config:
+    chunk_size: 1000
+    chunk_overlap: 150
+    chunk_strategy: "paragraphs"
+    extract_metadata: true
+```
+
+#### Text Parsers
+
+**TextParser_LlamaIndex**
+```yaml
+- type: "TextParser_LlamaIndex"
+  mime_types: ["text/plain"]
+  file_extensions: [".txt", ".text", ".log"]
+  config:
+    chunk_size: 1000
+    chunk_overlap: 150
+    extract_metadata: true
+```
+
+**TextParser_Python**
+```yaml
+- type: "TextParser_Python"
+  mime_types: ["text/plain"]
+  file_extensions: [".txt", ".log"]
   config:
     encoding: "utf-8"
-    chunk_size: 512
-    chunk_overlap: 50
-    preserve_formatting: true
+    chunk_size: 1200
+    chunk_overlap: 200
+    chunk_strategy: "sentences"
 ```
 
-#### PDFParser
+#### CSV Parsers
+
+**CSVParser_Pandas**
 ```yaml
-parser:
-  type: "PDFParser"
+- type: "CSVParser_Pandas"
+  mime_types: ["text/csv"]
+  file_extensions: [".csv", ".CSV"]
   config:
-    extract_images: false
+    content_fields: ["description", "content"]
+    metadata_fields: ["id", "date", "category"]
+    chunk_size: 500
+```
+
+#### Document Parsers
+
+**DocxParser_LlamaIndex**
+```yaml
+- type: "DocxParser_LlamaIndex"
+  mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+  file_extensions: [".docx", ".DOCX"]
+  config:
+    chunk_size: 1500
+    chunk_overlap: 200
     extract_tables: true
+```
+
+#### Markdown Parsers
+
+**MarkdownParser_LlamaIndex**
+```yaml
+- type: "MarkdownParser_LlamaIndex"
+  mime_types: ["text/markdown", "text/x-markdown"]
+  file_extensions: [".md", ".markdown"]
+  config:
+    chunk_size: 1200
+    chunk_overlap: 150
     extract_metadata: true
-    ocr_enabled: false
-```
-
-#### HTMLParser
-```yaml
-parser:
-  type: "HTMLParser"
-  config:
-    extract_links: true
-    preserve_structure: false
-    remove_scripts: true
-    remove_styles: true
-```
-
-#### CSVParser
-```yaml
-parser:
-  type: "CSVParser"
-  config:
-    delimiter: ","
-    has_header: true
-    field_mapping:
-      content_field: "description"
-      id_field: "id"
-```
-
-#### MarkdownParser
-```yaml
-parser:
-  type: "MarkdownParser"
-  config:
-    preserve_formatting: true
-    extract_code_blocks: true
-    extract_links: true
 ```
 
 ### Extractors
@@ -447,43 +433,81 @@ Consider:
 
 ### Step 2: Create Strategy YAML
 
-Create a new file `my_strategies.yaml`:
+Create a new file `my_strategies.yaml` following the v1 schema:
 
 ```yaml
-strategies:
-  - name: "my_custom_strategy"
-    description: "Custom strategy for my use case"
-    tags: ["custom", "specific"]
-    use_cases:
-      - "Specific use case 1"
-      - "Specific use case 2"
-    
-    components:
-      # Your configuration here
+version: v1
+name: my-project
+namespace: custom
+
+rag:
+  databases:
+    - name: "custom_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/custom_db"
+        collection_name: "custom_documents"
+      default_embedding_strategy: "custom_embeddings"
+      default_retrieval_strategy: "custom_search"
+      embedding_strategies:
+        - name: "custom_embeddings"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+      retrieval_strategies:
+        - name: "custom_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            top_k: 10
+  
+  data_processing_strategies:
+    - name: "my_custom_processing"
+      description: "Custom processing for my use case"
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf", "*.txt"]
+        allowed_mime_types: []  # Accept all
+      parsers:
+        - type: "PDFParser_LlamaIndex"
+          mime_types: ["application/pdf"]
+          file_extensions: [".pdf"]
+          config:
+            chunk_size: 1500
+        - type: "TextParser_Python"
+          mime_types: ["text/plain"]
+          file_extensions: [".txt"]
+          config:
+            chunk_size: 1200
+      extractors:
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG"]
 ```
 
 ### Step 3: Use with CLI
 
 ```bash
-# Use your custom strategy file
+# Use your custom strategy file with the combined strategy name
 python cli.py --strategy-file my_strategies.yaml \
-    ingest documents/ --strategy my_custom_strategy
+    ingest documents/ \
+    --strategy my_custom_processing_custom_db
 
 # Search using your strategy
 python cli.py --strategy-file my_strategies.yaml \
-    search "query" --strategy my_custom_strategy
+    search "query" \
+    --strategy my_custom_processing_custom_db
 ```
 
 ### Step 4: Test and Iterate
 
 ```bash
-# Test configuration
+# View collection info
 python cli.py --strategy-file my_strategies.yaml \
-    test --strategy my_custom_strategy
+    info --strategy my_custom_processing_custom_db
 
-# View strategy details
+# List available strategies
 python cli.py --strategy-file my_strategies.yaml \
-    strategies show my_custom_strategy
+    strategies list
 ```
 
 ## Best Practices
@@ -492,18 +516,35 @@ python cli.py --strategy-file my_strategies.yaml \
 Begin with a basic configuration and add complexity as needed:
 
 ```yaml
-strategies:
-  - name: "simple_start"
-    description: "Simple configuration to get started"
-    components:
-      parser:
-        type: "TextParser"
-      embedder:
-        type: "OllamaEmbedder"
-      vector_store:
-        type: "ChromaStore"
-      retrieval_strategy:
-        type: "BasicSimilarityStrategy"
+version: v1
+name: simple-project
+
+rag:
+  databases:
+    - name: "simple_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/simple_db"
+      embedding_strategies:
+        - name: "simple_embeddings"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+      retrieval_strategies:
+        - name: "simple_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            top_k: 5
+  
+  data_processing_strategies:
+    - name: "simple_processing"
+      directory_config:
+        recursive: true
+        include_patterns: ["*.txt"]
+      parsers:
+        - type: "TextParser_Python"
+          mime_types: ["text/plain"]
+          file_extensions: [".txt"]
 ```
 
 ### 2. Use Appropriate Chunk Sizes
@@ -531,16 +572,14 @@ Balance precision and recall:
 - **High Recall**: Use multi-query and larger top_k
 - **Balanced**: Use hybrid strategies
 
-### 5. Version Your Strategies
+### 5. Document Your Strategies
+
+Add clear descriptions to track changes and purpose:
 
 ```yaml
-strategies:
-  - name: "my_strategy_v2"
-    description: "Version 2.0 with improvements"
-    tags: ["v2", "production"]
-    metadata:
-      version: "2.0"
-      changelog: "Added entity extraction, increased chunk overlap"
+data_processing_strategies:
+  - name: "production_v2"
+    description: "Version 2.0 - Added entity extraction, increased chunk overlap"
     # ... rest of configuration
 ```
 

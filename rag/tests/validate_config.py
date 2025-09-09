@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 class ConfigValidator:
     """Validates configuration files against the schema."""
     
+    # Supported database types - single source of truth
+    SUPPORTED_DATABASE_TYPES = [
+        "ChromaStore", "chroma", 
+        "QdrantStore", "qdrant", 
+        "WeaviateStore", "weaviate", 
+        "MilvusStore", "milvus", 
+        "PineconeStore", "pinecone"
+    ]
+    
     def __init__(self, schema_path: str = None):
         """
         Initialize the validator.
@@ -126,8 +135,8 @@ class ConfigValidator:
         
         if "type" not in db:
             errors.append(f"{prefix}: Missing required field 'type'")
-        elif db["type"] not in ["ChromaStore", "chroma", "QdrantStore", "qdrant", "WeaviateStore", "weaviate", "MilvusStore", "milvus", "PineconeStore", "pinecone"]:
-            errors.append(f"{prefix}: Invalid database type '{db['type']}'")
+        elif db["type"] not in self.SUPPORTED_DATABASE_TYPES:
+            errors.append(f"{prefix}: Invalid database type '{db['type']}'. Supported types: {', '.join(self.SUPPORTED_DATABASE_TYPES)}")
         
         # Validate default strategies if present
         if "default_embedding_strategy" in db:

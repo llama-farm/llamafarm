@@ -99,8 +99,8 @@ class SchemaVerifier:
                             # Find parser classes
                             classes = re.findall(r'^class\s+(\w*Parser\w*)', content, re.MULTILINE)
                             components['parsers'].update(classes)
-                    except:
-                        pass
+                    except Exception:
+                        pass  # Skip files that can't be read
         
         # Discover extractors
         extractors_dir = components_dir / "extractors"
@@ -112,8 +112,8 @@ class SchemaVerifier:
                             content = f.read()
                             classes = re.findall(r'^class\s+(\w*Extractor\w*)', content, re.MULTILINE)
                             components['extractors'].update(classes)
-                    except:
-                        pass
+                    except Exception:
+                        pass  # Skip files that can't be read
         
         # Discover embedders
         embedders_dir = components_dir / "embedders"
@@ -125,8 +125,8 @@ class SchemaVerifier:
                             content = f.read()
                             classes = re.findall(r'^class\s+(\w*Embedder\w*)', content, re.MULTILINE)
                             components['embedders'].update(classes)
-                    except:
-                        pass
+                    except Exception:
+                        pass  # Skip files that can't be read
         
         # Discover stores
         stores_dir = components_dir / "stores"
@@ -138,8 +138,8 @@ class SchemaVerifier:
                             content = f.read()
                             classes = re.findall(r'^class\s+(\w*Store\w*)', content, re.MULTILINE)
                             components['stores'].update(classes)
-                    except:
-                        pass
+                    except Exception:
+                        pass  # Skip files that can't be read
         
         # Remove base classes and helper classes
         components['parsers'].discard('BaseParser')

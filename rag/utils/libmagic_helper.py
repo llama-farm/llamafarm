@@ -44,7 +44,9 @@ def handle_missing_libmagic():
         if check_brew_available():
             response = input("\nWould you like to install libmagic automatically? [y/N]: ")
             if response.lower() == 'y':
-                install_libmagic_macos()
+                if install_libmagic_macos():
+                    logger.info("Installation complete. Please restart your script.")
+                    raise SystemExit(0)  # More explicit than sys.exit()
     
     elif system == "Linux":
         logger.warning("=" * 60)
@@ -77,7 +79,11 @@ def check_brew_available():
 
 
 def install_libmagic_macos():
-    """Attempt to install libmagic on macOS using Homebrew."""
+    """Attempt to install libmagic on macOS using Homebrew.
+    
+    Returns:
+        bool: True if installation succeeded, False otherwise
+    """
     try:
         logger.info("Installing libmagic via Homebrew...")
         result = subprocess.run(['brew', 'install', 'libmagic'], 
@@ -86,11 +92,13 @@ def install_libmagic_macos():
         if result.returncode == 0:
             logger.info("✅ libmagic installed successfully!")
             logger.info("Please restart your Python script to use the new installation.")
-            sys.exit(0)  # Exit to force reload
+            return True
         else:
             logger.error(f"Failed to install libmagic: {result.stderr}")
+            return False
     except Exception as e:
         logger.error(f"Error installing libmagic: {e}")
+        return False
 
 
 # Check on import
