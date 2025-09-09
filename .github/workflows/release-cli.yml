@@ -1,4 +1,4 @@
-name: Build and Release CLI
+name: Release - CLI
 
 on:
   release:
@@ -19,7 +19,7 @@ env:
   BINARY_NAME: lf
 
 jobs:
-  build:
+  build-cli:
     name: Build CLI Binaries
     runs-on: ubuntu-latest
     strategy:
@@ -99,9 +99,9 @@ jobs:
           name: "${{ steps.build.outputs.binary_name }}"
           path: cli/${{ steps.build.outputs.binary_name }}
 
-  test-install:
+  test-cli-install:
     name: Test Installation Script
-    needs: build
+    needs: build-cli
     runs-on: ${{ matrix.os }}
     if: github.event_name == 'release'
     strategy:
