@@ -95,7 +95,7 @@ func resolveImageTag(component string, defaultTag string) string {
 	}
 
 	// Handle dev versions
-	if version == "dev" || version == "vdev" {
+	if version == "dev" {
 		return "latest"
 	}
 
@@ -106,7 +106,7 @@ func resolveImageTag(component string, defaultTag string) string {
 // getImageURL constructs the full Docker image URL for a given component
 func getImageURL(component string) (string, error) {
 	if !knownComponents[component] {
-		return "", fmt.Errorf("unknown component '%s'; valid components are: %s", 
+		return "", fmt.Errorf("unknown component '%s'; valid components are: %s",
 			component, getKnownComponentsList())
 	}
 

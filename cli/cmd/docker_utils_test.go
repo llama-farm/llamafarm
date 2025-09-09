@@ -98,13 +98,13 @@ func TestResolveImageTag(t *testing.T) {
 	os.Unsetenv("LF_DESIGNER_IMAGE_TAG")
 
 	tests := []struct {
-		name               string
-		version            string
-		component          string
-		defaultTag         string
-		globalOverride     string
-		componentOverride  string
-		expectedTag        string
+		name              string
+		version           string
+		component         string
+		defaultTag        string
+		globalOverride    string
+		componentOverride string
+		expectedTag       string
 	}{
 		{
 			name:        "semantic version",
@@ -135,13 +135,6 @@ func TestResolveImageTag(t *testing.T) {
 			expectedTag: "latest",
 		},
 		{
-			name:        "vdev version",
-			version:     "vdev",
-			component:   "server",
-			defaultTag:  "fallback",
-			expectedTag: "latest",
-		},
-		{
 			name:        "non-version string",
 			version:     "custom-build",
 			component:   "server",
@@ -156,12 +149,12 @@ func TestResolveImageTag(t *testing.T) {
 			expectedTag: "fallback",
 		},
 		{
-			name:              "global override takes precedence",
-			version:           "v1.0.0",
-			component:         "server",
-			defaultTag:        "latest",
-			globalOverride:    "custom-global",
-			expectedTag:       "custom-global",
+			name:           "global override takes precedence",
+			version:        "v1.0.0",
+			component:      "server",
+			defaultTag:     "latest",
+			globalOverride: "custom-global",
+			expectedTag:    "custom-global",
 		},
 		{
 			name:              "component override takes precedence over global",
