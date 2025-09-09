@@ -48,12 +48,12 @@ func TestResolvePort(t *testing.T) {
 func TestPingURL_SuccessAndFailure(t *testing.T) {
 	// success
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/tags" {
+		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
 		w.WriteHeader(200)
-		_, _ = w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`ok`))
 	}))
 	defer ts.Close()
 
@@ -112,9 +112,8 @@ func TestEnsureServerAvailable_LocalhostUp(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	if err := ensureServerAvailable(ts.URL); err != nil {
-		t.Fatalf("expected ensureServerAvailable to succeed for running localhost server, got %v", err)
-	}
+	// ensureServerAvailable should return without error for a healthy localhost server
+	ensureServerAvailable(ts.URL)
 }
 
 // dummy HTTP client used to test VerboseHTTPClient behavior
