@@ -190,14 +190,14 @@ def demonstrate_document_management():
     print_section_header("Initialize Document Management Collection", "🗄️")
     
     # Note: Collection is created automatically on first ingest with the strategy
-    console.print("[dim]Using document_management_demo strategy for all operations[/dim]")
+    console.print("[dim]Using text_processing_main_chroma_db strategy for all operations[/dim]")
     
     # Step 1: Add initial document
     print_section_header("Step 1: Add Initial Document", "➕")
     
     console.print("[bold]Adding technical specification v1...[/bold]")
     success, output = run_cli_command(
-        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy document_management_demo {doc_paths[0]}",
+        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy text_processing_main_chroma_db {doc_paths[0]}",
         "Ingesting document with verbose output to see hashing"
     )
     
@@ -211,7 +211,7 @@ def demonstrate_document_management():
     print_section_header("Step 2: Search for Added Document", "🔍")
     
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy document_management_demo "system architecture distributed" --top-k 3',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy text_processing_main_chroma_db "system architecture distributed" --top-k 3',
         "Searching for our technical specification"
     )
     
@@ -222,19 +222,19 @@ def demonstrate_document_management():
     
     # Search with specific terms
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy document_management_demo "technical specification" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy text_processing_main_chroma_db "technical specification" --top-k 2',
         "Search for technical specifications"
     )
     
     # Search with verbose mode to see metadata
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy document_management_demo "architecture" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --verbose search --strategy text_processing_main_chroma_db "architecture" --top-k 2',
         "Search with verbose mode (shows metadata)"
     )
     
     # Search with different content length display
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml --content-length 200 search --strategy document_management_demo "performance" --top-k 2',
+        'python cli.py --strategy-file demos/demo_strategies.yaml --content-length 200 search --strategy text_processing_main_chroma_db "performance" --top-k 2',
         "Search with longer content preview"
     )
     
@@ -243,7 +243,7 @@ def demonstrate_document_management():
     
     console.print("[bold]Attempting to add duplicate document...[/bold]")
     run_cli_command(
-        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy document_management_demo {doc_paths[2]}",
+        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy text_processing_main_chroma_db {doc_paths[2]}",
         "Adding exact duplicate (should be detected)"
     )
     
@@ -256,7 +256,7 @@ def demonstrate_document_management():
     
     # Show collection info
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml info --strategy document_management_demo',
+        'python cli.py --strategy-file demos/demo_strategies.yaml info --strategy text_processing_main_chroma_db',
         "Getting collection information"
     )
     
@@ -267,7 +267,7 @@ def demonstrate_document_management():
     print_section_header("Step 6: Verify Collection State", "✓")
     
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy document_management_demo "system architecture distributed"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy text_processing_main_chroma_db "system architecture distributed"',
         "Searching for documents in collection"
     )
     
@@ -278,13 +278,13 @@ def demonstrate_document_management():
     
     # Add the new version
     run_cli_command(
-        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy document_management_demo {doc_paths[1]}",
+        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy text_processing_main_chroma_db {doc_paths[1]}",
         "Adding updated version (v2.0)"
     )
     
     # Search to confirm replacement
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy document_management_demo "multi-modal cache redis"',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy text_processing_main_chroma_db "multi-modal cache redis"',
         "Searching for new features in v2 (should find updated doc)"
     )
     
@@ -293,7 +293,7 @@ def demonstrate_document_management():
     
     console.print("[bold]Adding multiple documents at once...[/bold]")
     run_cli_command(
-        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy document_management_demo {test_dir}/*",
+        f"python cli.py --strategy-file demos/demo_strategies.yaml --verbose ingest --strategy text_processing_main_chroma_db {test_dir}/*",
         "Bulk ingesting entire directory"
     )
     
@@ -301,12 +301,12 @@ def demonstrate_document_management():
     print_section_header("Step 9: Vector Database Health Check", "📊")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy document_management_demo",
+        "python cli.py --strategy-file demos/demo_strategies.yaml info --strategy text_processing_main_chroma_db",
         "Getting collection statistics"
     )
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy document_management_demo stats",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy text_processing_main_chroma_db stats",
         "Detailed database statistics"
     )
     
@@ -316,7 +316,7 @@ def demonstrate_document_management():
     console.print("[bold]Advanced search with result limiting:[/bold]")
     
     run_cli_command(
-        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy document_management_demo "API authentication" --top-k 3',
+        'python cli.py --strategy-file demos/demo_strategies.yaml search --strategy text_processing_main_chroma_db "API authentication" --top-k 3',
         "Search for API authentication content (limited to top 3 results)"
     )
     
@@ -324,7 +324,7 @@ def demonstrate_document_management():
     print_section_header("Step 11: Database Management Operations", "💾")
     
     run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy document_management_demo cleanup --dry-run",
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy text_processing_main_chroma_db cleanup --dry-run",
         "Running database cleanup (dry-run mode)"
     )
     
@@ -377,7 +377,7 @@ def demonstrate_document_management():
     # Clean up the database collection
     console.print("\n🗑️ Cleaning up database collection...")
     returncode, stdout, stderr = run_cli_command(
-        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy document_management_demo delete --all"
+        "python cli.py --strategy-file demos/demo_strategies.yaml manage --strategy text_processing_main_chroma_db delete --all"
     )
     
     if returncode == 0:

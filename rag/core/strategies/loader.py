@@ -1,9 +1,8 @@
 """
-Strategy Loader
+Strategy Loader - New Schema Only
 
-Loads strategy configurations from YAML files and validates them.
-Supports both the new unified schema format and legacy formats.
-Includes MIME type filtering support for strategies and parsers.
+Loads strategy configurations from YAML files using only the new RAG schema format.
+NO BACKWARD COMPATIBILITY - everything uses new schema directly.
 """
 
 import yaml
@@ -11,14 +10,11 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
 
-from .config import StrategyConfig
-from ..mime_type_filter import MimeTypeFilter
-
 logger = logging.getLogger(__name__)
 
 
 class StrategyLoader:
-    """Loads and manages strategy configurations."""
+    """Loads and manages strategy configurations using new RAG schema only."""
     
     def __init__(self, strategies_file: Optional[str] = None):
         """
@@ -33,20 +29,18 @@ class StrategyLoader:
         else:
             self.strategies_file = Path(strategies_file)
         
-        self._strategies: Dict[str, StrategyConfig] = {}
+        self._rag_data: Optional[Dict[str, Any]] = None
         self._loaded = False
-        self.mime_filter = MimeTypeFilter()
     
-    def load_strategies(self) -> Dict[str, StrategyConfig]:
+    def load_strategies(self) -> Dict[str, Any]:
         """
-        Load all strategies from the YAML file.
-        Supports both new unified schema format and legacy formats.
+        Load RAG configuration from the YAML file.
         
         Returns:
-            Dictionary mapping strategy names to StrategyConfig objects.
+            The RAG configuration dictionary.
         """
         if self._loaded:
-            return self._strategies
+            return self._rag_data
         
         try:
             if not self.strategies_file.exists():
@@ -56,394 +50,132 @@ class StrategyLoader:
             with open(self.strategies_file, 'r') as file:
                 data = yaml.safe_load(file)
             
-            # Check for the NEW rag schema format
-            if "rag" in data and isinstance(data["rag"], dict):
-                # NEW Schema: rag contains databases and data_processing_strategies
-                self._load_rag_format(data["rag"])
-            elif "strategies" in data and isinstance(data["strategies"], list):
-                # Legacy unified format: strategies is a list at the root
-                self._load_unified_format(data["strategies"])
-                # Also check for templates in legacy format
-                if "strategy_templates" in data:
-                    self._load_templates(data["strategy_templates"])
-            else:
-                # Legacy format: strategies are top-level keys
-                self._load_legacy_format(data)
+            # ONLY support new RAG schema format
+            if "rag" not in data or not isinstance(data["rag"], dict):
+                raise ValueError(f"File {self.strategies_file} does not contain valid RAG schema format. Must have 'rag:' top-level key.")
             
+            self._rag_data = data["rag"]
             self._loaded = True
-            logger.debug(f"Loaded {len(self._strategies)} strategies from {self.strategies_file}")
+            
+            # Log what we loaded
+            db_count = len(self._rag_data.get("databases", []))
+            proc_count = len(self._rag_data.get("data_processing_strategies", []))
+            logger.info(f"Loaded RAG config: {db_count} databases, {proc_count} data processing strategies")
             
         except Exception as e:
             logger.error(f"Failed to load strategies file {self.strategies_file}: {e}")
+            self._rag_data = {}
             
-        return self._strategies
+        return self._rag_data
     
-    def _load_rag_format(self, rag_data: Dict[str, Any]):
-        """Load strategies from the new RAG schema format."""
-        # Extract databases
-        databases = rag_data.get("databases", [])
-        data_processing_strategies = rag_data.get("data_processing_strategies", [])
-        
-        # For now, create combined strategies from databases and data processing strategies
-        # This is a simplified conversion - more sophisticated mapping may be needed
-        for db_config in databases:
-            for processing_strategy in data_processing_strategies:
-                # Create a combined strategy name
-                strategy_name = f"{processing_strategy['name']}_{db_config['name']}"
-                
-                # Convert to legacy strategy format for compatibility
-                strategy_data = self._convert_rag_to_legacy(db_config, processing_strategy, strategy_name)
-                
-                try:
-                    strategy_config = StrategyConfig.from_dict(strategy_data)
-                    self._strategies[strategy_name] = strategy_config
-                    logger.debug(f"Loaded RAG strategy: {strategy_name}")
-                except Exception as e:
-                    logger.error(f"Failed to load RAG strategy {strategy_name}: {e}")
-                    continue
-    
-    def _convert_rag_to_legacy(self, db_config: Dict[str, Any], processing_config: Dict[str, Any], strategy_name: str) -> Dict[str, Any]:
-        """Convert RAG format to legacy strategy format for backward compatibility."""
-        
-        # Use the first parser from data processing strategy
-        parser_config = processing_config.get("parsers", [{}])[0] if processing_config.get("parsers") else {}
-        
-        # Get embedding strategy - use default_embedding_strategy if specified
-        embedding_config = {}
-        embedding_strategies = db_config.get("embedding_strategies", [])
-        default_embedding_name = db_config.get("default_embedding_strategy")
-        
-        if default_embedding_name:
-            # Find the strategy with matching name
-            for strategy in embedding_strategies:
-                if strategy.get("name") == default_embedding_name:
-                    embedding_config = strategy
-                    break
-        
-        # Fallback to finding one marked as default or the first one
-        if not embedding_config:
-            for strategy in embedding_strategies:
-                if strategy.get("default", False):
-                    embedding_config = strategy
-                    break
-        
-        if not embedding_config and embedding_strategies:
-            embedding_config = embedding_strategies[0]
-        
-        # Get retrieval strategy - use default_retrieval_strategy if specified
-        retrieval_config = {}
-        retrieval_strategies = db_config.get("retrieval_strategies", [])
-        default_retrieval_name = db_config.get("default_retrieval_strategy")
-        
-        if default_retrieval_name:
-            # Find the strategy with matching name
-            for strategy in retrieval_strategies:
-                if strategy.get("name") == default_retrieval_name:
-                    retrieval_config = strategy
-                    break
-        
-        # Fallback to finding one marked as default or the first one
-        if not retrieval_config:
-            for strategy in retrieval_strategies:
-                if strategy.get("default", False):
-                    retrieval_config = strategy
-                    break
-        
-        if not retrieval_config and retrieval_strategies:
-            retrieval_config = retrieval_strategies[0]
-        
-        return {
-            "name": strategy_name,
-            "description": f"Combined strategy: {processing_config.get('description', 'Data processing')} with {db_config['name']} database",
-            "use_cases": ["general"],
-            "tags": ["auto_generated", "rag_format"],
-            "components": {
-                "parser": {
-                    "type": parser_config.get("type", "auto"),
-                    "config": parser_config.get("config", {})
-                },
-                "extractors": [
-                    {
-                        "type": extractor.get("type", "MetadataExtractor"),
-                        "config": extractor.get("config", {})
-                    } for extractor in processing_config.get("extractors", [])
-                ],
-                "embedder": {
-                    "type": embedding_config.get("type", "OllamaEmbedder"),
-                    "config": embedding_config.get("config", {})
-                },
-                "vector_store": {
-                    "type": db_config.get("type", "chroma"),
-                    "config": db_config.get("config", {})
-                },
-                "retrieval_strategy": {
-                    "type": retrieval_config.get("type", "BasicSimilarityStrategy"),
-                    "config": retrieval_config.get("config", {})
-                }
-            }
-        }
-    
-    def _load_unified_format(self, strategies_list: List[Dict[str, Any]]):
-        """Load strategies from the legacy unified schema format."""
-        for strategy_data in strategies_list:
-            if not isinstance(strategy_data, dict):
-                continue
-            
-            try:
-                # Ensure the strategy has a name
-                if "name" not in strategy_data:
-                    logger.warning("Strategy missing 'name' field, skipping")
-                    continue
-                
-                strategy_name = strategy_data["name"]
-                strategy_config = StrategyConfig.from_dict(strategy_data)
-                self._strategies[strategy_name] = strategy_config
-                logger.debug(f"Loaded strategy: {strategy_name}")
-            except Exception as e:
-                logger.error(f"Failed to load strategy: {e}")
-                continue
-    
-    def _load_legacy_format(self, data: Dict[str, Any]):
-        """Load strategies from the legacy format."""
-        # Skip metadata fields like usage_notes
-        strategy_names = [key for key in data.keys() if not key.startswith('usage_')]
-        
-        for strategy_name in strategy_names:
-            strategy_data = data[strategy_name]
-            
-            # Skip if this is not a complete strategy definition
-            if not isinstance(strategy_data, dict) or "components" not in strategy_data:
-                # Check if it's a strategy_templates section
-                if strategy_name == "strategy_templates":
-                    self._load_templates(strategy_data)
-                continue
-            
-            try:
-                # Ensure the strategy data has a name field
-                if "name" not in strategy_data:
-                    strategy_data["name"] = strategy_name
-                
-                strategy_config = StrategyConfig.from_dict(strategy_data)
-                self._strategies[strategy_name] = strategy_config
-                logger.debug(f"Loaded strategy: {strategy_name}")
-            except Exception as e:
-                logger.error(f"Failed to load strategy {strategy_name}: {e}")
-                continue
-    
-    def _load_templates(self, templates_data: Dict[str, Any]):
-        """Load strategy templates."""
-        for template_name, template_data in templates_data.items():
-            if not isinstance(template_data, dict):
-                continue
-            
-            try:
-                # Templates are essentially strategies
-                if "name" not in template_data:
-                    template_data["name"] = template_name
-                
-                strategy_config = StrategyConfig.from_dict(template_data)
-                # Store templates with a prefix to distinguish them
-                self._strategies[f"template_{template_name}"] = strategy_config
-                logger.debug(f"Loaded template: {template_name}")
-            except Exception as e:
-                logger.error(f"Failed to load template {template_name}: {e}")
-                continue
-    
-    def get_strategy(self, name: str) -> Optional[StrategyConfig]:
+    def get_database(self, name: str) -> Optional[Dict[str, Any]]:
         """
-        Get a specific strategy by name.
+        Get a specific database configuration by name.
+        
+        Args:
+            name: Database name
+            
+        Returns:
+            Database configuration or None if not found
+        """
+        rag_data = self.load_strategies()
+        for db in rag_data.get("databases", []):
+            if db.get("name") == name:
+                return db
+        return None
+    
+    def get_data_processing_strategy(self, name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific data processing strategy by name.
         
         Args:
             name: Strategy name
             
         Returns:
-            StrategyConfig object or None if not found
+            Data processing strategy configuration or None if not found
         """
-        strategies = self.load_strategies()
-        return strategies.get(name)
+        rag_data = self.load_strategies()
+        for strategy in rag_data.get("data_processing_strategies", []):
+            if strategy.get("name") == name:
+                return strategy
+        return None
+    
+    def get_combined_strategy(self, strategy_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a combined strategy (processing + database) by name.
+        Strategy name format: {processing_strategy}_{database_name}
+        
+        Args:
+            strategy_name: Combined strategy name
+            
+        Returns:
+            Combined configuration or None if not found
+        """
+        # Parse the strategy name
+        parts = strategy_name.rsplit('_', 1)
+        if len(parts) != 2:
+            logger.error(f"Invalid strategy name format: {strategy_name}. Expected format: processing_database")
+            return None
+        
+        proc_name, db_name = parts
+        
+        # Get the configurations
+        proc_strategy = self.get_data_processing_strategy(proc_name)
+        database = self.get_database(db_name)
+        
+        if not proc_strategy:
+            logger.error(f"Data processing strategy not found: {proc_name}")
+            return None
+        
+        if not database:
+            logger.error(f"Database not found: {db_name}")
+            return None
+        
+        # Return combined configuration
+        return {
+            "data_processing": proc_strategy,
+            "database": database,
+            "name": strategy_name
+        }
     
     def list_strategies(self) -> List[str]:
         """
-        List all available strategy names.
+        List all available combined strategy names.
         
         Returns:
-            List of strategy names
+            List of strategy names in format: processing_database
         """
-        strategies = self.load_strategies()
-        # Filter out templates from regular strategies
-        return [name for name in strategies.keys() if not name.startswith("template_")]
+        rag_data = self.load_strategies()
+        databases = rag_data.get("databases", [])
+        proc_strategies = rag_data.get("data_processing_strategies", [])
+        
+        strategies = []
+        for proc in proc_strategies:
+            for db in databases:
+                strategy_name = f"{proc['name']}_{db['name']}"
+                strategies.append(strategy_name)
+        
+        return strategies
     
-    def list_templates(self) -> List[str]:
+    def list_databases(self) -> List[str]:
         """
-        List all available template names.
+        List all available database names.
         
         Returns:
-            List of template names
+            List of database names
         """
-        strategies = self.load_strategies()
-        # Return only templates
-        return [name.replace("template_", "") for name in strategies.keys() if name.startswith("template_")]
+        rag_data = self.load_strategies()
+        return [db["name"] for db in rag_data.get("databases", [])]
     
-    def get_strategies_by_use_case(self, use_case: str) -> List[StrategyConfig]:
+    def list_data_processing_strategies(self) -> List[str]:
         """
-        Get strategies that support a specific use case.
+        List all available data processing strategy names.
         
-        Args:
-            use_case: Use case to search for
-            
         Returns:
-            List of matching StrategyConfig objects
+            List of data processing strategy names
         """
-        strategies = self.load_strategies()
-        matching = []
-        
-        for name, strategy in strategies.items():
-            # Skip templates
-            if name.startswith("template_"):
-                continue
-            if use_case in strategy.use_cases:
-                matching.append(strategy)
-        
-        return matching
-    
-    def get_strategies_by_tag(self, tag: str) -> List[StrategyConfig]:
-        """
-        Get strategies with a specific tag.
-        
-        Args:
-            tag: Tag to search for
-            
-        Returns:
-            List of matching StrategyConfig objects
-        """
-        strategies = self.load_strategies()
-        matching = []
-        
-        for name, strategy in strategies.items():
-            # Skip templates
-            if name.startswith("template_"):
-                continue
-            if tag in strategy.tags:
-                matching.append(strategy)
-        
-        return matching
-    
-    def get_strategies_by_performance(self, performance_priority: str) -> List[StrategyConfig]:
-        """
-        Get strategies with a specific performance priority.
-        
-        Args:
-            performance_priority: "speed", "accuracy", or "balanced"
-            
-        Returns:
-            List of matching StrategyConfig objects
-        """
-        strategies = self.load_strategies()
-        matching = []
-        
-        for name, strategy in strategies.items():
-            # Skip templates
-            if name.startswith("template_"):
-                continue
-            
-            # Check new optimization field first
-            if strategy.optimization and strategy.optimization.performance_priority == performance_priority:
-                matching.append(strategy)
-            # Fall back to legacy field
-            elif strategy.performance_priority and strategy.performance_priority.value == performance_priority:
-                matching.append(strategy)
-        
-        return matching
-    
-    def get_strategies_by_complexity(self, complexity: str) -> List[StrategyConfig]:
-        """
-        Get strategies with a specific complexity level.
-        
-        Args:
-            complexity: "simple", "moderate", or "complex"
-            
-        Returns:
-            List of matching StrategyConfig objects
-        """
-        strategies = self.load_strategies()
-        matching = []
-        
-        for name, strategy in strategies.items():
-            # Skip templates
-            if name.startswith("template_"):
-                continue
-            
-            # Check legacy field (new schema doesn't have complexity)
-            if strategy.complexity and strategy.complexity.value == complexity:
-                matching.append(strategy)
-        
-        return matching
-    
-    def recommend_strategy(self, 
-                         use_case: Optional[str] = None,
-                         performance_priority: Optional[str] = None,
-                         resource_usage: Optional[str] = None,
-                         complexity: Optional[str] = None,
-                         tags: Optional[List[str]] = None) -> List[StrategyConfig]:
-        """
-        Recommend strategies based on criteria.
-        
-        Args:
-            use_case: Desired use case
-            performance_priority: "speed", "accuracy", or "balanced"
-            resource_usage: "low", "medium", or "high"
-            complexity: "simple", "moderate", or "complex"
-            tags: List of desired tags
-            
-        Returns:
-            List of recommended StrategyConfig objects, sorted by relevance
-        """
-        strategies = self.load_strategies()
-        scores = []
-        
-        for name, strategy in strategies.items():
-            # Skip templates
-            if name.startswith("template_"):
-                continue
-            
-            score = 0
-            
-            # Score based on use case match
-            if use_case and use_case in strategy.use_cases:
-                score += 10
-            
-            # Score based on tags match
-            if tags:
-                for tag in tags:
-                    if tag in strategy.tags:
-                        score += 3
-            
-            # Score based on performance priority match
-            if performance_priority:
-                if strategy.optimization and strategy.optimization.performance_priority == performance_priority:
-                    score += 5
-                elif strategy.performance_priority and strategy.performance_priority.value == performance_priority:
-                    score += 5
-            
-            # Score based on resource usage match (legacy field)
-            if resource_usage and strategy.resource_usage and strategy.resource_usage.value == resource_usage:
-                score += 3
-            
-            # Score based on complexity match (legacy field)
-            if complexity and strategy.complexity and strategy.complexity.value == complexity:
-                score += 2
-            
-            scores.append((strategy, score))
-        
-        # Sort by score (highest first)
-        scores.sort(key=lambda x: x[1], reverse=True)
-        
-        # Return strategies with score > 0, or top 3 if no matches
-        recommendations = [strategy for strategy, score in scores if score > 0]
-        if not recommendations:
-            recommendations = [strategy for strategy, score in scores[:3]]
-        
-        return recommendations
+        rag_data = self.load_strategies()
+        return [s["name"] for s in rag_data.get("data_processing_strategies", [])]
     
     def get_database_defaults(self, database_name: str) -> Dict[str, str]:
         """
@@ -455,23 +187,14 @@ class StrategyLoader:
         Returns:
             Dictionary with 'embedding' and 'retrieval' default strategy names
         """
-        # Load the raw config to access database definitions
-        if not self.strategies_file.exists():
+        db = self.get_database(database_name)
+        if not db:
             return {}
         
-        with open(self.strategies_file, 'r') as file:
-            data = yaml.safe_load(file)
-        
-        # Look for the database in the rag config
-        if "rag" in data and "databases" in data["rag"]:
-            for db in data["rag"]["databases"]:
-                if db.get("name") == database_name:
-                    return {
-                        "embedding": db.get("default_embedding_strategy"),
-                        "retrieval": db.get("default_retrieval_strategy")
-                    }
-        
-        return {}
+        return {
+            "embedding": db.get("default_embedding_strategy"),
+            "retrieval": db.get("default_retrieval_strategy")
+        }
     
     def get_database_strategy(self, database_name: str, strategy_type: str, strategy_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
@@ -485,159 +208,46 @@ class StrategyLoader:
         Returns:
             Strategy configuration dictionary or None if not found
         """
-        if not self.strategies_file.exists():
+        db = self.get_database(database_name)
+        if not db:
             return None
         
-        with open(self.strategies_file, 'r') as file:
-            data = yaml.safe_load(file)
+        # Determine which strategy list to use
+        if strategy_type == "embedding":
+            strategies = db.get("embedding_strategies", [])
+            default_name = db.get("default_embedding_strategy")
+        elif strategy_type == "retrieval":
+            strategies = db.get("retrieval_strategies", [])
+            default_name = db.get("default_retrieval_strategy")
+        else:
+            return None
         
-        # Look for the database in the rag config
-        if "rag" in data and "databases" in data["rag"]:
-            for db in data["rag"]["databases"]:
-                if db.get("name") == database_name:
-                    # Determine which strategy list to use
-                    if strategy_type == "embedding":
-                        strategies = db.get("embedding_strategies", [])
-                        default_name = db.get("default_embedding_strategy")
-                    elif strategy_type == "retrieval":
-                        strategies = db.get("retrieval_strategies", [])
-                        default_name = db.get("default_retrieval_strategy")
-                    else:
-                        return None
-                    
-                    # If no specific strategy requested, use default
-                    if not strategy_name:
-                        strategy_name = default_name
-                    
-                    # Find the strategy by name
-                    if strategy_name:
-                        for strategy in strategies:
-                            if strategy.get("name") == strategy_name:
-                                return strategy
-                    
-                    # Fallback: look for one marked as default
-                    for strategy in strategies:
-                        if strategy.get("default", False):
-                            return strategy
-                    
-                    # Last fallback: return first strategy if available
-                    if strategies:
-                        return strategies[0]
+        # If no specific strategy requested, use default
+        if not strategy_name:
+            strategy_name = default_name
+        
+        # Find the strategy by name
+        if strategy_name:
+            for strategy in strategies:
+                if strategy.get("name") == strategy_name:
+                    return strategy
+        
+        # Fallback: look for one marked as default
+        for strategy in strategies:
+            if strategy.get("default", False):
+                return strategy
+        
+        # Last fallback: return first strategy if available
+        if strategies:
+            return strategies[0]
         
         return None
     
-    def filter_files_for_strategy(self, file_paths: List[Path], strategy_name: str) -> Dict[str, List[Path]]:
+    def get_raw_rag_data(self) -> Dict[str, Any]:
         """
-        Filter files based on a data processing strategy's MIME type and extension restrictions.
+        Get the raw RAG configuration data.
         
-        Args:
-            file_paths: List of file paths to filter
-            strategy_name: Name of the data processing strategy
-            
         Returns:
-            Dictionary with 'accepted' and 'rejected' file lists
+            The complete RAG configuration dictionary
         """
-        # Load the raw config to access data processing strategies
-        if not self.strategies_file.exists():
-            return {'accepted': file_paths, 'rejected': [], 'rejection_reasons': {}}
-        
-        with open(self.strategies_file, 'r') as file:
-            data = yaml.safe_load(file)
-        
-        # Look for the strategy in the rag config
-        if "rag" in data and "data_processing_strategies" in data["rag"]:
-            for strategy in data["rag"]["data_processing_strategies"]:
-                if strategy.get("name") == strategy_name:
-                    return self.mime_filter.validate_strategy_files(file_paths, strategy)
-        
-        # If strategy not found or no restrictions, accept all files
-        return {'accepted': file_paths, 'rejected': [], 'rejection_reasons': {}}
-    
-    def assign_files_to_parsers(self, file_paths: List[Path], strategy_name: str) -> Dict[str, List[Path]]:
-        """
-        Assign files to appropriate parsers within a strategy based on MIME types and extensions.
-        
-        Args:
-            file_paths: List of file paths to assign
-            strategy_name: Name of the data processing strategy
-            
-        Returns:
-            Dictionary mapping parser indices to file lists
-        """
-        # Load the raw config to access parser configurations
-        if not self.strategies_file.exists():
-            return {'unassigned': file_paths}
-        
-        with open(self.strategies_file, 'r') as file:
-            data = yaml.safe_load(file)
-        
-        # Find the strategy's parsers
-        parsers = []
-        if "rag" in data and "data_processing_strategies" in data["rag"]:
-            for strategy in data["rag"]["data_processing_strategies"]:
-                if strategy.get("name") == strategy_name:
-                    parsers = strategy.get("parsers", [])
-                    break
-        
-        if not parsers:
-            return {'unassigned': file_paths}
-        
-        return self.mime_filter.assign_files_to_parsers(file_paths, parsers)
-    
-    def get_file_info(self, file_path: Path) -> Dict[str, Any]:
-        """
-        Get detailed file information including MIME type and extension.
-        
-        Args:
-            file_path: Path to the file
-            
-        Returns:
-            Dictionary with file information
-        """
-        return self.mime_filter.get_file_info(file_path)
-    
-    def validate_strategy(self, strategy_config: StrategyConfig) -> List[str]:
-        """
-        Validate a strategy configuration.
-        
-        Args:
-            strategy_config: Strategy to validate
-            
-        Returns:
-            List of validation errors (empty if valid)
-        """
-        errors = []
-        
-        # Basic validation
-        if not strategy_config.name:
-            errors.append("Strategy name is required")
-        
-        if not strategy_config.description:
-            errors.append("Strategy description is required")
-        
-        if not strategy_config.components.parser.type:
-            errors.append("Parser type is required")
-        
-        if not strategy_config.components.embedder.type:
-            errors.append("Embedder type is required")
-        
-        if not strategy_config.components.vector_store.type:
-            errors.append("Vector store type is required")
-        
-        if not strategy_config.components.retrieval_strategy.type:
-            errors.append("Retrieval strategy type is required")
-        
-        # Validate extractor priorities if present
-        priorities = []
-        for extractor in strategy_config.components.extractors:
-            if extractor.priority is not None:
-                if extractor.priority in priorities:
-                    errors.append(f"Duplicate extractor priority: {extractor.priority}")
-                priorities.append(extractor.priority)
-        
-        # TODO: Add more sophisticated validation
-        # - Check if component types exist
-        # - Validate configuration parameters
-        # - Check component compatibility
-        
-        return errors
+        return self.load_strategies()

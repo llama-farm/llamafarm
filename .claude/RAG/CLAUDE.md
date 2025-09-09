@@ -13,6 +13,8 @@
 10. [CLI Commands](#cli-commands)
 11. [Development Guide](#development-guide)
 
+ALWAYS USE UV for python!
+
 ---
 
 ## Overview

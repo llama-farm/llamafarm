@@ -31,7 +31,7 @@ from utils.path_resolver import PathResolver, resolve_paths_in_config
 from core.document_manager import DocumentManager, DeletionStrategy, UpdateStrategy
 from core.extractor_integration import ExtractorIntegrator, apply_extractors_from_cli_args
 from components.extractors import registry
-from core.strategies import StrategyManager
+# from core.strategies import StrategyManager  # REMOVED - using SchemaHandler now
 
 
 def setup_logging(level: str = "INFO", quiet: bool = False):
@@ -196,6 +196,21 @@ def select_parser_config(config: Dict[str, Any], file_type: str, parser_override
     if parser_override and parser_override in parsers:
         return parsers[parser_override]
     
+    # Special handling for directories - always use DirectoryParser
+    if file_type == 'directory':
+        # Return a special directory parser config
+        return {
+            "type": "DirectoryParser",
+            "name": "DirectoryParser",
+            "config": {
+                "recursive": True,
+                "include_patterns": ["*"],
+                "exclude_patterns": [".*", "__pycache__/*"],
+                "max_files": 1000,
+                "parser_configs": parsers  # Pass all available parsers for file handling
+            }
+        }
+    
     # Auto-select based on file type
     for parser_name, parser_config in parsers.items():
         extensions = parser_config.get("file_extensions", [])
@@ -323,7 +338,8 @@ def load_config_with_strategy_support(
     base_dir: str = None,
     strategy_file: Optional[str] = None,
     embedding_strategy: Optional[str] = None,
-    retrieval_strategy: Optional[str] = None
+    retrieval_strategy: Optional[str] = None,
+    source_path: Optional[Path] = None
 ) -> Dict[str, Any]:
     """
     Load configuration with strategy support.
@@ -340,42 +356,44 @@ def load_config_with_strategy_support(
     Returns:
         Configuration dictionary
     """
-    if strategy_name:
-        # Strategy-based configuration
-        strategy_manager = StrategyManager(strategies_file=strategy_file)
+    if strategy_name and strategy_file:
+        # Use SchemaHandler for new schema WITHOUT any legacy conversion
+        from core.strategies.handler import SchemaHandler
         
-        # Parse overrides if provided
-        overrides = {}
+        handler = SchemaHandler(strategy_file)
+        
+        # Get component configuration directly from new schema
+        config = handler.create_component_config(strategy_name, source_path)
+        
+        if not config:
+            print(f"❌ Strategy '{strategy_name}' not found or invalid")
+            sys.exit(1)
+        
+        # Apply overrides if provided  
         if strategy_overrides:
             try:
                 overrides = json.loads(strategy_overrides)
+                for key, value in overrides.items():
+                    if key in config and isinstance(config[key], dict):
+                        config[key].update(value)
+                    else:
+                        config[key] = value
             except json.JSONDecodeError as e:
                 print(f"❌ Invalid strategy overrides JSON: {e}")
                 sys.exit(1)
         
-        # Add embedding and retrieval strategy overrides if provided
-        if embedding_strategy:
-            if 'embedder' not in overrides:
-                overrides['embedder'] = {}
-            overrides['embedder']['_strategy_name'] = embedding_strategy
-            
-        if retrieval_strategy:
-            if 'retrieval_strategy' not in overrides:
-                overrides['retrieval_strategy'] = {}
-            overrides['retrieval_strategy']['_strategy_name'] = retrieval_strategy
+        # Apply specific overrides
+        if embedding_strategy and 'embedder' in config:
+            config['embedder']['type'] = embedding_strategy
+        if retrieval_strategy and 'retrieval_strategy' in config:
+            config['retrieval_strategy']['type'] = retrieval_strategy
         
-        # Convert strategy to config
-        config = strategy_manager.convert_strategy_to_config(strategy_name, overrides)
-        if not config:
-            print(f"❌ Strategy '{strategy_name}' not found")
-            available = strategy_manager.get_available_strategies()
-            if available:
-                print(f"Available strategies: {', '.join(available)}")
-            sys.exit(1)
-        
-        # Remove strategy metadata for pipeline creation
-        config.pop("_strategy_info", None)
         return config
+    elif strategy_name:
+        # Strategy name provided without strategy file - error
+        print(f"❌ Strategy name '{strategy_name}' provided but no strategy file specified")
+        print("Please use --strategy-file to specify the YAML file containing strategy definitions")
+        sys.exit(1)
     
     elif config_path:
         # Traditional config file
@@ -475,7 +493,8 @@ def ingest_command(args):
             strategy_overrides=getattr(args, 'strategy_overrides', None),
             embedding_strategy=getattr(args, 'embedding_strategy', None),
             retrieval_strategy=getattr(args, 'retrieval_strategy', None),
-            base_dir=args.base_dir if hasattr(args, "base_dir") else None
+            base_dir=args.base_dir if hasattr(args, "base_dir") else None,
+            source_path=source_path  # Pass the source path for directory detection
         )
         
         # Show config type
@@ -980,15 +999,21 @@ def info_command(args):
 
     # Check if using strategy
     if hasattr(args, 'strategy') and args.strategy:
-        # Use strategy-based configuration
-        from core.strategies import StrategyManager
-        strategy_manager = StrategyManager(strategies_file=getattr(args, 'strategy_file', None))
+        # Use SchemaHandler for new schema
+        from core.strategies.handler import SchemaHandler
         
-        # Get strategy config
-        config = strategy_manager.convert_strategy_to_config(args.strategy)
+        strategy_file = getattr(args, 'strategy_file', None)
+        if not strategy_file:
+            print(f"❌ Strategy '{args.strategy}' specified but no strategy file provided")
+            print("Please use --strategy-file to specify the YAML file containing strategy definitions")
+            sys.exit(1)
+        
+        handler = SchemaHandler(strategy_file)
+        config = handler.create_component_config(args.strategy)
+        
         if not config:
             print(f"❌ Strategy '{args.strategy}' not found")
-            available = strategy_manager.get_available_strategies()
+            available = handler.get_available_strategies()
             if available:
                 print(f"Available strategies: {', '.join(available)}")
             sys.exit(1)
@@ -1477,15 +1502,21 @@ def manage_command(args):
 
     # Check if using RAG strategy
     if hasattr(args, 'rag_strategy') and args.rag_strategy:
-        # Use strategy-based configuration
-        from core.strategies import StrategyManager
-        strategy_manager = StrategyManager(strategies_file=getattr(args, 'strategy_file', None))
+        # Use SchemaHandler for new schema
+        from core.strategies.handler import SchemaHandler
         
-        # Get strategy config
-        config = strategy_manager.convert_strategy_to_config(args.rag_strategy)
+        strategy_file = getattr(args, 'strategy_file', None)
+        if not strategy_file:
+            print(f"❌ Strategy '{args.rag_strategy}' specified but no strategy file provided")
+            print("Please use --strategy-file to specify the YAML file containing strategy definitions")
+            sys.exit(1)
+        
+        handler = SchemaHandler(strategy_file)
+        config = handler.create_component_config(args.rag_strategy)
+        
         if not config:
             print(f"❌ Strategy '{args.rag_strategy}' not found")
-            available = strategy_manager.get_available_strategies()
+            available = handler.get_available_strategies()
             if available:
                 print(f"Available strategies: {', '.join(available)}")
             sys.exit(1)
@@ -1920,10 +1951,13 @@ def test_extractor_command(args):
 
 def strategy_command(args):
     """Handle strategy commands."""
-    strategy_manager = StrategyManager(strategies_file=getattr(args, 'strategy_file', None))
+    from core.strategies.handler import SchemaHandler
+    
+    strategy_file = getattr(args, 'strategy_file', 'demos/demo_strategies.yaml')
+    handler = SchemaHandler(strategy_file)
     
     if args.strategy_command == "list":
-        strategies = strategy_manager.get_available_strategies()
+        strategies = handler.get_available_strategies()
         
         if not strategies:
             print("❌ No strategies available")
@@ -1932,96 +1966,70 @@ def strategy_command(args):
         if args.detailed:
             print(f"\n🚀 {Fore.CYAN}Available RAG Strategies{Style.RESET_ALL}")
             print("=" * 80)
-            strategy_manager.print_all_strategies()
+            # Show detailed info for each strategy
+            for strategy_name in sorted(strategies):
+                config = handler.get_combined_config(strategy_name)
+                if config:
+                    proc_config = config.get('processing_strategy', {})
+                    db_config = config.get('database', {})
+                    print(f"\n{Fore.GREEN}{strategy_name}{Style.RESET_ALL}")
+                    print(f"  Processing: {proc_config.get('name', 'N/A')}")
+                    print(f"  Database: {db_config.get('name', 'N/A')}")
+                    print(f"  Description: {proc_config.get('description', 'N/A')}")
         else:
             print(f"\n🚀 {Fore.CYAN}Available Strategies ({len(strategies)}){Style.RESET_ALL}")
             print("=" * 50)
             for strategy_name in sorted(strategies):
-                info = strategy_manager.get_strategy_info(strategy_name)
-                if info:
-                    print(f"{Fore.GREEN}{strategy_name:15}{Style.RESET_ALL} - {info['description']}")
+                config = handler.get_combined_config(strategy_name)
+                if config:
+                    desc = config.get('processing_strategy', {}).get('description', 'N/A')
+                    print(f"{Fore.GREEN}{strategy_name:30}{Style.RESET_ALL} - {desc}")
             print(f"\n💡 Use 'strategies show <name>' for details")
             print(f"💡 Use 'strategies list --detailed' for full information")
     
     elif args.strategy_command == "show":
-        info = strategy_manager.get_strategy_info(args.name)
-        if not info:
+        config = handler.get_combined_config(args.name)
+        if not config:
             print(f"❌ Strategy '{args.name}' not found")
-            available = strategy_manager.get_available_strategies()
+            available = handler.get_available_strategies()
             if available:
                 print(f"Available strategies: {', '.join(available)}")
             return
         
-        strategy_manager.print_strategy_summary(args.name)
-    
-    elif args.strategy_command == "recommend":
-        criteria = {}
-        if args.use_case:
-            criteria["use_case"] = args.use_case
-        if args.performance:
-            criteria["performance_priority"] = args.performance
-        if args.resources:
-            criteria["resource_usage"] = args.resources
-        if args.complexity:
-            criteria["complexity"] = args.complexity
+        # Print strategy details
+        proc_config = config.get('processing_strategy', {})
+        db_config = config.get('database', {})
         
-        recommendations = strategy_manager.recommend_strategies(**criteria)
-        
-        if not recommendations:
-            print("❌ No strategies match your criteria")
-            return
-        
-        print(f"\n🎯 {Fore.CYAN}Strategy Recommendations{Style.RESET_ALL}")
+        print(f"\n{Fore.GREEN}Strategy: {args.name}{Style.RESET_ALL}")
         print("=" * 50)
-        
-        for i, rec in enumerate(recommendations[:5], 1):  # Show top 5
-            print(f"\n{i}. {Fore.GREEN}{rec['name']}{Style.RESET_ALL}")
-            print(f"   {rec['description']}")
-            print(f"   Use cases: {', '.join(rec['use_cases'])}")
-            print(f"   Performance: {rec['performance_priority']} | Resources: {rec['resource_usage']} | Complexity: {rec['complexity']}")
-    
-    elif args.strategy_command == "convert":
-        overrides = {}
-        if args.overrides:
-            try:
-                overrides = json.loads(args.overrides)
-            except json.JSONDecodeError as e:
-                print(f"❌ Invalid JSON overrides: {e}")
-                return
-        
-        success = strategy_manager.export_strategy_as_config(
-            args.strategy_name, 
-            args.output_file
-        )
-        
-        if success:
-            print(f"✅ Strategy '{args.strategy_name}' exported to {args.output_file}")
-        else:
-            print(f"❌ Failed to export strategy '{args.strategy_name}'")
+        print(f"Processing Strategy: {proc_config.get('name', 'N/A')}")
+        print(f"  Description: {proc_config.get('description', 'N/A')}")
+        print(f"  Parsers: {len(proc_config.get('parsers', []))}")
+        print(f"  Extractors: {len(proc_config.get('extractors', []))}")
+        print(f"\nDatabase: {db_config.get('name', 'N/A')}")
+        print(f"  Type: {db_config.get('type', 'N/A')}")
+        print(f"  Default Embedding: {db_config.get('default_embedding_strategy', 'N/A')}")
+        print(f"  Default Retrieval: {db_config.get('default_retrieval_strategy', 'N/A')}")
     
     elif args.strategy_command == "test":
-        overrides = {}
-        if args.overrides:
-            try:
-                overrides = json.loads(args.overrides)
-            except json.JSONDecodeError as e:
-                print(f"❌ Invalid JSON overrides: {e}")
-                return
-        
-        config = strategy_manager.convert_strategy_to_config(args.strategy_name, overrides)
+        config = handler.create_component_config(args.strategy_name)
         if not config:
             print(f"❌ Strategy '{args.strategy_name}' not found")
             return
         
-        # Validate the configuration
-        errors = strategy_manager.validate_strategy_config(config)
-        if errors:
-            print(f"❌ Strategy configuration has errors:")
-            for error in errors:
-                print(f"   - {error}")
+        # Simple validation - check that required components exist
+        required_components = ['embedder', 'vector_store', 'parser']
+        missing = [comp for comp in required_components if comp not in config or not config[comp]]
+        
+        if missing:
+            print(f"❌ Strategy configuration missing components: {', '.join(missing)}")
             return
         
         print(f"✅ Strategy '{args.strategy_name}' configuration is valid")
+        print(f"  Embedder: {config['embedder'].get('type', 'N/A')}")
+        print(f"  Vector Store: {config['vector_store'].get('type', 'N/A')}")
+        print(f"  Parser: {config['parser'].get('type', 'N/A')}")
+        print(f"  Extractors: {len(config.get('extractors', []))}")
         
         # Test with sample file if provided
         if args.sample_file:

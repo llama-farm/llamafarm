@@ -94,9 +94,15 @@ rag:
   data_processing_strategies:
     - name: "text_processing"
       description: "Standard text processing for research papers and documents"
-      # This is a generic strategy - accepts all file types
-      allowed_mime_types: []  # Empty = accept all
-      allowed_extensions: []  # Empty = accept all
+      # Directory processing configuration (always-on)
+      directory_config:
+        recursive: true
+        include_patterns: ["*.txt", "*.pdf", "*.md", "*.doc", "*.docx"]
+        exclude_patterns: ["*.tmp", ".*", "__pycache__/*"]
+        allowed_mime_types: []  # Empty = accept all
+        allowed_extensions: []  # Empty = accept all
+        max_files: 1000
+        follow_symlinks: false
       parsers:
         - type: "TextParser_Python"
           config:
@@ -127,9 +133,14 @@ rag:
 
     - name: "csv_processing"
       description: "CSV data processing for customer support and structured data"
-      # This strategy only accepts CSV/TSV files
-      allowed_mime_types: ["text/csv", "text/tab-separated-values"]
-      allowed_extensions: [".csv", ".tsv"]
+      # Directory processing configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*.csv", "*.tsv"]
+        exclude_patterns: ["*.tmp", ".*"]
+        allowed_mime_types: ["text/csv", "text/tab-separated-values"]
+        allowed_extensions: [".csv", ".tsv"]
+        max_files: 500
       parsers:
         - type: "CSVParser_Pandas"
           config:
@@ -157,8 +168,13 @@ rag:
 
     - name: "markdown_processing"
       description: "Markdown processing for code documentation and technical docs"
-      # Strategy accepts markdown and plain text files
-      allowed_extensions: [".md", ".markdown", ".mdown", ".mkd", ".txt"]
+      # Directory processing configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*.md", "*.markdown", "*.txt"]
+        exclude_patterns: ["*.tmp", ".*", "node_modules/*"]
+        allowed_extensions: [".md", ".markdown", ".mdown", ".mkd", ".txt"]
+        max_files: 1000
       parsers:
         - type: "MarkdownParser_Python"
           # Parser specifically handles markdown files
@@ -187,6 +203,11 @@ rag:
 
     - name: "news_processing"
       description: "HTML/web content processing for news articles"
+      # Directory processing configuration
+      directory_config:
+        recursive: false
+        include_patterns: ["*.html", "*.htm", "*.txt"]
+        max_files: 100
       parsers:
         - type: "TextParser_Python"  # Generic text parser
           config:
@@ -215,14 +236,19 @@ rag:
 
     - name: "business_processing"
       description: "Business document processing for reports and analysis"
-      # Strategy accepts common business document formats
-      allowed_mime_types: [
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "text/csv"
-      ]
-      allowed_extensions: [".pdf", ".docx", ".xlsx", ".csv"]
+      # Directory processing configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf", "*.docx", "*.xlsx", "*.csv"]
+        exclude_patterns: ["~$*", "*.tmp"]
+        allowed_mime_types: [
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "text/csv"
+        ]
+        allowed_extensions: [".pdf", ".docx", ".xlsx", ".csv"]
+        max_files: 500
       parsers:
         # PDF parser for reports
         - type: "PDFParser_LlamaIndex"
@@ -284,6 +310,11 @@ rag:
 
     - name: "llamaindex_pdf_processing"
       description: "Advanced PDF processing using LlamaIndex parsers"
+      # Directory processing configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf", "*.PDF"]
+        max_files: 100
       parsers:
         - type: "PDFParser_LlamaIndex"
           config:
@@ -307,6 +338,12 @@ rag:
 
     - name: "llamaindex_multiformat_processing"
       description: "Multi-format processing using LlamaIndex parsers"
+      # Directory processing configuration
+      directory_config:
+        recursive: true
+        include_patterns: ["*"]
+        exclude_patterns: ["*.tmp", ".*", "__pycache__/*"]
+        max_files: 1000
       parsers:
         - type: "TextParser_LlamaIndex"  # LlamaIndex text parser
           config:
