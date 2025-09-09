@@ -588,107 +588,167 @@ data_processing_strategies:
 ### Example 1: Legal Document Strategy
 
 ```yaml
-strategies:
-  - name: "legal_documents"
-    description: "Optimized for legal contracts and agreements"
-    tags: ["legal", "contracts"]
-    
-    components:
-      parser:
-        type: "PDFParser"
-        config:
-          extract_metadata: true
-          preserve_formatting: true
-          chunk_size: 256
-          chunk_overlap: 50
-      
-      extractors:
-        - type: "ClauseExtractor"
+version: v1
+name: legal-system
+
+rag:
+  databases:
+    - name: "legal_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/legal_db"
+        collection_name: "legal_documents"
+      embedding_strategies:
+        - name: "legal_embeddings"
+          type: "OllamaEmbedder"
           config:
-            clause_types: ["indemnity", "liability", "termination"]
+            model: "nomic-embed-text"
+            dimension: 768
+      retrieval_strategies:
+        - name: "legal_search"
+          type: "MetadataFilteredStrategy"
+          config:
+            top_k: 10
+            filters:
+              document_type: "contract"
+              jurisdiction: "US"
+  
+  data_processing_strategies:
+    - name: "legal_processing"
+      description: "Optimized for legal contracts and agreements"
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf", "*.docx"]
+        allowed_mime_types: ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+      parsers:
+        - type: "PDFParser_LlamaIndex"
+          mime_types: ["application/pdf"]
+          file_extensions: [".pdf"]
+          config:
+            chunk_size: 256
+            chunk_overlap: 50
+            extract_metadata: true
+      extractors:
         - type: "EntityExtractor"
           config:
-            entities: ["ORG", "PERSON", "DATE", "MONEY"]
+            entity_types: ["ORG", "PERSON", "DATE", "MONEY"]
         - type: "PatternExtractor"
           config:
             patterns:
               case_number: "[0-9]{2}-[A-Z]{2}-[0-9]{4}"
               statute: "\\d{1,3}\\s+U\\.S\\.C\\.\\s+§\\s+\\d+"
-      
-      retrieval_strategy:
-        type: "MetadataFilteredStrategy"
-        config:
-          top_k: 10
-          filters:
-            document_type: "contract"
-            jurisdiction: "US"
 ```
 
-### Example 2: Multi-lingual Strategy
+### Example 2: Research Papers Strategy
 
 ```yaml
-multilingual_docs:
-  description: "Handle documents in multiple languages"
+version: v1
+name: research-system
+
+rag:
+  databases:
+    - name: "research_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/research_db"
+        collection_name: "papers"
+      embedding_strategies:
+        - name: "research_embeddings"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+            dimension: 768
+            batch_size: 32
+      retrieval_strategies:
+        - name: "research_search"
+          type: "RerankedStrategy"
+          config:
+            initial_k: 20
+            final_k: 5
   
-  components:
-    parser:
-      type: "UniversalParser"
-      config:
-        detect_language: true
-        supported_languages: ["en", "es", "fr", "de"]
-    
-    extractors:
-      - type: "LanguageDetector"
-      - type: "MultilingualEntityExtractor"
-        config:
-          model: "xx_ent_wiki_sm"
-    
-    embedder:
-      type: "MultilingualEmbedder"
-      config:
-        model: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-        dimension: 768
-    
-    retrieval_strategy:
-      type: "CrossLingualStrategy"
-      config:
-        enable_translation: true
-        primary_language: "en"
+  data_processing_strategies:
+    - name: "research_processing"
+      description: "Processing for academic papers with citations"
+      directory_config:
+        recursive: true
+        include_patterns: ["*.pdf"]
+        allowed_mime_types: ["application/pdf"]
+      parsers:
+        - type: "PDFParser_LlamaIndex"
+          mime_types: ["application/pdf"]
+          file_extensions: [".pdf"]
+          config:
+            chunk_size: 1500
+            chunk_overlap: 200
+            chunk_strategy: "semantic"
+      extractors:
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "DATE"]
+        - type: "KeywordExtractor"
+          config:
+            algorithm: "yake"
+            max_keywords: 15
+        - type: "ContentStatisticsExtractor"
+          config:
+            include_readability: true
 ```
 
-### Example 3: Real-time Chat Strategy
+### Example 3: Mixed Document Repository
 
 ```yaml
-chat_support:
-  description: "Real-time customer chat processing"
+version: v1
+name: document-hub
+
+rag:
+  databases:
+    - name: "shared_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/shared_db"
+      embedding_strategies:
+        - name: "standard_embeddings"
+          type: "OllamaEmbedder"
+          config:
+            model: "nomic-embed-text"
+      retrieval_strategies:
+        - name: "standard_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            top_k: 10
   
-  components:
-    parser:
-      type: "ConversationParser"
-      config:
-        preserve_speaker: true
-        chunk_by_turn: true
-    
-    extractors:
-      - type: "IntentExtractor"
-      - type: "SentimentExtractor"
-        config:
-          real_time: true
-      - type: "UrgencyDetector"
-    
-    embedder:
-      type: "FastEmbedder"
-      config:
-        model: "all-MiniLM-L6-v2"
-        dimension: 384
-        cache_enabled: true
-    
-    retrieval_strategy:
-      type: "CachedStrategy"
-      config:
-        cache_size: 1000
-        ttl: 3600
-        fallback_strategy: "BasicSimilarityStrategy"
+  data_processing_strategies:
+    - name: "mixed_documents"
+      description: "Handles multiple document types"
+      directory_config:
+        recursive: true
+        include_patterns: ["*"]
+        exclude_patterns: ["*.tmp", ".*"]
+      parsers:
+        - type: "PDFParser_LlamaIndex"
+          mime_types: ["application/pdf"]
+          file_extensions: [".pdf"]
+          config:
+            chunk_size: 1000
+        - type: "TextParser_Python"
+          mime_types: ["text/plain"]
+          file_extensions: [".txt", ".log"]
+          config:
+            chunk_size: 1200
+        - type: "MarkdownParser_LlamaIndex"
+          mime_types: ["text/markdown"]
+          file_extensions: [".md"]
+          config:
+            chunk_size: 1000
+        - type: "CSVParser_Pandas"
+          mime_types: ["text/csv"]
+          file_extensions: [".csv"]
+          config:
+            chunk_size: 500
+      extractors:
+        - type: "EntityExtractor"
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE"]
 ```
 
 ## Troubleshooting
