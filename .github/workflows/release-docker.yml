@@ -11,6 +11,10 @@ on:
         required: true
         default: 'v1.0.0'
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   tag-docker-images:
     name: Tag Docker Images
@@ -21,6 +25,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Tag Docker images
         env:
