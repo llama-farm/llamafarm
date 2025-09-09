@@ -224,10 +224,7 @@ def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     worst = 0
     for c in components + seeds:
         worst = max(worst, order.get(c.get("status", "unhealthy"), 2))
-    for k, v in order.items():
-        if v == worst:
-            return k
-    return "unhealthy"
+    return next((k for k, v in order.items() if v == worst), "unhealthy")
 
 
 def health_summary() -> dict[str, Any]:
