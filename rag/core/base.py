@@ -83,8 +83,16 @@ class Embedder(Component):
         for doc, embedding in zip(documents, embeddings):
             doc.embeddings = embedding
 
+        # Calculate chunk metrics
+        chunked_docs = [doc for doc in documents if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
+        
         return ProcessingResult(
-            documents=documents, metrics={"embedded_count": len(documents)}
+            documents=documents, 
+            metrics={
+                "embedded_count": len(documents),
+                "chunk_count": len(chunked_docs),
+                "non_chunked_count": len(documents) - len(chunked_docs)
+            }
         )
 
 
@@ -109,9 +117,17 @@ class VectorStore(Component):
     def process(self, documents: List[Document]) -> ProcessingResult:
         """Add documents to vector store."""
         success = self.add_documents(documents)
+        
+        # Calculate chunk metrics
+        chunked_docs = [doc for doc in documents if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
+        
         return ProcessingResult(
             documents=documents,
-            metrics={"stored_count": len(documents) if success else 0},
+            metrics={
+                "stored_count": len(documents) if success else 0,
+                "stored_chunks": len(chunked_docs) if success else 0,
+                "stored_docs": (len(documents) - len(chunked_docs)) if success else 0
+            },
         )
 
 
@@ -151,13 +167,27 @@ class Pipeline:
             raise ValueError("Either source or documents must be provided")
 
         # Process through remaining components
+        aggregated_metrics = {}
         for component in self.components[start_idx:]:
             try:
                 result = component.process(current_docs)
                 current_docs = result.documents
                 all_errors.extend(result.errors)
+                # Aggregate metrics from each component
+                if result.metrics:
+                    for key, value in result.metrics.items():
+                        aggregated_metrics[f"{component.name}_{key}"] = value
             except Exception as e:
                 self.logger.error(f"Component {component.name} failed: {e}")
                 all_errors.append({"component": component.name, "error": str(e)})
 
-        return ProcessingResult(documents=current_docs, errors=all_errors)
+        # Calculate final chunk metrics
+        chunked_docs = [doc for doc in current_docs if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
+        aggregated_metrics['total_chunks'] = len(chunked_docs)
+        aggregated_metrics['total_documents'] = len(current_docs)
+        
+        return ProcessingResult(
+            documents=current_docs, 
+            errors=all_errors,
+            metrics=aggregated_metrics
+        )

@@ -1,0 +1,96 @@
+parsers:
+  - name: PDFParser_PyPDF2
+    display_name: PDF Parser (PyPDF2)
+    tool: PyPDF2
+    version: 1.1.0
+    description: Enhanced PDF parser using PyPDF2 with layout preservation and metadata extraction
+    
+    supported_extensions:
+      - .pdf
+    
+    mime_types:
+      - application/pdf
+      - application/x-pdf
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - layout_preservation
+      - annotation_extraction
+      - page_info_extraction
+      - encryption_handling
+      - form_field_extraction
+      - outline_extraction
+      - image_extraction
+      - xmp_metadata_extraction
+      - rotation_handling
+    
+    dependencies:
+      required:
+        - PyPDF2
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: paragraphs  # paragraphs, sentences, characters
+      extract_metadata: true
+      preserve_layout: true
+      extract_page_info: true
+      extract_annotations: false
+      extract_links: false
+      extract_form_fields: false
+      extract_outlines: false
+      extract_images: false
+      extract_xmp_metadata: false
+      clean_text: true
+
+  - name: PDFParser_LlamaIndex
+    display_name: PDF Parser (LlamaIndex)
+    tool: LlamaIndex
+    version: 1.0.0
+    description: Advanced PDF parser using LlamaIndex with multiple fallback strategies
+    
+    supported_extensions:
+      - .pdf
+    
+    mime_types:
+      - application/pdf
+      - application/x-pdf
+    
+    capabilities:
+      - text_extraction
+      - semantic_chunking
+      - metadata_extraction
+      - page_aware_splitting
+      - table_extraction
+      - image_extraction
+      - fallback_strategies
+      - ocr_support
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-readers-file
+      optional:
+        - PyMuPDF
+        - fitz
+        - PyPDF2
+        - pdfplumber
+        - camelot-py
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: characters  # characters, sentences, tokens, pages
+      extract_metadata: true
+      extract_images: false
+      extract_tables: false
+      preserve_layout: false
+      fallback_strategies:
+        - llama_pdf_reader
+        - llama_pymupdf_reader
+        - direct_pymupdf
+        - pypdf2_fallback
+

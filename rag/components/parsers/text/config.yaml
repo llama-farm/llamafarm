@@ -1,0 +1,151 @@
+parsers:
+  - name: TextParser_Python
+    display_name: Text Parser (Python)
+    tool: Python
+    version: 1.0.0
+    description: Text parser using native Python with encoding detection
+    
+    supported_extensions:
+      - .txt
+      - .text
+      - .log
+      - .rst
+      - .tex
+      - .rtf
+      - .asc
+      - .ascii
+      - .conf
+      - .cfg
+      - .ini
+      - .yaml
+      - .yml
+      - .json
+      - .xml
+    
+    mime_types:
+      - text/plain
+      - text/x-log
+      - text/x-rst
+      - text/x-tex
+      - text/rtf
+      - application/x-yaml
+      - application/json
+      - text/xml
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - encoding_detection
+      - metadata_extraction
+      - basic_statistics
+    
+    dependencies:
+      required: []
+      optional:
+        - chardet  # Better encoding detection
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: sentences  # characters, sentences, paragraphs
+      encoding: utf-8
+      clean_text: true
+      extract_metadata: true
+
+  - name: TextParser_LlamaIndex
+    display_name: Text Parser (LlamaIndex)
+    tool: LlamaIndex
+    version: 1.0.0
+    description: Advanced text parser using LlamaIndex with semantic splitting and multi-format support
+    
+    supported_extensions:
+      - .txt
+      - .text
+      - .log
+      - .rst
+      - .tex
+      - .rtf
+      - .asc
+      - .ascii
+      - .conf
+      - .cfg
+      - .ini
+      - .yaml
+      - .yml
+      - .json
+      - .xml
+      - .py
+      - .js
+      - .java
+      - .cpp
+      - .c
+      - .h
+      - .cs
+      - .php
+      - .rb
+      - .go
+      - .rs
+      - .swift
+      - .kt
+      - .scala
+      - .r
+      - .sql
+      - .sh
+      - .bash
+      - .zsh
+      - .ps1
+      - .bat
+    
+    mime_types:
+      - text/plain
+      - text/x-log
+      - text/x-rst
+      - text/x-tex
+      - text/rtf
+      - application/x-yaml
+      - application/json
+      - text/xml
+      - text/x-python
+      - text/javascript
+      - text/x-java-source
+      - text/x-c
+      - text/x-csrc
+      - text/x-chdr
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - semantic_chunking
+      - token_based_chunking
+      - code_aware_parsing
+      - language_detection
+      - structure_preservation
+      - metadata_extraction
+      - json_parsing
+      - yaml_parsing
+      - xml_parsing
+      - code_syntax_parsing
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-core
+      optional:
+        - transformers  # For semantic splitting
+        - tiktoken      # For token counting
+        - tree-sitter   # For code parsing
+        - pygments      # For syntax highlighting
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: semantic  # characters, sentences, paragraphs, tokens, semantic, code
+      encoding: utf-8
+      clean_text: true
+      extract_metadata: true
+      semantic_buffer_size: 1
+      semantic_breakpoint_percentile_threshold: 95
+      token_model: gpt-3.5-turbo
+      preserve_code_structure: true
+      detect_language: true
+      include_prev_next_rel: true
