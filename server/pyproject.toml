@@ -31,6 +31,7 @@ dependencies = [
     "atomic-agents==2.1.0",
     "jsonref>=1.1.0",
     "celery>=5.5.3",
+    "requests>=2.25.0",
 ]
 
 [project.optional-dependencies]

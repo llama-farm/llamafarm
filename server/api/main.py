@@ -27,6 +27,8 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.projects_router, prefix=API_PREFIX)
     app.include_router(routers.datasets_router, prefix=API_PREFIX)
     app.include_router(routers.inference_router, prefix=API_PREFIX)
+    # Health endpoints are exposed at the root (no version prefix)
+    app.include_router(routers.health_router)
 
     app.add_api_route(
         path="/", methods=["GET"], endpoint=lambda: {"message": "Hello, World!"}

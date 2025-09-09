@@ -48,12 +48,12 @@ func TestResolvePort(t *testing.T) {
 func TestPingURL_SuccessAndFailure(t *testing.T) {
 	// success
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/tags" {
+		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
 		w.WriteHeader(200)
-		_, _ = w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`ok`))
 	}))
 	defer ts.Close()
 
@@ -73,44 +73,47 @@ func TestPingURL_SuccessAndFailure(t *testing.T) {
 
 func TestCheckServerHealth_SuccessAndFailure(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/info" {
-			http.NotFound(w, r)
-			return
-		}
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer ts.Close()
-
-	if err := checkServerHealth(ts.URL); err != nil {
-		t.Fatalf("expected nil from checkServerHealth on 200, got %v", err)
-	}
-
-	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(500)
-		_, _ = w.Write([]byte(`error`))
-	}))
-	defer ts2.Close()
-	if err := checkServerHealth(ts2.URL); err == nil {
-		t.Fatalf("expected error from checkServerHealth on 500, got nil")
-	}
-}
-
-func TestEnsureServerAvailable_LocalhostUp(t *testing.T) {
-	// httptest server binds to localhost/127.0.0.1 which is considered localhost
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/info" {
+		if r.URL.Path == "/health" {
 			w.WriteHeader(200)
-			_, _ = w.Write([]byte(`{"ok":true}`))
+			_, _ = w.Write([]byte(`{"status":"healthy"}`))
 			return
 		}
 		http.NotFound(w, r)
 	}))
 	defer ts.Close()
 
-	if err := ensureServerAvailable(ts.URL); err != nil {
-		t.Fatalf("expected ensureServerAvailable to succeed for running localhost server, got %v", err)
+	if err := checkServerHealth(ts.URL); err != nil {
+		t.Fatalf("expected nil from checkServerHealth on healthy, got %v", err)
 	}
+
+	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte(`{"status":"unhealthy","summary":"x"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ts2.Close()
+	if err := checkServerHealth(ts2.URL); err == nil {
+		t.Fatalf("expected error from checkServerHealth on unhealthy status, got nil")
+	}
+}
+
+func TestEnsureServerAvailable_LocalhostUp(t *testing.T) {
+	// httptest server binds to localhost/127.0.0.1 which is considered localhost
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ts.Close()
+
+	// ensureServerAvailable should return without error for a healthy localhost server
+	ensureServerAvailable(ts.URL)
 }
 
 // dummy HTTP client used to test VerboseHTTPClient behavior

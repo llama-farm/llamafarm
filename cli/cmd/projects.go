@@ -72,10 +72,7 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		if err := ensureServerAvailable(serverURL); err != nil {
-			fmt.Fprintf(os.Stderr, "Error ensuring server availability: %v\n", err)
-			os.Exit(1)
-		}
+		ensureServerAvailable(serverURL)
 
 		// Build request
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
