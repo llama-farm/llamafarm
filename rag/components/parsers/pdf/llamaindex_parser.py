@@ -91,8 +91,9 @@ class PDFParser_LlamaIndex:
             llama_docs = reader.load_data(file=path)
             
             documents = []
+            global_chunk_index = 0  # Track chunks across all pages
             
-            for llama_doc in llama_docs:
+            for page_num, llama_doc in enumerate(llama_docs):
                 content = llama_doc.text if hasattr(llama_doc, 'text') else str(llama_doc)
                 
                 metadata = {
@@ -101,7 +102,8 @@ class PDFParser_LlamaIndex:
                     "parser": "PDFParser_LlamaIndex",
                     "tool": "LlamaIndex",
                     "strategy": "llama_pdf_reader",
-                    "file_size": path.stat().st_size
+                    "file_size": path.stat().st_size,
+                    "page_number": page_num + 1  # Add page number
                 }
                 
                 # Add LlamaIndex metadata
@@ -124,20 +126,22 @@ class PDFParser_LlamaIndex:
                     nodes = splitter.get_nodes_from_documents([llama_doc])
                     
                     for i, node in enumerate(nodes):
+                        global_chunk_index += 1  # Increment global counter
                         chunk_metadata = metadata.copy()
                         chunk_metadata.update({
-                            "chunk_index": i,
-                            "total_chunks": len(nodes),
+                            "chunk_index": global_chunk_index - 1,
+                            "page_chunk_index": i,  # Chunk index within page
+                            "total_page_chunks": len(nodes),
                             "chunk_strategy": self.chunk_strategy
                         })
                         
                         if hasattr(node, 'metadata') and 'page_label' in node.metadata:
-                            chunk_metadata['page_number'] = node.metadata['page_label']
+                            chunk_metadata['page_label'] = node.metadata['page_label']
                         
                         doc = Document(
                             content=node.text if hasattr(node, 'text') else str(node),
                             metadata=chunk_metadata,
-                            id=f"{path.stem}_chunk_{i+1}",
+                            id=f"{path.stem}_chunk_{global_chunk_index}",
                             source=str(path)
                         )
                         documents.append(doc)
@@ -172,8 +176,9 @@ class PDFParser_LlamaIndex:
             llama_docs = reader.load(file_path=str(path))
             
             documents = []
+            global_chunk_index = 0  # Track chunks across all pages
             
-            for llama_doc in llama_docs:
+            for page_num, llama_doc in enumerate(llama_docs):
                 content = llama_doc.text if hasattr(llama_doc, 'text') else str(llama_doc)
                 
                 metadata = {
@@ -182,7 +187,8 @@ class PDFParser_LlamaIndex:
                     "parser": "PDFParser_LlamaIndex",
                     "tool": "LlamaIndex-PyMuPDF",
                     "strategy": "llama_pymupdf_reader",
-                    "file_size": path.stat().st_size
+                    "file_size": path.stat().st_size,
+                    "page_number": page_num + 1  # Add page number
                 }
                 
                 # Add LlamaIndex metadata including page info
@@ -205,17 +211,19 @@ class PDFParser_LlamaIndex:
                     nodes = splitter.get_nodes_from_documents([llama_doc])
                     
                     for i, node in enumerate(nodes):
+                        global_chunk_index += 1  # Increment global counter
                         chunk_metadata = metadata.copy()
                         chunk_metadata.update({
-                            "chunk_index": i,
-                            "total_chunks": len(nodes),
+                            "chunk_index": global_chunk_index - 1,
+                            "page_chunk_index": i,  # Chunk index within page
+                            "total_page_chunks": len(nodes),
                             "chunk_strategy": self.chunk_strategy
                         })
                         
                         doc = Document(
                             content=node.text if hasattr(node, 'text') else str(node),
                             metadata=chunk_metadata,
-                            id=f"{path.stem}_chunk_{i+1}",
+                            id=f"{path.stem}_chunk_{global_chunk_index}",
                             source=str(path)
                         )
                         documents.append(doc)
