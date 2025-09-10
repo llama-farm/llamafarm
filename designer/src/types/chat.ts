@@ -58,6 +58,18 @@ export interface ChatChoice {
 }
 
 /**
+ * Delta response choice for streaming chat API
+ */
+export interface StreamingChatChoice {
+  index: number
+  delta: {
+    role?: string
+    content?: string
+  }
+  finish_reason?: string
+}
+
+/**
  * Token usage statistics from API response
  */
 export interface Usage {
@@ -80,10 +92,44 @@ export interface ChatResponse {
 }
 
 /**
+ * Streaming chat response chunk from API
+ * Contains delta choices for incremental updates
+ */
+export interface StreamingChatResponse {
+  id: string
+  object: string
+  created: number
+  model?: string | null
+  choices: StreamingChatChoice[]
+}
+
+/**
  * Response from session deletion API endpoint
  */
 export interface DeleteSessionResponse {
   message: string
+}
+
+/**
+ * Chat session context for streaming and project integration
+ * Manages connection state and project-specific settings
+ */
+export interface ChatSessionContext {
+  serverURL: string
+  namespace: string
+  projectID: string
+  sessionID?: string
+  temperature?: number
+  maxTokens?: number
+  streaming: boolean
+}
+
+/**
+ * Stream control interface for managing active streams
+ */
+export interface StreamControl {
+  abort: () => void
+  isActive: boolean
 }
 
 // Custom error types for better error handling

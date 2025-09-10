@@ -1,18 +1,23 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useChatInference, useDeleteChatSession, chatKeys } from './useChat'
-import { createChatRequest } from '../api/chatService'
+import { useDeleteChatSession, chatKeys } from './useChat'
 import { generateMessageId } from '../utils/idGenerator'
 import useChatSession from './useChatSession'
+import useActiveProject from './useActiveProject'
+import useStreamingChat from './useStreamingChat'
 import { ChatboxMessage } from '../types/chatbox'
+import { ChatMessage } from '../types/chat'
+import { createUserFriendlyErrorMessage } from '../utils/streamingApi'
 
 /**
  * Custom hook for managing chatbox state and API interactions
- * Extracts chat logic from the Chatbox component for better reusability and testability
- * Now includes session persistence and restoration
+ * Now includes streaming support, project integration, and enhanced session management
  */
 export function useChatbox(initialSessionId?: string) {
-  // Session management with persistence
+  // Active project integration
+  const activeProject = useActiveProject()
+  
+  // Session management with persistence (project-aware)
   const {
     currentSessionId: sessionId,
     messages: persistedMessages,
@@ -20,21 +25,74 @@ export function useChatbox(initialSessionId?: string) {
     createNewSession,
     setSessionId,
     isLoading: isLoadingSession
-  } = useChatSession(initialSessionId)
+  } = useChatSession(initialSessionId, activeProject?.namespace, activeProject?.project)
   
   // Local state
   const [messages, setMessages] = useState<ChatboxMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [hasInitialSync, setHasInitialSync] = useState(false)
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   
   // Ref for debounced save timeout
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // API hooks
   const queryClient = useQueryClient()
-  const chatMutation = useChatInference()
   const deleteSessionMutation = useDeleteChatSession()
+  
+  // Streaming chat integration
+  const streamingChat = useStreamingChat({
+    activeProject,
+    sessionId,
+    onChunk: useCallback((chunk: string) => {
+      // Update streaming message content in real-time
+      if (streamingMessageId) {
+        updateMessage(streamingMessageId, (prev) => ({
+          ...prev,
+          content: (prev.content === 'Thinking...' ? '' : prev.content) + chunk,
+        }))
+      }
+    }, [streamingMessageId]),
+    onComplete: useCallback((fullResponse: string, responseSessionId?: string) => {
+      // Finalize streaming message
+      if (streamingMessageId) {
+        updateMessage(streamingMessageId, {
+          content: fullResponse,
+          isLoading: false,
+        })
+        setStreamingMessageId(null)
+      }
+      
+      // Update session ID if received from server
+      if (responseSessionId && responseSessionId !== sessionId) {
+        setSessionId(responseSessionId)
+        if (!hasInitialSync) {
+          setHasInitialSync(true)
+        }
+      }
+    }, [streamingMessageId, sessionId, setSessionId, hasInitialSync]),
+    onError: useCallback((streamError: Error) => {
+      console.error('Streaming error:', streamError)
+      
+      // Remove streaming message on error
+      if (streamingMessageId) {
+        setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId))
+        setStreamingMessageId(null)
+      }
+      
+      // Set error state with friendly message
+      const friendlyMessage = createUserFriendlyErrorMessage(streamError)
+      setError(friendlyMessage)
+      
+      // Add error message to chat
+      addMessage({
+        type: 'error',
+        content: `Error: ${friendlyMessage}`,
+        timestamp: new Date()
+      })
+    }, [streamingMessageId])
+  })
   
   // Debounced save function to avoid blocking on every message change
   const debouncedSave = useCallback((sessionId: string, messages: ChatboxMessage[]) => {
@@ -95,18 +153,40 @@ export function useChatbox(initialSessionId?: string) {
   }, [])
 
   // Update message by ID
-  const updateMessage = useCallback((id: string, updates: Partial<ChatboxMessage>) => {
+  const updateMessage = useCallback((id: string, updates: Partial<ChatboxMessage> | ((prev: ChatboxMessage) => Partial<ChatboxMessage>)) => {
     setMessages(prev => {
-      const updated = prev.map(msg => 
-        msg.id === id ? { ...msg, ...updates } : msg
-      )
+      const updated = prev.map(msg => {
+        if (msg.id === id) {
+          const newUpdates = typeof updates === 'function' ? updates(msg) : updates
+          return { ...msg, ...newUpdates }
+        }
+        return msg
+      })
       return updated
     })
   }, [])
 
-  // Handle sending message with API integration
+  // Handle sending message with streaming API integration
   const sendMessage = useCallback(async (messageContent: string) => {
-    if (!messageContent.trim() || chatMutation.isPending) return false
+    if (!messageContent.trim()) return false
+
+    // Check if we have an active project
+    if (!activeProject) {
+      const errorMessage = 'Please select a project to start chatting'
+      setError(errorMessage)
+      
+      addMessage({
+        type: 'error',
+        content: errorMessage,
+        timestamp: new Date()
+      })
+      return false
+    }
+
+    // Check if already streaming
+    if (streamingChat.isStreaming || streamingMessageId) {
+      return false
+    }
 
     // Clear any previous errors
     setError(null)
@@ -118,47 +198,30 @@ export function useChatbox(initialSessionId?: string) {
       timestamp: new Date()
     })
 
-    // Add loading assistant message
+    // Add loading assistant message for streaming
     const assistantMessageId = addMessage({
       type: 'assistant',
       content: 'Thinking...',
       timestamp: new Date(),
       isLoading: true
     })
+    
+    setStreamingMessageId(assistantMessageId)
 
     try {
-      // Create chat request
-      const chatRequest = createChatRequest(messageContent)
-
-      // Send to API
-      const response = await chatMutation.mutateAsync({
-        chatRequest,
-        sessionId
-      })
-
-      // Set session ID if received from server (for new sessions)
-      if (response.sessionId && response.sessionId !== sessionId) {
-        setSessionId(response.sessionId)
-        // Mark as having initial sync since this is a new session with messages
-        if (!hasInitialSync) {
-          setHasInitialSync(true)
-        }
+      // Convert message to chat format
+      const chatMessages: ChatMessage[] = [
+        { role: 'user', content: messageContent }
+      ]
+      
+      // Create streaming request
+      const request = {
+        messages: chatMessages,
+        stream: true
       }
 
-      // Update assistant message with response
-      if (response.data.choices && response.data.choices.length > 0) {
-        const assistantResponse = response.data.choices[0].message.content
-        
-        updateMessage(assistantMessageId, {
-          content: assistantResponse,
-          isLoading: false
-        })
-      } else {
-        updateMessage(assistantMessageId, {
-          content: 'Sorry, I didn\'t receive a proper response.',
-          isLoading: false
-        })
-      }
+      // Send streaming request
+      await streamingChat.sendStreamingMessage(request)
 
       return true
     } catch (error) {
@@ -166,21 +229,22 @@ export function useChatbox(initialSessionId?: string) {
 
       // Remove loading message
       setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+      setStreamingMessageId(null)
 
-      // Set error message
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-      setError(errorMessage)
+      // Set error message with friendly formatting
+      const friendlyMessage = createUserFriendlyErrorMessage(error)
+      setError(friendlyMessage)
 
       // Add error message to chat
       addMessage({
         type: 'error',
-        content: `Error: ${errorMessage}`,
+        content: `Error: ${friendlyMessage}`,
         timestamp: new Date()
       })
 
       return false
     }
-  }, [chatMutation, sessionId, setSessionId, addMessage, updateMessage])
+  }, [activeProject, streamingChat, streamingMessageId, addMessage])
 
   // Handle clear chat
   const clearChat = useCallback(async () => {
@@ -202,8 +266,8 @@ export function useChatbox(initialSessionId?: string) {
       return true
     } catch (error) {
       console.error('Delete session error:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to clear chat'
-      setError(errorMessage)
+      const friendlyMessage = createUserFriendlyErrorMessage(error)
+      setError(friendlyMessage)
       return false
     }
   }, [deleteSessionMutation, sessionId, createNewSession])
@@ -217,6 +281,19 @@ export function useChatbox(initialSessionId?: string) {
   const clearError = useCallback(() => {
     setError(null)
   }, [])
+
+  // Abort current streaming
+  const abortStreaming = useCallback(() => {
+    if (streamingChat.isStreaming) {
+      streamingChat.abortStream()
+      
+      // Clean up streaming state
+      if (streamingMessageId) {
+        setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId))
+        setStreamingMessageId(null)
+      }
+    }
+  }, [streamingChat, streamingMessageId])
 
   // Reset to new session
   const resetSession = useCallback(() => {
@@ -237,11 +314,13 @@ export function useChatbox(initialSessionId?: string) {
     messages,
     inputValue,
     error,
+    activeProject,
     
-    // Loading states
-    isSending: chatMutation.isPending,
+    // Loading/streaming states
+    isSending: streamingChat.isStreaming || streamingChat.isLoading,
     isClearing: deleteSessionMutation.isPending,
     isLoadingSession,
+    isStreaming: streamingChat.isStreaming,
     
     // Actions
     sendMessage,
@@ -251,10 +330,13 @@ export function useChatbox(initialSessionId?: string) {
     resetSession,
     addMessage,
     updateMessage,
+    abortStreaming,
     
     // Computed values
     hasMessages: messages.length > 0,
-    canSend: !chatMutation.isPending && inputValue.trim().length > 0,
+    canSend: streamingChat.canSend && inputValue.trim().length > 0,
+    hasActiveProject: !!activeProject,
+    projectInfo: activeProject ? `${activeProject.namespace}/${activeProject.project}` : null,
   }
 }
 

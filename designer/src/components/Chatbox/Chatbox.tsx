@@ -16,11 +16,15 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
     error,
     isSending,
     isClearing,
+    isStreaming,
     sendMessage,
     clearChat,
     updateInput,
     hasMessages,
-    canSend
+    canSend,
+    hasActiveProject,
+    projectInfo,
+    abortStreaming
   } = useChatbox()
   
 
@@ -51,6 +55,11 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
       updateInput('')
     }
   }, [inputValue, canSend, sendMessage, updateInput])
+  
+  // Handle abort streaming
+  const handleAbortStreaming = useCallback(() => {
+    abortStreaming()
+  }, [abortStreaming])
 
   // Handle clear chat
   const handleClearChat = useCallback(async () => {
@@ -70,13 +79,23 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
         className={`flex ${isPanelOpen ? 'justify-between items-center mr-1 mt-1' : 'justify-center mt-3'}`}
       >
         {isPanelOpen && (
-          <button
-            onClick={handleClearChat}
-            disabled={isClearing}
-            className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isClearing ? 'Clearing...' : 'Clear'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearChat}
+              disabled={isClearing}
+              className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isClearing ? 'Clearing...' : 'Clear'}
+            </button>
+            {isStreaming && (
+              <button
+                onClick={handleAbortStreaming}
+                className="text-xs px-2 py-1 rounded bg-red-100 hover:bg-red-200 text-red-700"
+              >
+                Stop
+              </button>
+            )}
+          </div>
         )}
         <FontIcon
           isButton
@@ -85,6 +104,22 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
           handleOnClick={() => setIsPanelOpen(!isPanelOpen)}
         />
       </div>
+      
+      {/* Project info header */}
+      {isPanelOpen && (
+        <div className="px-4 py-2 border-b border-border">
+          {hasActiveProject && projectInfo ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>📁</span>
+              <span>Project: {projectInfo}</span>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground text-center py-1">
+              Please select a project to start chatting
+            </div>
+          )}
+        </div>
+      )}
       
       {/* Error display */}
       {error && isPanelOpen && (
@@ -100,7 +135,16 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
           ref={listRef}
           className="flex-1 overflow-y-auto flex flex-col gap-5 pr-1"
         >
-          {!hasMessages ? (
+          {!hasActiveProject ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm text-center">
+              <div>
+                <div className="mb-2">Please select a project to start chatting</div>
+                <div className="text-xs opacity-75">
+                  Chat requires an active project for context and session management
+                </div>
+              </div>
+            </div>
+          ) : !hasMessages ? (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               Start a conversation...
             </div>
@@ -116,13 +160,34 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
             value={inputValue}
             onChange={e => updateInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isSending}
+            disabled={isSending || !hasActiveProject}
             className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
-            placeholder={isSending ? "Waiting for response..." : "Type here..."}
+            placeholder={
+              !hasActiveProject 
+                ? "Select a project to start chatting..." 
+                : isSending 
+                  ? isStreaming 
+                    ? "Streaming response..." 
+                    : "Waiting for response..."
+                  : "Type here..."
+            }
           />
           <div className="flex justify-between items-center">
             {isSending && (
-              <span className="text-xs text-muted-foreground">Sending message...</span>
+              <span className="text-xs text-muted-foreground">
+                {isStreaming ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+                      <div className="w-1 h-1 bg-current rounded-full animate-pulse [animation-delay:0.2s]"></div>
+                      <div className="w-1 h-1 bg-current rounded-full animate-pulse [animation-delay:0.4s]"></div>
+                    </div>
+                    <span>Thinking...</span>
+                  </div>
+                ) : (
+                  "Sending message..."
+                )}
+              </span>
             )}
             <FontIcon
               isButton
