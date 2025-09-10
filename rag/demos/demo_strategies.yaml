@@ -97,10 +97,8 @@ rag:
       # Directory processing configuration (always-on)
       directory_config:
         recursive: true
-        include_patterns: ["*.txt", "*.pdf", "*.md", "*.doc", "*.docx"]
+        supported_files: ["*.txt", "*.pdf", "*.md", "*.doc", "*.docx"]  # Glob patterns for accepted files
         exclude_patterns: ["*.tmp", ".*", "__pycache__/*"]
-        allowed_mime_types: []  # Empty = accept all
-        allowed_extensions: []  # Empty = accept all
         max_files: 1000
         follow_symlinks: false
       parsers:
@@ -136,10 +134,8 @@ rag:
       # Directory processing configuration
       directory_config:
         recursive: true
-        include_patterns: ["*.csv", "*.tsv"]
+        supported_files: ["*.csv", "*.tsv"]  # Glob patterns for CSV files
         exclude_patterns: ["*.tmp", ".*"]
-        allowed_mime_types: ["text/csv", "text/tab-separated-values"]
-        allowed_extensions: [".csv", ".tsv"]
         max_files: 500
       parsers:
         - type: "CSVParser_Pandas"
@@ -239,15 +235,8 @@ rag:
       # Directory processing configuration
       directory_config:
         recursive: true
-        include_patterns: ["*.pdf", "*.docx", "*.xlsx", "*.csv"]
+        supported_files: ["*.pdf", "*.docx", "*.xlsx", "*.csv"]  # Glob patterns for business documents
         exclude_patterns: ["~$*", "*.tmp"]
-        allowed_mime_types: [
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "text/csv"
-        ]
-        allowed_extensions: [".pdf", ".docx", ".xlsx", ".csv"]
         max_files: 500
       parsers:
         # PDF parser for reports

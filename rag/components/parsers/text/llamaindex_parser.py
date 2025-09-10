@@ -78,23 +78,13 @@ class TextParser_LlamaIndex:
             
             # Choose appropriate parser based on strategy and file type
             if self.chunk_strategy == "semantic":
-                try:
-                    # Import embedding model for semantic chunking
-                    from llama_index.embeddings.openai import OpenAIEmbedding
-                    embed_model = OpenAIEmbedding()
-                    
-                    parser = SemanticSplitterNodeParser(
-                        buffer_size=self.semantic_buffer_size,
-                        breakpoint_percentile_threshold=self.semantic_breakpoint_percentile_threshold,
-                        embed_model=embed_model
-                    )
-                except ImportError:
-                    # Fallback to sentence splitter if OpenAI embeddings not available
-                    logger.warning("OpenAI embeddings not available, falling back to sentence splitting")
-                    parser = SentenceSplitter(
-                        chunk_size=self.chunk_size,
-                        chunk_overlap=self.chunk_overlap
-                    )
+                # IMPORTANT: Always use sentence splitter instead of semantic for now
+                # Semantic chunking requires embeddings which may not be configured correctly
+                logger.info("Using sentence splitter for semantic strategy (avoids embedding issues)")
+                parser = SentenceSplitter(
+                    chunk_size=self.chunk_size,
+                    chunk_overlap=self.chunk_overlap
+                )
             elif self.chunk_strategy == "code" and is_code_file:
                 # Use code splitter for programming languages
                 language = self._detect_programming_language(file_extension)

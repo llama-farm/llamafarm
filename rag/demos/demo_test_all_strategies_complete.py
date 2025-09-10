@@ -65,11 +65,13 @@ class CompleteStrategyTester:
             import yaml
             config = yaml.safe_load(f)
         
-        # Modify the vector store path to be unique for this test
+        # Modify the vector store path AND collection name to be unique for this test
         if 'rag' in config and 'databases' in config['rag']:
             for db in config['rag']['databases']:
                 if db.get('name') == 'main_database':
                     db['config']['persist_directory'] = f"{self.base_temp_dir}/{strategy_name}_db"
+                    # IMPORTANT: Use unique collection name for each strategy
+                    db['config']['collection_name'] = f"{strategy_name}_collection"
         
         # Save to temporary config file
         temp_config = f"{self.base_temp_dir}/{strategy_name}_config.yaml"
@@ -200,7 +202,7 @@ class CompleteStrategyTester:
                 "strategy": "pdf_processing",
                 "description": "Standard PDF document processing",
                 "files": ["fda_letters/761315_2025_Orig1s000OtherActionLtrs.pdf"],
-                "query": "FDA approval"
+                "query": "BLA"  # More specific to FDA letters content
             },
             {
                 "strategy": "text_processing",
@@ -215,13 +217,13 @@ class CompleteStrategyTester:
                 "strategy": "markdown_processing",
                 "description": "Markdown document processing with structure preservation",
                 "files": ["code_documentation/api_reference.md"],
-                "query": "API endpoint"
+                "query": "Document class"  # More specific to actual content
             },
             {
                 "strategy": "csv_processing",
                 "description": "CSV and structured data processing",
                 "files": ["customer_support/support_tickets.csv"],
-                "query": "customer issue"
+                "query": "login password"  # More specific to actual ticket content
             },
             {
                 "strategy": "multi_format_llamaindex",

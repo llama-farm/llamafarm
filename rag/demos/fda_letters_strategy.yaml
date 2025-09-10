@@ -87,9 +87,13 @@ rag:
     - name: "fda_letters_processing"
       description: "Advanced processing pipeline for FDA regulatory action letters with comprehensive metadata extraction"
       
-      # MIME type filtering - only accept PDFs
-      allowed_mime_types: ["application/pdf"]
-      allowed_extensions: [".pdf", ".PDF"]
+      # Directory configuration with file filtering
+      directory_config:
+        recursive: true
+        supported_files: ["*.pdf", "*.PDF"]  # Only accept PDF files
+        exclude_patterns: ["*.tmp", ".*"]
+        max_files: 1000
+        follow_symlinks: false
       
       # Parser configuration using LlamaIndex for advanced PDF processing
       parsers:

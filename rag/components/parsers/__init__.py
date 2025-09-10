@@ -148,10 +148,16 @@ class ParserFactory:
                 logger.info("Using LlamaIndex PDF parser as fallback")
                 return PDFParser_LlamaIndex(name=name, config=config)
             elif name == 'csv_excel':
-                # Use text parser for CSV as fallback
-                from .text.llamaindex_parser import TextParser_LlamaIndex
-                logger.info("Using LlamaIndex text parser as fallback for CSV")
-                return TextParser_LlamaIndex(name=name, config=config)
+                # Use pandas CSV parser as fallback
+                try:
+                    from .csv.pandas_parser import CSVParser_Pandas
+                    logger.info("Using Pandas CSV parser as fallback")
+                    return CSVParser_Pandas(name=name, config=config)
+                except ImportError:
+                    # If pandas not available, use Python CSV parser
+                    from .csv.python_parser import CSVParser_Python
+                    logger.info("Using Python CSV parser as fallback")
+                    return CSVParser_Python(name=name, config=config)
             elif name in ['docx', 'web']:
                 # Use text parser as fallback
                 from .text.llamaindex_parser import TextParser_LlamaIndex
