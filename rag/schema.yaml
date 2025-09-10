@@ -1898,16 +1898,18 @@ definitions:
             type: boolean
             default: true
             description: Process subdirectories recursively
-          include_patterns:
+          supported_files:
             type: array
             items:
               type: string
             default: ["*"]
-            description: File patterns to include (glob patterns)
+            description: Glob patterns for accepted files (recommended)
             examples:
-              - ["*.txt", "*.md"]
-              - ["*.pdf"]
-              - ["*"]  # All files
+              - ["*.pdf", "*.PDF"]  # PDF files
+              - ["*.txt", "*.log"]  # Text files
+              - ["*.testdata.csv"]  # Specific naming pattern
+              - ["report_*.json"]   # Files with prefix
+              - ["*"]  # Accept all files
           exclude_patterns:
             type: array
             items:
@@ -1917,27 +1919,29 @@ definitions:
             examples:
               - [".*", "__pycache__/*"]
               - ["*.tmp", "*.bak"]
+          # Legacy fields (use supported_files instead)
+          include_patterns:
+            type: array
+            items:
+              type: string
+            default: ["*"]
+            description: "[DEPRECATED - use supported_files] File patterns to include"
+            deprecated: true
           allowed_mime_types:
             type: array
             items:
               type: string
             default: []
-            description: MIME types to allow (empty means accept all)
-            examples:
-              - ["application/pdf"]
-              - ["text/plain", "text/markdown"]
-              - []  # Accept all MIME types
+            description: "[DEPRECATED - use supported_files] MIME types to allow"
+            deprecated: true
           allowed_extensions:
             type: array
             items:
               type: string
               pattern: ^\.[a-zA-Z0-9]+$
             default: []
-            description: File extensions to allow (empty means accept all)
-            examples:
-              - [".pdf"]
-              - [".txt", ".md"]
-              - []  # Accept all extensions
+            description: "[DEPRECATED - use supported_files] File extensions to allow"
+            deprecated: true
           max_files:
             type: integer
             default: 1000

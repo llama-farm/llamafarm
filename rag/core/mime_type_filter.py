@@ -85,19 +85,43 @@ class MimeTypeFilter:
     
     def is_file_allowed_by_strategy(self, file_path: Path, strategy_config: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Check if a file is allowed by a strategy's MIME type and extension filters.
+        Check if a file is allowed by a strategy's supported_files patterns.
+        
+        Supports three filtering approaches:
+        1. supported_files: List of glob patterns (recommended)
+        2. allowed_mime_types: List of MIME types (legacy)
+        3. allowed_extensions: List of extensions (legacy)
         
         Args:
             file_path: Path to the file
-            strategy_config: Strategy configuration with allowed_mime_types and allowed_extensions
+            strategy_config: Strategy configuration with supported_files patterns
             
         Returns:
             Tuple of (is_allowed, reason_if_rejected)
         """
+        import fnmatch
+        
+        # Check new supported_files patterns first (if present)
+        supported_files = strategy_config.get('supported_files', [])
+        if supported_files:
+            file_name = file_path.name
+            for pattern in supported_files:
+                # Handle different pattern types
+                if pattern == "*":  # Accept all files
+                    return True, "File allowed by wildcard pattern"
+                elif pattern.startswith("*."):  # Extension pattern
+                    if fnmatch.fnmatch(file_name.lower(), pattern.lower()):
+                        return True, f"File matches pattern '{pattern}'"
+                else:  # General glob pattern
+                    if fnmatch.fnmatch(file_name, pattern):
+                        return True, f"File matches pattern '{pattern}'"
+            return False, f"File '{file_name}' doesn't match any supported patterns: {supported_files}"
+        
+        # Fall back to legacy allowed_mime_types/allowed_extensions if no supported_files
         # Get file info
         mime_type, extension = self.get_mime_type(file_path)
         
-        # Check MIME types if specified
+        # Check MIME types if specified (legacy)
         allowed_mime_types = strategy_config.get('allowed_mime_types', [])
         if allowed_mime_types:  # Empty list means accept all
             if not mime_type:
@@ -105,7 +129,7 @@ class MimeTypeFilter:
             if mime_type not in allowed_mime_types:
                 return False, f"MIME type '{mime_type}' not in allowed types: {allowed_mime_types}"
         
-        # Check extensions if specified
+        # Check extensions if specified (legacy)
         allowed_extensions = strategy_config.get('allowed_extensions', [])
         if allowed_extensions:  # Empty list means accept all
             if not extension:

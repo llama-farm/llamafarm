@@ -25,17 +25,16 @@ data_processing_strategies:
     # DirectoryParser configuration (ALWAYS ACTIVE)
     directory_config:
       recursive: true
-      include_patterns: ["*.pdf", "*.txt"]
-      allowed_mime_types: ["application/pdf", "text/plain"]
-      allowed_extensions: [".pdf", ".txt"]
+      supported_files: ["*.pdf", "*.txt"]  # Glob patterns for accepted files
+      exclude_patterns: ["*.tmp", ".*"]     # Files to exclude
     parsers:
       # Individual file parsers
 ```
 
 DirectoryParser automatically:
 1. Scans the input path (file or directory)
-2. Filters files based on `directory_config`
-3. Routes each file to the appropriate parser
+2. Filters files based on `supported_files` glob patterns in `directory_config`
+3. Routes each file to the appropriate parser based on mime_types/file_extensions
 4. Handles both single files and directories seamlessly
 
 ## 📋 Parser Naming Convention
@@ -317,9 +316,8 @@ data_processing_strategies:
   - name: "multi_format"
     directory_config:
       recursive: true
-      include_patterns: ["*"]
-      allowed_mime_types: []  # Accept all
-      allowed_extensions: []  # Accept all
+      supported_files: ["*"]  # Accept all files
+      exclude_patterns: ["*.tmp", ".*"]
     parsers:
       - type: "PDFParser_LlamaIndex"
         mime_types: ["application/pdf"]
@@ -346,9 +344,8 @@ data_processing_strategies:
   - name: "pdf_only"
     directory_config:
       recursive: true
-      include_patterns: ["*.pdf"]
-      allowed_mime_types: ["application/pdf"]
-      allowed_extensions: [".pdf"]
+      supported_files: ["*.pdf", "*.PDF"]  # PDF files only
+      exclude_patterns: ["*.tmp"]
     parsers:
       - type: "PDFParser_LlamaIndex"
         mime_types: ["application/pdf"]
@@ -361,7 +358,7 @@ data_processing_strategies:
 
 ## 🔄 Parser Selection Logic
 
-1. **DirectoryParser** filters files based on `directory_config`
+1. **DirectoryParser** filters files based on `supported_files` glob patterns in `directory_config`
 2. For each accepted file:
    - Check MIME type against parser `mime_types`
    - Check extension against parser `file_extensions`
@@ -410,10 +407,9 @@ class JSONParser_Custom:
 ### File Not Being Processed
 
 Check:
-1. `directory_config` includes the file pattern
-2. MIME type is in `allowed_mime_types`
-3. Extension is in `allowed_extensions`
-4. A parser exists for the file type
+1. File matches a pattern in `supported_files` glob patterns
+2. File doesn't match any `exclude_patterns`
+3. A parser exists with matching `mime_types` or `file_extensions`
 
 ### Wrong Parser Selected
 

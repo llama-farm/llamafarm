@@ -116,10 +116,8 @@ data_processing_strategies:
     # DirectoryParser configuration (ALWAYS ACTIVE)
     directory_config:
       recursive: true  # Scan subdirectories
-      include_patterns: ["*.pdf", "*.PDF"]  # File patterns to include
+      supported_files: ["*.pdf", "*.PDF"]  # Glob patterns for accepted files
       exclude_patterns: ["*.tmp", ".*"]  # Patterns to exclude
-      allowed_mime_types: ["application/pdf"]  # MIME type filtering
-      allowed_extensions: [".pdf", ".PDF"]  # Extension filtering
       max_files: 1000  # Maximum files to process
       follow_symlinks: false  # Whether to follow symbolic links
     
@@ -156,10 +154,8 @@ data_processing_strategies:
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `recursive` | boolean | Scan subdirectories | `true` |
-| `include_patterns` | array | Glob patterns to include | `["*"]` |
+| `supported_files` | array | Glob patterns for accepted files | `["*"]` |
 | `exclude_patterns` | array | Glob patterns to exclude | `[".*", "__pycache__/*"]` |
-| `allowed_mime_types` | array | MIME types to accept (empty = all) | `[]` |
-| `allowed_extensions` | array | File extensions to accept (empty = all) | `[]` |
 | `max_files` | integer | Maximum files to process | `1000` |
 | `follow_symlinks` | boolean | Follow symbolic links | `false` |
 
@@ -284,10 +280,8 @@ rag:
       description: "Process multiple document types"
       directory_config:
         recursive: true
-        include_patterns: ["*"]
+        supported_files: ["*"]  # Accept all files
         exclude_patterns: ["*.tmp", ".*", "__pycache__/*"]
-        allowed_mime_types: []  # Accept all
-        allowed_extensions: []  # Accept all
         max_files: 5000
       parsers:
         - type: "PDFParser_LlamaIndex"

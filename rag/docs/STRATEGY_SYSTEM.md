@@ -72,9 +72,7 @@ rag:
       # DirectoryParser configuration (ALWAYS ACTIVE)
       directory_config:
         recursive: true
-        include_patterns: ["*.pdf"]
-        allowed_mime_types: ["application/pdf"]
-        allowed_extensions: [".pdf"]
+        supported_files: ["*.pdf", "*.PDF"]
       parsers:
         - type: "PDFParser_LlamaIndex"
           mime_types: ["application/pdf"]
@@ -114,10 +112,8 @@ The `directory_config` section controls how files are discovered and filtered:
 ```yaml
 directory_config:
   recursive: true                           # Scan subdirectories
-  include_patterns: ["*.pdf", "*.txt"]      # Glob patterns to include
-  exclude_patterns: ["*.tmp", ".*"]         # Patterns to exclude
-  allowed_mime_types: ["application/pdf"]   # MIME types to accept
-  allowed_extensions: [".pdf", ".PDF"]      # File extensions to accept
+  supported_files: ["*.pdf", "*.txt"]       # Glob patterns for accepted files
+  exclude_patterns: ["*.tmp", ".*"]         # Patterns to exclude  
   max_files: 1000                          # Maximum files to process
   follow_symlinks: false                   # Whether to follow symbolic links
 ```
@@ -465,8 +461,7 @@ rag:
       description: "Custom processing for my use case"
       directory_config:
         recursive: true
-        include_patterns: ["*.pdf", "*.txt"]
-        allowed_mime_types: []  # Accept all
+        supported_files: ["*.pdf", "*.txt"]  # Accept PDF and text files
       parsers:
         - type: "PDFParser_LlamaIndex"
           mime_types: ["application/pdf"]
@@ -618,8 +613,7 @@ rag:
       description: "Optimized for legal contracts and agreements"
       directory_config:
         recursive: true
-        include_patterns: ["*.pdf", "*.docx"]
-        allowed_mime_types: ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+        supported_files: ["*.pdf", "*.docx"]  # Legal documents
       parsers:
         - type: "PDFParser_LlamaIndex"
           mime_types: ["application/pdf"]
@@ -671,8 +665,7 @@ rag:
       description: "Processing for academic papers with citations"
       directory_config:
         recursive: true
-        include_patterns: ["*.pdf"]
-        allowed_mime_types: ["application/pdf"]
+        supported_files: ["*.pdf"]  # Research papers
       parsers:
         - type: "PDFParser_LlamaIndex"
           mime_types: ["application/pdf"]
@@ -722,7 +715,7 @@ rag:
       description: "Handles multiple document types"
       directory_config:
         recursive: true
-        include_patterns: ["*"]
+        supported_files: ["*"]  # Accept all file types
         exclude_patterns: ["*.tmp", ".*"]
       parsers:
         - type: "PDFParser_LlamaIndex"

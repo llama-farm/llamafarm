@@ -88,10 +88,8 @@ rag:
       # DirectoryParser configuration (ALWAYS ACTIVE)
       directory_config:
         recursive: true
-        include_patterns: ["*.pdf", "*.PDF"]
+        supported_files: ["*.pdf", "*.PDF"]  # Glob patterns for accepted files
         exclude_patterns: ["*.tmp", ".*"]
-        allowed_mime_types: ["application/pdf"]
-        allowed_extensions: [".pdf", ".PDF"]
         max_files: 1000
         follow_symlinks: false
       parsers:
@@ -124,10 +122,8 @@ rag:
       # DirectoryParser configuration
       directory_config:
         recursive: true
-        include_patterns: ["*.txt", "*.text", "*.log"]
+        supported_files: ["*.txt", "*.text", "*.log"]  # Glob patterns for text files
         exclude_patterns: ["*.tmp", ".*"]
-        allowed_mime_types: ["text/plain"]
-        allowed_extensions: [".txt", ".text", ".log"]
         max_files: 1000
         follow_symlinks: false
       parsers:
@@ -156,10 +152,8 @@ rag:
       # DirectoryParser configuration
       directory_config:
         recursive: true
-        include_patterns: ["*.md", "*.markdown", "*.mdown"]
+        supported_files: ["*.md", "*.markdown", "*.mdown", "*.mkd"]  # Glob patterns for markdown files
         exclude_patterns: ["*.tmp", ".*", "node_modules/*"]
-        allowed_mime_types: ["text/markdown", "text/x-markdown"]
-        allowed_extensions: [".md", ".markdown", ".mdown", ".mkd"]
         max_files: 1000
         follow_symlinks: false
       parsers:
@@ -188,10 +182,8 @@ rag:
       # DirectoryParser configuration
       directory_config:
         recursive: true
-        include_patterns: ["*.csv", "*.tsv"]
+        supported_files: ["*.csv", "*.tsv", "*.CSV", "*.TSV"]  # Glob patterns for CSV files
         exclude_patterns: ["*.tmp", ".*"]
-        allowed_mime_types: ["text/csv", "text/tab-separated-values"]
-        allowed_extensions: [".csv", ".tsv", ".CSV", ".TSV"]
         max_files: 500
         follow_symlinks: false
       parsers:
@@ -217,18 +209,16 @@ rag:
       # DirectoryParser configuration - handles ALL file filtering
       directory_config:
         recursive: true
-        include_patterns: ["*"]  # Accept all patterns, filter by mime/extension
-        exclude_patterns: ["*.tmp", ".*", "__pycache__/*", "node_modules/*"]
-        # File type filtering happens ONLY here
-        allowed_mime_types: [
-          "application/pdf",
-          "text/csv",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "text/markdown",
-          "text/plain"
+        # Use glob patterns to accept multiple file types
+        supported_files: [
+          "*.pdf", "*.PDF",
+          "*.csv", "*.tsv", "*.CSV", "*.TSV",
+          "*.docx", "*.DOCX",
+          "*.xlsx", "*.XLSX",
+          "*.md", "*.markdown",
+          "*.txt", "*.text"
         ]
-        allowed_extensions: [".pdf", ".csv", ".docx", ".xlsx", ".md", ".txt"]
+        exclude_patterns: ["*.tmp", ".*", "__pycache__/*", "node_modules/*"]
         max_files: 5000
         follow_symlinks: false
       parsers:
@@ -299,11 +289,8 @@ rag:
       # DirectoryParser configuration - accepts all files
       directory_config:
         recursive: true
-        include_patterns: ["*"]
+        supported_files: ["*"]  # Accept all files (wildcard pattern)
         exclude_patterns: ["*.tmp", ".*", "*.pyc", "__pycache__/*"]
-        # Empty arrays = accept all types
-        allowed_mime_types: []
-        allowed_extensions: []
         max_files: 1000
         follow_symlinks: false
       parsers:
