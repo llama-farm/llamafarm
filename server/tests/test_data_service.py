@@ -66,25 +66,41 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
                     {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
                                 "type": "OllamaEmbedder",
                                 "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
                                 "type": "BasicSimilarityStrategy",
                                 "config": {},
-                            },
-                        },
+                                "default": True,
+                            }
+                        ],
                     }
-                ]
+                ],
+                "data_processing_strategies": [
+                    {
+                        "name": "default_processing",
+                        "description": "Default data processing strategy",
+                        "parsers": [
+                            {
+                                "type": "PDFParser_PyPDF2",
+                                "config": {},
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
+                    }
+                ],
             },
             datasets=[
                 Dataset(
@@ -300,25 +316,41 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
+                    {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
+                                "type": "OllamaEmbedder",
+                                "config": {"model": "nomic-embed-text"},
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
+                    }
+                ],
+                "data_processing_strategies": [
                     {
                         "name": "default",
                         "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
+                        "parsers": [
+                            {
+                                "type": "PDFParser_PyPDF2",
                                 "config": {},
-                            },
-                        },
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
                     }
-                ]
+                ],
             },
             datasets=[
                 Dataset(
@@ -378,25 +410,41 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
+                    {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
+                                "type": "OllamaEmbedder",
+                                "config": {"model": "nomic-embed-text"},
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
+                    }
+                ],
+                "data_processing_strategies": [
                     {
                         "name": "default",
                         "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
+                        "parsers": [
+                            {
+                                "type": "PDFParser_PyPDF2",
                                 "config": {},
-                            },
-                        },
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
                     }
-                ]
+                ],
             },
             datasets=[
                 Dataset(
@@ -454,25 +502,41 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
+                    {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
+                                "type": "OllamaEmbedder",
+                                "config": {"model": "nomic-embed-text"},
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
+                    }
+                ],
+                "data_processing_strategies": [
                     {
                         "name": "default",
                         "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
+                        "parsers": [
+                            {
+                                "type": "PDFParser_PyPDF2",
                                 "config": {},
-                            },
-                        },
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
                     }
-                ]
+                ],
             },
             datasets=[
                 Dataset(

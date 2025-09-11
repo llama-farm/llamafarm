@@ -5,9 +5,6 @@ from core.logging import FastAPIStructLogger
 from services.data_service import MetadataFileContent
 from services.project_service import ProjectService
 
-# TODO: populate this with default strategies from the rug sub-system
-DEFAULT_RAG_STRATEGIES: list[str] = ["auto"]
-
 logger = FastAPIStructLogger()
 
 
@@ -45,7 +42,12 @@ class DatasetService:
                 raise ValueError(f"Dataset {name} already exists")
 
         # Validate RAG strategy
-        supported_rag_strategies = cls.get_supported_rag_strategies(namespace, project)
+        supported_rag_strategies = cls.get_supported_data_processing_strategies(
+            namespace, project
+        )
+        supported_rag_strategies = [
+            "auto"
+        ] + supported_rag_strategies  # Add default auto strategy
 
         if rag_strategy not in supported_rag_strategies:
             raise ValueError(f"RAG strategy {rag_strategy} not supported")
@@ -92,38 +94,38 @@ class DatasetService:
         return dataset_to_delete
 
     @classmethod
-    def get_supported_rag_strategies(cls, namespace: str, project: str) -> list[str]:
+    def get_supported_data_processing_strategies(
+        cls, namespace: str, project: str
+    ) -> list[str]:
         """
-        Get list of supported RAG strategies for the project
+        Get list of supported data processing strategies
         """
         project_config = ProjectService.load_config(namespace, project)
         rag_config = project_config.rag
 
-        custom_rag_strategies: list[str] = []
-        try:
-            # Support new strict schema: rag.strategies is a list of strategy objects
-            strategies = getattr(rag_config, "strategies", None)
-            if strategies is not None:
-                for s in strategies:
-                    name = getattr(s, "name", None)
-                    if name is None and isinstance(s, dict):
-                        name = s.get("name")
-                    if isinstance(name, str):
-                        custom_rag_strategies.append(name)
-            elif isinstance(rag_config, dict):
-                # Dict form: prefer 'strategies' item names; fallback to legacy 'rag_strategies'
-                dict_strategies = rag_config.get("strategies")
-                if isinstance(dict_strategies, list):
-                    custom_rag_strategies.extend(
-                        s["name"]
-                        for s in dict_strategies
-                        if isinstance(s, dict) and isinstance(s.get("name"), str)
-                    )
-        except Exception:
-            # Be resilient and fall back to defaults only
-            custom_rag_strategies = []
+        if rag_config is None:
+            return []
 
-        return DEFAULT_RAG_STRATEGIES + custom_rag_strategies
+        custom_data_processing_strategies: list[str] = []
+
+        # Only support new schema - no backwards compatibility
+        if (
+            hasattr(rag_config, "data_processing_strategies")
+            and rag_config.data_processing_strategies
+        ):
+            for strategy in rag_config.data_processing_strategies:
+                if hasattr(strategy, "name") and strategy.name:
+                    custom_data_processing_strategies.append(strategy.name)
+        elif (
+            isinstance(rag_config, dict) and "data_processing_strategies" in rag_config
+        ):
+            strategies = rag_config["data_processing_strategies"]
+            if isinstance(strategies, list):
+                for strategy in strategies:
+                    if isinstance(strategy, dict) and "name" in strategy:
+                        custom_data_processing_strategies.append(strategy["name"])
+
+        return custom_data_processing_strategies
 
     @classmethod
     def add_file_to_dataset(

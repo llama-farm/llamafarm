@@ -17,7 +17,7 @@ from config.datamodel import (
     Version,
 )
 
-from services.dataset_service import DEFAULT_RAG_STRATEGIES, DatasetService
+from services.dataset_service import DatasetService
 from services.project_service import ProjectService
 
 
@@ -38,25 +38,41 @@ class TestDatasetService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
+                    {
+                        "name": "custom_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "custom_embedding",
+                                "type": "OllamaEmbedder",
+                                "config": {"model": "nomic-embed-text"},
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "custom_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
+                    }
+                ],
+                "data_processing_strategies": [
                     {
                         "name": "custom_strategy",
                         "description": "Custom strategy for testing behavior",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_Pandas",
                                 "config": {},
-                            },
-                        },
+                                "file_extensions": [".csv"],
+                            }
+                        ],
                     }
-                ]
+                ],
             },
             datasets=[
                 Dataset(
@@ -91,25 +107,41 @@ class TestDatasetService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
                     {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
                                 "type": "OllamaEmbedder",
                                 "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
                                 "type": "BasicSimilarityStrategy",
                                 "config": {},
-                            },
-                        },
+                                "default": True,
+                            }
+                        ],
                     }
-                ]
+                ],
+                "data_processing_strategies": [
+                    {
+                        "name": "default_processing",
+                        "description": "Default data processing strategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_Pandas",
+                                "config": {},
+                                "file_extensions": [".csv"],
+                            }
+                        ],
+                    }
+                ],
             },
             datasets=[],
             runtime=Runtime(
@@ -164,25 +196,41 @@ class TestDatasetService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
                     {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
                                 "type": "OllamaEmbedder",
                                 "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
                                 "type": "BasicSimilarityStrategy",
                                 "config": {},
-                            },
-                        },
+                                "default": True,
+                            }
+                        ],
                     }
-                ]
+                ],
+                "data_processing_strategies": [
+                    {
+                        "name": "default_processing",
+                        "description": "Default data processing strategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_Pandas",
+                                "config": {},
+                                "file_extensions": [".csv"],
+                            }
+                        ],
+                    }
+                ],
             },
             datasets=[],
             runtime=Runtime(
@@ -313,56 +361,24 @@ class TestDatasetService:
             )
 
     @patch.object(ProjectService, "load_config")
-    def test_get_supported_rag_strategies_with_custom_strategies(
+    def test_get_supported_data_processing_strategies_with_custom_strategies(
         self, mock_load_config
     ):
-        """Test getting supported RAG strategies including custom ones."""
+        """Test getting supported data processing strategies including custom ones."""
         mock_load_config.return_value = self.mock_project_config
 
-        strategies = DatasetService.get_supported_rag_strategies(
+        strategies = DatasetService.get_supported_data_processing_strategies(
             "test_namespace", "test_project"
         )
 
-        expected_strategies = DEFAULT_RAG_STRATEGIES + ["custom_strategy"]
+        expected_strategies = ["custom_strategy"]
         assert strategies == expected_strategies
 
     @patch.object(ProjectService, "load_config")
-    def test_get_supported_rag_strategies_default_only(self, mock_load_config):
-        """Test getting supported RAG strategies with only default strategies."""
-        config_no_custom = self.mock_project_config.model_copy()
-        config_no_custom.rag = {
-            "strategies": [
-                {
-                    "name": "default",
-                    "description": "Default strategy configuration",
-                    "components": {
-                        "parser": {"type": "CSVParser", "config": {}},
-                        "extractors": [],
-                        "embedder": {
-                            "type": "OllamaEmbedder",
-                            "config": {"model": "nomic-embed-text"},
-                        },
-                        "vector_store": {"type": "ChromaStore", "config": {}},
-                        "retrieval_strategy": {
-                            "type": "BasicSimilarityStrategy",
-                            "config": {},
-                        },
-                    },
-                }
-            ]
-        }
-        mock_load_config.return_value = config_no_custom
-
-        strategies = DatasetService.get_supported_rag_strategies(
-            "test_namespace", "test_project"
-        )
-
-        expected_strategies = DEFAULT_RAG_STRATEGIES + ["default"]
-        assert strategies == expected_strategies
-
-    @patch.object(ProjectService, "load_config")
-    def test_get_supported_rag_strategies_no_rag_config(self, mock_load_config):
-        """Test getting supported RAG strategies when RAG config is missing."""
+    def test_get_supported_data_processing_strategies_no_rag_config(
+        self, mock_load_config
+    ):
+        """Test getting supported data processing strategies when RAG config is missing."""
         config_no_rag = LlamaFarmConfig(
             version=Version.v1,
             name="test_project",
@@ -373,33 +389,12 @@ class TestDatasetService:
                     content="You are a helpful assistant.",
                 )
             ],
-            rag={
-                "strategies": [
-                    {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
-                                "config": {},
-                            },
-                        },
-                    }
-                ]
-            },
+            rag=None,
             datasets=[],
             runtime=Runtime(
                 provider=Provider.openai,
                 model="llama3.1:8b",
                 api_key="ollama",
-                base_url="http://localhost:11434/v1",
                 model_api_parameters={
                     "temperature": 0.5,
                 },
@@ -407,65 +402,11 @@ class TestDatasetService:
         )
         mock_load_config.return_value = config_no_rag
 
-        strategies = DatasetService.get_supported_rag_strategies(
+        strategies = DatasetService.get_supported_data_processing_strategies(
             "test_namespace", "test_project"
         )
 
-        expected_strategies = DEFAULT_RAG_STRATEGIES + ["default"]
-        assert strategies == expected_strategies
-
-    @patch.object(ProjectService, "load_config")
-    def test_get_supported_rag_strategies_no_strategies_key(self, mock_load_config):
-        """Test getting supported RAG strategies when rag_strategies key is missing from RAG config."""
-        config_no_strategies_key = LlamaFarmConfig(
-            version=Version.v1,
-            name="test_project",
-            namespace="test_namespace",
-            prompts=[
-                Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
-                )
-            ],
-            rag={
-                "strategies": [
-                    {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
-                                "config": {},
-                            },
-                        },
-                    }
-                ]
-            },
-            datasets=[],
-            runtime=Runtime(
-                provider=Provider.openai,
-                model="llama3.1:8b",
-                api_key="ollama",
-                base_url="http://localhost:11434/v1",
-                model_api_parameters={
-                    "temperature": 0.5,
-                },
-            ),
-        )
-        mock_load_config.return_value = config_no_strategies_key
-
-        strategies = DatasetService.get_supported_rag_strategies(
-            "test_namespace", "test_project"
-        )
-
-        expected_strategies = DEFAULT_RAG_STRATEGIES + ["default"]
+        expected_strategies = []
         assert strategies == expected_strategies
 
     @patch.object(ProjectService, "load_config")
@@ -482,25 +423,41 @@ class TestDatasetService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
                     {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
-                            "extractors": [],
-                            "embedder": {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
                                 "type": "OllamaEmbedder",
                                 "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
                                 "type": "BasicSimilarityStrategy",
                                 "config": {},
-                            },
-                        },
+                                "default": True,
+                            }
+                        ],
                     }
-                ]
+                ],
+                "data_processing_strategies": [
+                    {
+                        "name": "default_processing",
+                        "description": "Default data processing strategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_Pandas",
+                                "config": {},
+                                "file_extensions": [".csv"],
+                            }
+                        ],
+                    }
+                ],
             },
             datasets=[],
             runtime=Runtime(
@@ -557,28 +514,41 @@ class TestDatasetServiceIntegration:
                         )
                     ],
                     rag={
-                        "strategies": [
+                        "databases": [
+                            {
+                                "name": "test_db",
+                                "type": "ChromaStore",
+                                "config": {},
+                                "embedding_strategies": [
+                                    {
+                                        "name": "test_embedding",
+                                        "type": "OllamaEmbedder",
+                                        "config": {"model": "nomic-embed-text"},
+                                    }
+                                ],
+                                "retrieval_strategies": [
+                                    {
+                                        "name": "test_retrieval",
+                                        "type": "BasicSimilarityStrategy",
+                                        "config": {},
+                                        "default": True,
+                                    }
+                                ],
+                            }
+                        ],
+                        "data_processing_strategies": [
                             {
                                 "name": "custom_strategy",
                                 "description": "Custom strategy for testing behavior",
-                                "components": {
-                                    "parser": {"type": "CSVParser", "config": {}},
-                                    "extractors": [],
-                                    "embedder": {
-                                        "type": "OllamaEmbedder",
-                                        "config": {"model": "nomic-embed-text"},
-                                    },
-                                    "vector_store": {
-                                        "type": "ChromaStore",
+                                "parsers": [
+                                    {
+                                        "type": "CSVParser_Pandas",
                                         "config": {},
-                                    },
-                                    "retrieval_strategy": {
-                                        "type": "BasicSimilarityStrategy",
-                                        "config": {},
-                                    },
-                                },
+                                        "file_extensions": [".csv"],
+                                    }
+                                ],
                             }
-                        ]
+                        ],
                     },
                     datasets=current_datasets.copy(),
                     runtime=Runtime(
