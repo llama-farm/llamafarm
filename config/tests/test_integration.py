@@ -275,9 +275,11 @@ prompts:
             parser_type = strat["parsers"][0]["type"]
             parser_config = strat["parsers"][0]["config"]
 
-            if parser_type == "CSVParser_Pandas":
+            if parser_type == "CSVParser_LlamaIndex":
                 return {
                     "type": parser_type,
+                    "content_fields": parser_config["content_fields"],
+                    "metadata_fields": parser_config["metadata_fields"],
                 }
             else:
                 raise ValueError(f"Unknown parser type: {parser_type}")
@@ -356,7 +358,7 @@ def test_cross_module_config_sharing():
     parser_type = getattr(rag_service.parser_type, "value", rag_service.parser_type)
     embedder_type = getattr(rag_service.embedder_type, "value", rag_service.embedder_type)
     collection_type = getattr(rag_service.collection_type, "value", rag_service.collection_type)
-    assert parser_type == "CSVParser_Pandas"
+    assert parser_type == "CSVParser_LlamaIndex"
     assert embedder_type == "OllamaEmbedder"
     assert collection_type == "ChromaStore"
 
