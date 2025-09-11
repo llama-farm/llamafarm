@@ -11,7 +11,7 @@ on:
       - 'install.sh'
       - 'cli/**'
       - 'cli/hack/**'
-      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/release-cli.yml'
       - '.github/workflows/cli-installer.yml'
   push:
     branches: [main]
@@ -19,7 +19,7 @@ on:
       - 'install.sh'
       - 'cli/**'
       - 'cli/hack/**'
-      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/release-cli.yml'
       - '.github/workflows/test-installer.yml'
   workflow_dispatch:
 

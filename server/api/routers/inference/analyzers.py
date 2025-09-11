@@ -131,7 +131,9 @@ class IntentAnalysis(BaseModel):
         default_factory=dict,
         description="Key-value parameters for the tool input schema",
     )
-    namespace: str | None = Field(default=None, description="Project namespace if relevant")
+    namespace: str | None = Field(
+        default=None, description="Project namespace if relevant"
+    )
     project_id: str | None = Field(default=None, description="Project id if relevant")
     confidence: float = Field(description="Confidence score between 0 and 1")
     reasoning: str = Field(description="Why this tool and action were chosen")
@@ -147,10 +149,12 @@ class IntentClassifier:
     def _initialize_client(self):
         try:
             ollama_client = OpenAI(
-                base_url=settings.ollama_host,
+                base_url=f"{settings.ollama_host}/v1",
                 api_key=settings.ollama_api_key,
             )
-            self.client = instructor.from_openai(ollama_client, mode=instructor.Mode.JSON)
+            self.client = instructor.from_openai(
+                ollama_client, mode=instructor.Mode.JSON
+            )
         except Exception as e:
             logger.warning("Failed to initialize IntentClassifier client", error=str(e))
             self.client = None
@@ -167,7 +171,9 @@ class IntentClassifier:
         Falls back to heuristics if LLM is unavailable.
         """
         if not self.client:
-            return self._fallback_classify(message, available_tools, request_namespace, request_project_id)
+            return self._fallback_classify(
+                message, available_tools, request_namespace, request_project_id
+            )
 
         try:
             tools_as_bullets = "\n".join(f"- {t}" for t in available_tools)
@@ -213,8 +219,12 @@ Guidelines:
 
             return analysis
         except Exception as e:
-            logger.warning("LLM intent classification failed; using heuristics", error=str(e))
-            return self._fallback_classify(message, available_tools, request_namespace, request_project_id)
+            logger.warning(
+                "LLM intent classification failed; using heuristics", error=str(e)
+            )
+            return self._fallback_classify(
+                message, available_tools, request_namespace, request_project_id
+            )
 
     def _fallback_classify(
         self,
@@ -233,13 +243,19 @@ Guidelines:
 
         if tool is None or tool not in available_tools:
             # Default to prompt_engineering for conversational assistance
-            tool = "prompt_engineering" if "prompt_engineering" in available_tools else available_tools[0]
+            tool = (
+                "prompt_engineering"
+                if "prompt_engineering" in available_tools
+                else available_tools[0]
+            )
 
         # Basic action heuristics
         action = "start_engineering"
         params: dict = {}
         if tool == "projects":
-            action = "create" if "create" in msg or "new" in msg or "make" in msg else "list"
+            action = (
+                "create" if "create" in msg or "new" in msg or "make" in msg else "list"
+            )
         elif tool == "project_config":
             if any(k in msg for k in ["analyze", "status", "current"]):
                 action = "analyze_config"

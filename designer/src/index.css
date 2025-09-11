@@ -55,7 +55,7 @@ html,
 body,
 #root {
   width: 100%;
-  height: 100% !important;
+  height: 100%;
   transition: background-color 0.3s ease, color 0.3s ease;
   font-family: theme('fontFamily.sans');
 }
@@ -83,29 +83,37 @@ body,
   border-image-slice: 1;
 }
 
-/* Custom Scrollbar */
-.scrollbar-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Legacy scrollbar styles removed - now using Tailwind utilities */
+
+/* Config Editor Height Fix - Ensure CodeMirror fills container */
+.config-editor-content .cm-editor {
+  height: 100%;
+  min-height: 100%;
 }
 
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
+.config-editor-content .cm-scroller {
+  height: 100%;
+  min-height: 100%;
+  max-height: 600px; /* Enable scrolling for large configs */
+  overflow: auto !important; /* Ensure scrolling works */
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: rgba(100, 100, 100, 0.5);
-  border-radius: 6px;
+.config-editor-content .cm-content {
+  min-height: 100%;
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(100, 100, 100, 0.7);
+/* Ensure the editor container itself fills available space */
+.config-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-/* For Firefox */
-.scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(100, 100, 100, 0.5) transparent;
+.config-editor-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 @layer base {

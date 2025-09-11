@@ -12,9 +12,9 @@ function Chat() {
       >
         <Chatbox isPanelOpen={isPanelOpen} setIsPanelOpen={setIsPanelOpen} />
       </div>
-      
+
       <div
-        className={`h-full scrollbar-thin overflow-auto ${isPanelOpen ? 'w-3/4' : 'flex-1'} text-gray-900 dark:text-white px-6 pt-6`}
+        className={`h-full ${isPanelOpen ? 'w-3/4' : 'flex-1'} text-gray-900 dark:text-white px-6 pt-6 overflow-hidden`}
       >
         <Outlet />
       </div>

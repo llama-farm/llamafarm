@@ -48,7 +48,7 @@ def setup_celery_logging(**kwargs):
 
 
 def run_worker():
-    app.worker_main(argv=["worker", "-P", "solo"])
+    app.worker_main(argv=["worker", "-P", "solo", "--uid", "0"])
 
 
 t = threading.Thread(target=run_worker, daemon=True)

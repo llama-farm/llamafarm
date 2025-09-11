@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '../ui/button'
+import PageActions from '../common/PageActions'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
+import { Mode } from '../ModeToggle'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import {
@@ -844,6 +847,7 @@ function TrainingData() {
 
 const Models = () => {
   const [activeTab, setActiveTab] = useState('project')
+  const [mode, setMode] = useState<Mode>('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([
     {
       id: 'tinyllama',
@@ -859,6 +863,20 @@ const Models = () => {
       badges: ['Cloud', 'OpenAI'],
     },
   ])
+
+  // Initialize default model from persisted selection
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('lf_default_project_model')
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      const savedId = parsed?.id
+      if (!savedId) return
+      setProjectModels(prev =>
+        prev.map(m => ({ ...m, isDefault: m.id === savedId }))
+      )
+    } catch {}
+  }, [])
 
   const addProjectModel = (m: InferenceModel) => {
     setProjectModels(prev => {
@@ -884,6 +902,25 @@ const Models = () => {
   }
 
   const makeDefault = (id: string) => {
+    // Persist selection to localStorage and notify listeners
+    try {
+      const chosen = projectModels.find(m => m.id === id)
+      if (chosen) {
+        localStorage.setItem(
+          'lf_default_project_model',
+          JSON.stringify({ id: chosen.id, name: chosen.name })
+        )
+        if (typeof window !== 'undefined') {
+          try {
+            window.dispatchEvent(
+              new CustomEvent('lf:defaultProjectModelUpdated', {
+                detail: { id: chosen.id, name: chosen.name },
+              })
+            )
+          } catch {}
+        }
+      }
+    } catch {}
     setProjectModels(prev => prev.map(m => ({ ...m, isDefault: m.id === id })))
   }
 
@@ -892,38 +929,51 @@ const Models = () => {
   }
 
   return (
-    <div className="h-full w-full flex flex-col gap-3">
+    <div className="h-full w-full flex flex-col gap-3 pb-32">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl">Models</h2>
-        <Button variant="outline" size="sm" disabled>
-          Deploy
-        </Button>
+        <h2 className="text-2xl">
+          {mode === 'designer' ? 'Models' : 'Config editor'}
+        </h2>
+        <PageActions mode={mode} onModeChange={setMode} />
       </div>
 
-      <TabBar
-        activeTab={activeTab}
-        onChange={setActiveTab}
-        tabs={[
-          { id: 'project', label: 'Project inference models' },
-          { id: 'manage', label: 'Add or change models' },
-          { id: 'training', label: 'Training data' },
-        ]}
-      />
+      {mode !== 'designer' ? (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-sm text-muted-foreground mb-1">Edit config</div>
+          <div className="rounded-md overflow-hidden">
+            <div className="h-[70vh]">
+              <ConfigEditor />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <TabBar
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={[
+              { id: 'project', label: 'Project inference models' },
+              { id: 'manage', label: 'Add or change models' },
+              { id: 'training', label: 'Training data' },
+            ]}
+          />
 
-      {activeTab === 'project' && (
-        <ProjectInferenceModels
-          models={projectModels}
-          onMakeDefault={makeDefault}
-          onDelete={deleteModel}
-        />
+          {activeTab === 'project' && (
+            <ProjectInferenceModels
+              models={projectModels}
+              onMakeDefault={makeDefault}
+              onDelete={deleteModel}
+            />
+          )}
+          {activeTab === 'manage' && (
+            <AddOrChangeModels
+              onAddModel={addProjectModel}
+              onGoToProject={() => setActiveTab('project')}
+            />
+          )}
+          {activeTab === 'training' && <TrainingData />}
+        </>
       )}
-      {activeTab === 'manage' && (
-        <AddOrChangeModels
-          onAddModel={addProjectModel}
-          onGoToProject={() => setActiveTab('project')}
-        />
-      )}
-      {activeTab === 'training' && <TrainingData />}
     </div>
   )
 }

@@ -9,9 +9,6 @@ const GeneratedOutputs = () => {
 
   return (
     <div className="w-full h-full flex flex-col gap-2 pb-4">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl ">Prompt</h2>
-      </div>
       <div className="flex flex-row items-center mb-4">
         <Tabs
           activeTab={activeTab}

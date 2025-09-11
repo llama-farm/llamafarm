@@ -2,7 +2,7 @@
 
 <div align="center">
   <img src="docs/images/rocket-llama.png" alt="Llama Building a Rocket" width="400">
-  
+
   **The Complete AI Development Framework - From Local Prototypes to Production Systems**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -11,7 +11,7 @@
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
   [![Discord](https://img.shields.io/discord/1234567890?color=7289da&logo=discord&logoColor=white)](https://discord.gg/8kH9AmQpSa)
 
-  
+
   [🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [🏗️ Architecture](#-architecture) • [🤝 Contributing](#-contributing)
 
 </div>
@@ -56,7 +56,7 @@ LlamaFarm is built as a modular system where each component can be used independ
 #### **🚀 Runtime**
 The execution environment that orchestrates all components and manages the application lifecycle.
 - **Process Management**: Handles component initialization and shutdown
-- **API/Access Layer**: Send queries to /chat, data to /data, and get full results with ease. 
+- **API/Access Layer**: Send queries to /chat, data to /data, and get full results with ease.
 - **Resource Allocation**: Manages memory, CPU, and GPU resources efficiently
 - **Service Discovery**: Automatically finds and connects components
 - **Health Monitoring**: Tracks component status and performance metrics
@@ -119,17 +119,16 @@ Each component is independent but designed to work seamlessly together through s
 ### Installation
 
 ```bash
-
-
-# Or clone and set up manually
-git clone https://github.com/llama-farm/llamafarm.git
-cd llamafarm
+curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 ```
 
-Full Dev Mode:
+Or, to start components manually for development:
 
 ```bash
-npm install -g nx  
+git clone https://github.com/llama-farm/llamafarm.git
+cd llamafarm
+
+npm install -g nx
 nx init --useDotNxInstallation --interactive=false
 nx start server
 ```
@@ -146,15 +145,15 @@ For the best experience getting started with LlamaFarm, we recommend exploring o
   ```bash
   cd rag
   uv sync
-  
+
   # Interactive setup wizard - guides you through configuration
   uv run python setup_demo.py
-  
+
   # Or try specific demos with the real CLI:
   uv run python cli.py demo research_papers    # Academic paper analysis
   uv run python cli.py demo customer_support   # Support ticket processing
   uv run python cli.py demo code_analysis      # Source code understanding
-  
+
   # Use your own documents:
   uv run python cli.py ingest ./your-docs/ --strategy research
   uv run python cli.py search "your query here" --top-k 5
@@ -166,16 +165,16 @@ For the best experience getting started with LlamaFarm, we recommend exploring o
   ```bash
   cd models
   uv sync
-  
+
   # Try our showcase demos:
   uv run python demos/demo1_cloud_fallback.py  # Automatic provider fallback
   uv run python demos/demo2_multi_model.py     # Smart model routing
   uv run python demos/demo3_training.py        # Fine-tuning pipeline (preview)
-  
+
   # Or use the real CLI directly:
   uv run python cli.py chat --strategy balanced "Explain quantum computing"
   uv run python cli.py chat --primary gpt-4 --fallback claude-3 "Write a haiku"
-  
+
   # Test with your own config:
   uv run python cli.py setup your-strategy.yaml --verify
   uv run python cli.py demo your-strategy
@@ -252,7 +251,7 @@ strategies:
       template: "academic_research"
       style: "formal"
       citations: true
-  
+
   customer_support:
     rag:
       embedder: "openai"
@@ -389,14 +388,14 @@ from llamafarm.strategies import Strategy
 
 class MedicalStrategy(Strategy):
     """Custom strategy for medical document analysis"""
-    
+
     def configure_rag(self):
         return {
             "extractors": ["medical_entities", "dosages", "symptoms"],
             "embedder": "biobert",
             "chunk_size": 256
         }
-    
+
     def configure_models(self):
         return {
             "primary": "med-palm-2",
@@ -443,7 +442,7 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
           <sub><b>Bobby Radford</b></sub>
         </a>
         <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a>
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
       </td>
       <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/mhamann">
@@ -579,8 +578,8 @@ See [CREDITS.md](CREDITS.md) for complete acknowledgments.
   <h3>🦙 Ready to Build Production AI?</h3>
   <p>Join thousands of developers building with LlamaFarm</p>
   <p>
-    <a href="https://github.com/llama-farm/llamafarm">⭐ Star on GitHub</a> • 
-    <a href="https://discord.gg/https://discord.gg/8kH9AmQpSa">💬 Join Discord</a> • 
+    <a href="https://github.com/llama-farm/llamafarm">⭐ Star on GitHub</a> •
+    <a href="https://discord.gg/https://discord.gg/8kH9AmQpSa">💬 Join Discord</a> •
     <a href="https://docs.llamafarm.dev">📚 Read Docs</a> •
 
   </p>

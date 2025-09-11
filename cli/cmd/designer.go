@@ -35,7 +35,12 @@ var designerStartCmd = &cobra.Command{
 
 		// Pull the latest llamafarm image if needed
 		fmt.Println("Pulling latest LlamaFarm image...")
-		if err := pullImage("ghcr.io/llama-farm/llamafarm/designer:latest"); err != nil {
+		designerImage, err := getImageURL("designer")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := pullImage(designerImage); err != nil {
 			fmt.Printf("Warning: Failed to pull latest image: %v\n", err)
 			fmt.Println("Continuing with existing local image...")
 		}
@@ -48,7 +53,7 @@ var designerStartCmd = &cobra.Command{
 			"--name", "llamafarm-designer",
 			"-p", "8080:8080", // Map port 8080
 			"-v", fmt.Sprintf("%s:/workspace", getEffectiveCWD()), // Mount current directory
-			"ghcr.io/llama-farm/llamafarm/designer:latest",
+			designerImage,
 		}
 
 		startCmd := exec.Command("docker", dockerArgs...)
