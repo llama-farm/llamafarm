@@ -5,8 +5,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from components.parsers.pdf_parser import PDFParser
 from core.base import Document
+from components.parsers.pdf_parser.pdf_parser import PDFParser
 
 
 class TestPDFParser:

@@ -43,7 +43,7 @@ class TestDatasetService:
                         "name": "custom_strategy",
                         "description": "Custom strategy for testing behavior",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -96,7 +96,7 @@ class TestDatasetService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -169,7 +169,7 @@ class TestDatasetService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -336,7 +336,7 @@ class TestDatasetService:
                     "name": "default",
                     "description": "Default strategy configuration",
                     "components": {
-                        "parser": {"type": "CSVParser", "config": {}},
+                        "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                         "extractors": [],
                         "embedder": {
                             "type": "OllamaEmbedder",
@@ -379,7 +379,7 @@ class TestDatasetService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -433,7 +433,7 @@ class TestDatasetService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -487,7 +487,7 @@ class TestDatasetService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -562,7 +562,10 @@ class TestDatasetServiceIntegration:
                                 "name": "custom_strategy",
                                 "description": "Custom strategy for testing behavior",
                                 "components": {
-                                    "parser": {"type": "CSVParser", "config": {}},
+                                    "parser": {
+                                        "type": "CSVParser_LlamaIndex",
+                                        "config": {},
+                                    },
                                     "extractors": [],
                                     "embedder": {
                                         "type": "OllamaEmbedder",

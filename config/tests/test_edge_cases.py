@@ -75,7 +75,37 @@ invalid toml syntax
         # Create a file without read permissions
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(
-                "version: v1\nmodels: []\nrag:\n  strategies:\n    - name: default\n      description: Default strategy for permissions test\n      components:\n        parser:\n          type: CSVParser\n          config:\n            content_fields: [question]\n            metadata_fields: [category]\n            id_field: id\n            combine_content: true\n        extractors: []\n        embedder:\n          type: OllamaEmbedder\n          config:\n            model: test-model\n            base_url: http://localhost:11434\n            batch_size: 16\n            timeout: 30\n        vector_store:\n          type: ChromaStore\n          config:\n            collection_name: test\n            persist_directory: ./test\n        retrieval_strategy:\n          type: BasicSimilarityStrategy\n          config:\n            distance_metric: cosine"
+                """version: v1
+models: []
+rag:
+  strategies:
+    - name: default
+      description: Default strategy for permissions test
+      components:
+        parser:
+          type: CSVParser_LlamaIndex
+          config:
+            chunk_size: 1000
+            chunk_strategy: rows
+            extract_metadata: True
+        extractors: []
+        embedder:
+          type: OllamaEmbedder
+          config:
+            model: test-model
+            base_url: http://localhost:11434
+            batch_size: 16
+            timeout: 30
+        vector_store:
+          type: ChromaStore
+          config:
+            collection_name: test
+            persist_directory: ./test
+        retrieval_strategy:
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+"""
             )
             temp_path = f.name
 
@@ -104,12 +134,12 @@ rag:
       description: "Large config default strategy"
       components:
         parser:
-          type: "CSVParser"
+          type: "CSVParser_LlamaIndex"
           config:
-            content_fields: ["question"]
-            metadata_fields: ["category"]
-            id_field: "id"
+            content_fields: ["subject", "body"]
+            metadata_fields: []
             combine_content: true
+            table_format: "markdown"
         extractors: []
         embedder:
           type: "OllamaEmbedder"
@@ -118,6 +148,7 @@ rag:
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
+            auto_pull: true
         vector_store:
           type: "ChromaStore"
           config:
@@ -180,12 +211,12 @@ rag:
       description: "Unicode strategy"
       components:
         parser:
-          type: "CSVParser"
+          type: "CSVParser_LlamaIndex"
           config:
-            content_fields: ["question"]
-            metadata_fields: ["category"]
-            id_field: "id"
+            content_fields: ["subject", "body"]
+            metadata_fields: []
             combine_content: true
+            table_format: "markdown"
         extractors: []
         embedder:
           type: "OllamaEmbedder"
@@ -194,6 +225,7 @@ rag:
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
+            auto_pull: true
         vector_store:
           type: "ChromaStore"
           config:
@@ -220,17 +252,9 @@ datasets:
         temp_path = temp_config_file(unicode_config, ".yaml")
 
         config = load_config_dict(config_path=temp_path)
-        # Accept either raw_text or structured sections
+        # Prompts are role/content items; ensure unicode preserved
         prompt0 = config["prompts"][0]
-        if "raw_text" in prompt0:
-            assert "你好" in prompt0["raw_text"]
-            assert "café" in prompt0.get("description", "")
-        elif "sections" in prompt0:
-            contents = []
-            for section in prompt0["sections"]:
-                contents.extend(section.get("content", []))
-            assert any("你好" in c for c in contents)
-            # description key may not exist in new schema; skip
+        assert "你好" in prompt0.get("content", "")
         # Vector store config validated via schema; skip unicode assertion under strict schema
 
     def test_deeply_nested_paths(self, temp_config_file):
@@ -246,12 +270,12 @@ rag:
       description: "Deep path strategy"
       components:
         parser:
-          type: "CSVParser"
+          type: "CSVParser_LlamaIndex"
           config:
-            content_fields: ["question"]
-            metadata_fields: ["category"]
-            id_field: "id"
+            content_fields: ["subject", "body"]
+            metadata_fields: []
             combine_content: true
+            table_format: "markdown"
         extractors: []
         embedder:
           type: "OllamaEmbedder"
@@ -260,6 +284,7 @@ rag:
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
+            auto_pull: true
         vector_store:
           type: "ChromaStore"
           config:
@@ -317,12 +342,12 @@ rag:
       description: "Special characters strategy"
       components:
         parser:
-          type: "CSVParser"
+          type: "CSVParser_LlamaIndex"
           config:
-            content_fields: ["question"]
-            metadata_fields: ["category"]
-            id_field: "id"
+            content_fields: ["subject", "body"]
+            metadata_fields: []
             combine_content: true
+            table_format: "markdown"
         extractors: []
         embedder:
           type: "OllamaEmbedder"
@@ -331,6 +356,7 @@ rag:
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
+            auto_pull: true
         vector_store:
           type: "ChromaStore"
           config:
@@ -358,13 +384,7 @@ datasets:
 
         config = load_config_dict(config_path=temp_path)
         prompt0 = config["prompts"][0]
-        if "raw_text" in prompt0:
-            assert "@#$%^&*" in prompt0["raw_text"]
-        elif "sections" in prompt0:
-            contents = []
-            for section in prompt0["sections"]:
-                contents.extend(section.get("content", []))
-            assert any("@#$%^&*" in c for c in contents)
+        assert "@#$%^&*" in prompt0.get("content", "")
         # Under strict schema, embedders are nested under strategies; skip model string assertion
 
     @pytest.mark.skip(

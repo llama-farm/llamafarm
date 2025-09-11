@@ -4,12 +4,8 @@ name: sample_config
 namespace: test
 
 prompts:
-  - name: "customer_support"
+  - role: "system"
     content: "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
-    sections:
-      - title: "background"
-        content:
-          - "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
 
 rag:
   strategies:
@@ -17,14 +13,12 @@ rag:
       description: "Customer support strategy for testing"
       components:
         parser:
-          type: "CSVParser"
+          type: "CSVParser_LlamaIndex"
           config:
-            content_fields: ["question", "answer", "solution", "explanation"]
-            metadata_fields:
-              ["category", "timestamp", "priority", "tags", "author"]
-            id_field: "id"
+            content_fields: ["question", "answer"]
+            metadata_fields: ["category", "timestamp"]
             combine_content: true
-            content_separator: "\n\n"
+            table_format: "markdown"
         extractors: []
         embedder:
           type: "OllamaEmbedder"
@@ -33,6 +27,7 @@ rag:
             base_url: "http://localhost:11434"
             batch_size: 32
             timeout: 60
+            auto_pull: true
         vector_store:
           type: "ChromaStore"
           config:
@@ -52,6 +47,6 @@ runtime:
   provider: "openai"
   model: "llama3.1:8b"
   api_key: "ollama"
-  base_url: "http://localhost:11434/v1"
+  base_url: "http://localhost:11434"
   model_api_parameters:
     temperature: 0.5

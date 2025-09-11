@@ -25,14 +25,8 @@ class TestConfigWriter:
             "namespace": "test",
             "prompts": [
                 {
-                    "name": "test_prompt",
+                    "role": "system",
                     "content": "This is a test prompt for configuration testing.",
-                    "sections": [
-                        {
-                            "title": "default",
-                            "content": ["This is a test prompt for configuration testing."],
-                        }
-                    ],
                 }
             ],
             "rag": {
@@ -42,12 +36,12 @@ class TestConfigWriter:
                         "description": "Default strategy",
                         "components": {
                             "parser": {
-                                "type": "CSVParser",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {
                                     "content_fields": ["question"],
-                                    "metadata_fields": ["category"],
-                                    "id_field": "id",
+                                    "metadata_fields": [],
                                     "combine_content": True,
+                                    "table_format": "markdown",
                                 },
                             },
                             "extractors": [],
@@ -58,6 +52,7 @@ class TestConfigWriter:
                                     "base_url": "http://localhost:11434",
                                     "batch_size": 16,
                                     "timeout": 30,
+                                    "auto_pull": True,
                                 },
                             },
                             "vector_store": {"type": "ChromaStore", "config": {}},
@@ -102,7 +97,7 @@ class TestConfigWriter:
 
             try:
                 # Save configuration
-                saved_path = save_config(sample_config, config_path, "toml")
+                saved_path, _ = save_config(sample_config, config_path, "toml")
 
                 # Verify file was created
                 assert saved_path.exists()
@@ -211,7 +206,14 @@ class TestConfigWriter:
                                     "type": "OllamaEmbedder",
                                     "config": {"batch_size": 32},
                                 },
-                                "parser": {"type": "CSVParser", "config": {}},
+                                "parser": {
+                                    "type": "CSVParser_LlamaIndex",
+                                    "config": {
+                                        "content_fields": ["question"],
+                                        "combine_content": True,
+                                        "table_format": "markdown",
+                                    },
+                                },
                                 "vector_store": {"type": "ChromaStore", "config": {}},
                                 "retrieval_strategy": {
                                     "type": "BasicSimilarityStrategy",
@@ -263,7 +265,7 @@ class TestConfigWriter:
                                     "type": "OllamaEmbedder",
                                     "config": {"batch_size": 64, "timeout": 45},
                                 },
-                                "parser": {"type": "CSVParser", "config": {}},
+                                "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                                 "vector_store": {"type": "ChromaStore", "config": {}},
                                 "retrieval_strategy": {
                                     "type": "BasicSimilarityStrategy",

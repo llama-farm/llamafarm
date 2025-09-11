@@ -6,7 +6,8 @@ strategies:
   # =============================================================================
   # DEMO 1: RESEARCH PAPERS STRATEGY
   # =============================================================================
-  - name: "research_papers_demo"
+  research_papers_demo:
+    name: "research_papers_demo"
     description: "Optimized strategy for academic research paper analysis demo"
     tags: ["demo", "research", "academic", "papers"]
     use_cases: 
@@ -72,7 +73,8 @@ strategies:
   # =============================================================================
   # DEMO 2: CUSTOMER SUPPORT STRATEGY
   # =============================================================================
-  - name: "customer_support_demo"
+  customer_support_demo:
+    name: "customer_support_demo"
     description: "Optimized strategy for customer support system demo"
     tags: ["demo", "support", "customer-service", "helpdesk"]
     use_cases:
@@ -138,7 +140,8 @@ strategies:
   # =============================================================================
   # DEMO 3: CODE DOCUMENTATION STRATEGY
   # =============================================================================
-  - name: "code_documentation_demo"
+  code_documentation_demo:
+    name: "code_documentation_demo"
     description: "Optimized strategy for code documentation demo"
     tags: ["demo", "code", "documentation", "technical"]
     use_cases:
@@ -213,7 +216,8 @@ strategies:
   # =============================================================================
   # DEMO 4: NEWS ANALYSIS STRATEGY
   # =============================================================================
-  - name: "news_analysis_demo"
+  news_analysis_demo:
+    name: "news_analysis_demo"
     description: "Optimized strategy for news article analysis demo"
     tags: ["demo", "news", "analysis", "media"]
     use_cases:
@@ -285,7 +289,8 @@ strategies:
   # =============================================================================
   # DEMO 5: BUSINESS REPORTS STRATEGY
   # =============================================================================
-  - name: "business_reports_demo"
+  business_reports_demo:
+    name: "business_reports_demo"
     description: "Optimized strategy for business reports analysis demo"
     tags: ["demo", "business", "reports", "analytics"]
     use_cases:
@@ -367,7 +372,8 @@ strategies:
   # =============================================================================
   # DEMO 6: DOCUMENT MANAGEMENT STRATEGY
   # =============================================================================
-  - name: "document_management_demo"
+  document_management_demo:
+    name: "document_management_demo"
     description: "Strategy for document lifecycle management demo"
     tags: ["demo", "management", "operations", "vector-db"]
     use_cases:
@@ -428,7 +434,8 @@ strategies:
   # =============================================================================
   # DEMO 7: AIRCRAFT OPERATIONS STRATEGY
   # =============================================================================
-  - name: "aircraft_operations_demo"
+  aircraft_operations_demo:
+    name: "aircraft_operations_demo"
     description: "Strategy for aircraft operations manual analysis (737 FCOM)"
     tags: ["demo", "aviation", "technical", "operations", "pdf"]
     use_cases:
@@ -526,7 +533,8 @@ strategies:
   # ==============================================================================
   # TEST STRATEGY FOR CLI TESTING  
   # ==============================================================================
-  - name: "test_cli_strategy"
+  test_cli_strategy:
+    name: "test_cli_strategy"
     description: "Test strategy for automated CLI testing"
     tags: ["test", "cli"]
     use_cases:
@@ -570,7 +578,6 @@ strategy_templates:
     description: "Minimal configuration for quick demos"
     tags: ["template", "minimal", "quick-start"]
     use_cases: ["Quick prototyping"]
-    
     components:
       parser:
         type: "TextParser_Python"
@@ -580,20 +587,17 @@ strategy_templates:
           chunk_strategy: characters
           respect_sentence_boundaries: true
           min_chunk_size: 50
-      
       embedder:
         type: "OllamaEmbedder"
         config:
           model: "nomic-embed-text"
           batch_size: 10
-      
       vector_store:
         type: "ChromaStore"
         config:
           collection_name: "demo"
           persist_directory: "./demos/vectordb/demo"
           distance_function: "cosine"
-      
       retrieval_strategy:
         type: "BasicSimilarityStrategy"
         config:
@@ -602,7 +606,8 @@ strategy_templates:
   # =============================================================================
   # DEMO 8: ADVANCED PDF WITH LLAMAINDEX
   # =============================================================================
-  - name: "advanced_pdf_llamaindex"
+  advanced_pdf_llamaindex:
+    name: "advanced_pdf_llamaindex"
     description: "Advanced PDF processing using LlamaIndex parser with multiple fallback strategies"
     tags: ["demo", "llamaindex", "pdf", "advanced"]
     use_cases:
@@ -672,7 +677,8 @@ strategy_templates:
   # =============================================================================
   # DEMO 9: MARKDOWN DOCUMENTATION WITH LLAMAINDEX
   # =============================================================================
-  - name: "markdown_docs_llamaindex"
+  markdown_docs_llamaindex:
+    name: "markdown_docs_llamaindex"
     description: "Markdown documentation processing with LlamaIndex heading-aware chunking"
     tags: ["demo", "llamaindex", "markdown", "documentation"]
     use_cases:
@@ -746,7 +752,8 @@ strategy_templates:
   # =============================================================================
   # DEMO 10: EXCEL DATA ANALYSIS WITH LLAMAINDEX
   # =============================================================================
-  - name: "excel_analysis_llamaindex"
+  excel_analysis_llamaindex:
+    name: "excel_analysis_llamaindex"
     description: "Excel data processing with LlamaIndex multi-sheet support"
     tags: ["demo", "llamaindex", "excel", "data-analysis"]
     use_cases:
@@ -816,7 +823,8 @@ strategy_templates:
   # =============================================================================
   # DEMO 11: MULTI-FORMAT WITH LLAMAINDEX TEXT PARSER
   # =============================================================================
-  - name: "multiformat_llamaindex"
+  multiformat_llamaindex:
+    name: "multiformat_llamaindex"
     description: "Multi-format text processing with LlamaIndex advanced text parser"
     tags: ["demo", "llamaindex", "text", "multi-format"]
     use_cases:

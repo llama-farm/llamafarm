@@ -862,13 +862,9 @@ For custom CSV formats, configure field mappings:
 ```json
 {
   "parser": {
-    "type": "CSVParser",
+    "type": "CSVParser_LlamaIndex",
     "config": {
-      "content_fields": ["title", "description", "solution"],
-      "metadata_fields": ["category", "severity", "date"],
-      "id_field": "ticket_number",
-      "combine_content": true,
-      "content_separator": "\\n\\n"
+      "chunk_size": 100
     }
   }
 }

@@ -12,7 +12,7 @@ from components.parsers import (
     LlamaIndexCSVExcelParser,
     LlamaIndexDocxParser,
     LlamaIndexMarkdownParser,
-    LlamaIndexWebParser
+    LlamaIndexWebParser,
 )
 
 # Create aliases for backward compatibility
@@ -33,18 +33,25 @@ from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
 # Conditional imports for embedders with dependencies
 try:
     from components.embedders.openai_embedder.openai_embedder import OpenAIEmbedder
+
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
 
 try:
-    from components.embedders.huggingface_embedder.huggingface_embedder import HuggingFaceEmbedder
+    from components.embedders.huggingface_embedder.huggingface_embedder import (
+        HuggingFaceEmbedder,
+    )
+
     HUGGINGFACE_AVAILABLE = True
 except ImportError:
     HUGGINGFACE_AVAILABLE = False
 
 try:
-    from components.embedders.sentence_transformer_embedder.sentence_transformer_embedder import SentenceTransformerEmbedder
+    from components.embedders.sentence_transformer_embedder.sentence_transformer_embedder import (
+        SentenceTransformerEmbedder,
+    )
+
     SENTENCE_TRANSFORMER_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMER_AVAILABLE = False
@@ -52,33 +59,45 @@ except ImportError:
 # Conditional imports for vector stores
 try:
     from components.stores.chroma_store.chroma_store import ChromaStore
+
     CHROMA_AVAILABLE = True
 except ImportError:
     CHROMA_AVAILABLE = False
 
 try:
     from components.stores.faiss_store.faiss_store import FAISSStore
+
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
 
 try:
     from components.stores.pinecone_store.pinecone_store import PineconeStore
+
     PINECONE_AVAILABLE = True
 except ImportError:
     PINECONE_AVAILABLE = False
 
 try:
     from components.stores.qdrant_store.qdrant_store import QdrantStore
+
     QDRANT_AVAILABLE = True
 except ImportError:
     QDRANT_AVAILABLE = False
 
 # Import extractors
-from components.extractors.keyword_extractor.keyword_extractor import YAKEExtractor, RAKEExtractor, TFIDFExtractor
+from components.extractors.keyword_extractor.keyword_extractor import (
+    YAKEExtractor,
+    RAKEExtractor,
+    TFIDFExtractor,
+)
 from components.extractors.entity_extractor.entity_extractor import EntityExtractor
-from components.extractors.datetime_extractor.datetime_extractor import DateTimeExtractor
-from components.extractors.statistics_extractor.statistics_extractor import ContentStatisticsExtractor
+from components.extractors.datetime_extractor.datetime_extractor import (
+    DateTimeExtractor,
+)
+from components.extractors.statistics_extractor.statistics_extractor import (
+    ContentStatisticsExtractor,
+)
 from components.extractors.summary_extractor.summary_extractor import SummaryExtractor
 from components.extractors.pattern_extractor.pattern_extractor import PatternExtractor
 from components.extractors.table_extractor.table_extractor import TableExtractor
@@ -86,10 +105,16 @@ from components.extractors.link_extractor.link_extractor import LinkExtractor
 from components.extractors.heading_extractor.heading_extractor import HeadingExtractor
 
 # Import retrieval strategies
-from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
+from components.retrievers.basic_similarity.basic_similarity import (
+    BasicSimilarityStrategy,
+)
 
-from components.retrievers.hybrid_universal.hybrid_universal import HybridUniversalStrategy
-from components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
+from components.retrievers.hybrid_universal.hybrid_universal import (
+    HybridUniversalStrategy,
+)
+from components.retrievers.metadata_filtered.metadata_filtered import (
+    MetadataFilteredStrategy,
+)
 from components.retrievers.multi_query.multi_query import MultiQueryStrategy
 from components.retrievers.reranked.reranked import RerankedStrategy
 
@@ -127,17 +152,29 @@ class ParserFactoryWrapper(ComponentFactory):
         """Create a parser instance using the new ParserFactory."""
         # Use the new ParserFactory from components.parsers
         return NewParserFactory.create_parser(component_type, config)
-    
+
     @classmethod
     def list_available(cls):
         """List available parsers."""
         return [
-            "CSVParser", "CustomerSupportCSVParser", "MarkdownParser",
-            "DocxParser", "PlainTextParser", "HTMLParser", "ExcelParser",
-            "DirectoryParser", "PDFParser",
+            "CSVParser",
+            "CustomerSupportCSVParser",
+            "MarkdownParser",
+            "DocxParser",
+            "PlainTextParser",
+            "HTMLParser",
+            "ExcelParser",
+            "DirectoryParser",
+            "PDFParser",
             # New names
-            "text", "pdf", "csv_excel", "docx", "markdown", "web"
+            "text",
+            "pdf",
+            "csv_excel",
+            "docx",
+            "markdown",
+            "web",
         ]
+
 
 # Keep the name ParserFactory for backward compatibility but use the wrapper
 ParserFactory = ParserFactoryWrapper
@@ -149,7 +186,7 @@ class EmbedderFactory(ComponentFactory):
     _registry = {
         "OllamaEmbedder": OllamaEmbedder,
     }
-    
+
     # Add embedders conditionally based on availability
     if OPENAI_AVAILABLE:
         _registry["OpenAIEmbedder"] = OpenAIEmbedder
@@ -163,7 +200,7 @@ class VectorStoreFactory(ComponentFactory):
     """Factory for creating vector store instances."""
 
     _registry = {}
-    
+
     # Add vector stores conditionally based on availability
     if CHROMA_AVAILABLE:
         _registry["ChromaStore"] = ChromaStore
@@ -177,7 +214,7 @@ class VectorStoreFactory(ComponentFactory):
 
 class ExtractorFactory(ComponentFactory):
     """Factory for creating extractor instances."""
-    
+
     _registry = {
         "YAKEExtractor": YAKEExtractor,
         "RAKEExtractor": RAKEExtractor,
