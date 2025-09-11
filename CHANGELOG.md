@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.0.3](https://github.com/llama-farm/llamafarm/compare/v0.0.2...v0.0.3) (2025-09-11)
+
+
+### Features
+
+* add a server health check and use it in the CLI ([#133](https://github.com/llama-farm/llamafarm/issues/133)) ([f842ad9](https://github.com/llama-farm/llamafarm/commit/f842ad9c3d661e7765c1063e115b76af46af6bac))
+* **cli:** determine server image tag with overrides ([#134](https://github.com/llama-farm/llamafarm/issues/134)) ([2423cfb](https://github.com/llama-farm/llamafarm/commit/2423cfb3ed3b157ba728c0b77bcc38ec5da76f48))
+* **designer:** consistent package button and code switcher ([e9c1378](https://github.com/llama-farm/llamafarm/commit/e9c1378a097a20d8e68842a5db00072d6dd31ee8))
+* **designer:** package experience inital modal and loader ([79b8298](https://github.com/llama-farm/llamafarm/commit/79b82988c74571002dc8924e9318458d98b98c19))
+* **designer:** packaging experience ([e205df2](https://github.com/llama-farm/llamafarm/commit/e205df227718c0b1e34d871f7325cdfeea2dd508))
+* **designer:** packet exp loading state, and success states ([0a02614](https://github.com/llama-farm/llamafarm/commit/0a02614bdd90134b47bdb3eafc5a7e586851b81d))
+* **designer:** versions page and actions (and dashboard links fixeed) ([e1a1902](https://github.com/llama-farm/llamafarm/commit/e1a1902cf2a19dfcc45ba327a6aaf3db996b1fe6))
+
+
+### Bug Fixes
+
+* **designer:** config editor switcher not working on some pages ([1d57b1e](https://github.com/llama-farm/llamafarm/commit/1d57b1e7ed7b091246522fc23cb52e8d9ac93cb0))
+* **designer:** package expereince run in background and other fixes ([3f8ad9c](https://github.com/llama-farm/llamafarm/commit/3f8ad9c13de1832c4e37bba923992c6a19bb992d))
+* **designer:** remove unused ModeToggle import in Data.tsx (TS6133) ([61a0182](https://github.com/llama-farm/llamafarm/commit/61a0182c21235c295f3bc489e490ae911d1160cd))
+* **install:** cli download naming ([8649357](https://github.com/llama-farm/llamafarm/commit/864935719201c32c40e5811386addf296288cd48))
+
+
+### Miscellaneous Chores
+
+* release 0.0.3 ([14e602b](https://github.com/llama-farm/llamafarm/commit/14e602b1286b480b493ec8061d00c831c0871f2a))
+
 ## [0.0.2](https://github.com/llama-farm/llamafarm/compare/v0.0.1...v0.0.2) (2025-09-08)
 
 
