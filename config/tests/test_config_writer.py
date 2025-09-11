@@ -25,14 +25,8 @@ class TestConfigWriter:
             "namespace": "test",
             "prompts": [
                 {
-                    "name": "test_prompt",
+                    "role": "system",
                     "content": "This is a test prompt for configuration testing.",
-                    "sections": [
-                        {
-                            "title": "default",
-                            "content": ["This is a test prompt for configuration testing."],
-                        }
-                    ],
                 }
             ],
             "rag": {
@@ -50,6 +44,7 @@ class TestConfigWriter:
                                     "base_url": "http://localhost:11434",
                                     "batch_size": 16,
                                     "timeout": 30,
+                                    "auto_pull": True,
                                 },
                             }
                         ],
@@ -124,7 +119,7 @@ class TestConfigWriter:
 
             try:
                 # Save configuration
-                saved_path = save_config(sample_config, config_path, "toml")
+                saved_path, _ = save_config(sample_config, config_path, "toml")
 
                 # Verify file was created
                 assert saved_path.exists()
@@ -252,8 +247,12 @@ class TestConfigWriter:
                             "description": "Default strategy",
                             "parsers": [
                                 {
-                                    "type": "CSVParser_Pandas",
-                                    "config": {},
+                                    "type": "CSVParser_LlamaIndex",
+                                    "config": {
+                                        "content_fields": ["question"],
+                                        "combine_content": True,
+                                        "table_format": "markdown",
+                                    },
                                     "file_extensions": [".csv"],
                                 }
                             ],

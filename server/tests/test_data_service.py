@@ -94,7 +94,7 @@ class TestDataService:
                         "description": "Default data processing strategy",
                         "parsers": [
                             {
-                                "type": "PDFParser_PyPDF2",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".pdf"],
                             }
@@ -352,7 +352,7 @@ class TestDataService:
                         "description": "Default strategy configuration",
                         "parsers": [
                             {
-                                "type": "PDFParser_PyPDF2",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".pdf"],
                             }
@@ -447,7 +447,7 @@ class TestDataService:
                         "description": "Default strategy configuration",
                         "parsers": [
                             {
-                                "type": "PDFParser_PyPDF2",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".pdf"],
                             }
@@ -541,7 +541,7 @@ class TestDataService:
                         "description": "Default strategy configuration",
                         "parsers": [
                             {
-                                "type": "PDFParser_PyPDF2",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".pdf"],
                             }

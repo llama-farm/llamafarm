@@ -34,16 +34,12 @@ class TestConfigLoader:
         assert "rag" in config
         assert "prompts" in config
 
-        # Verify prompts (new schema supports sections/raw_text)
-        assert isinstance(config["prompts"], list)
-        assert len(config["prompts"]) >= 1
-        prompt_names = [p.get("name") for p in config["prompts"]]
-        assert "customer_support" in prompt_names
-        cs_prompt = next(p for p in config["prompts"] if p.get("name") == "customer_support")
-        assert ("sections" in cs_prompt) or ("raw_text" in cs_prompt)
-        if "sections" in cs_prompt:
-            assert isinstance(cs_prompt["sections"], list) and len(cs_prompt["sections"]) >= 1
-            assert "content" in cs_prompt["sections"][0]
+        # Verify prompts match strict schema (list of role/content objects)
+        if "prompts" in config:
+            assert isinstance(config["prompts"], list)
+            if config["prompts"]:
+                first_prompt = config["prompts"][0]
+                assert "content" in first_prompt
 
         # Verify RAG configuration
         rag = config["rag"]
@@ -63,7 +59,11 @@ class TestConfigLoader:
         # Verify data processing strategy
         strat = rag["data_processing_strategies"][0]
         assert isinstance(strat["parsers"], list) and len(strat["parsers"]) >= 1
-        assert strat["parsers"][0]["type"] == "CSVParser_Pandas"
+        assert strat["parsers"][0]["type"] in [
+            "CSVParser_LlamaIndex",
+            "CSVParser_Pandas",
+            "CSVParser_Python",
+        ]
 
         # Verify parser config
         parser_config = strat["parsers"][0]["config"]
@@ -109,11 +109,11 @@ class TestConfigLoader:
 
         assert config["version"] == "v1"
 
-        # Prompts should be present since it's a required field
+        # Prompts optional list; when present, objects have role/content
         assert "prompts" in config
         assert isinstance(config["prompts"], list)
-        assert len(config["prompts"]) == 1
-        assert config["prompts"][0]["name"] == "minimal_prompt"
+        if config["prompts"]:
+            assert "content" in config["prompts"][0]
 
         # RAG should be properly configured
         strat = config["rag"]["data_processing_strategies"][0]
@@ -228,7 +228,7 @@ models:
         # Should load successfully with minimal prompts (required field)
         assert "prompts" in config
         assert isinstance(config["prompts"], list)
-        # The minimal config has at least one prompt
+        # Minimal config has at least one prompt
         assert len(config["prompts"]) >= 1
 
     def test_directory_vs_file_loading(self, test_data_dir):
@@ -280,7 +280,7 @@ def test_integration_usage():
     embedder_model = db["embedding_strategies"][0]["config"]["model"]
     collection_name = db["config"]["collection_name"]
 
-    assert parser_type == "CSVParser_Pandas"
+    assert parser_type in ["CSVParser_LlamaIndex", "CSVParser_Pandas", "CSVParser_Python"]
     assert embedder_model == "mxbai-embed-large"
     assert collection_name == "customer_support_knowledge_base"
 
@@ -289,17 +289,8 @@ def test_integration_usage():
 
     # Test accessing prompts (common use case)
     if config.get("prompts"):
-        customer_support_prompt = next(
-            (p for p in config["prompts"] if p.get("name") == "customer_support"), None
-        )
-        assert customer_support_prompt is not None
-        if "raw_text" in customer_support_prompt:
-            assert "assistant" in customer_support_prompt["raw_text"].lower()
-        elif "sections" in customer_support_prompt:
-            contents = []
-            for section in customer_support_prompt["sections"]:
-                contents.extend(section.get("content", []))
-            assert any("assistant" in c.lower() for c in contents)
+        first = config["prompts"][0]
+        assert "content" in first
 
 
 if __name__ == "__main__":

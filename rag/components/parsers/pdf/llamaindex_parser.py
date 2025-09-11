@@ -94,6 +94,8 @@ class PDFParser_LlamaIndex:
             global_chunk_index = 0  # Track chunks across all pages
             
             for page_num, llama_doc in enumerate(llama_docs):
+            
+            for llama_doc in llama_docs:
                 content = llama_doc.text if hasattr(llama_doc, 'text') else str(llama_doc)
                 
                 metadata = {
@@ -132,6 +134,7 @@ class PDFParser_LlamaIndex:
                             "chunk_index": global_chunk_index - 1,
                             "page_chunk_index": i,  # Chunk index within page
                             "total_page_chunks": len(nodes),
+                            "total_chunks": len(nodes),
                             "chunk_strategy": self.chunk_strategy
                         })
                         
@@ -217,6 +220,7 @@ class PDFParser_LlamaIndex:
                             "chunk_index": global_chunk_index - 1,
                             "page_chunk_index": i,  # Chunk index within page
                             "total_page_chunks": len(nodes),
+                            "total_chunks": len(nodes),
                             "chunk_strategy": self.chunk_strategy
                         })
                         

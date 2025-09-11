@@ -48,12 +48,8 @@ datasets:
     database: "minimal_db"
 
 prompts:
-  - name: "minimal_prompt"
+  - role: "system"
     content: "This is a minimal prompt."
-    sections:
-      - title: "default"
-        content:
-          - "This is a minimal prompt."
 
 runtime:
   provider: "openai"

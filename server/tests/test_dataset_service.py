@@ -66,7 +66,7 @@ class TestDatasetService:
                         "description": "Custom strategy for testing behavior",
                         "parsers": [
                             {
-                                "type": "CSVParser_Pandas",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".csv"],
                             }
@@ -139,7 +139,7 @@ class TestDatasetService:
                         "description": "Default data processing strategy",
                         "parsers": [
                             {
-                                "type": "CSVParser_Pandas",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".csv"],
                             }
@@ -230,7 +230,7 @@ class TestDatasetService:
                         "description": "Default data processing strategy",
                         "parsers": [
                             {
-                                "type": "CSVParser_Pandas",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".csv"],
                             }
@@ -487,7 +487,7 @@ class TestDatasetService:
                         "description": "Default data processing strategy",
                         "parsers": [
                             {
-                                "type": "CSVParser_Pandas",
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
                                 "file_extensions": [".csv"],
                             }
@@ -583,7 +583,7 @@ class TestDatasetServiceIntegration:
                                 "description": "Custom strategy for testing behavior",
                                 "parsers": [
                                     {
-                                        "type": "CSVParser_Pandas",
+                                        "type": "CSVParser_LlamaIndex",
                                         "config": {},
                                         "file_extensions": [".csv"],
                                     }

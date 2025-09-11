@@ -1,9 +1,10 @@
 """Tests for PDF parser."""
 
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
 from core.base import Document

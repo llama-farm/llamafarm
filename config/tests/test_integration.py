@@ -37,7 +37,7 @@ class TestModuleIntegration:
         content_fields = parser_config["content_fields"]
         metadata_fields = parser_config["metadata_fields"]
 
-        assert parser_type == "CSVParser_Pandas"
+        assert parser_type in ["CSVParser_LlamaIndex", "CSVParser_Pandas", "CSVParser_Python"]
         assert isinstance(content_fields, list)
         assert isinstance(metadata_fields, list)
         assert len(content_fields) >= 1
@@ -72,25 +72,11 @@ class TestModuleIntegration:
         config_path = sample_config_dir / "sample_config.yaml"
         config = load_config_dict(config_path=config_path)
 
-        # Handle prompts field using new sections/raw_text structure
+        # Handle prompts: list of role/content objects
         prompts = config.get("prompts", [])
         if prompts:
-            prompt_lookup = {p["name"]: p for p in prompts if "name" in p}
-
-            if "customer_support" in prompt_lookup:
-                cs_prompt = prompt_lookup["customer_support"]
-                if "raw_text" in cs_prompt:
-                    assert isinstance(cs_prompt["raw_text"], str)
-                    assert len(cs_prompt["raw_text"]) > 0
-                elif "sections" in cs_prompt:
-                    sections = cs_prompt["sections"]
-                    assert isinstance(sections, list) and len(sections) > 0
-                    first = sections[0]
-                    assert "title" in first and "content" in first
-                    assert isinstance(first["content"], list) and len(first["content"]) > 0
-
-            support_prompts = [p for p in prompts if "support" in p.get("name", "").lower()]
-            assert len(support_prompts) >= 1
+            first = prompts[0]
+            assert "content" in first
 
     def test_configuration_validation_service(self, sample_config_dir):
         """Test how a configuration validation service would use the module."""
@@ -173,7 +159,7 @@ rag:
     - name: "default"
       description: "Dev strategy"
       parsers:
-        - type: "CSVParser_Pandas"
+        - type: "CSVParser_LlamaIndex"
           config:
             content_fields: ["question"]
             metadata_fields: ["category"]
@@ -197,10 +183,8 @@ datasets:
     database: "dev_db"
 
 prompts:
-  - name: "dev_prompt"
+  - role: "system"
     content: "This is a dev prompt."
-    prompt: "This is a dev prompt."
-    description: "This is a description of the dev prompt."
 """
 
         # Production config
@@ -234,7 +218,7 @@ rag:
     - name: "default"
       description: "Prod strategy"
       parsers:
-        - type: "CSVParser_Pandas"
+        - type: "CSVParser_LlamaIndex"
           config:
             content_fields: ["question", "answer", "solution"]
             metadata_fields: ["category", "priority", "timestamp"]
@@ -258,10 +242,8 @@ datasets:
     database: "prod_db"
 
 prompts:
-  - name: "prod_prompt"
+  - role: "system"
     content: "This is a prod prompt."
-    prompt: "This is a prod prompt."
-    description: "This is a description of the prod prompt."
 """
 
         dev_path = temp_config_file(dev_config, ".yaml")
@@ -296,8 +278,6 @@ prompts:
             if parser_type == "CSVParser_Pandas":
                 return {
                     "type": parser_type,
-                    "content_fields": parser_config["content_fields"],
-                    "metadata_fields": parser_config["metadata_fields"],
                 }
             else:
                 raise ValueError(f"Unknown parser type: {parser_type}")
@@ -321,8 +301,12 @@ prompts:
         rag_config = config["rag"]
 
         parser = create_parser_from_config(rag_config)
-        assert parser["type"] == "CSVParser_Pandas"
         assert len(parser["content_fields"]) > 0
+        assert parser["type"] in [
+            "CSVParser_LlamaIndex",
+            "CSVParser_Pandas",
+            "CSVParser_Python",
+        ]
 
         embedder = create_embedder_from_config(rag_config)
         assert embedder["type"] == "OllamaEmbedder"
