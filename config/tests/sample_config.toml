@@ -4,10 +4,8 @@ name = "sample_config"
 namespace = "test"
 
 [[prompts]]
-name = "customer_support"
+role = "system"
 content = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
-prompt = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
-description = "Default customer support prompt for handling user inquiries"
 
 [[prompts]]
 name = "technical_documentation"
@@ -28,14 +26,13 @@ name = "default"
 description = "Customer support strategy for testing"
 
 [rag.strategies.components.parser]
-type = "CSVParser"
+type = "CSVParser_LlamaIndex"
 
 [rag.strategies.components.parser.config]
-content_fields = ["question", "answer", "solution", "explanation"]
-metadata_fields = ["category", "timestamp", "priority", "tags", "author"]
-id_field = "id"
+content_fields = ["question", "answer"]
+metadata_fields = ["category", "timestamp"]
 combine_content = true
-content_separator = "\n\n"
+table_format = "markdown"
 
 
 [rag.strategies.components.embedder]
@@ -46,6 +43,7 @@ model = "mxbai-embed-large"
 base_url = "http://localhost:11434"
 batch_size = 32
 timeout = 60
+auto_pull = true
 
 [rag.strategies.components.vector_store]
 type = "ChromaStore"

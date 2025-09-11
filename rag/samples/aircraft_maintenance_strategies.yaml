@@ -15,7 +15,7 @@ aircraft_technical_manuals:
   
   components:
     parser:
-      type: "PDFParser"
+      type: "PDFParser_PyPDF2"
       config:
         # Technical manuals are often large PDFs with complex formatting
         extract_images: true          # Diagrams and schematics are critical
@@ -108,7 +108,7 @@ aircraft_maintenance_logs:
   
   components:
     parser:
-      type: "CSVParser"              # Many logs exported from AMOS/TRAX as CSV
+      type: "CSVParser_Pandas"              # Many logs exported from AMOS/TRAX as CSV
       config:
         delimiter: ","
         has_header: true
@@ -185,7 +185,7 @@ pilot_debrief_reports:
   
   components:
     parser:
-      type: "TextParser"
+      type: "TextParser_Python"
       config:
         encoding: "utf-8"
         chunk_size: 512               # Pilot reports are usually concise
@@ -262,7 +262,7 @@ aviation_regulatory_compliance:
   
   components:
     parser:
-      type: "PDFParser"
+      type: "PDFParser_PyPDF2"
       config:
         extract_metadata: true        # Regulatory dates are critical
         chunk_size: 768               # Balance between context and precision
@@ -343,10 +343,10 @@ aircraft_incident_investigation:
   
   components:
     parser:
-      type: "UniversalParser"         # Handle multiple formats
+      type: "TextParser_Python"         # Handle multiple formats
       config:
         auto_detect: true
-        fallback_parser: "TextParser"
+        fallback_parser: "TextParser_Python"
         chunk_size: 1024              # Larger for comprehensive context
         chunk_overlap: 300            # High overlap for correlation
     

@@ -1,0 +1,79 @@
+parsers:
+  - name: DocxParser_PythonDocx
+    display_name: DOCX Parser (python-docx)
+    tool: python-docx
+    version: 1.0.0
+    description: Word document parser using python-docx library
+    
+    supported_extensions:
+      - .docx
+      - .docm
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.ms-word.document.macroEnabled.12
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - table_extraction
+      - header_extraction
+      - footer_extraction
+      - style_preservation
+    
+    dependencies:
+      required:
+        - python-docx
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      chunk_strategy: paragraphs
+      extract_metadata: true
+      extract_tables: true
+      extract_headers: true
+      extract_footers: false
+      extract_comments: false
+
+  - name: DocxParser_LlamaIndex
+    display_name: DOCX Parser (LlamaIndex)
+    tool: LlamaIndex
+    version: 1.0.0
+    description: Advanced DOCX parser using LlamaIndex with enhanced chunking
+    
+    supported_extensions:
+      - .docx
+      - .docm
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.ms-word.document.macroEnabled.12
+    
+    capabilities:
+      - text_extraction
+      - semantic_chunking
+      - paragraph_aware_splitting
+      - metadata_extraction
+      - table_extraction
+      - style_preservation
+      - section_detection
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-readers-file
+      optional:
+        - python-docx
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: paragraphs  # paragraphs, sentences, tokens
+      extract_metadata: true
+      extract_tables: true
+      extract_headers_footers: false
+      extract_comments: false
+      extract_images: false
+      preserve_formatting: false
+

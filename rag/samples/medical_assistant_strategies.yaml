@@ -15,7 +15,7 @@ clinical_notes_ehr:
   
   components:
     parser:
-      type: "TextParser"
+      type: "TextParser_Python"
       config:
         encoding: "utf-8"
         chunk_size: 512               # Balance context with precision
@@ -26,7 +26,7 @@ clinical_notes_ehr:
     
     extractors:
       # Medical entity extraction with privacy
-      - type: "MedicalEntityExtractor"  # Specialized medical NER
+      - type: "EntityExtractor"  # Specialized medical NER
         config:
           entities:
             - "CONDITION"             # Diseases, symptoms
@@ -77,7 +77,7 @@ clinical_notes_ehr:
           temporal_relations: true    # Before/after relationships
     
     embedder:
-      type: "BioBertEmbedder"         # Medical-specific embeddings
+      type: "HuggingFaceEmbedder"         # Medical-specific embeddings
       config:
         model: "dmis-lab/biobert-base-cased-v1.2"
         dimension: 768
@@ -124,7 +124,7 @@ medical_literature_research:
   
   components:
     parser:
-      type: "PDFParser"
+      type: "PDFParser_PyPDF2"
       config:
         extract_images: false         # Usually not needed for literature
         extract_tables: true          # Clinical trial data
@@ -176,7 +176,7 @@ medical_literature_research:
           max_length: 300
     
     embedder:
-      type: "PubMedBertEmbedder"      # Trained on medical literature
+      type: "HuggingFaceEmbedder"      # Trained on medical literature
       config:
         model: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
         dimension: 768
@@ -219,7 +219,7 @@ drug_information_formulary:
   
   components:
     parser:
-      type: "StructuredDataParser"    # Drug databases are structured
+      type: "TextParser_Python"    # Drug databases are structured
       config:
         format: "json"
         schema:
@@ -275,7 +275,7 @@ drug_information_formulary:
             - "excretion"
     
     embedder:
-      type: "ChemBertEmbedder"         # Chemical structure aware
+      type: "HuggingFaceEmbedder"         # Chemical structure aware
       config:
         model: "seyonec/ChemBERTa-zinc-base-v1"
         dimension: 768
@@ -294,7 +294,7 @@ drug_information_formulary:
       config:
         strategies:
           # Exact drug name matching
-          - type: "ExactMatchStrategy"
+          - type: "BasicSimilarityStrategy"
             weight: 0.4
             config:
               fields: ["drug_name", "generic_name"]
@@ -319,7 +319,7 @@ patient_education_materials:
   
   components:
     parser:
-      type: "MarkdownParser"           # Many materials in markdown
+      type: "MarkdownParser_Python"           # Many materials in markdown
       config:
         preserve_formatting: true
         extract_images: true          # Educational diagrams
@@ -358,7 +358,7 @@ patient_education_materials:
           extract_translations: true
     
     embedder:
-      type: "MultilingualEmbedder"
+      type: "HuggingFaceEmbedder"
       config:
         model: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
         dimension: 768
@@ -373,7 +373,7 @@ patient_education_materials:
           indexed_fields: ["condition", "language", "reading_level"]
     
     retrieval_strategy:
-      type: "PersonalizedStrategy"    # Custom strategy for patient matching
+      type: "BasicSimilarityStrategy"    # Custom strategy for patient matching
       config:
         top_k: 5
         personalization_factors:
@@ -395,7 +395,7 @@ clinical_decision_support:
   
   components:
     parser:
-      type: "UniversalParser"
+      type: "TextParser_Python"
       config:
         auto_detect: true
         chunk_size: 768
@@ -435,7 +435,7 @@ clinical_decision_support:
           extract_exclusions: true
     
     embedder:
-      type: "ClinicalBertEmbedder"
+      type: "HuggingFaceEmbedder"
       config:
         model: "emilyalsentzer/Bio_ClinicalBERT"
         dimension: 768

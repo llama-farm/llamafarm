@@ -126,9 +126,29 @@ embeddings = [
     "torch>=2.0.0",
 ]
 
+# LlamaIndex parsers and advanced document processing
+llamaindex = [
+    "llama-index>=0.9.0",
+    "llama-index-core>=0.9.0",
+    "llama-index-readers-file>=0.1.0",
+    "llama-index-embeddings-openai>=0.1.0",
+    "llama-index-llms-openai>=0.1.0",
+    "python-magic>=0.4.27",  # For file type detection
+    "pypdf>=3.17.0",  # Enhanced PDF support
+    "pymupdf>=1.23.0",  # Alternative PDF parsing
+    "pdfplumber>=0.10.0",  # Table extraction from PDFs
+    "camelot-py>=0.11.0",  # Advanced table extraction
+    "tabula-py>=2.8.0",  # Table extraction via Java
+    "pytesseract>=0.3.10",  # OCR support for scanned PDFs
+    "pdf2image>=1.16.0",  # PDF to image conversion
+    "pillow>=10.0.0",  # Image processing
+    "numpy>=1.24.0",  # Numerical operations
+    "scipy>=1.10.0",  # Scientific computing
+]
+
 # All optional dependencies
 all = [
-    "llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings]"
+    "llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex]"
 ]
 
 [project.urls]
@@ -144,10 +164,15 @@ rag = "cli:main"
 [tool.hatch.build.targets.wheel]
 packages = [
     "core",
-    "parsers", 
+    "components",  # Include all components (parsers, embedders, extractors, stores)
+    "parsers",  # Legacy parsers support
     "embedders",
     "stores",
-    "utils"
+    "utils",
+    "retrieval",  # Retrieval strategies
+    "config",  # Configuration system
+    "api",  # API interfaces
+    "cli"  # CLI system
 ]
 
 # Include data files

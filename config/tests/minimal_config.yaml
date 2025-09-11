@@ -9,12 +9,12 @@ rag:
       description: "Minimal strategy for testing"
       components:
         parser:
-          type: "CSVParser"
+          type: "CSVParser_LlamaIndex"
           config:
             content_fields: ["question"]
-            metadata_fields: ["category"]
-            id_field: "id"
+            metadata_fields: []
             combine_content: true
+            table_format: "markdown"
         extractors: []
         embedder:
           type: "OllamaEmbedder"
@@ -23,6 +23,7 @@ rag:
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
+            auto_pull: true
         vector_store:
           type: "ChromaStore"
           config:
@@ -43,12 +44,8 @@ datasets:
     rag_strategy: "default"
 
 prompts:
-  - name: "minimal_prompt"
+  - role: "system"
     content: "This is a minimal prompt."
-    sections:
-      - title: "default"
-        content:
-          - "This is a minimal prompt."
 
 runtime:
   provider: "openai"

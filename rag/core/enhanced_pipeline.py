@@ -43,7 +43,13 @@ class EnhancedPipeline(Pipeline):
                 current_docs = result
                 all_errors = []
 
-            self.tracker.print_success(f"Parsed {len(current_docs)} documents!")
+            # Check for chunks in parsed documents
+            chunked_docs = [doc for doc in current_docs if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
+            if chunked_docs:
+                self.tracker.print_success(f"Parsed {len(current_docs)} documents (including {len(chunked_docs)} chunks)!")
+            else:
+                self.tracker.print_success(f"Parsed {len(current_docs)} documents!")
+            
             if all_errors:
                 self.tracker.print_warning(f"Found {len(all_errors)} parsing errors")
 

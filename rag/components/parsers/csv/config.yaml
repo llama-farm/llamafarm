@@ -1,0 +1,112 @@
+parsers:
+  - name: CSVParser_Pandas
+    display_name: CSV Parser (Pandas)
+    tool: Pandas
+    version: 1.0.0
+    description: Advanced CSV parser using Pandas with data analysis capabilities
+    
+    supported_extensions:
+      - .csv
+      - .tsv
+    
+    mime_types:
+      - text/csv
+      - text/tab-separated-values
+      - application/csv
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - statistics
+      - data_analysis
+      - column_processing
+    
+    dependencies:
+      required:
+        - pandas
+      optional:
+        - numpy
+    
+    default_config:
+      chunk_size: 1000
+      chunk_strategy: rows  # rows, columns, full
+      extract_metadata: true
+      encoding: utf-8
+      delimiter: ","
+      na_values: ["", "NA", "N/A", "null", "None"]
+
+  - name: CSVParser_Python
+    display_name: CSV Parser (Python)
+    tool: Python csv
+    version: 1.0.0
+    description: Simple CSV parser using native Python csv module
+    
+    supported_extensions:
+      - .csv
+      - .tsv
+    
+    mime_types:
+      - text/csv
+      - text/tab-separated-values
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - basic_metadata
+    
+    dependencies:
+      required: []
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      encoding: utf-8
+      delimiter: ","
+      quotechar: '"'
+
+  - name: CSVParser_LlamaIndex
+    display_name: CSV Parser (LlamaIndex)
+    tool: LlamaIndex-Pandas
+    version: 1.0.0
+    description: CSV parser using LlamaIndex with Pandas backend for advanced processing
+    
+    supported_extensions:
+      - .csv
+      - .tsv
+    
+    mime_types:
+      - text/csv
+      - text/tab-separated-values
+      - application/csv
+    
+    capabilities:
+      - text_extraction
+      - semantic_chunking
+      - metadata_extraction
+      - field_mapping
+      - row_based_processing
+      - column_based_processing
+      - statistics
+      - data_transformation
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-readers-file
+        - pandas
+      optional:
+        - numpy
+    
+    default_config:
+      chunk_size: 1000
+      chunk_strategy: rows  # rows, columns, semantic
+      content_fields: null  # Auto-detect if null
+      metadata_fields: []
+      id_field: null
+      combine_content: true
+      content_separator: "\n\n"
+      encoding: utf-8
+      delimiter: ","
+      na_values: ["", "NA", "N/A", "null", "None"]
+

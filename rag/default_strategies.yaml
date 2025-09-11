@@ -16,7 +16,7 @@ strategies:
     
     components:
       parser:
-        type: "CSVParser"
+        type: "CSVParser_LlamaIndex"
         config:
           content_fields: ["subject", "body"]
           metadata_fields: ["type", "priority"]
@@ -57,7 +57,7 @@ strategies:
     
     components:
       parser:
-        type: "CSVParser"
+        type: "CSVParser_LlamaIndex"
         config:
           content_fields: ["subject", "body", "answer"]
           metadata_fields: ["ticket_id", "type", "priority", "status", "customer", "created_at", "updated_at"]
@@ -609,7 +609,7 @@ strategies:
 
     components:
       parser:
-        type: "CSVParser"
+        type: "CSVParser_LlamaIndex"
         config:
           content_fields: ["response_text", "comments", "feedback", "suggestions"]
           metadata_fields: ["respondent_id", "survey_date", "rating", "age_group", "location", "segment"]
@@ -660,7 +660,7 @@ strategies:
 
     components:
       parser:
-        type: "CSVParser"
+        type: "CSVParser_LlamaIndex"
         config:
           content_fields: ["name", "description", "features", "specifications"]
           metadata_fields: ["sku", "category", "brand", "price", "availability", "rating"]
@@ -711,7 +711,7 @@ strategies:
 
     components:
       parser:
-        type: "CSVParser"
+        type: "CSVParser_LlamaIndex"
         config:
           content_fields: ["notes", "bio", "description", "comments"]
           metadata_fields: ["name", "email", "phone", "company", "role", "industry", "location"]
@@ -759,7 +759,7 @@ strategies:
 
     components:
       parser:
-        type: "CSVParser"
+        type: "CSVParser_LlamaIndex"
         config:
           content_fields: ["message", "error_details", "stack_trace", "context"]
           metadata_fields: ["timestamp", "level", "service", "user_id", "session_id", "ip_address"]

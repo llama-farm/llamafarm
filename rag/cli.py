@@ -587,9 +587,51 @@ def ingest_command(args):
             except Exception as e:
                 tracker.print_warning(f"Extractor application failed: {e}")
 
-        # Show final summary with enhanced details
+        # Calculate chunk metrics
+        total_chunks = len(result.documents)
+        chunk_sizes = [len(doc.content) for doc in result.documents]
+        avg_chunk_size = sum(chunk_sizes) / total_chunks if total_chunks > 0 else 0
+        min_chunk_size = min(chunk_sizes) if chunk_sizes else 0
+        max_chunk_size = max(chunk_sizes) if chunk_sizes else 0
+        
+        # Count documents vs chunks (chunks have chunk metadata)
+        chunked_docs = [doc for doc in result.documents if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
+        original_docs = total_chunks - len(chunked_docs)
+        
+        # Show final summary with enhanced details including chunk metrics
         print(f"\n📊 Final Results:")
         tracker.print_success(f"Documents processed: {len(result.documents)}")
+        
+        # Show metrics from processing result if available
+        if hasattr(result, 'metrics') and result.metrics:
+            if 'total_chunks' in result.metrics and result.metrics['total_chunks'] > 0:
+                print(f"  • Total chunks in pipeline: {result.metrics['total_chunks']}")
+        
+        # Show detailed chunking metrics
+        if chunked_docs:
+            print(f"\n📄 Chunking Metrics:")
+            print(f"  • Total chunks created: {len(chunked_docs)}")
+            print(f"  • Original documents: {original_docs}")
+            print(f"  • Average chunk size: {avg_chunk_size:.0f} characters")
+            print(f"  • Min chunk size: {min_chunk_size} characters")
+            print(f"  • Max chunk size: {max_chunk_size} characters")
+            
+            # Show chunk distribution by source if multiple files
+            source_counts = {}
+            for doc in chunked_docs:
+                source = doc.metadata.get('file_path', doc.source)
+                if source:
+                    source_name = Path(source).name if source else 'unknown'
+                    source_counts[source_name] = source_counts.get(source_name, 0) + 1
+            
+            if len(source_counts) > 1:
+                print(f"\n  Chunks by source:")
+                for source, count in sorted(source_counts.items()):
+                    print(f"    - {source}: {count} chunks")
+        elif total_chunks > 0:
+            print(f"\n📄 Document Metrics:")
+            print(f"  • No chunking applied (documents processed as-is)")
+            print(f"  • Average document size: {avg_chunk_size:.0f} characters")
         
         # Show document details if verbose
         if args.verbose and result.documents:

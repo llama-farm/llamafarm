@@ -15,7 +15,7 @@ simple_document_search:
   components:
     # Simple text parsing - no fancy extraction
     parser:
-      type: "TextParser"
+      type: "TextParser_Python"
       config:
         chunk_size: 512               # Default chunk size
         chunk_overlap: 50             # Minimal overlap
@@ -56,7 +56,7 @@ intermediate_document_search:
   components:
     # Same parser but with better chunking
     parser:
-      type: "TextParser"
+      type: "TextParser_Python"
       config:
         chunk_size: 768               # Larger chunks for context
         chunk_overlap: 100            # More overlap
@@ -110,7 +110,7 @@ advanced_multi_format:
   components:
     # Universal parser for multiple formats
     parser:
-      type: "UniversalParser"
+      type: "TextParser_Python"
       config:
         auto_detect: true             # Detect file format
         parsers:                      # Configure each parser
@@ -191,7 +191,7 @@ enterprise_rag_pipeline:
   components:
     # Sophisticated parsing with format detection
     parser:
-      type: "EnterpriseParser"
+      type: "TextParser_Python"
       config:
         auto_detect: true
         parallel_processing: true      # Process files in parallel
@@ -408,7 +408,7 @@ ai_adaptive_rag_system:
   components:
     # Adaptive parsing based on content
     parser:
-      type: "AdaptiveParser"
+      type: "TextParser_Python"
       config:
         ml_model: "document-classifier"  # Classify then parse
         optimization_objective: "quality" # quality, speed, or balanced

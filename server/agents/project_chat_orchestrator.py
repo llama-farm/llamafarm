@@ -15,6 +15,10 @@ repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig, Prompt, Provider  # noqa: E402
 
+from core.logging import FastAPIStructLogger  # noqa: E402
+
+logger = FastAPIStructLogger(__name__)
+
 
 class ProjectChatOrchestratorAgentInputSchema(BaseIOSchema):
     """
@@ -56,6 +60,7 @@ class ProjectChatOrchestratorAgent(
 
 class LFSystemPromptGenerator(SystemPromptGenerator):
     def __init__(self, project_config: LlamaFarmConfig):
+        logger.info(f"Project config: {project_config}")
         self.system_prompts = [
             prompt
             for prompt in (project_config.prompts or [])

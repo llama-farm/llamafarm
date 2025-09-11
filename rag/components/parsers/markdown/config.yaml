@@ -1,0 +1,84 @@
+parsers:
+  - name: MarkdownParser_Python
+    display_name: Markdown Parser (Python)
+    tool: Python
+    version: 1.0.0
+    description: Markdown parser using native Python with regex parsing
+    
+    supported_extensions:
+      - .md
+      - .markdown
+      - .mdown
+      - .mkd
+    
+    mime_types:
+      - text/markdown
+      - text/x-markdown
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - header_extraction
+      - code_block_extraction
+      - link_extraction
+      - frontmatter_parsing
+    
+    dependencies:
+      required: []
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      chunk_strategy: sections  # sections, paragraphs, characters
+      extract_metadata: true
+      extract_code_blocks: true
+      extract_links: true
+
+  - name: MarkdownParser_LlamaIndex
+    display_name: Markdown Parser (LlamaIndex)
+    tool: LlamaIndex
+    version: 1.0.0
+    description: Advanced markdown parser using LlamaIndex with semantic chunking
+    
+    supported_extensions:
+      - .md
+      - .markdown
+      - .mdown
+      - .mkd
+      - .mdx
+    
+    mime_types:
+      - text/markdown
+      - text/x-markdown
+      - text/mdx
+    
+    capabilities:
+      - text_extraction
+      - semantic_chunking
+      - heading_based_splitting
+      - metadata_extraction
+      - header_hierarchy
+      - code_block_extraction
+      - link_extraction
+      - frontmatter_parsing
+      - preserve_structure
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-readers-file
+      optional:
+        - markdown
+        - markdown2
+    
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: headings  # headings, sentences, tokens, characters
+      extract_metadata: true
+      extract_headings: true
+      extract_links: true
+      extract_code_blocks: true
+      preserve_formatting: false
+

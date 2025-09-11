@@ -71,7 +71,7 @@ class TestDataService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -305,7 +305,7 @@ class TestDataService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -383,7 +383,7 @@ class TestDataService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
@@ -459,7 +459,7 @@ class TestDataService:
                         "name": "default",
                         "description": "Default strategy configuration",
                         "components": {
-                            "parser": {"type": "CSVParser", "config": {}},
+                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
                             "extractors": [],
                             "embedder": {
                                 "type": "OllamaEmbedder",
