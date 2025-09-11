@@ -51,6 +51,8 @@ properties:
       required:
         - name
         - files
+        - data_processing_strategy
+        - database
       properties:
         name:
           type: string

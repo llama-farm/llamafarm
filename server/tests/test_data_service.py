@@ -104,9 +104,17 @@ class TestDataService:
             },
             datasets=[
                 Dataset(
-                    name="dataset1", rag_strategy="auto", files=[self.test_file_hash]
+                    name="dataset1",
+                    data_processing_strategy="default_processing",
+                    database="default_db",
+                    files=[self.test_file_hash],
                 ),
-                Dataset(name="dataset2", rag_strategy="auto", files=["other_hash"]),
+                Dataset(
+                    name="dataset2",
+                    data_processing_strategy="default_processing",
+                    database="default_db",
+                    files=["other_hash"],
+                ),
             ],
             runtime=Runtime(
                 provider=Provider.openai,
@@ -355,7 +363,8 @@ class TestDataService:
             datasets=[
                 Dataset(
                     name="target_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=[self.test_file_hash],
                 )
             ],
@@ -449,12 +458,14 @@ class TestDataService:
             datasets=[
                 Dataset(
                     name="target_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=[self.test_file_hash],
                 ),
                 Dataset(
                     name="other_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=["other_hash", self.test_file_hash],
                 ),
             ],
@@ -541,7 +552,8 @@ class TestDataService:
             datasets=[
                 Dataset(
                     name="target_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=[self.test_file_hash],
                 )
             ],

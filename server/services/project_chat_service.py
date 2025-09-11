@@ -75,7 +75,11 @@ class ProjectChatService:
         }
 
     def _perform_rag_search(
-        self, project_config: LlamaFarmConfig, message: str, top_k: int = 5
+        self,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
+        message: str,
+        top_k: int = 5,
     ) -> list[Any]:
         """Perform RAG search using the project's RAG configuration.
 
@@ -91,13 +95,18 @@ class ProjectChatService:
         logger.info(f"Performing RAG search for message: {message}")
 
         # For now, use the first available strategy
-        if not project_config.rag.strategies:
+        if not project_config.rag.data_processing_strategies:
             logger.error("No RAG strategies found in project config")
             return []
 
-        strategy = project_config.rag.strategies[0]
+        dataset = project_config.datasets[0] if project_config.datasets else None
+
+        if not dataset:
+            logger.error("No datasets found in project config")
+            return []
+
         # Use shared helper to run RAG search
-        results = search_with_rag(strategy, message, top_k=top_k)
+        results = search_with_rag(project_dir, dataset.name, message, top_k=top_k)
         if results is None:
             results = []
 
@@ -118,6 +127,7 @@ class ProjectChatService:
 
     async def chat(
         self,
+        project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
@@ -127,7 +137,7 @@ class ProjectChatService:
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
         # Use the RAG subsystem to perform RAG based on the project config
-        rag_results = self._perform_rag_search(project_config, message)
+        rag_results = self._perform_rag_search(project_dir, project_config, message)
 
         # Store the result from the RAG subsystem in the agent's context provider
         for idx, result in enumerate(rag_results):
@@ -170,6 +180,7 @@ class ProjectChatService:
 
     async def stream_chat(
         self,
+        project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
@@ -178,7 +189,7 @@ class ProjectChatService:
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        rag_results = self._perform_rag_search(project_config, message)
+        rag_results = self._perform_rag_search(project_dir, project_config, message)
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(
                 content=result.content,

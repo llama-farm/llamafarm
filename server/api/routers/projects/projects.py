@@ -199,6 +199,7 @@ async def chat(
     session_id: str | None = Header(None, alias="X-Session-ID"),
 ):
     """Send a message to the chat agent"""
+    project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
 
     # If no session ID provided, create a new one and ensure thread-safe session map access
@@ -225,6 +226,7 @@ async def chat(
         return create_streaming_response_from_iterator(
             request,
             project_chat_service.stream_chat(
+                project_dir=project_dir,
                 project_config=project_config,
                 chat_agent=agent,
                 message=latest_user_message,
@@ -234,6 +236,7 @@ async def chat(
 
     try:
         completion = await project_chat_service.chat(
+            project_dir=project_dir,
             project_config=project_config,
             chat_agent=agent,
             message=latest_user_message,

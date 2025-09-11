@@ -6,6 +6,8 @@ from typing import Any
 
 from core.logging import FastAPIStructLogger
 
+from config.datamodel import LlamaFarmConfig
+
 
 logger = FastAPIStructLogger()
 repo_root = Path(__file__).parent.parent.parent
@@ -112,67 +114,206 @@ def run_rag_cli_with_config(
             return e.returncode, e.stdout or "", e.stderr or ""
 
 
-def ingest_file_with_rag(strategy, source_path: str) -> bool:
-    """Ingest a single file using rag CLI and provided strategy components."""
-    logger.info(f"Ingesting file {source_path} with strategy {strategy.name}")
-    cfg = build_v1_config_from_strategy(strategy)
-    exit_code, stdout, stderr = run_rag_cli_with_config(["ingest", source_path], cfg)
-    if exit_code != 0:
-        logger.error(
-            "RAG ingest failed", exit_code=exit_code, stderr=stderr, stdout=stdout
+def ingest_file_with_rag(
+    project_dir: str,
+    project_config: LlamaFarmConfig,
+    data_processing_strategy_name: str,
+    database_name: str,
+    source_path: str,
+) -> bool:
+    """
+    Ingest a single file using the new RAG schema format.
+
+    Args:
+        project_dir: The directory of the project
+        project_config: The full project configuration dictionary
+        data_processing_strategy_name: Name of the data processing strategy to use
+        database_name: Name of the database to use
+        source_path: Path to the file to ingest
+
+    Returns:
+        True if ingestion succeeded, False otherwise
+    """
+    try:
+        # Extract RAG configuration
+        rag_config = project_config.rag
+        if not rag_config:
+            logger.error("No RAG configuration found in project config")
+            return False
+
+        # Find the specified data processing strategy
+        data_processing_strategy = None
+        for strategy in rag_config.data_processing_strategies or []:
+            if strategy.name == data_processing_strategy_name:
+                data_processing_strategy = strategy
+                break
+
+        if not data_processing_strategy:
+            logger.error(
+                f"Data processing strategy '{data_processing_strategy_name}' not found"
+            )
+            return False
+
+        # Find the specified database
+        database_config = None
+        for db in rag_config.databases or []:
+            if db.name == database_name:
+                database_config = db
+                break
+
+        if not database_config:
+            logger.error(f"Database '{database_name}' not found")
+            return False
+
+        # Create a temporary config file for the RAG CLI that combines both
+        temp_config = {
+            "version": "v1",
+            "rag": {
+                "databases": [database_config],
+                "data_processing_strategies": [data_processing_strategy],
+            },
+        }
+
+        # The strategy name in the new format is: {data_processing_strategy}_{database}
+        combined_strategy_name = f"{data_processing_strategy_name}_{database_name}"
+
+        logger.info(
+            f"Ingesting file {source_path} with strategy {combined_strategy_name}"
         )
+
+        # Run the RAG CLI with the new schema format
+        exit_code, stdout, stderr = run_rag_cli_with_config_and_strategy(
+            source_path, project_dir, combined_strategy_name
+        )
+
+        if exit_code != 0:
+            logger.error(
+                "RAG ingest failed",
+                exit_code=exit_code,
+                stderr=stderr,
+                stdout=stdout,
+                strategy=combined_strategy_name,
+            )
+            return False
+
+        logger.info(
+            "RAG ingest succeeded", stdout=stdout, strategy=combined_strategy_name
+        )
+        return True
+
+    except Exception as e:
+        logger.error(f"Error during RAG ingestion: {e}")
         return False
-    logger.info("RAG ingest succeeded", stdout=stdout)
-    return True
 
 
-def search_with_rag(strategy, query: str, top_k: int = 5) -> list[dict[str, Any]]:
-    """Run a search via rag api in its own environment and return list of dict results."""
-    # Build minimal config expected by rag/api.py
-    v1 = build_v1_config_from_strategy(strategy)
-    # Convert unified v1 rag config to the legacy fields expected by SearchAPI
-    cfg = {
-        "embedder": v1["rag"]["embedders"]["default"],
-        "vector_store": v1["rag"]["vector_stores"]["default"],
-        "retrieval_strategy": v1["rag"]["retrieval_strategies"]["default"],
-    }
+def run_rag_cli_with_config_and_strategy(
+    source_path: str,
+    project_dir: str,
+    strategy_name: str,
+    cwd: Path | None = None,
+) -> tuple[int, str, str]:
+    """
+    Run RAG CLI with new schema format and strategy name.
+
+    Args:
+        source_path: Path to the file to ingest
+        config_dict: Configuration dictionary with new schema format
+        strategy_name: Name of the strategy to use
+        cwd: Working directory (defaults to rag_repo)
+
+    Returns:
+        Tuple of (exit_code, stdout, stderr)
+    """
+    cwd = cwd or rag_repo
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        cfg_path = Path(tmpdir) / "rag_config.json"
-        with open(cfg_path, "w") as f:
-            json.dump(cfg, f)
+        # Write the config file in YAML format (RAG CLI expects YAML for strategy files)
+        # cfg_path = Path(tmpdir) / "strategy_config.yaml"
 
-        code = (
-            "from api import SearchAPI;"
-            f"api=SearchAPI(config_path=r'{cfg_path}');"
-            f"res=api.search(query={json.dumps(query)}, top_k={int(top_k)});"
-            "import json; print(json.dumps([r.to_dict() for r in res]))"
-        )
+        # try:
+        #     import yaml  # type: ignore
+        # except ImportError:
+        #     logger.error("PyYAML not available, falling back to JSON config")
+        #     # Fallback to JSON if YAML is not available
+        #     cfg_path = Path(tmpdir) / "strategy_config.json"
+        #     import json
+
+        #     with open(cfg_path, "w") as f:
+        #         json.dump(config_dict, f)
+        # else:
+        #     with open(cfg_path, "w") as f:
+        #         yaml.dump(config_dict, f)
+
+        # Use the new RAG CLI command format with strategy
         cmd = [
             "uv",
             "run",
             "-q",
             "python",
-            "-c",
-            code,
+            "cli.py",
+            "--strategy-file",
+            project_dir + "/llamafarm.yaml",
+            "ingest",
+            source_path,
+            "--strategy",
+            strategy_name,
         ]
+
         try:
             completed = subprocess.run(
                 cmd,
-                cwd=str(rag_repo),
+                cwd=str(cwd),
                 check=True,
                 capture_output=True,
                 text=True,
             )
-            stdout = completed.stdout.strip()
-            return json.loads(stdout or "[]")
+            return completed.returncode, completed.stdout, completed.stderr
         except subprocess.CalledProcessError as e:
-            logger.error(
-                "RAG search subprocess failed",
-                exit_code=e.returncode,
-                stderr=e.stderr.strip(),
-            )
-            return []
-        except json.JSONDecodeError:
-            logger.error("Failed to decode RAG search output as JSON")
-            return []
+            return e.returncode, e.stdout or "", e.stderr or ""
+
+
+def search_with_rag(
+    project_dir: str,
+    dataset: str,
+    query: str,
+    top_k: int = 5,
+    retrieval_strategy: str | None = None,
+) -> list[dict[str, Any]]:
+    """Run a search via rag api in its own environment and return list of dict results."""
+
+    cfg_path = project_dir + "/llamafarm.yaml"
+
+    code = (
+        "from api import SearchAPI;"
+        f"api=SearchAPI(config_path=r'{cfg_path}', dataset='{dataset}');"
+        f"res=api.search(query={json.dumps(query)}, top_k={int(top_k)}, retrieval_strategy='{retrieval_strategy}');"
+        "import json; print(json.dumps([r.to_dict() for r in res]))"
+    )
+    cmd = [
+        "uv",
+        "run",
+        "-q",
+        "python",
+        "-c",
+        code,
+    ]
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(rag_repo),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        stdout = completed.stdout.strip()
+        return json.loads(stdout or "[]")
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "RAG search subprocess failed",
+            exit_code=e.returncode,
+            stderr=e.stderr.strip(),
+        )
+        return []
+    except json.JSONDecodeError:
+        logger.error("Failed to decode RAG search output as JSON")
+        return []

@@ -31,6 +31,25 @@ async def list_datasets(namespace: str, project: str):
     )
 
 
+class AvailableStrategiesResponse(BaseModel):
+    data_processing_strategies: list[str]
+    databases: list[str]
+
+
+@router.get("/strategies", response_model=AvailableStrategiesResponse)
+async def get_available_strategies(namespace: str, project: str):
+    """Get available data processing strategies and databases for the project"""
+    logger.bind(namespace=namespace, project=project)
+    data_processing_strategies = (
+        DatasetService.get_supported_data_processing_strategies(namespace, project)
+    )
+    databases = DatasetService.get_supported_databases(namespace, project)
+    return AvailableStrategiesResponse(
+        data_processing_strategies=data_processing_strategies,
+        databases=databases,
+    )
+
+
 class CreateDatasetRequest(BaseModel):
     name: str
     data_processing_strategy: str
@@ -122,33 +141,44 @@ async def ingest_data(
     # replicate DataService.get_data_dir() path assembly; avoid class constants
     data_path = f"{project_dir}/lf_data/raw/{metadata_file_content.hash}"
 
-    # Load project config and pick dataset strategy (default to first strategy)
+    # Load project config and get dataset configuration
     project_obj = ProjectService.get_project(namespace, project)
-    strategy_name = (
-        next(
-            (
-                ds.rag_strategy
-                for ds in project_obj.config.datasets
-                if ds.name == dataset
-            ),
-            None,
+    dataset_config = next(
+        (ds for ds in (project_obj.config.datasets or []) if ds.name == dataset),
+        None,
+    )
+
+    if dataset_config is None:
+        logger.error("Dataset not found in project config", dataset=dataset)
+        # Use default processing for now - this should be handled by RAG system
+        data_processing_strategy_name = "default"
+        database_name = "default"
+    else:
+        data_processing_strategy_name = (
+            dataset_config.data_processing_strategy or "default"
         )
-        or "default"
-    )
-    strategy = next(
-        (s for s in project_obj.config.rag.strategies if s.name == strategy_name),
-        project_obj.config.rag.strategies[0],
-    )
+        database_name = dataset_config.database or "default"
 
     logger.info(
         "Ingesting file into RAG",
         path=data_path,
         dataset=dataset,
-        strategy=strategy.name,
+        data_processing_strategy=data_processing_strategy_name,
+        database=database_name,
     )
-    ok = ingest_file_with_rag(strategy, data_path)
+
+    # Use simple RAG ingestion (bypassing complex config serialization)
+    ok = ingest_file_with_rag(
+        project_dir=project_dir,
+        project_config=project_obj.config,
+        data_processing_strategy_name=data_processing_strategy_name,
+        database_name=database_name,
+        source_path=data_path,
+    )
+
     if not ok:
         logger.error("RAG ingest failed", path=data_path)
+        raise HTTPException(status_code=500, detail="RAG ingest failed")
 
     DatasetService.add_file_to_dataset(
         namespace=namespace,
