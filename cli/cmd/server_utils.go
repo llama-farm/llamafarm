@@ -163,7 +163,7 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	port := resolvePort(serverURL, 8000)
-	
+
 	// Get the dynamic image URL using our version-aware resolution
 	image, err := getImageURL("server")
 	if err != nil {
@@ -253,9 +253,10 @@ func resolvePort(serverURL string, defaultPort int) int {
 // prettyPrintHealth decodes a /health payload and renders a concise, readable summary
 func prettyPrintHealth(w io.Writer, hr HealthPayload) {
 	prefix := "❌"
-	if hr.Status == "degraded" {
+	switch hr.Status {
+	case "degraded":
 		prefix = "⚠️"
-	} else if hr.Status == "healthy" {
+	case "healthy":
 		prefix = "✅"
 	}
 	fmt.Fprintf(w, "%s Server is %s\n", prefix, hr.Status)

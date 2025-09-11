@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"llamafarm-cli/cmd/config"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +26,10 @@ var (
 	projectPrompt    = "📁 Project:"
 	sessionPrompt    = "🆔 Session:"
 )
+
+// overrides provided by dev command
+var designerPreferredPort int
+var designerForced bool
 
 var chatCtx = &ChatSessionContext{
 	ServerURL:   serverURL,
@@ -43,23 +51,25 @@ func runChatSessionTUI(projectInfo *config.ProjectInfo) {
 }
 
 type chatModel struct {
-	projectInfo *config.ProjectInfo
-	input       textinput.Model
-	spin        spinner.Model
-	transcript  []string
-	messages    []ChatMessage
-	thinking    bool
-	printing    bool
-	thinkFrame  int
-	history     []string
-	histIndex   int
-	historyPath string
-	width       int
-	height      int
-	status      string
-	err         error
-	program     *tea.Program
-	streamCh    chan tea.Msg
+	projectInfo    *config.ProjectInfo
+	input          textinput.Model
+	spin           spinner.Model
+	transcript     []string
+	messages       []ChatMessage
+	thinking       bool
+	printing       bool
+	thinkFrame     int
+	history        []string
+	histIndex      int
+	historyPath    string
+	width          int
+	height         int
+	status         string
+	err            error
+	program        *tea.Program
+	streamCh       chan tea.Msg
+	designerStatus string
+	designerURL    string
 }
 
 type (
@@ -69,6 +79,9 @@ type (
 type responseMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
+
+type designerReadyMsg struct{ url string }
+type designerErrorMsg struct{ err error }
 
 func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	in := textinput.New()
@@ -85,16 +98,17 @@ func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	hPath := getHistoryPath()
 	h := loadHistory(hPath)
 	return chatModel{
-		projectInfo: projectInfo,
-		input:       in,
-		spin:        s,
-		transcript:  []string{},
-		messages:    []ChatMessage{},
-		thinking:    false,
-		printing:    false,
-		history:     h,
-		histIndex:   len(h),
-		historyPath: hPath,
+		projectInfo:    projectInfo,
+		input:          in,
+		spin:           s,
+		transcript:     []string{},
+		messages:       []ChatMessage{},
+		thinking:       false,
+		printing:       false,
+		history:        h,
+		histIndex:      len(h),
+		historyPath:    hPath,
+		designerStatus: "starting…",
 	}
 }
 
@@ -129,7 +143,27 @@ func loadHistory(path string) []string {
 }
 
 func (m chatModel) Init() tea.Cmd {
-	return m.spin.Tick
+	// Kick off spinner and designer background start
+	startDesigner := func() tea.Msg {
+		// Determine preferred port and forced
+		pref := 7724
+		forced := false
+		if designerPreferredPort > 0 {
+			pref = designerPreferredPort
+			forced = designerForced
+		} else if v := strings.TrimSpace(os.Getenv("LF_DESIGNER_PORT")); v != "" {
+			if p, err := strconv.Atoi(v); err == nil && p > 0 {
+				pref = p
+				forced = true
+			}
+		}
+		url, err := StartDesignerInBackground(context.Background(), DesignerLaunchOptions{PreferredPort: pref, Forced: forced})
+		if err != nil {
+			return designerErrorMsg{err: err}
+		}
+		return designerReadyMsg{url: url}
+	}
+	return tea.Batch(m.spin.Tick, startDesigner)
 }
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -137,7 +171,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		w := max(msg.Width-2, 10)
+		w := msg.Width - 2
+		if w < 10 {
+			w = 10
+		}
 		m.input.Width = w
 		return m, nil
 	case tea.KeyMsg:
@@ -172,6 +209,42 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			lower := strings.ToLower(msg)
+			// Slash commands
+			if strings.HasPrefix(lower, "/") {
+				fields := strings.Fields(lower)
+				cmd := fields[0]
+				switch cmd {
+				case "/help":
+					m.transcript = append(m.transcript, "Commands: /help, /launch designer, clear, exit")
+					m.input.SetValue("")
+					return m, nil
+				case "/launch":
+					if len(fields) < 2 {
+						m.transcript = append(m.transcript, "Usage: /launch <component>. Components: designer")
+						m.input.SetValue("")
+						return m, nil
+					}
+					target := fields[1]
+					if target != "designer" {
+						m.transcript = append(m.transcript, "Unknown component. Try: /launch designer")
+						m.input.SetValue("")
+						return m, nil
+					}
+					if strings.TrimSpace(m.designerURL) == "" || m.designerStatus != "ready" {
+						m.transcript = append(m.transcript, "Designer is not running yet.")
+						m.input.SetValue("")
+						return m, nil
+					}
+					openURL(m.designerURL)
+					m.input.SetValue("")
+					return m, nil
+				default:
+					m.transcript = append(m.transcript, "Unknown command. Type '/help' for available commands.")
+					m.input.SetValue("")
+					return m, nil
+				}
+			}
+
 			if lower == "exit" || lower == "quit" {
 				m.status = "👋 You have left the pasture. Safe travels, little llama!"
 				return m, tea.Quit
@@ -276,6 +349,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.printing = false
 		m.streamCh = nil
 		return m, nil
+	case designerReadyMsg:
+		m.designerStatus = "ready"
+		m.designerURL = msg.url
+		return m, nil
+	case designerErrorMsg:
+		m.designerStatus = fmt.Sprintf("error: %v", msg.err)
+		return m, nil
 	}
 
 	var cmds []tea.Cmd
@@ -313,6 +393,17 @@ func (m chatModel) View() string {
 	wrappedProject := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(projectLine)
 	b.WriteString(wrappedProject + "\n")
 
+	// Designer status line
+	if m.designerStatus != "" || m.designerURL != "" {
+		ds := m.designerStatus
+		if m.designerURL != "" {
+			ds = "ready: " + m.designerURL
+		}
+		designerLine := "🎨 Designer: " + ds
+		wrappedDesigner := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(designerLine)
+		b.WriteString(wrappedDesigner + "\n")
+	}
+
 	if m.err != nil {
 		errorText := fmt.Sprintf("We had some trouble: %v", m.err)
 		wrappedError := lipgloss.NewStyle().Width(m.width - 2).Render(errorText)
@@ -340,7 +431,7 @@ func (m chatModel) View() string {
 	if !m.thinking && !m.printing {
 		b.WriteString(m.input.View())
 		b.WriteString("\n")
-		helpText := "Type 'exit' to quit, 'clear' to reset. Up/Down for history."
+		helpText := "Type '/help' for commands. Up/Down for history."
 		wrappedHelp := lipgloss.NewStyle().Faint(true).Width(m.width - 2).Render(helpText)
 		b.WriteString(wrappedHelp)
 	}
@@ -351,9 +442,18 @@ func thinkingCmd() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
+func openURL(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		fmt.Fprintf(os.Stderr, "Unsupported platform for opening URLs: %s\n", runtime.GOOS)
+		return
 	}
-	return b
+	_ = cmd.Start()
 }
