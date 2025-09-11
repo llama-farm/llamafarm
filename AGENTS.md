@@ -6,7 +6,7 @@ This file provides guidance to AI agents when working with code in this reposito
 LlamaFarm is a dev tool for building AI pipelines/projects. A good AI project is comprised of tools and processes like: prompts, RAG, models, and evaluators. Not every project will have all of these aspects. Most will at least have some form of "system prompt" along with a model. Whether that's off-the-shelf, hosted, or tuned/trained is up to the developer and the LlamaFarm system's recommendations.
 
 This is a monorepo containing several interconnected projects:
-- **Server**: An Python-based API server that handles requests from clients such as developer code and the LlamaFarm CLI.
+- **Server**: A Python-based API server that handles requests from clients such as developer code and the LlamaFarm CLI.
 - **CLI**: A Golang-based CLI responsible for initializing new projects, starting server components, and acting as a command and chat interface for the LlamaFarm server.
 - **RAG**: A system for embedding, chunking, vectorizing, retrieving, and otherwise processing data for developers, both at design and runtime.
 - **Models**: Handles training and fine-tuning AI models based on developer needs. This won't be required for all projects.
