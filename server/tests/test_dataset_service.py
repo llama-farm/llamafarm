@@ -77,11 +77,15 @@ class TestDatasetService:
             datasets=[
                 Dataset(
                     name="dataset1",
-                    rag_strategy="auto",
+                    data_processing_strategy="auto",
+                    database="custom_db",
                     files=["file1.pdf", "file2.pdf"],
                 ),
                 Dataset(
-                    name="dataset2", rag_strategy="custom_strategy", files=["data.csv"]
+                    name="dataset2",
+                    data_processing_strategy="custom_strategy",
+                    database="custom_db",
+                    files=["data.csv"],
                 ),
             ],
             runtime=Runtime(
@@ -164,10 +168,12 @@ class TestDatasetService:
 
         assert len(datasets) == 2
         assert datasets[0].name == "dataset1"
-        assert datasets[0].rag_strategy == "auto"
+        assert datasets[0].data_processing_strategy == "auto"
+        assert datasets[0].database == "custom_db"
         assert datasets[0].files == ["file1.pdf", "file2.pdf"]
         assert datasets[1].name == "dataset2"
-        assert datasets[1].rag_strategy == "custom_strategy"
+        assert datasets[1].data_processing_strategy == "custom_strategy"
+        assert datasets[1].database == "custom_db"
         assert datasets[1].files == ["data.csv"]
 
         mock_load_config.assert_called_once_with("test_namespace", "test_project")
@@ -258,11 +264,16 @@ class TestDatasetService:
         mock_save_config.return_value = None
 
         dataset = DatasetService.create_dataset(
-            "test_namespace", "test_project", "new_dataset", "auto"
+            "test_namespace",
+            "test_project",
+            "new_dataset",
+            "custom_strategy",
+            "custom_db",
         )
 
         assert dataset.name == "new_dataset"
-        assert dataset.rag_strategy == "auto"
+        assert dataset.data_processing_strategy == "custom_strategy"
+        assert dataset.database == "custom_db"
         assert dataset.files == []
 
         # Verify save_config was called with updated config
@@ -284,19 +295,43 @@ class TestDatasetService:
                 "test_namespace",
                 "test_project",
                 "dataset1",  # This name already exists
-                "auto",
+                "custom_strategy",
+                "custom_db",
             )
 
     @patch.object(ProjectService, "load_config")
-    def test_create_dataset_unsupported_rag_strategy(self, mock_load_config):
+    def test_create_dataset_unsupported_data_processing_strategy(
+        self, mock_load_config
+    ):
         """Test creating a dataset with an unsupported RAG strategy."""
         mock_load_config.return_value = self.mock_project_config
 
         with pytest.raises(
-            ValueError, match="RAG strategy unsupported_strategy not supported"
+            ValueError,
+            match="RAG data processing strategy unsupported_strategy not supported",
         ):
             DatasetService.create_dataset(
-                "test_namespace", "test_project", "new_dataset", "unsupported_strategy"
+                "test_namespace",
+                "test_project",
+                "new_dataset",
+                "unsupported_strategy",
+                "custom_db",
+            )
+
+    @patch.object(ProjectService, "load_config")
+    def test_create_dataset_unsupported_database(self, mock_load_config):
+        """Test creating a dataset with an unsupported database."""
+        mock_load_config.return_value = self.mock_project_config
+
+        with pytest.raises(
+            ValueError, match="RAG database unsupported_database not supported"
+        ):
+            DatasetService.create_dataset(
+                "test_namespace",
+                "test_project",
+                "new_dataset",
+                "custom_strategy",
+                "unsupported_database",
             )
 
     @patch.object(ProjectService, "save_config")
@@ -310,12 +345,14 @@ class TestDatasetService:
         dataset = DatasetService.create_dataset(
             "test_namespace",
             "test_project",
-            "custom_dataset",
-            "custom_strategy",  # This is in the custom rag strategies list
+            "new_dataset",
+            "custom_strategy",
+            "custom_db",
         )
 
-        assert dataset.name == "custom_dataset"
-        assert dataset.rag_strategy == "custom_strategy"
+        assert dataset.name == "new_dataset"
+        assert dataset.data_processing_strategy == "custom_strategy"
+        assert dataset.database == "custom_db"
         mock_save_config.assert_called_once()
 
     @patch.object(ProjectService, "save_config")
@@ -330,7 +367,6 @@ class TestDatasetService:
         )
 
         assert deleted_dataset.name == "dataset1"
-        assert deleted_dataset.rag_strategy == "auto"
         assert deleted_dataset.files == ["file1.pdf", "file2.pdf"]
 
         # Verify save_config was called with updated config
@@ -474,11 +510,16 @@ class TestDatasetService:
 
         with patch.object(ProjectService, "save_config") as mock_save_config:
             dataset = DatasetService.create_dataset(
-                "test_namespace", "test_project", "first_dataset", "auto"
+                "test_namespace",
+                "test_project",
+                "first_dataset",
+                "default_processing",
+                "default_db",
             )
 
             assert dataset.name == "first_dataset"
-            assert dataset.rag_strategy == "auto"
+            assert dataset.data_processing_strategy == "default_processing"
+            assert dataset.database == "default_db"
             assert dataset.files == []
 
             # Verify the config was updated correctly
@@ -575,9 +616,11 @@ class TestDatasetServiceIntegration:
 
             # 2. Create dataset
             dataset = DatasetService.create_dataset(
-                "ns", "proj", "test_dataset", "auto"
+                "ns", "proj", "test_dataset", "custom_strategy", "test_db"
             )
             assert dataset.name == "test_dataset"
+            assert dataset.data_processing_strategy == "custom_strategy"
+            assert dataset.database == "test_db"
 
             # 3. List datasets (should have one)
             datasets = DatasetService.list_datasets("ns", "proj")

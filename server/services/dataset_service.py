@@ -17,7 +17,7 @@ class DatasetService:
         List all datasets for a given project
         """
         project_config = ProjectService.load_config(namespace, project)
-        return project_config.datasets
+        return project_config.datasets or []
 
     @classmethod
     def create_dataset(
@@ -25,7 +25,8 @@ class DatasetService:
         namespace: str,
         project: str,
         name: str,
-        rag_strategy: str,
+        data_processing_strategy: str,
+        database: str,
     ) -> Dataset:
         """
         Create a new dataset in the project
@@ -34,28 +35,37 @@ class DatasetService:
             ValueError: If dataset with same name already exists or parser is not supported
         """
         project_config = ProjectService.load_config(namespace, project)
-        existing_datasets = project_config.datasets
+        existing_datasets = project_config.datasets or []
 
         # Check if dataset already exists
-        for dataset in existing_datasets:
+        for dataset in existing_datasets or []:
             if dataset.name == name:
                 raise ValueError(f"Dataset {name} already exists")
 
         # Validate RAG strategy
-        supported_rag_strategies = cls.get_supported_data_processing_strategies(
-            namespace, project
+        supported_data_processing_strategies = (
+            cls.get_supported_data_processing_strategies(namespace, project)
         )
-        supported_rag_strategies = [
-            "auto"
-        ] + supported_rag_strategies  # Add default auto strategy
+        supported_data_processing_strategies = (
+            supported_data_processing_strategies  # Add default auto strategy
+        )
 
-        if rag_strategy not in supported_rag_strategies:
-            raise ValueError(f"RAG strategy {rag_strategy} not supported")
+        if data_processing_strategy not in supported_data_processing_strategies:
+            raise ValueError(
+                f"RAG data processing strategy {data_processing_strategy} not supported"
+            )
+
+        supported_databases = cls.get_supported_databases(namespace, project)
+        supported_databases = supported_databases  # Add default auto strategy
+
+        if database not in supported_databases:
+            raise ValueError(f"RAG database {database} not supported")
 
         # Create new dataset
         new_dataset = Dataset(
             name=name,
-            rag_strategy=rag_strategy,
+            data_processing_strategy=data_processing_strategy,
+            database=database,
             files=[],
         )
 
@@ -77,7 +87,7 @@ class DatasetService:
             ValueError: If dataset with given name is not found
         """
         project_config = ProjectService.load_config(namespace, project)
-        existing_datasets = project_config.datasets
+        existing_datasets = project_config.datasets or []
 
         # Filter out the dataset to delete
         dataset_to_delete = next(
@@ -128,6 +138,26 @@ class DatasetService:
         return custom_data_processing_strategies
 
     @classmethod
+    def get_supported_databases(cls, namespace: str, project: str) -> list[str]:
+        """
+        Get list of supported databases
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        rag_config = project_config.rag
+
+        if rag_config is None:
+            return []
+
+        databases: list[str] = []
+
+        if hasattr(rag_config, "databases") and rag_config.databases:
+            for database in rag_config.databases:
+                if hasattr(database, "name") and database.name:
+                    databases.append(database.name)
+
+        return databases
+
+    @classmethod
     def add_file_to_dataset(
         cls,
         namespace: str,
@@ -139,7 +169,7 @@ class DatasetService:
         Add a file to a dataset
         """
         project_config = ProjectService.load_config(namespace, project)
-        existing_datasets = project_config.datasets
+        existing_datasets = project_config.datasets or []
         dataset_to_update = next(
             (ds for ds in existing_datasets if ds.name == dataset),
             None,

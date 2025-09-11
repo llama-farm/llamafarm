@@ -33,7 +33,8 @@ async def list_datasets(namespace: str, project: str):
 
 class CreateDatasetRequest(BaseModel):
     name: str
-    rag_strategy: str
+    data_processing_strategy: str
+    database: str
 
 
 class CreateDatasetResponse(BaseModel):
@@ -48,7 +49,8 @@ async def create_dataset(namespace: str, project: str, request: CreateDatasetReq
             namespace=namespace,
             project=project,
             name=request.name,
-            rag_strategy=request.rag_strategy,
+            data_processing_strategy=request.data_processing_strategy,
+            database=request.database,
         )
         return CreateDatasetResponse(dataset=dataset)
     except ValueError as e:
