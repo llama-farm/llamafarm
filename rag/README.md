@@ -5,9 +5,10 @@ A powerful, extensible RAG (Retrieval-Augmented Generation) system featuring **n
 ## 🎉 What's New in v1
 
 - **📋 New RAG Schema Format**: Clean, structured YAML with `databases` and `data_processing_strategies`
+- **🌍 Global Config Integration**: Uses `llamafarm.yaml` for unified project configuration
 - **🚀 DirectoryParser Always Active**: Automatic file detection and routing at strategy level
-- **🔄 Unified Vector Store**: All strategies can share the same vector database
-- **🎯 Strategy Naming Convention**: `{processing_strategy}_{database}` for clear organization
+- **🔄 Unified Vector Store**: All databases can share processing strategies
+- **🎯 Clear CLI Arguments**: `--database` and `--data-processing-strategy` for explicit control
 - **📦 Enhanced Parser System**: Naming convention `{ParserType}_{Implementation}` (e.g., `PDFParser_LlamaIndex`)
 
 ## 🌟 Key Features
@@ -66,22 +67,31 @@ python demos/demo_test_strategies_quick.py
 # ✅ auto_processing         PASS
 ```
 
-### 3. Basic Usage with New Schema
+### 3. Basic Usage with Global Config
 
 ```bash
-# Ingest documents with a strategy from default.yaml
-python cli.py --strategy-file config/templates/default.yaml \
+# Create a llamafarm.yaml config (see config/templates/default.yaml for example)
+
+# Ingest documents with database and processing strategy
+uv run python cli.py --config llamafarm.yaml \
     ingest path/to/document.pdf \
-    --strategy pdf_processing_main_database
+    --database main_database \
+    --data-processing-strategy pdf_processing
 
 # Search across all documents
-python cli.py --strategy-file config/templates/default.yaml \
+uv run python cli.py --config llamafarm.yaml \
     search "your query" \
-    --strategy text_processing_main_database
+    --database main_database
+
+# Search with specific retrieval strategy
+uv run python cli.py --config llamafarm.yaml \
+    search "your query" \
+    --database main_database \
+    --retrieval-strategy filtered_search
 
 # View collection info
-python cli.py --strategy-file config/templates/default.yaml \
-    info --strategy pdf_processing_main_database
+uv run python cli.py --config llamafarm.yaml \
+    info --database main_database
 ```
 
 ## 📖 New Schema Structure

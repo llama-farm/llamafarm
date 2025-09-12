@@ -165,25 +165,9 @@ def ingest_file_with_rag(
             logger.error(f"Database '{database_name}' not found")
             return False
 
-        # Create a temporary config file for the RAG CLI that combines both
-        temp_config = {
-            "version": "v1",
-            "rag": {
-                "databases": [database_config],
-                "data_processing_strategies": [data_processing_strategy],
-            },
-        }
-
-        # The strategy name in the new format is: {data_processing_strategy}_{database}
-        combined_strategy_name = f"{data_processing_strategy_name}_{database_name}"
-
-        logger.info(
-            f"Ingesting file {source_path} with strategy {combined_strategy_name}"
-        )
-
         # Run the RAG CLI with the new schema format
         exit_code, stdout, stderr = run_rag_cli_with_config_and_strategy(
-            source_path, project_dir, combined_strategy_name
+            source_path, project_dir, database_name, data_processing_strategy_name
         )
 
         if exit_code != 0:
@@ -192,12 +176,16 @@ def ingest_file_with_rag(
                 exit_code=exit_code,
                 stderr=stderr,
                 stdout=stdout,
-                strategy=combined_strategy_name,
+                database=database_name,
+                data_processing_strategy=data_processing_strategy_name,
             )
             return False
 
         logger.info(
-            "RAG ingest succeeded", stdout=stdout, strategy=combined_strategy_name
+            "RAG ingest succeeded",
+            stdout=stdout,
+            database=database_name,
+            data_processing_strategy=data_processing_strategy_name,
         )
         return True
 
@@ -209,7 +197,8 @@ def ingest_file_with_rag(
 def run_rag_cli_with_config_and_strategy(
     source_path: str,
     project_dir: str,
-    strategy_name: str,
+    database_name: str,
+    data_processing_strategy_name: str,
     cwd: Path | None = None,
 ) -> tuple[int, str, str]:
     """
@@ -251,13 +240,17 @@ def run_rag_cli_with_config_and_strategy(
             "-q",
             "python",
             "cli.py",
-            "--strategy-file",
+            "--config",
             project_dir + "/llamafarm.yaml",
             "ingest",
             source_path,
-            "--strategy",
-            strategy_name,
+            "--database",
+            database_name,
+            "--data-processing-strategy",
+            data_processing_strategy_name,
         ]
+
+        logger.info("Running RAG CLI", cmd=cmd)
 
         try:
             completed = subprocess.run(

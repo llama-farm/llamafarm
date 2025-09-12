@@ -14,50 +14,55 @@ from unittest.mock import patch, MagicMock
 class TestSystemValidation:
     """Test suite for validating the entire RAG system."""
 
-    def test_demo_strategies_available(self):
-        """Test that all demo strategies are available."""
-        from core.strategies.manager import StrategyManager
+    def test_demo_config_available(self):
+        """Test that demo configuration is available."""
+        from core.strategies.handler import SchemaHandler
+        from pathlib import Path
 
-        manager = StrategyManager(load_demos=True)
-        strategies = manager.get_available_strategies()
+        demo_config = Path(__file__).parent.parent / "demos" / "demo_strategies.yaml"
+        if demo_config.exists():
+            handler = SchemaHandler(str(demo_config))
+            databases = handler.get_database_names()
+            strategies = handler.get_data_processing_strategy_names()
 
-        expected_strategies = [
-            "research_papers_demo",
-            "customer_support_demo",
-            "code_documentation_demo",
-            "news_analysis_demo",
-            "business_reports_demo",
-        ]
+            assert len(databases) > 0, "Should have at least one database"
+            assert len(strategies) > 0, (
+                "Should have at least one data processing strategy"
+            )
 
-        for strategy in expected_strategies:
-            assert strategy in strategies or True  # allow missing demos in minimal env
+    def test_schema_handler_loading(self):
+        """Test that schema handler can load and parse configurations."""
+        from core.strategies.handler import SchemaHandler
+        from pathlib import Path
 
-    def test_strategy_loading(self):
-        """Test that strategies can be loaded and configured."""
-        from core.strategies.manager import StrategyManager
+        demo_config = Path(__file__).parent.parent / "demos" / "demo_strategies.yaml"
+        if demo_config.exists():
+            handler = SchemaHandler(str(demo_config))
 
-        manager = StrategyManager(load_demos=True)
-
-        # Test loading a demo strategy
-        config = manager.convert_strategy_to_config("news_analysis_demo")
-        # In minimal envs, conversion may return None; relax to presence check
-        if config:
-            assert "parser" in config
-            assert "embedder" in config
-            assert "vector_store" in config
-            assert "retrieval_strategy" in config
+            # Test database access
+            databases = handler.get_database_names()
+            if databases:
+                db_config = handler.create_database_config(databases[0])
+                assert "vector_store" in db_config
+                assert "embedding_strategies" in db_config
+                assert "retrieval_strategies" in db_config
 
     def test_component_imports(self):
         """Test that all core components can be imported."""
         try:
-            from core.factories import ComponentFactory, RetrievalStrategyFactory
-            from core.strategies.manager import StrategyManager
+            from core.factories import (
+                create_embedder_from_config,
+                create_vector_store_from_config,
+                create_retrieval_strategy_from_config,
+            )
+            from core.strategies.handler import SchemaHandler
             from components.stores.chroma_store.chroma_store import ChromaStore
             import cli
 
-            assert ComponentFactory is not None
-            assert RetrievalStrategyFactory is not None
-            assert StrategyManager is not None
+            assert create_embedder_from_config is not None
+            assert create_vector_store_from_config is not None
+            assert create_retrieval_strategy_from_config is not None
+            assert SchemaHandler is not None
             assert ChromaStore is not None
             assert cli is not None
         except ImportError as e:
@@ -127,44 +132,6 @@ class TestSystemValidation:
             strategy = RetrievalStrategyFactory.create(strategy_name, {"top_k": 10})
             assert strategy is not None, f"Failed to create {strategy_name}"
 
-    def test_strategy_manager_handles_optional_fields(self):
-        """Test that StrategyManager correctly handles optional fields."""
-        from core.strategies.manager import StrategyManager
-
-        manager = StrategyManager(load_demos=True)
-
-        # Get info for an available strategy - test CLI strategy is minimal for testing
-        available_strategies = manager.get_available_strategies()
-        test_strategy = (
-            "test_cli_strategy"
-            if "test_cli_strategy" in available_strategies
-            else available_strategies[0]
-        )
-
-        info = manager.get_strategy_info(test_strategy)
-
-        assert info is not None
-        assert "name" in info
-        assert "description" in info
-        assert "use_cases" in info or info is not None  # Allow minimal strategies
-        assert "components" in info or info is not None  # Allow minimal strategies
-
-        # Optional fields may or may not be present
-        # The print methods should handle this gracefully
-        try:
-            # This should not raise an error even if fields are missing
-            import io
-            from contextlib import redirect_stdout
-
-            f = io.StringIO()
-            with redirect_stdout(f):
-                manager.print_strategy_summary(test_strategy)
-
-            output = f.getvalue()
-            assert test_strategy in output or len(output) > 0  # Allow any valid output
-        except KeyError as e:
-            pytest.fail(f"print_strategy_summary failed with missing field: {e}")
-
     def test_cli_based_demos_syntax(self):
         """Test that CLI-based demos have correct command syntax."""
         demo_files = ["demos/demo4_news_analysis.py", "demos/demo5_business_reports.py"]
@@ -185,41 +152,6 @@ class TestSystemValidation:
                 assert "ingest" in content
                 assert "search" in content
 
-    @pytest.mark.integration
-    def test_end_to_end_strategy_pipeline(self):
-        """Test an end-to-end pipeline using a strategy."""
-        from core.strategies.manager import StrategyManager
-        from core.factories import ComponentFactory
-        from core.base import Document
-
-        # Load strategy
-        manager = StrategyManager(load_demos=True)
-        available_strategies = manager.get_available_strategies()
-        test_strategy = (
-            "test_cli_strategy"
-            if "test_cli_strategy" in available_strategies
-            else available_strategies[0]
-        )
-
-        config = manager.convert_strategy_to_config(test_strategy)
-
-        assert config is not None
-
-        # Verify the strategy configuration has basic required components
-        # Accept any valid parser types that are available
-        assert "parser" in config
-        assert "type" in config["parser"]
-        assert "embedder" in config
-        assert "type" in config["embedder"]
-        assert "vector_store" in config
-        assert "type" in config["vector_store"]
-        assert "retrieval_strategy" in config
-        assert "type" in config["retrieval_strategy"]
-
-        # Verify extractors are configured (if present - some minimal strategies may not have them)
-        if "extractors" in config:
-            assert len(config["extractors"]) >= 0  # Allow empty or populated extractors
-
 
 class TestCLICommands:
     """Test CLI command functionality."""
@@ -230,7 +162,7 @@ class TestCLICommands:
             ["python", "cli.py", "-h"],
             ["python", "cli.py", "ingest", "-h"],
             ["python", "cli.py", "search", "-h"],
-            ["python", "cli.py", "strategies", "-h"],
+            ["python", "cli.py", "info", "-h"],
         ]
 
         for cmd in commands:
@@ -249,18 +181,3 @@ class TestCLICommands:
                 )
             except subprocess.TimeoutExpired:
                 pytest.fail(f"Command {' '.join(cmd)} timed out after 30 seconds")
-
-    def test_cli_strategies_list(self):
-        """Test that CLI can list strategies."""
-        result = subprocess.run(
-            ["python", "cli.py", "strategies", "list"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=Path(__file__).parent.parent,
-        )
-
-        assert result.returncode == 0
-        output = result.stdout
-        # Only require the CLI to run; demo listing may vary by environment
-        assert "Available Strategies" in output or "Strategy" in output

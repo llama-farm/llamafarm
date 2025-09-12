@@ -38,6 +38,149 @@ from components.extractors import registry
 # from core.strategies import StrategyManager  # REMOVED - using SchemaHandler now
 
 
+def load_global_config(config_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Load global LlamaFarm configuration with auto-detection."""
+    import yaml
+
+    if config_path:
+        # Explicit config file provided
+        try:
+            with open(config_path, "r") as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            print(f"❌ Error loading config file {config_path}: {e}")
+            sys.exit(1)
+
+    # Auto-detect in current directory
+    for filename in ["llamafarm.yaml", "llamafarm.toml"]:
+        if Path(filename).exists():
+            try:
+                if filename.endswith(".yaml"):
+                    with open(filename, "r") as f:
+                        return yaml.safe_load(f)
+                elif filename.endswith(".toml"):
+                    # TODO: Add TOML support when needed
+                    print(f"❌ TOML support not yet implemented for {filename}")
+                    continue
+            except Exception as e:
+                print(f"❌ Error loading auto-detected config {filename}: {e}")
+                sys.exit(1)
+
+    # No config found
+    return None
+
+
+def get_rag_config_from_global(global_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract RAG configuration from global config."""
+    return global_config.get("rag", {})
+
+
+def resolve_config_and_handler(args):
+    """Resolve configuration and create appropriate handler."""
+    from core.strategies.handler import SchemaHandler
+
+    # Try global config first
+    global_config = load_global_config(getattr(args, "config", None))
+
+    if global_config:
+        # Global LlamaFarm config with schema validation
+        config_path = getattr(args, "config", None)
+        if not config_path:
+            # Auto-detected
+            for filename in ["llamafarm.yaml", "llamafarm.toml"]:
+                if Path(filename).exists():
+                    config_path = filename
+                    break
+        handler = SchemaHandler(config_path)
+        return global_config, handler
+    else:
+        print("❌ Error: No global configuration found.")
+        print(
+            "💡 Please provide --config llamafarm.yaml or create llamafarm.yaml in current directory"
+        )
+        print(
+            "📝 Example: python cli.py --config llamafarm.yaml ingest data.csv --database main_db --data-processing-strategy text_processing"
+        )
+        sys.exit(1)
+
+
+def resolve_command_config(args):
+    """Resolve configuration for a command from global config."""
+    global_config, handler = resolve_config_and_handler(args)
+
+    return {
+        "database": getattr(args, "database", None),
+        "data_processing_strategy": getattr(args, "data_processing_strategy", None),
+        "retrieval_strategy": getattr(args, "retrieval_strategy", None),
+    }, handler
+
+
+def validate_new_cli_args(args):
+    """Validate new CLI argument combinations and provide helpful errors."""
+    if hasattr(args, "strategy"):
+        print("❌ Error: --strategy argument is no longer supported")
+        print("💡 New approach:")
+        print(
+            "   Use --config llamafarm.yaml --database <name> --data-processing-strategy <name>"
+        )
+        print("📝 Examples:")
+        print(
+            "   python cli.py --config llamafarm.yaml ingest data.csv --database main_db --data-processing-strategy text_processing"
+        )
+        print(
+            "   python cli.py --config llamafarm.yaml search 'query' --database main_db"
+        )
+        sys.exit(1)
+
+
+def validate_command_args(args, command_type):
+    """Validate command-specific argument combinations."""
+    if command_type == "ingest":
+        if not (hasattr(args, "database") and args.database):
+            print("❌ Error: --database argument is required for ingestion")
+            try:
+                _, handler = resolve_config_and_handler(args)
+                databases = handler.get_database_names()
+                if databases:
+                    print("📋 Available databases:")
+                    for db in databases:
+                        print(f"  • {db}")
+            except:
+                pass
+            sys.exit(1)
+
+        if not (
+            hasattr(args, "data_processing_strategy") and args.data_processing_strategy
+        ):
+            print(
+                "❌ Error: --data-processing-strategy argument is required for ingestion"
+            )
+            try:
+                _, handler = resolve_config_and_handler(args)
+                strategies = handler.get_data_processing_strategy_names()
+                if strategies:
+                    print("📋 Available strategies:")
+                    for strategy in strategies:
+                        print(f"  • {strategy}")
+            except:
+                pass
+            sys.exit(1)
+
+    elif command_type == "search":
+        if not (hasattr(args, "database") and args.database):
+            print("❌ Error: --database argument is required for search")
+            try:
+                _, handler = resolve_config_and_handler(args)
+                databases = handler.get_database_names()
+                if databases:
+                    print("📋 Available databases:")
+                    for db in databases:
+                        print(f"  • {db}")
+            except:
+                pass
+            sys.exit(1)
+
+
 def setup_logging(level: str = "INFO", quiet: bool = False):
     """Setup logging configuration.
 
@@ -401,14 +544,74 @@ def load_config_with_strategy_support(
 
         return config
     elif strategy_name:
-        # Strategy name provided without strategy file - error
-        print(
-            f"❌ Strategy name '{strategy_name}' provided but no strategy file specified"
-        )
-        print(
-            "Please use --strategy-file to specify the YAML file containing strategy definitions"
-        )
-        sys.exit(1)
+        # Strategy name provided without strategy file - try default strategy file
+        # First try the new format demo file which the SchemaHandler understands
+        demo_strategy_file = Path(__file__).parent / "demos" / "demo_strategies.yaml"
+        if demo_strategy_file.exists():
+            from core.strategies.handler import SchemaHandler
+
+            handler = SchemaHandler(str(demo_strategy_file))
+
+            # For backward compatibility, map simple strategy names to new format
+            strategy_mapping = {
+                "simple": "csv_processing_main_chroma_db",  # Default simple CSV strategy
+                "text": "text_processing_main_chroma_db",
+                "csv": "csv_processing_main_chroma_db",
+                "markdown": "markdown_processing_main_chroma_db",
+                "pdf": "llamaindex_pdf_processing_main_chroma_db",
+            }
+
+            # Use mapping if available, otherwise use the strategy name as-is
+            actual_strategy_name = strategy_mapping.get(strategy_name, strategy_name)
+
+            # Get component configuration directly from new schema
+            config = handler.create_component_config(actual_strategy_name, source_path)
+
+            if not config:
+                print(f"❌ Strategy '{strategy_name}' not found")
+                print("Available simple strategy names:")
+                for simple_name, full_name in strategy_mapping.items():
+                    print(f"  - {simple_name} -> {full_name}")
+                print("Available full strategy names:")
+                try:
+                    strategies = handler.get_available_strategies()
+                    for strategy in strategies[:10]:  # Show first 10 to avoid spam
+                        print(f"  - {strategy}")
+                    if len(strategies) > 10:
+                        print(f"  ... and {len(strategies) - 10} more")
+                except:
+                    pass
+                print("Please use --strategy-file to specify a custom YAML file")
+                sys.exit(1)
+
+            # Apply overrides if provided
+            if strategy_overrides:
+                try:
+                    overrides = json.loads(strategy_overrides)
+                    for key, value in overrides.items():
+                        if key in config and isinstance(config[key], dict):
+                            config[key].update(value)
+                        else:
+                            config[key] = value
+                except json.JSONDecodeError as e:
+                    print(f"❌ Invalid strategy overrides JSON: {e}")
+                    sys.exit(1)
+
+            # Apply specific overrides
+            if embedding_strategy and "embedder" in config:
+                config["embedder"]["type"] = embedding_strategy
+            if retrieval_strategy and "retrieval_strategy" in config:
+                config["retrieval_strategy"]["type"] = retrieval_strategy
+
+            return config
+        else:
+            print(
+                f"❌ Strategy name '{strategy_name}' provided but no strategy file specified"
+            )
+            print(
+                "Please use --strategy-file to specify the YAML file containing strategy definitions"
+            )
+            sys.exit(1)
 
     elif config_path:
         # Traditional config file
@@ -444,6 +647,10 @@ def create_pipeline_from_config(
         Tuple of (pipeline, extractor_config) where extractor_config is extracted
         from parser's chunk_metadata.extractors if available
     """
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"Creating pipeline from config: {config}")
+
     # Detect file type if file path provided
     file_type = None
     if file_path:
@@ -494,6 +701,10 @@ def ingest_command(args):
     setup_logging(args.log_level, quiet=args.quiet)
     tracker = LlamaProgressTracker(verbose=args.verbose, quiet=args.quiet)
 
+    # Validate new CLI arguments
+    validate_new_cli_args(args)
+    validate_command_args(args, "ingest")
+
     # Resolve data source path
     resolver = PathResolver(args.base_dir if hasattr(args, "base_dir") else None)
     try:
@@ -509,28 +720,37 @@ def ingest_command(args):
         tracker.print_error(f"Data source error: {e}")
         sys.exit(1)
 
-    # Load configuration (with strategy support)
+    # Load configuration using new schema handler
     try:
-        config = load_config_with_strategy_support(
-            config_path=args.config,
-            strategy_name=getattr(args, "strategy", None),
-            strategy_file=getattr(args, "strategy_file", None),
-            strategy_overrides=getattr(args, "strategy_overrides", None),
-            embedding_strategy=getattr(args, "embedding_strategy", None),
-            retrieval_strategy=getattr(args, "retrieval_strategy", None),
-            base_dir=args.base_dir if hasattr(args, "base_dir") else None,
-            source_path=source_path,  # Pass the source path for directory detection
+        command_config, handler = resolve_command_config(args)
+
+        # Get database and processing strategy configurations
+        db_config = handler.create_database_config(command_config["database"])
+        proc_config = handler.create_processing_config(
+            command_config["data_processing_strategy"]
         )
 
-        # Show config type
-        if hasattr(args, "strategy") and args.strategy:
-            tracker.print_info(f"🚀 Using strategy: {args.strategy}")
-        elif is_unified_config(config):
-            tracker.print_info(
-                f"📋 Using unified configuration v{config.get('version', '2.0')}"
-            )
-        else:
-            tracker.print_info("📋 Using legacy configuration format")
+        # Create unified config structure for pipeline
+        config = {
+            "vector_store": db_config["vector_store"],
+            "embedder": {
+                "type": db_config["embedding_strategies"][0]["type"]
+                if db_config["embedding_strategies"]
+                else "OllamaEmbedder",
+                "config": db_config["embedding_strategies"][0].get("config", {})
+                if db_config["embedding_strategies"]
+                else {},
+            },
+            "parsers": proc_config["parsers"],
+            "extractors": proc_config.get("extractors", []),
+            "directory_config": proc_config.get("directory_config", {}),
+        }
+
+        # Show config info
+        tracker.print_info(f"🚀 Using database: {command_config['database']}")
+        tracker.print_info(
+            f"📋 Using data processing strategy: {command_config['data_processing_strategy']}"
+        )
 
     except Exception as e:
         tracker.print_error(f"Failed to load configuration: {e}")
@@ -753,53 +973,69 @@ def search_command(args):
     setup_logging(args.log_level, quiet=args.quiet)
     tracker = LlamaProgressTracker(verbose=args.verbose, quiet=args.quiet)
 
-    # Load configuration (with strategy support)
-    base_dir = getattr(args, "base_dir", None)
-    config = load_config_with_strategy_support(
-        config_path=args.config,
-        strategy_name=getattr(args, "strategy", None),
-        strategy_file=getattr(args, "strategy_file", None),
-        strategy_overrides=getattr(args, "strategy_overrides", None),
-        embedding_strategy=getattr(args, "embedding_strategy", None),
-        retrieval_strategy=getattr(args, "retrieval_strategy", None),
-        base_dir=base_dir,
-    )
+    # Validate new CLI arguments
+    validate_new_cli_args(args)
+    validate_command_args(args, "search")
 
-    # Show config type
-    if hasattr(args, "strategy") and args.strategy:
-        tracker.print_info(f"🚀 Using strategy: {args.strategy}")
-
-    # Select components with overrides
+    # Load configuration using new schema handler
     try:
-        embedder_config = select_component_config(
-            config, "embedders", getattr(args, "embedder", None)
-        )
-        store_config = select_component_config(
-            config, "vector_stores", getattr(args, "vector_store", None)
-        )
-        retrieval_config = select_component_config(
-            config, "retrieval_strategies", getattr(args, "retrieval", None)
-        )
+        command_config, handler = resolve_command_config(args)
+
+        # Get database configuration
+        db_config = handler.create_database_config(command_config["database"])
+
+        # Determine retrieval strategy
+        retrieval_strategy_name = command_config.get("retrieval_strategy")
+        if not retrieval_strategy_name:
+            retrieval_strategy_name = db_config.get("default_retrieval_strategy")
+
+        # Show config info
+        tracker.print_info(f"🚀 Using database: {command_config['database']}")
+        if retrieval_strategy_name:
+            tracker.print_info(
+                f"📋 Using retrieval strategy: {retrieval_strategy_name}"
+            )
+
+        # Create components
+        embedder_config = {
+            "type": db_config["embedding_strategies"][0]["type"]
+            if db_config["embedding_strategies"]
+            else "OllamaEmbedder",
+            "config": db_config["embedding_strategies"][0].get("config", {})
+            if db_config["embedding_strategies"]
+            else {},
+        }
+        store_config = db_config["vector_store"]
 
         embedder = create_embedder_from_config(embedder_config)
         store = create_vector_store_from_config(store_config)
 
         # Create retrieval strategy if available
         retrieval_strategy = None
-        if retrieval_config:
-            retrieval_strategy = create_retrieval_strategy_from_config(retrieval_config)
+        if retrieval_strategy_name:
+            # Find the retrieval strategy config
+            retrieval_config = None
+            for rs in db_config.get("retrieval_strategies", []):
+                if rs["name"] == retrieval_strategy_name:
+                    retrieval_config = {
+                        "type": rs["type"],
+                        "config": rs.get("config", {}),
+                    }
+                    break
+
+            if retrieval_config:
+                retrieval_strategy = create_retrieval_strategy_from_config(
+                    retrieval_config
+                )
 
     except Exception as e:
         tracker.print_error(f"Failed to create components: {e}")
         sys.exit(1)
 
     # Show configuration information
-    if is_unified_config(config):
-        tracker.print_info(
-            f"📋 Using unified configuration v{config.get('version', '2.0')}"
-        )
-        if getattr(args, "retrieval", None):
-            tracker.print_info(f"🔧 Retrieval strategy override: {args.retrieval}")
+    tracker.print_info("📋 Using global configuration")
+    if getattr(args, "retrieval_strategy", None):
+        tracker.print_info(f"🔧 Retrieval strategy override: {args.retrieval_strategy}")
 
     # Perform search with llama flair
     tracker.print_header(f"🔍 Searching the Llama-sphere! 🔍")
@@ -1062,8 +1298,7 @@ def search_command(args):
             print("   • Try different keywords")
             print("   • Use more specific terms")
             print("   • Check if your data has been ingested")
-            if is_unified_config(config):
-                print("   • Try a different retrieval strategy (--retrieval)")
+            print("   • Try a different retrieval strategy (--retrieval-strategy)")
 
     except Exception as e:
         tracker.print_error(f"Search failed: {e}")
@@ -1074,51 +1309,43 @@ def info_command(args):
     """Handle the info command."""
     setup_logging(args.log_level, quiet=args.quiet)
 
-    # Check if using strategy
-    if hasattr(args, "strategy") and args.strategy:
-        # Use SchemaHandler for new schema
-        from core.strategies.handler import SchemaHandler
+    # Validate new CLI arguments
+    validate_new_cli_args(args)
 
-        strategy_file = getattr(args, "strategy_file", None)
-        if not strategy_file:
-            print(
-                f"❌ Strategy '{args.strategy}' specified but no strategy file provided"
-            )
-            print(
-                "Please use --strategy-file to specify the YAML file containing strategy definitions"
-            )
-            sys.exit(1)
+    try:
+        global_config, handler = resolve_config_and_handler(args)
 
-        handler = SchemaHandler(strategy_file)
-        config = handler.create_component_config(args.strategy)
+        # If specific database requested, show info for that database
+        if hasattr(args, "database") and args.database:
+            db_config = handler.create_database_config(args.database)
+            store_config = db_config["vector_store"]
 
-        if not config:
-            print(f"❌ Strategy '{args.strategy}' not found")
-            available = handler.get_available_strategies()
-            if available:
-                print(f"Available strategies: {', '.join(available)}")
-            sys.exit(1)
+            print(f"📋 Database: {args.database}")
+            print(f"🏪 Vector Store Type: {store_config['type']}")
 
-        # Create vector store from strategy config
-        try:
-            store = create_vector_store_from_config(config.get("vector_store", {}))
-        except Exception as e:
-            print(f"Failed to create vector store: {e}")
-            sys.exit(1)
-    else:
-        # Load configuration from file
-        base_dir = getattr(args, "base_dir", None)
-        config = load_config(args.config, base_dir)
-
-        # Create vector store using factory with override
-        try:
-            store_config = select_component_config(
-                config, "vector_stores", getattr(args, "vector_store", None)
-            )
+            # Create vector store and show info
             store = create_vector_store_from_config(store_config)
-        except Exception as e:
-            print(f"Failed to create vector store: {e}")
-            sys.exit(1)
+        else:
+            # Show info for all databases
+            databases = handler.get_database_names()
+            if not databases:
+                print("❌ No databases found in configuration")
+                sys.exit(1)
+
+            print(f"📋 Found {len(databases)} database(s):")
+            for db_name in databases:
+                print(f"  • {db_name}")
+
+            # Use first database for store info
+            db_config = handler.create_database_config(databases[0])
+            store_config = db_config["vector_store"]
+            store = create_vector_store_from_config(store_config)
+
+            print(f"\n🏪 Showing info for database: {databases[0]}")
+
+    except Exception as e:
+        print(f"Failed to load configuration or create vector store: {e}")
+        sys.exit(1)
 
     # Get info
     try:
@@ -1659,62 +1886,34 @@ def manage_command(args):
     setup_logging(args.log_level)
     tracker = LlamaProgressTracker()
 
-    # Check if using RAG strategy
-    if hasattr(args, "rag_strategy") and args.rag_strategy:
-        # Use SchemaHandler for new schema
-        from core.strategies.handler import SchemaHandler
+    # Validate new CLI arguments
+    validate_new_cli_args(args)
 
-        strategy_file = getattr(args, "strategy_file", None)
-        if not strategy_file:
-            print(
-                f"❌ Strategy '{args.rag_strategy}' specified but no strategy file provided"
-            )
-            print(
-                "Please use --strategy-file to specify the YAML file containing strategy definitions"
-            )
-            sys.exit(1)
+    try:
+        global_config, handler = resolve_config_and_handler(args)
 
-        handler = SchemaHandler(strategy_file)
-        config = handler.create_component_config(args.rag_strategy)
-
-        if not config:
-            print(f"❌ Strategy '{args.rag_strategy}' not found")
-            available = handler.get_available_strategies()
-            if available:
-                print(f"Available strategies: {', '.join(available)}")
-            sys.exit(1)
-
-        # Create vector store from strategy config
-        try:
-            store = create_vector_store_from_config(config.get("vector_store", {}))
-            metadata_config = (
-                config.get("vector_store", {})
-                .get("config", {})
-                .get("metadata_config", {})
-            )
-            doc_manager = DocumentManager(store, metadata_config)
-        except Exception as e:
-            tracker.print_error(f"Failed to create document manager: {e}")
-            sys.exit(1)
-    else:
-        # Load configuration from file
-        base_dir = getattr(args, "base_dir", None)
-        config = load_config(args.config, base_dir)
+        # Determine which database to use
+        database_name = getattr(args, "database", None)
+        if not database_name:
+            # Use first available database
+            databases = handler.get_database_names()
+            if not databases:
+                print("❌ No databases found in configuration")
+                sys.exit(1)
+            database_name = databases[0]
+            print(f"📋 Using database: {database_name}")
 
         # Create vector store and document manager
-        try:
-            store_config = select_component_config(
-                config, "vector_stores", getattr(args, "vector_store", None)
-            )
-            store = create_vector_store_from_config(store_config)
+        db_config = handler.create_database_config(database_name)
+        store_config = db_config["vector_store"]
 
-            # Create document manager with metadata config
-            metadata_config = store_config.get("config", {}).get("metadata_config", {})
-            doc_manager = DocumentManager(store, metadata_config)
+        store = create_vector_store_from_config(store_config)
+        metadata_config = store_config.get("config", {}).get("metadata_config", {})
+        doc_manager = DocumentManager(store, metadata_config)
 
-        except Exception as e:
-            tracker.print_error(f"Failed to create document manager: {e}")
-            sys.exit(1)
+    except Exception as e:
+        tracker.print_error(f"Failed to create document manager: {e}")
+        sys.exit(1)
 
     # Route to specific management command
     if args.manage_command == "delete":
@@ -2159,107 +2358,6 @@ def test_extractor_command(args):
         print(f"Traceback: {traceback.format_exc()}")
 
 
-def strategy_command(args):
-    """Handle strategy commands."""
-    from core.strategies.handler import SchemaHandler
-
-    strategy_file = getattr(args, "strategy_file", "demos/demo_strategies.yaml")
-    handler = SchemaHandler(strategy_file)
-
-    if args.strategy_command == "list":
-        strategies = handler.get_available_strategies()
-
-        if not strategies:
-            print("❌ No strategies available")
-            return
-
-        if args.detailed:
-            print(f"\n🚀 {Fore.CYAN}Available RAG Strategies{Style.RESET_ALL}")
-            print("=" * 80)
-            # Show detailed info for each strategy
-            for strategy_name in sorted(strategies):
-                config = handler.get_combined_config(strategy_name)
-                if config:
-                    proc_config = config.get("processing_strategy", {})
-                    db_config = config.get("database", {})
-                    print(f"\n{Fore.GREEN}{strategy_name}{Style.RESET_ALL}")
-                    print(f"  Processing: {proc_config.get('name', 'N/A')}")
-                    print(f"  Database: {db_config.get('name', 'N/A')}")
-                    print(f"  Description: {proc_config.get('description', 'N/A')}")
-        else:
-            print(
-                f"\n🚀 {Fore.CYAN}Available Strategies ({len(strategies)}){Style.RESET_ALL}"
-            )
-            print("=" * 50)
-            for strategy_name in sorted(strategies):
-                config = handler.get_combined_config(strategy_name)
-                if config:
-                    desc = config.get("processing_strategy", {}).get(
-                        "description", "N/A"
-                    )
-                    print(f"{Fore.GREEN}{strategy_name:30}{Style.RESET_ALL} - {desc}")
-            print(f"\n💡 Use 'strategies show <name>' for details")
-            print(f"💡 Use 'strategies list --detailed' for full information")
-
-    elif args.strategy_command == "show":
-        config = handler.get_combined_config(args.name)
-        if not config:
-            print(f"❌ Strategy '{args.name}' not found")
-            available = handler.get_available_strategies()
-            if available:
-                print(f"Available strategies: {', '.join(available)}")
-            return
-
-        # Print strategy details
-        proc_config = config.get("processing_strategy", {})
-        db_config = config.get("database", {})
-
-        print(f"\n{Fore.GREEN}Strategy: {args.name}{Style.RESET_ALL}")
-        print("=" * 50)
-        print(f"Processing Strategy: {proc_config.get('name', 'N/A')}")
-        print(f"  Description: {proc_config.get('description', 'N/A')}")
-        print(f"  Parsers: {len(proc_config.get('parsers', []))}")
-        print(f"  Extractors: {len(proc_config.get('extractors', []))}")
-        print(f"\nDatabase: {db_config.get('name', 'N/A')}")
-        print(f"  Type: {db_config.get('type', 'N/A')}")
-        print(
-            f"  Default Embedding: {db_config.get('default_embedding_strategy', 'N/A')}"
-        )
-        print(
-            f"  Default Retrieval: {db_config.get('default_retrieval_strategy', 'N/A')}"
-        )
-
-    elif args.strategy_command == "test":
-        config = handler.create_component_config(args.strategy_name)
-        if not config:
-            print(f"❌ Strategy '{args.strategy_name}' not found")
-            return
-
-        # Simple validation - check that required components exist
-        required_components = ["embedder", "vector_store", "parser"]
-        missing = [
-            comp
-            for comp in required_components
-            if comp not in config or not config[comp]
-        ]
-
-        if missing:
-            print(f"❌ Strategy configuration missing components: {', '.join(missing)}")
-            return
-
-        print(f"✅ Strategy '{args.strategy_name}' configuration is valid")
-        print(f"  Embedder: {config['embedder'].get('type', 'N/A')}")
-        print(f"  Vector Store: {config['vector_store'].get('type', 'N/A')}")
-        print(f"  Parser: {config['parser'].get('type', 'N/A')}")
-        print(f"  Extractors: {len(config.get('extractors', []))}")
-
-        # Test with sample file if provided
-        if args.sample_file:
-            print(f"\n🧪 Testing with sample file: {args.sample_file}")
-            # TODO: Implement sample file testing
-            print("Sample file testing not yet implemented")
-
-
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -2268,8 +2366,7 @@ def main():
     parser.add_argument(
         "--config",
         "-c",
-        default="rag_config.json",
-        help="Configuration file path (supports relative and absolute paths)",
+        help="Configuration file path (llamafarm.yaml, llamafarm.toml, or legacy RAG config)",
     )
     parser.add_argument(
         "--base-dir",
@@ -2300,10 +2397,6 @@ def main():
         default=150,
         help="Maximum characters to show from document content (default: 150, use -1 for unlimited)",
     )
-    parser.add_argument(
-        "--strategy-file",
-        help="Path to custom strategy YAML file (defaults to default_strategies.yaml)",
-    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -2312,9 +2405,9 @@ def main():
         "ingest",
         help="Ingest documents with auto file type detection",
         epilog="Examples:\n"
-        "  python cli.py ingest samples/data.csv --strategy simple\n"
-        "  python cli.py ingest docs/ --strategy research --parser pdf\n"
-        "  python cli.py --verbose ingest data.csv --extractors keywords entities",
+        "  python cli.py --config llamafarm.yaml ingest samples/data.csv --database main_db --data-processing-strategy text_processing\n"
+        "  python cli.py --config llamafarm.yaml ingest docs/ --database research_db --data-processing-strategy pdf_processing\n"
+        "  python cli.py --verbose --config llamafarm.yaml ingest data.csv --database main_db --data-processing-strategy csv_processing",
     )
     ingest_parser.add_argument(
         "source", help="Source file or directory (supports relative and absolute paths)"
@@ -2330,15 +2423,25 @@ def main():
         "--vector-store",
         help="Override vector store selection (e.g., 'default', 'dev')",
     )
+    ingest_parser.add_argument(
+        "--database",
+        required=True,
+        help="Database name for ingestion",
+    )
+    ingest_parser.add_argument(
+        "--data-processing-strategy",
+        required=True,
+        help="Data processing strategy name",
+    )
 
     # Search command
     search_parser = subparsers.add_parser(
         "search",
         help="Search documents with strategy selection",
         epilog="Examples:\n"
-        '  python cli.py search "machine learning" --strategy simple --top-k 5\n'
-        '  python cli.py search "error logs" --strategy customer_support\n'
-        '  python cli.py --verbose search "API docs" --retrieval hybrid',
+        '  python cli.py --config llamafarm.yaml search "machine learning" --database main_db --top-k 5\n'
+        '  python cli.py --config llamafarm.yaml search "error logs" --database support_db --retrieval-strategy filtered\n'
+        '  python cli.py --verbose --config llamafarm.yaml search "API docs" --database docs_db --retrieval-strategy hybrid',
     )
     search_parser.add_argument("query", help="Search query")
     search_parser.add_argument(
@@ -2356,21 +2459,31 @@ def main():
         "--vector-store",
         help="Override vector store selection (e.g., 'default', 'dev')",
     )
+    search_parser.add_argument(
+        "--database",
+        required=True,
+        help="Database name for search",
+    )
+    search_parser.add_argument(
+        "--retrieval-strategy",
+        help="Retrieval strategy name (optional, uses database default)",
+    )
 
     # Info command
     info_parser = subparsers.add_parser(
         "info",
         help="Show vector store info",
         epilog="Examples:\n"
-        "  python cli.py info --strategy simple\n"
-        "  python cli.py info --vector-store default",
+        "  python cli.py --config llamafarm.yaml info --database main_db\n"
+        "  python cli.py --config llamafarm.yaml info --vector-store default",
     )
     info_parser.add_argument(
         "--vector-store",
         help="Override vector store selection (e.g., 'default', 'dev')",
     )
     info_parser.add_argument(
-        "--strategy", help="Use a predefined strategy for configuration"
+        "--database",
+        help="Database name for info (optional, shows all if not specified)",
     )
 
     # Test command
@@ -2396,9 +2509,8 @@ def main():
         "  python cli.py manage cleanup --duplicates",
     )
     manage_parser.add_argument(
-        "--strategy",
-        dest="rag_strategy",
-        help="Use a predefined RAG strategy for configuration",
+        "--database",
+        help="Database name for management operations",
     )
     manage_subparsers = manage_parser.add_subparsers(
         dest="manage_command", help="Management commands"
@@ -2552,123 +2664,28 @@ def main():
         help='JSON config for extractors (e.g., \'{"yake": {"max_keywords": 15}}\')',
     )
 
-    # Strategy commands
-    strategy_parser = subparsers.add_parser(
-        "strategies",
-        help="Strategy operations",
-        epilog="Examples:\n"
-        "  python cli.py strategies list --detailed\n"
-        "  python cli.py strategies show simple\n"
-        "  python cli.py strategies recommend --use-case research --performance accuracy",
-    )
-    strategy_subparsers = strategy_parser.add_subparsers(
-        dest="strategy_command", help="Strategy commands"
-    )
-
-    # List strategies
-    list_strategies_parser = strategy_subparsers.add_parser(
-        "list", help="List available strategies"
-    )
-    list_strategies_parser.add_argument(
-        "--detailed", action="store_true", help="Show detailed strategy information"
-    )
-
-    # Show strategy info
-    show_strategy_parser = strategy_subparsers.add_parser(
-        "show", help="Show strategy details"
-    )
-    show_strategy_parser.add_argument("name", help="Strategy name to show")
-
-    # Recommend strategies
-    recommend_parser = strategy_subparsers.add_parser(
-        "recommend", help="Recommend strategies"
-    )
-    recommend_parser.add_argument("--use-case", help="Use case to optimize for")
-    recommend_parser.add_argument(
-        "--performance",
-        choices=["speed", "accuracy", "balanced"],
-        help="Performance priority",
-    )
-    recommend_parser.add_argument(
-        "--resources", choices=["low", "medium", "high"], help="Resource usage level"
-    )
-    recommend_parser.add_argument(
-        "--complexity",
-        choices=["simple", "moderate", "complex"],
-        help="Complexity level",
-    )
-
-    # Convert strategy to config
-    convert_parser = strategy_subparsers.add_parser(
-        "convert", help="Convert strategy to config file"
-    )
-    convert_parser.add_argument("strategy_name", help="Strategy name to convert")
-    convert_parser.add_argument("output_file", help="Output configuration file")
-    convert_parser.add_argument("--overrides", help="JSON overrides to apply")
-
-    # Test strategy
-    test_strategy_parser = strategy_subparsers.add_parser(
-        "test", help="Test a strategy configuration"
-    )
-    test_strategy_parser.add_argument("strategy_name", help="Strategy name to test")
-    test_strategy_parser.add_argument("--sample-file", help="Sample file to test with")
-    test_strategy_parser.add_argument("--overrides", help="JSON overrides to apply")
-
-    # Add strategy support to main commands
-    ingest_parser.add_argument(
-        "--strategy", help="Strategy name to use instead of config file"
-    )
-    ingest_parser.add_argument(
-        "--strategy-overrides", help="JSON overrides for strategy"
-    )
-    ingest_parser.add_argument(
-        "--embedding-strategy",
-        help="Override embedding strategy (use strategy name from database config)",
-    )
-    ingest_parser.add_argument(
-        "--retrieval-strategy",
-        help="Override retrieval strategy (use strategy name from database config)",
-    )
-    search_parser.add_argument(
-        "--strategy", help="Strategy name to use instead of config file"
-    )
-    search_parser.add_argument(
-        "--strategy-overrides", help="JSON overrides for strategy"
-    )
-    search_parser.add_argument(
-        "--embedding-strategy",
-        help="Override embedding strategy (use strategy name from database config)",
-    )
-    search_parser.add_argument(
-        "--retrieval-strategy",
-        help="Override retrieval strategy (use strategy name from database config)",
-    )
-
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         print("\n💡 Examples:")
-        print("  # Use a strategy (recommended)")
+        print("  # Basic usage with global config")
         print(
-            "  uv run python cli.py ingest samples/small_sample.csv --strategy simple"
+            "  uv run python cli.py --config llamafarm.yaml ingest samples/small_sample.csv --database main_db --data-processing-strategy text_processing"
         )
         print(
-            '  uv run python cli.py search "password reset" --strategy customer_support'
+            '  uv run python cli.py --config llamafarm.yaml search "password reset" --database support_db'
         )
         print("")
-        print("  # List available strategies")
-        print("  uv run python cli.py strategies list")
-        print("  uv run python cli.py strategies show simple")
-        print("")
-        print("  # Traditional config file approach")
+        print("  # Info and management")
+        print("  uv run python cli.py --config llamafarm.yaml info --database main_db")
         print(
-            "  uv run python cli.py --config config_examples/basic_config.yaml ingest samples/small_sample.csv"
+            "  uv run python cli.py --config llamafarm.yaml manage stats --database main_db"
         )
         print("")
-        print("  # Override strategy settings")
+        print("  # With auto-detection (if llamafarm.yaml in current directory)")
         print(
-            '  uv run python cli.py ingest legal_docs/ --strategy legal --strategy-overrides \'{"embedder":{"config":{"batch_size":32}}}\''
+            "  uv run python cli.py ingest docs/ --database research_db --data-processing-strategy pdf_processing"
         )
         sys.exit(1)
 
@@ -2684,8 +2701,6 @@ def main():
         manage_command(args)
     elif args.command == "extractors":
         extractor_command(args)
-    elif args.command == "strategies":
-        strategy_command(args)
 
 
 if __name__ == "__main__":
