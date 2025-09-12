@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChatboxMessage, ChatSession } from '../types/chatbox'
 import { chatKeys } from './useChat'
@@ -6,7 +6,7 @@ import { chatKeys } from './useChat'
 // Session storage keys - now project-aware
 const SESSION_STORAGE_KEYS = {
   CURRENT_SESSION: (namespace?: string, project?: string) => 
-    namespace && project ? `chatbox_session_${namespace}_${project}` : 'chatbox_current_session',
+    namespace && project ? `session_${namespace}_${project}` : 'chatbox_current_session',
   SESSION_MESSAGES: (sessionId: string) => `chatbox_messages_${sessionId}`,
   SESSION_LIST: (namespace?: string, project?: string) => 
     namespace && project ? `chatbox_sessions_${namespace}_${project}` : 'chatbox_sessions',
@@ -21,11 +21,14 @@ const SESSION_STORAGE_KEYS = {
  */
 export function useChatSession(initialSessionId?: string, namespace?: string, project?: string) {
   const queryClient = useQueryClient()
+  const projectKey = namespace && project ? `${namespace}/${project}` : null
+  
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
     // Try to restore from localStorage, fallback to provided ID or empty string
     // Session ID will be provided by server on first chat message
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project))
+      const storageKey = SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project)
+      const saved = localStorage.getItem(storageKey)
       return saved || initialSessionId || ''
     }
     return initialSessionId || ''
@@ -146,21 +149,23 @@ export function useChatSession(initialSessionId?: string, namespace?: string, pr
 
   // Create new session (will get ID from server on first message)
   const createNewSession = useCallback(() => {
+    const storageKey = SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project)
     const newSessionId = '' // Empty until server provides ID
+    
     setCurrentSessionId(newSessionId)
     
     // Clear current session from localStorage - will be set when server provides ID
     if (typeof window !== 'undefined') {
-      localStorage.removeItem(SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project))
+      localStorage.removeItem(storageKey)
     }
     
     // Invalidate queries to refresh data
-    if (newSessionId) {
-      queryClient.invalidateQueries({ queryKey: chatKeys.session(newSessionId) })
+    if (currentSessionId) {
+      queryClient.invalidateQueries({ queryKey: chatKeys.session(currentSessionId) })
     }
     
     return newSessionId
-  }, [queryClient, namespace, project])
+  }, [queryClient, namespace, project, projectKey, currentSessionId])
 
   // Switch to existing session
   const switchToSession = useCallback((sessionId: string) => {
@@ -229,23 +234,46 @@ export function useChatSession(initialSessionId?: string, namespace?: string, pr
 
   // Set session ID when received from server
   const setSessionId = useCallback((sessionId: string) => {
+    const storageKey = SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project)
+    
     setCurrentSessionId(sessionId)
     
     // Save to localStorage
     if (typeof window !== 'undefined') {
-      localStorage.setItem(SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project), sessionId)
+      localStorage.setItem(storageKey, sessionId)
     }
     
     // Invalidate queries to refresh data
     queryClient.invalidateQueries({ queryKey: chatKeys.session(sessionId) })
-  }, [queryClient, namespace, project])
+  }, [queryClient, namespace, project, projectKey, currentSessionId])
+
+  // Track project context changes and load appropriate session
+  const prevProjectKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevProjectKeyRef.current !== null && prevProjectKeyRef.current !== projectKey) {
+      
+      // Load session for the new project
+      if (typeof window !== 'undefined' && namespace && project) {
+        const newStorageKey = SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project)
+        const newProjectSession = localStorage.getItem(newStorageKey)
+      
+        if (newProjectSession && newProjectSession !== currentSessionId) {
+          setCurrentSessionId(newProjectSession)
+        } else if (!newProjectSession) {
+          setCurrentSessionId('')
+        }
+      }
+    }
+    prevProjectKeyRef.current = projectKey
+  }, [projectKey, currentSessionId, namespace, project])
 
   // Save current session ID to localStorage when it changes
   useEffect(() => {
     if (typeof window !== 'undefined' && currentSessionId) {
-      localStorage.setItem(SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project), currentSessionId)
+      const storageKey = SESSION_STORAGE_KEYS.CURRENT_SESSION(namespace, project)
+      localStorage.setItem(storageKey, currentSessionId)
     }
-  }, [currentSessionId, namespace, project])
+  }, [currentSessionId, namespace, project, projectKey])
 
   return {
     // Current session state

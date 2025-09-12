@@ -107,17 +107,47 @@ export function useChatbox(initialSessionId?: string) {
     }, 500) // 500ms delay
   }, [saveSessionMessages])
 
-  // Sync persisted messages with local state ONLY on true initial load
+  // Reset chat state when active project changes
+  const activeProjectKey = activeProject ? `${activeProject.namespace}/${activeProject.project}` : null
+  const prevActiveProjectRef = useRef<string | null>(null)
+  
   useEffect(() => {
-    // CRITICAL: Only load from persistence on TRUE component mount (not navigation)
-    // We determine this by checking if this is genuinely the first load for this session
-    if (!hasInitialSync && messages.length === 0) {
-      if (persistedMessages.length > 0) {
-        setMessages(persistedMessages)
+
+    
+    // Check if project has changed (not initial load)
+    if (prevActiveProjectRef.current && prevActiveProjectRef.current !== activeProjectKey) {
+      
+      
+      // Project has changed - NUCLEAR RESET of all chat state
+      setMessages([])
+      setError(null)
+      setInputValue('')
+      setHasInitialSync(false)
+      setStreamingMessageId(null)
+      
+      // Abort any ongoing streaming
+      if (streamingChat.isStreaming) {
+        streamingChat.abortStream()
       }
+      
+    }
+    
+    // Update the previous project reference
+    prevActiveProjectRef.current = activeProjectKey
+  }, [activeProjectKey, streamingChat, sessionId, messages.length, hasInitialSync])
+
+  // Sync persisted messages with local state on initial load and after project changes
+  useEffect(() => {
+    
+    // Load messages when:
+    // 1. This is the first time we're syncing for this session (!hasInitialSync)
+    // 2. OR when we have no local messages but have persisted messages (after project switch)
+    if (!hasInitialSync || (messages.length === 0 && persistedMessages.length > 0)) {
+      
+      setMessages(persistedMessages)
       setHasInitialSync(true)
     }
-  }, [persistedMessages, hasInitialSync, messages.length, sessionId])
+  }, [persistedMessages, hasInitialSync, messages.length, sessionId, activeProjectKey])
   
   // Save messages to persistence when they change (with debouncing)
   useEffect(() => {
@@ -281,6 +311,31 @@ export function useChatbox(initialSessionId?: string) {
   const clearError = useCallback(() => {
     setError(null)
   }, [])
+
+  // Debug utility - expose to window for debugging
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugChatState = () => {
+        const state = {
+          activeProject,
+          sessionId,
+          messagesCount: messages.length,
+          hasInitialSync,
+          error,
+          localStorage: {} as Record<string, string | null>
+        }
+        
+        // Collect all localStorage keys that look like session keys
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && (key.startsWith('session_') || key.startsWith('chatbox_'))) {
+            state.localStorage[key] = localStorage.getItem(key)
+          }
+        }
+        return state
+      }
+    }
+  }, [activeProject, sessionId, messages.length, hasInitialSync, error])
 
   // Abort current streaming
   const abortStreaming = useCallback(() => {
