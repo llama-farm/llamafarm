@@ -61,14 +61,24 @@ export function useStreamingChat(options: StreamingChatOptions) {
   const streamControlRef = useRef<StreamControl | null>(null)
   const accumulatedContentRef = useRef<string>('')
 
-  // Reset state when project changes
+  // Reset state when project changes and cleanup AbortController
   useEffect(() => {
-    setState(prev => ({
-      ...prev,
-      error: null,
-      streamingContent: '',
-    }))
+    setState(prev => {
+      // Cleanup existing abortController if it exists
+      if (prev.abortController && !prev.abortController.signal.aborted) {
+        prev.abortController.abort()
+      }
+      
+      return {
+        ...prev,
+        error: null,
+        streamingContent: '',
+        isStreaming: false,
+        abortController: null, // Clear the reference
+      }
+    })
     accumulatedContentRef.current = ''
+    streamControlRef.current = null // Clear stream control reference
   }, [activeProject?.namespace, activeProject?.project])
 
   // Build session context from current state
@@ -124,13 +134,14 @@ export function useStreamingChat(options: StreamingChatOptions) {
           onChunk?.(value)
         }
         
-        // Stream complete
+        // Stream complete - cleanup and update state
         const finalResponse = accumulatedContentRef.current
         const finalSessionId = getSessionId()
         
         setState(prev => ({
           ...prev,
           isStreaming: false,
+          abortController: null, // Clear abortController reference
         }))
         
         onComplete?.(finalResponse, finalSessionId)
@@ -147,12 +158,14 @@ export function useStreamingChat(options: StreamingChatOptions) {
           ...prev,
           isStreaming: false,
           error: friendlyMessage,
+          abortController: null, // Clear abortController reference on error
         }))
         
         const errorObj = error instanceof Error ? error : new Error(friendlyMessage)
         onError?.(errorObj)
         throw errorObj
       } finally {
+        // Always clear references in finally block
         streamControlRef.current = null
       }
     },
@@ -200,17 +213,28 @@ export function useStreamingChat(options: StreamingChatOptions) {
     [buildSessionContext, streamingMutation, fallbackMutation, onError]
   )
 
-  // Abort current stream
+  // Abort current stream with proper cleanup
   const abortStream = useCallback(() => {
     if (streamControlRef.current && streamControlRef.current.isActive) {
       streamControlRef.current.abort()
     }
     
-    setState(prev => ({
-      ...prev,
-      isStreaming: false,
-      error: 'Stream was cancelled',
-    }))
+    setState(prev => {
+      // Also abort the abortController if it exists
+      if (prev.abortController && !prev.abortController.signal.aborted) {
+        prev.abortController.abort()
+      }
+      
+      return {
+        ...prev,
+        isStreaming: false,
+        error: 'Stream was cancelled',
+        abortController: null, // Clear abortController reference
+      }
+    })
+    
+    // Clear stream control reference
+    streamControlRef.current = null
   }, [])
 
   // Clear error
@@ -219,6 +243,27 @@ export function useStreamingChat(options: StreamingChatOptions) {
       ...prev,
       error: null,
     }))
+  }, [])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup any ongoing streams and abort controllers on unmount
+      if (streamControlRef.current && streamControlRef.current.isActive) {
+        streamControlRef.current.abort()
+      }
+      
+      setState(prev => {
+        if (prev.abortController && !prev.abortController.signal.aborted) {
+          prev.abortController.abort()
+        }
+        return {
+          ...prev,
+          isStreaming: false,
+          abortController: null,
+        }
+      })
+    }
   }, [])
 
   // Check if project is available

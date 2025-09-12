@@ -112,12 +112,8 @@ export function useChatbox(initialSessionId?: string) {
   const prevActiveProjectRef = useRef<string | null>(null)
   
   useEffect(() => {
-
-    
     // Check if project has changed (not initial load)
     if (prevActiveProjectRef.current && prevActiveProjectRef.current !== activeProjectKey) {
-      
-      
       // Project has changed - NUCLEAR RESET of all chat state
       setMessages([])
       setError(null)
@@ -129,12 +125,18 @@ export function useChatbox(initialSessionId?: string) {
       if (streamingChat.isStreaming) {
         streamingChat.abortStream()
       }
-      
     }
     
     // Update the previous project reference
     prevActiveProjectRef.current = activeProjectKey
   }, [activeProjectKey, streamingChat, sessionId, messages.length, hasInitialSync])
+
+  // Clear error state when activeProject changes from null to valid project
+  useEffect(() => {
+    if (activeProject && error) {
+      setError(null)
+    }
+  }, [activeProject, error])
 
   // Sync persisted messages with local state on initial load and after project changes
   useEffect(() => {
@@ -312,30 +314,6 @@ export function useChatbox(initialSessionId?: string) {
     setError(null)
   }, [])
 
-  // Debug utility - expose to window for debugging
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).debugChatState = () => {
-        const state = {
-          activeProject,
-          sessionId,
-          messagesCount: messages.length,
-          hasInitialSync,
-          error,
-          localStorage: {} as Record<string, string | null>
-        }
-        
-        // Collect all localStorage keys that look like session keys
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key && (key.startsWith('session_') || key.startsWith('chatbox_'))) {
-            state.localStorage[key] = localStorage.getItem(key)
-          }
-        }
-        return state
-      }
-    }
-  }, [activeProject, sessionId, messages.length, hasInitialSync, error])
 
   // Abort current streaming
   const abortStreaming = useCallback(() => {

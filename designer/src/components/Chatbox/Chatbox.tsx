@@ -161,6 +161,15 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
             onChange={e => updateInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isSending || !hasActiveProject}
+            aria-disabled={isSending || !hasActiveProject}
+            aria-label={
+              !hasActiveProject 
+                ? "Chat input - Please select a project first" 
+                : isSending 
+                  ? "Chat input - Sending message..."
+                  : "Chat input - Type your message here"
+            }
+            aria-describedby="chat-input-help"
             className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
             placeholder={
               !hasActiveProject 
@@ -172,6 +181,11 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
                   : "Type here..."
             }
           />
+          {!hasActiveProject && (
+            <div id="chat-input-help" className="text-xs text-muted-foreground sr-only">
+              You must select a project before you can start chatting. Use the project switcher in the header to choose a project.
+            </div>
+          )}
           <div className="flex justify-between items-center">
             {isSending && (
               <span className="text-xs text-muted-foreground">
