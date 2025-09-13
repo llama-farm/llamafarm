@@ -7,8 +7,8 @@ from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings
 
-from core.base import VectorStore, Document
-from utils.hash_utils import DeduplicationTracker
+from rag.core.base import VectorStore, Document
+from rag.utils.hash_utils import DeduplicationTracker
 
 logger = logging.getLogger(__name__)
 

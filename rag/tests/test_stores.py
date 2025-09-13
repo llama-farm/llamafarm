@@ -5,8 +5,8 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from core.base import Document
-from components.stores.chroma_store import ChromaStore
+from rag.core.base import Document
+from rag.components.stores.chroma_store import ChromaStore
 
 
 class TestChromaStore:

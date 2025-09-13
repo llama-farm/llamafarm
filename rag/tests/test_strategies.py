@@ -10,13 +10,13 @@ import unittest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.strategies.handler import SchemaHandler
+from rag.core.strategies.handler import SchemaHandler
 
 
 def test_schema_loading():
     """Test loading schema from YAML file."""
     # Use an actual config file that exists
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Should have loaded config
     assert handler.rag_config is not None
@@ -30,7 +30,7 @@ def test_schema_loading():
 def test_schema_handler_initialization():
     """Test SchemaHandler initialization with new schema."""
     # Test with default strategies file
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Get available strategies
     available = handler.get_available_strategies()
@@ -45,7 +45,7 @@ def test_schema_handler_initialization():
 
 def test_get_combined_config():
     """Test getting combined configuration for a strategy."""
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Get available strategies
     available = handler.get_available_strategies()
@@ -60,7 +60,7 @@ def test_get_combined_config():
 
 def test_create_component_config():
     """Test creating component configuration for CLI."""
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Get available strategies
     available = handler.get_available_strategies()
@@ -77,7 +77,7 @@ def test_create_component_config():
 
 def test_database_config():
     """Test getting database configuration with new methods."""
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Get available databases
     databases = handler.get_database_names()
@@ -92,7 +92,7 @@ def test_database_config():
 
 def test_processing_strategy_config():
     """Test getting processing strategy configuration with new methods."""
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Get available strategies
     strategies = handler.get_data_processing_strategy_names()
@@ -106,7 +106,7 @@ def test_processing_strategy_config():
 
 def test_embedder_config():
     """Test getting embedder configuration."""
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Get a database config first
     db_config = handler.get_database_config("main_database")
@@ -121,7 +121,7 @@ def test_embedder_config():
 
 def test_retrieval_strategy_config():
     """Test getting retrieval strategy configuration."""
-    handler = SchemaHandler("demos/demo_strategies.yaml")
+    handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
 
     # Get a database config first
     db_config = handler.get_database_config("main_database")

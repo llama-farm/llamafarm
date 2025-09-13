@@ -1,6 +1,6 @@
 import pytest
 
-from core.base import Document, ProcessingResult, Parser, Embedder, VectorStore, Pipeline, Component
+from rag.core.base import Document, ProcessingResult, Parser, Embedder, VectorStore, Pipeline, Component
 
 
 class DummyParser(Parser):

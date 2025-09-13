@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from components.embedders.ollama_embedder import OllamaEmbedder
+from rag.components.embedders.ollama_embedder import OllamaEmbedder
 
 
 class TestOllamaEmbedder:

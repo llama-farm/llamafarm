@@ -16,7 +16,7 @@ def test_faiss_store():
     print("🧪 Testing FAISSStore...")
     
     try:
-        from components.stores.faiss_store import FAISSStore
+        from rag.components.stores.faiss_store import FAISSStore
         
         print("⚠️  FAISSStore - Testing basic instantiation (requires FAISS library)")
         
@@ -65,7 +65,7 @@ def test_pinecone_store():
     print("\n🧪 Testing PineconeStore...")
     
     try:
-        from components.stores.pinecone_store import PineconeStore
+        from rag.components.stores.pinecone_store import PineconeStore
         
         # Check if API key is available
         api_key = os.getenv("PINECONE_API_KEY")
@@ -136,7 +136,7 @@ def test_qdrant_store():
     print("\n🧪 Testing QdrantStore...")
     
     try:
-        from components.stores.qdrant_store import QdrantStore
+        from rag.components.stores.qdrant_store import QdrantStore
         
         print("⚠️  QdrantStore - Testing without running Qdrant server")
         print("   Testing basic instantiation...")
@@ -195,7 +195,7 @@ def test_vector_store_comparison():
         
         # Test FAISS
         try:
-            from components.stores.faiss_store import FAISSStore
+            from rag.components.stores.faiss_store import FAISSStore
             stores_available["FAISS"] = {
                 "type": "local",
                 "requires": "faiss-cpu or faiss-gpu",
@@ -210,7 +210,7 @@ def test_vector_store_comparison():
         
         # Test Pinecone
         try:
-            from components.stores.pinecone_store import PineconeStore
+            from rag.components.stores.pinecone_store import PineconeStore
             stores_available["Pinecone"] = {
                 "type": "cloud",
                 "requires": "pinecone-client + API key",
@@ -225,7 +225,7 @@ def test_vector_store_comparison():
         
         # Test Qdrant
         try:
-            from components.stores.qdrant_store import QdrantStore
+            from rag.components.stores.qdrant_store import QdrantStore
             stores_available["Qdrant"] = {
                 "type": "self-hosted/cloud",
                 "requires": "qdrant-client + server",
@@ -240,7 +240,7 @@ def test_vector_store_comparison():
         
         # Test existing ChromaDB for comparison
         try:
-            from components.stores.chroma_store import ChromaStore
+            from rag.components.stores.chroma_store import ChromaStore
             stores_available["ChromaDB"] = {
                 "type": "local",
                 "requires": "chromadb",

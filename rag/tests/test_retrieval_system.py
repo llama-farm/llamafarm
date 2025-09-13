@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 from api import SearchAPI, search
-from core.factories import RetrievalStrategyFactory, create_retrieval_strategy_from_config
+from rag.core.factories import RetrievalStrategyFactory, create_retrieval_strategy_from_config
 
 
 def test_basic_setup():

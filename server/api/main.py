@@ -43,3 +43,6 @@ def llama_farm_api() -> fastapi.FastAPI:
     )
 
     return app
+
+
+app = llama_farm_api()

@@ -32,6 +32,10 @@ dependencies = [
     "jsonref>=1.1.0",
     "celery>=5.5.3",
     "requests>=2.25.0",
+    # RAG dependencies
+    "chromadb>=1.0.0",
+    "pyyaml>=6.0.0",
+    "python-magic>=0.4.0",
 ]
 
 [project.optional-dependencies]

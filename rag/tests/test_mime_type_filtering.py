@@ -6,7 +6,7 @@ Tests the two-tier MIME type filtering system for strategies and parsers.
 
 import unittest
 from pathlib import Path
-from core.mime_type_filter import MimeTypeFilter, filter_files_for_strategy, get_parser_for_file
+from rag.core.mime_type_filter import MimeTypeFilter, filter_files_for_strategy, get_parser_for_file
 
 
 class TestMimeTypeFiltering(unittest.TestCase):

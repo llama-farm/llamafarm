@@ -7,7 +7,7 @@ namespace: default
 # =============================================================================
 runtime:
   provider: ollama
-  model: llama3.2
+  model: llama3.1:8b
   base_url: http://localhost:11434
   temperature: 0.5
   # api_key: optional, not needed for ollama
@@ -17,7 +17,9 @@ runtime:
 # =============================================================================
 # PROMPTS CONFIGURATION
 # =============================================================================
-prompts: []
+prompts:
+- role: system
+  content: You are a helpful assistant.
 
 # =============================================================================
 # DATASETS CONFIGURATION
@@ -79,234 +81,179 @@ rag:
             fallback_multiplier: 2
 
   # =============================================================================
-  # DATA PROCESSING STRATEGIES
+  # DATA PROCESSING STRATEGIES - SINGLE UNIFIED STRATEGY
   # =============================================================================
   data_processing_strategies:
-    # Basic PDF processing
-    - name: "pdf_processing"
-      description: "Standard PDF document processing"
-      # DirectoryParser configuration (ALWAYS ACTIVE)
-      directory_config:
-        recursive: true
-        supported_files: ["*.pdf", "*.PDF"]  # Glob patterns for accepted files
-        exclude_patterns: ["*.tmp", ".*"]
-        max_files: 1000
-        follow_symlinks: false
+    # Universal document processor - handles all file types
+    - name: "universal_processor"
+      description: "Unified processor for PDFs, Word docs, CSVs, Markdown, and text files"
       parsers:
+        # PDF Parser with robust fallback
+        - type: "PDFParser_LlamaIndex"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          file_exclude_patterns: ["*_draft.pdf", "*.tmp.pdf"]
+          priority: 100  # Primary PDF parser
+          config:
+            chunk_strategy: "semantic"
+            chunk_size: 1000
+            chunk_overlap: 200
+            extract_metadata: true
+            extract_tables: true
+        
         - type: "PDFParser_PyPDF2"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          file_exclude_patterns: ["*_draft.pdf", "*.tmp.pdf"]
+          priority: 50  # Fallback PDF parser
           config:
             chunk_size: 1000
             chunk_overlap: 150
             chunk_strategy: "paragraphs"
             extract_metadata: true
-      extractors:
-        - type: "ContentStatisticsExtractor"
+        
+        # Word Document Parser
+        - type: "DocxParser_LlamaIndex"
+          file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
+          file_exclude_patterns: ["~$*", "*.tmp"]  # Exclude temp Word files
+          priority: 100
           config:
-            include_readability: true
-            include_vocabulary: true
-            include_structure: true
-        - type: "EntityExtractor"
-          config:
-            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT"]
-            use_fallback: true
-            min_entity_length: 2
-        - type: "KeywordExtractor"
-          config:
-            algorithm: "yake"
-            max_keywords: 10
-            min_keyword_length: 3
-
-    # Basic text processing
-    - name: "text_processing"
-      description: "Plain text document processing"
-      # DirectoryParser configuration
-      directory_config:
-        recursive: true
-        supported_files: ["*.txt", "*.text", "*.log"]  # Glob patterns for text files
-        exclude_patterns: ["*.tmp", ".*"]
-        max_files: 1000
-        follow_symlinks: false
-      parsers:
-        - type: "TextParser_Python"
-          config:
-            encoding: "utf-8"
-            chunk_size: 1200
-            chunk_overlap: 200
-            chunk_strategy: "sentences"
-            clean_text: true
-      extractors:
-        - type: "ContentStatisticsExtractor"
-          config:
-            include_readability: true
-            include_vocabulary: true
-            include_structure: true
-        - type: "EntityExtractor"
-          config:
-            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT", "PRODUCT"]
-            use_fallback: true
-            min_entity_length: 2
-
-    # Markdown processing
-    - name: "markdown_processing"
-      description: "Markdown document processing with structure preservation"
-      # DirectoryParser configuration
-      directory_config:
-        recursive: true
-        supported_files: ["*.md", "*.markdown", "*.mdown", "*.mkd"]  # Glob patterns for markdown files
-        exclude_patterns: ["*.tmp", ".*", "node_modules/*"]
-        max_files: 1000
-        follow_symlinks: false
-      parsers:
+            chunk_size: 1000
+            chunk_overlap: 150
+            extract_metadata: true
+            extract_tables: true
+        
+        # Markdown Parser
         - type: "MarkdownParser_Python"
+          file_include_patterns: ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*"]
+          file_exclude_patterns: ["*.tmp.md", "_draft*.md"]
+          priority: 100
           config:
             chunk_size: 1000
             chunk_strategy: "sections"
             extract_metadata: true
             extract_code_blocks: true
             extract_links: true
-      extractors:
-        - type: "ContentStatisticsExtractor"
-          config:
-            include_readability: true
-            include_vocabulary: true
-            include_structure: true
-        - type: "EntityExtractor"
-          config:
-            entity_types: ["PERSON", "ORG", "PRODUCT", "CARDINAL", "GPE"]
-            use_fallback: true
-            min_entity_length: 2
-
-    # CSV/structured data processing
-    - name: "csv_processing"
-      description: "CSV and structured data processing"
-      # DirectoryParser configuration
-      directory_config:
-        recursive: true
-        supported_files: ["*.csv", "*.tsv", "*.CSV", "*.TSV"]  # Glob patterns for CSV files
-        exclude_patterns: ["*.tmp", ".*"]
-        max_files: 500
-        follow_symlinks: false
-      parsers:
+        
+        # CSV/TSV Parser
         - type: "CSVParser_Pandas"
+          file_include_patterns: ["*.csv", "*.CSV", "*.tsv", "*.TSV", "*.dat"]
+          file_exclude_patterns: ["*_backup.csv", "*.tmp.csv"]
+          priority: 100
           config:
             chunk_size: 500
             chunk_strategy: "rows"
             extract_metadata: true
-      extractors:
-        - type: "EntityExtractor"
+            encoding: "utf-8"
+        
+        # Excel Parser
+        - type: "ExcelParser_Pandas"
+          file_include_patterns: ["*.xlsx", "*.XLSX", "*.xls", "*.XLS"]
+          file_exclude_patterns: ["~$*", "*.tmp.xlsx"]  # Exclude temp Excel files
+          priority: 100
           config:
-            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PERCENT"]
-            use_fallback: true
-            min_entity_length: 2
-        - type: "DateTimeExtractor"
+            chunk_size: 500
+            sheets: null  # Process all sheets
+            extract_metadata: true
+        
+        # Plain Text Parser (catch-all for text files)
+        - type: "TextParser_Python"
+          file_include_patterns: [
+            "*.txt", "*.text", "*.log", 
+            "*.json", "*.xml", "*.yaml", "*.yml", "*.toml",
+            "*.cfg", "*.conf", "*.ini",
+            "*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h",
+            "*.sh", "*.bash", "*.zsh",
+            "LICENSE*", "CHANGELOG*", "AUTHORS*"
+          ]
+          file_exclude_patterns: ["*.pyc", "*.pyo", "*.class", "*.o", "*.so", "*.dll"]
+          priority: 50  # Lower priority, acts as fallback
           config:
-            formats: ["ISO8601", "US", "EU"]
-            extract_relative: true
-
-    # Multi-format processing with LlamaIndex parsers
-    - name: "multi_format_llamaindex"
-      description: "Multi-format document processing using LlamaIndex parsers"
-      # DirectoryParser configuration - handles ALL file filtering
-      directory_config:
-        recursive: true
-        # Use glob patterns to accept multiple file types
-        supported_files: [
-          "*.pdf", "*.PDF",
-          "*.csv", "*.tsv", "*.CSV", "*.TSV",
-          "*.docx", "*.DOCX",
-          "*.xlsx", "*.XLSX",
-          "*.md", "*.markdown",
-          "*.txt", "*.text"
-        ]
-        exclude_patterns: ["*.tmp", ".*", "__pycache__/*", "node_modules/*"]
-        max_files: 5000
-        follow_symlinks: false
-      parsers:
-        # PDF parser
-        - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
-          file_extensions: [".pdf", ".PDF"]
-          config:
-            chunk_strategy: "semantic"
-            chunk_size: 1000
+            encoding: "utf-8"
+            chunk_size: 1200
             chunk_overlap: 200
-            preserve_equations: true
-            extract_images: false
+            chunk_strategy: "sentences"
+            clean_text: true
             extract_metadata: true
-        # CSV parser for structured data
-        - type: "CSVParser_LlamaIndex"
-          mime_types: ["text/csv", "text/tab-separated-values"]
-          file_extensions: [".csv", ".tsv", ".CSV", ".TSV"]
-          config:
-            chunk_size: 500
-            chunk_overlap: 50
-            extract_metadata: true
-        # Word document parser
-        - type: "DocxParser_LlamaIndex"
-          mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
-          file_extensions: [".docx", ".DOCX"]
-          config:
-            chunk_size: 1000
-            chunk_overlap: 150
-            extract_metadata: true
-        # Excel parser
-        - type: "ExcelParser_LlamaIndex"
-          mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
-          file_extensions: [".xlsx", ".XLSX"]
-          config:
-            chunk_size: 500
-            extract_metadata: true
-        # Markdown parser
-        - type: "MarkdownParser_LlamaIndex"
-          mime_types: ["text/markdown", "text/x-markdown"]
-          file_extensions: [".md", ".markdown", ".mdown", ".mkd"]
-          config:
-            chunk_size: 1000
-            chunk_overlap: 150
-            extract_metadata: true
-        # Plain text parser as fallback
-        - type: "TextParser_LlamaIndex"
-          mime_types: ["text/plain"]
-          file_extensions: [".txt", ".text", ".log"]
-          config:
-            chunk_size: 1000
-            chunk_overlap: 150
-            extract_metadata: true
+      
+      # Extractors with file pattern matching
       extractors:
+        # Universal extractors - work on all file types
         - type: "ContentStatisticsExtractor"
+          file_include_patterns: ["*"]  # Apply to all files
+          file_exclude_patterns: []
+          priority: 100
           config:
             include_readability: true
             include_vocabulary: true
             include_structure: true
+        
         - type: "EntityExtractor"
+          file_include_patterns: ["*"]  # Apply to all files
+          file_exclude_patterns: []
+          priority: 90
           config:
             entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT", "MONEY", "PERCENT"]
             use_fallback: true
-  
-    # Generic text processing (fallback for unknown file types)
-    - name: "auto_processing"
-      description: "Generic text processing for various file types"
-      # DirectoryParser configuration - accepts all files
-      directory_config:
-        recursive: true
-        supported_files: ["*"]  # Accept all files (wildcard pattern)
-        exclude_patterns: ["*.tmp", ".*", "*.pyc", "__pycache__/*"]
-        max_files: 1000
-        follow_symlinks: false
-      parsers:
-        - type: "TextParser_Python"
+            min_entity_length: 2
+        
+        - type: "KeywordExtractor"
+          file_include_patterns: ["*"]  # Apply to all files
+          file_exclude_patterns: []
+          priority: 80
           config:
-            chunk_size: 1000
-            chunk_overlap: 100
-            chunk_strategy: "sentences"
-            extract_metadata: true
-      extractors:
-        - type: "ContentStatisticsExtractor"
+            algorithm: "yake"
+            max_keywords: 10
+            min_keyword_length: 3
+        
+        # PDF-specific extractors
+        - type: "TableExtractor"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          file_exclude_patterns: []
+          priority: 100
           config:
-            include_readability: true
-            include_vocabulary: true
-            include_structure: true
-        - type: "EntityExtractor"
+            output_format: "dict"
+            extract_headers: true
+            merge_cells: true
+        
+        # CSV/Excel-specific extractors
+        - type: "DateTimeExtractor"
+          file_include_patterns: ["*.csv", "*.xlsx", "*.xls", "*.tsv"]
+          file_exclude_patterns: []
+          priority: 100
           config:
-            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT"]
-            use_fallback: true
+            formats: ["ISO8601", "US", "EU"]
+            extract_relative: true
+            extract_times: true
+        
+        # Code file extractors
+        - type: "PatternExtractor"
+          file_include_patterns: ["*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h"]
+          file_exclude_patterns: []
+          priority: 100
+          config:
+            predefined_patterns: ["email", "url", "ip_address", "version"]
+            custom_patterns:
+              - name: "function_def"
+                pattern: "def\\s+\\w+\\s*\\("
+                description: "Python function definitions"
+              - name: "class_def"
+                pattern: "class\\s+\\w+[\\(\\:]"
+                description: "Class definitions"
+        
+        # Markdown-specific extractors
+        - type: "HeadingExtractor"
+          file_include_patterns: ["*.md", "*.markdown", "README*"]
+          file_exclude_patterns: []
+          priority: 100
+          config:
+            max_level: 6
+            include_hierarchy: true
+            extract_outline: true
+        
+        - type: "LinkExtractor"
+          file_include_patterns: ["*.md", "*.markdown", "*.html", "*.htm"]
+          file_exclude_patterns: []
+          priority: 90
+          config:
+            extract_urls: true
+            extract_emails: true
+            extract_domains: true

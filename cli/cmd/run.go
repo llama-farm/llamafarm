@@ -11,7 +11,12 @@ import (
 )
 
 var (
-	runInputFile string
+	runInputFile        string
+	runRAGDatabase      string
+	runRetrievalStrategy string
+	runRAGTopK          int
+	runRAGEnabled       bool
+	runRAGScoreThreshold float64
 )
 
 // runCmd represents the `lf run` command
@@ -31,7 +36,16 @@ Examples:
   lf run "What models are configured?"
 
   # Project inferred from llamafarm.yaml, input file
-  lf run -f ./prompt.txt`,
+  lf run -f ./prompt.txt
+  
+  # Run with RAG enabled
+  lf run --rag "What is transformer architecture?"
+  
+  # Run with specific RAG database
+  lf run --rag --rag-database main_database "Explain attention mechanism"
+  
+  # Run with custom retrieval strategy and top-k
+  lf run --rag --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		// Valid forms:
 		// 1) run <ns>/<proj> <input>
@@ -123,6 +137,12 @@ Examples:
 			Temperature: temperature,
 			MaxTokens:   maxTokens,
 			HTTPClient:  getHTTPClient(),
+			// RAG settings
+			RAGEnabled:          runRAGEnabled,
+			RAGDatabase:         runRAGDatabase,
+			RAGRetrievalStrategy: runRetrievalStrategy,
+			RAGTopK:             runRAGTopK,
+			RAGScoreThreshold:   runRAGScoreThreshold,
 		}
 
 		messages := []ChatMessage{{Role: "user", Content: input}}
@@ -141,5 +161,13 @@ Examples:
 
 func init() {
 	runCmd.Flags().StringVarP(&runInputFile, "file", "f", "", "path to file containing input text")
+	
+	// RAG flags
+	runCmd.Flags().BoolVar(&runRAGEnabled, "rag", false, "Enable RAG (Retrieval-Augmented Generation)")
+	runCmd.Flags().StringVar(&runRAGDatabase, "rag-database", "", "RAG database to use (default: from config)")
+	runCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
+	runCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
+	runCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")
+	
 	rootCmd.AddCommand(runCmd)
 }

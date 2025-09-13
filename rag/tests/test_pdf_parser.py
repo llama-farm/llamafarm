@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
-from core.base import Document
+from rag.components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
+from rag.core.base import Document
 
 
 class TestPDFParser:

@@ -8,7 +8,7 @@ import os
 # Test the CSV parsers
 def test_csv_parser_pandas(tmp_path):
     """Test the Pandas CSV parser."""
-    from components.parsers.csv.pandas_parser import CSVParser_Pandas
+    from rag.components.parsers.csv.pandas_parser import CSVParser_Pandas
     
     # Create a test CSV file
     csv_content = """subject,body,type,priority
@@ -40,7 +40,7 @@ Data Error,Database showing wrong values,Bug,high"""
 
 def test_csv_parser_python(tmp_path):
     """Test the Python CSV parser."""
-    from components.parsers.csv.python_parser import CSVParser_Python
+    from rag.components.parsers.csv.python_parser import CSVParser_Python
     
     # Create a test CSV file
     csv_content = """subject,body,type,priority
@@ -70,7 +70,7 @@ Data Error,Database showing wrong values,Bug,high"""
 
 def test_pdf_parser_pypdf2(tmp_path):
     """Test the PyPDF2 parser."""
-    from components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
+    from rag.components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
     
     # Note: This test requires a real PDF file to work properly
     # For now, just test that the parser can be instantiated
@@ -86,7 +86,7 @@ def test_pdf_parser_pypdf2(tmp_path):
 
 def test_docx_parser(tmp_path):
     """Test the DOCX parser."""
-    from components.parsers.docx.python_docx_parser import DocxParser_PythonDocx
+    from rag.components.parsers.docx.python_docx_parser import DocxParser_PythonDocx
     
     # Test basic instantiation
     parser = DocxParser_PythonDocx(config={
@@ -101,7 +101,7 @@ def test_docx_parser(tmp_path):
 
 def test_markdown_parser(tmp_path):
     """Test the Markdown parser."""
-    from components.parsers.markdown.python_parser import MarkdownParser_Python
+    from rag.components.parsers.markdown.python_parser import MarkdownParser_Python
     
     # Create a test markdown file
     markdown_content = """---
@@ -150,7 +150,7 @@ def hello():
 
 def test_text_parser_python(tmp_path):
     """Test the Python text parser."""
-    from components.parsers.text.python_parser import TextParser_Python
+    from rag.components.parsers.text.python_parser import TextParser_Python
     
     # Create a test text file
     text_content = """This is a test document.
@@ -188,7 +188,7 @@ Final paragraph with conclusion."""
 
 def test_text_parser_llamaindex(tmp_path):
     """Test the LlamaIndex text parser."""
-    from components.parsers.text.llamaindex_parser import TextParser_LlamaIndex
+    from rag.components.parsers.text.llamaindex_parser import TextParser_LlamaIndex
     
     # Create a test text file
     text_content = """This is a test document for LlamaIndex parser.
@@ -227,7 +227,7 @@ The parser can handle various text formats."""
 
 def test_excel_parser_openpyxl(tmp_path):
     """Test the OpenPyXL Excel parser."""
-    from components.parsers.excel.openpyxl_parser import ExcelParser_OpenPyXL
+    from rag.components.parsers.excel.openpyxl_parser import ExcelParser_OpenPyXL
     
     # Test basic instantiation (actual Excel parsing requires openpyxl and .xlsx file)
     parser = ExcelParser_OpenPyXL(config={
@@ -242,7 +242,7 @@ def test_excel_parser_openpyxl(tmp_path):
 
 def test_excel_parser_pandas(tmp_path):
     """Test the Pandas Excel parser."""
-    from components.parsers.excel.pandas_parser import ExcelParser_Pandas
+    from rag.components.parsers.excel.pandas_parser import ExcelParser_Pandas
     
     # Test basic instantiation
     parser = ExcelParser_Pandas(config={
@@ -257,7 +257,7 @@ def test_excel_parser_pandas(tmp_path):
 
 def test_parser_factory():
     """Test the parser factory."""
-    from components.parsers.parser_factory import ParserFactory
+    from rag.components.parsers.parser_factory import ParserFactory
     
     # Test creating a parser instance using the backward compatible interface
     pdf_parser = ParserFactory.create_parser("PDFParser_PyPDF2")
@@ -271,7 +271,7 @@ def test_parser_factory():
 
 def test_tool_aware_parser_factory():
     """Test the tool-aware parser factory."""
-    from components.parsers.parser_factory import ToolAwareParserFactory
+    from rag.components.parsers.parser_factory import ToolAwareParserFactory
     
     # Test parser discovery
     parsers = ToolAwareParserFactory.discover_parsers()
@@ -292,7 +292,7 @@ def test_tool_aware_parser_factory():
 
 def test_parser_registry():
     """Test the parser registry."""
-    from components.parsers.parser_registry import ParserRegistry
+    from rag.components.parsers.parser_registry import ParserRegistry
     
     registry = ParserRegistry()
     
@@ -319,7 +319,7 @@ def test_parser_registry():
 
 def test_parser_with_chunking(tmp_path):
     """Test parser with chunking enabled."""
-    from components.parsers.text.python_parser import TextParser_Python
+    from rag.components.parsers.text.python_parser import TextParser_Python
     
     # Create a long text file that should be chunked
     long_text = "This is a test sentence. " * 100  # Create a long text
@@ -349,7 +349,7 @@ def test_parser_with_chunking(tmp_path):
 # Additional tests for all LlamaIndex parsers
 def test_markdown_parser_llamaindex(tmp_path):
     """Test the LlamaIndex Markdown parser."""
-    from components.parsers.markdown.llamaindex_parser import MarkdownParser_LlamaIndex
+    from rag.components.parsers.markdown.llamaindex_parser import MarkdownParser_LlamaIndex
     
     # Create a test markdown file
     markdown_content = """---
@@ -397,7 +397,7 @@ Final section with conclusion.
 
 def test_pdf_parser_llamaindex(tmp_path):
     """Test the LlamaIndex PDF parser."""
-    from components.parsers.pdf.llamaindex_parser import PDFParser_LlamaIndex
+    from rag.components.parsers.pdf.llamaindex_parser import PDFParser_LlamaIndex
     
     # Test basic instantiation
     parser = PDFParser_LlamaIndex(config={
@@ -415,7 +415,7 @@ def test_pdf_parser_llamaindex(tmp_path):
 
 def test_csv_parser_llamaindex(tmp_path):
     """Test the LlamaIndex CSV parser."""
-    from components.parsers.csv.llamaindex_parser import CSVParser_LlamaIndex
+    from rag.components.parsers.csv.llamaindex_parser import CSVParser_LlamaIndex
     
     # Create a test CSV file
     csv_content = """subject,body,type,priority
@@ -445,7 +445,7 @@ Data Error,Database showing wrong values,Bug,high"""
 
 def test_docx_parser_llamaindex(tmp_path):
     """Test the LlamaIndex DOCX parser."""
-    from components.parsers.docx.llamaindex_parser import DocxParser_LlamaIndex
+    from rag.components.parsers.docx.llamaindex_parser import DocxParser_LlamaIndex
     
     # Test basic instantiation
     parser = DocxParser_LlamaIndex(config={
@@ -463,7 +463,7 @@ def test_docx_parser_llamaindex(tmp_path):
 
 def test_excel_parser_llamaindex(tmp_path):
     """Test the LlamaIndex Excel parser."""
-    from components.parsers.excel.llamaindex_parser import ExcelParser_LlamaIndex
+    from rag.components.parsers.excel.llamaindex_parser import ExcelParser_LlamaIndex
     
     # Test basic instantiation
     parser = ExcelParser_LlamaIndex(config={
@@ -482,7 +482,7 @@ def test_excel_parser_llamaindex(tmp_path):
 
 def test_parser_registry_includes_llamaindex():
     """Test that parser registry includes all LlamaIndex parsers."""
-    from components.parsers.parser_registry import ParserRegistry
+    from rag.components.parsers.parser_registry import ParserRegistry
     
     registry = ParserRegistry()
     all_parsers = registry.list_all_parsers()
@@ -508,7 +508,7 @@ def test_parser_registry_includes_llamaindex():
 
 def test_parser_factory_creates_llamaindex_parsers():
     """Test that parser factory can create LlamaIndex parsers."""
-    from components.parsers.parser_factory import ToolAwareParserFactory
+    from rag.components.parsers.parser_factory import ToolAwareParserFactory
     
     # Test creating each LlamaIndex parser
     llamaindex_parsers = [

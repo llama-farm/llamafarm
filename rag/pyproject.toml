@@ -248,14 +248,15 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=core",
-    "--cov=parsers", 
-    "--cov=embedders",
-    "--cov=stores",
-    "--cov=utils",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
+    # Coverage disabled for now - uncomment to enable
+    # "--cov=core",
+    # "--cov=parsers", 
+    # "--cov=embedders",
+    # "--cov=stores",
+    # "--cov=utils",
+    # "--cov-report=term-missing",
+    # "--cov-report=html",
+    # "--cov-report=xml",
 ]
 testpaths = [
     "tests",

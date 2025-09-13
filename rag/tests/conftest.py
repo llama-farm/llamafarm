@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Generator
 import pytest
 
-from core.base import Document
+from rag.core.base import Document
 
 
 @pytest.fixture

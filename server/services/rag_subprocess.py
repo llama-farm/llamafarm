@@ -202,67 +202,89 @@ def run_rag_cli_with_config_and_strategy(
     cwd: Path | None = None,
 ) -> tuple[int, str, str]:
     """
-    Run RAG CLI with new schema format and strategy name.
+    Run RAG ingestion directly using the IngestHandler.
 
     Args:
         source_path: Path to the file to ingest
-        config_dict: Configuration dictionary with new schema format
-        strategy_name: Name of the strategy to use
-        cwd: Working directory (defaults to rag_repo)
+        project_dir: The directory of the project
+        database_name: Name of the database to use
+        data_processing_strategy_name: Name of the data processing strategy to use
+        cwd: Working directory (not used anymore, kept for compatibility)
 
     Returns:
         Tuple of (exit_code, stdout, stderr)
     """
-    cwd = cwd or rag_repo
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Write the config file in YAML format (RAG CLI expects YAML for strategy files)
-        # cfg_path = Path(tmpdir) / "strategy_config.yaml"
-
-        # try:
-        #     import yaml  # type: ignore
-        # except ImportError:
-        #     logger.error("PyYAML not available, falling back to JSON config")
-        #     # Fallback to JSON if YAML is not available
-        #     cfg_path = Path(tmpdir) / "strategy_config.json"
-        #     import json
-
-        #     with open(cfg_path, "w") as f:
-        #         json.dump(config_dict, f)
-        # else:
-        #     with open(cfg_path, "w") as f:
-        #         yaml.dump(config_dict, f)
-
-        # Use the new RAG CLI command format with strategy
-        cmd = [
-            "uv",
-            "run",
-            "-q",
-            "python",
-            "cli.py",
-            "--config",
-            project_dir + "/llamafarm.yaml",
-            "ingest",
-            source_path,
-            "--database",
-            database_name,
-            "--data-processing-strategy",
-            data_processing_strategy_name,
-        ]
-
-        logger.info("Running RAG CLI", cmd=cmd)
-
+    try:
+        # Import the IngestHandler directly
+        import sys
+        import traceback
+        rag_path = str(repo_root)
+        if rag_path not in sys.path:
+            sys.path.insert(0, rag_path)
+        
         try:
-            completed = subprocess.run(
-                cmd,
-                cwd=str(cwd),
-                check=True,
-                capture_output=True,
-                text=True,
+            from rag.core.ingest_handler import IngestHandler
+        except ImportError as e:
+            logger.error(f"Failed to import IngestHandler: {e}")
+            logger.error(f"Python path: {sys.path}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return 1, "", f"Failed to import IngestHandler: {e}"
+        
+        # Configuration path
+        config_path = f"{project_dir}/llamafarm.yaml"
+        
+        logger.info(
+            "Using IngestHandler directly",
+            config_path=config_path,
+            data_processing_strategy=data_processing_strategy_name,
+            database=database_name,
+            source_path=source_path
+        )
+        
+        # Initialize the ingest handler with separate fields
+        try:
+            handler = IngestHandler(
+                config_path=config_path,
+                data_processing_strategy=data_processing_strategy_name,
+                database=database_name
             )
-            return completed.returncode, completed.stdout, completed.stderr
-        except subprocess.CalledProcessError as e:
-            return e.returncode, e.stdout or "", e.stderr or ""
+        except Exception as e:
+            logger.error(f"Failed to initialize IngestHandler: {e}")
+            logger.error(f"Config path: {config_path}")
+            logger.error(f"Strategy: {data_processing_strategy_name}")
+            logger.error(f"Database: {database_name}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return 1, "", f"Failed to initialize IngestHandler: {e}"
+        
+        # Read the file
+        with open(source_path, 'rb') as f:
+            file_data = f.read()
+        
+        # Create metadata
+        from pathlib import Path as PathLib
+        file_path = PathLib(source_path)
+        metadata = {
+            'filename': file_path.name,
+            'filepath': str(file_path),
+            'size': len(file_data)
+        }
+        
+        # Ingest the file
+        result = handler.ingest_file(
+            file_data=file_data,
+            metadata=metadata
+        )
+        
+        if result.get('status') == 'success':
+            stdout = f"Successfully ingested {result.get('document_count', 0)} documents from {file_path.name}"
+            return 0, stdout, ""
+        else:
+            stderr = f"Ingestion failed: {result.get('message', 'Unknown error')}"
+            return 1, "", stderr
+            
+    except Exception as e:
+        logger.error(f"Error during direct RAG ingestion: {e}")
+        return 1, "", str(e)
 
 
 def search_with_rag(

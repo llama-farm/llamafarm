@@ -17,7 +17,7 @@ def test_table_extractor():
     print("🧪 Testing TableExtractor...")
     
     try:
-        from components.extractors.table_extractor.table_extractor import TableExtractor
+        from rag.components.extractors.table_extractor.table_extractor import TableExtractor
         
         # Test text with various table formats
         test_text = """Document with multiple table formats:
@@ -109,7 +109,7 @@ def test_link_extractor():
     print("\n🧪 Testing LinkExtractor...")
     
     try:
-        from components.extractors.link_extractor.link_extractor import LinkExtractor
+        from rag.components.extractors.link_extractor.link_extractor import LinkExtractor
         
         # Test text with various link types
         test_text = """Contact information and links:
@@ -204,7 +204,7 @@ def test_heading_extractor():
     print("\n🧪 Testing HeadingExtractor...")
     
     try:
-        from components.extractors.heading_extractor.heading_extractor import HeadingExtractor
+        from rag.components.extractors.heading_extractor.heading_extractor import HeadingExtractor
         
         # Test text with various heading formats
         test_text = """DOCUMENT TITLE

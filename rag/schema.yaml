@@ -1888,70 +1888,6 @@ definitions:
         minLength: 10
         maxLength: 500
         description: Strategy description
-      directory_config:
-        type: object
-        title: Directory Processing Configuration
-        description: Configuration for processing directories of files (always-on)
-        additionalProperties: false
-        properties:
-          recursive:
-            type: boolean
-            default: true
-            description: Process subdirectories recursively
-          supported_files:
-            type: array
-            items:
-              type: string
-            default: ["*"]
-            description: Glob patterns for accepted files (recommended)
-            examples:
-              - ["*.pdf", "*.PDF"]  # PDF files
-              - ["*.txt", "*.log"]  # Text files
-              - ["*.testdata.csv"]  # Specific naming pattern
-              - ["report_*.json"]   # Files with prefix
-              - ["*"]  # Accept all files
-          exclude_patterns:
-            type: array
-            items:
-              type: string
-            default: []
-            description: File patterns to exclude (glob patterns)
-            examples:
-              - [".*", "__pycache__/*"]
-              - ["*.tmp", "*.bak"]
-          # Legacy fields (use supported_files instead)
-          include_patterns:
-            type: array
-            items:
-              type: string
-            default: ["*"]
-            description: "[DEPRECATED - use supported_files] File patterns to include"
-            deprecated: true
-          allowed_mime_types:
-            type: array
-            items:
-              type: string
-            default: []
-            description: "[DEPRECATED - use supported_files] MIME types to allow"
-            deprecated: true
-          allowed_extensions:
-            type: array
-            items:
-              type: string
-              pattern: ^\.[a-zA-Z0-9]+$
-            default: []
-            description: "[DEPRECATED - use supported_files] File extensions to allow"
-            deprecated: true
-          max_files:
-            type: integer
-            default: 1000
-            minimum: 1
-            maximum: 10000
-            description: Maximum number of files to process
-          follow_symlinks:
-            type: boolean
-            default: false
-            description: Follow symbolic links when traversing directories
       parsers:
         type: array
         title: Parsers
@@ -1995,6 +1931,29 @@ definitions:
                 - [".pdf", ".PDF"]  # PDF parser
                 - [".csv", ".tsv"]  # CSV parser
                 - [".md", ".markdown"]  # Markdown parser
+            file_include_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to include (e.g., ["*.pdf", "report_*.pdf"])
+              examples:
+                - ["*.pdf", "*.PDF"]  # All PDF files
+                - ["report_*.csv"]  # CSV files starting with report_
+                - ["README*", "*.md"]  # README files and markdown
+            file_exclude_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to exclude (e.g., ["*_draft.pdf", "*.tmp"])
+              examples:
+                - ["*_draft.pdf", "*.tmp.pdf"]  # Draft and temp PDFs
+                - ["~$*", "*.bak"]  # Temp and backup files
+            priority:
+              type: integer
+              description: Parser priority (higher = try first)
+              default: 50
+              minimum: 0
+              maximum: 1000
             mime_types:
               type: array
               items:
@@ -2035,4 +1994,25 @@ definitions:
             condition:
               type: string
               description: Optional condition for when to use this extractor
+            file_include_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to apply this extractor to
+              examples:
+                - ["*.pdf", "*.PDF"]  # PDF files only
+                - ["*"]  # All files
+            file_exclude_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to exclude from this extractor
+              examples:
+                - ["*.tmp", "*.bak"]  # Skip temp/backup files
+            priority:
+              type: integer
+              description: Extractor priority (higher = apply first)
+              default: 50
+              minimum: 0
+              maximum: 1000
  

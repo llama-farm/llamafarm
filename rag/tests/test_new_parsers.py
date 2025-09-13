@@ -17,7 +17,7 @@ def test_plain_text_parser():
     print("🧪 Testing PlainTextParser...")
     
     try:
-        from components.parsers.text_parser import PlainTextParser
+        from rag.components.parsers.text_parser import PlainTextParser
         
         # Create test text file
         test_content = """# Document Title
@@ -91,7 +91,7 @@ def test_html_parser():
     print("\\n🧪 Testing HTMLParser...")
     
     try:
-        from components.parsers.html_parser import HTMLParser
+        from rag.components.parsers.html_parser import HTMLParser
         
         # Create test HTML file
         test_html = """<!DOCTYPE html>
@@ -185,7 +185,7 @@ def test_docx_parser():
     print("\\n🧪 Testing DocxParser...")
     
     try:
-        from components.parsers.docx_parser import DocxParser
+        from rag.components.parsers.docx_parser import DocxParser
         
         print("⚠️  DocxParser - Skipping test (requires actual .docx file and python-docx)")
         print("   To test manually: create a test.docx file and run:")
@@ -215,7 +215,7 @@ def test_excel_parser():
     print("\\n🧪 Testing ExcelParser...")
     
     try:
-        from components.parsers.excel_parser import ExcelParser
+        from rag.components.parsers.excel_parser import ExcelParser
         
         print("⚠️  ExcelParser - Skipping test (requires actual .xlsx file and pandas/openpyxl)")
         print("   To test manually: create a test.xlsx file and run:")
@@ -245,7 +245,7 @@ def test_markdown_parser():
     print("\\n🧪 Testing MarkdownParser...")
     
     try:
-        from components.parsers.markdown_parser import MarkdownParser
+        from rag.components.parsers.markdown_parser import MarkdownParser
         
         # Create test markdown file
         test_markdown = """---

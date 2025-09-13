@@ -1,6 +1,6 @@
 """Tests for CSV parsers (aligned with current parser API)."""
 
-from components.parsers.csv.python_parser import CSVParser_Python
+from rag.components.parsers.csv.python_parser import CSVParser_Python
 
 
 class TestCSVParser:

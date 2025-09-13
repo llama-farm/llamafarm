@@ -15,7 +15,7 @@ def test_openai_embedder():
     print("🧪 Testing OpenAIEmbedder...")
     
     try:
-        from components.embedders.openai_embedder import OpenAIEmbedder
+        from rag.components.embedders.openai_embedder import OpenAIEmbedder
         
         # Check if API key is available
         api_key = os.getenv("OPENAI_API_KEY")
@@ -89,7 +89,7 @@ def test_huggingface_embedder():
     print("\n🧪 Testing HuggingFaceEmbedder...")
     
     try:
-        from components.embedders.huggingface_embedder import HuggingFaceEmbedder
+        from rag.components.embedders.huggingface_embedder import HuggingFaceEmbedder
         
         print("⚠️  HuggingFaceEmbedder - Skipping full test (requires large model download)")
         print("   Testing basic instantiation...")
@@ -152,7 +152,7 @@ def test_sentence_transformer_embedder():
     print("\n🧪 Testing SentenceTransformerEmbedder...")
     
     try:
-        from components.embedders.sentence_transformer_embedder import SentenceTransformerEmbedder
+        from rag.components.embedders.sentence_transformer_embedder import SentenceTransformerEmbedder
         
         print("⚠️  SentenceTransformerEmbedder - Skipping full test (requires model download)")
         print("   Testing basic instantiation...")
@@ -223,7 +223,7 @@ def test_embedder_comparison():
         
         # Test OpenAI
         try:
-            from components.embedders.openai_embedder import OpenAIEmbedder
+            from rag.components.embedders.openai_embedder import OpenAIEmbedder
             embedders_available["OpenAI"] = {
                 "requires": "openai library + API key",
                 "type": "cloud",
@@ -234,7 +234,7 @@ def test_embedder_comparison():
         
         # Test HuggingFace
         try:
-            from components.embedders.huggingface_embedder import HuggingFaceEmbedder
+            from rag.components.embedders.huggingface_embedder import HuggingFaceEmbedder
             embedders_available["HuggingFace"] = {
                 "requires": "transformers + torch",
                 "type": "local",
@@ -245,7 +245,7 @@ def test_embedder_comparison():
         
         # Test SentenceTransformers
         try:
-            from components.embedders.sentence_transformer_embedder import SentenceTransformerEmbedder
+            from rag.components.embedders.sentence_transformer_embedder import SentenceTransformerEmbedder
             embedders_available["SentenceTransformers"] = {
                 "requires": "sentence-transformers",
                 "type": "local",

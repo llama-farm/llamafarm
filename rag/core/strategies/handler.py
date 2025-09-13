@@ -88,7 +88,6 @@ class SchemaHandler:
                 return {
                     "parsers": strategy.get("parsers", []),
                     "extractors": strategy.get("extractors", []),
-                    "directory_config": strategy.get("directory_config", {}),
                 }
         raise ValueError(f"Data processing strategy '{strategy_name}' not found")
 
@@ -231,22 +230,26 @@ class SchemaHandler:
 
         return {"type": "BasicSimilarityStrategy", "config": {}}
 
+    def get_parsers_config(
+        self, proc_config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Get all parser configurations from processing strategy.
+        
+        Returns all parsers configured for the strategy.
+        """
+        return proc_config.get("parsers", [])
+    
     def get_parser_config(
         self, proc_config: Dict[str, Any], source_path: Optional[Path] = None
     ) -> Dict[str, Any]:
-        """Get parser configuration from processing strategy.
-
-        DirectoryParser is ALWAYS active at the strategy level.
+        """Get first parser configuration (for backward compatibility).
+        
+        DEPRECATED: Use get_parsers_config to get all parsers.
         """
-        # DirectoryParser is always on with directory_config
-        directory_config = proc_config.get("directory_config", {})
-
-        # Add parsers from the processing strategy
-        parsers = proc_config.get("parsers", [])
+        parsers = self.get_parsers_config(proc_config)
         if parsers:
-            directory_config["parsers"] = parsers
-
-        return {"type": "DirectoryParser", "config": directory_config}
+            return parsers[0]
+        return {"type": "TextParser_Python", "config": {}}
 
     def get_extractors_config(
         self, proc_config: Dict[str, Any]

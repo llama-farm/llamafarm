@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch, MagicMock
 import tempfile
 import json
 
-from core.document_manager import (
+from rag.core.document_manager import (
     DocumentManager,
     DocumentLifecycleManager,
     DocumentHashManager,
@@ -16,7 +16,7 @@ from core.document_manager import (
     DeletionStrategy,
     UpdateStrategy
 )
-from core.base import Document
+from rag.core.base import Document
 
 
 class TestDocumentHashManager:
