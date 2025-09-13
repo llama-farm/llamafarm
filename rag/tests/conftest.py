@@ -1,10 +1,17 @@
 """Essential pytest configuration and fixtures."""
 
+import sys
 import tempfile
 import shutil
 from pathlib import Path
 from typing import Generator
 import pytest
+
+# Add parent directories to path so 'rag' module can be imported
+rag_dir = Path(__file__).parent.parent  # /path/to/rag
+project_root = rag_dir.parent  # /path/to/llamafarm-1
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(rag_dir))
 
 from rag.core.base import Document
 
