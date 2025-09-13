@@ -150,7 +150,7 @@ def auto_register_components():
             if item.is_dir() and not item.name.startswith("_"):
                 try:
                     # Try to import the module
-                    module_name = f"components.{subdir}.{item.name}"
+                    module_name = f"models.components.{subdir}.{item.name}"
                     module = importlib.import_module(module_name)
                     
                     # Find the component class
