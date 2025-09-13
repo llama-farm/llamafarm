@@ -9,33 +9,38 @@ from rag.core.strategies.handler import SchemaHandler
 class TestStrategies:
     """Core strategy functionality tests."""
 
-    def test_schema_loading(self):
+    @pytest.fixture
+    def test_config_path(self):
+        """Get path to test config file."""
+        return str(Path(__file__).parent / "test_data" / "test_strategies.yaml")
+
+    def test_schema_loading(self, test_config_path):
         """Test loading schema from YAML file."""
-        handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
+        handler = SchemaHandler(test_config_path)
         
         assert handler.rag_config is not None
         assert "databases" in handler.rag_config or "data_processing_strategies" in handler.rag_config
 
-    def test_get_available_strategies(self):
+    def test_get_available_strategies(self, test_config_path):
         """Test getting available strategies."""
-        handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
+        handler = SchemaHandler(test_config_path)
         
         available = handler.get_available_strategies()
         assert isinstance(available, list)
         assert len(available) > 0
 
-    def test_strategy_name_parsing(self):
+    def test_strategy_name_parsing(self, test_config_path):
         """Test parsing strategy names."""
-        handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
+        handler = SchemaHandler(test_config_path)
         available = handler.get_available_strategies()
         
         if available:
             proc_name, db_name = handler.parse_strategy_name(available[0])
             assert proc_name is not None or db_name is not None
 
-    def test_get_combined_config(self):
+    def test_get_combined_config(self, test_config_path):
         """Test getting combined configuration."""
-        handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
+        handler = SchemaHandler(test_config_path)
         available = handler.get_available_strategies()
         
         if available:
@@ -43,9 +48,9 @@ class TestStrategies:
             assert config is not None
             assert "database" in config or "processing_strategy" in config
 
-    def test_database_config(self):
+    def test_database_config(self, test_config_path):
         """Test database configuration."""
-        handler = SchemaHandler("rag/tests/test_data/test_strategies.yaml")
+        handler = SchemaHandler(test_config_path)
         databases = handler.get_database_names()
         
         if databases:
