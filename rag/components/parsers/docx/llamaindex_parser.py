@@ -32,7 +32,7 @@ class DocxParser_LlamaIndex:
     
     def parse(self, source: str, **kwargs):
         """Parse DOCX using LlamaIndex."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
         
         try:
             from llama_index.readers.file import DocxReader

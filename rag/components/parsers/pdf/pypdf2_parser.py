@@ -47,7 +47,7 @@ class PDFParser_PyPDF2:
 
     def parse(self, source: str, **kwargs):
         """Parse PDF using PyPDF2."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             import PyPDF2

@@ -24,7 +24,7 @@ class ExcelParser_Pandas:
     
     def parse(self, source: str, **kwargs):
         """Parse Excel using Pandas."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
         
         try:
             import pandas as pd

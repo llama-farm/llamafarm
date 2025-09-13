@@ -7,8 +7,8 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
-from components.extractors.path_extractor import PathExtractor
+from rag.core.base import Document
+from rag.components.extractors.path_extractor import PathExtractor
 
 
 def test_path_extractor():

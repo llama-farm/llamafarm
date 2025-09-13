@@ -46,7 +46,7 @@ class PDFParser_LlamaIndex:
 
     def parse(self, source: str, **kwargs):
         """Parse PDF using LlamaIndex with fallback strategies."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         path = Path(source)
         if not path.exists():
@@ -69,7 +69,7 @@ class PDFParser_LlamaIndex:
 
     def _try_strategy(self, strategy: str, path: Path):
         """Try a specific parsing strategy."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             if strategy == "llama_pdf_reader":
@@ -86,7 +86,7 @@ class PDFParser_LlamaIndex:
 
     def _parse_with_llama_pdf(self, path: Path):
         """Parse using LlamaIndex PDFReader."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             from llama_index.readers.file import PDFReader
@@ -174,7 +174,7 @@ class PDFParser_LlamaIndex:
 
     def _parse_with_llama_pymupdf(self, path: Path):
         """Parse using LlamaIndex PyMuPDFReader."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             from llama_index.readers.file import PyMuPDFReader
@@ -258,7 +258,7 @@ class PDFParser_LlamaIndex:
 
     def _parse_with_direct_pymupdf(self, path: Path):
         """Parse directly using PyMuPDF."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             import fitz  # PyMuPDF
@@ -344,7 +344,7 @@ class PDFParser_LlamaIndex:
 
     def _parse_with_pypdf2(self, path: Path):
         """Fallback to PyPDF2."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             import PyPDF2

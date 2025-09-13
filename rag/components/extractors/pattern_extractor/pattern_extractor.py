@@ -9,7 +9,7 @@ import re
 from typing import Dict, Any, List, Optional, Tuple
 from collections import defaultdict
 
-from components.extractors.base import BaseExtractor
+from rag.components.extractors.base import BaseExtractor
 
 
 class PatternExtractor(BaseExtractor):
@@ -122,7 +122,7 @@ class PatternExtractor(BaseExtractor):
         Returns:
             List of enhanced documents with pattern metadata
         """
-        from core.base import Document
+        from rag.core.base import Document
         
         enhanced_docs = []
         for doc in documents:

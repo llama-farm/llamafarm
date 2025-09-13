@@ -40,7 +40,7 @@ class TextParser_LlamaIndex:
 
     def parse(self, source: str, **kwargs):
         """Parse text using LlamaIndex node parsers."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             # Try importing LlamaIndex components

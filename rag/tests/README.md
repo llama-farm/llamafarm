@@ -1,6 +1,6 @@
 # RAG Tests
 
-This directory contains comprehensive test suites for the RAG (Retrieval-Augmented Generation) system.
+**Streamlined test suite with 42 essential tests focusing on real functionality with minimal mocking.**
 
 ## Quick Start
 
