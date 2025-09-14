@@ -463,15 +463,6 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         <a href="https://github.com/llama-farm/llamafarm/commits?author=rgthelen" title="Code">💻</a>
       </td>
       <td align="center" valign="top" width="14.28%">
-        <a href="https://github.com/rachradulo">
-          <img src="https://avatars.githubusercontent.com/u/128095403?v=4?v=4&s=100" width="100px;" alt="rachradulo"/>
-          <br />
-          <sub><b>rachradulo</b></sub>
-        </a>
-        <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=rachradulo" title="Code">💻</a>
-      </td>
-      <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/rachmlenig">
           <img src="https://avatars.githubusercontent.com/u/106166434?v=4?v=4&s=100" width="100px;" alt="Racheal Ochalek"/>
           <br />
@@ -479,6 +470,15 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         </a>
         <br />
         <a href="https://github.com/llama-farm/llamafarm/commits?author=rachmlenig" title="Code">💻</a>
+      </td>
+      <td align="center" valign="top" width="14.28%">
+        <a href="https://github.com/apps/github-actions">
+          <img src="https://avatars.githubusercontent.com/in/15368?v=4?v=4&s=100" width="100px;" alt="github-actions[bot]"/>
+          <br />
+          <sub><b>github-actions[bot]</b></sub>
+        </a>
+        <br />
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=github-actions[bot]" title="Code">💻</a>
       </td>
       <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/davon-davis">
@@ -490,13 +490,13 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         <a href="https://github.com/llama-farm/llamafarm/commits?author=davon-davis" title="Code">💻</a>
       </td>
       <td align="center" valign="top" width="14.28%">
-        <a href="https://github.com/apps/github-actions">
-          <img src="https://avatars.githubusercontent.com/in/15368?v=4?v=4&s=100" width="100px;" alt="github-actions[bot]"/>
+        <a href="https://github.com/rachel-orrino">
+          <img src="https://avatars.githubusercontent.com/u/231560446?v=4?v=4&s=100" width="100px;" alt="rachel-orrino"/>
           <br />
-          <sub><b>github-actions[bot]</b></sub>
+          <sub><b>rachel-orrino</b></sub>
         </a>
         <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=github-actions[bot]" title="Code">💻</a>
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=rachel-orrino" title="Code">💻</a>
       </td>
     </tr>
   </tbody>
