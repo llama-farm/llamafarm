@@ -121,6 +121,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 
 	width, _, _ := term.GetSize(uintptr(os.Stdout.Fd()))
 
+	problems := renderServerStatusProblems(serverHealth)
+	transcript = append(transcript, problems)
+
 	return chatModel{
 		serverHealth:   serverHealth,
 		projectInfo:    projectInfo,
@@ -440,32 +443,16 @@ func listen(ch <-chan tea.Msg) tea.Cmd {
 	}
 }
 
-func serverStatusLine(health *HealthPayload) string {
+func renderServerStatusProblems(health *HealthPayload) string {
 	var b strings.Builder
 
-	var style = lipgloss.NewStyle().
-		PaddingTop(1).
-		PaddingBottom(1).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		BorderBottom(true)
-
 	if health == nil {
-		return style.Render("Server status: unknown")
+		return ""
 	}
 
-	if health.Status != "healthy" {
-		b.WriteString(fmt.Sprintf("%s Server status: %s", iconForStatus(health.Status), health.Status))
-		for _, c := range health.Components {
-			if c.Status != "healthy" {
-				b.WriteString(fmt.Sprintf("  %s %s %s", iconForStatus(c.Status), c.Name, c.Status))
-			}
-		}
-	} else {
-		b.WriteString(fmt.Sprintf("%s Server status: healthy", iconForStatus(health.Status)))
-	}
+	prettyPrintHealthProblems(&b, *health)
 
-	return style.Render(b.String())
+	return b.String()
 }
 
 func renderChatContent(m chatModel) string {
@@ -563,51 +550,6 @@ func renderInfoBar(m chatModel) string {
 
 func (m chatModel) View() string {
 	var b strings.Builder
-	// b.WriteString(serverStatusLine(m.serverHealth))
-	// b.WriteString("\n")
-
-	// var infoStyle = lipgloss.NewStyle().
-	// 	MarginBottom(1).
-	// 	BorderStyle(lipgloss.NormalBorder()).
-	// 	BorderForeground(lipgloss.Color("63"))
-
-	// serverLine := serverPrompt + " " + serverURL
-	// wrappedServer := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(serverLine)
-	// b.WriteString(wrappedServer + "\n")
-
-	// ollamaHostLine := ollamaHostPrompt + " " + ollamaHost
-	// wrappedOllamaHost := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(ollamaHostLine)
-	// b.WriteString(wrappedOllamaHost + "\n")
-
-	// projectLine := projectPrompt + " " + m.projectInfo.Namespace + "/" + m.projectInfo.Project
-	// wrappedProject := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(projectLine)
-	// b.WriteString(wrappedProject + "\n")
-
-	// // Designer status line
-	// if m.designerStatus != "" || m.designerURL != "" {
-	// 	ds := m.designerStatus
-	// 	if m.designerURL != "" {
-	// 		ds = "ready: " + m.designerURL
-	// 	}
-	// 	designerLine := "🎨 Designer: " + ds
-	// 	wrappedDesigner := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(designerLine)
-	// 	b.WriteString(wrappedDesigner + "\n")
-	// }
-
-	// if m.err != nil {
-	// 	errorText := fmt.Sprintf("We had some trouble: %v", m.err)
-	// 	wrappedError := lipgloss.NewStyle().Width(m.width - 2).Render(errorText)
-	// 	return "\n" + wrappedError + "\n\n"
-	// }
-
-	// if sessionID != "" {
-	// 	sessionLine := sessionPrompt + " " + sessionID
-	// 	wrappedSession := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(sessionLine)
-	// 	b.WriteString(wrappedSession + "\n")
-	// }
-	// b.WriteString("\n")
-	// b.WriteString(infoStyle.Render(b.String()))
-	// b.WriteString("\n")
 
 	b.WriteString(m.viewport.View())
 	b.WriteString(renderChatInput(m))

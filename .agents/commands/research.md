@@ -130,7 +130,7 @@ router = APIRouter()
 - **Don't plan yet**; planning implementation is done via a separate step after research.
 
 ## Timebox and check-ins
-- **Timebox discovery**: ~5 minutes to produce the research note.
+- **Timebox discovery**: ~15 minutes to produce the research note.
 - **Escalate blockers** early with specific questions and file references.
 
 ---

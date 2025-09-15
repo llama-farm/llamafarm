@@ -264,6 +264,7 @@ func prettyPrintHealth(w io.Writer, hr HealthPayload) {
 	case "healthy":
 		prefix = "✅"
 	}
+
 	fmt.Fprintf(w, "%s Server is %s\n", prefix, hr.Status)
 	if strings.TrimSpace(hr.Summary) != "" {
 		fmt.Fprintf(w, "Summary: %s\n", hr.Summary)
@@ -281,6 +282,32 @@ func prettyPrintHealth(w io.Writer, hr HealthPayload) {
 	if len(hr.Seeds) > 0 {
 		fmt.Fprintln(w, "Seeds:")
 		for _, s := range hr.Seeds {
+			icon := iconForStatus(s.Status)
+			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs)
+			for k, v := range s.Runtime {
+				fmt.Fprintf(w, "      %s: %v\n", k, v)
+			}
+		}
+	}
+}
+
+// prettyPrintHealthProblems prints only the non-healthy components and seeds from a HealthPayload.
+// It is intended for concise error reporting.
+func prettyPrintHealthProblems(w io.Writer, hr HealthPayload) {
+	// Check components
+	for _, c := range hr.Components {
+		if c.Status != "healthy" {
+			icon := iconForStatus(c.Status)
+			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, c.Name, c.Status, c.Message, c.LatencyMs)
+			for k, v := range c.Details {
+				fmt.Fprintf(w, "      %s: %v\n", k, v)
+			}
+		}
+	}
+
+	// Check seeds
+	for _, s := range hr.Seeds {
+		if s.Status != "healthy" {
 			icon := iconForStatus(s.Status)
 			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs)
 			for k, v := range s.Runtime {
