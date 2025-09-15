@@ -85,36 +85,190 @@ This example uses production-ready components:
 - **Multiple Parsers** - Handle various file formats
 - **Content Extractors** - Extract metadata and structure
 
-## Common Commands
+## CLI Commands for Dataset Management
 
-### Query Documents
+### 1. Build the CLI Tool
+```bash
+# Navigate to CLI directory and build
+cd cli
+go build -o lf main.go
+cd ..
+
+# Make it executable (optional)
+chmod +x ./lf
+```
+
+### 2. Initialize LlamaFarm Project
+```bash
+# Initialize a new project (if not already done)
+./lf init
+
+# Check project status
+./lf status
+```
+
+### 3. Create a New Dataset
+```bash
+# Create dataset with RAG strategy and database
+./lf datasets add \
+  --data-processing-strategy universal_processor \
+  --database main_database \
+  my-documents
+
+# Create dataset for specific document types
+./lf datasets add \
+  --data-processing-strategy pdf_processing \
+  --database main_database \
+  pdf-collection
+
+# Create dataset with custom strategy from config file
+./lf datasets add \
+  --strategy-file examples/rag_pipeline/llamafarm.yaml \
+  --data-processing-strategy universal_processor \
+  --database main_database \
+  research-papers
+```
+
+### 4. Add Data to Dataset
+```bash
+# Ingest a single file
+./lf datasets ingest my-documents path/to/document.pdf
+
+# Ingest multiple files
+./lf datasets ingest my-documents \
+  examples/rag_pipeline/sample_files/research_papers/transformer_architecture.txt \
+  examples/rag_pipeline/sample_files/research_papers/neural_scaling_laws.txt
+
+# Ingest all files from sample directories
+./lf datasets ingest my-documents \
+  examples/rag_pipeline/sample_files/research_papers/*.txt \
+  examples/rag_pipeline/sample_files/code_documentation/*.md \
+  examples/rag_pipeline/sample_files/news_articles/*.html
+
+# Real-world example with various file types
+./lf datasets ingest research-papers \
+  rag/demos/static_samples/research_papers/transformer_architecture.txt \
+  rag/demos/static_samples/customer_support/support_tickets.csv \
+  rag/demos/static_samples/code_documentation/api_reference.md \
+  rag/demos/static_samples/747/ryanair-737-700-800-fcom-rev-30.pdf
+```
+
+### 5. List and View Datasets
+```bash
+# List all datasets with file counts
+./lf datasets list
+
+# Show specific dataset details
+./lf datasets info my-documents
+
+# View dataset statistics
+./lf datasets stats my-documents
+```
+
+### 6. Query Documents (Future Feature)
 ```bash
 # Basic query
-lf rag query "What is transformer architecture?"
+./lf rag query --dataset my-documents "What is transformer architecture?"
 
 # Query with options
-lf rag query --top-k 5 --score-threshold 0.7 "explain attention mechanism"
+./lf rag query --dataset my-documents \
+  --top-k 5 \
+  --score-threshold 0.7 \
+  "explain attention mechanism"
+
+# Query across multiple datasets
+./lf rag query --dataset my-documents,research-papers \
+  "neural network scaling laws"
 ```
 
-### Manage Database
+### 7. Manage Datasets
 ```bash
-# View statistics
-lf rag stats
+# Delete a dataset
+./lf datasets delete my-documents
 
-# List documents
-lf rag list
+# Export dataset metadata
+./lf datasets export my-documents --output dataset-export.json
 
-# Clear database
-lf rag clear --force
+# Import dataset from export
+./lf datasets import dataset-export.json
 ```
 
-### Chat with RAG
+### 8. Chat with RAG Context (Future Feature)
 ```bash
-# Chat with RAG context
-lf run --rag "What papers discuss neural scaling?"
+# Chat using specific dataset
+./lf run --rag --dataset my-documents "What papers discuss neural scaling?"
 
-# Specify retrieval settings
-lf run --rag --rag-top-k 10 "Summarize the documentation"
+# Chat with retrieval settings
+./lf run --rag --dataset research-papers \
+  --rag-top-k 10 \
+  --rag-score-threshold 0.5 \
+  "Summarize the documentation"
+```
+
+## Complete Example Workflow
+
+Here's a full example of creating and populating a dataset:
+
+```bash
+# 1. Build the CLI
+cd cli && go build -o lf main.go && cd ..
+
+# 2. Initialize project (if needed)
+./lf init
+
+# 3. Create a dataset for research papers
+./lf datasets add \
+  --data-processing-strategy universal_processor \
+  --database main_database \
+  ai-research
+
+# 4. Add sample documents to the dataset
+./lf datasets ingest ai-research \
+  examples/rag_pipeline/sample_files/research_papers/transformer_architecture.txt \
+  examples/rag_pipeline/sample_files/research_papers/neural_scaling_laws.txt
+
+# 5. Verify the ingestion
+./lf datasets list
+
+# Output should show:
+# NAME          DATA PROCESSING STRATEGY   DATABASE        FILE COUNT
+# ----          ------------------------   --------        ----------
+# ai-research   universal_processor        main_database   2
+
+# 6. Add more documents of different types
+./lf datasets ingest ai-research \
+  examples/rag_pipeline/sample_files/code_documentation/api_reference.md \
+  examples/rag_pipeline/sample_files/news_articles/ai_breakthrough.html
+
+# 7. Check updated file count
+./lf datasets list
+
+# Output should show:
+# NAME          DATA PROCESSING STRATEGY   DATABASE        FILE COUNT
+# ----          ------------------------   --------        ----------
+# ai-research   universal_processor        main_database   4
+```
+
+## Using Custom Configuration
+
+To use a custom configuration file with specific parsers and settings:
+
+```bash
+# 1. Create dataset with custom config
+./lf datasets add \
+  --strategy-file examples/rag_pipeline/llamafarm.yaml \
+  --data-processing-strategy universal_processor \
+  --database main_database \
+  custom-dataset
+
+# 2. The configuration defines:
+#    - Which parsers to use for different file types
+#    - Embedding model settings (e.g., Ollama nomic-embed-text)
+#    - Vector store configuration (e.g., ChromaDB)
+#    - Chunk sizes and overlap settings
+
+# 3. Ingest files - they'll be processed according to config
+./lf datasets ingest custom-dataset your-documents/*.pdf
 ```
 
 ## Customization

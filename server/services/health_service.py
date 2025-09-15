@@ -91,8 +91,8 @@ def _load_seed_runtime_model() -> tuple[str | None, str]:
         data = yaml.safe_load(seed_path.read_text(encoding="utf-8")) or {}
         runtime = (data or {}).get("runtime") or {}
         model = (runtime or {}).get("model")
-    #    if not model or not isinstance(model, str):
-     #       return None, "runtime.model missing in seed"
+        if not model or not isinstance(model, str):
+            return None, "runtime.model missing in seed"
         return model, "ok"
     except Exception as e:
         return None, f"Failed to parse seed YAML: {e}"
@@ -159,7 +159,7 @@ def _check_seed_project() -> dict:
             }
         data = resp.json() if resp.content else {}
         tags = {item.get("name") for item in (data.get("models") or [])}
-      #  present = model in tags
+        present = model in tags
         present = True
         status = "healthy" if present else "unhealthy"
         message = (
