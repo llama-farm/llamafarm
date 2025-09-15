@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
 )
 
 var (
@@ -24,8 +26,10 @@ var (
 	serverPrompt     = "📡 Server:"
 	ollamaHostPrompt = "🐏 Ollama:"
 	projectPrompt    = "📁 Project:"
-	sessionPrompt    = "🆔 Session:"
+	sessionPrompt    = "🆔"
 )
+
+const gap = "\n\n"
 
 // overrides provided by dev command
 var designerPreferredPort int
@@ -41,8 +45,8 @@ var chatCtx = &ChatSessionContext{
 }
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
-func runChatSessionTUI(projectInfo *config.ProjectInfo) {
-	m := newChatModel(projectInfo)
+func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
+	m := newChatModel(projectInfo, serverHealth)
 	p := tea.NewProgram(m)
 	m.program = p
 	if _, err := p.Run(); err != nil {
@@ -51,8 +55,8 @@ func runChatSessionTUI(projectInfo *config.ProjectInfo) {
 }
 
 type chatModel struct {
+	serverHealth   *HealthPayload
 	projectInfo    *config.ProjectInfo
-	input          textinput.Model
 	spin           spinner.Model
 	transcript     []string
 	messages       []ChatMessage
@@ -66,6 +70,8 @@ type chatModel struct {
 	height         int
 	status         string
 	err            error
+	viewport       viewport.Model
+	textarea       textarea.Model
 	program        *tea.Program
 	streamCh       chan tea.Msg
 	designerStatus string
@@ -82,33 +88,54 @@ type tickMsg struct{}
 
 type designerReadyMsg struct{ url string }
 type designerErrorMsg struct{ err error }
+type serverHealthMsg struct{ health *HealthPayload }
 
-func newChatModel(projectInfo *config.ProjectInfo) chatModel {
-	in := textinput.New()
-	in.Placeholder = "Type a message"
-	in.Prompt = "You> "
-	in.Focus()
-	in.CharLimit = 0
-	// Set a sensible initial width so the placeholder isn't truncated
-	in.Width = 60
+func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) chatModel {
+	messages := []ChatMessage{{Role: "assistant", Content: farmerPrompt + ` Send a message or type '/help' for commands.`}}
+	transcript := []string{farmerPrompt + ` Send a message or type '/help' for commands.` + "\n"}
+
+	ta := textarea.New()
+	ta.Placeholder = "Send a message..."
+	ta.Focus()
+
+	ta.Prompt = "> "
+
+	ta.SetWidth(30)
+	ta.SetHeight(1)
+
+	// Remove cursor line styling
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+
+	ta.ShowLineNumbers = false
+
+	vp := viewport.New(30, 5)
+	vp.SetContent(renderChatContent(chatModel{messages: messages, transcript: transcript}))
+
+	ta.KeyMap.InsertNewline.SetEnabled(false)
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	hPath := getHistoryPath()
 	h := loadHistory(hPath)
+
+	width, _, _ := term.GetSize(uintptr(os.Stdout.Fd()))
+
 	return chatModel{
+		serverHealth:   serverHealth,
 		projectInfo:    projectInfo,
-		input:          in,
 		spin:           s,
-		transcript:     []string{},
-		messages:       []ChatMessage{},
+		transcript:     transcript,
+		messages:       messages,
 		thinking:       false,
 		printing:       false,
 		history:        h,
 		histIndex:      len(h),
 		historyPath:    hPath,
 		designerStatus: "starting…",
+		textarea:       ta,
+		viewport:       vp,
+		width:          width,
 	}
 }
 
@@ -163,20 +190,48 @@ func (m chatModel) Init() tea.Cmd {
 		}
 		return designerReadyMsg{url: url}
 	}
-	return tea.Batch(m.spin.Tick, startDesigner)
+	return tea.Batch(m.spin.Tick, startDesigner, updateServerHealthCmd(m))
+}
+
+func updateServerHealthCmd(m chatModel) tea.Cmd {
+	return func() tea.Msg {
+		m.serverHealth, _ = checkServerHealth(serverURL)
+
+		if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
+			time.Sleep(5 * time.Second)
+		}
+
+		return serverHealthMsg{health: m.serverHealth}
+	}
 }
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		tiCmd tea.Cmd
+		vpCmd tea.Cmd
+		cmd   tea.Cmd
+		cmds  []tea.Cmd
+	)
+
+	m.textarea, tiCmd = m.textarea.Update(msg)
+	m.viewport, vpCmd = m.viewport.Update(msg)
+
+	cmds = append(cmds, vpCmd, tiCmd)
+
+	headerHeight := lipgloss.Height(renderInfoBar(m))
+	footerHeight := lipgloss.Height(renderChatInput(m))
+
+	if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
+		logDebug(fmt.Sprintf("Checking latest server health. Last: %v", m.serverHealth))
+		cmds = append(cmds, updateServerHealthCmd(m))
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		w := msg.Width - 2
-		if w < 10 {
-			w = 10
-		}
-		m.input.Width = w
-		return m, nil
+		m.viewport.Width = msg.Width
+		m.textarea.SetWidth(msg.Width - 2)
+		m.viewport.Height = msg.Height - footerHeight - headerHeight
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -186,26 +241,25 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up":
 			if m.histIndex > 0 {
 				m.histIndex--
-				m.input.SetValue(m.history[m.histIndex])
-				m.input.CursorEnd()
+				m.textarea.SetValue(m.history[m.histIndex])
+				m.textarea.CursorEnd()
 			}
-			return m, nil
 
 		case "down":
 			if m.histIndex < len(m.history)-1 {
 				m.histIndex++
-				m.input.SetValue(m.history[m.histIndex])
-				m.input.CursorEnd()
+				m.textarea.SetValue(m.history[m.histIndex])
+				m.textarea.CursorEnd()
 			} else {
 				m.histIndex = len(m.history)
-				m.input.SetValue("")
+				m.textarea.SetValue("")
 			}
-			return m, nil
 
 		case "enter":
-			msg := strings.TrimSpace(m.input.Value())
+			m.err = nil
+			msg := strings.TrimSpace(m.textarea.Value())
 			if msg == "" {
-				return m, nil
+				break
 			}
 
 			lower := strings.ToLower(msg)
@@ -216,32 +270,29 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch cmd {
 				case "/help":
 					m.transcript = append(m.transcript, "Commands: /help, /launch designer, clear, exit")
-					m.input.SetValue("")
-					return m, nil
+					m.textarea.SetValue("")
 				case "/launch":
 					if len(fields) < 2 {
 						m.transcript = append(m.transcript, "Usage: /launch <component>. Components: designer")
-						m.input.SetValue("")
-						return m, nil
+						m.textarea.SetValue("")
+						break
 					}
 					target := fields[1]
 					if target != "designer" {
 						m.transcript = append(m.transcript, "Unknown component. Try: /launch designer")
-						m.input.SetValue("")
-						return m, nil
+						m.textarea.SetValue("")
+						break
 					}
 					if strings.TrimSpace(m.designerURL) == "" || m.designerStatus != "ready" {
 						m.transcript = append(m.transcript, "Designer is not running yet.")
-						m.input.SetValue("")
-						return m, nil
+						m.textarea.SetValue("")
+						break
 					}
 					openURL(m.designerURL)
-					m.input.SetValue("")
-					return m, nil
+					m.textarea.SetValue("")
 				default:
 					m.transcript = append(m.transcript, "Unknown command. Type '/help' for available commands.")
-					m.input.SetValue("")
-					return m, nil
+					m.textarea.SetValue("")
 				}
 			}
 
@@ -253,10 +304,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if lower == "clear" {
 				m.transcript = nil
 				m.messages = nil
-				m.input.SetValue("")
+				m.textarea.SetValue("")
+				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 				m.thinking = false
 				m.printing = false
-				return m, nil
+				break
 			}
 
 			// persist history
@@ -270,12 +322,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.history = append(m.history, msg)
 			m.histIndex = len(m.history)
-			m.transcript = append(m.transcript, lipgloss.NewStyle().Bold(true).Render("You:")+" "+msg)
+			m.transcript = append(m.transcript, lipgloss.NewStyle().Bold(true).Render("> ")+" "+msg)
 			m.messages = []ChatMessage{{Role: "user", Content: msg}}
-			m.input.SetValue("")
+			m.textarea.SetValue("")
 			m.thinking = true
 			m.printing = true
-			// Start channel-based streaming
+			// Start channel-based streaming - important for showing progress
 			chunks, errs, _ := startChatStream(m.messages, chatCtx)
 			ch := make(chan tea.Msg, 32)
 			m.streamCh = ch
@@ -302,9 +354,15 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}()
-			return m, tea.Batch(listen(m.streamCh), thinkingCmd())
+			cmds = append(cmds, listen(m.streamCh), thinkingCmd())
 		}
+
 	case responseMsg:
+		if m.err != nil {
+			m.err = nil
+			break
+		}
+
 		logDebug(fmt.Sprintf("RESPONSE MSG: %v", msg.content))
 		m.thinking = false
 		m.printing = true
@@ -324,46 +382,49 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: msg.content})
 		}
+		m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 		if m.streamCh != nil {
-			return m, listen(m.streamCh)
+			cmds = append(cmds, listen(m.streamCh))
 		}
-		return m, nil
 
 	case errorMsg:
 		m.thinking = false
+		m.err = msg.err
 		m.transcript = append(m.transcript, lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("Error: %v", msg.err)))
 		if m.streamCh != nil {
-			return m, listen(m.streamCh)
+			cmds = append(cmds, listen(m.streamCh))
 		}
-		return m, nil
 
 	case tickMsg:
 		if m.thinking {
 			m.thinkFrame = (m.thinkFrame + 1) % 3
-			return m, thinkingCmd()
+			m.spin, cmd = m.spin.Update(msg)
+			cmds = append(cmds, thinkingCmd(), cmd)
 		}
-		return m, nil
 
 	case streamDone:
 		logDebug(fmt.Sprintf("STREAM DONE: %v", m.transcript))
 		m.printing = false
 		m.streamCh = nil
-		return m, nil
+
 	case designerReadyMsg:
 		m.designerStatus = "ready"
 		m.designerURL = msg.url
-		return m, nil
+
 	case designerErrorMsg:
 		m.designerStatus = fmt.Sprintf("error: %v", msg.err)
-		return m, nil
+
+	case serverHealthMsg:
+		m.serverHealth = msg.health
+
+		if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
+			cmds = append(cmds, updateServerHealthCmd(m))
+		}
 	}
 
-	var cmds []tea.Cmd
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	cmds = append(cmds, cmd)
-	m.spin, cmd = m.spin.Update(msg)
-	cmds = append(cmds, cmd)
+	m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+	m.viewport.GotoBottom()
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -379,62 +440,179 @@ func listen(ch <-chan tea.Msg) tea.Cmd {
 	}
 }
 
-func (m chatModel) View() string {
+func serverStatusLine(health *HealthPayload) string {
 	var b strings.Builder
-	serverLine := serverPrompt + " " + serverURL
-	wrappedServer := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(serverLine)
-	b.WriteString(wrappedServer + "\n")
 
-	ollamaHostLine := ollamaHostPrompt + " " + ollamaHost
-	wrappedOllamaHost := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(ollamaHostLine)
-	b.WriteString(wrappedOllamaHost + "\n")
+	var style = lipgloss.NewStyle().
+		PaddingTop(1).
+		PaddingBottom(1).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("63")).
+		BorderBottom(true)
 
-	projectLine := projectPrompt + " " + m.projectInfo.Namespace + "/" + m.projectInfo.Project
-	wrappedProject := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(projectLine)
-	b.WriteString(wrappedProject + "\n")
+	if health == nil {
+		return style.Render("Server status: unknown")
+	}
 
-	// Designer status line
-	if m.designerStatus != "" || m.designerURL != "" {
-		ds := m.designerStatus
-		if m.designerURL != "" {
-			ds = "ready: " + m.designerURL
+	if health.Status != "healthy" {
+		b.WriteString(fmt.Sprintf("%s Server status: %s", iconForStatus(health.Status), health.Status))
+		for _, c := range health.Components {
+			if c.Status != "healthy" {
+				b.WriteString(fmt.Sprintf("  %s %s %s", iconForStatus(c.Status), c.Name, c.Status))
+			}
 		}
-		designerLine := "🎨 Designer: " + ds
-		wrappedDesigner := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(designerLine)
-		b.WriteString(wrappedDesigner + "\n")
+	} else {
+		b.WriteString(fmt.Sprintf("%s Server status: healthy", iconForStatus(health.Status)))
 	}
 
-	if m.err != nil {
-		errorText := fmt.Sprintf("We had some trouble: %v", m.err)
-		wrappedError := lipgloss.NewStyle().Width(m.width - 2).Render(errorText)
-		return "\n" + wrappedError + "\n\n"
-	}
+	return style.Render(b.String())
+}
 
-	if sessionID != "" {
-		sessionLine := sessionPrompt + " " + sessionID
-		wrappedSession := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(sessionLine)
-		b.WriteString(wrappedSession + "\n")
-	}
-	b.WriteString("\n")
+func renderChatContent(m chatModel) string {
+	var b strings.Builder
+
 	for _, line := range m.transcript {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
 		// Wrap the line to fit within the terminal width
 		wrappedLine := lipgloss.NewStyle().Width(m.width - 2).Render(line)
-		b.WriteString(wrappedLine + "\n\n")
+		b.WriteString(wrappedLine + "\n")
 	}
 	if m.thinking {
 		dots := m.thinkFrame + 1
 		thinkingText := farmerPrompt + " " + m.spin.View() + "Thinking" + strings.Repeat(".", dots)
 		wrappedThinking := lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Width(m.width - 2).Render(thinkingText)
-		b.WriteString(wrappedThinking + "\n\n")
+		b.WriteString(wrappedThinking + gap)
 	}
 
-	if !m.thinking && !m.printing {
-		b.WriteString(m.input.View())
-		b.WriteString("\n")
-		helpText := "Type '/help' for commands. Up/Down for history."
-		wrappedHelp := lipgloss.NewStyle().Faint(true).Width(m.width - 2).Render(helpText)
-		b.WriteString(wrappedHelp)
+	return b.String()
+}
+
+func renderChatInput(m chatModel) string {
+	var b strings.Builder
+
+	b.WriteString(gap)
+
+	cbStyle := lipgloss.NewStyle().
+		MarginBottom(1).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("63"))
+
+	b.WriteString(cbStyle.Render(m.textarea.View()))
+	helpText := "Type '/help' for commands. Up/Down for history."
+	b.WriteString("\n")
+	wrappedHelp := lipgloss.NewStyle().Faint(true).Width(m.width - 2).Render(helpText)
+	b.WriteString(wrappedHelp)
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func renderInfoBar(m chatModel) string {
+	headerW := m.width
+	headerStyle := lipgloss.NewStyle().
+		Width(headerW).
+		Background(lipgloss.Color("#027ffd")).
+		Foreground(lipgloss.AdaptiveColor{Light: "236", Dark: "248"}).
+		PaddingLeft(1)
+
+	// Left/middle parts (already rendered strings)
+	left := fmt.Sprintf("%s %s/%s", projectPrompt, m.projectInfo.Namespace, m.projectInfo.Project)
+	mid := ""
+	if sessionID != "" {
+		mid = fmt.Sprintf(" (%s %s)", sessionPrompt, sessionID)
 	}
+	leftRendered := lipgloss.NewStyle().Render(left + mid)
+
+	// Right (server status)
+	right := fmt.Sprintf("%s %s", iconForStatus(func() string {
+		if m.serverHealth != nil {
+			return m.serverHealth.Status
+		}
+		return "degraded"
+	}()), serverURL)
+
+	// If headerStyle has padding/borders, subtract them
+	frameW, _ := headerStyle.GetFrameSize()
+	contentW := headerW - frameW
+
+	// Give the right part the remaining width and align it
+	avail := contentW - lipgloss.Width(leftRendered)
+	if avail < 1 {
+		avail = 1
+	}
+
+	rightWithStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("#141e47")).
+		Foreground(lipgloss.Color("#ffffff")).
+		Padding(0, 1).
+		Render(right)
+
+	rightRendered := lipgloss.NewStyle().
+		Width(avail).
+		Align(lipgloss.Right).
+		Render(rightWithStyle)
+
+	// Join and render the full header line
+	line := lipgloss.JoinHorizontal(lipgloss.Top, leftRendered, rightRendered)
+	return headerStyle.Render(line)
+}
+
+func (m chatModel) View() string {
+	var b strings.Builder
+	// b.WriteString(serverStatusLine(m.serverHealth))
+	// b.WriteString("\n")
+
+	// var infoStyle = lipgloss.NewStyle().
+	// 	MarginBottom(1).
+	// 	BorderStyle(lipgloss.NormalBorder()).
+	// 	BorderForeground(lipgloss.Color("63"))
+
+	// serverLine := serverPrompt + " " + serverURL
+	// wrappedServer := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(serverLine)
+	// b.WriteString(wrappedServer + "\n")
+
+	// ollamaHostLine := ollamaHostPrompt + " " + ollamaHost
+	// wrappedOllamaHost := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(ollamaHostLine)
+	// b.WriteString(wrappedOllamaHost + "\n")
+
+	// projectLine := projectPrompt + " " + m.projectInfo.Namespace + "/" + m.projectInfo.Project
+	// wrappedProject := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(projectLine)
+	// b.WriteString(wrappedProject + "\n")
+
+	// // Designer status line
+	// if m.designerStatus != "" || m.designerURL != "" {
+	// 	ds := m.designerStatus
+	// 	if m.designerURL != "" {
+	// 		ds = "ready: " + m.designerURL
+	// 	}
+	// 	designerLine := "🎨 Designer: " + ds
+	// 	wrappedDesigner := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(designerLine)
+	// 	b.WriteString(wrappedDesigner + "\n")
+	// }
+
+	// if m.err != nil {
+	// 	errorText := fmt.Sprintf("We had some trouble: %v", m.err)
+	// 	wrappedError := lipgloss.NewStyle().Width(m.width - 2).Render(errorText)
+	// 	return "\n" + wrappedError + "\n\n"
+	// }
+
+	// if sessionID != "" {
+	// 	sessionLine := sessionPrompt + " " + sessionID
+	// 	wrappedSession := lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Width(m.width - 2).Render(sessionLine)
+	// 	b.WriteString(wrappedSession + "\n")
+	// }
+	// b.WriteString("\n")
+	// b.WriteString(infoStyle.Render(b.String()))
+	// b.WriteString("\n")
+
+	b.WriteString(m.viewport.View())
+	b.WriteString(renderChatInput(m))
+	b.WriteString(renderInfoBar(m))
+
 	return b.String()
 }
 

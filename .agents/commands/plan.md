@@ -6,6 +6,7 @@ Turn your completed research into a minimal, verifiable change plan. This docume
 - The research note in `thoughts/shared/research/<issue_id>_<slug>.md`
 - Clarifications from the user for any uncertainties identified in research
 - Awareness of repo guidelines in `AGENTS.md` and project conventions
+- Answers to the “Known unknowns” listed in the research note (resolve with the user first)
 
 ### Outputs
 - A plan document at `thoughts/shared/plans/<issue_id>_<slug>-plan.md` that includes:
@@ -86,6 +87,7 @@ nx build docs
 - No test plan or unverifiable steps
 - No rollback or ops considerations
 - Ignoring cross-project impacts
+- Starting to plan before presenting open questions to the user and getting answers
 
 ## Plan Deliverable Template
 Create `thoughts/shared/plans/<issue_id>_<slug>-plan.md` using this template:

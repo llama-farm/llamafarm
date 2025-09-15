@@ -113,7 +113,7 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverURL)
+		ensureServerAvailable(serverURL, true)
 
 		// Construct context and call the project-scoped chat completions via shared helpers
 		ctx := &ChatSessionContext{

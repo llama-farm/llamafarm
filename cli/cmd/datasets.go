@@ -75,7 +75,7 @@ var datasetsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
@@ -146,7 +146,7 @@ Examples:
 		createReq := createDatasetRequest{Name: datasetName, RAGStrategy: ragStrategy}
 		payload, _ := json.Marshal(createReq)
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
@@ -219,7 +219,7 @@ var datasetsRemoveCmd = &cobra.Command{
 		}
 		datasetName := args[0]
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
@@ -279,7 +279,7 @@ Examples:
 		}
 
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 		fmt.Printf("Starting upload to dataset '%s' (%d file(s))...\n", datasetName, len(files))
 		uploaded := 0
 		for _, f := range files {

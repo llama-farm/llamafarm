@@ -175,7 +175,7 @@ func StartConfigWatcher(namespace, project string) error {
 					// Update last modification time
 					lastModTimes[targetPath] = time.Now()
 
-					fmt.Fprintf(os.Stderr, "Synced %s -> %s\n", sourcePath, targetPath)
+					logDebug(fmt.Sprintf("Synced %s -> %s\n", sourcePath, targetPath))
 				}
 
 			case err, ok := <-watcher.Errors:

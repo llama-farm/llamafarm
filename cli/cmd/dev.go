@@ -48,8 +48,8 @@ var devCmd = &cobra.Command{
 			}
 		}
 
-		ensureServerAvailable(serverURL)
-		runChatSessionTUI(projectInfo)
+		serverHealth := ensureServerAvailable(serverURL, false)
+		runChatSessionTUI(projectInfo, serverHealth)
 	},
 }
 
