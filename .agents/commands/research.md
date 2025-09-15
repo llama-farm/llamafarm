@@ -87,6 +87,8 @@ Create a short note in `thoughts/shared/research/<issue_id>_<slug>.md` including
 - **Known unknowns (bulleted, no answers)**: list questions to present to the user; do not include answers or decisions in the research doc
 
 Do NOT include any implementation plan in the research note. Planning is a separate document.
+- **Open questions**: unknowns and how to answer them
+- **Proposed plan**: minimal, measurable steps to implement and verify
 
 Example template:
 ```markdown
@@ -125,6 +127,7 @@ router = APIRouter()
 - **Don’t rely on single search hits**; corroborate via tests and callers.
 - **Don’t skip verification**; always plan how you’ll test the change.
 - **Don't plan yet**; planning implementation is done via a separate step after research. Do not place plan content in research notes.
+- **Don't plan yet**; planning implementation is done via a separate step after research.
 
 ## Timebox and check-ins
 - **Timebox discovery**: ~5 minutes to produce the research note.
