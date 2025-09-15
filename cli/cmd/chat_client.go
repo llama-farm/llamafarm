@@ -143,7 +143,7 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 			return
 		}
 		streamTrue := true
-		request := ChatRequest{Messages: messages, Stream: &streamTrue}
+		request := ChatRequest{Messages: messages[len(messages)-1:], Stream: &streamTrue}
 
 		jsonData, err := json.Marshal(request)
 		logDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))

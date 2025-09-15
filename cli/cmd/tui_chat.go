@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"llamafarm-cli/cmd/config"
 	"os"
 	"os/exec"
@@ -35,6 +37,8 @@ const gap = "\n\n"
 var designerPreferredPort int
 var designerForced bool
 
+var lastTranscriptKey string
+
 var chatCtx = &ChatSessionContext{
 	ServerURL:   serverURL,
 	Namespace:   "llamafarm",
@@ -55,10 +59,10 @@ func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayl
 }
 
 type chatModel struct {
+	transcript     string
 	serverHealth   *HealthPayload
 	projectInfo    *config.ProjectInfo
 	spin           spinner.Model
-	transcript     []string
 	messages       []ChatMessage
 	thinking       bool
 	printing       bool
@@ -91,8 +95,7 @@ type designerErrorMsg struct{ err error }
 type serverHealthMsg struct{ health *HealthPayload }
 
 func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) chatModel {
-	messages := []ChatMessage{{Role: "assistant", Content: farmerPrompt + ` Send a message or type '/help' for commands.`}}
-	transcript := []string{farmerPrompt + ` Send a message or type '/help' for commands.` + "\n"}
+	messages := []ChatMessage{{Role: "client", Content: "Send a message or type '/help' for commands."}}
 
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
@@ -109,7 +112,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(30, 5)
-	vp.SetContent(renderChatContent(chatModel{messages: messages, transcript: transcript}))
+	vp.SetContent(renderChatContent(chatModel{messages: messages}))
 
 	ta.KeyMap.InsertNewline.SetEnabled(false)
 
@@ -121,14 +124,13 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 
 	width, _, _ := term.GetSize(uintptr(os.Stdout.Fd()))
 
-	problems := renderServerStatusProblems(serverHealth)
-	transcript = append(transcript, problems)
+	messages = append(messages, ChatMessage{Role: "client", Content: renderServerStatusProblems(serverHealth)})
+	// transcript = append(transcript, problems)
 
 	return chatModel{
 		serverHealth:   serverHealth,
 		projectInfo:    projectInfo,
 		spin:           s,
-		transcript:     transcript,
 		messages:       messages,
 		thinking:       false,
 		printing:       false,
@@ -219,7 +221,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.textarea, tiCmd = m.textarea.Update(msg)
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
-	cmds = append(cmds, vpCmd, tiCmd)
+	// Forward all messages to the spinner so it processes its own TickMsgs
+	m.spin, cmd = m.spin.Update(msg)
+
+	cmds = append(cmds, vpCmd, tiCmd, cmd)
 
 	headerHeight := lipgloss.Height(renderInfoBar(m))
 	footerHeight := lipgloss.Height(renderChatInput(m))
@@ -234,6 +239,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.textarea.SetWidth(msg.Width - 2)
 		m.viewport.Height = msg.Height - footerHeight - headerHeight
+		m.width = msg.Width
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -261,7 +267,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.err = nil
 			msg := strings.TrimSpace(m.textarea.Value())
-			if msg == "" {
+			if msg == "" || m.thinking {
 				break
 			}
 
@@ -272,31 +278,32 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := fields[0]
 				switch cmd {
 				case "/help":
-					m.transcript = append(m.transcript, "Commands: /help, /launch designer, clear, exit")
+					m.messages = append(m.messages, ChatMessage{Role: "client", Content: "Commands: /help, /launch designer, clear, exit"})
 					m.textarea.SetValue("")
 				case "/launch":
 					if len(fields) < 2 {
-						m.transcript = append(m.transcript, "Usage: /launch <component>. Components: designer")
+						m.messages = append(m.messages, ChatMessage{Role: "client", Content: "Usage: /launch <component>. Components: designer"})
 						m.textarea.SetValue("")
 						break
 					}
 					target := fields[1]
 					if target != "designer" {
-						m.transcript = append(m.transcript, "Unknown component. Try: /launch designer")
+						m.messages = append(m.messages, ChatMessage{Role: "client", Content: fmt.Sprintf("Unknown component '%s'. Try: /launch designer", target)})
 						m.textarea.SetValue("")
 						break
 					}
 					if strings.TrimSpace(m.designerURL) == "" || m.designerStatus != "ready" {
-						m.transcript = append(m.transcript, "Designer is not running yet.")
+						m.messages = append(m.messages, ChatMessage{Role: "client", Content: "Designer is not running yet."})
 						m.textarea.SetValue("")
 						break
 					}
 					openURL(m.designerURL)
 					m.textarea.SetValue("")
 				default:
-					m.transcript = append(m.transcript, "Unknown command. Type '/help' for available commands.")
+					m.messages = append(m.messages, ChatMessage{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. Type '/help' for available commands.", cmd)})
 					m.textarea.SetValue("")
 				}
+				break
 			}
 
 			if lower == "exit" || lower == "quit" {
@@ -305,7 +312,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if lower == "clear" {
-				m.transcript = nil
+				m.transcript = ""
 				m.messages = nil
 				m.textarea.SetValue("")
 				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
@@ -325,8 +332,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.history = append(m.history, msg)
 			m.histIndex = len(m.history)
-			m.transcript = append(m.transcript, lipgloss.NewStyle().Bold(true).Render("> ")+" "+msg)
-			m.messages = []ChatMessage{{Role: "user", Content: msg}}
+			m.messages = append(m.messages, ChatMessage{Role: "user", Content: msg})
 			m.textarea.SetValue("")
 			m.thinking = true
 			m.printing = true
@@ -370,22 +376,18 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.thinking = false
 		m.printing = true
 		if len(m.messages) == 0 || (len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") {
-			m.transcript = append(m.transcript, lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(farmerPrompt)+" "+msg.content)
+			m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: msg.content})
 		} else {
 			// Update last assistant line
-			if len(m.transcript) > 0 {
-				m.transcript[len(m.transcript)-1] = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(farmerPrompt) + " " + msg.content
+			if len(m.messages) > 0 {
+				m.messages[len(m.messages)-1] = ChatMessage{Role: "assistant", Content: msg.content}
 			} else {
-				m.transcript = append(m.transcript, lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(farmerPrompt)+" "+msg.content)
+				m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: msg.content})
 			}
 		}
-		// Keep a single assistant message representing the latest full content
-		if len(m.messages) > 0 && m.messages[len(m.messages)-1].Role == "assistant" {
-			m.messages[len(m.messages)-1] = ChatMessage{Role: "assistant", Content: msg.content}
-		} else {
-			m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: msg.content})
-		}
+
 		m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
 		}
@@ -393,7 +395,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorMsg:
 		m.thinking = false
 		m.err = msg.err
-		m.transcript = append(m.transcript, lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("Error: %v", msg.err)))
+		m.messages = append(m.messages, ChatMessage{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
 		}
@@ -401,12 +403,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		if m.thinking {
 			m.thinkFrame = (m.thinkFrame + 1) % 3
-			m.spin, cmd = m.spin.Update(msg)
-			cmds = append(cmds, thinkingCmd(), cmd)
+			cmds = append(cmds, thinkingCmd())
 		}
 
 	case streamDone:
-		logDebug(fmt.Sprintf("STREAM DONE: %v", m.transcript))
+		logDebug(fmt.Sprintf("STREAM DONE: %v", m.messages[len(m.messages)-1]))
 		m.printing = false
 		m.streamCh = nil
 
@@ -425,6 +426,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.transcript = computeTranscript(m)
 	m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 	m.viewport.GotoBottom()
 
@@ -455,19 +457,49 @@ func renderServerStatusProblems(health *HealthPayload) string {
 	return b.String()
 }
 
+func computeTranscript(m chatModel) string {
+	var b strings.Builder
+
+	key := computeTranscriptKey(m)
+	if lastTranscriptKey == key {
+		b.WriteString(m.transcript)
+	} else {
+		baseStyle := lipgloss.NewStyle()
+		for _, message := range m.messages {
+			var line string
+			switch message.Role {
+			case "assistant":
+				line = baseStyle.Foreground(lipgloss.Color("11")).Render(farmerPrompt) + " " + message.Content + "\n"
+			case "user":
+				style := baseStyle.Foreground(lipgloss.Color("#ccc"))
+				line = style.Bold(true).Render("> ") + style.Render(message.Content)
+			case "error":
+				line = baseStyle.Foreground(lipgloss.Color("9")).Render(message.Content)
+			case "client":
+				line = baseStyle.Foreground(lipgloss.Color("#666666")).Render(message.Content)
+			}
+
+			b.WriteString(line + "\n")
+		}
+		lastTranscriptKey = key
+	}
+
+	return b.String()
+}
+
+func computeTranscriptKey(m chatModel) string {
+	h := fnv.New64a()
+	msg := m.messages[len(m.messages)-1]
+	io.WriteString(h, msg.Role)
+	io.WriteString(h, msg.Content)
+	return fmt.Sprintf("%x", h.Sum64())
+}
+
 func renderChatContent(m chatModel) string {
 	var b strings.Builder
 
-	for _, line := range m.transcript {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	b.WriteString(m.transcript)
 
-		// Wrap the line to fit within the terminal width
-		wrappedLine := lipgloss.NewStyle().Width(m.width - 2).Render(line)
-		b.WriteString(wrappedLine + "\n")
-	}
 	if m.thinking {
 		dots := m.thinkFrame + 1
 		thinkingText := farmerPrompt + " " + m.spin.View() + "Thinking" + strings.Repeat(".", dots)
