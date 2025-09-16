@@ -3,6 +3,12 @@ import FontIcon from '../../common/FontIcon'
 import useChatbox from '../../hooks/useChatbox'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { 
+  useProjectChatMessage,
+  useProjectChatParams 
+} from '../../hooks/useProjectChat'
+import { useProjectChatSession } from '../../hooks/useProjectChatSession'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -52,13 +58,26 @@ export default function TestChat({
   showThinking,
   showGenSettings,
 }: TestChatProps) {
+  // Get active project for project chat API
+  const activeProject = useActiveProject()
+  const chatParams = useProjectChatParams(activeProject)
+  
+  // Project chat session management
+  const projectChatSession = useProjectChatSession(
+    chatParams?.namespace,
+    chatParams?.projectId
+  )
+  
+  // Project chat message sending
+  const projectChatMessage = useProjectChatMessage()
+
   const {
     messages,
     inputValue,
     isSending,
     isClearing,
     error,
-    sendMessage,
+    sendMessage: fallbackSendMessage,
     clearChat,
     updateInput,
     hasMessages,
@@ -69,6 +88,20 @@ export default function TestChat({
 
   // Mock mode controlled by parent
   const MOCK_MODE = Boolean(useTestData)
+  
+  // Use project chat if we have an active project and not in mock mode
+  const USE_PROJECT_CHAT = !MOCK_MODE && !!chatParams
+  
+  // Combined loading state
+  const isProjectChatLoading = projectChatMessage.isPending
+  const combinedIsSending = isSending || isProjectChatLoading
+  
+  // Combined error state
+  const projectChatError = projectChatMessage.error || projectChatSession.error
+  const combinedError = error || (projectChatError ? projectChatError.message : null)
+  
+  // Combined canSend state
+  const combinedCanSend = canSend && !isProjectChatLoading
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
@@ -99,9 +132,27 @@ export default function TestChat({
     resizeTextarea()
   }, [inputValue, resizeTextarea])
 
+  // Clear chat when active project changes (start fresh session)
+  useEffect(() => {
+    // Only clear if we have a valid project and we're not in mock mode
+    if (!MOCK_MODE && chatParams?.namespace && chatParams?.projectId) {
+      // Clear existing chat when switching projects
+      clearChat()
+      // Reset session for new project
+      projectChatSession.clearSession()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatParams?.namespace, chatParams?.projectId]) // Only trigger when project actually changes
+
   const handleSend = useCallback(async () => {
     const content = inputValue.trim()
-    if (!canSend || !content) return
+    if (!combinedCanSend || !content) return
+    
+    // Prevent multiple simultaneous requests
+    if (combinedIsSending) {
+      return
+    }
+    
     if (MOCK_MODE) {
       // Local-only optimistic flow without backend
       addMessage({ type: 'user', content, timestamp: new Date() })
@@ -165,9 +216,90 @@ export default function TestChat({
       return
     }
 
-    const ok = await sendMessage(content)
+    if (USE_PROJECT_CHAT && chatParams) {
+      // Use project chat API
+      let assistantId: string | undefined
+      
+      try {
+        // Add user message to UI
+        addMessage({ type: 'user', content, timestamp: new Date() })
+        lastUserInputRef.current = content
+        
+        // Add loading assistant message
+        assistantId = addMessage({
+          type: 'assistant',
+          content: 'Thinking…',
+          timestamp: new Date(),
+          isLoading: true,
+        })
+        
+        updateInput('')
+        
+        // Send message via project chat
+        const result = await projectChatMessage.mutateAsync({
+          namespace: chatParams.namespace,
+          projectId: chatParams.projectId,
+          message: content,
+          sessionId: projectChatSession.sessionId || undefined,
+        })
+        
+        // Update session ID if we got a new one
+        if (result.sessionId && result.sessionId !== projectChatSession.sessionId) {
+          projectChatSession.setSessionId(result.sessionId)
+        }
+        
+        // Update assistant message with response
+        const assistantContent = result.completion.choices[0]?.message?.content || 'No response received'
+        
+        updateMessage(assistantId, {
+          content: assistantContent,
+          isLoading: false,
+          // Add mock metadata for consistency with existing UI
+          metadata: {
+            prompts: ['System: You are a helpful assistant.', `User: ${content}`],
+            thinking: ['Processing user request...', 'Generating response...'],
+            generation: {
+              temperature: 0.7,
+              topP: 0.9,
+              maxTokens: 512,
+              presencePenalty: 0.0,
+              frequencyPenalty: 0.0,
+              seed: undefined,
+            },
+          },
+        })
+        
+      } catch (error) {
+        console.error('Project chat error:', error)
+        // Update assistant message with error using the stored assistantId
+        if (assistantId) {
+          updateMessage(assistantId, {
+            content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+            isLoading: false,
+          })
+        }
+      }
+      return
+    }
+
+    // Fallback to original chat system
+    const ok = await fallbackSendMessage(content)
     if (ok) updateInput('')
-  }, [canSend, inputValue, sendMessage, updateInput])
+  }, [
+    combinedCanSend, 
+    inputValue, 
+    MOCK_MODE, 
+    USE_PROJECT_CHAT, 
+    chatParams, 
+    projectChatMessage, 
+    projectChatSession.sessionId,
+    projectChatSession.setSessionId,
+    addMessage, 
+    updateMessage, 
+    updateInput, 
+    fallbackSendMessage,
+    messages
+  ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -322,10 +454,28 @@ export default function TestChat({
     <div className={containerClasses}>
       {/* Header row actions */}
       <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
-        <div className="text-xs md:text-sm text-muted-foreground">Session</div>
+        <div className="text-xs md:text-sm text-muted-foreground">
+          {USE_PROJECT_CHAT && chatParams ? (
+            <span>
+              Project: {chatParams.namespace}/{chatParams.projectId}
+              {projectChatSession.sessionId && (
+                <span className="ml-2 opacity-60">
+                  • Session: {projectChatSession.sessionId.slice(-8)}
+                </span>
+              )}
+            </span>
+          ) : (
+            'Session'
+          )}
+        </div>
         <button
           type="button"
-          onClick={() => clearChat()}
+          onClick={() => {
+            clearChat()
+            if (!MOCK_MODE && chatParams) {
+              projectChatSession.clearSession()
+            }
+          }}
           disabled={isClearing}
           className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -334,9 +484,16 @@ export default function TestChat({
       </div>
 
       {/* Error */}
-      {error && (
+      {combinedError && (
         <div className="mx-4 mt-3 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-xs">
-          {error}
+          {combinedError}
+        </div>
+      )}
+      
+      {/* No active project warning */}
+      {!MOCK_MODE && !chatParams && (
+        <div className="mx-4 mt-3 p-2 bg-amber-100 border border-amber-400 text-amber-700 rounded text-xs">
+          No active project selected. Please select a project to use the chat feature.
         </div>
       )}
 
@@ -370,23 +527,27 @@ export default function TestChat({
           value={inputValue}
           onChange={e => updateInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={isSending}
+          disabled={combinedIsSending || (!MOCK_MODE && !chatParams)}
           placeholder={
-            isSending
+            combinedIsSending
               ? 'Waiting for response…'
-              : 'Type a message and press Enter'
+              : !MOCK_MODE && !chatParams
+                ? 'Select a project to start chatting…'
+                : 'Type a message and press Enter'
           }
           className={textareaClasses}
           aria-label="Message input"
         />
         <div className="flex items-center justify-between">
-          {isSending && (
-            <span className="text-xs text-muted-foreground">Sending…</span>
+          {combinedIsSending && (
+            <span className="text-xs text-muted-foreground">
+              {USE_PROJECT_CHAT ? 'Sending to project…' : 'Sending…'}
+            </span>
           )}
           <FontIcon
             isButton
             type="arrow-filled"
-            className={`w-8 h-8 self-end ${!canSend ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+            className={`w-8 h-8 self-end ${!combinedCanSend || (!MOCK_MODE && !chatParams) ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
             handleOnClick={handleSend}
           />
         </div>

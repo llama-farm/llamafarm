@@ -135,6 +135,7 @@ export const useProjectChatMessage = () => {
       const request = createProjectChatRequest(message, options)
       return await sendProjectChatMessage(namespace, projectId, request, sessionId)
     },
+    retry: false, // Disable retries to prevent multiple requests
     onSuccess: (data, variables) => {
       // Invalidate conversation queries for this project
       queryClient.invalidateQueries({ 
