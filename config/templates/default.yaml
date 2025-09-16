@@ -1,6 +1,8 @@
 version: v1
 name: default-project
-prompts: []
+prompts:
+  - role: system
+    content: You are a helpful assistant
 rag:
   strategies:
     - name: default
