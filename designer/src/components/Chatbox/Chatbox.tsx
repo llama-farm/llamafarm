@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import Message from './Message'
 import FontIcon from '../../common/FontIcon'
 import useChatbox from '../../hooks/useChatbox'
@@ -9,6 +9,8 @@ interface ChatboxProps {
 }
 
 function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
+  const [isDiagnosing, setIsDiagnosing] = useState<boolean>(false)
+  const diagnosingInFlightRef = useRef<boolean>(false)
   // Use the custom chatbox hook for all chat logic
   const {
     messages,
@@ -20,11 +22,9 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
     clearChat,
     updateInput,
     hasMessages,
-    canSend
+    canSend,
   } = useChatbox()
-  
 
-  
   // Refs for auto-scroll
   const listRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
@@ -45,7 +45,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
 
     // Send message using the hook
     const success = await sendMessage(messageContent)
-    
+
     // Clear input on successful send
     if (success) {
       updateInput('')
@@ -63,6 +63,65 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
       handleSendClick()
     }
   }
+
+  // Compose an auto-message for diagnose intents
+  const composeDiagnoseMessage = useCallback((detail: any) => {
+    const lines: string[] = []
+    lines.push(
+      'Help me diagnose this. Identify issues and propose fixes (prompt, retrieval, tools, or settings).'
+    )
+    if (detail?.source === 'low_score') {
+      const scoreText =
+        typeof detail?.matchScore === 'number' ? `${detail.matchScore}%` : '—'
+      const testLabel = detail?.testName ? `"${detail.testName}"` : ''
+      lines.push(`Context: Test ${testLabel} scored ${scoreText}.`)
+    }
+    if (
+      detail?.source === 'message_action' ||
+      detail?.source === 'thumbs_down'
+    ) {
+      lines.push('Context: Diagnosing a specific response.')
+    }
+    if (detail?.input) {
+      lines.push(`Input:\n${detail.input}`)
+    }
+    if (detail?.expected) {
+      lines.push(`Expected:\n${detail.expected}`)
+    }
+    if (detail?.responseText) {
+      lines.push(`Response:\n${detail.responseText}`)
+    }
+    // Note: We intentionally do not dump prompts/thinking here.
+    return lines.join('\n\n')
+  }, [])
+
+  // Global diagnose listener: open panel and auto-send composed message
+  useEffect(() => {
+    const onDiagnose = async (e: Event) => {
+      const detail = (e as CustomEvent).detail as any
+      try {
+        // Prevent overlapping diagnoses if events fire rapidly
+        if (diagnosingInFlightRef.current) return
+        diagnosingInFlightRef.current = true
+        setIsDiagnosing(true)
+        setIsPanelOpen(true)
+        const message = composeDiagnoseMessage(detail)
+        if (message && message.trim()) {
+          await sendMessage(message)
+          updateInput('')
+        }
+        // keep the diagnose indicator visible briefly
+        setTimeout(() => {
+          setIsDiagnosing(false)
+          diagnosingInFlightRef.current = false
+        }, 800)
+      } catch {}
+    }
+
+    window.addEventListener('lf-diagnose', onDiagnose as EventListener)
+    return () =>
+      window.removeEventListener('lf-diagnose', onDiagnose as EventListener)
+  }, [sendMessage, updateInput, setIsPanelOpen, composeDiagnoseMessage])
 
   return (
     <div className="w-full h-full flex flex-col transition-colors bg-card text-foreground">
@@ -85,14 +144,20 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
           handleOnClick={() => setIsPanelOpen(!isPanelOpen)}
         />
       </div>
-      
+      {isDiagnosing && (
+        <div className="mx-4 mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+          <span>Diagnosing…</span>
+        </div>
+      )}
+
       {/* Error display */}
       {error && isPanelOpen && (
         <div className="mx-4 mb-2 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
           {error}
         </div>
       )}
-      
+
       <div
         className={`flex flex-col h-full p-4 overflow-hidden ${isPanelOpen ? 'flex' : 'hidden'}`}
       >
@@ -105,7 +170,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
               Start a conversation...
             </div>
           ) : (
-            messages.map((message) => (
+            messages.map(message => (
               <Message key={message.id} message={message} />
             ))
           )}
@@ -118,11 +183,13 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
             onKeyDown={handleKeyDown}
             disabled={isSending}
             className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
-            placeholder={isSending ? "Waiting for response..." : "Type here..."}
+            placeholder={isSending ? 'Waiting for response...' : 'Type here...'}
           />
           <div className="flex justify-between items-center">
             {isSending && (
-              <span className="text-xs text-muted-foreground">Sending message...</span>
+              <span className="text-xs text-muted-foreground">
+                Sending message...
+              </span>
             )}
             <FontIcon
               isButton

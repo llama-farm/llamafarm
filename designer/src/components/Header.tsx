@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu'
 import { useProjects } from '../hooks/useProjects'
+import { useProjectModalContext } from '../contexts/ProjectModalContext'
 import {
   setActiveProject as setActiveProjectUtil,
   getActiveProject,
@@ -37,8 +38,10 @@ function Header() {
   // Convert API projects to project names for dropdown with fallback
   const projects = useMemo(() => {
     return getProjectsList(projectsResponse)
-  }, [projectsResponse])
+  }, [projectsResponse, isProjectOpen])
   const projectRef = useRef<HTMLDivElement>(null)
+  // Project modal from centralized context
+  const projectModal = useProjectModalContext()
 
   // Page switching overlay (fade only)
   const [isSwitching, setIsSwitching] = useState(false)
@@ -73,8 +76,9 @@ function Header() {
     if (!isSwitching) return
 
     const currentProjectKey = projectKeys.detail(namespace, activeProject)
-    const isLoading = queryClient.isFetching({ queryKey: currentProjectKey }) > 0
-    
+    const isLoading =
+      queryClient.isFetching({ queryKey: currentProjectKey }) > 0
+
     if (!isLoading) {
       // End animation when data is loaded
       const timer = setTimeout(() => setIsSwitching(false), 100) // Small delay for smoother transition
@@ -86,20 +90,20 @@ function Header() {
 
   const handleSelectProject = (name: string) => {
     const isDifferent = name !== activeProject
-    
+
     if (isDifferent) {
       // Invalidate the current project query to force refetch
       const currentProjectKey = projectKeys.detail(namespace, activeProject)
       queryClient.invalidateQueries({ queryKey: currentProjectKey })
-      
+
       // Set the new active project
       setActiveProject(name)
       setActiveProjectUtil(name)
-      
+
       // Show switching animation - will be ended by useEffect when loading completes
       setIsSwitching(true)
     }
-    
+
     setIsProjectOpen(false)
   }
 
@@ -185,12 +189,7 @@ function Header() {
                     className="px-0"
                     onSelect={() => {
                       setIsProjectOpen(false)
-                      navigate('/', {
-                        state: { openCreate: true, scrollTo: 'projects' },
-                      })
-                      try {
-                        localStorage.setItem('homeOpenCreate', '1')
-                      } catch {}
+                      projectModal.openCreateModal()
                     }}
                   >
                     <div className="w-full flex items-center justify-center gap-2 rounded-md border border-input text-primary hover:bg-primary hover:text-primary-foreground transition-colors px-3 py-2">
@@ -279,7 +278,7 @@ function Header() {
                 onClick={() => navigate('/chat/prompt')}
               >
                 <FontIcon type="prompt" className="w-6 h-6" />
-                <span>Prompt</span>
+                <span>Prompts</span>
               </button>
               <button
                 className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
@@ -325,6 +324,7 @@ function Header() {
           </div>
         </div>
       </div>
+      {/* Modal is rendered by ProjectModalRoot in App */}
     </header>
   )
 }

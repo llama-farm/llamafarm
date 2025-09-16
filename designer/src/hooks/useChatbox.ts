@@ -19,35 +19,38 @@ export function useChatbox(initialSessionId?: string) {
     saveSessionMessages,
     createNewSession,
     setSessionId,
-    isLoading: isLoadingSession
+    isLoading: isLoadingSession,
   } = useChatSession(initialSessionId)
-  
+
   // Local state
   const [messages, setMessages] = useState<ChatboxMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [hasInitialSync, setHasInitialSync] = useState(false)
-  
+
   // Ref for debounced save timeout
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  
+
   // API hooks
   const queryClient = useQueryClient()
   const chatMutation = useChatInference()
   const deleteSessionMutation = useDeleteChatSession()
-  
+
   // Debounced save function to avoid blocking on every message change
-  const debouncedSave = useCallback((sessionId: string, messages: ChatboxMessage[]) => {
-    // Clear existing timeout
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-    
-    // Set new timeout for debounced save
-    saveTimeoutRef.current = setTimeout(() => {
-      saveSessionMessages(sessionId, messages)
-    }, 500) // 500ms delay
-  }, [saveSessionMessages])
+  const debouncedSave = useCallback(
+    (sessionId: string, messages: ChatboxMessage[]) => {
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+
+      // Set new timeout for debounced save
+      saveTimeoutRef.current = setTimeout(() => {
+        saveSessionMessages(sessionId, messages)
+      }, 500) // 500ms delay
+    },
+    [saveSessionMessages]
+  )
 
   // Sync persisted messages with local state ONLY on true initial load
   useEffect(() => {
@@ -60,7 +63,7 @@ export function useChatbox(initialSessionId?: string) {
       setHasInitialSync(true)
     }
   }, [persistedMessages, hasInitialSync, messages.length, sessionId])
-  
+
   // Save messages to persistence when they change (with debouncing)
   useEffect(() => {
     // Save if we have a valid session ID and either:
@@ -68,7 +71,7 @@ export function useChatbox(initialSessionId?: string) {
     // 2. We have messages to save (new session with messages)
     if (sessionId && (hasInitialSync || messages.length > 0)) {
       debouncedSave(sessionId, messages)
-      
+
       // IMMEDIATELY update React Query cache for cross-component access
       queryClient.setQueryData(chatKeys.session(sessionId), messages)
     }
@@ -82,117 +85,129 @@ export function useChatbox(initialSessionId?: string) {
       }
     }
   }, [])
-  
+
   // Add message to state
   const addMessage = useCallback((message: Omit<ChatboxMessage, 'id'>) => {
     const newMessage: ChatboxMessage = {
       ...message,
-      id: generateMessageId()
+      id: generateMessageId(),
     }
-    
+
     setMessages(prev => [...prev, newMessage])
     return newMessage.id
   }, [])
 
   // Update message by ID
-  const updateMessage = useCallback((id: string, updates: Partial<ChatboxMessage>) => {
-    setMessages(prev => {
-      const updated = prev.map(msg => 
-        msg.id === id ? { ...msg, ...updates } : msg
-      )
-      return updated
-    })
-  }, [])
+  const updateMessage = useCallback(
+    (id: string, updates: Partial<ChatboxMessage>) => {
+      setMessages(prev => {
+        const updated = prev.map(msg =>
+          msg.id === id ? { ...msg, ...updates } : msg
+        )
+        return updated
+      })
+    },
+    []
+  )
 
   // Handle sending message with API integration
-  const sendMessage = useCallback(async (messageContent: string) => {
-    if (!messageContent.trim() || chatMutation.isPending) return false
+  const sendMessage = useCallback(
+    async (messageContent: string) => {
+      if (!messageContent.trim() || chatMutation.isPending) return false
 
-    // Clear any previous errors
-    setError(null)
+      // Clear any previous errors
+      setError(null)
 
-    // Add user message immediately (optimistic update)
-    addMessage({
-      type: 'user',
-      content: messageContent,
-      timestamp: new Date()
-    })
-
-    // Add loading assistant message
-    const assistantMessageId = addMessage({
-      type: 'assistant',
-      content: 'Thinking...',
-      timestamp: new Date(),
-      isLoading: true
-    })
-
-    try {
-      // Create chat request
-      const chatRequest = createChatRequest(messageContent)
-
-      // Send to API
-      const response = await chatMutation.mutateAsync({
-        chatRequest,
-        sessionId
-      })
-
-      // Set session ID if received from server (for new sessions)
-      if (response.sessionId && response.sessionId !== sessionId) {
-        setSessionId(response.sessionId)
-        // Mark as having initial sync since this is a new session with messages
-        if (!hasInitialSync) {
-          setHasInitialSync(true)
-        }
-      }
-
-      // Update assistant message with response
-      if (response.data.choices && response.data.choices.length > 0) {
-        const assistantResponse = response.data.choices[0].message.content
-        
-        updateMessage(assistantMessageId, {
-          content: assistantResponse,
-          isLoading: false
-        })
-      } else {
-        updateMessage(assistantMessageId, {
-          content: 'Sorry, I didn\'t receive a proper response.',
-          isLoading: false
-        })
-      }
-
-      return true
-    } catch (error) {
-      console.error('Chat error:', error)
-
-      // Remove loading message
-      setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
-
-      // Set error message
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-      setError(errorMessage)
-
-      // Add error message to chat
+      // Add user message immediately (optimistic update)
       addMessage({
-        type: 'error',
-        content: `Error: ${errorMessage}`,
-        timestamp: new Date()
+        type: 'user',
+        content: messageContent,
+        timestamp: new Date(),
       })
 
-      return false
-    }
-  }, [chatMutation, sessionId, setSessionId, addMessage, updateMessage])
+      // Add loading assistant message
+      const assistantMessageId = addMessage({
+        type: 'assistant',
+        content: 'Thinking...',
+        timestamp: new Date(),
+        isLoading: true,
+      })
+
+      try {
+        // Create chat request
+        const chatRequest = createChatRequest(messageContent)
+
+        // Send to API
+        const response = await chatMutation.mutateAsync({
+          chatRequest,
+          sessionId,
+        })
+
+        // Set session ID if received from server (for new sessions)
+        if (response.sessionId && response.sessionId !== sessionId) {
+          setSessionId(response.sessionId)
+          // Mark as having initial sync since this is a new session with messages
+          if (!hasInitialSync) {
+            setHasInitialSync(true)
+          }
+        }
+
+        // Update assistant message with response
+        if (response.data.choices && response.data.choices.length > 0) {
+          const assistantResponse = response.data.choices[0].message.content
+
+          updateMessage(assistantMessageId, {
+            content: assistantResponse,
+            isLoading: false,
+          })
+        } else {
+          updateMessage(assistantMessageId, {
+            content: "Sorry, I didn't receive a proper response.",
+            isLoading: false,
+          })
+        }
+
+        return true
+      } catch (error) {
+        console.error('Chat error:', error)
+
+        // Remove loading message
+        setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+
+        // Set error message
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred'
+        setError(errorMessage)
+
+        // Add error message to chat
+        addMessage({
+          type: 'error',
+          content: `Error: ${errorMessage}`,
+          timestamp: new Date(),
+        })
+
+        return false
+      }
+    },
+    [chatMutation, sessionId, setSessionId, addMessage, updateMessage]
+  )
 
   // Handle clear chat
   const clearChat = useCallback(async () => {
     if (deleteSessionMutation.isPending) return false
 
     try {
-      await deleteSessionMutation.mutateAsync(sessionId)
+      // If we don't have a valid sessionId (e.g., mock/test mode), skip server deletion
+      if (sessionId && !sessionId.startsWith('local_')) {
+        await deleteSessionMutation.mutateAsync(sessionId)
+      }
 
       // Clear local messages and errors
       setMessages([])
       setError(null)
-      
+
       // Reset initial sync flag to allow fresh sync with new session
       setHasInitialSync(false)
 
@@ -202,7 +217,8 @@ export function useChatbox(initialSessionId?: string) {
       return true
     } catch (error) {
       console.error('Delete session error:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to clear chat'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to clear chat'
       setError(errorMessage)
       return false
     }
@@ -224,10 +240,10 @@ export function useChatbox(initialSessionId?: string) {
     setMessages([])
     setError(null)
     setInputValue('')
-    
+
     // Reset initial sync flag to allow fresh sync with new session
     setHasInitialSync(false)
-    
+
     return newSessionId
   }, [createNewSession])
 
@@ -237,12 +253,12 @@ export function useChatbox(initialSessionId?: string) {
     messages,
     inputValue,
     error,
-    
+
     // Loading states
     isSending: chatMutation.isPending,
     isClearing: deleteSessionMutation.isPending,
     isLoadingSession,
-    
+
     // Actions
     sendMessage,
     clearChat,
@@ -251,7 +267,7 @@ export function useChatbox(initialSessionId?: string) {
     resetSession,
     addMessage,
     updateMessage,
-    
+
     // Computed values
     hasMessages: messages.length > 0,
     canSend: !chatMutation.isPending && inputValue.trim().length > 0,

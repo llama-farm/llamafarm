@@ -2,18 +2,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 // removed decorative llama image
 import FontIcon from './common/FontIcon'
-import ProjectModal from './components/Project/ProjectModal'
+// Modal rendered globally in App
 import useChatbox from './hooks/useChatbox'
 import { useProjects } from './hooks/useProjects'
-import { useProjectModal } from './hooks/useProjectModal'
-import { filterProjectsBySearch, getProjectsList } from './utils/projectConstants'
+import { useProjectModalContext } from './contexts/ProjectModalContext'
+import {
+  filterProjectsBySearch,
+  getProjectsList,
+} from './utils/projectConstants'
 import { getCurrentNamespace } from './utils/namespaceUtils'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
-  
+
   // Initialize chat functionality
   const { sendMessage, isSending } = useChatbox()
 
@@ -25,23 +28,18 @@ function Home() {
   ]
 
   const namespace = getCurrentNamespace()
-  
+
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
-  
+
   // Convert API projects to project names for UI compatibility
-  const projectsList = useMemo(() => getProjectsList(projectsResponse), [projectsResponse])
-  
+  const projectsList = useMemo(
+    () => getProjectsList(projectsResponse),
+    [projectsResponse]
+  )
+
   // Shared modal hook
-  const projectModal = useProjectModal({
-    namespace,
-    existingProjects: projectsList,
-    onSuccess: (_, mode) => {
-      if (mode === 'create') {
-        navigate('/chat/dashboard')
-      }
-    }
-  })
+  const projectModal = useProjectModalContext()
 
   const filteredProjectNames = useMemo(() => {
     return filterProjectsBySearch(
@@ -56,23 +54,23 @@ function Home() {
 
   const handleSendClick = async () => {
     if (isSending) return
-    
+
     const messageContent = inputValue.trim()
-    
+
     // If empty string, just navigate to show most recent conversation
     if (!messageContent) {
       navigate('/chat/data')
       return
     }
-    
+
     try {
       // Submit the chat message first
       const success = await sendMessage(messageContent)
-      
+
       if (success) {
         // Clear the input after successful submission
         setInputValue('')
-        
+
         // Then navigate to the chat page
         navigate('/chat/data')
       }
@@ -87,24 +85,25 @@ function Home() {
     navigate('/chat/dashboard')
   }
 
-
-
-
-
-
-
-  // Listen for header-triggered create intent and scroll
+  // Listen for header-triggered create intent and scroll (run once on mount)
   useEffect(() => {
     // Support router state-based control from Header
     try {
       // @ts-ignore - history state type
       const state = window.history.state && window.history.state.usr
+      let usedState = false
       if (state?.openCreate) {
         projectModal.openCreateModal()
+        usedState = true
       }
       if (state?.scrollTo === 'projects') {
         const el = document.getElementById('projects')
         el?.scrollIntoView({ behavior: 'smooth' })
+        usedState = true
+      }
+      // Clear the one-time state so the modal doesn't immediately re-open after closing
+      if (usedState) {
+        navigate('.', { replace: true, state: undefined as any })
       }
       // Fallback: check localStorage hint
       const createFlag = localStorage.getItem('homeOpenCreate')
@@ -115,7 +114,7 @@ function Home() {
         el?.scrollIntoView({ behavior: 'smooth' })
       }
     } catch {}
-  }, [projectModal])
+  }, [])
 
   return (
     <div className="min-h-screen flex flex-col items-stretch px-4 sm:px-6 lg:px-8 pt-24 md:pt-28 pb-8 bg-background">
@@ -142,13 +141,23 @@ function Home() {
               }}
               disabled={isSending}
               className="w-full h-24 sm:h-28 bg-transparent border-none resize-none p-4 pr-12 placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed text-foreground placeholder-foreground/50 disabled:opacity-70"
-              placeholder={isSending ? "Sending message..." : "I'm building an agent that will work with my app..."}
+              placeholder={
+                isSending
+                  ? 'Sending message...'
+                  : "I'm building an agent that will work with my app..."
+              }
             />
             <button
               onClick={handleSendClick}
               disabled={isSending}
               className="absolute bottom-2 right-2 p-0 bg-transparent text-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label={isSending ? "Sending..." : inputValue.trim() ? "Send" : "Go to Chat"}
+              aria-label={
+                isSending
+                  ? 'Sending...'
+                  : inputValue.trim()
+                    ? 'Send'
+                    : 'Go to Chat'
+              }
             >
               <FontIcon type="arrow-filled" className="w-6 h-6 text-primary" />
             </button>
@@ -333,16 +342,7 @@ function Home() {
         </div>
       </div>
       {/* Project edit modal over Home */}
-      <ProjectModal
-        isOpen={projectModal.isModalOpen}
-        mode={projectModal.modalMode}
-        initialName={projectModal.projectName}
-        initialDescription={''}
-        onClose={projectModal.closeModal}
-        onSave={projectModal.saveProject}
-        onDelete={projectModal.modalMode === 'edit' ? projectModal.deleteProject : undefined}
-        isLoading={projectModal.isLoading}
-      />
+      {/* Modal rendered globally in App */}
     </div>
   )
 }

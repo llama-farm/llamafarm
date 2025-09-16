@@ -11,17 +11,16 @@ import { useNavigate } from 'react-router-dom'
 import { Mode } from '../ModeToggle'
 import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
-import ProjectModal from '../../components/Project/ProjectModal'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
-import { useProjectModal } from '../../hooks/useProjectModal'
-import { getCurrentNamespace } from '../../utils/namespaceUtils'
+import { useProjectModalContext } from '../../contexts/ProjectModalContext'
+// import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets } from '../../hooks/useDatasets'
 
 const Dashboard = () => {
   const { theme } = useTheme()
   const navigate = useNavigate()
-  const namespace = getCurrentNamespace()
+  // const namespace = getCurrentNamespace()
   const activeProject = useActiveProject()
 
   // All state declarations first
@@ -68,15 +67,7 @@ const Dashboard = () => {
   }, [apiDatasets])
 
   // Shared modal hook
-  const projectModal = useProjectModal({
-    namespace,
-    existingProjects: [], // Dashboard doesn't need duplicate checking since it edits current project
-    onSuccess: (newProjectName, mode) => {
-      if (mode === 'edit' && newProjectName) {
-        setProjectName(newProjectName)
-      }
-    },
-  })
+  const projectModal = useProjectModalContext()
 
   useEffect(() => {
     const refresh = () => {
@@ -416,24 +407,7 @@ const Dashboard = () => {
           </>
         )}
       </div>
-      <ProjectModal
-        isOpen={projectModal.isModalOpen}
-        mode={projectModal.modalMode}
-        initialName={projectModal.projectName}
-        initialDescription={''}
-        onClose={projectModal.closeModal}
-        onSave={projectModal.saveProject}
-        onDelete={
-          projectModal.modalMode === 'edit'
-            ? async () => {
-                await projectModal.deleteProject()
-                // Navigate to projects page after deletion
-                navigate('/chat/projects')
-              }
-            : undefined
-        }
-        isLoading={projectModal.isLoading}
-      />
+      {/* Modal rendered globally in App */}
     </>
   )
 }

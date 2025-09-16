@@ -124,3 +124,11 @@ body,
     @apply bg-background text-foreground;
   }
 }
+
+/* Multi-line text clamp utilities */
+.line-clamp-6 {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

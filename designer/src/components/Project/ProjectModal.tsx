@@ -80,7 +80,22 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent
+        className="sm:max-w-xl"
+        onEscapeKeyDown={e => {
+          e.preventDefault()
+          if (!isLoading) onClose()
+        }}
+        onPointerDownOutside={e => {
+          // allow clicking outside to close modal when not loading
+          if (!isLoading) return
+          e.preventDefault()
+        }}
+        onInteractOutside={e => {
+          if (!isLoading) return
+          e.preventDefault()
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg text-foreground">{title}</DialogTitle>
         </DialogHeader>
@@ -142,7 +157,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   ? 'bg-primary text-primary-foreground hover:opacity-90'
                   : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
               }`}
-              onClick={(e) => {
+              onClick={e => {
                 e.preventDefault()
                 if (isValid) {
                   onSave(name.trim())
@@ -151,7 +166,11 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               disabled={!isValid}
               type="button"
             >
-              {isLoading ? (mode === 'create' ? 'Creating...' : 'Saving...') : cta}
+              {isLoading
+                ? mode === 'create'
+                  ? 'Creating...'
+                  : 'Saving...'
+                : cta}
             </button>
           </div>
         </DialogFooter>

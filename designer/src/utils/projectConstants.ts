@@ -10,7 +10,7 @@ export const DEFAULT_PROJECT_NAMES = [
   'customer-support',
   'financial-analysis',
   'equipment-monitoring',
-  'data-pipeline'
+  'data-pipeline',
 ]
 
 export const DEFAULT_PROJECTS = DEFAULT_PROJECT_NAMES.map((name, index) => ({
@@ -18,7 +18,7 @@ export const DEFAULT_PROJECTS = DEFAULT_PROJECT_NAMES.map((name, index) => ({
   name,
   model: 'TinyLama',
   lastEdited: '8/15/2025',
-  description: `Default ${name} project`
+  description: `Default ${name} project`,
 }))
 
 /**
@@ -26,11 +26,17 @@ export const DEFAULT_PROJECTS = DEFAULT_PROJECT_NAMES.map((name, index) => ({
  * @param apiResponse - The API response containing projects
  * @returns Array of project names
  */
-export const getProjectsList = (apiResponse?: { projects?: Project[] }): string[] => {
-  if (apiResponse?.projects && apiResponse.projects.length > 0) {
-    return apiResponse.projects.map(p => p.name)
-  }
-  return DEFAULT_PROJECT_NAMES
+export const getProjectsList = (apiResponse?: {
+  projects?: Project[]
+}): string[] => {
+  const api = (apiResponse?.projects || []).map(p => p.name)
+  let custom: string[] = []
+  try {
+    const raw = localStorage.getItem('lf_custom_projects')
+    if (raw) custom = JSON.parse(raw)
+  } catch {}
+  const merged = [...new Set([...api, ...custom])]
+  return merged.length > 0 ? merged : DEFAULT_PROJECT_NAMES
 }
 
 /**
@@ -39,14 +45,31 @@ export const getProjectsList = (apiResponse?: { projects?: Project[] }): string[
  * @returns Array of ProjectItem objects for UI display
  */
 export const getProjectsForUI = (apiResponse?: { projects?: Project[] }) => {
-  if (apiResponse?.projects && apiResponse.projects.length > 0) {
-    return apiResponse.projects.map((project, idx) => ({
+  const api = apiResponse?.projects || []
+  let custom: string[] = []
+  try {
+    const raw = localStorage.getItem('lf_custom_projects')
+    if (raw) custom = JSON.parse(raw)
+  } catch {}
+  if (api.length > 0 || custom.length > 0) {
+    const itemsFromApi = api.map((project, idx) => ({
       id: idx + 1,
       name: project.name,
-      model: 'TinyLama', // TODO: Extract from project.config when available
-      lastEdited: '8/15/2025', // TODO: Use actual lastModified from API
-      description: project.config?.description || ''
+      model: 'TinyLama',
+      lastEdited: '8/15/2025',
+      description: project.config?.description || '',
     }))
+    const startIndex = itemsFromApi.length
+    const itemsFromCustom = custom
+      .filter(name => !api.some(p => p.name === name))
+      .map((name, idx) => ({
+        id: startIndex + idx + 1,
+        name,
+        model: 'TinyLama',
+        lastEdited: '8/15/2025',
+        description: '',
+      }))
+    return [...itemsFromApi, ...itemsFromCustom]
   }
   return DEFAULT_PROJECTS
 }
@@ -62,9 +85,9 @@ export const filterProjectsBySearch = <T extends { name: string }>(
   search: string
 ): T[] => {
   if (!search || search.trim() === '') return projects
-  
+
   const searchTerm = search.toLowerCase().trim()
-  return projects.filter(project => 
+  return projects.filter(project =>
     project.name.toLowerCase().includes(searchTerm)
   )
 }
