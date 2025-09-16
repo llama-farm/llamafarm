@@ -116,20 +116,26 @@ class ProjectChatService:
         logger.info(f"RAG search returned {len(normalized)} results")
         return normalized
 
+    def _clear_rag_context_provider(self, chat_agent: ProjectChatOrchestratorAgent) -> None:
+        try:
+            if hasattr(chat_agent, 'context_providers') and chat_agent.context_providers:
+                if "project_chat_context" in chat_agent.context_providers:
+                    del chat_agent.context_providers["project_chat_context"]
+        except Exception as e:
+            logger.warning(f"Failed to clear RAG context provider: {e}")
+
     async def chat(
         self,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
     ) -> ChatCompletion:
+        self._clear_rag_context_provider(chat_agent)
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
-
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        # Use the RAG subsystem to perform RAG based on the project config
         rag_results = self._perform_rag_search(project_config, message)
 
-        # Store the result from the RAG subsystem in the agent's context provider
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(
                 content=result.content,
@@ -175,6 +181,7 @@ class ProjectChatService:
         message: str,
     ) -> AsyncGenerator[str, None]:
         """Yield assistant content chunks, using agent-native streaming if available."""
+        self._clear_rag_context_provider(chat_agent)
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
