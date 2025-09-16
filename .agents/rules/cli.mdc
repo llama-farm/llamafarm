@@ -1,0 +1,8 @@
+---
+description: Applies to CLI development
+globs: cli/**
+alwaysApply: false
+---
+
+## Rules that must be followed
+- When updating CLI code that could be invoked via the BubbleTea TUI, ensure the code does not print to stdout/stderr in any way. It *must* update code using the update/view approach as required by BubbleTea.

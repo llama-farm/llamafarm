@@ -13,7 +13,7 @@ If tools are available, respond based on the user's request:
 I can help you with GitHub issues. What would you like to do?
 1. Create a new issue from a thoughts document
 2. Create a new issue ad-hoc
-3. Add a comment to a issue (I'll use our conversation context)
+3. Add a comment to an issue (I'll use our conversation context)
 4. Search for issues
 5. Update issue status or details
 ```
@@ -191,7 +191,7 @@ resuming sessions, with support for explicit overrides.
 
 ### 2. Adding Comments and Links to Existing issues
 
-When user wants to add a comment to a issue:
+When user wants to add a comment to an issue:
 
 1. **Determine which issue:**
    - Use context from the current conversation to identify the relevant issue
@@ -309,7 +309,7 @@ When moving issues through the workflow:
 
 - Tag users in descriptions and comments using `@[name](ID)` format, e.g., `@[alice](3784fc42-4879-4c0f-ef23-0d4d79222ef5)`
 - Keep issues concise but complete - aim for scannable content
-- All issues should include a clear "problem to solve" - if the user asks for a issue and only gives implementation details, you MUST ask "To write a good issue, please explain the problem you're trying to solve from a user perspective"
+- All issues should include a clear "problem to solve" - if the user asks for an issue and only gives implementation details, you MUST ask "To write a good issue, please explain the problem you're trying to solve from a user perspective"
 - Focus on the "what" and "why", include "how" only if well-defined
 - Always preserve links to source material using the `links` parameter
 - Don't create issues from early-stage brainstorming unless requested
