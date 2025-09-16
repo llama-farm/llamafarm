@@ -80,6 +80,7 @@ class ProjectChatService:
         project_config: LlamaFarmConfig,
         message: str,
         top_k: int = 5,
+        database: str | None = None,
     ) -> list[Any]:
         """Perform RAG search using the project's RAG configuration.
 
@@ -99,7 +100,18 @@ class ProjectChatService:
             logger.error("No RAG strategies found in project config")
             return []
 
-        dataset = project_config.datasets[0] if project_config.datasets else None
+        # Find the dataset based on the database parameter
+        dataset = None
+        if database:
+            # Look for a dataset that uses the specified database
+            for ds in project_config.datasets:
+                if ds.database == database:
+                    dataset = ds
+                    break
+        
+        # Fallback to first dataset if no specific database requested
+        if not dataset:
+            dataset = project_config.datasets[0] if project_config.datasets else None
 
         if not dataset:
             logger.error("No datasets found in project config")
@@ -131,13 +143,49 @@ class ProjectChatService:
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
+        rag_enabled: bool | None = None,
+        rag_database: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
     ) -> ChatCompletion:
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
 
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
+        # Use config defaults if not explicitly provided
+        # If rag_enabled is None, check if RAG is configured and datasets exist
+        if rag_enabled is None:
+            rag_enabled = bool(project_config.rag and project_config.datasets)
+            if rag_enabled:
+                logger.info("RAG enabled by default based on project configuration")
+        
+        # Use config defaults for other parameters if not provided
+        if rag_enabled and project_config.rag:
+            # If no database specified, use the first dataset's database
+            if rag_database is None and project_config.datasets:
+                rag_database = project_config.datasets[0].database
+                logger.info(f"Using default database from config: {rag_database}")
+            
+            # If no top_k specified, check if there's a default in retrieval strategies
+            if rag_top_k is None:
+                # Look for default retrieval strategy's top_k
+                if project_config.rag.databases:
+                    for db in project_config.rag.databases:
+                        if db.name == rag_database:
+                            for strategy in db.retrieval_strategies or []:
+                                if strategy.default:
+                                    rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
+                                    break
+                            break
+                if rag_top_k is None:
+                    rag_top_k = 5  # Fallback default
+        
         # Use the RAG subsystem to perform RAG based on the project config
-        rag_results = self._perform_rag_search(project_dir, project_config, message)
+        rag_results = []
+        if rag_enabled:
+            rag_results = self._perform_rag_search(
+                project_dir, project_config, message, top_k=rag_top_k or 5, database=rag_database
+            )
 
         # Store the result from the RAG subsystem in the agent's context provider
         for idx, result in enumerate(rag_results):
@@ -184,12 +232,43 @@ class ProjectChatService:
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
+        rag_enabled: bool | None = None,
+        rag_database: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[str, None]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        rag_results = self._perform_rag_search(project_dir, project_config, message)
+        # Use config defaults if not explicitly provided (same logic as chat method)
+        if rag_enabled is None:
+            rag_enabled = bool(project_config.rag and project_config.datasets)
+            if rag_enabled:
+                logger.info("RAG enabled by default based on project configuration")
+        
+        if rag_enabled and project_config.rag:
+            if rag_database is None and project_config.datasets:
+                rag_database = project_config.datasets[0].database
+                logger.info(f"Using default database from config: {rag_database}")
+            
+            if rag_top_k is None:
+                if project_config.rag.databases:
+                    for db in project_config.rag.databases:
+                        if db.name == rag_database:
+                            for strategy in db.retrieval_strategies or []:
+                                if strategy.default:
+                                    rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
+                                    break
+                            break
+                if rag_top_k is None:
+                    rag_top_k = 5
+
+        rag_results = []
+        if rag_enabled:
+            rag_results = self._perform_rag_search(
+                project_dir, project_config, message, top_k=rag_top_k or 5, database=rag_database
+            )
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(
                 content=result.content,

@@ -298,8 +298,10 @@ def search_with_rag(
 
     cfg_path = project_dir + "/llamafarm.yaml"
 
+    # Add the repo root to sys.path to fix import issues
     code = (
-        "from api import SearchAPI;"
+        f"import sys; sys.path.insert(0, r'{str(repo_root)}');"
+        "from rag.api import SearchAPI;"
         f"api=SearchAPI(config_path=r'{cfg_path}', dataset='{dataset}');"
         f"res=api.search(query={json.dumps(query)}, top_k={int(top_k)}, retrieval_strategy='{retrieval_strategy}');"
         "import json; print(json.dumps([r.to_dict() for r in res]))"

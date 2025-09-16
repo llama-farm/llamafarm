@@ -230,6 +230,10 @@ async def chat(
                 project_config=project_config,
                 chat_agent=agent,
                 message=latest_user_message,
+                rag_enabled=request.rag_enabled,
+                rag_database=request.rag_database,
+                rag_top_k=request.rag_top_k,
+                rag_score_threshold=request.rag_score_threshold,
             ),
             session_id,
         )
@@ -240,6 +244,10 @@ async def chat(
             project_config=project_config,
             chat_agent=agent,
             message=latest_user_message,
+            rag_enabled=request.rag_enabled,
+            rag_database=request.rag_database,
+            rag_top_k=request.rag_top_k,
+            rag_score_threshold=request.rag_score_threshold,
         )
     except Exception as e:
         raise HTTPException(
