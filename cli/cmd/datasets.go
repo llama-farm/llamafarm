@@ -38,7 +38,8 @@ Available commands:
   list    - List all datasets on the server for a project
   add     - Create a dataset on the server (optionally then upload files)
   remove  - Delete a dataset from the server
-  ingest  - Upload files to a dataset on the server`,
+  ingest  - Upload files to a dataset on the server
+  process - Process uploaded files into the vector database`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("LlamaFarm Datasets Management")
 		cmd.Help()
@@ -317,6 +318,87 @@ Examples:
 	},
 }
 
+// datasetsProcessCmd represents the datasets process command
+var datasetsProcessCmd = &cobra.Command{
+	Use:   "process [dataset-name]",
+	Short: "Process uploaded files into the vector database",
+	Long: `Process all uploaded files in the dataset into the vector database using the configured data processing strategy and embeddings.`,
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		datasetName := args[0]
+
+		// Ensure server is up
+		ensureServerAvailable(serverCfg.URL)
+
+		fmt.Printf("Processing dataset '%s'...\n", datasetName)
+
+		// Call the process endpoint
+		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process", 
+			serverCfg.Namespace, serverCfg.Project, datasetName))
+		
+		req, err := http.NewRequest("POST", url, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+			os.Exit(1)
+		}
+
+		resp, err := getHTTPClient().Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error processing dataset: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading response: %v\n", err)
+			os.Exit(1)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
+			os.Exit(1)
+		}
+
+		// Parse response
+		var result struct {
+			ProcessedFiles int      `json:"processed_files"`
+			SkippedFiles   int      `json:"skipped_files"`
+			FailedFiles    int      `json:"failed_files"`
+			Details        []struct {
+				Hash   string `json:"hash"`
+				Status string `json:"status"`
+				Error  string `json:"error,omitempty"`
+			} `json:"details"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing response: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Display results
+		fmt.Printf("✅ Processing complete:\n")
+		fmt.Printf("   • Processed: %d files\n", result.ProcessedFiles)
+		if result.SkippedFiles > 0 {
+			fmt.Printf("   • Skipped: %d files (already processed)\n", result.SkippedFiles)
+		}
+		if result.FailedFiles > 0 {
+			fmt.Printf("   • Failed: %d files\n", result.FailedFiles)
+			for _, d := range result.Details {
+				if d.Status == "failed" && d.Error != "" {
+					fmt.Printf("     - %s: %s\n", d.Hash[:8], d.Error)
+				}
+			}
+		}
+	},
+}
+
 func init() {
 	// Add persistent flags
 	datasetsCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path (default: llamafarm.yaml in current directory)")
@@ -338,6 +420,7 @@ func init() {
 	datasetsCmd.AddCommand(datasetsAddCmd)
 	datasetsCmd.AddCommand(datasetsRemoveCmd)
 	datasetsCmd.AddCommand(datasetsIngestCmd)
+	datasetsCmd.AddCommand(datasetsProcessCmd)
 
 	// Add the datasets command to root
 	rootCmd.AddCommand(datasetsCmd)

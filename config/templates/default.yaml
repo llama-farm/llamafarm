@@ -22,8 +22,6 @@ prompts:
     content: |
       You are a helpful AI assistant with access to a knowledge base through RAG (Retrieval-Augmented Generation).
       When context is provided from the knowledge base, use it to provide accurate and detailed answers.
-      If relevant context is available, cite or reference it in your response.
-      If no relevant context is provided, answer based on your general knowledge while noting that you don't have specific information from the knowledge base.
 
 # =============================================================================
 # DATASETS CONFIGURATION
@@ -60,18 +58,7 @@ rag:
             dimension: 768
             batch_size: 16
             timeout: 60
-            auto_pull: true
-        - name: "fast_embeddings"
-          type: "OllamaEmbedder"
-          priority: 0
-          config:
-            model: "nomic-embed-text"
-            base_url: "http://localhost:11434/"
-            dimension: 768
-            batch_size: 32
-            timeout: 30
-            auto_pull: true
-      # Available retrieval strategies
+            auto_pull: true      # Available retrieval strategies
       retrieval_strategies:
         - name: "basic_search"
           type: "BasicSimilarityStrategy"

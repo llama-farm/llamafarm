@@ -46,6 +46,284 @@ class SearchResult:
         return asdict(self)
 
 
+class DatabaseSearchAPI:
+    """API for searching directly against a database without dataset requirement."""
+
+    def __init__(
+        self,
+        config_path: str = "rag_config.json",
+        base_dir: Optional[str] = None,
+        database: Optional[str] = None,
+    ):
+        """Initialize the database search API.
+
+        Args:
+            config_path: Path to llamafarm.yaml configuration file
+            base_dir: Base directory for relative path resolution
+            database: Database name to search in
+        """
+        self.config_path = config_path
+        self.base_dir = base_dir
+        self.database = database
+        self._load_database_config()
+        self._initialize_components()
+
+    def _load_database_config(self) -> None:
+        """Load configuration for database from llamafarm.yaml."""
+        resolver = PathResolver(self.base_dir)
+
+        try:
+            resolved_config_path = resolver.resolve_config_path(self.config_path)
+
+            # Load llamafarm.yaml
+            if yaml is None:
+                raise ImportError("PyYAML is required to parse llamafarm.yaml files")
+
+            with open(resolved_config_path, "r") as f:
+                llamafarm_config = yaml.safe_load(f)
+
+            if not llamafarm_config:
+                raise ValueError("Empty llamafarm config file")
+
+            # Find the database configuration directly from rag section
+            rag_config = llamafarm_config.get("rag", {})
+            databases = rag_config.get("databases", [])
+            
+            # If no database specified, use the first one
+            if not self.database and databases:
+                self.database = databases[0].get("name")
+            
+            database_config = None
+            for db in databases:
+                if db.get("name") == self.database:
+                    database_config = db
+                    break
+
+            if not database_config:
+                raise ValueError(f"Database '{self.database}' not found in rag configuration")
+
+            # Store database config for later use
+            self._database_config = database_config
+
+            # Build traditional rag config format
+            traditional_config = {}
+
+            # Vector store configuration
+            db_type = database_config.get("type")
+            db_config = database_config.get("config", {})
+            
+            # Resolve persist_directory if relative
+            if "persist_directory" in db_config and not db_config["persist_directory"].startswith("/"):
+                import os
+                base_path = os.path.dirname(resolved_config_path)
+                db_config["persist_directory"] = os.path.join(base_path, db_config["persist_directory"])
+                print(f"[DatabaseSearchAPI] Resolved persist_directory to: {db_config['persist_directory']}")
+            
+            traditional_config["vector_store"] = {"type": db_type, "config": db_config}
+
+            # Embedding configuration - use default embedding strategy
+            embedding_strategies = database_config.get("embedding_strategies", [])
+            default_embedding_strategy = database_config.get("default_embedding_strategy")
+
+            embedder_config = None
+            if default_embedding_strategy:
+                # Find the named strategy
+                for strategy in embedding_strategies:
+                    if strategy.get("name") == default_embedding_strategy:
+                        embedder_config = {
+                            "type": strategy.get("type"),
+                            "config": strategy.get("config", {}),
+                        }
+                        break
+            elif embedding_strategies:
+                # Use first available strategy
+                first_strategy = embedding_strategies[0]
+                embedder_config = {
+                    "type": first_strategy.get("type"),
+                    "config": first_strategy.get("config", {}),
+                }
+
+            if embedder_config:
+                traditional_config["embedder"] = embedder_config
+
+            # Retrieval strategy configuration - use default retrieval strategy
+            retrieval_strategies = database_config.get("retrieval_strategies", [])
+            default_retrieval_strategy = database_config.get("default_retrieval_strategy")
+
+            retrieval_config = None
+            if default_retrieval_strategy:
+                # Find the named strategy
+                for strategy in retrieval_strategies:
+                    if strategy.get("name") == default_retrieval_strategy:
+                        retrieval_config = {
+                            "type": strategy.get("type"),
+                            "config": strategy.get("config", {}),
+                        }
+                        break
+            elif retrieval_strategies:
+                # Use first strategy or one marked as default
+                for strategy in retrieval_strategies:
+                    if strategy.get("default", False):
+                        retrieval_config = {
+                            "type": strategy.get("type"),
+                            "config": strategy.get("config", {}),
+                        }
+                        break
+                
+                if not retrieval_config and retrieval_strategies:
+                    # Use first available strategy as fallback
+                    first_strategy = retrieval_strategies[0]
+                    retrieval_config = {
+                        "type": first_strategy.get("type"),
+                        "config": first_strategy.get("config", {}),
+                    }
+
+            if retrieval_config:
+                traditional_config["retrieval_strategy"] = retrieval_config
+
+            self.config = traditional_config
+
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Config file not found: {e}")
+        except (yaml.YAMLError) as e:
+            raise ValueError(f"Invalid config file format: {e}")
+
+    def _get_retrieval_strategy_by_name(self, strategy_name: str):
+        """Get a retrieval strategy by name from the database config."""
+        retrieval_strategies = self._database_config.get("retrieval_strategies", [])
+        
+        for strategy in retrieval_strategies:
+            if strategy.get("name") == strategy_name:
+                # Create strategy from config
+                strategy_config = {
+                    "type": strategy.get("type"),
+                    "config": strategy.get("config", {}),
+                }
+                return create_retrieval_strategy_from_config(strategy_config)
+        
+        # If not found, return the default strategy
+        return self.retrieval_strategy
+
+    def _initialize_components(self) -> None:
+        """Initialize RAG components from configuration."""
+        try:
+            # Initialize embedder
+            if "embedder" in self.config:
+                self.embedder = create_embedder_from_config(self.config["embedder"])
+            else:
+                raise ValueError("No embedder configuration found")
+
+            # Initialize vector store
+            if "vector_store" in self.config:
+                self.vector_store = create_vector_store_from_config(
+                    self.config["vector_store"]
+                )
+            else:
+                raise ValueError("No vector store configuration found")
+
+            # Initialize retrieval strategy
+            if "retrieval_strategy" in self.config:
+                self.retrieval_strategy = create_retrieval_strategy_from_config(
+                    self.config["retrieval_strategy"]
+                )
+            else:
+                # Fallback to basic universal strategy
+                try:
+                    from components.retrievers.strategies.universal import (
+                        BasicSimilarityStrategy,
+                    )
+
+                    self.retrieval_strategy = BasicSimilarityStrategy()
+                except ImportError:
+                    # Use basic similarity from the standard location
+                    from components.retrievers.basic_similarity.basic_similarity import (
+                        BasicSimilarityStrategy,
+                    )
+
+                    self.retrieval_strategy = BasicSimilarityStrategy()
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize components: {e}")
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        min_score: Optional[float] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        return_raw_documents: bool = False,
+        retrieval_strategy: Optional[str] = None,
+        **kwargs,
+    ) -> Union[List[SearchResult], List[Document]]:
+        """Search for documents in the database using configured retrieval strategy."""
+        # Embed the query
+        query_embedding = self.embedder.embed([query])[0]
+
+        # Determine which retrieval strategy to use
+        strategy_to_use = self.retrieval_strategy
+        if retrieval_strategy:
+            # Look for alternative retrieval strategy by name
+            strategy_to_use = self._get_retrieval_strategy_by_name(retrieval_strategy)
+
+        # Use retrieval strategy to get results
+        retrieval_result = strategy_to_use.retrieve(
+            query_embedding=query_embedding,
+            vector_store=self.vector_store,
+            top_k=top_k,
+            **kwargs,
+        )
+
+        # Filter by minimum score if specified
+        if min_score is not None:
+            filtered_docs = []
+            filtered_scores = []
+            for doc, score in zip(retrieval_result.documents, retrieval_result.scores):
+                if score >= min_score:
+                    filtered_docs.append(doc)
+                    filtered_scores.append(score)
+            retrieval_result.documents = filtered_docs
+            retrieval_result.scores = filtered_scores
+
+        # Apply metadata filter if specified
+        if metadata_filter:
+            filtered_docs = []
+            filtered_scores = []
+            for doc, score in zip(retrieval_result.documents, retrieval_result.scores):
+                if self._matches_metadata_filter(doc, metadata_filter):
+                    filtered_docs.append(doc)
+                    filtered_scores.append(score)
+            retrieval_result.documents = filtered_docs
+            retrieval_result.scores = filtered_scores
+
+        # Return raw documents if requested
+        if return_raw_documents:
+            return retrieval_result.documents
+
+        # Convert to SearchResult objects
+        results = []
+        for doc, score in zip(retrieval_result.documents, retrieval_result.scores):
+            # Update score in metadata for SearchResult creation
+            doc.metadata["similarity_score"] = score
+            results.append(SearchResult.from_document(doc))
+
+        return results
+
+    def _matches_metadata_filter(
+        self, doc: Document, metadata_filter: Dict[str, Any]
+    ) -> bool:
+        """Check if a document matches metadata filter criteria."""
+        if not doc.metadata:
+            return False
+
+        for key, value in metadata_filter.items():
+            if key not in doc.metadata:
+                return False
+            if doc.metadata[key] != value:
+                return False
+
+        return True
+
+
 class SearchAPI:
     """Internal API for searching the RAG system."""
 
@@ -156,6 +434,14 @@ class SearchAPI:
         # Vector store configuration
         db_type = database_config.get("type")
         db_config = database_config.get("config", {})
+        
+        # Resolve persist_directory if relative (for ChromaDB)
+        if "persist_directory" in db_config and not db_config["persist_directory"].startswith("/"):
+            import os
+            base_path = os.path.dirname(config_path)
+            db_config["persist_directory"] = os.path.join(base_path, db_config["persist_directory"])
+            print(f"[SearchAPI] Resolved persist_directory to: {db_config['persist_directory']}")
+        
         traditional_config["vector_store"] = {"type": db_type, "config": db_config}
 
         # Embedding configuration - use default embedding strategy

@@ -35,7 +35,18 @@ dependencies = [
     # RAG dependencies
     "chromadb>=1.0.0",
     "pyyaml>=6.0.0",
-    "python-magic>=0.4.0",
+    "python-magic>=0.4.27",
+    "python-magic-bin>=0.4.14; sys_platform == 'win32'",  # Windows support
+    # PDF parsing dependencies
+    "pypdf2>=3.0.0",
+    "llama-index>=0.13.6",
+    # Additional document parsing
+    "beautifulsoup4>=4.12.0",
+    "python-docx>=1.0.0",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.2",
+    # Fix dotenv parsing
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]

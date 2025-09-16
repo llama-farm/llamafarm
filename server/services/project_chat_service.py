@@ -17,7 +17,7 @@ from context_providers.project_chat_context_provider import (
     ProjectChatContextProvider,
 )
 from core.logging import FastAPIStructLogger
-from services.rag_subprocess import search_with_rag
+from services.rag_subprocess import search_with_rag, search_with_rag_database
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -84,8 +84,7 @@ class ProjectChatService:
     ) -> list[Any]:
         """Perform RAG search using the project's RAG configuration.
 
-        This implementation shells out to the rag subsystem in its own
-        Python environment to avoid cross-venv import issues.
+        This implementation searches the database directly, not through datasets.
         """
 
         # First, make sure rag is enabled
@@ -95,30 +94,18 @@ class ProjectChatService:
 
         logger.info(f"Performing RAG search for message: {message}")
 
-        # For now, use the first available strategy
-        if not project_config.rag.data_processing_strategies:
-            logger.error("No RAG strategies found in project config")
-            return []
+        # Find the database configuration
+        if not database:
+            # Use the first database as default
+            if project_config.rag.databases:
+                database = project_config.rag.databases[0].name
+                logger.info(f"Using default database: {database}")
+            else:
+                logger.error("No databases found in project config")
+                return []
 
-        # Find the dataset based on the database parameter
-        dataset = None
-        if database:
-            # Look for a dataset that uses the specified database
-            for ds in project_config.datasets:
-                if ds.database == database:
-                    dataset = ds
-                    break
-        
-        # Fallback to first dataset if no specific database requested
-        if not dataset:
-            dataset = project_config.datasets[0] if project_config.datasets else None
-
-        if not dataset:
-            logger.error("No datasets found in project config")
-            return []
-
-        # Use shared helper to run RAG search
-        results = search_with_rag(project_dir, dataset.name, message, top_k=top_k)
+        # Use shared helper to run RAG search on database
+        results = search_with_rag_database(project_dir, database, message, top_k=top_k)
         if results is None:
             results = []
 
@@ -153,17 +140,17 @@ class ProjectChatService:
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
         # Use config defaults if not explicitly provided
-        # If rag_enabled is None, check if RAG is configured and datasets exist
+        # If rag_enabled is None, check if RAG is configured
         if rag_enabled is None:
-            rag_enabled = bool(project_config.rag and project_config.datasets)
+            rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
                 logger.info("RAG enabled by default based on project configuration")
         
         # Use config defaults for other parameters if not provided
         if rag_enabled and project_config.rag:
-            # If no database specified, use the first dataset's database
-            if database is None and project_config.datasets:
-                database = project_config.datasets[0].database
+            # If no database specified, use the first database
+            if database is None and project_config.rag.databases:
+                database = project_config.rag.databases[0].name
                 logger.info(f"Using default database from config: {database}")
             
             # If no top_k specified, check if there's a default in retrieval strategies

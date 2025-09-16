@@ -69,16 +69,8 @@ class SchemaHandler:
         """Create database configuration for factories."""
         for db in self.rag_config.get("databases", []):
             if db["name"] == database_name:
-                return {
-                    "vector_store": {
-                        "type": db["type"],
-                        "config": db.get("config", {}),
-                    },
-                    "default_embedding_strategy": db.get("default_embedding_strategy"),
-                    "default_retrieval_strategy": db.get("default_retrieval_strategy"),
-                    "embedding_strategies": db.get("embedding_strategies", []),
-                    "retrieval_strategies": db.get("retrieval_strategies", []),
-                }
+                # Return the database config as-is from the YAML
+                return db
         raise ValueError(f"Database '{database_name}' not found")
 
     def create_processing_config(self, strategy_name: str) -> Dict[str, Any]:
@@ -201,6 +193,7 @@ class SchemaHandler:
 
     def get_vector_store_config(self, db_config: Dict[str, Any]) -> Dict[str, Any]:
         """Get vector store configuration from database config."""
+        # Database config has 'type' and 'config' at the top level
         return {
             "type": db_config.get("type", "ChromaStore"),
             "config": db_config.get("config", {}),

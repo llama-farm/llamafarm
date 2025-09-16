@@ -122,12 +122,13 @@ async def actions(
 
 
 @router.post("/{dataset}/data")
-async def ingest_data(
+async def upload_data(
     namespace: str,
     project: str,
     dataset: str,
     file: UploadFile,
 ):
+    """Upload a file to the dataset (stores it but does NOT process into vector database)"""
     logger.bind(namespace=namespace, project=project, dataset=dataset)
     metadata_file_content = await DataService.add_data_file(
         namespace=namespace,
@@ -135,58 +136,129 @@ async def ingest_data(
         file=file,
     )
 
-    # Call the rag subsystem to ingest the file into the vector store
-    # Resolve on-disk path for the newly saved file
-    project_dir = ProjectService.get_project_dir(namespace, project)
-    # replicate DataService.get_data_dir() path assembly; avoid class constants
-    data_path = f"{project_dir}/lf_data/raw/{metadata_file_content.hash}"
-
-    # Load project config and get dataset configuration
-    project_obj = ProjectService.get_project(namespace, project)
-    dataset_config = next(
-        (ds for ds in (project_obj.config.datasets or []) if ds.name == dataset),
-        None,
-    )
-
-    if dataset_config is None:
-        logger.error("Dataset not found in project config", dataset=dataset)
-        # Use default processing for now - this should be handled by RAG system
-        data_processing_strategy_name = "default"
-        database_name = "default"
-    else:
-        data_processing_strategy_name = (
-            dataset_config.data_processing_strategy or "default"
-        )
-        database_name = dataset_config.database or "default"
-
-    logger.info(
-        "Ingesting file into RAG",
-        path=data_path,
-        dataset=dataset,
-        data_processing_strategy=data_processing_strategy_name,
-        database=database_name,
-    )
-
-    # Use simple RAG ingestion (bypassing complex config serialization)
-    ok = ingest_file_with_rag(
-        project_dir=project_dir,
-        project_config=project_obj.config,
-        data_processing_strategy_name=data_processing_strategy_name,
-        database_name=database_name,
-        source_path=data_path,
-    )
-
-    if not ok:
-        logger.error("RAG ingest failed", path=data_path)
-        raise HTTPException(status_code=500, detail="RAG ingest failed")
-
     DatasetService.add_file_to_dataset(
         namespace=namespace,
         project=project,
         dataset=dataset,
         file=metadata_file_content,
     )
-    return {"filename": file.filename}
+    
+    logger.info(
+        "File uploaded to dataset",
+        dataset=dataset,
+        filename=file.filename,
+        hash=metadata_file_content.hash
+    )
+    
+    return {"filename": file.filename, "hash": metadata_file_content.hash, "processed": False}
+
+
+class ProcessDatasetResponse(BaseModel):
+    processed_files: int
+    skipped_files: int
+    failed_files: int
+    details: list[dict]
+
+
+@router.post("/{dataset}/process", response_model=ProcessDatasetResponse)
+async def process_dataset(
+    namespace: str,
+    project: str,
+    dataset: str,
+):
+    """Process all unprocessed files in the dataset into the vector database"""
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+    
+    # Get project and dataset configuration
+    project_obj = ProjectService.get_project(namespace, project)
+    project_dir = ProjectService.get_project_dir(namespace, project)
+    
+    dataset_config = next(
+        (ds for ds in (project_obj.config.datasets or []) if ds.name == dataset),
+        None,
+    )
+    
+    if dataset_config is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset}' not found")
+    
+    data_processing_strategy_name = dataset_config.data_processing_strategy
+    database_name = dataset_config.database
+    
+    if not data_processing_strategy_name or not database_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Dataset missing data_processing_strategy or database configuration"
+        )
+    
+    # Process each file in the dataset
+    processed = 0
+    skipped = 0
+    failed = 0
+    details = []
+    
+    for file_hash in dataset_config.files or []:
+        data_path = f"{project_dir}/lf_data/raw/{file_hash}"
+        
+        # Check if file exists
+        import os
+        if not os.path.exists(data_path):
+            logger.warning("File not found", hash=file_hash, path=data_path)
+            failed += 1
+            details.append({
+                "hash": file_hash,
+                "status": "failed",
+                "error": "File not found"
+            })
+            continue
+        
+        # Check if already processed (by checking if hash exists as document ID in vector store)
+        # This will be handled inside ingest_file_with_rag with duplicate detection
+        
+        logger.info(
+            "Processing file into vector database",
+            hash=file_hash,
+            dataset=dataset,
+            data_processing_strategy=data_processing_strategy_name,
+            database=database_name,
+        )
+        
+        # Process the file
+        ok = ingest_file_with_rag(
+            project_dir=project_dir,
+            project_config=project_obj.config,
+            data_processing_strategy_name=data_processing_strategy_name,
+            database_name=database_name,
+            source_path=data_path,
+        )
+        
+        if ok:
+            processed += 1
+            details.append({
+                "hash": file_hash,
+                "status": "processed"
+            })
+        else:
+            failed += 1
+            details.append({
+                "hash": file_hash,
+                "status": "failed",
+                "error": "Ingestion failed"
+            })
+    
+    logger.info(
+        "Dataset processing complete",
+        dataset=dataset,
+        processed=processed,
+        skipped=skipped,
+        failed=failed
+    )
+    
+    return ProcessDatasetResponse(
+        processed_files=processed,
+        skipped_files=skipped,
+        failed_files=failed,
+        details=details
+    )
 
 
 @router.delete("/{dataset}/data/{file_hash}")

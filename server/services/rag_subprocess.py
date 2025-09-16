@@ -262,11 +262,37 @@ def run_rag_cli_with_config_and_strategy(
         
         # Create metadata
         from pathlib import Path as PathLib
+        import json
+        import os
+        
         file_path = PathLib(source_path)
+        
+        # Check if this is a hash-based file in lf_data/raw
+        if 'lf_data/raw' in str(source_path):
+            # Extract file hash from the path
+            file_hash = file_path.name
+            # Try to load metadata file
+            meta_dir = file_path.parent.parent / 'meta'
+            meta_file = meta_dir / f"{file_hash}.json"
+            
+            if meta_file.exists():
+                with open(meta_file, 'r') as mf:
+                    meta_content = json.load(mf)
+                    original_filename = meta_content.get('original_file_name', file_hash)
+                    mime_type = meta_content.get('mime_type', 'application/octet-stream')
+            else:
+                original_filename = file_hash
+                mime_type = 'application/octet-stream'
+        else:
+            # Regular file path
+            original_filename = file_path.name
+            mime_type = 'application/octet-stream'
+        
         metadata = {
-            'filename': file_path.name,
+            'filename': original_filename,
             'filepath': str(file_path),
-            'size': len(file_data)
+            'size': len(file_data),
+            'content_type': mime_type
         }
         
         # Ingest the file
@@ -327,6 +353,56 @@ def search_with_rag(
     except subprocess.CalledProcessError as e:
         logger.error(
             "RAG search subprocess failed",
+            exit_code=e.returncode,
+            stderr=e.stderr.strip(),
+        )
+        return []
+    except json.JSONDecodeError:
+        logger.error("Failed to decode RAG search output as JSON")
+        return []
+
+
+def search_with_rag_database(
+    project_dir: str,
+    database: str,
+    query: str,
+    top_k: int = 5,
+    retrieval_strategy: str | None = None,
+) -> list[dict[str, Any]]:
+    """Run a search directly against a database via rag api."""
+
+    cfg_path = project_dir + "/llamafarm.yaml"
+
+    # Add the repo root to sys.path to fix import issues
+    # Use DatabaseSearchAPI instead of SearchAPI to search database directly
+    code = (
+        f"import sys; sys.path.insert(0, r'{str(repo_root)}');"
+        "from rag.api import DatabaseSearchAPI;"
+        f"api=DatabaseSearchAPI(config_path=r'{cfg_path}', database='{database}');"
+        f"res=api.search(query={json.dumps(query)}, top_k={int(top_k)}, retrieval_strategy='{retrieval_strategy}');"
+        "import json; print(json.dumps([r.to_dict() for r in res]))"
+    )
+    cmd = [
+        "uv",
+        "run",
+        "-q",
+        "python",
+        "-c",
+        code,
+    ]
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(rag_repo),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        stdout = completed.stdout.strip()
+        return json.loads(stdout or "[]")
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "RAG database search subprocess failed",
             exit_code=e.returncode,
             stderr=e.stderr.strip(),
         )

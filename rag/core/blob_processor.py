@@ -328,9 +328,12 @@ class BlobProcessor:
         """
         filename = metadata.get("filename", "unknown")
         logger.info(f"Processing blob: {filename}")
+        logger.debug(f"Blob metadata: {metadata}")
+        logger.debug(f"First 20 bytes of blob: {blob_data[:20] if blob_data else 'empty'}")
         
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
+        logger.debug(f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0]['type'] for p in matching_parsers]}")
         
         if not matching_parsers:
             logger.warning(f"No parser found for file: {filename}")

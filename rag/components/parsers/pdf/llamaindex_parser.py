@@ -3,11 +3,12 @@
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import logging
+from rag.components.parsers.base.base_parser import BaseParser, ParserConfig
 
 logger = logging.getLogger(__name__)
 
 
-class PDFParser_LlamaIndex:
+class PDFParser_LlamaIndex(BaseParser):
     """PDF parser using LlamaIndex with multiple backend options."""
 
     def __init__(
@@ -15,8 +16,8 @@ class PDFParser_LlamaIndex:
         name: str = "PDFParser_LlamaIndex",
         config: Optional[Dict[str, Any]] = None,
     ):
+        super().__init__(config)  # Call BaseParser init
         self.name = name
-        self.config = config or {}
 
         # Chunking configuration
         self.chunk_size = self.config.get("chunk_size", 1000)
@@ -39,6 +40,85 @@ class PDFParser_LlamaIndex:
                 "pypdf2_fallback",
             ],
         )
+    
+    def _load_metadata(self) -> ParserConfig:
+        """Load parser metadata."""
+        return ParserConfig(
+            name="PDFParser_LlamaIndex",
+            display_name="LlamaIndex PDF Parser",
+            version="1.0.0",
+            supported_extensions=[".pdf"],
+            mime_types=["application/pdf"],
+            capabilities=["text_extraction", "metadata_extraction", "table_extraction", "image_extraction"],
+            dependencies={"llama-index": ["llama-index>=0.9.0"], "PyMuPDF": ["PyMuPDF>=1.23.0"]},
+            default_config={
+                "chunk_size": 1000,
+                "chunk_overlap": 100,
+                "chunk_strategy": "characters",
+                "extract_metadata": True,
+                "extract_images": False,
+                "extract_tables": False
+            }
+        )
+    
+    def can_parse(self, file_path: str) -> bool:
+        """Check if this parser can handle the given file."""
+        return file_path.lower().endswith('.pdf')
+    
+    def parse_blob(self, data: bytes, metadata: Dict[str, Any] = None) -> List:
+        """Parse PDF from raw bytes."""
+        from rag.core.base import Document
+        import io
+        import tempfile
+        import os
+        
+        try:
+            from llama_index.core import SimpleDirectoryReader
+        except ImportError:
+            # Fall back to PyPDF2 parser
+            from rag.components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
+            fallback_parser = PDFParser_PyPDF2(config=self.config)
+            return fallback_parser.parse_blob(data, metadata)
+        
+        try:
+            # LlamaIndex needs a file on disk, so write temporarily
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+                tmp_file.write(data)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Use LlamaIndex to read the PDF
+                reader = SimpleDirectoryReader(input_files=[tmp_path])
+                llama_docs = reader.load_data()
+                
+                documents = []
+                filename = metadata.get("filename", "unknown.pdf") if metadata else "unknown.pdf"
+                
+                for llama_doc in llama_docs:
+                    doc = Document(
+                        content=llama_doc.text,
+                        metadata={
+                            "source": filename,
+                            "parser": "PDFParser_LlamaIndex",
+                            **(metadata or {})
+                        },
+                        source=filename
+                    )
+                    documents.append(doc)
+                
+                return documents
+                
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+        except Exception as e:
+            print(f"Error parsing PDF with LlamaIndex, falling back to PyPDF2: {e}")
+            # Fall back to PyPDF2 parser
+            from rag.components.parsers.pdf.pypdf2_parser import PDFParser_PyPDF2
+            fallback_parser = PDFParser_PyPDF2(config=self.config)
+            return fallback_parser.parse_blob(data, metadata)
 
     def validate_config(self) -> bool:
         """Validate configuration."""

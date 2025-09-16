@@ -343,53 +343,53 @@ lf rag process my-documents \
 # === SEARCHING THE VECTOR DATABASE ===
 
 # Basic semantic search
-lf rag search my-documents "What is transformer architecture?"
+lf rag search --database main_database "What is transformer architecture?"
 
 # Search with custom number of results
-lf rag search my-documents "explain attention mechanism" --top-k 5
+lf rag search --database main_database "explain attention mechanism" --top-k 5
 
 # Search with relevance threshold
-lf rag search my-documents "neural networks" --score-threshold 0.7
+lf rag search --database main_database "neural networks" --score-threshold 0.7
 
 # Search with specific retrieval strategy
-lf rag search my-documents "BERT model" --retrieval-strategy filtered_search
+lf rag search --database main_database "BERT model" --retrieval-strategy filtered_search
 
 # Combined search parameters
-lf rag search my-documents "deep learning concepts" \
+lf rag search --database main_database "deep learning concepts" \
   --top-k 10 \
   --score-threshold 0.6 \
   --retrieval-strategy basic_search
 
 # === DATABASE STATISTICS ===
 
-# Show statistics for a specific dataset/database
-lf rag stats my-documents
+# Show statistics for a specific database
+lf rag stats --database main_database
 
 # Show statistics for all databases
 lf rag stats
 
 # Detailed statistics with metadata
-lf rag stats my-documents --detailed
+lf rag stats --database main_database --detailed
 
 # === DATABASE MANAGEMENT ===
 
 # Clear a database (remove all vectors)
-lf rag clear my-documents
+lf rag clear --database main_database
 
 # Clear with confirmation
-lf rag clear my-documents --confirm
+lf rag clear --database main_database --confirm
 
 # Export database to file
-lf rag export my-documents ./backups/my-docs-backup.json
+lf rag export --database main_database ./backups/my-docs-backup.json
 
 # Export with metadata
-lf rag export my-documents ./backups/my-docs-full.json --include-metadata
+lf rag export --database main_database ./backups/my-docs-full.json --include-metadata
 
 # Import database from file
-lf rag import my-documents ./backups/my-docs-backup.json
+lf rag import --database main_database ./backups/my-docs-backup.json
 
 # Import with merge (don't overwrite existing)
-lf rag import my-documents ./backups/my-docs-backup.json --merge
+lf rag import --database main_database ./backups/my-docs-backup.json --merge
 ```
 
 ## Using RAG with LLM

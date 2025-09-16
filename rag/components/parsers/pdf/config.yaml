@@ -27,9 +27,9 @@ parsers:
       - rotation_handling
     
     dependencies:
-      required:
+      required: []
+      optional:
         - PyPDF2
-      optional: []
     
     default_config:
       chunk_size: 1000

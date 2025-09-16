@@ -116,7 +116,19 @@ class IngestHandler:
         if not vector_store_type:
             raise ValueError("No vector store type specified in configuration")
         
-        logger.info(f"Initializing vector store: {vector_store_type} with config: {vector_store_config.get('config', {})}")
+        # Resolve persist_directory if it's relative and we have ChromaStore
+        config_dict = vector_store_config.get('config', {}).copy()
+        if vector_store_type == 'ChromaStore' and 'persist_directory' in config_dict:
+            persist_dir = config_dict['persist_directory']
+            if not persist_dir.startswith('/'):
+                # Make it relative to the config file's directory (project directory)
+                import os
+                config_dir = os.path.dirname(self.config_path)
+                config_dict['persist_directory'] = os.path.join(config_dir, persist_dir)
+                print(f"[IngestHandler] Resolved persist_directory from '{persist_dir}' to: {config_dict['persist_directory']}")
+                logger.info(f"Resolved persist_directory to: {config_dict['persist_directory']}")
+        
+        logger.info(f"Initializing vector store: {vector_store_type} with config: {config_dict}")
         
         # Dynamically import the store based on type from config
         # Convert type like "ChromaStore" to module path
@@ -129,18 +141,10 @@ class IngestHandler:
             # Get the class (should match the type name)
             store_class = getattr(module, vector_store_type)
             # Initialize with config from the config file
-            store_config = vector_store_config.get('config', {})
-            
-            # Resolve relative paths to absolute paths
-            if 'persist_directory' in store_config:
-                persist_dir = store_config['persist_directory']
-                if not Path(persist_dir).is_absolute():
-                    # Make it relative to the config file directory
-                    store_config['persist_directory'] = str(self.config_path.parent / persist_dir)
-                    logger.info(f"Resolved persist_directory to: {store_config['persist_directory']}")
+            # Use the already resolved config_dict from above
             
             # Pass config as a dictionary, not as kwargs
-            return store_class(config=store_config)
+            return store_class(config=config_dict)
         except (ImportError, AttributeError) as e:
             logger.error(f"Failed to load vector store {vector_store_type} from {module_path}: {e}")
             raise ValueError(f"Cannot initialize vector store {vector_store_type}: {e}")
@@ -171,9 +175,22 @@ class IngestHandler:
                     "document_count": 0
                 }
             
+            # Generate file hash for deduplication
+            import hashlib
+            file_hash = hashlib.sha256(file_data).hexdigest()
+            
             # Generate embeddings for each document
             embedded_documents = []
-            for doc in documents:
+            for i, doc in enumerate(documents):
+                # Generate a unique ID based on file hash and chunk index
+                # This ensures the same file won't be re-embedded
+                doc.id = f"{file_hash[:16]}_{i:04d}"
+                
+                # Add file hash to metadata for tracking
+                doc.metadata["file_hash"] = file_hash
+                doc.metadata["chunk_index"] = i
+                doc.metadata["total_chunks"] = len(documents)
+                
                 # Generate embedding
                 embedding = self.embedder.embed([doc.content])  # embed expects a list
                 
