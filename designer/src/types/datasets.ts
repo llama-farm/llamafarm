@@ -47,6 +47,19 @@ export interface DatasetWithFileDetails {
 }
 
 /**
+ * Flexible Dataset that can contain either file hashes or file details
+ * Used for backward compatibility in API responses
+ */
+export interface FlexibleDataset {
+  /** Dataset name within the project */
+  name: string
+  /** RAG strategy used for processing */
+  rag_strategy: string
+  /** Array of files - either hashes (legacy) or detailed metadata (enhanced) */
+  files: string[] | DatasetFile[]
+}
+
+/**
  * Request payload for creating a new dataset
  */
 export interface CreateDatasetRequest {
@@ -70,8 +83,8 @@ export interface CreateDatasetResponse {
 export interface ListDatasetsResponse {
   /** Total number of datasets */
   total: number
-  /** Array of datasets with file details */
-  datasets: DatasetWithFileDetails[]
+  /** Array of datasets with flexible file format */
+  datasets: FlexibleDataset[]
 }
 
 /**

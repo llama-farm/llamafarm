@@ -26,6 +26,7 @@ import {
   useDeleteDatasetFile,
   useDeleteDataset,
 } from '../../hooks/useDatasets'
+import { DatasetFile, FlexibleDataset } from '../../types/datasets'
 import { defaultStrategies } from '../Rag/strategies'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
@@ -39,7 +40,7 @@ type Dataset = {
   processedPercent: number
   version: string
   description?: string
-  files?: string[] // Array of file hashes from API
+  files?: string[] | DatasetFile[] // Flexible file format from API
 }
 
 function DatasetView() {
