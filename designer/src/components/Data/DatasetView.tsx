@@ -90,6 +90,19 @@ function DatasetView() {
   const files = useMemo(() => {
     if (!currentApiDataset?.files) return []
     return currentApiDataset.files.map((fileObj: any) => {
+      // Handle new API response format with file details
+      if (typeof fileObj === 'object' && fileObj !== null && 'original_filename' in fileObj) {
+        return {
+          id: fileObj.hash,
+          name: fileObj.original_filename,
+          size: fileObj.size,
+          lastModified: new Date(fileObj.timestamp * 1000).toLocaleString(),
+          type: fileObj.mime_type,
+          fullHash: fileObj.hash, // Store full hash for operations
+        }
+      }
+      
+      // Fallback for legacy format (file hash strings)
       const fileHash =
         typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
       const size =
