@@ -5,8 +5,9 @@ from core.celery.tasks import process_dataset_task
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, FileExistsInAnotherDatasetError
 from services.dataset_service import Dataset, DatasetService
-from config.datamodel import DatasetWithFileDetails
-from typing import Union
+from config.datamodel import DatasetWithFileDetails, DatasetFile
+from typing import Union, Any, Dict
+from fastapi import Query
 from services.project_service import ProjectService
 from services.rag_subprocess import ingest_file_with_rag
 
@@ -18,32 +19,50 @@ router = APIRouter(
 )
 
 
+class FlexibleDataset(BaseModel):
+    name: str
+    rag_strategy: str
+    files: Union[list[str], list[DatasetFile]]
+
+
 class ListDatasetsResponse(BaseModel):
     total: int
-    datasets: list[DatasetWithFileDetails]
+    datasets: list[FlexibleDataset]
 
 
-class ListDatasetsLegacyResponse(BaseModel):
-    total: int
-    datasets: list[Dataset]
-
-
-@router.get("/")
-async def list_datasets(namespace: str, project: str, include_file_details: bool = True):
+@router.get("/", response_model=ListDatasetsResponse)
+async def list_datasets(
+    namespace: str,
+    project: str,
+    include_file_details: bool = Query(True, description="Include detailed file information with original filenames")
+):
     logger.bind(namespace=namespace, project=project)
     if include_file_details:
-        datasets = DatasetService.list_datasets_with_file_details(namespace, project)
-        return ListDatasetsResponse(
-            total=len(datasets),
-            datasets=datasets,
-        )
+        detailed_datasets = DatasetService.list_datasets_with_file_details(namespace, project)
+        datasets = [
+            FlexibleDataset(
+                name=ds.name,
+                rag_strategy=ds.rag_strategy or "auto",
+                files=ds.files
+            )
+            for ds in detailed_datasets
+        ]
     else:
         # Backward compatibility: return old format for CLI
-        datasets = DatasetService.list_datasets(namespace, project)
-        return ListDatasetsLegacyResponse(
-            total=len(datasets),
-            datasets=datasets,
-        )
+        basic_datasets = DatasetService.list_datasets(namespace, project)
+        datasets = [
+            FlexibleDataset(
+                name=ds.name,
+                rag_strategy=ds.rag_strategy or "auto",
+                files=ds.files
+            )
+            for ds in basic_datasets
+        ]
+
+    return ListDatasetsResponse(
+        total=len(datasets),
+        datasets=datasets,
+    )
 
 
 class CreateDatasetRequest(BaseModel):
