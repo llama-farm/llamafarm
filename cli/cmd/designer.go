@@ -37,7 +37,7 @@ var designerStartCmd = &cobra.Command{
 		// Determine preferred port (default 7724) with env override
 		preferred := 7724
 		if v := strings.TrimSpace(os.Getenv("LF_DESIGNER_PORT")); v != "" {
-			if p, err := strconv.Atoi(v); err == nil && p > 0 {
+			if p, err := strconv.Atoi(v); err == nil && p > 0 && p <= 65535 {
 				preferred = p
 			}
 		}

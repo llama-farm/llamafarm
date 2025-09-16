@@ -402,7 +402,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case streamDone:
-		logDebug(fmt.Sprintf("STREAM DONE: %v", m.messages[len(m.messages)-1]))
+		if len(m.messages) > 0 {
+			logDebug(fmt.Sprintf("STREAM DONE: %v", m.messages[len(m.messages)-1]))
+		} else {
+			logDebug("STREAM DONE: no messages")
+		}
 		m.printing = false
 		m.streamCh = nil
 
@@ -540,7 +544,12 @@ func renderInfoBar(m chatModel) string {
 		PaddingLeft(1)
 
 	// Left/middle parts (already rendered strings)
-	left := fmt.Sprintf("%s %s/%s", projectPrompt, m.projectInfo.Namespace, m.projectInfo.Project)
+	var left string
+	if m.projectInfo != nil {
+		left = fmt.Sprintf("%s %s/%s", projectPrompt, m.projectInfo.Namespace, m.projectInfo.Project)
+	} else {
+		left = fmt.Sprintf("%s unknown/unknown", projectPrompt)
+	}
 	mid := ""
 	if sessionID != "" {
 		mid = fmt.Sprintf(" (%s %s)", sessionPrompt, sessionID)

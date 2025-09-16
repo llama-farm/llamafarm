@@ -237,7 +237,15 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 	if policy != nil && policy.PreferredHostPort > 0 && len(spec.StaticPorts) > 0 {
 		if isHostPortAvailable(policy.PreferredHostPort) {
 			for _, pm := range spec.StaticPorts {
-				runArgs = append(runArgs, "-p", fmt.Sprintf("%d:%d", policy.PreferredHostPort, pm.Container))
+				hostPort := policy.PreferredHostPort
+				if pm.Host > 0 {
+					hostPort = pm.Host
+				}
+				protocol := pm.Protocol
+				if protocol == "" {
+					protocol = "tcp"
+				}
+				runArgs = append(runArgs, "-p", fmt.Sprintf("%d:%d/%s", hostPort, pm.Container, protocol))
 			}
 		} else {
 			if policy.Forced {
@@ -268,9 +276,11 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 	if strings.TrimSpace(spec.Workdir) != "" {
 		runArgs = append(runArgs, "-w", spec.Workdir)
 	}
+	if len(spec.Entrypoint) > 0 {
+		runArgs = append(runArgs, "--entrypoint", strings.Join(spec.Entrypoint, " "))
+	}
 
 	runArgs = append(runArgs, spec.Image)
-	runArgs = append(runArgs, spec.Entrypoint...)
 	runArgs = append(runArgs, spec.Cmd...)
 
 	runCmd := exec.Command("docker", runArgs...)

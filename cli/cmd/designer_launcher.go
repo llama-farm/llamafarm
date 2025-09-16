@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 )
@@ -69,7 +68,7 @@ func StartDesignerInBackground(ctx context.Context, opts DesignerLaunchOptions) 
 	defer cancel()
 	check := HTTPGetReady(url)
 	if err := WaitForReadiness(readyCtx, check, 1*time.Second); err != nil {
-		fmt.Fprintf(os.Stderr, "designer readiness wait timed out or failed: %v\n", err)
+		logDebug(fmt.Sprintf("designer readiness wait timed out or failed: %v", err))
 		// Return the URL anyway so the UI can still attempt to open it
 	}
 	return url, nil

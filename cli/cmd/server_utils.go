@@ -65,7 +65,7 @@ func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
 				if herr.Status == "unhealthy" {
 					os.Exit(1)
 				} else {
-					return hr
+					return &herr.HealthResp
 				}
 			}
 		}
