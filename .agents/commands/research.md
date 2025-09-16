@@ -84,11 +84,9 @@ Create a short note in `thoughts/shared/research/<issue_id>_<slug>.md` including
 - **Affected modules**: files/dirs and why
 - **Key flows**: sequence from entry to side effects
 - **Risks**: edge cases, cross-project impacts, data migrations
-- **Known unknowns (bulleted, no answers)**: list questions to present to the user; do not include answers or decisions in the research doc
+- **Open questions**: unknowns and how to answer them (bulleted, no answers); list questions to present to the user; do not include answers or decisions in the research doc
 
 Do NOT include any implementation plan in the research note. Planning is a separate document.
-- **Open questions**: unknowns and how to answer them
-- **Proposed plan**: minimal, measurable steps to implement and verify
 
 Example template:
 ```markdown
@@ -101,8 +99,6 @@ Example template:
 ## Risks
 
 ## Open questions
-
-## Proposed plan
 ```
 
 ## Citing code and commands

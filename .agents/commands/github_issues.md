@@ -142,7 +142,7 @@ Automatically apply labels based on the issue content:
    - teamId: [selected team]
    - projectId: [use default project from above unless user specifies]
    - priority: [selected priority number, default 3]
-   - stateId: [Triage status ID]
+   - stateId: [New status ID]
    - assigneeId: [if requested]
    - labelIds: [apply automatic label assignment from above]
    - links: [{url: "GitHub URL", title: "Document Title"}]
@@ -286,15 +286,10 @@ When moving issues through the workflow:
    - Show current status in workflow
 
 2. **Suggest next status:**
-   - Triage → Spec Needed (lacks detail/problem statement)
-   - Spec Needed → Research Needed (once problem/solution outlined)
-   - Research Needed → Research in Progress (starting research)
-   - Research in Progress → Research in Review (optional, can skip to Ready for Plan)
-   - Research in Review → Ready for Plan (research approved)
-   - Ready for Plan → Plan in Progress (starting to write plan)
-   - Plan in Progress → Plan in Review (plan written)
-   - Plan in Review → Ready for Dev (plan approved)
-   - Ready for Dev → In Dev (work started)
+   - New → Researching (starting research/investigation)
+   - Researching → Planning (research complete, starting implementation plan)
+   - Planning → Implementing (plan approved, starting development)
+   - Implementing → Done (work completed)
 
 3. **Update with context:**
    ```
@@ -307,7 +302,7 @@ When moving issues through the workflow:
 
 ## Important Notes
 
-- Tag users in descriptions and comments using `@[name](ID)` format, e.g., `@[alice](3784fc42-4879-4c0f-ef23-0d4d79222ef5)`
+- Tag users in descriptions and comments using @username format, e.g., @alice
 - Keep issues concise but complete - aim for scannable content
 - All issues should include a clear "problem to solve" - if the user asks for an issue and only gives implementation details, you MUST ask "To write a good issue, please explain the problem you're trying to solve from a user perspective"
 - Focus on the "what" and "why", include "how" only if well-defined
