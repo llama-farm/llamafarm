@@ -129,7 +129,7 @@ def _check_ollama() -> dict:
         }
 
 
-def _check_seed_project() -> dict:
+def _check_seed_project(cli_client: bool = False) -> dict:
     """Validate the project seed runtime: Ollama is reachable and model is present."""
     start = _now_ms()
     model, reason = _load_seed_runtime_model()
@@ -150,9 +150,11 @@ def _check_seed_project() -> dict:
         resp = requests.get(url, timeout=1.5)
         ok = 200 <= resp.status_code < 300
         if not ok:
+            # For CLI clients, downgrade Ollama connection issues to degraded
+            status = "degraded" if cli_client else "unhealthy"
             return {
                 "name": "project",
-                "status": "unhealthy",
+                "status": status,
                 "message": f"Ollama tags returned {resp.status_code}",
                 "latency_ms": _now_ms() - start,
                 "runtime": {"host": base, "model": model},
@@ -160,12 +162,19 @@ def _check_seed_project() -> dict:
         data = resp.json() if resp.content else {}
         tags = {item.get("name") for item in (data.get("models") or [])}
         present = model in tags
-        status = "healthy" if present else "unhealthy"
-        message = (
-            "Model available"
-            if present
-            else f"Model '{model}' not found; run: ollama pull {model}"
-        )
+
+        if present:
+            status = "healthy"
+            message = "Model available"
+        else:
+            # For CLI clients, missing models are degraded (warning), not unhealthy (error)
+            status = "degraded" if cli_client else "unhealthy"
+            message = (
+                f"Model '{model}' not found; run: ollama pull {model}"
+                if not cli_client
+                else f"⚠️  Model '{model}' not found. This will limit inference features. For full functionality, run: ollama pull {model}"
+            )
+
         return {
             "name": "project",
             "status": status,
@@ -174,9 +183,11 @@ def _check_seed_project() -> dict:
             "runtime": {"host": base, "model": model},
         }
     except Exception as e:
+        # For CLI clients, downgrade connection failures to degraded
+        status = "degraded" if cli_client else "unhealthy"
         return {
             "name": "project",
-            "status": "unhealthy",
+            "status": status,
             "message": f"Failed to query Ollama tags: {e}",
             "latency_ms": _now_ms() - start,
             "runtime": {"host": base, "model": model},
@@ -227,7 +238,7 @@ def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     return next((k for k, v in order.items() if v == worst), "unhealthy")
 
 
-def health_summary() -> dict[str, Any]:
+def health_summary(cli_client: bool = False) -> dict[str, Any]:
     """Compute health summary. Keep checks quick; small timeouts only."""
     components: list[dict] = []
     seeds: list[dict] = []
@@ -237,7 +248,7 @@ def health_summary() -> dict[str, Any]:
     components.append(_check_ollama())
     components.append(_check_celery())
 
-    seeds.append(_check_seed_project())
+    seeds.append(_check_seed_project(cli_client=cli_client))
 
     status = compute_overall_status(components, seeds)
     summary_parts = [f"{c['name']}={c['status']}" for c in components + seeds]
