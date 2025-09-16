@@ -18,7 +18,6 @@ import (
 )
 
 var (
-	configFile  string
 	ragStrategy string
 )
 
@@ -63,12 +62,13 @@ type createDatasetResponse struct {
 
 // datasetsListCmd represents the datasets list command
 var datasetsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all datasets on the server for the selected project",
-	Long:  `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all datasets on the server for the selected project",
+	Long:    `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Resolve server and routing
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -123,16 +123,17 @@ var datasetsListCmd = &cobra.Command{
 
 // datasetsAddCmd represents the datasets add command
 var datasetsAddCmd = &cobra.Command{
-	Use:   "add [name] [file1] [file2] ...",
-	Short: "Create a new dataset on the server (optionally upload files)",
+	Use:     "create [name] [file1] [file2] ...",
+	Aliases: []string{"add"},
+	Short:   "Create a new dataset on the server (optionally upload files)",
 	Long: `Create a new dataset on the server for the current project.
 
 Examples:
-  lf datasets add my-docs
-  lf datasets add --rag-strategy auto my-pdfs ./pdfs/*.pdf`,
+  lf datasets create my-docs
+  lf datasets create --rag-strategy auto my-pdfs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -207,12 +208,13 @@ Examples:
 
 // datasetsRemoveCmd represents the datasets remove command
 var datasetsRemoveCmd = &cobra.Command{
-	Use:   "remove [name]",
-	Short: "Delete a dataset from the server",
-	Long:  `Deletes a dataset from the LlamaFarm server for the selected project.`,
-	Args:  cobra.ExactArgs(1),
+	Use:     "delete [name]",
+	Aliases: []string{"rm", "remove", "del"},
+	Short:   "Delete a dataset from the server",
+	Long:    `Deletes a dataset from the LlamaFarm server for the selected project.`,
+	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -256,7 +258,7 @@ Examples:
   lf datasets ingest my-docs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -295,8 +297,6 @@ Examples:
 }
 
 func init() {
-	// Add persistent flags
-	datasetsCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path (default: llamafarm.yaml in current directory)")
 	// Server routing flags (align with projects chat)
 	datasetsCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
 	datasetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")
