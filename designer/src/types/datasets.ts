@@ -1,6 +1,6 @@
 /**
  * Dataset API Types - aligned with server/api/routers/datasets/
- * 
+ *
  * This file contains types for Dataset API communication.
  * These types should remain stable and aligned with the API contract.
  */
@@ -181,7 +181,11 @@ export interface DatasetApiError {
  * Base error classes for Dataset API operations
  */
 export class DatasetError extends Error {
-  constructor(message: string, public statusCode?: number, public data?: any) {
+  constructor(
+    message: string,
+    public statusCode?: number,
+    public data?: any
+  ) {
     super(message)
     this.name = 'DatasetError'
   }
