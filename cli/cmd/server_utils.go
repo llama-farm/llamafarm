@@ -117,7 +117,7 @@ func ensureServerAvailable(serverURL string) {
 // checkServerHealth requires /health to be healthy.
 func checkServerHealth(serverURL string) error {
 	base := strings.TrimRight(serverURL, "/")
-	healthURL := base + "/health"
+	healthURL := base + "/health?cli_client=true"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -137,7 +137,7 @@ func checkServerHealth(serverURL string) error {
 		if err := json.Unmarshal(body, &payload); err != nil {
 			return fmt.Errorf("invalid health payload: %v", err)
 		}
-		if strings.EqualFold(payload.Status, "healthy") {
+		if strings.EqualFold(payload.Status, "healthy") || strings.EqualFold(payload.Status, "degraded") {
 			return nil
 		}
 		return &HealthError{Status: payload.Status, HealthResp: payload}
@@ -163,7 +163,7 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	port := resolvePort(serverURL, 8000)
-	
+
 	// Get the dynamic image URL using our version-aware resolution
 	image, err := getImageURL("server")
 	if err != nil {
