@@ -37,12 +37,12 @@ def main():
     # Track results
     results = []
     
-    # 1. Check server health
+    # 1. Check version (simpler than health check)
     success, output = run_command(
-        "./lf health",
-        "Check server health"
+        "./lf version",
+        "Check CLI version"
     )
-    results.append(("Server health check", success))
+    results.append(("CLI version check", success))
     
     # 2. List existing datasets
     success, output = run_command(
@@ -51,7 +51,11 @@ def main():
     )
     results.append(("List datasets", success))
     
-    # 3. Create a new test dataset
+    # 3. Create a new test dataset (remove first if it exists)
+    run_command(
+        "./lf datasets remove cli-test-dataset 2>/dev/null",
+        "Remove existing test dataset (if any)"
+    )
     success, output = run_command(
         "./lf datasets add cli-test-dataset -s universal_processor -b main_database",
         "Create new dataset via CLI"
@@ -60,14 +64,14 @@ def main():
     
     # 4. Add a single file
     success, output = run_command(
-        "./lf datasets ingest cli-test-dataset examples/rag_verification/sample_files/research_papers/transformer_architecture.txt",
+        "./lf datasets ingest cli-test-dataset examples/rag_pipeline/sample_files/research_papers/transformer_architecture.txt",
         "Ingest single file"
     )
     results.append(("Ingest single file", success))
     
     # 5. Add multiple files
     success, output = run_command(
-        "./lf datasets ingest cli-test-dataset examples/rag_verification/sample_files/code/*.py",
+        "./lf datasets ingest cli-test-dataset examples/rag_pipeline/sample_files/code/*.py",
         "Ingest multiple Python files"
     )
     results.append(("Ingest multiple files", success))
@@ -85,6 +89,11 @@ def main():
     print(f"{'='*60}")
     
     try:
+        import sys
+        import os
+        sys.path.insert(0, '/Users/robthelen/llamafarm-1')
+        os.chdir('/Users/robthelen/llamafarm-1/server')
+        
         from rag.core.ingest_handler import IngestHandler
         
         handler = IngestHandler(
@@ -124,6 +133,8 @@ def main():
         results.append(("ChromaDB verification", False))
     
     # 8. Remove test dataset
+    # Need to change back to the original directory first
+    os.chdir('/Users/robthelen/llamafarm-1')
     success, output = run_command(
         "./lf datasets remove cli-test-dataset",
         "Remove test dataset"

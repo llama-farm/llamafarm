@@ -144,7 +144,7 @@ class ProjectChatService:
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
         rag_enabled: bool | None = None,
-        rag_database: str | None = None,
+        database: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> ChatCompletion:
@@ -162,16 +162,16 @@ class ProjectChatService:
         # Use config defaults for other parameters if not provided
         if rag_enabled and project_config.rag:
             # If no database specified, use the first dataset's database
-            if rag_database is None and project_config.datasets:
-                rag_database = project_config.datasets[0].database
-                logger.info(f"Using default database from config: {rag_database}")
+            if database is None and project_config.datasets:
+                database = project_config.datasets[0].database
+                logger.info(f"Using default database from config: {database}")
             
             # If no top_k specified, check if there's a default in retrieval strategies
             if rag_top_k is None:
                 # Look for default retrieval strategy's top_k
                 if project_config.rag.databases:
                     for db in project_config.rag.databases:
-                        if db.name == rag_database:
+                        if db.name == database:
                             for strategy in db.retrieval_strategies or []:
                                 if strategy.default:
                                     rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
@@ -184,7 +184,7 @@ class ProjectChatService:
         rag_results = []
         if rag_enabled:
             rag_results = self._perform_rag_search(
-                project_dir, project_config, message, top_k=rag_top_k or 5, database=rag_database
+                project_dir, project_config, message, top_k=rag_top_k or 5, database=database
             )
 
         # Store the result from the RAG subsystem in the agent's context provider
@@ -233,7 +233,7 @@ class ProjectChatService:
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
         rag_enabled: bool | None = None,
-        rag_database: str | None = None,
+        database: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[str, None]:
@@ -248,14 +248,14 @@ class ProjectChatService:
                 logger.info("RAG enabled by default based on project configuration")
         
         if rag_enabled and project_config.rag:
-            if rag_database is None and project_config.datasets:
-                rag_database = project_config.datasets[0].database
-                logger.info(f"Using default database from config: {rag_database}")
+            if database is None and project_config.datasets:
+                database = project_config.datasets[0].database
+                logger.info(f"Using default database from config: {database}")
             
             if rag_top_k is None:
                 if project_config.rag.databases:
                     for db in project_config.rag.databases:
-                        if db.name == rag_database:
+                        if db.name == database:
                             for strategy in db.retrieval_strategies or []:
                                 if strategy.default:
                                     rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
@@ -267,7 +267,7 @@ class ProjectChatService:
         rag_results = []
         if rag_enabled:
             rag_results = self._perform_rag_search(
-                project_dir, project_config, message, top_k=rag_top_k or 5, database=rag_database
+                project_dir, project_config, message, top_k=rag_top_k or 5, database=database
             )
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(

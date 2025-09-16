@@ -40,7 +40,7 @@ type ChatRequest struct {
 	LogitBias        map[string]float64 `json:"logit_bias,omitempty"`
 	// RAG fields
 	RAGEnabled          *bool              `json:"rag_enabled,omitempty"`
-	RAGDatabase         *string            `json:"rag_database,omitempty"`
+	RAGDatabase         *string            `json:"database,omitempty"`
 	RAGRetrievalStrategy *string           `json:"rag_retrieval_strategy,omitempty"`
 	RAGTopK             *int               `json:"rag_top_k,omitempty"`
 	RAGScoreThreshold   *float64           `json:"rag_score_threshold,omitempty"`

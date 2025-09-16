@@ -41,8 +41,8 @@ Examples:
   # Run with RAG enabled
   lf run --rag "What is transformer architecture?"
   
-  # Run with specific RAG database
-  lf run --rag --rag-database main_database "Explain attention mechanism"
+  # Run with specific database
+  lf run --rag --database main_database "Explain attention mechanism"
   
   # Run with custom retrieval strategy and top-k
   lf run --rag --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"`,
@@ -164,7 +164,7 @@ func init() {
 	
 	// RAG flags
 	runCmd.Flags().BoolVar(&runRAGEnabled, "rag", false, "Enable RAG (Retrieval-Augmented Generation)")
-	runCmd.Flags().StringVar(&runRAGDatabase, "rag-database", "", "RAG database to use (default: from config)")
+	runCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use (default: from config)")
 	runCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
 	runCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
 	runCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")

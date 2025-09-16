@@ -8,8 +8,8 @@ namespace: default
 runtime:
   provider: ollama
   model: llama3.1:8b
-  base_url: http://localhost:11434
-  temperature: 0.5
+  base_url: http://localhost:11434/v1  # Note: /v1 for OpenAI compatibility
+  temperature: 0.7
   # api_key: optional, not needed for ollama
   # instructor_mode: optional
   # model_api_parameters: optional additional parameters
@@ -18,8 +18,12 @@ runtime:
 # PROMPTS CONFIGURATION
 # =============================================================================
 prompts:
-- role: system
-  content: You are a helpful assistant.
+  - role: system
+    content: |
+      You are a helpful AI assistant with access to a knowledge base through RAG (Retrieval-Augmented Generation).
+      When context is provided from the knowledge base, use it to provide accurate and detailed answers.
+      If relevant context is available, cite or reference it in your response.
+      If no relevant context is provided, answer based on your general knowledge while noting that you don't have specific information from the knowledge base.
 
 # =============================================================================
 # DATASETS CONFIGURATION
@@ -49,6 +53,7 @@ rag:
       embedding_strategies:
         - name: "default_embeddings"
           type: "OllamaEmbedder"
+          priority: 0
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434/"
@@ -58,6 +63,7 @@ rag:
             auto_pull: true
         - name: "fast_embeddings"
           type: "OllamaEmbedder"
+          priority: 0
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434/"

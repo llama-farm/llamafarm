@@ -29,7 +29,7 @@ class ChatRequest(BaseModel):
     logit_bias: dict[str, float] = Field(default_factory=dict)
     # RAG parameters (None means use config defaults)
     rag_enabled: bool | None = None
-    rag_database: str | None = None
+    database: str | None = None
     rag_top_k: int | None = None
     rag_score_threshold: float | None = None
 
