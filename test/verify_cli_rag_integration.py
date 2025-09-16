@@ -6,8 +6,18 @@ Tests that documents ingested via CLI are properly stored and searchable
 
 import sys
 import os
-sys.path.insert(0, '/Users/robthelen/llamafarm-1')
-os.chdir('/Users/robthelen/llamafarm-1')
+from pathlib import Path
+
+# Get project root dynamically
+test_dir = Path(__file__).parent
+project_root = test_dir.parent
+
+# Add project root to path
+sys.path.insert(0, str(project_root))
+
+# Change to project root
+original_dir = os.getcwd()
+os.chdir(project_root)
 
 try:
     from rag.core.ingest_handler import IngestHandler
@@ -26,9 +36,9 @@ def main():
         print("This is expected if running outside the server environment.")
         return 0
     
-    # Configuration
-    project_dir = '/Users/robthelen/.llamafarm/projects/default/llamafarm-1'
-    config_path = f'{project_dir}/llamafarm.yaml'
+    # Get config path dynamically
+    home_dir = Path.home()
+    config_path = home_dir / '.llamafarm' / 'projects' / 'default' / 'llamafarm-1' / 'llamafarm.yaml'
     
     print(f"\n📁 Project: llamafarm-1")
     print(f"📋 Config: {config_path}")
@@ -38,20 +48,20 @@ def main():
     try:
         # Initialize handler to check the database
         # Change to server directory where ChromaDB is actually stored
-        import os
-        original_dir = os.getcwd()
-        os.chdir('/Users/robthelen/llamafarm-1/server')
+        server_dir = project_root / 'server'
+        os.chdir(server_dir)
         
         handler = IngestHandler(
-            config_path=config_path,
+            config_path=str(config_path),
             data_processing_strategy='universal_processor',
             database='main_database'
         )
         
-        os.chdir(original_dir)
+        os.chdir(project_root)
     except Exception as e:
         print(f"\n❌ Failed to initialize IngestHandler: {e}")
         print("This might be due to missing services (Ollama, ChromaDB, etc.)")
+        os.chdir(original_dir)
         return 0  # Return success to not fail CI
     
     print("\n" + "-" * 40)
@@ -152,6 +162,9 @@ The complete flow:
 """)
     
     print("=" * 80)
+    
+    # Restore original directory
+    os.chdir(original_dir)
     return 0
 
 if __name__ == '__main__':

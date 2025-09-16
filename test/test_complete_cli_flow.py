@@ -7,6 +7,8 @@ Tests the entire dataset + RAG pipeline through the CLI
 import subprocess
 import json
 import time
+import sys
+import os
 from pathlib import Path
 
 def run_command(cmd, description):
@@ -33,6 +35,17 @@ def main():
     print("\n" + "="*80)
     print("COMPLETE CLI FLOW TEST")
     print("="*80)
+    
+    # Get the project root directory dynamically
+    test_dir = Path(__file__).parent
+    project_root = test_dir.parent
+    
+    # Change to project root for running CLI commands
+    original_dir = os.getcwd()
+    os.chdir(project_root)
+    
+    # Add project root to path for imports
+    sys.path.insert(0, str(project_root))
     
     # Track results
     results = []
@@ -89,15 +102,18 @@ def main():
     print(f"{'='*60}")
     
     try:
-        import sys
-        import os
-        sys.path.insert(0, '/Users/robthelen/llamafarm-1')
-        os.chdir('/Users/robthelen/llamafarm-1/server')
+        # Get the config path dynamically
+        home_dir = Path.home()
+        config_path = home_dir / '.llamafarm' / 'projects' / 'default' / 'llamafarm-1' / 'llamafarm.yaml'
+        
+        # Change to server directory for ChromaDB access
+        server_dir = project_root / 'server'
+        os.chdir(server_dir)
         
         from rag.core.ingest_handler import IngestHandler
         
         handler = IngestHandler(
-            config_path='/Users/robthelen/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml',
+            config_path=str(config_path),
             data_processing_strategy='universal_processor',
             database='main_database'
         )
@@ -133,8 +149,8 @@ def main():
         results.append(("ChromaDB verification", False))
     
     # 8. Remove test dataset
-    # Need to change back to the original directory first
-    os.chdir('/Users/robthelen/llamafarm-1')
+    # Change back to project root for CLI commands
+    os.chdir(project_root)
     success, output = run_command(
         "./lf datasets remove cli-test-dataset",
         "Remove test dataset"
@@ -159,6 +175,9 @@ def main():
         print("\n🎉 ALL TESTS PASSED! The CLI integration is working perfectly!")
     else:
         print(f"\n⚠️ {total - passed} test(s) failed. Please review the output above.")
+    
+    # Restore original directory
+    os.chdir(original_dir)
     
     return 0 if passed == total else 1
 

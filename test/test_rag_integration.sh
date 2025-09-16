@@ -26,8 +26,13 @@ print_test() {
     fi
 }
 
+# Get the directory of this script
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Get the project root (parent of test directory)
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # Change to project directory
-cd /Users/robthelen/llamafarm-1
+cd "$PROJECT_ROOT"
 
 echo "1. Testing basic functionality..."
 echo "--------------------------------"

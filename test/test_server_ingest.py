@@ -4,7 +4,12 @@ Test server ingestion directly
 """
 import sys
 import os
-sys.path.insert(0, '/Users/robthelen/llamafarm-1')
+from pathlib import Path
+
+# Get project root dynamically
+test_dir = Path(__file__).parent
+project_root = test_dir.parent
+sys.path.insert(0, str(project_root))
 
 try:
     from rag.core.ingest_handler import IngestHandler
@@ -18,9 +23,9 @@ def test_ingestion():
         print("⚠️ RAG modules not available. Skipping test.")
         return 0
     
-    # Configuration
-    project_dir = '/Users/robthelen/.llamafarm/projects/default/llamafarm-1'
-    config_path = f'{project_dir}/llamafarm.yaml'
+    # Get config path dynamically
+    home_dir = Path.home()
+    config_path = home_dir / '.llamafarm' / 'projects' / 'default' / 'llamafarm-1' / 'llamafarm.yaml'
     
     print(f"Using config: {config_path}")
     print(f"Strategy: universal_processor")
@@ -29,7 +34,7 @@ def test_ingestion():
     try:
         # Initialize handler
         handler = IngestHandler(
-            config_path=config_path,
+            config_path=str(config_path),
             data_processing_strategy='universal_processor',
             database='main_database'
         )
@@ -38,19 +43,23 @@ def test_ingestion():
         print("This is expected if services are not running.")
         return 0
     
-    # Test file
-    test_file = '/Users/robthelen/llamafarm-1/examples/rag_pipeline/sample_files/research_papers/transformer_architecture.txt'
+    # Test file - use relative path from project root
+    test_file = project_root / 'examples' / 'rag_pipeline' / 'sample_files' / 'research_papers' / 'transformer_architecture.txt'
+    
+    if not test_file.exists():
+        print(f"⚠️ Test file not found: {test_file}")
+        return 0
     
     try:
         with open(test_file, 'rb') as f:
             file_data = f.read()
-    except FileNotFoundError:
-        print(f"⚠️ Test file not found: {test_file}")
+    except Exception as e:
+        print(f"⚠️ Failed to read test file: {e}")
         return 0
     
     metadata = {
         'filename': 'transformer_architecture.txt',
-        'filepath': test_file
+        'filepath': str(test_file)
     }
     
     try:
