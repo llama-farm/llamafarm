@@ -6,6 +6,22 @@
  */
 
 /**
+ * File information with metadata
+ */
+export interface DatasetFile {
+  /** File content hash */
+  hash: string
+  /** Original filename */
+  original_filename: string
+  /** File size in bytes */
+  size: number
+  /** MIME type of the file */
+  mime_type: string
+  /** Upload timestamp */
+  timestamp: number
+}
+
+/**
  * Core Dataset entity structure for API communication
  * Used in responses from the datasets service
  */
@@ -16,6 +32,18 @@ export interface Dataset {
   rag_strategy: string
   /** Array of file hashes included in this dataset */
   files: string[]
+}
+
+/**
+ * Enhanced Dataset with file details for API responses
+ */
+export interface DatasetWithFileDetails {
+  /** Dataset name within the project */
+  name: string
+  /** RAG strategy used for processing */
+  rag_strategy: string
+  /** Array of files with detailed metadata */
+  files: DatasetFile[]
 }
 
 /**
@@ -42,8 +70,8 @@ export interface CreateDatasetResponse {
 export interface ListDatasetsResponse {
   /** Total number of datasets */
   total: number
-  /** Array of datasets */
-  datasets: Dataset[]
+  /** Array of datasets with file details */
+  datasets: DatasetWithFileDetails[]
 }
 
 /**
