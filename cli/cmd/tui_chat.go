@@ -200,13 +200,8 @@ func (m chatModel) Init() tea.Cmd {
 
 func updateServerHealthCmd(m chatModel) tea.Cmd {
 	return func() tea.Msg {
-		m.serverHealth, _ = checkServerHealth(serverURL)
-
-		if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
-			time.Sleep(5 * time.Second)
-		}
-
-		return serverHealthMsg{health: m.serverHealth}
+		health, _ := checkServerHealth(serverURL)
+		return serverHealthMsg{health: health}
 	}
 }
 
@@ -297,7 +292,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.textarea.SetValue("")
 						break
 					}
-					openURL(m.designerURL)
+					cmds = append(cmds, openURL(m.designerURL))
 					m.textarea.SetValue("")
 				default:
 					m.messages = append(m.messages, ChatMessage{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. Type '/help' for available commands.", cmd)})
@@ -422,7 +417,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.serverHealth = msg.health
 
 		if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
-			cmds = append(cmds, updateServerHealthCmd(m))
+			// Schedule a non-blocking re-check after 5 seconds
+			cmds = append(cmds, tea.Tick(5*time.Second, func(time.Time) tea.Msg {
+				return updateServerHealthCmd(m)()
+			}))
 		}
 	}
 
@@ -489,6 +487,9 @@ func computeTranscript(m chatModel) string {
 
 func computeTranscriptKey(m chatModel) string {
 	h := fnv.New64a()
+	if len(m.messages) == 0 {
+		return "empty"
+	}
 	msg := m.messages[len(m.messages)-1]
 	io.WriteString(h, msg.Role)
 	io.WriteString(h, msg.Content)
@@ -594,18 +595,22 @@ func thinkingCmd() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-func openURL(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		fmt.Fprintf(os.Stderr, "Unsupported platform for opening URLs: %s\n", runtime.GOOS)
-		return
+func openURL(url string) tea.Cmd {
+	return func() tea.Msg {
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", url)
+		case "linux":
+			cmd = exec.Command("xdg-open", url)
+		case "windows":
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		default:
+			return errorMsg{err: fmt.Errorf("unsupported platform for opening urls: %s", runtime.GOOS)}
+		}
+		if err := cmd.Start(); err != nil {
+			return errorMsg{err: fmt.Errorf("failed to open url %s: %v", url, err)}
+		}
+		return nil
 	}
-	_ = cmd.Start()
 }
