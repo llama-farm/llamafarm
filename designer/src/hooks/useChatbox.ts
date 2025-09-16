@@ -1,17 +1,20 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useChatInference, useDeleteChatSession, chatKeys } from './useChat'
-import { createChatRequest } from '../api/chatService'
+import { createChatRequest, chatInferenceStreaming } from '../api/chatService'
 import { generateMessageId } from '../utils/idGenerator'
 import useChatSession from './useChatSession'
 import { ChatboxMessage } from '../types/chatbox'
+import { ChatStreamChunk, NetworkError } from '../types/chat'
 
 /**
  * Custom hook for managing chatbox state and API interactions
  * Extracts chat logic from the Chatbox component for better reusability and testability
- * Now includes session persistence and restoration
+ * Now includes session persistence and restoration with streaming support
  */
-export function useChatbox(initialSessionId?: string) {
+export function useChatbox(initialSessionId?: string, enableStreaming: boolean = true) {
+  // Allow disabling streaming via environment variable for debugging
+  const streamingEnabled = enableStreaming && !import.meta.env.VITE_DISABLE_STREAMING
   // Session management with persistence
   const {
     currentSessionId: sessionId,
@@ -27,9 +30,11 @@ export function useChatbox(initialSessionId?: string) {
   const [inputValue, setInputValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [hasInitialSync, setHasInitialSync] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
 
-  // Ref for debounced save timeout
+  // Refs for streaming and debounced save
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const streamingAbortControllerRef = useRef<AbortController | null>(null)
 
   // API hooks
   const queryClient = useQueryClient()
@@ -77,11 +82,14 @@ export function useChatbox(initialSessionId?: string) {
     }
   }, [messages, sessionId, debouncedSave, hasInitialSync, queryClient])
 
-  // Cleanup timeout on unmount
+  // Cleanup timeout and abort streaming on unmount
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
+      }
+      if (streamingAbortControllerRef.current) {
+        streamingAbortControllerRef.current.abort()
       }
     }
   }, [])
@@ -110,10 +118,16 @@ export function useChatbox(initialSessionId?: string) {
     []
   )
 
-  // Handle sending message with API integration
+  // Handle sending message with streaming or non-streaming API integration
   const sendMessage = useCallback(
     async (messageContent: string) => {
-      if (!messageContent.trim() || chatMutation.isPending) return false
+      if (!messageContent.trim() || chatMutation.isPending || isStreaming) return false
+
+      // Cancel any existing streaming request before starting a new one
+      if (streamingAbortControllerRef.current) {
+        streamingAbortControllerRef.current.abort()
+        streamingAbortControllerRef.current = null
+      }
 
       // Clear any previous errors
       setError(null)
@@ -125,53 +139,228 @@ export function useChatbox(initialSessionId?: string) {
         timestamp: new Date(),
       })
 
-      // Add loading assistant message
+      // Add loading/streaming assistant message
       const assistantMessageId = addMessage({
         type: 'assistant',
-        content: 'Thinking...',
+        content: streamingEnabled ? '' : 'Thinking...',
         timestamp: new Date(),
-        isLoading: true,
+        isLoading: !streamingEnabled,
+        isStreaming: streamingEnabled,
       })
+
+      let timeoutId: NodeJS.Timeout | undefined
 
       try {
         // Create chat request
         const chatRequest = createChatRequest(messageContent)
 
-        // Send to API
-        const response = await chatMutation.mutateAsync({
-          chatRequest,
-          sessionId,
-        })
+        if (streamingEnabled) {
+          // Streaming path
+          setIsStreaming(true)
+          
+          // Create abort controller for this request
+          const abortController = new AbortController()
+          streamingAbortControllerRef.current = abortController
+          
+          // Set a timeout for streaming requests (45 seconds - increased for slow models)
+          timeoutId = setTimeout(() => {
+            console.log('Streaming request timed out after 1 minute')
+            abortController.abort()
+          }, 60000)
 
-        // Set session ID if received from server (for new sessions)
-        if (response.sessionId && response.sessionId !== sessionId) {
-          setSessionId(response.sessionId)
-          // Mark as having initial sync since this is a new session with messages
-          if (!hasInitialSync) {
-            setHasInitialSync(true)
+          let accumulatedContent = ''
+          let finalSessionId = sessionId
+
+          const responseSessionId = await chatInferenceStreaming(
+            chatRequest,
+            sessionId,
+            {
+              onChunk: (chunk: ChatStreamChunk) => {
+                // Handle role assignment (first chunk)
+                if (chunk.choices?.[0]?.delta?.role && !accumulatedContent) {
+                  // Role chunk - no content to add yet
+                  return
+                }
+
+                // Handle content chunks
+                if (chunk.choices?.[0]?.delta?.content) {
+                  accumulatedContent += chunk.choices[0].delta.content
+                  updateMessage(assistantMessageId, {
+                    content: accumulatedContent,
+                    isStreaming: true,
+                  })
+                }
+              },
+              onError: (error: Error) => {
+                console.error('Streaming error:', error)
+                clearTimeout(timeoutId) // Clear the timeout
+                setIsStreaming(false)
+                
+                // Remove streaming message
+                setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+
+                // For abort errors or network issues, try fallback to non-streaming
+                if (error instanceof NetworkError && 
+                    (error.message.includes('cancelled') || error.message.includes('aborted'))) {
+                  // Silently fall back to non-streaming mode
+                  setTimeout(async () => {
+                    try {
+                      const chatRequest = createChatRequest(messageContent)
+                      const response = await chatMutation.mutateAsync({
+                        chatRequest,
+                        sessionId,
+                      })
+                      
+                      // Add the response as a new message
+                      if (response.data.choices && response.data.choices.length > 0) {
+                        const assistantResponse = response.data.choices[0].message.content
+                        addMessage({
+                          type: 'assistant',
+                          content: assistantResponse,
+                          timestamp: new Date(),
+                        })
+                      } else {
+                        addMessage({
+                          type: 'assistant',
+                          content: "Sorry, I didn't receive a proper response.",
+                          timestamp: new Date(),
+                        })
+                      }
+                    } catch (fallbackError) {
+                      console.error('Fallback request also failed:', fallbackError)
+                      const errorMessage = fallbackError instanceof Error 
+                        ? fallbackError.message 
+                        : 'Failed to get response'
+                      setError(errorMessage)
+                      addMessage({
+                        type: 'error',
+                        content: `Error: ${errorMessage}`,
+                        timestamp: new Date(),
+                      })
+                    }
+                  }, 100)
+                } else {
+                  // For other errors, show error message
+                  const errorMessage = error instanceof NetworkError 
+                    ? error.message 
+                    : 'Streaming connection failed'
+                  setError(errorMessage)
+
+                  addMessage({
+                    type: 'error',
+                    content: `Error: ${errorMessage}`,
+                    timestamp: new Date(),
+                  })
+                }
+              },
+              onComplete: () => {
+                clearTimeout(timeoutId) // Clear the timeout
+                setIsStreaming(false)
+                
+                // If we didn't get any content through streaming, fall back to non-streaming
+                if (!accumulatedContent || accumulatedContent.trim() === '') {
+                  // Remove the streaming message and try non-streaming
+                  setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+                  
+                  // Retry with non-streaming
+                  setTimeout(async () => {
+                    try {
+                      const chatRequest = createChatRequest(messageContent)
+                      const response = await chatMutation.mutateAsync({
+                        chatRequest,
+                        sessionId,
+                      })
+                      
+                      // Add the response as a new message
+                      if (response.data.choices && response.data.choices.length > 0) {
+                        const assistantResponse = response.data.choices[0].message.content
+                        addMessage({
+                          type: 'assistant',
+                          content: assistantResponse,
+                          timestamp: new Date(),
+                        })
+                      } else {
+                        addMessage({
+                          type: 'assistant',
+                          content: "Sorry, I didn't receive a proper response.",
+                          timestamp: new Date(),
+                        })
+                      }
+                    } catch (fallbackError) {
+                      console.error('Fallback request also failed:', fallbackError)
+                      addMessage({
+                        type: 'error',
+                        content: 'Error: Failed to get response',
+                        timestamp: new Date(),
+                      })
+                    }
+                  }, 100)
+                  
+                  return
+                }
+                
+                updateMessage(assistantMessageId, {
+                  content: accumulatedContent,
+                  isStreaming: false,
+                  isLoading: false,
+                })
+              },
+              signal: abortController.signal,
+            }
+          )
+
+          finalSessionId = responseSessionId
+
+          // Set session ID if received from server (for new sessions)
+          if (finalSessionId && finalSessionId !== sessionId) {
+            setSessionId(finalSessionId)
+            // Mark as having initial sync since this is a new session with messages
+            if (!hasInitialSync) {
+              setHasInitialSync(true)
+            }
           }
-        }
 
-        // Update assistant message with response
-        if (response.data.choices && response.data.choices.length > 0) {
-          const assistantResponse = response.data.choices[0].message.content
+          return true
 
-          updateMessage(assistantMessageId, {
-            content: assistantResponse,
-            isLoading: false,
-          })
         } else {
-          updateMessage(assistantMessageId, {
-            content: "Sorry, I didn't receive a proper response.",
-            isLoading: false,
+          // Non-streaming path (fallback)
+          const response = await chatMutation.mutateAsync({
+            chatRequest,
+            sessionId,
           })
+
+          // Set session ID if received from server (for new sessions)
+          if (response.sessionId && response.sessionId !== sessionId) {
+            setSessionId(response.sessionId)
+            // Mark as having initial sync since this is a new session with messages
+            if (!hasInitialSync) {
+              setHasInitialSync(true)
+            }
+          }
+
+          // Update assistant message with response
+          if (response.data.choices && response.data.choices.length > 0) {
+            const assistantResponse = response.data.choices[0].message.content
+
+            updateMessage(assistantMessageId, {
+              content: assistantResponse,
+              isLoading: false,
+            })
+          } else {
+            updateMessage(assistantMessageId, {
+              content: "Sorry, I didn't receive a proper response.",
+              isLoading: false,
+            })
+          }
+
+          return true
         }
 
-        return true
       } catch (error) {
         console.error('Chat error:', error)
+        setIsStreaming(false)
 
-        // Remove loading message
+        // Remove loading/streaming message
         setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
 
         // Set error message
@@ -189,9 +378,24 @@ export function useChatbox(initialSessionId?: string) {
         })
 
         return false
+      } finally {
+        // Clear the abort controller reference and timeout
+        streamingAbortControllerRef.current = null
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
       }
     },
-    [chatMutation, sessionId, setSessionId, addMessage, updateMessage]
+    [
+      chatMutation, 
+      sessionId, 
+      setSessionId, 
+      addMessage, 
+      updateMessage, 
+      streamingEnabled, 
+      isStreaming,
+      hasInitialSync
+    ]
   )
 
   // Handle clear chat
@@ -234,8 +438,28 @@ export function useChatbox(initialSessionId?: string) {
     setError(null)
   }, [])
 
+  // Cancel streaming
+  const cancelStreaming = useCallback(() => {
+    if (streamingAbortControllerRef.current && isStreaming) {
+      streamingAbortControllerRef.current.abort()
+      setIsStreaming(false)
+      
+      // Update any streaming messages to show they were cancelled
+      setMessages(prev => prev.map(msg => 
+        msg.isStreaming 
+          ? { ...msg, isStreaming: false, content: msg.content + ' [Cancelled]' }
+          : msg
+      ))
+    }
+  }, [isStreaming])
+
   // Reset to new session
   const resetSession = useCallback(() => {
+    // Cancel any active streaming first
+    if (isStreaming) {
+      cancelStreaming()
+    }
+    
     const newSessionId = createNewSession()
     setMessages([])
     setError(null)
@@ -245,7 +469,7 @@ export function useChatbox(initialSessionId?: string) {
     setHasInitialSync(false)
 
     return newSessionId
-  }, [createNewSession])
+  }, [createNewSession, isStreaming, cancelStreaming])
 
   return {
     // State
@@ -255,7 +479,8 @@ export function useChatbox(initialSessionId?: string) {
     error,
 
     // Loading states
-    isSending: chatMutation.isPending,
+    isSending: chatMutation.isPending || isStreaming,
+    isStreaming,
     isClearing: deleteSessionMutation.isPending,
     isLoadingSession,
 
@@ -265,12 +490,13 @@ export function useChatbox(initialSessionId?: string) {
     updateInput,
     clearError,
     resetSession,
+    cancelStreaming,
     addMessage,
     updateMessage,
 
     // Computed values
     hasMessages: messages.length > 0,
-    canSend: !chatMutation.isPending && inputValue.trim().length > 0,
+    canSend: !chatMutation.isPending && !isStreaming && inputValue.trim().length > 0,
   }
 }
 

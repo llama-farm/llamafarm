@@ -5,7 +5,7 @@ export interface MessageProps {
 }
 
 const Message: React.FC<MessageProps> = ({ message }) => {
-  const { type, content, isLoading } = message
+  const { type, content, isLoading, isStreaming } = message
 
   const getMessageStyles = (): string => {
     const baseStyles = 'flex flex-col mb-4'
@@ -40,6 +40,11 @@ const Message: React.FC<MessageProps> = ({ message }) => {
       <div className={getContentStyles()}>
         {isLoading && type === 'assistant' ? (
           <span className="italic opacity-70">{content}</span>
+        ) : isStreaming && type === 'assistant' ? (
+          <span className="relative">
+            {content}
+            <span className="inline-block ml-1 w-2 h-5 bg-current animate-pulse" />
+          </span>
         ) : (
           content
         )}
