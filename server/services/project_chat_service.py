@@ -119,7 +119,7 @@ class ProjectChatService:
     def _clear_rag_context_provider(self, chat_agent: ProjectChatOrchestratorAgent) -> None:
         try:
             if hasattr(chat_agent, 'context_providers') and chat_agent.context_providers:
-                del chat_agent.context_providers["project_chat_context"]
+                chat_agent.context_providers.pop("project_chat_context", None)
         except Exception as e:
             logger.warning(f"Failed to clear RAG context provider: {e}")
 
