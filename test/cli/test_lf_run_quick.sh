@@ -15,7 +15,7 @@ echo "QUICK LF RUN TEST"
 echo "================================"
 echo ""
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 PASSED=0
 FAILED=0
@@ -24,12 +24,17 @@ test_command() {
     local desc="$1"
     local cmd="$2"
     echo -e "\n${BLUE}Testing:${NC} $desc"
-    if output=$($cmd 2>&1); then
-        if [ -n "$output" ]; then
+    
+    # Use timeout to prevent hanging
+    if output=$(timeout 30 $cmd 2>&1); then
+        # Filter out server health warnings for test evaluation
+        filtered_output=$(echo "$output" | grep -v "Server is degraded" | grep -v "Components:" | grep -v "Seeds:" | grep -v "⚠️" | grep -v "✅" | grep -v "host:" | grep -v "model:" | grep -v "Summary:")
+        
+        if [ -n "$filtered_output" ]; then
             echo -e "${GREEN}✓ PASSED${NC}"
             ((PASSED++))
         else
-            echo -e "${YELLOW}⚠ No output${NC}"
+            echo -e "${YELLOW}⚠ No meaningful output${NC}"
             ((FAILED++))
         fi
     else
@@ -38,24 +43,24 @@ test_command() {
     fi
 }
 
-# Basic queries
-test_command "Simple math" "./lf run 'What is 2+2?'"
-test_command "Hello query" "./lf run 'Say hello'"
-test_command "General knowledge" "./lf run 'What is the capital of France?'"
+# Basic queries without RAG
+test_command "Simple math (no RAG)" "./lf run --no-rag 'What is 2+2?'"
+test_command "Hello query (no RAG)" "./lf run --no-rag 'Say hello'"
+test_command "General knowledge (no RAG)" "./lf run --no-rag 'What is the capital of France?'"
 
-# RAG queries
-test_command "RAG basic" "./lf run --rag 'What is transformer architecture?'"
-test_command "RAG with database" "./lf run --rag --database main_database 'What is attention?'"
-test_command "RAG with top-k" "./lf run --rag --database main_database --rag-top-k 3 'Neural networks'"
-test_command "RAG with threshold" "./lf run --rag --database main_database --rag-score-threshold 0.5 'Machine learning'"
+# RAG queries (default behavior)
+test_command "RAG basic (default)" "./lf run 'What is transformer architecture?'"
+test_command "RAG with database" "./lf run --database main_database 'What is attention?'"
+test_command "RAG with top-k" "./lf run --database main_database --rag-top-k 3 'Neural networks'"
+test_command "RAG with threshold" "./lf run --database main_database --rag-score-threshold 0.5 'Machine learning'"
 
 # Combined parameters
-test_command "RAG all params" "./lf run --rag --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Deep learning'"
+test_command "RAG all params" "./lf run --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Deep learning'"
 
 # File input
 echo "Test query from file" > /tmp/test_query.txt
-test_command "File input" "./lf run -f /tmp/test_query.txt"
-test_command "File with RAG" "./lf run --rag --database main_database -f /tmp/test_query.txt"
+test_command "File input (no RAG)" "./lf run --no-rag -f /tmp/test_query.txt"
+test_command "File with RAG (default)" "./lf run --database main_database -f /tmp/test_query.txt"
 rm -f /tmp/test_query.txt
 
 echo ""

@@ -15,7 +15,7 @@ var (
 	runRAGDatabase      string
 	runRetrievalStrategy string
 	runRAGTopK          int
-	runRAGEnabled       bool
+	runNoRAG            bool  // Changed: now we track if RAG is disabled
 	runRAGScoreThreshold float64
 )
 
@@ -38,14 +38,17 @@ Examples:
   # Project inferred from llamafarm.yaml, input file
   lf run -f ./prompt.txt
   
-  # Run with RAG enabled
-  lf run --rag "What is transformer architecture?"
+  # Run with RAG (default behavior)
+  lf run "What is transformer architecture?"
   
   # Run with specific database
-  lf run --rag --database main_database "Explain attention mechanism"
+  lf run --database main_database "Explain attention mechanism"
   
   # Run with custom retrieval strategy and top-k
-  lf run --rag --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"`,
+  lf run --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"
+  
+  # Run WITHOUT RAG (LLM only)
+  lf run --no-rag "What is machine learning?"`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		// Valid forms:
 		// 1) run <ns>/<proj> <input>
@@ -137,8 +140,8 @@ Examples:
 			Temperature: temperature,
 			MaxTokens:   maxTokens,
 			HTTPClient:  getHTTPClient(),
-			// RAG settings
-			RAGEnabled:          runRAGEnabled,
+			// RAG settings - RAG is enabled by default unless --no-rag is used
+			RAGEnabled:          !runNoRAG,  // Changed: RAG is on by default
 			RAGDatabase:         runRAGDatabase,
 			RAGRetrievalStrategy: runRetrievalStrategy,
 			RAGTopK:             runRAGTopK,
@@ -162,9 +165,9 @@ Examples:
 func init() {
 	runCmd.Flags().StringVarP(&runInputFile, "file", "f", "", "path to file containing input text")
 	
-	// RAG flags
-	runCmd.Flags().BoolVar(&runRAGEnabled, "rag", false, "Enable RAG (Retrieval-Augmented Generation)")
-	runCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use (default: from config)")
+	// RAG flags - RAG is enabled by default now
+	runCmd.Flags().BoolVar(&runNoRAG, "no-rag", false, "Disable RAG (use LLM only without document retrieval)")
+	runCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use for RAG (default: from config)")
 	runCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
 	runCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
 	runCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")

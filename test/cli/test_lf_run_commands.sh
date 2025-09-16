@@ -22,7 +22,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Change to project root
-cd "$PROJECT_ROOT"
+cd "$(dirname "$PROJECT_ROOT")"
 
 # Track test results
 PASSED=0
@@ -73,18 +73,18 @@ echo "1. BASIC QUERIES (WITHOUT RAG)"
 echo "============================================"
 
 run_test \
-    "Simple math query" \
-    "./lf run 'What is 2+2?'" \
+    "Simple math query (no RAG)" \
+    "./lf run --no-rag 'What is 2+2?'" \
     "4"
 
 run_test \
-    "General knowledge query" \
-    "./lf run 'What is the capital of France?'" \
+    "General knowledge query (no RAG)" \
+    "./lf run --no-rag 'What is the capital of France?'" \
     "Paris"
 
 run_test \
-    "Short response query" \
-    "./lf run 'Say hello'" \
+    "Short response query (no RAG)" \
+    "./lf run --no-rag 'Say hello'" \
     ""
 
 echo ""
@@ -94,27 +94,27 @@ echo "============================================"
 
 run_test \
     "RAG query with --rag flag" \
-    "./lf run --rag 'What is transformer architecture?'" \
+    "./lf run 'What is transformer architecture?'" \
     ""
 
 run_test \
     "RAG with specific database" \
-    "./lf run --rag --database main_database 'What is self-attention?'" \
+    "./lf run --database main_database 'What is self-attention?'" \
     ""
 
 run_test \
     "RAG with custom top-k" \
-    "./lf run --rag --database main_database --rag-top-k 3 'Explain neural networks'" \
+    "./lf run --database main_database --rag-top-k 3 'Explain neural networks'" \
     ""
 
 run_test \
     "RAG with high top-k for more context" \
-    "./lf run --rag --database main_database --rag-top-k 10 'What are the key ML concepts?'" \
+    "./lf run --database main_database --rag-top-k 10 'What are the key ML concepts?'" \
     ""
 
 run_test \
     "RAG with score threshold" \
-    "./lf run --rag --database main_database --rag-score-threshold 0.5 'Machine learning basics'" \
+    "./lf run --database main_database --rag-score-threshold 0.5 'Machine learning basics'" \
     ""
 
 echo ""
@@ -124,12 +124,12 @@ echo "============================================"
 
 run_test \
     "RAG with all parameters" \
-    "./lf run --rag --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Explain attention mechanism in detail'" \
+    "./lf run --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Explain attention mechanism in detail'" \
     ""
 
 run_test \
     "Complex technical query with RAG" \
-    "./lf run --rag --database main_database --rag-top-k 8 'Compare transformer architecture with RNN models'" \
+    "./lf run --database main_database --rag-top-k 8 'Compare transformer architecture with RNN models'" \
     ""
 
 echo ""
@@ -147,7 +147,7 @@ run_test \
 
 run_test \
     "Query from file with RAG" \
-    "./lf run --rag --database main_database -f /tmp/test_query.txt" \
+    "./lf run --database main_database -f /tmp/test_query.txt" \
     ""
 
 # Cleanup
@@ -175,7 +175,7 @@ run_test \
 
 run_test \
     "Non-existent database (should use default or fail gracefully)" \
-    "./lf run --rag --database nonexistent_db 'test query' 2>&1 || true" \
+    "./lf run --database nonexistent_db 'test query' 2>&1 || true" \
     ""
 
 echo ""

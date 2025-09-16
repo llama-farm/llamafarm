@@ -110,14 +110,17 @@ The LlamaFarm CLI (`lf`) provides all functionality. Here are examples using rea
 
 ### Chat with RAG Integration
 ```bash
-# Chat without RAG (uses only LLM general knowledge)
-./lf run "What is machine learning?"
+# Chat WITH RAG (default - augments responses with your documents)
+./lf run "What is transformer architecture?"
 
-# Chat with RAG enabled (augments responses with your documents)
-./lf run --rag --database main_database "What is transformer architecture?"
+# Chat with specific database
+./lf run --database main_database "Explain attention mechanism"
 
 # Debug mode to see retrieval details
-./lf run --rag --database main_database --debug "Explain neural scaling laws"
+./lf run --database main_database --debug "Explain neural scaling laws"
+
+# Chat WITHOUT RAG (LLM only, no document retrieval)
+./lf run --no-rag "What is machine learning?"
 ```
 
 ### Working with Real Documents
@@ -151,16 +154,16 @@ The project includes comprehensive sample documents you can use immediately:
 ./lf rag query --database main_database "What FDA submissions are discussed?"
 ./lf rag query --database main_database "What are the API authentication methods?"
 
-# 7. Chat with RAG-augmented responses
-./lf run --rag --database main_database "Explain neural scaling laws"
-./lf run --rag --database main_database "What is BLA 761248?"
+# 7. Chat with RAG-augmented responses (default behavior)
+./lf run --database main_database "Explain neural scaling laws"
+./lf run --database main_database "What is BLA 761248?"
 
-# 8. Compare with and without RAG
-echo "=== Without RAG (general knowledge) ==="
-./lf run "What is the DataProcessor class?"
+# 8. Compare RAG vs no-RAG responses
+echo "=== With RAG (default - from your documents) ==="
+./lf run --database main_database "What is the DataProcessor class?"
 
-echo "=== With RAG (from your documents) ==="
-./lf run --rag --database main_database "What is the DataProcessor class?"
+echo "=== Without RAG (LLM general knowledge only) ==="
+./lf run --no-rag "What is the DataProcessor class?"
 ```
 
 ## Complete Example Workflow
@@ -202,10 +205,10 @@ nx start server  # Or the CLI will auto-start it
 ./lf rag query --database main_database "What FDA BLA submissions are mentioned?"
 ./lf rag query --database main_database --top-k 10 "API authentication methods"
 
-# Step 10: Chat with RAG augmentation
-./lf run --rag --database main_database "Explain the self-attention mechanism"
-./lf run --rag --database main_database "What is BLA 761248 about?"
-./lf run --rag --database main_database "How does the DataProcessor class work?"
+# Step 10: Chat with RAG augmentation (default behavior)
+./lf run --database main_database "Explain the self-attention mechanism"
+./lf run --database main_database "What is BLA 761248 about?"
+./lf run --database main_database "How does the DataProcessor class work?"
 
 # Step 11: Test different retrieval strategies
 ./lf rag query --database main_database --score-threshold 0.8 "neural scaling laws"

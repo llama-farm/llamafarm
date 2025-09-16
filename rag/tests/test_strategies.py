@@ -55,5 +55,6 @@ class TestStrategies:
         
         if databases:
             db_config = handler.create_database_config(databases[0])
-            assert "vector_store" in db_config
+            # New schema structure - check for 'config' instead of 'vector_store'
+            assert "config" in db_config
             assert "embedding_strategies" in db_config
