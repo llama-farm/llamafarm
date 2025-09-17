@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import Message from './Message'
 import FontIcon from '../../common/FontIcon'
-import useChatbox from '../../hooks/useChatbox'
+import useChatboxWithProjectSession from '../../hooks/useChatboxWithProjectSession'
 
 interface ChatboxProps {
   isPanelOpen: boolean
@@ -11,7 +11,7 @@ interface ChatboxProps {
 function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
   const [isDiagnosing, setIsDiagnosing] = useState<boolean>(false)
   const diagnosingInFlightRef = useRef<boolean>(false)
-  // Use the custom chatbox hook for all chat logic
+  // Use the enhanced chatbox hook with project session management for Designer Chat
   const {
     messages,
     inputValue,
@@ -25,7 +25,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
     cancelStreaming,
     hasMessages,
     canSend,
-  } = useChatbox()
+  } = useChatboxWithProjectSession()
 
   // Refs for auto-scroll
   const listRef = useRef<HTMLDivElement | null>(null)
