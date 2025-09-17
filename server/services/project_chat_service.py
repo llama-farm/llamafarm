@@ -121,7 +121,7 @@ class ProjectChatService:
             if hasattr(chat_agent, 'context_providers') and chat_agent.context_providers:
                 chat_agent.context_providers.pop("project_chat_context", None)
         except Exception as e:
-            logger.warning(f"Failed to clear RAG context provider: {e}")
+            logger.warning("Failed to clear RAG context provider", exc_info=True)
 
     async def chat(
         self,
