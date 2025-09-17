@@ -7,7 +7,7 @@ import logging
 from .base_parser import BaseParser, ParserConfig
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from core.base import Document, ProcessingResult
+from rag.core.base import Document, ProcessingResult
 
 logger = logging.getLogger(__name__)
 

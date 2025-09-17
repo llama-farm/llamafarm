@@ -51,14 +51,18 @@ properties:
       required:
         - name
         - files
+        - data_processing_strategy
+        - database
       properties:
         name:
           type: string
           description: Dataset name
-        rag_strategy:
+        data_processing_strategy:
           type: string
-          description: RAG strategy to use for the dataset
-          default: auto
+          description: RAG data processing strategy to use for the dataset
+        database:
+          type: string
+          description: RAG database to use for the dataset
         files:
           type: array
           description: List of file hashes

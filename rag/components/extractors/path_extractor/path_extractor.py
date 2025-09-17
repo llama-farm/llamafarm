@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 
 from ..base import BaseExtractor
-from core.base import Document
+from rag.core.base import Document
 
 logger = logging.getLogger(__name__)
 

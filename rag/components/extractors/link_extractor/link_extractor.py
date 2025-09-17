@@ -7,10 +7,10 @@ import re
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.base import Document
+    from rag.core.base import Document
 from urllib.parse import urlparse
 
-from components.extractors.base import BaseExtractor
+from rag.components.extractors.base import BaseExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class LinkExtractor(BaseExtractor):
         Returns:
             List of enhanced documents with link metadata
         """
-        from core.base import Document
+        from rag.core.base import Document
         
         for doc in documents:
             try:

@@ -67,6 +67,8 @@ dependencies = [
     "pytest-cov>=6.2.1",
     "pytest-asyncio>=1.1.0",
     "pytest-mock>=3.14.1",
+    "python-magic>=0.4.27",
+    "llama-index>=0.13.6",
 ]
 
 [project.optional-dependencies]
@@ -246,17 +248,21 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=core",
-    "--cov=parsers", 
-    "--cov=embedders",
-    "--cov=stores",
-    "--cov=utils",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
+    # Coverage disabled for now - uncomment to enable
+    # "--cov=core",
+    # "--cov=parsers", 
+    # "--cov=embedders",
+    # "--cov=stores",
+    # "--cov=utils",
+    # "--cov-report=term-missing",
+    # "--cov-report=html",
+    # "--cov-report=xml",
 ]
 testpaths = [
     "tests",
+    "."
+]
+pythonpath = [
     "."
 ]
 markers = [

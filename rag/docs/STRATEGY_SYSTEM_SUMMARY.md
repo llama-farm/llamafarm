@@ -1,21 +1,25 @@
 # RAG Strategy System Implementation Summary
 
-This document summarizes the comprehensive strategy system that has been implemented for the RAG project.
+This document summarizes the new v1 schema strategy system implemented for the RAG project.
 
 ## 🎯 Overview
 
-The strategy system provides a high-level, user-friendly way to configure RAG pipelines by selecting from predefined strategies optimized for specific use cases, rather than manually configuring individual components.
+The v1 schema introduces a modular architecture that separates databases from data processing strategies, providing flexibility and reusability. The system uses DirectoryParser as an always-active component for file routing, with strategies defined by combining processing methods with target databases.
 
-## 📁 Files Created/Modified
+## 📁 Core Architecture
 
-### Core Strategy System
-- `strategies/__init__.py` - Strategy module initialization
-- `strategies/config.py` - Strategy configuration data structures
-- `strategies/loader.py` - Strategy loading from YAML files
-- `strategies/manager.py` - High-level strategy management interface
-- `default_strategies.yaml` - Predefined strategies for common use cases
+### New Schema Structure
+- **Version**: v1 schema with `rag:` top-level key
+- **Databases**: Separate vector store configurations with embedding/retrieval strategies
+- **Data Processing Strategies**: Document processing pipelines with parsers and extractors
+- **DirectoryParser**: Always-active file detection and routing at strategy level
+- **Strategy Naming**: `{data_processing_strategy}_{database_name}` convention
+
+### Core Files
+- `core/strategies/handler.py` - SchemaHandler replaces old StrategyManager
+- `core/strategies/loader.py` - Loads and validates v1 schema configurations
 - `schema.yaml` - Comprehensive schema defining all RAG components
-- `test_strategies.py` - Test suite for strategy system
+- `config/templates/default.yaml` - Default configuration with example strategies
 
 ### Enhanced Parsers & Extractors
 - `parsers/markdown_parser.py` - Markdown parser with structure extraction
@@ -27,84 +31,83 @@ The strategy system provides a high-level, user-friendly way to configure RAG pi
 - `config/default.yaml` - Updated with strategy system support
 - `setup_and_demo.sh` - Added strategy demonstrations
 
-## 🚀 Available Strategies
+## 🚀 Available Strategies (from default.yaml)
 
-### 1. **Simple** (`simple`)
-- **Use Cases**: Development, testing, small datasets
-- **Performance**: Speed optimized
-- **Complexity**: Simple
-- **Components**: CSVParser + OllamaEmbedder + ChromaStore + BasicSimilarityStrategy
+### Data Processing Strategies
 
-### 2. **Customer Support** (`customer_support`)
-- **Use Cases**: Helpdesk, support tickets, customer service
-- **Performance**: Balanced
-- **Complexity**: Moderate
-- **Components**: CustomerSupportCSVParser + Multiple extractors + MetadataFilteredStrategy
+1. **pdf_processing**
+   - **Description**: Standard PDF document processing
+   - **Parsers**: PDFParser_PyPDF2, PDFParser_LlamaIndex
+   - **Extractors**: ContentStatisticsExtractor, EntityExtractor, KeywordExtractor
 
-### 3. **Legal** (`legal`)
-- **Use Cases**: Legal research, contract analysis, compliance
-- **Performance**: Accuracy optimized
-- **Complexity**: Complex
-- **Components**: PDFParser + Entity/Date/Keyword extractors + HybridUniversalStrategy
+2. **text_processing**
+   - **Description**: Plain text document processing
+   - **Parsers**: TextParser_Python, TextParser_LlamaIndex
+   - **Extractors**: ContentStatisticsExtractor, EntityExtractor
 
-### 4. **Research** (`research`)
-- **Use Cases**: Academic research, literature review, scientific papers
-- **Performance**: Accuracy optimized
-- **Complexity**: Complex
-- **Components**: PDFParser + TF-IDF extractor + MultiQueryStrategy
+3. **markdown_processing**
+   - **Description**: Markdown document processing with structure preservation
+   - **Parsers**: MarkdownParser_Python, MarkdownParser_LlamaIndex
+   - **Extractors**: ContentStatisticsExtractor, EntityExtractor
 
-### 5. **Business** (`business`)
-- **Use Cases**: Business reports, financial documents, corporate analysis
-- **Performance**: Balanced
-- **Complexity**: Moderate
-- **Components**: PDFParser + Entity/Date extractors + RerankedStrategy
+4. **csv_processing**
+   - **Description**: CSV and structured data processing
+   - **Parsers**: CSVParser_Pandas
+   - **Extractors**: EntityExtractor, DateTimeExtractor
 
-### 6. **Technical** (`technical`)
-- **Use Cases**: API docs, technical manuals, software documentation
-- **Performance**: Accuracy optimized
-- **Complexity**: Moderate
-- **Components**: PDFParser + YAKE extractor + MetadataFilteredStrategy
+5. **multi_format_llamaindex**
+   - **Description**: Multi-format document processing using LlamaIndex parsers
+   - **Parsers**: PDFParser_LlamaIndex, CSVParser_LlamaIndex, DocxParser_LlamaIndex, and more
+   - **Extractors**: ContentStatisticsExtractor, EntityExtractor, KeywordExtractor
 
-### 7. **Production** (`production`)
-- **Use Cases**: Production deployment, high scale, enterprise
-- **Performance**: Balanced
-- **Complexity**: Complex
-- **Components**: Optimized for containerized deployment + HybridUniversalStrategy
+6. **auto_processing**
+   - **Description**: Automatic file type detection and processing
+   - **Parsers**: Auto-detects based on file type
+   - **Extractors**: ContentStatisticsExtractor, EntityExtractor
+
+### Database Configuration
+
+**main_database** (ChromaStore)
+- **Embedding Strategies**: default_embeddings, fast_embeddings
+- **Retrieval Strategies**: basic_search, filtered_search
+- **Storage**: ./data/chroma_db
+
+### Complete Strategy Names
+
+When using the CLI, combine processing strategy with database:
+- `pdf_processing_main_database`
+- `text_processing_main_database`
+- `markdown_processing_main_database`
+- `csv_processing_main_database`
+- `multi_format_llamaindex_main_database`
+- `auto_processing_main_database`
 
 ## 🛠️ CLI Commands
 
-### Strategy Management
+### Using the New v1 Schema
 ```bash
-# List all available strategies
-uv run python cli.py strategies list
-uv run python cli.py strategies list --detailed
+# List available strategies
+uv run python cli.py --strategy-file config/templates/default.yaml strategies list
 
-# Show strategy details
-uv run python cli.py strategies show simple
+# Ingest with a specific strategy (note the combined naming)
+uv run python cli.py --strategy-file config/templates/default.yaml \
+    ingest documents/ \
+    --strategy pdf_processing_main_database
 
-# Get strategy recommendations
-uv run python cli.py strategies recommend --use-case customer_support
-uv run python cli.py strategies recommend --performance speed
+# Search across documents
+uv run python cli.py --strategy-file config/templates/default.yaml \
+    search "your query" \
+    --strategy pdf_processing_main_database
 
-# Convert strategy to config file
-uv run python cli.py strategies convert simple simple_config.yaml
-
-# Test strategy configuration
-uv run python cli.py strategies test simple
+# View collection info
+uv run python cli.py --strategy-file config/templates/default.yaml \
+    info --strategy pdf_processing_main_database
 ```
 
-### Using Strategies
-```bash
-# Strategy-based ingestion
-uv run python cli.py ingest --strategy simple samples/data.csv
-uv run python cli.py ingest --strategy legal legal_docs/
-
-# Strategy-based search
-uv run python cli.py search --strategy customer_support \"login problems\"
-
-# Strategy with overrides
-uv run python cli.py ingest data/ --strategy simple --strategy-overrides '{\"components\":{\"embedder\":{\"config\":{\"batch_size\":32}}}}'
-```
+### Key CLI Changes
+- **Global --strategy-file**: Must be specified before the command
+- **Strategy naming**: Use combined `{processing}_{database}` format
+- **DirectoryParser**: Automatically handles file detection and routing
 
 ## 📊 Component Schema
 

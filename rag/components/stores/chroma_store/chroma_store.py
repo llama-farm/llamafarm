@@ -7,8 +7,8 @@ from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings
 
-from core.base import VectorStore, Document
-from utils.hash_utils import DeduplicationTracker
+from rag.core.base import VectorStore, Document
+from rag.utils.hash_utils import DeduplicationTracker
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +195,27 @@ class ChromaStore(VectorStore):
                 logger.warning("No valid documents with embeddings to add (all may be duplicates)")
                 return True
 
+            # DEBUG: Check for duplicate IDs
+            id_counts = {}
+            for id in ids:
+                id_counts[id] = id_counts.get(id, 0) + 1
+            duplicates = {id: count for id, count in id_counts.items() if count > 1}
+            if duplicates:
+                print(f"DUPLICATE IDS FOUND: {duplicates}")
+                # Remove duplicates, keeping only first occurrence
+                seen_ids = set()
+                unique_data = []
+                for i, id in enumerate(ids):
+                    if id not in seen_ids:
+                        seen_ids.add(id)
+                        unique_data.append((ids[i], embeddings[i], metadatas[i], documents_content[i]))
+                
+                ids = [d[0] for d in unique_data]
+                embeddings = [d[1] for d in unique_data]
+                metadatas = [d[2] for d in unique_data]
+                documents_content = [d[3] for d in unique_data]
+                print(f"Removed duplicates, now have {len(ids)} unique documents")
+
             # Add to ChromaDB
             self.collection.add(
                 ids=ids,
@@ -211,6 +232,9 @@ class ChromaStore(VectorStore):
 
         except Exception as e:
             logger.error(f"Failed to add documents to ChromaDB: {e}")
+            print(f"ERROR STORING DOCUMENTS: {e}")  # DEBUG
+            import traceback
+            traceback.print_exc()  # DEBUG
             return False
 
     def search(self, query: str = None, top_k: int = 10, query_embedding: Optional[List[float]] = None, where: Optional[Dict[str, Any]] = None, **kwargs) -> List[Document]:

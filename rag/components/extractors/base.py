@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Type
 import logging
 
-from core.base import Document
+from rag.core.base import Document
 
 logger = logging.getLogger(__name__)
 

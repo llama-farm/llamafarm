@@ -129,43 +129,44 @@ name: very_large_config
 namespace: test
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Large config default strategy"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["subject", "body"]
-            metadata_fields: []
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "large_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "test"
+        persist_directory: "./test"
+      embedding_strategies:
+        - name: "default_embedding"
           type: "OllamaEmbedder"
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "test"
-            persist_directory: "./test"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "default_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Large config default strategy"
+      parsers:
+        - type: "CSVParser_Pandas"
+          config:
+            content_fields: ["question"]
+            metadata_fields: ["category"]
+            id_field: "id"
+            combine_content: true
+          file_extensions: [".csv"]
+      extractors: []
 
 datasets:
   - name: "very_large_dataset"
     files: ["test_file.csv"]
-    parser: "csv"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+    data_processing_strategy: "default"
+    database: "large_db"
 
 prompts:
 """
@@ -206,35 +207,38 @@ prompts:
           - "你好, こんにちは, Здравствуйте, مرحبا"
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Unicode strategy"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["subject", "body"]
-            metadata_fields: []
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "unicode_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "test_unicode_tm"
+        persist_directory: "./data/unicode_spade"
+      embedding_strategies:
+        - name: "default_embedding"
           type: "OllamaEmbedder"
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "test_unicode_tm"
-            persist_directory: "./data/unicode_spade"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "default_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Unicode strategy"
+      parsers:
+        - type: "CSVParser_Pandas"
+          config:
+            content_fields: ["question"]
+            metadata_fields: ["category"]
+            id_field: "id"
+            combine_content: true
+          file_extensions: [".csv"]
+      extractors: []
 
 runtime:
   provider: "openai"
@@ -243,10 +247,8 @@ runtime:
 datasets:
   - name: "unicode_dataset"
     files: ["test_file.csv"]
-    parser: "csv"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+    data_processing_strategy: "default"
+    database: "unicode_db"
 """
 
         temp_path = temp_config_file(unicode_config, ".yaml")
@@ -265,35 +267,38 @@ name: unicode_config
 namespace: test
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Deep path strategy"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["subject", "body"]
-            metadata_fields: []
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "deep_path_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "test"
+        persist_directory: "./very/deeply/nested/directory/structure/that/goes/many/levels/deep"
+      embedding_strategies:
+        - name: "default_embedding"
           type: "OllamaEmbedder"
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "test"
-            persist_directory: "./very/deeply/nested/directory/structure/that/goes/many/levels/deep"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "default_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Deep path strategy"
+      parsers:
+        - type: "CSVParser_LlamaIndex"
+          config:
+            content_fields: ["subject", "body"]
+            metadata_fields: []
+            combine_content: true
+            table_format: "markdown"
+          file_extensions: [".csv"]
+      extractors: []
 
 runtime:
   provider: "openai"
@@ -302,10 +307,8 @@ runtime:
 datasets:
   - name: "deep_path_dataset"
     files: ["test_file.csv"]
-    parser: "csv"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+    data_processing_strategy: "default"
+    database: "deep_path_db"
 
 prompts:
   - name: "deep_path_prompt"
@@ -337,35 +340,38 @@ prompts:
           - "Handle chars: @#$%^&*()_+-=[]{}|;',./<>?"
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Special characters strategy"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["subject", "body"]
-            metadata_fields: []
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "special_chars_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "collection_name_with-dashes_and_underscores"
+        persist_directory: "./data/with spaces and (parentheses)"
+      embedding_strategies:
+        - name: "default_embedding"
           type: "OllamaEmbedder"
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "collection_name_with-dashes_and_underscores"
-            persist_directory: "./data/with spaces and (parentheses)"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "default_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Special characters strategy"
+      parsers:
+        - type: "CSVParser_Pandas"
+          config:
+            content_fields: ["question"]
+            metadata_fields: ["category"]
+            id_field: "id"
+            combine_content: true
+          file_extensions: [".csv"]
+      extractors: []
 
 runtime:
   provider: "openai"
@@ -374,10 +380,8 @@ runtime:
 datasets:
   - name: "special_chars_dataset"
     files: ["test_file.csv"]
-    parser: "csv"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+    data_processing_strategy: "default"
+    database: "special_chars_db"
 """
 
         temp_path = temp_config_file(special_chars_config, ".yaml")

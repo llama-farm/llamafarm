@@ -189,38 +189,53 @@ uv run python -m prompts.cli template list  # View available templates
 uv run python -m prompts.cli execute "Your task" --template research
 ```
 
-### 🎮 Try It Live
+### 🎮 Try It Live with the LlamaFarm CLI
 
-#### RAG Pipeline Example
+#### Complete RAG Pipeline Example
 ```bash
-# Ingest documents with smart extraction
-uv run python rag/cli.py ingest samples/ \
-  --extractors keywords entities statistics \
-  --strategy research
+# Build the CLI
+cd cli && go build -o ../lf main.go && cd ..
 
-# Search with advanced retrieval
-uv run python rag/cli.py search \
-  "What are the key findings about climate change?" \
-  --top-k 5 --rerank
+# Create and populate a dataset
+./lf datasets add my-docs -s universal_processor -b main_database
+./lf datasets ingest my-docs examples/rag_pipeline/sample_files/research_papers/*.txt
+./lf datasets ingest my-docs examples/rag_pipeline/sample_files/fda/*.pdf
+./lf datasets process my-docs
+
+# Query your documents
+./lf rag query --database main_database "What is transformer architecture?"
+./lf rag query --database main_database --top-k 10 "What FDA submissions are discussed?"
+
+# Chat with RAG augmentation (default behavior)
+./lf run --database main_database "Explain neural scaling laws"
+./lf run --database main_database --debug "What is BLA 761248?"
+
+# Chat without RAG (LLM only)
+./lf run --no-rag "What is machine learning?"
 ```
 
-#### Multi-Model Chat Example
+#### Component-Specific Examples
+
+**RAG System:**
 ```bash
-# Chat with automatic fallback
-uv run python models/cli.py chat \
-  --primary gpt-4 \
-  --fallback claude-3 \
-  --local-fallback llama3.2 \
-  "Explain quantum entanglement"
+cd rag
+uv run python cli.py demo research_papers
+uv run python cli.py ingest ./your-docs/ --strategy research
+uv run python cli.py search "your query" --top-k 5
 ```
 
-#### Smart Prompt Example
+**Models System:**
 ```bash
-# Use domain-specific templates
-uv run python prompts/cli.py execute \
-  "Analyze this medical report for anomalies" \
-  --strategy medical \
-  --template diagnostic_analysis
+cd models
+uv run python demos/demo1_cloud_fallback.py
+uv run python cli.py chat --strategy balanced "Explain quantum computing"
+```
+
+**Prompts System:**
+```bash
+cd prompts
+uv run python -m prompts.cli template list
+uv run python -m prompts.cli execute "Your task" --template research
 ```
 
 ---

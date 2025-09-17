@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	configFile  string
-	ragStrategy string
+	configFile             string
+	dataProcessingStrategy string
+	database               string
 )
 
 // datasetsCmd represents the datasets command
@@ -29,11 +30,16 @@ var datasetsCmd = &cobra.Command{
 	Long: `Manage datasets on your LlamaFarm server. Datasets are collections
 of files that can be ingested into your RAG system for retrieval-augmented generation.
 
+Each dataset must specify:
+  - A data processing strategy (from rag.data_processing_strategies in your config)
+  - A database (from rag.databases in your config)
+
 Available commands:
   list    - List all datasets on the server for a project
   add     - Create a dataset on the server (optionally then upload files)
   remove  - Delete a dataset from the server
-  ingest  - Upload files to a dataset on the server`,
+  ingest  - Upload files to a dataset on the server
+  process - Process uploaded files into the vector database`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("LlamaFarm Datasets Management")
 		cmd.Help()
@@ -42,9 +48,10 @@ Available commands:
 
 // ==== API types (mirroring server) ====
 type apiDataset struct {
-	Name        string   `json:"name"`
-	RAGStrategy string   `json:"rag_strategy"`
-	Files       []string `json:"files"`
+	Name                   string   `json:"name"`
+	DataProcessingStrategy string   `json:"data_processing_strategy"`
+	Database               string   `json:"database"`
+	Files                  []string `json:"files"`
 }
 
 type listDatasetsResponse struct {
@@ -53,8 +60,9 @@ type listDatasetsResponse struct {
 }
 
 type createDatasetRequest struct {
-	Name        string `json:"name"`
-	RAGStrategy string `json:"rag_strategy"`
+	Name                   string `json:"name"`
+	DataProcessingStrategy string `json:"data_processing_strategy"`
+	Database               string `json:"database"`
 }
 
 type createDatasetResponse struct {
@@ -63,19 +71,20 @@ type createDatasetResponse struct {
 
 // datasetsListCmd represents the datasets list command
 var datasetsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all datasets on the server for the selected project",
-	Long:  `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all datasets on the server for the selected project",
+	Long:    `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Resolve server and routing
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
@@ -112,10 +121,10 @@ var datasetsListCmd = &cobra.Command{
 
 		fmt.Printf("Found %d dataset(s):\n\n", out.Total)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "NAME\tRAG STRATEGY\tFILE COUNT")
-		fmt.Fprintln(w, "----\t------------\t----------")
+		fmt.Fprintln(w, "NAME\tDATA PROCESSING STRATEGY\tDATABASE\tFILE COUNT")
+		fmt.Fprintln(w, "----\t------------------------\t--------\t----------")
 		for _, ds := range out.Datasets {
-			fmt.Fprintf(w, "%s\t%s\t%d\n", ds.Name, emptyDefault(ds.RAGStrategy, "auto"), len(ds.Files))
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", ds.Name, emptyDefault(ds.DataProcessingStrategy, "auto"), emptyDefault(ds.Database, "auto"), len(ds.Files))
 		}
 		w.Flush()
 	},
@@ -123,30 +132,47 @@ var datasetsListCmd = &cobra.Command{
 
 // datasetsAddCmd represents the datasets add command
 var datasetsAddCmd = &cobra.Command{
-	Use:   "add [name] [file1] [file2] ...",
-	Short: "Create a new dataset on the server (optionally upload files)",
+	Use:     "create [name] [file1] [file2] ...",
+	Aliases: []string{"add"},
+	Short:   "Create a new dataset on the server (optionally upload files)",
 	Long: `Create a new dataset on the server for the current project.
 
 Examples:
-  lf datasets add my-docs
-  lf datasets add --rag-strategy auto my-pdfs ./pdfs/*.pdf`,
+  lf datasets add --data-processing-strategy pdf_processing --database main_database my-docs
+  lf datasets add -s text_processing -b main_database my-pdfs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		datasetName := args[0]
-		// 1) Create dataset via API
-		if ragStrategy == "" {
-			ragStrategy = "auto"
+		// 1) Validate required parameters
+		if dataProcessingStrategy == "" {
+			fmt.Fprintf(os.Stderr, "Error: --data-processing-strategy is required\n")
+			os.Exit(1)
 		}
-		createReq := createDatasetRequest{Name: datasetName, RAGStrategy: ragStrategy}
+		if database == "" {
+			fmt.Fprintf(os.Stderr, "Error: --database is required\n")
+			os.Exit(1)
+		}
+
+		// 2) Validate strategies and databases exist in project config
+		ensureServerAvailable(serverCfg.URL, true)
+		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// 3) Create dataset via API
+		createReq := createDatasetRequest{
+			Name:                   datasetName,
+			DataProcessingStrategy: dataProcessingStrategy,
+			Database:               database,
+		}
 		payload, _ := json.Marshal(createReq)
-		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL)
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
@@ -175,9 +201,9 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Failed parsing response: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Created dataset '%s' (rag: %s)\n", created.Dataset.Name, emptyDefault(created.Dataset.RAGStrategy, "auto"))
+		fmt.Printf("✅ Created dataset '%s' (strategy: %s, database: %s)\n", created.Dataset.Name, created.Dataset.DataProcessingStrategy, created.Dataset.Database)
 
-		// 2) Optionally upload files if provided
+		// 4) Optionally upload files if provided
 		filePaths := args[1:]
 		if len(filePaths) == 0 {
 			return
@@ -207,19 +233,20 @@ Examples:
 
 // datasetsRemoveCmd represents the datasets remove command
 var datasetsRemoveCmd = &cobra.Command{
-	Use:   "remove [name]",
-	Short: "Delete a dataset from the server",
-	Long:  `Deletes a dataset from the LlamaFarm server for the selected project.`,
-	Args:  cobra.ExactArgs(1),
+	Use:     "delete [name]",
+	Aliases: []string{"rm", "remove", "del"},
+	Short:   "Delete a dataset from the server",
+	Long:    `Deletes a dataset from the LlamaFarm server for the selected project.`,
+	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		datasetName := args[0]
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
@@ -256,7 +283,7 @@ Examples:
   lf datasets ingest my-docs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -279,7 +306,7 @@ Examples:
 		}
 
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 		fmt.Printf("Starting upload to dataset '%s' (%d file(s))...\n", datasetName, len(files))
 		uploaded := 0
 		for _, f := range files {
@@ -294,22 +321,107 @@ Examples:
 	},
 }
 
+// datasetsProcessCmd represents the datasets process command
+var datasetsProcessCmd = &cobra.Command{
+	Use:   "process [dataset-name]",
+	Short: "Process uploaded files into the vector database",
+	Long: `Process all uploaded files in the dataset into the vector database using the configured data processing strategy and embeddings.`,
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		datasetName := args[0]
+
+		// Ensure server is up
+		ensureServerAvailable(serverCfg.URL, true)
+
+		fmt.Printf("Processing dataset '%s'...\n", datasetName)
+
+		// Call the process endpoint
+		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process", 
+			serverCfg.Namespace, serverCfg.Project, datasetName))
+		
+		req, err := http.NewRequest("POST", url, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+			os.Exit(1)
+		}
+
+		resp, err := getHTTPClient().Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error processing dataset: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading response: %v\n", err)
+			os.Exit(1)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
+			os.Exit(1)
+		}
+
+		// Parse response
+		var result struct {
+			ProcessedFiles int      `json:"processed_files"`
+			SkippedFiles   int      `json:"skipped_files"`
+			FailedFiles    int      `json:"failed_files"`
+			Details        []struct {
+				Hash   string `json:"hash"`
+				Status string `json:"status"`
+				Error  string `json:"error,omitempty"`
+			} `json:"details"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing response: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Display results
+		fmt.Printf("✅ Processing complete:\n")
+		fmt.Printf("   • Processed: %d files\n", result.ProcessedFiles)
+		if result.SkippedFiles > 0 {
+			fmt.Printf("   • Skipped: %d files (already processed)\n", result.SkippedFiles)
+		}
+		if result.FailedFiles > 0 {
+			fmt.Printf("   • Failed: %d files\n", result.FailedFiles)
+			for _, d := range result.Details {
+				if d.Status == "failed" && d.Error != "" {
+					fmt.Printf("     - %s: %s\n", d.Hash[:8], d.Error)
+				}
+			}
+		}
+	},
+}
+
 func init() {
-	// Add persistent flags
-	datasetsCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path (default: llamafarm.yaml in current directory)")
 	// Server routing flags (align with projects chat)
 	datasetsCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
 	datasetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")
 	datasetsCmd.PersistentFlags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
 
 	// Add flags specific to add command
-	datasetsAddCmd.Flags().StringVarP(&ragStrategy, "rag-strategy", "r", "auto", "RAG strategy to use for this dataset (default: auto)")
+	datasetsAddCmd.Flags().StringVarP(&dataProcessingStrategy, "data-processing-strategy", "s", "", "Data processing strategy to use for this dataset (required)")
+	datasetsAddCmd.Flags().StringVarP(&database, "database", "b", "", "Database to use for this dataset (required)")
+
+	// Mark flags as required
+	datasetsAddCmd.MarkFlagRequired("data-processing-strategy")
+	datasetsAddCmd.MarkFlagRequired("database")
 
 	// Add subcommands to datasets
 	datasetsCmd.AddCommand(datasetsListCmd)
 	datasetsCmd.AddCommand(datasetsAddCmd)
 	datasetsCmd.AddCommand(datasetsRemoveCmd)
 	datasetsCmd.AddCommand(datasetsIngestCmd)
+	datasetsCmd.AddCommand(datasetsProcessCmd)
 
 	// Add the datasets command to root
 	rootCmd.AddCommand(datasetsCmd)
@@ -321,6 +433,80 @@ func emptyDefault(s string, d string) string {
 		return d
 	}
 	return s
+}
+
+// ==== Validation helpers ====
+
+// availableStrategiesResponse represents the server response for available strategies
+type availableStrategiesResponse struct {
+	DataProcessingStrategies []string `json:"data_processing_strategies"`
+	Databases                []string `json:"databases"`
+}
+
+// validateStrategiesAndDatabases validates that the specified strategies exist in the project
+func validateStrategiesAndDatabases(serverURL, namespace, project, dataProcessingStrategy, database string) error {
+	// Get available strategies from server
+	url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s/%s/datasets/strategies", namespace, project))
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		// If we can't validate, continue anyway (graceful degradation)
+		fmt.Printf("⚠️  Warning: Could not validate strategies: %v\n", err)
+		return nil
+	}
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		// If we can't validate, continue anyway (graceful degradation)
+		fmt.Printf("⚠️  Warning: Could not validate strategies: %v\n", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// If endpoint doesn't exist or returns error, continue anyway
+		fmt.Printf("⚠️  Warning: Could not validate strategies (server returned %d)\n", resp.StatusCode)
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: Could not read validation response: %v\n", err)
+		return nil
+	}
+
+	var strategies availableStrategiesResponse
+	if err := json.Unmarshal(body, &strategies); err != nil {
+		fmt.Printf("⚠️  Warning: Could not parse validation response: %v\n", err)
+		return nil
+	}
+
+	// Validate data processing strategy
+	found := false
+	for _, s := range strategies.DataProcessingStrategies {
+		if s == dataProcessingStrategy {
+			found = true
+			break
+		}
+	}
+	if !found && len(strategies.DataProcessingStrategies) > 0 {
+		return fmt.Errorf("data processing strategy '%s' not found. Available strategies: %s",
+			dataProcessingStrategy, strings.Join(strategies.DataProcessingStrategies, ", "))
+	}
+
+	// Validate database
+	found = false
+	for _, db := range strategies.Databases {
+		if db == database {
+			found = true
+			break
+		}
+	}
+	if !found && len(strategies.Databases) > 0 {
+		return fmt.Errorf("database '%s' not found. Available databases: %s",
+			database, strings.Join(strategies.Databases, ", "))
+	}
+
+	return nil
 }
 
 func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) error {

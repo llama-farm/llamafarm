@@ -50,15 +50,13 @@ Available commands:
 
 // projectsListCmd lists projects for a namespace from the server
 var projectsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List projects in a namespace",
-	Long:  "List projects available in the specified namespace on the LlamaFarm server.",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List projects in a namespace",
+	Long:    "List projects available in the specified namespace on the LlamaFarm server.",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Resolve config path from persistent flag
-		configPath, _ := cmd.Flags().GetString("config")
-
 		// Resolve server URL and namespace (project is not required for list)
-		serverCfg, err := config.GetServerConfigLenient(configPath, serverURL, namespace, "")
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -72,7 +70,7 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverURL)
+		ensureServerAvailable(serverURL, true)
 
 		// Build request
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
@@ -118,12 +116,7 @@ var projectsListCmd = &cobra.Command{
 	},
 }
 
-// chatCmd represents the chat command
-
 func init() {
-	// Add persistent flags to projects command
-	projectsCmd.PersistentFlags().StringP("config", "c", "", "config file path (default: llamafarm.yaml in current directory)")
-
 	// Add list subcommand to projects
 	projectsCmd.AddCommand(projectsListCmd)
 

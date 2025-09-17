@@ -29,11 +29,11 @@ class TestModuleIntegration:
 
         # Simulate RAG module extracting its configuration
         rag_config = config["rag"]
-        strat = rag_config["strategies"][0]
+        strat = rag_config["data_processing_strategies"][0]
 
         # Parser configuration extraction
-        parser_type = strat["components"]["parser"]["type"]
-        parser_config = strat["components"]["parser"]["config"]
+        parser_type = strat["parsers"][0]["type"]
+        parser_config = strat["parsers"][0]["config"]
         content_fields = parser_config["content_fields"]
         metadata_fields = parser_config["metadata_fields"]
 
@@ -44,8 +44,9 @@ class TestModuleIntegration:
         assert len(metadata_fields) >= 1
 
         # Embedder configuration extraction
-        embedder_type = strat["components"]["embedder"]["type"]
-        embedder_config = strat["components"]["embedder"]["config"]
+        db = rag_config["databases"][0]
+        embedder_type = db["embedding_strategies"][0]["type"]
+        embedder_config = db["embedding_strategies"][0]["config"]
         embedding_model = embedder_config["model"]
         batch_size = embedder_config["batch_size"]
 
@@ -55,8 +56,8 @@ class TestModuleIntegration:
         assert batch_size > 0
 
         # Vector store configuration extraction
-        vector_store_type = strat["components"]["vector_store"]["type"]
-        vector_store_config = strat["components"]["vector_store"]["config"]
+        vector_store_type = db["type"]
+        vector_store_config = db["config"]
         collection_name = vector_store_config["collection_name"]
         persist_directory = vector_store_config["persist_directory"]
 
@@ -100,8 +101,9 @@ class TestModuleIntegration:
 
                 # Check RAG structure
                 rag = config["rag"]
-                # Strict schema uses strategies array instead of these root keys
-                assert "strategies" in rag
+                # Strict schema uses databases and data_processing_strategies arrays
+                assert "databases" in rag
+                assert "data_processing_strategies" in rag
 
                 # Runtime is the canonical place for execution provider
                 runtime = config["runtime"]
@@ -120,8 +122,8 @@ class TestModuleIntegration:
         # Should be identical
         assert config1["version"] == config2["version"]
         assert (
-            config1["rag"]["strategies"][0]["components"]["parser"]["type"]
-            == config2["rag"]["strategies"][0]["components"]["parser"]["type"]
+            config1["rag"]["data_processing_strategies"][0]["parsers"][0]["type"]
+            == config2["rag"]["data_processing_strategies"][0]["parsers"][0]["type"]
         )
 
     def test_environment_specific_configs(self, temp_config_file):
@@ -133,35 +135,38 @@ name: dev_config
 namespace: test
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Dev strategy"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["question"]
-            metadata_fields: []
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "dev_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "dev_collection"
+        persist_directory: "./data/dev"
+      embedding_strategies:
+        - name: "dev_embedding"
           type: "OllamaEmbedder"
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434"
             batch_size: 8
             timeout: 30
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "dev_collection"
-            persist_directory: "./data/dev"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "dev_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Dev strategy"
+      parsers:
+        - type: "CSVParser_LlamaIndex"
+          config:
+            content_fields: ["question"]
+            metadata_fields: ["category"]
+            id_field: "id"
+            combine_content: true
+          file_extensions: [".csv"]
+      extractors: []
 
 runtime:
   provider: "openai"
@@ -174,10 +179,8 @@ runtime:
 datasets:
   - name: "dev_dataset"
     files: ["test_file.csv"]
-    parser: "csv"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+    data_processing_strategy: "default"
+    database: "dev_db"
 
 prompts:
   - role: "system"
@@ -191,35 +194,38 @@ name: prod_config
 namespace: test
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Prod strategy"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["question", "answer"]
-            metadata_fields: ["category"]
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "prod_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "production_collection"
+        persist_directory: "./data/production"
+      embedding_strategies:
+        - name: "prod_embedding"
           type: "OllamaEmbedder"
           config:
             model: "mxbai-embed-large"
             base_url: "http://localhost:11434"
             batch_size: 64
             timeout: 60
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "production_collection"
-            persist_directory: "./data/production"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "prod_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Prod strategy"
+      parsers:
+        - type: "CSVParser_LlamaIndex"
+          config:
+            content_fields: ["question", "answer", "solution"]
+            metadata_fields: ["category", "priority", "timestamp"]
+            id_field: "id"
+            combine_content: true
+          file_extensions: [".csv"]
+      extractors: []
 
 runtime:
   provider: "openai"
@@ -232,10 +238,8 @@ runtime:
 datasets:
   - name: "prod_dataset"
     files: ["test_file.csv"]
-    parser: "csv"
-    embedder: "default"
-    vector_store: "default"
-    retrieval_strategy: "default"
+    data_processing_strategy: "default"
+    database: "prod_db"
 
 prompts:
   - role: "system"
@@ -247,20 +251,15 @@ prompts:
 
         # Load development config
         dev_cfg = load_config_dict(config_path=dev_path)
-        dev_strat = dev_cfg["rag"]["strategies"][0]
-        assert dev_strat["components"]["embedder"]["config"]["batch_size"] == 8
-        assert (
-            dev_strat["components"]["vector_store"]["config"]["collection_name"] == "dev_collection"
-        )
+        dev_db = dev_cfg["rag"]["databases"][0]
+        assert dev_db["embedding_strategies"][0]["config"]["batch_size"] == 8
+        assert dev_db["config"]["collection_name"] == "dev_collection"
 
         # Load production config
         prod_cfg = load_config_dict(config_path=prod_path)
-        prod_strat = prod_cfg["rag"]["strategies"][0]
-        assert prod_strat["components"]["embedder"]["config"]["batch_size"] == 64
-        assert (
-            prod_strat["components"]["vector_store"]["config"]["collection_name"]
-            == "production_collection"
-        )
+        prod_db = prod_cfg["rag"]["databases"][0]
+        assert prod_db["embedding_strategies"][0]["config"]["batch_size"] == 64
+        assert prod_db["config"]["collection_name"] == "production_collection"
         # Models list is optional; rely on runtime instead
         assert prod_cfg["runtime"]["provider"] == "openai"
 
@@ -272,22 +271,24 @@ prompts:
         # Simulate component factory pattern based on config
         def create_parser_from_config(rag_config):
             """Simulate parser factory."""
-            strat = rag_config["strategies"][0]
-            parser_type = strat["components"]["parser"]["type"]
-            parser_config = strat["components"]["parser"]["config"]
+            strat = rag_config["data_processing_strategies"][0]
+            parser_type = strat["parsers"][0]["type"]
+            parser_config = strat["parsers"][0]["config"]
 
             if parser_type == "CSVParser_LlamaIndex":
                 return {
                     "type": parser_type,
+                    "content_fields": parser_config["content_fields"],
+                    "metadata_fields": parser_config["metadata_fields"],
                 }
             else:
                 raise ValueError(f"Unknown parser type: {parser_type}")
 
         def create_embedder_from_config(rag_config):
             """Simulate embedder factory."""
-            strat = rag_config["strategies"][0]
-            embedder_type = strat["components"]["embedder"]["type"]
-            embedder_config = strat["components"]["embedder"]["config"]
+            db = rag_config["databases"][0]
+            embedder_type = db["embedding_strategies"][0]["type"]
+            embedder_config = db["embedding_strategies"][0]["config"]
 
             if embedder_type == "OllamaEmbedder":
                 return {
@@ -302,6 +303,7 @@ prompts:
         rag_config = config["rag"]
 
         parser = create_parser_from_config(rag_config)
+        assert len(parser["content_fields"]) > 0
         assert parser["type"] in [
             "CSVParser_LlamaIndex",
             "CSVParser_Pandas",
@@ -336,10 +338,11 @@ def test_cross_module_config_sharing():
     # Module 1: RAG Service
     class RAGService:
         def __init__(self, config: LlamaFarmConfig):
-            strat = config.rag.strategies[0]
-            self.parser_type = strat.components.parser.type
-            self.embedder_type = strat.components.embedder.type
-            self.collection_type = strat.components.vector_store.type
+            strat = config.rag.data_processing_strategies[0]
+            db = config.rag.databases[0]
+            self.parser_type = strat.parsers[0].type
+            self.embedder_type = db.embedding_strategies[0].type
+            self.collection_type = db.type
 
     # Module 3: Prompt Service
     class PromptService:

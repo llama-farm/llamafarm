@@ -750,3 +750,4 @@ rag/demos/vectordb/aircraft_operations/babf2f8c-f800-4695-9029-e29b14585c5d/inde
 
 # Celery filesystem broker
 server/control/
+llamafarm.yaml

@@ -22,9 +22,34 @@ class TextParser_Python:
         """Validate configuration."""
         return True
     
+    def parse_blob(self, blob_data: bytes, metadata: Dict[str, Any]) -> List['Document']:
+        """Parse raw blob data by writing to temp file and calling parse."""
+        import tempfile
+        from rag.core.base import Document
+        
+        # Write blob to temp file
+        suffix = f".{metadata.get('filename', 'temp.txt').split('.')[-1]}"
+        with tempfile.NamedTemporaryFile(mode='wb', suffix=suffix, delete=False) as tmp:
+            tmp.write(blob_data)
+            tmp_path = tmp.name
+        
+        try:
+            # Parse the temp file
+            result = self.parse(tmp_path)
+            if result and result.documents:
+                # Update metadata for all chunks
+                for doc in result.documents:
+                    doc.metadata.update(metadata)
+                    doc.metadata['parser'] = self.name
+                return result.documents
+            return []
+        finally:
+            # Clean up temp file
+            Path(tmp_path).unlink(missing_ok=True)
+    
     def parse(self, source: str, **kwargs):
         """Parse text file using native Python."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
         
         path = Path(source)
         if not path.exists():

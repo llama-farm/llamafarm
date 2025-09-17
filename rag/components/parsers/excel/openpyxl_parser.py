@@ -24,7 +24,7 @@ class ExcelParser_OpenPyXL:
     
     def parse(self, source: str, **kwargs):
         """Parse Excel using OpenPyXL."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
         
         try:
             import openpyxl

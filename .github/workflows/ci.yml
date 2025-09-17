@@ -73,19 +73,19 @@ jobs:
             cli/coverage.out
             cli/coverage.txt
 
-      - name: Update PR description with CLI coverage
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
-        uses: ./.github/actions/update-pr-coverage
-        with:
-          coverage_path: cli/coverage.md
-          section_title: CLI Coverage
-          start_marker: '<!-- CLI_COVERAGE_START -->'
-          end_marker: '<!-- CLI_COVERAGE_END -->'
+      # - name: Update PR description with CLI coverage
+      #   if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+      #   uses: ./.github/actions/update-pr-coverage
+      #   with:
+      #     coverage_path: cli/coverage.md
+      #     section_title: CLI Coverage
+      #     start_marker: '<!-- CLI_COVERAGE_START -->'
+      #     end_marker: '<!-- CLI_COVERAGE_END -->'
 
-      - name: Skipping PR description update (fork PR)
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
-        run: |
-          echo "PR is from a fork; cannot update PR description with GITHUB_TOKEN. Coverage is available in the job summary and as artifacts." >> "$GITHUB_STEP_SUMMARY"
+      # - name: Skipping PR description update (fork PR)
+      #   if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
+      #   run: |
+      #     echo "PR is from a fork; cannot update PR description with GITHUB_TOKEN. Coverage is available in the job summary and as artifacts." >> "$GITHUB_STEP_SUMMARY"
 
   # Test Python components
   test-python:

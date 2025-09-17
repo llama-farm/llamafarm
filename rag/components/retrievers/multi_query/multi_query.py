@@ -3,8 +3,8 @@
 import numpy as np
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
-from core.base import Document
+from rag.components.retrievers.base import RetrievalStrategy, RetrievalResult
+from rag.core.base import Document
 
 
 class MultiQueryStrategy(RetrievalStrategy):

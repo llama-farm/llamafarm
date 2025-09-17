@@ -1,50 +1,251 @@
 version: v1
 name: default-project
-prompts:
-  - role: system
-    content: You are a helpful assistant
-rag:
-  strategies:
-    - name: default
-      description: Default RAG strategy
-      components:
-        parser:
-          type: PlainTextParser
-          config:
-            encoding: auto
-            chunk_overlap: 0
-            chunk_strategy: characters
-            respect_sentence_boundaries: true
-            respect_paragraph_boundaries: false
-            min_chunk_size: 50
-            preserve_line_breaks: true
-            strip_empty_lines: true
-            detect_structure: true
-        embedder:
-          type: OllamaEmbedder
-          config:
-            model: nomic-embed-text
-            base_url: http://localhost:11434/ # FIXME: This is not going to work very well within a docker container
-            dimension: 768
-            batch_size: 16
-            timeout: 60
-            auto_pull: true
-        vector_store:
-          type: ChromaStore
-          config:
-            collection_name: documents
-            persist_directory: ./data/chroma_db
-            port: 8000
-            distance_function: cosine
-        retrieval_strategy:
-          type: BasicSimilarityStrategy
-          config:
-            top_k: 10
-            distance_metric: cosine
-  strategy_templates: {}
-datasets: []
+namespace: default
+
+# =============================================================================
+# RUNTIME CONFIGURATION (required - most important)
+# =============================================================================
 runtime:
   provider: ollama
   model: llama3.1:8b
-  model_api_parameters:
-    temperature: 0.5
+  base_url: http://localhost:11434/v1  # Note: /v1 for OpenAI compatibility
+  temperature: 0.7
+  # api_key: optional, not needed for ollama
+  # instructor_mode: optional
+  # model_api_parameters: optional additional parameters
+
+# =============================================================================
+# PROMPTS CONFIGURATION
+# =============================================================================
+prompts:
+  - role: system
+    content: |
+      You are a helpful AI assistant.
+
+# =============================================================================
+# DATASETS CONFIGURATION
+# =============================================================================
+datasets: []
+
+# =============================================================================
+# RAG CONFIGURATION
+# =============================================================================
+rag:
+  # =============================================================================
+  # DATABASE CONFIGURATIONS
+  # =============================================================================
+  databases:
+    # Main vector database for general documents
+    - name: "main_database"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/chroma_db"
+        distance_function: "cosine"
+        collection_name: "documents"
+        port: 8000
+      # Default strategies for this database
+      default_embedding_strategy: "default_embeddings"
+      default_retrieval_strategy: "basic_search"
+      # Available embedding strategies
+      embedding_strategies:
+        - name: "default_embeddings"
+          type: "OllamaEmbedder"
+          priority: 0
+          config:
+            model: "nomic-embed-text"
+            base_url: "http://localhost:11434/"
+            dimension: 768
+            batch_size: 16
+            timeout: 60
+            auto_pull: true      # Available retrieval strategies
+      retrieval_strategies:
+        - name: "basic_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 10
+          default: true
+        - name: "filtered_search"
+          type: "MetadataFilteredStrategy"
+          config:
+            top_k: 10
+            filter_mode: "post"
+            fallback_multiplier: 2
+
+  # =============================================================================
+  # DATA PROCESSING STRATEGIES - SINGLE UNIFIED STRATEGY
+  # =============================================================================
+  data_processing_strategies:
+    # Universal document processor - handles all file types
+    - name: "universal_processor"
+      description: "Unified processor for PDFs, Word docs, CSVs, Markdown, and text files"
+      parsers:
+        # PDF Parser with robust fallback
+        - type: "PDFParser_LlamaIndex"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          file_exclude_patterns: ["*_draft.pdf", "*.tmp.pdf"]
+          priority: 100  # Primary PDF parser
+          config:
+            chunk_strategy: "semantic"
+            chunk_size: 1000
+            chunk_overlap: 200
+            extract_metadata: true
+            extract_tables: true
+        
+        - type: "PDFParser_PyPDF2"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          file_exclude_patterns: ["*_draft.pdf", "*.tmp.pdf"]
+          priority: 50  # Fallback PDF parser
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            chunk_strategy: "paragraphs"
+            extract_metadata: true
+        
+        # Word Document Parser
+        - type: "DocxParser_LlamaIndex"
+          file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
+          file_exclude_patterns: ["~$*", "*.tmp"]  # Exclude temp Word files
+          priority: 100
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            extract_metadata: true
+            extract_tables: true
+        
+        # Markdown Parser
+        - type: "MarkdownParser_Python"
+          file_include_patterns: ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*"]
+          file_exclude_patterns: ["*.tmp.md", "_draft*.md"]
+          priority: 100
+          config:
+            chunk_size: 1000
+            chunk_strategy: "sections"
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+        
+        # CSV/TSV Parser
+        - type: "CSVParser_Pandas"
+          file_include_patterns: ["*.csv", "*.CSV", "*.tsv", "*.TSV", "*.dat"]
+          file_exclude_patterns: ["*_backup.csv", "*.tmp.csv"]
+          priority: 100
+          config:
+            chunk_size: 500
+            chunk_strategy: "rows"
+            extract_metadata: true
+            encoding: "utf-8"
+        
+        # Excel Parser
+        - type: "ExcelParser_Pandas"
+          file_include_patterns: ["*.xlsx", "*.XLSX", "*.xls", "*.XLS"]
+          file_exclude_patterns: ["~$*", "*.tmp.xlsx"]  # Exclude temp Excel files
+          priority: 100
+          config:
+            chunk_size: 500
+            sheets: null  # Process all sheets
+            extract_metadata: true
+        
+        # Plain Text Parser (catch-all for text files)
+        - type: "TextParser_Python"
+          file_include_patterns: [
+            "*.txt", "*.text", "*.log", 
+            "*.json", "*.xml", "*.yaml", "*.yml", "*.toml",
+            "*.cfg", "*.conf", "*.ini",
+            "*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h",
+            "*.sh", "*.bash", "*.zsh",
+            "LICENSE*", "CHANGELOG*", "AUTHORS*"
+          ]
+          file_exclude_patterns: ["*.pyc", "*.pyo", "*.class", "*.o", "*.so", "*.dll"]
+          priority: 50  # Lower priority, acts as fallback
+          config:
+            encoding: "utf-8"
+            chunk_size: 1200
+            chunk_overlap: 200
+            chunk_strategy: "sentences"
+            clean_text: true
+            extract_metadata: true
+      
+      # Extractors with file pattern matching
+      extractors:
+        # Universal extractors - work on all file types
+        - type: "ContentStatisticsExtractor"
+          file_include_patterns: ["*"]  # Apply to all files
+          file_exclude_patterns: []
+          priority: 100
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+        
+        - type: "EntityExtractor"
+          file_include_patterns: ["*"]  # Apply to all files
+          file_exclude_patterns: []
+          priority: 90
+          config:
+            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT", "MONEY", "PERCENT"]
+            use_fallback: true
+            min_entity_length: 2
+        
+        - type: "KeywordExtractor"
+          file_include_patterns: ["*"]  # Apply to all files
+          file_exclude_patterns: []
+          priority: 80
+          config:
+            algorithm: "yake"
+            max_keywords: 10
+            min_keyword_length: 3
+        
+        # PDF-specific extractors
+        - type: "TableExtractor"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          file_exclude_patterns: []
+          priority: 100
+          config:
+            output_format: "dict"
+            extract_headers: true
+            merge_cells: true
+        
+        # CSV/Excel-specific extractors
+        - type: "DateTimeExtractor"
+          file_include_patterns: ["*.csv", "*.xlsx", "*.xls", "*.tsv"]
+          file_exclude_patterns: []
+          priority: 100
+          config:
+            formats: ["ISO8601", "US", "EU"]
+            extract_relative: true
+            extract_times: true
+        
+        # Code file extractors
+        - type: "PatternExtractor"
+          file_include_patterns: ["*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h"]
+          file_exclude_patterns: []
+          priority: 100
+          config:
+            predefined_patterns: ["email", "url", "ip_address", "version"]
+            custom_patterns:
+              - name: "function_def"
+                pattern: "def\\s+\\w+\\s*\\("
+                description: "Python function definitions"
+              - name: "class_def"
+                pattern: "class\\s+\\w+[\\(\\:]"
+                description: "Class definitions"
+        
+        # Markdown-specific extractors
+        - type: "HeadingExtractor"
+          file_include_patterns: ["*.md", "*.markdown", "README*"]
+          file_exclude_patterns: []
+          priority: 100
+          config:
+            max_level: 6
+            include_hierarchy: true
+            extract_outline: true
+        
+        - type: "LinkExtractor"
+          file_include_patterns: ["*.md", "*.markdown", "*.html", "*.htm"]
+          file_exclude_patterns: []
+          priority: 90
+          config:
+            extract_urls: true
+            extract_emails: true
+            extract_domains: true

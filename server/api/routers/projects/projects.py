@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
+from api.routers.rag.rag_query import QueryRequest, QueryResponse, handle_rag_query
 from api.routers.shared.response_utils import (
     create_streaming_response_from_iterator,
     set_session_header,
@@ -199,6 +200,7 @@ async def chat(
     session_id: str | None = Header(None, alias="X-Session-ID"),
 ):
     """Send a message to the chat agent"""
+    project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
 
     # If no session ID provided, create a new one and ensure thread-safe session map access
@@ -225,18 +227,28 @@ async def chat(
         return create_streaming_response_from_iterator(
             request,
             project_chat_service.stream_chat(
+                project_dir=project_dir,
                 project_config=project_config,
                 chat_agent=agent,
                 message=latest_user_message,
+                rag_enabled=request.rag_enabled,
+                database=request.database,
+                rag_top_k=request.rag_top_k,
+                rag_score_threshold=request.rag_score_threshold,
             ),
             session_id,
         )
 
     try:
         completion = await project_chat_service.chat(
+            project_dir=project_dir,
             project_config=project_config,
             chat_agent=agent,
             message=latest_user_message,
+            rag_enabled=request.rag_enabled,
+            database=request.database,
+            rag_top_k=request.rag_top_k,
+            rag_score_threshold=request.rag_score_threshold,
         )
     except Exception as e:
         raise HTTPException(
@@ -246,6 +258,38 @@ async def chat(
 
     set_session_header(response, session_id)
     return completion
+
+
+@router.post(
+    "/{namespace}/{project_id}/rag/query",
+    response_model=QueryResponse,
+    responses={
+        404: {"model": ErrorResponse, "description": "Database or strategy not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    }
+)
+async def rag_query(
+    namespace: str,
+    project_id: str,
+    request: QueryRequest
+):
+    """Perform a RAG query on the project's configured databases."""
+    # Get project configuration
+    project_service = ProjectService()
+    project_dir = project_service.get_project_dir(namespace, project_id)
+    
+    if not Path(project_dir).exists():
+        raise HTTPException(status_code=404, detail=f"Project {namespace}/{project_id} not found")
+    
+    project_config = ProjectService.load_config(namespace, project_id)
+    
+    if not project_config:
+        raise HTTPException(status_code=500, detail="Failed to load project configuration")
+    
+    # Handle the RAG query
+    response = await handle_rag_query(request, project_config, str(project_dir))
+    
+    return response
 
 
 @router.get("/{namespace}/{project_id}/tasks/{task_id}")

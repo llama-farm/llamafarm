@@ -30,22 +30,14 @@ class TestConfigWriter:
                 }
             ],
             "rag": {
-                "strategies": [
+                "databases": [
                     {
-                        "name": "default",
-                        "description": "Default strategy",
-                        "components": {
-                            "parser": {
-                                "type": "CSVParser_LlamaIndex",
-                                "config": {
-                                    "content_fields": ["question"],
-                                    "metadata_fields": [],
-                                    "combine_content": True,
-                                    "table_format": "markdown",
-                                },
-                            },
-                            "extractors": [],
-                            "embedder": {
+                        "name": "test_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "test_embedding",
                                 "type": "OllamaEmbedder",
                                 "config": {
                                     "model": "nomic-embed-text",
@@ -54,15 +46,45 @@ class TestConfigWriter:
                                     "timeout": 30,
                                     "auto_pull": True,
                                 },
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {"type": "BasicSimilarityStrategy", "config": {}},
-                        },
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "test_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
                     }
-                ]
+                ],
+                "data_processing_strategies": [
+                    {
+                        "name": "default",
+                        "description": "Default strategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_Pandas",
+                                "config": {
+                                    "content_fields": ["question"],
+                                    "metadata_fields": ["category"],
+                                    "id_field": "id",
+                                    "combine_content": True,
+                                },
+                                "file_extensions": [".csv"],
+                            }
+                        ],
+                        "extractors": [],
+                    }
+                ],
             },
             "datasets": [
-                {"name": "test_dataset", "files": ["test_file.csv"], "rag_strategy": "auto"}
+                {
+                    "name": "test_dataset",
+                    "files": ["test_file.csv"],
+                    "data_processing_strategy": "auto",
+                    "database": "test_db",
+                }
             ],
             "runtime": {
                 "provider": "openai",
@@ -197,31 +219,46 @@ class TestConfigWriter:
             # Update configuration
             updates = {
                 "rag": {
-                    "strategies": [
+                    "databases": [
+                        {
+                            "name": "test_db",
+                            "type": "ChromaStore",
+                            "config": {},
+                            "embedding_strategies": [
+                                {
+                                    "name": "test_embedding",
+                                    "type": "OllamaEmbedder",
+                                    "config": {"batch_size": 32},
+                                }
+                            ],
+                            "retrieval_strategies": [
+                                {
+                                    "name": "test_retrieval",
+                                    "type": "BasicSimilarityStrategy",
+                                    "config": {},
+                                    "default": True,
+                                }
+                            ],
+                        }
+                    ],
+                    "data_processing_strategies": [
                         {
                             "name": "default",
                             "description": "Default strategy",
-                            "components": {
-                                "embedder": {
-                                    "type": "OllamaEmbedder",
-                                    "config": {"batch_size": 32},
-                                },
-                                "parser": {
+                            "parsers": [
+                                {
                                     "type": "CSVParser_LlamaIndex",
                                     "config": {
                                         "content_fields": ["question"],
                                         "combine_content": True,
                                         "table_format": "markdown",
                                     },
-                                },
-                                "vector_store": {"type": "ChromaStore", "config": {}},
-                                "retrieval_strategy": {
-                                    "type": "BasicSimilarityStrategy",
-                                    "config": {},
-                                },
-                            },
+                                    "file_extensions": [".csv"],
+                                }
+                            ],
+                            "extractors": [],
                         }
-                    ]
+                    ],
                 },
                 "runtime": {"model": "gpt-4"},
             }
@@ -235,7 +272,7 @@ class TestConfigWriter:
             # Load and verify changes
             loaded_config = load_config_dict(config_path)
             assert (
-                loaded_config["rag"]["strategies"][0]["components"]["embedder"]["config"][
+                loaded_config["rag"]["databases"][0]["embedding_strategies"][0]["config"][
                     "batch_size"
                 ]
                 == 32
@@ -256,24 +293,47 @@ class TestConfigWriter:
             # Update only nested values
             updates = {
                 "rag": {
-                    "strategies": [
+                    "databases": [
+                        {
+                            "name": "test_db",
+                            "type": "ChromaStore",
+                            "config": {},
+                            "embedding_strategies": [
+                                {
+                                    "name": "test_embedding",
+                                    "type": "OllamaEmbedder",
+                                    "config": {
+                                        "model": "nomic-embed-text",
+                                        "base_url": "http://localhost:11434",
+                                        "batch_size": 64,
+                                        "timeout": 45,
+                                    },
+                                }
+                            ],
+                            "retrieval_strategies": [
+                                {
+                                    "name": "test_retrieval",
+                                    "type": "BasicSimilarityStrategy",
+                                    "config": {},
+                                    "default": True,
+                                }
+                            ],
+                        }
+                    ],
+                    "data_processing_strategies": [
                         {
                             "name": "default",
                             "description": "Default strategy",
-                            "components": {
-                                "embedder": {
-                                    "type": "OllamaEmbedder",
-                                    "config": {"batch_size": 64, "timeout": 45},
-                                },
-                                "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
-                                "vector_store": {"type": "ChromaStore", "config": {}},
-                                "retrieval_strategy": {
-                                    "type": "BasicSimilarityStrategy",
+                            "parsers": [
+                                {
+                                    "type": "CSVParser_Pandas",
                                     "config": {},
-                                },
-                            },
+                                    "file_extensions": [".csv"],
+                                }
+                            ],
+                            "extractors": [],
                         }
-                    ]
+                    ],
                 },
                 "runtime": {"model_api_parameters": {"top_p": 0.9}},
             }
@@ -282,7 +342,7 @@ class TestConfigWriter:
 
             # Load and verify deep merge worked
             loaded_config = load_config_dict(config_path)
-            embedder_config = loaded_config["rag"]["strategies"][0]["components"]["embedder"][
+            embedder_config = loaded_config["rag"]["databases"][0]["embedding_strategies"][0][
                 "config"
             ]
 

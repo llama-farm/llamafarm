@@ -3,7 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -33,41 +34,22 @@ var designerStartCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Pull the latest llamafarm image if needed
-		fmt.Println("Pulling latest LlamaFarm image...")
-		designerImage, err := getImageURL("designer")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		if err := pullImage(designerImage); err != nil {
-			fmt.Printf("Warning: Failed to pull latest image: %v\n", err)
-			fmt.Println("Continuing with existing local image...")
+		// Determine preferred port (default 7724) with env override
+		preferred := 7724
+		if v := strings.TrimSpace(os.Getenv("LF_DESIGNER_PORT")); v != "" {
+			if p, err := strconv.Atoi(v); err == nil && p > 0 && p <= 65535 {
+				preferred = p
+			}
 		}
 
-		// Start the container
-		fmt.Println("Starting container...")
-		dockerArgs := []string{
-			"run",
-			"-d", // Run in detached mode
-			"--name", "llamafarm-designer",
-			"-p", "8080:8080", // Map port 8080
-			"-v", fmt.Sprintf("%s:/workspace", getEffectiveCWD()), // Mount current directory
-			designerImage,
-		}
-
-		startCmd := exec.Command("docker", dockerArgs...)
-		output, err := startCmd.CombinedOutput()
-
+		url, err := StartDesignerInBackground(cmd.Context(), DesignerLaunchOptions{PreferredPort: preferred, Forced: false})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error starting container: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Output: %s\n", output)
 			os.Exit(1)
 		}
 
 		fmt.Println("🌾 LlamaFarm designer started successfully!")
-		fmt.Println("🌐 Open your browser and navigate to: http://localhost:8080")
-		fmt.Println("📁 Your current directory is mounted at /workspace in the container")
+		fmt.Printf("🌐 Open your browser and navigate to: %s\n", url)
 		fmt.Println("\nTo stop the designer, run: lf designer stop")
 	},
 }

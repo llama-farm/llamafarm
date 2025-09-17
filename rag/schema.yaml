@@ -5,187 +5,23 @@ description: Schema for RAG system strategy configurations
 type: object
 additionalProperties: false
 properties:
-  strategies:
+  databases:
     type: array
-    title: Strategy Definitions
-    description: Array of strategy configurations
+    title: Database Configurations
+    description: Independent database definitions with their own embedding/retrieval strategies
     minItems: 1
     items:
-      $ref: "#/definitions/strategyDefinition"
-  strategy_templates:
-    type: object
-    title: Predefined Strategy Templates
-    description: Ready-to-use strategy configurations
-    default: {}
-    additionalProperties:
-      $ref: "#/definitions/strategyDefinition"
-  component_metadata:
-    type: object
-    title: Component Metadata
-    description: Metadata about available components
-    properties:
-      parsers:
-        type: object
-        additionalProperties:
-          type: object
-          properties:
-            description:
-              type: string
-            class_name:
-              type: string
-            module:
-              type: string
-            use_cases:
-              type: array
-              items:
-                type: string
-            dependencies:
-              type: object
-              properties:
-                required:
-                  type: array
-                  items:
-                    type: string
-                optional:
-                  type: array
-                  items:
-                    type: string
-      extractors:
-        type: object
-        additionalProperties:
-          type: object
-      embedders:
-        type: object
-        additionalProperties:
-          type: object
-      vector_stores:
-        type: object
-        additionalProperties:
-          type: object
-      retrieval_strategies:
-        type: object
-        additionalProperties:
-          type: object
-  compatibility_rules:
-    type: object
-    title: Component Compatibility Rules
-    description: Rules for component compatibility
-    properties:
-      component_compatibility:
-        type: object
-      embedder_store_compatibility:
-        type: object
-      strategy_store_optimization:
-        type: object
-  validation_rules:
-    type: object
-    title: Validation Rules
-    description: System-wide validation rules
-    properties:
-      required_fields:
-        type: object
-      field_constraints:
-        type: object
-      performance_warnings:
-        type: array
-        items:
-          type: object
-  best_practices:
-    type: object
-    title: Best Practices
-    description: Recommended configuration patterns
-    additionalProperties:
-      type: array
-      items:
-        type: string
-required:
-  - strategies
+      $ref: "#/definitions/databaseDefinition"
+  data_processing_strategies:
+    type: array
+    title: Data Processing Strategies
+    description: Processing pipelines for parsers and extractors
+    minItems: 1
+    items:
+      $ref: "#/definitions/dataProcessingStrategyDefinition"
+
+required: []
 definitions:
-  strategyDefinition:
-    type: object
-    title: Strategy Definition
-    description: Defines a complete RAG strategy configuration
-    required:
-      - name
-      - description
-      - components
-    additionalProperties: false
-    properties:
-      name:
-        type: string
-        pattern: ^[a-z][a-z0-9_]*$
-        minLength: 1
-        maxLength: 50
-        description: Unique strategy identifier
-        examples:
-          - simple
-          - customer_support
-          - legal_documents
-      description:
-        type: string
-        minLength: 10
-        maxLength: 500
-        description: Clear description of strategy purpose
-      tags:
-        type: array
-        uniqueItems: true
-        items:
-          type: string
-          pattern: ^[a-z0-9_-]+$
-        description: Tags for categorization
-        examples:
-          - - production
-            - optimized
-          - - development
-            - testing
-      use_cases:
-        type: array
-        minItems: 1
-        uniqueItems: true
-        items:
-          type: string
-          minLength: 3
-        description: Specific use cases
-      components:
-        $ref: "#/definitions/strategyComponents"
-      optimization:
-        type: object
-        title: Optimization Settings
-        description: Performance and resource optimization settings
-        additionalProperties: true
-      validation:
-        type: object
-        title: Validation Rules
-        description: Data validation and quality rules
-        additionalProperties: true
-      monitoring:
-        type: object
-        title: Monitoring Configuration
-        description: Monitoring and metrics settings
-        additionalProperties: true
-  strategyComponents:
-    type: object
-    title: Strategy Components
-    required:
-      - parser
-      - embedder
-      - vector_store
-      - retrieval_strategy
-    additionalProperties: false
-    properties:
-      parser:
-        $ref: "#/definitions/parserConfig"
-      extractors:
-        type: array
-        maxItems: 10
-        items:
-          $ref: "#/definitions/extractorConfig"
-      embedder:
-        $ref: "#/definitions/embedderConfig"
-      vector_store:
-        $ref: "#/definitions/vectorStoreConfig"
-      retrieval_strategy:
-        $ref: "#/definitions/retrievalStrategyConfig"
   parserConfig:
     title: Parser Configuration
     description: Parser configuration
@@ -195,6 +31,8 @@ definitions:
       type:
         type: string
         enum:
+          # Auto-detection
+          - auto
           # Tool-specific parsers from registry
           - PDFParser_PyPDF2
           - PDFParser_LlamaIndex
@@ -213,6 +51,8 @@ definitions:
       config:
         type: object
         oneOf:
+          # Auto-detection parser
+          - $ref: "#/definitions/parsers/autoParserConfig"
           # Tool-specific parser configurations
           - $ref: "#/definitions/parsers/pdfParserPyPDF2Config"
           - $ref: "#/definitions/parsers/pdfParserLlamaIndexConfig"
@@ -228,23 +68,25 @@ definitions:
           - $ref: "#/definitions/parsers/markdownParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/textParserPythonConfig"
           - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
-          # Legacy parser configurations
-          - $ref: "#/definitions/parsers/directoryParserConfig"
-          - $ref: "#/definitions/parsers/csvParserConfig"
-          - $ref: "#/definitions/parsers/pdfParserConfig"
-          - $ref: "#/definitions/parsers/markdownParserConfig"
-          - $ref: "#/definitions/parsers/htmlParserConfig"
-          - $ref: "#/definitions/parsers/docxParserConfig"
-          - $ref: "#/definitions/parsers/excelParserConfig"
-          - $ref: "#/definitions/parsers/plainTextParserConfig"
-          - $ref: "#/definitions/parsers/smartRouterConfig"
-          - $ref: "#/definitions/parsers/llamaIndexTextParserConfig"
-          - $ref: "#/definitions/parsers/llamaIndexPDFParserConfig"
-          - $ref: "#/definitions/parsers/llamaIndexCSVExcelParserConfig"
-          - $ref: "#/definitions/parsers/llamaIndexDocxParserConfig"
-          - $ref: "#/definitions/parsers/llamaIndexMarkdownParserConfig"
-          - $ref: "#/definitions/parsers/llamaIndexWebParserConfig"
   parsers:
+    # Auto-detection parser configuration
+    autoParserConfig:
+      type: object
+      title: Auto Parser Configuration
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 10000
+          description: Chunk size for text splitting
+        chunk_overlap:
+          type: integer
+          default: 200
+          minimum: 0
+          maximum: 500
+          description: Overlap between chunks
     # Tool-specific parser configurations based on actual implementations
     pdfParserPyPDF2Config:
       type: object
@@ -816,882 +658,6 @@ definitions:
           type: boolean
           default: true
           description: Preserve heading hierarchy
-
-    directoryParserConfig:
-      type: object
-      title: Directory Parser Configuration
-      additionalProperties: false
-      properties:
-        recursive:
-          type: boolean
-          default: true
-          description: Recursively parse subdirectories
-        include_patterns:
-          type: array
-          items:
-            type: string
-          description: File patterns to include
-        exclude_patterns:
-          type: array
-          items:
-            type: string
-          description: File patterns to exclude
-        parser_map:
-          type: object
-          additionalProperties:
-            type: string
-          description: Mapping of file extensions to parser types
-        parser_configs:
-          type: object
-          additionalProperties:
-            type: object
-          description: Configuration for each parser type
-    csvParserConfig:
-      type: object
-      title: CSV Parser Configuration
-      additionalProperties: false
-      properties:
-        content_fields:
-          type: array
-          items:
-            type: string
-          default:
-            - subject
-            - body
-          description: CSV columns to use as document content
-          minItems: 1
-        metadata_fields:
-          type: array
-          items:
-            type: string
-          default: []
-          description: CSV columns to include as metadata
-        id_field:
-          type: ["string", "null"]
-          default: null
-          description: CSV column to use as document ID
-        combine_content:
-          type: boolean
-          default: true
-          description: Combine multiple content fields into one document
-        content_separator:
-          type: string
-          default: "\n\n"
-          description: Separator when combining content fields
-        priority_mapping:
-          type: object
-          description: Mapping for priority field values
-          additionalProperties:
-            type: ["string", "number"]
-          example:
-            "Critical": 1
-            "High": 2
-            "Medium": 3
-            "Low": 4
-    pdfParserConfig:
-      type: object
-      title: PDF Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract PDF metadata
-        extract_page_structure:
-          type: boolean
-          default: true
-          description: Extract page-level structure
-        combine_pages:
-          type: boolean
-          default: true
-          description: Combine all pages into single document
-        page_separator:
-          type: string
-          default: "
-
-
-            --- Page Break ---
-
-
-            "
-          description: Separator between pages
-        min_text_length:
-          type: integer
-          default: 10
-          minimum: 0
-          description: Minimum text length to include page
-        include_page_numbers:
-          type: boolean
-          default: true
-          description: Include page numbers in text
-        extract_outline:
-          type: boolean
-          default: true
-          description: Extract document outline
-        extract_images:
-          type: boolean
-          default: false
-          description: Extract embedded images
-        ocr_enabled:
-          type: boolean
-          default: false
-          description: Enable OCR for scanned documents
-
-        # Chunking configuration
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking)"
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - pages
-          default: characters
-          description: "Chunking strategy - pages splits at PDF page boundaries"
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
-          type: boolean
-          default: false
-          description: "Avoid splitting paragraphs in the middle (overrides sentence boundaries)"
-        min_chunk_size:
-          type: integer
-          default: 50
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-    markdownParserConfig:
-      type: object
-      title: Markdown Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract YAML frontmatter
-        extract_headings:
-          type: boolean
-          default: true
-          description: Extract heading structure
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract all links
-        extract_code_blocks:
-          type: boolean
-          default: true
-          description: Extract code blocks
-        chunk_by_headings:
-          type: boolean
-          default: false
-          description: Split by headings
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve Markdown formatting
-        heading_level_split:
-          type: integer
-          default: 2
-          minimum: 1
-          maximum: 6
-          description: Heading level for splitting
-
-        # Advanced chunking configuration
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking, overrides chunk_by_headings)"
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - headings
-          default: headings
-          description: "Chunking strategy - headings preserves markdown structure"
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting paragraphs in the middle"
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-    htmlParserConfig:
-      type: object
-      title: HTML Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract meta tags
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract hyperlinks
-        extract_images:
-          type: boolean
-          default: true
-          description: Extract image sources
-        preserve_structure:
-          type: boolean
-          default: false
-          description: Preserve HTML structure
-        remove_scripts:
-          type: boolean
-          default: true
-          description: Remove JavaScript
-        remove_styles:
-          type: boolean
-          default: true
-          description: Remove CSS
-        text_only:
-          type: boolean
-          default: false
-          description: Extract only text
-
-        # Chunking configuration
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking)"
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - elements
-          default: elements
-          description: "Chunking strategy - elements uses HTML semantic structure"
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting paragraphs in the middle"
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-    docxParserConfig:
-      type: object
-      title: DOCX Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract document properties
-        extract_headers_footers:
-          type: boolean
-          default: true
-          description: Include headers and footers
-        extract_comments:
-          type: boolean
-          default: true
-          description: Extract comments
-        extract_tables:
-          type: boolean
-          default: true
-          description: Extract tables
-        extract_images:
-          type: boolean
-          default: false
-          description: Extract images
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve text formatting
-
-        # Chunking configuration
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking)"
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - sections
-          default: paragraphs
-          description: "Chunking strategy - sections uses Word's built-in structure"
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting paragraphs in the middle"
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-    excelParserConfig:
-      type: object
-      title: Excel Parser Configuration
-      additionalProperties: false
-      properties:
-        sheet_names:
-          type:
-            - array
-            - "null"
-          items:
-            type: string
-          default: null
-          description: Specific sheets to parse
-        combine_sheets:
-          type: boolean
-          default: false
-          description: Combine all sheets
-        extract_formulas:
-          type: boolean
-          default: false
-          description: Extract cell formulas
-        extract_charts:
-          type: boolean
-          default: false
-          description: Extract chart metadata
-        table_format:
-          type: string
-          enum:
-            - csv
-            - markdown
-            - json
-            - text
-          default: markdown
-          description: Table output format
-        header_row:
-          type: integer
-          default: 0
-          minimum: 0
-          description: Header row index
-    plainTextParserConfig:
-      type: object
-      title: Plain Text Parser Configuration
-      additionalProperties: false
-      properties:
-        encoding:
-          type: string
-          default: auto
-          description: Text encoding (auto-detect or specify like utf-8, latin1, etc.)
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: Chunk size in characters (null for no chunking)
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: Overlap between chunks in characters
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-          default: characters
-          description: Chunking strategy - how to split the text
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting sentences in the middle when using character chunking
-        respect_paragraph_boundaries:
-          type: boolean
-          default: false
-          description: Avoid splitting paragraphs in the middle (overrides sentence boundaries)
-        min_chunk_size:
-          type: integer
-          default: 50
-          minimum: 10
-          maximum: 1000
-          description: Minimum chunk size to avoid creating tiny chunks
-        preserve_line_breaks:
-          type: boolean
-          default: true
-          description: Preserve line breaks in the text
-        strip_empty_lines:
-          type: boolean
-          default: true
-          description: Remove empty lines while preserving paragraph structure
-        detect_structure:
-          type: boolean
-          default: true
-          description: Detect and extract structural elements (headers, lists, code blocks)
-        split_by:
-          type: string
-          enum:
-            - characters
-            - words
-            - sentences
-            - paragraphs
-            - lines
-          default: characters
-          description: Splitting method
-        preserve_whitespace:
-          type: boolean
-          default: false
-          description: Preserve whitespace
-    smartRouterConfig:
-      type: object
-      title: Smart Router Configuration
-      additionalProperties: false
-      properties:
-        fallback_chain:
-          type: array
-          items:
-            type: string
-          default: ["PlainTextParser", "MarkdownParser"]
-          description: Fallback parsers to try in order
-        content_detection_enabled:
-          type: boolean
-          default: true
-          description: Enable content-based file type detection
-        max_file_size_mb:
-          type: integer
-          default: 100
-          minimum: 1
-          maximum: 1000
-          description: Maximum file size in MB to process
-        enable_magic:
-          type: boolean
-          default: true
-          description: Enable python-magic for file type detection
-    llamaIndexTextParserConfig:
-      type: object
-      title: LlamaIndex Text Parser Configuration
-      additionalProperties: false
-      properties:
-        encoding:
-          type: string
-          default: auto
-          description: Text encoding (auto-detect or specify)
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: Chunk size in characters (null for no chunking)
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: Overlap between chunks in characters
-        chunk_strategy:
-          type: string
-          enum: [characters, sentences, paragraphs, tokens]
-          default: characters
-          description: Chunking strategy for LlamaIndex
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting sentences in the middle
-        respect_paragraph_boundaries:
-          type: boolean
-          default: false
-          description: Avoid splitting paragraphs in the middle
-        min_chunk_size:
-          type: integer
-          default: 50
-          minimum: 10
-          maximum: 1000
-          description: Minimum chunk size to avoid creating tiny chunks
-        preserve_line_breaks:
-          type: boolean
-          default: true
-          description: Preserve line breaks in the text
-        strip_empty_lines:
-          type: boolean
-          default: true
-          description: Remove empty lines while preserving paragraph structure
-        detect_structure:
-          type: boolean
-          default: true
-          description: Detect and extract structural elements
-    llamaIndexPDFParserConfig:
-      type: object
-      title: LlamaIndex PDF Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract PDF metadata
-        extract_page_structure:
-          type: boolean
-          default: true
-          description: Extract page-level structure
-        combine_pages:
-          type: boolean
-          default: true
-          description: Combine all pages into single document
-        page_separator:
-          type: string
-          default: "\n\n--- Page Break ---\n\n"
-          description: Separator between pages
-        min_text_length:
-          type: integer
-          default: 10
-          minimum: 0
-          description: Minimum text length to include page
-        include_page_numbers:
-          type: boolean
-          default: true
-          description: Include page numbers in text
-        extract_outline:
-          type: boolean
-          default: true
-          description: Extract document outline
-        fallback_strategies:
-          type: array
-          items:
-            type: string
-            enum: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
-          default: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
-          description: PDF parsing strategies to try in order
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: Chunk size in characters (null for no chunking)
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: Overlap between chunks in characters
-        chunk_strategy:
-          type: string
-          enum: [characters, sentences, paragraphs, tokens]
-          default: characters
-          description: Chunking strategy for LlamaIndex
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting sentences in the middle
-        respect_paragraph_boundaries:
-          type: boolean
-          default: false
-          description: Avoid splitting paragraphs in the middle
-        min_chunk_size:
-          type: integer
-          default: 50
-          minimum: 10
-          maximum: 1000
-          description: Minimum chunk size to avoid creating tiny chunks
-    llamaIndexCSVExcelParserConfig:
-      type: object
-      title: LlamaIndex CSV/Excel Parser Configuration
-      additionalProperties: false
-      properties:
-        content_fields:
-          type: array
-          items:
-            type: string
-          default: ["subject", "body", "content", "description"]
-          description: Columns to use as document content
-        metadata_fields:
-          type: array
-          items:
-            type: string
-          default: []
-          description: Columns to include as metadata
-        id_field:
-          type: ["string", "null"]
-          default: null
-          description: Column to use as document ID
-        combine_content:
-          type: boolean
-          default: true
-          description: Combine multiple content fields into one document
-        content_separator:
-          type: string
-          default: "\n\n"
-          description: Separator when combining content fields
-        priority_mapping:
-          type: object
-          additionalProperties:
-            type: ["string", "number"]
-          description: Mapping for priority field values
-        table_format:
-          type: string
-          enum: [csv, markdown, json, text]
-          default: markdown
-          description: Table output format for Excel
-        sheet_names:
-          type: ["array", "null"]
-          items:
-            type: string
-          default: null
-          description: Specific sheets to parse (Excel only)
-        combine_sheets:
-          type: boolean
-          default: false
-          description: Combine all sheets (Excel only)
-        header_row:
-          type: integer
-          default: 0
-          minimum: 0
-          description: Header row index (Excel only)
-    llamaIndexDocxParserConfig:
-      type: object
-      title: LlamaIndex DOCX Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract document properties
-        extract_headers_footers:
-          type: boolean
-          default: true
-          description: Include headers and footers
-        extract_comments:
-          type: boolean
-          default: false
-          description: Extract comments
-        extract_tables:
-          type: boolean
-          default: true
-          description: Extract tables
-        extract_images:
-          type: boolean
-          default: false
-          description: Extract images
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve text formatting
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: Chunk size in characters (null for no chunking)
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: Overlap between chunks in characters
-        chunk_strategy:
-          type: string
-          enum: [characters, sentences, paragraphs, tokens]
-          default: paragraphs
-          description: Chunking strategy for LlamaIndex
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting sentences in the middle
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting paragraphs in the middle
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: Minimum chunk size to avoid creating tiny chunks
-    llamaIndexMarkdownParserConfig:
-      type: object
-      title: LlamaIndex Markdown Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract YAML frontmatter
-        extract_headings:
-          type: boolean
-          default: true
-          description: Extract heading structure
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract all links
-        extract_code_blocks:
-          type: boolean
-          default: true
-          description: Extract code blocks
-        chunk_by_headings:
-          type: boolean
-          default: false
-          description: Split by headings
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve Markdown formatting
-        heading_level_split:
-          type: integer
-          default: 2
-          minimum: 1
-          maximum: 6
-          description: Heading level for splitting
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: Chunk size in characters (null for no chunking)
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: Overlap between chunks in characters
-        chunk_strategy:
-          type: string
-          enum: [characters, sentences, paragraphs, headings, tokens]
-          default: headings
-          description: Chunking strategy - headings preserves markdown structure
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting sentences in the middle
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting paragraphs in the middle
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: Minimum chunk size to avoid creating tiny chunks
-    llamaIndexWebParserConfig:
-      type: object
-      title: LlamaIndex Web Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract meta tags
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract hyperlinks
-        extract_images:
-          type: boolean
-          default: true
-          description: Extract image sources
-        preserve_structure:
-          type: boolean
-          default: false
-          description: Preserve HTML structure
-        remove_scripts:
-          type: boolean
-          default: true
-          description: Remove JavaScript
-        remove_styles:
-          type: boolean
-          default: true
-          description: Remove CSS
-        text_only:
-          type: boolean
-          default: false
-          description: Extract only text
-        request_timeout:
-          type: integer
-          default: 30
-          minimum: 5
-          maximum: 300
-          description: Request timeout for URLs in seconds
-        user_agent:
-          type: string
-          default: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          description: User agent for web requests
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: Chunk size in characters (null for no chunking)
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: Overlap between chunks in characters
-        chunk_strategy:
-          type: string
-          enum: [characters, sentences, paragraphs, elements, tokens]
-          default: elements
-          description: Chunking strategy - elements uses HTML semantic structure
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting sentences in the middle
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting paragraphs in the middle
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: Minimum chunk size to avoid creating tiny chunks
   extractorConfig:
     type: object
     title: Extractor Configuration
@@ -1702,19 +668,19 @@ definitions:
         type: string
         description: Extractor type identifier
         enum:
-          - KeywordExtractor
-          - EntityExtractor
+          - ContentStatisticsExtractor
           - DateTimeExtractor
+          - EntityExtractor
           - HeadingExtractor
+          - KeywordExtractor
           - LinkExtractor
           - PathExtractor
           - PatternExtractor
-          - StatisticsExtractor
+          - RAKEExtractor
           - SummaryExtractor
+          - TFIDFExtractor
           - TableExtractor
-          - SentimentExtractor
           - YAKEExtractor
-          - ContentStatisticsExtractor
       priority:
         type: integer
         minimum: 1
@@ -2038,23 +1004,6 @@ definitions:
           type: boolean
           default: false
           description: Include surrounding context in results
-        patterns:
-          type: array
-          description: Custom regex patterns (deprecated - use 'custom_patterns' instead). Will be merged with 'custom_patterns' if both are specified
-          items:
-            type: object
-            required:
-              - name
-              - pattern
-            properties:
-              name:
-                type: string
-                description: Pattern name
-              pattern:
-                type: string
-                description: Regex pattern
-          default: []
-          description: Custom patterns to match
         max_matches_per_pattern:
           type: integer
           default: 100
@@ -2271,10 +1220,6 @@ definitions:
           format: uri
           default: http://localhost:11434
           description: Ollama API endpoint (preferred)
-        api_base:
-          type: string
-          format: uri
-          description: Alias for base_url (deprecated - use base_url instead). If both are set, base_url takes precedence
         dimension:
           type: integer
           default: 768
@@ -2844,4 +1789,230 @@ definitions:
           minimum: 1
           maximum: 1000
           description: Final number of results
+
+  # NEW SCHEMA DEFINITIONS
+  databaseDefinition:
+    type: object
+    title: Database Definition
+    description: Database configuration with embedded embedding/retrieval strategies
+    required: [name, type]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+        minLength: 1
+        maxLength: 50
+        description: Unique database identifier
+      type:
+        type: string
+        enum: [ChromaStore, QdrantStore]
+        description: Database type (accepts both short names and Store class names)
+      config:
+        type: object
+        description: Database-specific configuration
+        additionalProperties: true
+      embedding_strategies:
+        type: array
+        title: Embedding Strategies
+        description: Multiple embedding strategies for hybrid search
+        items:
+          type: object
+          required: [name, type]
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+              description: Strategy identifier
+            type:
+              type: string
+              enum: [HuggingFaceEmbedder, OllamaEmbedder, OpenAIEmbedder, SentenceTransformerEmbedder]
+              description: Embedding type
+            config:
+              type: object
+              description: Embedder configuration
+              additionalProperties: true
+            condition:
+              type: string
+              description: Optional condition for when to use this embedding (e.g., doc.type == 'code')
+            priority:
+              type: integer
+              default: 0
+              description: Priority for automatic selection
+      retrieval_strategies:
+        type: array
+        title: Retrieval Strategies  
+        description: Multiple retrieval strategies for different query patterns
+        items:
+          type: object
+          required: [name, type]
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+              description: Strategy identifier
+            type:
+              type: string
+              enum: [VectorRetriever, HybridRetriever, BM25Retriever, RerankedRetriever, GraphRetriever, ElasticRetriever, BasicSimilarityStrategy, MetadataFilteredStrategy, MultiQueryStrategy, RerankedStrategy, HybridUniversalStrategy]
+              description: Retrieval type
+            config:
+              type: object
+              description: Retrieval configuration
+              additionalProperties: true
+            default:
+              type: boolean
+              default: false
+              description: Whether this is the default strategy
+      default_embedding_strategy:
+        type: string
+        description: Name of the default embedding strategy to use
+      default_retrieval_strategy:
+        type: string
+        description: Name of the default retrieval strategy to use
+
+  dataProcessingStrategyDefinition:
+    type: object
+    title: Data Processing Strategy Definition
+    description: Processing pipeline configuration for parsers and extractors
+    required: [name, parsers]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+        minLength: 1
+        maxLength: 50
+        description: Unique strategy identifier
+      description:
+        type: string
+        minLength: 10
+        maxLength: 500
+        description: Strategy description
+      parsers:
+        type: array
+        title: Parsers
+        description: Document parsers in processing order
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              enum: [
+                CSVParser_LlamaIndex,
+                CSVParser_Pandas,
+                CSVParser_Python,
+                DirectoryParser,
+                DocxParser_LlamaIndex,
+                DocxParser_PythonDocx,
+                ExcelParser_LlamaIndex,
+                ExcelParser_OpenPyXL,
+                ExcelParser_Pandas,
+                MarkdownParser_LlamaIndex,
+                MarkdownParser_Python,
+                PDFParser_LlamaIndex,
+                PDFParser_PyPDF2,
+                TextParser_LlamaIndex,
+                TextParser_Python
+              ]
+              description: Parser type
+            config:
+              type: object
+              description: Parser configuration
+              additionalProperties: true
+            file_extensions:
+              type: array
+              items:
+                type: string
+                pattern: ^\.[a-zA-Z0-9]+$
+              description: File extensions this parser handles (e.g., [".pdf", ".PDF"])
+              examples:
+                - [".pdf", ".PDF"]  # PDF parser
+                - [".csv", ".tsv"]  # CSV parser
+                - [".md", ".markdown"]  # Markdown parser
+            file_include_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to include (e.g., ["*.pdf", "report_*.pdf"])
+              examples:
+                - ["*.pdf", "*.PDF"]  # All PDF files
+                - ["report_*.csv"]  # CSV files starting with report_
+                - ["README*", "*.md"]  # README files and markdown
+            file_exclude_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to exclude (e.g., ["*_draft.pdf", "*.tmp"])
+              examples:
+                - ["*_draft.pdf", "*.tmp.pdf"]  # Draft and temp PDFs
+                - ["~$*", "*.bak"]  # Temp and backup files
+            priority:
+              type: integer
+              description: Parser priority (higher = try first)
+              default: 50
+              minimum: 0
+              maximum: 1000
+            mime_types:
+              type: array
+              items:
+                type: string
+              description: MIME types this parser handles (e.g., ["application/pdf"])
+              examples:
+                - ["application/pdf"]  # PDF parser
+                - ["text/csv", "text/tab-separated-values"]  # CSV parser
+                - ["text/markdown", "text/x-markdown"]  # Markdown parser
+            fallback_parser:
+              type: string
+              description: Parser to use if this one fails
+            priority:
+              type: integer
+              default: 0
+              description: Priority for automatic selection
+      extractors:
+        type: array
+        title: Extractors
+        description: Metadata and feature extractors
+        items:
+          type: object
+          required: [type]
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              description: Extractor type
+            config:
+              type: object
+              description: Extractor configuration
+              additionalProperties: true
+            required_for:
+              type: array
+              items:
+                type: string
+              description: Database names that require this extractor
+            condition:
+              type: string
+              description: Optional condition for when to use this extractor
+            file_include_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to apply this extractor to
+              examples:
+                - ["*.pdf", "*.PDF"]  # PDF files only
+                - ["*"]  # All files
+            file_exclude_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to exclude from this extractor
+              examples:
+                - ["*.tmp", "*.bak"]  # Skip temp/backup files
+            priority:
+              type: integer
+              description: Extractor priority (higher = apply first)
+              default: 50
+              minimum: 0
+              maximum: 1000
  

@@ -76,6 +76,10 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     root_logger.addHandler(handler)
     root_logger.setLevel(log_level.upper())
 
+    # Configure celery logger
+    celery_logger = logging.getLogger("celery.worker")
+    celery_logger.setLevel(settings.CELERY_LOG_LEVEL.upper() or "INFO")
+
     # Configure uvicorn loggers to use our root logger setup
     for logger_name in ["uvicorn", "uvicorn.error"]:
         uvicorn_logger = logging.getLogger(logger_name)
