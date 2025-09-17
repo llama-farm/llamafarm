@@ -20,8 +20,7 @@ runtime:
 prompts:
   - role: system
     content: |
-      You are a helpful AI assistant with access to a knowledge base through RAG (Retrieval-Augmented Generation).
-      When context is provided from the knowledge base, use it to provide accurate and detailed answers.
+      You are a helpful AI assistant.
 
 # =============================================================================
 # DATASETS CONFIGURATION
