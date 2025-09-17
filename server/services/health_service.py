@@ -160,7 +160,6 @@ def _check_seed_project() -> dict:
         data = resp.json() if resp.content else {}
         tags = {item.get("name") for item in (data.get("models") or [])}
         present = model in tags
-        present = True
         status = "healthy" if present else "unhealthy"
         message = (
             "Model available"
