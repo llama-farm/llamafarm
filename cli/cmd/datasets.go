@@ -160,7 +160,7 @@ Examples:
 		}
 
 		// 2) Validate strategies and databases exist in project config
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -337,7 +337,7 @@ var datasetsProcessCmd = &cobra.Command{
 		datasetName := args[0]
 
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		fmt.Printf("Processing dataset '%s'...\n", datasetName)
 

@@ -47,7 +47,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		stats, err := fetchRAGStats(serverCfg, statsDatabase)
 		if err != nil {
@@ -83,7 +83,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		health, err := fetchRAGHealth(serverCfg, statsDatabase)
 		if err != nil {
@@ -120,7 +120,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		docs, err := fetchRAGDocuments(serverCfg, statsDatabase, listLimit, metadataFilters)
 		if err != nil {
@@ -152,7 +152,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		fmt.Println("🔧 Starting database compaction...")
 		result, err := compactRAGDatabase(serverCfg, statsDatabase)
@@ -185,7 +185,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		fmt.Println("🔄 Starting reindexing...")
 		result, err := reindexRAGDatabase(serverCfg, statsDatabase, ragDataStrategy)

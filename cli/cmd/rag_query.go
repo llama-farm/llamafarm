@@ -77,7 +77,7 @@ Examples:
 		}
 
 		// Ensure server is available
-		ensureServerAvailable(serverCfg.URL)
+		ensureServerAvailable(serverCfg.URL, true)
 
 		// Build the request
 		queryRequest := buildQueryRequest(queryText)
