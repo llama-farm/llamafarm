@@ -1,18 +1,206 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
-import LoadingSteps from '../../common/LoadingSteps'
-import ModeToggle, { Mode } from '../ModeToggle'
-import ConfigEditor from '../ConfigEditor'
+import type { Mode } from '../ModeToggle'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '../ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+  DialogClose,
+} from '../ui/dialog'
+import { Button } from '../ui/button'
+import PageActions from '../common/PageActions'
+import { Input } from '../ui/input'
+import { Textarea } from '../ui/textarea'
+import { Badge } from '../ui/badge'
+import { useToast } from '../ui/toast'
+import { useNavigate } from 'react-router-dom'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import {
+  useListDatasets,
+  useCreateDataset,
+  useDeleteDataset,
+} from '../../hooks/useDatasets'
+import type { UIFile } from '../../types/datasets'
+
+type RawFile = UIFile
 
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [droppedFiles, setDroppedFiles] = useState<File[]>([])
+  const [rawFiles, setRawFiles] = useState<RawFile[]>(() => {
+    try {
+      const stored = localStorage.getItem('lf_raw_files')
+      return stored ? (JSON.parse(stored) as RawFile[]) : []
+    } catch {
+      return []
+    }
+  })
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [searchValue, setSearchValue] = useState('')
   const [mode, setMode] = useState<Mode>('designer')
+
+  const navigate = useNavigate()
+  const { toast } = useToast()
+
+  // Get current active project for API calls
+  const activeProject = useActiveProject()
+
+  // Use React Query hooks for datasets with localStorage fallback
+  const {
+    data: apiDatasets,
+    isLoading: isDatasetsLoading,
+    error: datasetsError,
+  } = useListDatasets(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
+  const createDatasetMutation = useCreateDataset()
+  const deleteDatasetMutation = useDeleteDataset()
+
+  // Convert API datasets to UI format; provide demo fallback if none
+  const datasets = useMemo(() => {
+    if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
+      return apiDatasets.datasets.map(dataset => ({
+        id: dataset.name,
+        name: dataset.name,
+        rag_strategy: dataset.rag_strategy,
+        files: dataset.files,
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        // Estimate chunk count numerically for display
+        numChunks: Array.isArray(dataset.files)
+          ? Math.max(0, dataset.files.length * 100)
+          : 0,
+        processedPercent: 100,
+        version: 'v1',
+        description: '',
+      }))
+    }
+
+    // Demo fallback datasets to populate the grid when API has none
+    try {
+      const stored = localStorage.getItem('lf_demo_datasets')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+
+    const demo = [
+      {
+        id: 'demo-arxiv',
+        name: 'arxiv-papers',
+        rag_strategy: 'PDF Simple',
+        files: [],
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: 12800,
+        processedPercent: 100,
+        version: 'v1',
+        description: 'Demo dataset of academic PDFs',
+      },
+      {
+        id: 'demo-handbook',
+        name: 'company-handbook',
+        rag_strategy: 'Markdown',
+        files: [],
+        lastRun: new Date(),
+        embedModel: 'text-embedding-3-large',
+        numChunks: 4200,
+        processedPercent: 100,
+        version: 'v2',
+        description: 'Demo employee handbook and policies',
+      },
+    ]
+    try {
+      localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
+    } catch {}
+    return demo
+  }, [apiDatasets])
+
+  // Map of fileKey -> array of dataset ids
+  const [fileAssignments] = useState<Record<string, string[]>>(() => {
+    try {
+      const stored = localStorage.getItem('lf_file_assignments')
+      return stored ? (JSON.parse(stored) as Record<string, string[]>) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  // (initial state is loaded from localStorage)
+
+  // Persist data when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('lf_raw_files', JSON.stringify(rawFiles))
+    } catch {}
+  }, [rawFiles])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'lf_file_assignments',
+        JSON.stringify(fileAssignments)
+      )
+    } catch {}
+  }, [fileAssignments])
+
+  // Dataset persistence is handled in the setDatasets function for localStorage fallback
+
+  // Create dataset dialog state
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [newDatasetName, setNewDatasetName] = useState('')
+  const [newDatasetDescription, setNewDatasetDescription] = useState('')
+
+  // Simple edit modal state
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editDatasetId, setEditDatasetId] = useState<string>('')
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+
+  const handleCreateDataset = async () => {
+    const name = newDatasetName.trim()
+    if (!name) return
+
+    if (!activeProject?.namespace || !activeProject?.project) {
+      toast({
+        message: 'No active project selected',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      await createDatasetMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        name,
+        rag_strategy: 'default', // Default strategy
+      })
+      toast({ message: 'Dataset created successfully', variant: 'default' })
+      setIsCreateOpen(false)
+      setNewDatasetName('')
+      setNewDatasetDescription('')
+    } catch (error) {
+      console.error('Failed to create dataset:', error)
+      toast({
+        message: 'Failed to create dataset. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -26,7 +214,6 @@ const Data = () => {
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     setIsDropped(true)
-    setIsLoading(true)
 
     setTimeout(() => {
       setIsDragging(false)
@@ -35,8 +222,18 @@ const Data = () => {
 
     const files = Array.from(e.dataTransfer.files)
     setTimeout(() => {
-      setDroppedFiles(prev => [...prev, ...files])
-      setIsLoading(false)
+      const converted: RawFile[] = files.map(f => ({
+        id: `${f.name}:${f.size}:${f.lastModified}`,
+        name: f.name,
+        size: f.size,
+        lastModified: f.lastModified,
+        type: f.type,
+      }))
+      setRawFiles(prev => {
+        const existingIds = new Set(prev.map(r => r.id))
+        const deduped = converted.filter(r => !existingIds.has(r.id))
+        return [...prev, ...deduped]
+      })
     }, 4000)
 
     // console.log('Dropped files:', files)
@@ -47,47 +244,49 @@ const Data = () => {
     if (files.length === 0) return
 
     setIsDropped(true)
-    setIsLoading(true)
 
     setTimeout(() => {
-      setDroppedFiles(prev => [...prev, ...files])
+      const converted: RawFile[] = files.map(f => ({
+        id: `${f.name}:${f.size}:${f.lastModified}`,
+        name: f.name,
+        size: f.size,
+        lastModified: f.lastModified,
+        type: f.type,
+      }))
+      setRawFiles(prev => {
+        const existingIds = new Set(prev.map(r => r.id))
+        const deduped = converted.filter(r => !existingIds.has(r.id))
+        return [...prev, ...deduped]
+      })
       setIsDropped(false)
-      setIsLoading(false)
     }, 4000)
 
     // console.log('Selected files:', files)
   }
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setSearchValue(value)
+  const formatLastRun = (d: Date) => {
+    if (!(d instanceof Date) || isNaN(d.getTime())) {
+      return '-'
+    }
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'numeric',
+      day: 'numeric',
+      year: '2-digit',
+    }).format(d)
   }
-
-  const filteredFiles = useMemo(
-    () =>
-      droppedFiles.filter(file =>
-        file.name.toLowerCase().includes(searchValue.toLowerCase())
-      ),
-    [droppedFiles, searchValue]
-  )
 
   return (
     <div
-      className="h-full w-full flex flex-col gap-2"
+      className="h-full w-full flex flex-col"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="w-full flex items-center justify-between mb-4">
+      <div className="w-full flex items-center justify-between mb-4 flex-shrink-0">
         <h2 className="text-2xl ">
           {mode === 'designer' ? 'Data' : 'Config editor'}
         </h2>
-        <div className="flex items-center gap-3">
-          <ModeToggle mode={mode} onToggle={setMode} />
-          <button className="opacity-50 cursor-not-allowed text-sm px-3 py-2 rounded-lg border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400">
-            Deploy
-          </button>
-        </div>
+        <PageActions mode={mode} onModeChange={setMode} />
       </div>
       <input
         type="file"
@@ -96,187 +295,285 @@ const Data = () => {
         multiple
         onChange={handleFileSelect}
       />
-      <div className="w-full flex flex-col h-full">
+      <div className="w-full flex flex-col flex-1 min-h-0">
         {mode === 'designer' && (
-          <>
-            <div className="mb-2">Project data</div>
-            <div className="mb-2 flex flex-row gap-2 justify-between items-end">
-              <div className="text-sm">Dataset</div>
-              <button className="py-2 px-3 bg-blue-200 rounded-lg text-sm text-white ">
-                Upload data
-              </button>
+          <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
+            <div>Datasets</div>
+            <div className="flex items-center gap-2">
+              <Dialog
+                open={isCreateOpen}
+                onOpenChange={open => {
+                  // Prevent closing dialog during mutation
+                  if (!createDatasetMutation.isPending) {
+                    setIsCreateOpen(open)
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button variant="secondary" size="sm">
+                    Create new
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>New dataset</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">
+                        Name
+                      </label>
+                      <Input
+                        autoFocus
+                        value={newDatasetName}
+                        onChange={e => setNewDatasetName(e.target.value)}
+                        placeholder="Enter dataset name"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">
+                        Description
+                      </label>
+                      <Textarea
+                        value={newDatasetDescription}
+                        onChange={e => setNewDatasetDescription(e.target.value)}
+                        placeholder="Optional description"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogClose
+                      asChild
+                      disabled={createDatasetMutation.isPending}
+                    >
+                      <Button variant="secondary">Cancel</Button>
+                    </DialogClose>
+                    <Button
+                      onClick={handleCreateDataset}
+                      disabled={
+                        !newDatasetName.trim() ||
+                        createDatasetMutation.isPending
+                      }
+                    >
+                      {createDatasetMutation.isPending
+                        ? 'Creating...'
+                        : 'Create'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
-          </>
+          </div>
         )}
         {mode !== 'designer' ? (
-          <ConfigEditor />
-        ) : isDragging ? (
-          <div
-            className={`w-full h-full flex flex-col items-center justify-center border-[1px] border-dashed rounded-lg p-4 gap-2 transition-colors border-blue-100`}
-          >
-            <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-blue-200 dark:text-white">
-              {isDropped ? (
-                <Loader />
-              ) : (
-                <FontIcon
-                  type="upload"
-                  className="w-10 h-10 text-blue-200 dark:text-white"
-                />
-              )}
-              <div className="text-xl">Drop data here</div>
-            </div>
-            <p className="max-w-[527px] text-sm text-blue-100 text-center mb-10">
-              You can upload PDFs, explore various list formats, or draw
-              inspiration from other data sources to enhance your project with
-              LlaMaFarm.
-            </p>
+          <div className="flex-1 min-h-0 overflow-hidden pb-6">
+            <ConfigEditor className="h-full" />
           </div>
         ) : (
-          <div>
-            {mode === 'designer' && droppedFiles.length <= 0 ? (
+          <div className="flex-1 min-h-0 overflow-auto pb-6">
+            {isDragging ? (
               <div
-                className="w-full mb-6 flex items-center justify-center bg-blue-500 rounded-lg py-4 text-blue-200 text-center"
-                style={{ background: 'rgba(1, 123, 247, 0.10)' }}
+                className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
               >
-                Datasets will appear here when they’re ready
+                <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
+                  {isDropped ? (
+                    <Loader />
+                  ) : (
+                    <FontIcon
+                      type="upload"
+                      className="w-10 h-10 text-blue-200 dark:text-white"
+                    />
+                  )}
+                  <div className="text-xl text-foreground">Drop data here</div>
+                </div>
+                <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
+                  You can upload PDFs, explore various list formats, or draw
+                  inspiration from other data sources to enhance your project with
+                  LlaMaFarm.
+                </p>
+              </div>
+            ) : (
+              <div>
+            {mode === 'designer' && isDatasetsLoading ? (
+              <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                <Loader size={32} className="mr-2" />
+                Loading datasets...
+              </div>
+            ) : mode === 'designer' && datasets.length <= 0 ? (
+              <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                {datasetsError
+                  ? 'Unable to load datasets. Using local storage.'
+                  : 'No datasets found. Create one to get started.'}
               </div>
             ) : (
               mode === 'designer' && (
                 <div className="grid grid-cols-2 gap-2 mb-6">
-                  {Array.from({ length: 2 }).map((_, index) => (
+                  {datasets.map(ds => (
                     <div
-                      key={index}
-                      className="w-full bg-[#FFFFFF] dark:bg-blue-500 rounded-lg border-[1px] border-blue-50 border-solid dark:border-none flex flex-col gap-2 p-4"
+                      key={ds.id}
+                      className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
+                      onClick={() => navigate(`/chat/data/${ds.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/chat/data/${ds.id}`)
+                        }
+                      }}
                     >
-                      <div className="text-sm">
-                        air-craft-maintenance-guides
+                      <div className="absolute right-3 top-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                              onClick={e => e.stopPropagation()}
+                              aria-label="Dataset actions"
+                            >
+                              <FontIcon type="overflow" className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-[10rem] w-[10rem]"
+                          >
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                // open simple edit modal
+                                setEditDatasetId(ds.id)
+                                setEditName(ds.name)
+                                setEditDescription(ds.description || '')
+                                setIsEditOpen(true)
+                              }}
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                navigate(`/chat/data/${ds.id}`)
+                              }}
+                            >
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={async e => {
+                                e.stopPropagation()
+                                if (
+                                  !activeProject?.namespace ||
+                                  !activeProject?.project
+                                )
+                                  return
+                                try {
+                                  await deleteDatasetMutation.mutateAsync({
+                                    namespace: activeProject.namespace,
+                                    project: activeProject.project,
+                                    dataset: ds.id,
+                                  })
+                                  toast({
+                                    message: 'Dataset deleted',
+                                    variant: 'default',
+                                  })
+                                } catch (err) {
+                                  console.error('Delete failed', err)
+                                  toast({
+                                    message: 'Failed to delete dataset',
+                                    variant: 'destructive',
+                                  })
+                                }
+                              }}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <div className="text-xs text-blue-100">
-                        Updated on 8/23/25
+                      <div className="text-sm font-medium">{ds.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Last run on {formatLastRun(ds.lastRun)}
                       </div>
-                      <div className="flex flex-row gap-2">
-                        <div className="text-xs text-white bg-blue-100 dark:bg-blue-200 rounded-xl px-3 py-0.5">
-                          Embedded
-                        </div>
-                        <div className="text-xs text-white bg-blue-100 dark:bg-blue-200 rounded-xl px-3 py-0.5">
-                          Chunked
-                        </div>
+                      <div className="flex flex-row gap-2 items-center">
+                        <Badge
+                          variant="default"
+                          size="sm"
+                          className="rounded-xl"
+                        >
+                          {ds.embedModel}
+                        </Badge>
                       </div>
-                      <div className="text-xs text-blue-100">
-                        more info here in a line
-                      </div>
-                      <div className="flex justify-end">
-                        <button className="text-sm bg-transparent text-blue-200 dark:text-green-100 hover:text-white hover:bg-blue-100 dark:hover:text-black dark:hover:bg-green-100 rounded-lg px-2 py-1 w-fit">
-                          View raw data
-                        </button>
+                      <div className="text-xs text-muted-foreground">
+                        {ds.numChunks.toLocaleString()} chunks •{' '}
+                        {ds.processedPercent}% processed • {ds.version}
                       </div>
                     </div>
                   ))}
                 </div>
               )
             )}
-            {mode === 'designer' && <div className="mb-4">Raw data files</div>}
-            {isLoading && droppedFiles.length <= 0 ? (
-              <div className="w-full flex flex-col items-center justify-center border-[1px] border-solid rounded-lg p-4 gap-2 transition-colors border-blue-100">
-                <div className="flex flex-col items-center justify-center gap-4 text-center my-[40px]">
-                  <div className="text-xl">Processing your data...</div>
-                  <Loader
-                    size={72}
-                    className="border-blue-200 dark:border-blue-100"
-                  />
-                  <LoadingSteps />
-                </div>
-              </div>
-            ) : (
-              mode === 'designer' &&
-              droppedFiles.length <= 0 && (
-                <div className="w-full flex flex-col items-center justify-center border-[1px] border-dashed rounded-lg p-4 gap-2 transition-colors border-blue-100">
-                  <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px]">
-                    <FontIcon
-                      type="upload"
-                      className="w-10 h-10 text-gray-800 dark:text-white"
-                    />
-                    <div className="text-xl">Drop data here to start</div>
-                    <button
-                      className="text-sm py-2 px-6 border-[1px] border-solid border-gray-800 rounded-lg hover:bg-blue-200 hover:border-blue-200 hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-blue-200"
-                      onClick={() => {
-                        fileInputRef.current?.click()
-                      }}
-                    >
-                      Or choose files
-                    </button>
-                  </div>
-                  <p className="max-w-[527px] text-sm text-blue-100 text-center mb-10">
-                    You can upload PDFs, explore various list formats, or draw
-                    inspiration from other data sources to enhance your project
-                    with LlaMaFarm.
-                  </p>
-                </div>
-              )
-            )}
-            {mode === 'designer' && filteredFiles.length > 0 && (
-              <div>
-                <div className="w-full flex flex-row gap-2">
-                  <div className="w-3/4 flex flex-row gap-2 items-center bg-[#FFFFFF] dark:bg-transparent rounded-lg pl-2 border-[1px] border-solid border-blue-50 dark:border-blue-100">
-                    <FontIcon
-                      type="search"
-                      className="w-4 h-4 text-gray-800 dark:text-white"
-                    />
-                    <input
-                      type="search"
-                      className="w-full bg-transparent rounded-lg py-2 px-4 text-gray-800 dark:text-white text-sm focus:outline-none"
-                      placeholder="Search files"
-                      value={searchValue}
-                      onChange={handleSearch}
-                    />
-                  </div>
-                  <div className="w-1/4 text-sm text-gray-800 dark:text-white flex items-center bg-[#FFFFFF] dark:bg-blue-500 rounded-lg px-3 justify-between">
-                    <div>All datasets</div>
-                    <FontIcon
-                      type="chevron-down"
-                      className="w-4 h-4 text-gray-800 dark:text-white"
-                    />
-                  </div>
-                </div>
-                {filteredFiles.map((file, i) => (
-                  <div
-                    key={i}
-                    className="w-full bg-[#FFFFFF] dark:bg-blue-500 rounded-lg py-2 px-4  text-sm mt-2 flex justify-between items-center"
-                  >
-                    <div className="text-xs text-[#545454] dark:text-white font-mono leading-4 tracking-[0.32px] truncate whitespace-nowrap overflow-hidden">
-                      {file.name}
-                    </div>
-                    <div className="w-1/2 flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="text-blue-100 text-xs">MX-log-data</div>
-                        <FontIcon
-                          type="chevron-down"
-                          className="w-4 h-4 text-blue-100"
-                        />
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2">
-                          <FontIcon
-                            type="fade"
-                            className="w-4 h-4 text-blue-100"
-                          />
-                          <div className="text-xs text-blue-100">
-                            Processing
-                          </div>
-                        </div>
-                        <FontIcon
-                          type="trashcan"
-                          className="w-4 h-4 text-blue-100"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
+
+            {/* Project-level raw files UI removed: files now only exist within datasets. */}
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Edit dataset dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit dataset</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Name</label>
+              <Input
+                autoFocus
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                placeholder="Dataset name"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">
+                Description
+              </label>
+              <Textarea
+                value={editDescription}
+                onChange={e => setEditDescription(e.target.value)}
+                placeholder="Optional description"
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button
+              onClick={() => {
+                const id = editDatasetId.trim()
+                const name = editName.trim()
+                if (!id || !name) return
+                try {
+                  localStorage.setItem(`lf_dataset_name_${id}`, name)
+                  localStorage.setItem(
+                    `lf_dataset_description_${id}`,
+                    editDescription
+                  )
+                } catch {}
+                setIsEditOpen(false)
+              }}
+              disabled={!editName.trim()}
+            >
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

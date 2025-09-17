@@ -1,0 +1,56 @@
+# Anthropic Claude Models
+# Configuration for Claude models via Anthropic API
+
+strategies:
+  - name: claude_opus_advanced
+    description: Claude 3 Opus for complex reasoning and analysis
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-opus-20240229
+          base_url: https://api.anthropic.com/v1
+          max_tokens: 4096
+          temperature: 0.7
+          anthropic_version: "2023-06-01"
+          system_prompt: "You are a helpful AI assistant."
+    
+  - name: claude_sonnet_balanced
+    description: Claude 3 Sonnet for balanced performance and cost
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-sonnet-20240229
+          base_url: https://api.anthropic.com/v1
+          max_tokens: 4096
+          temperature: 0.6
+          top_p: 0.9
+    
+  - name: claude_haiku_fast
+    description: Claude 3 Haiku for quick responses
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-haiku-20240307
+          base_url: https://api.anthropic.com/v1
+          max_tokens: 2048
+          temperature: 0.5
+          stream: true
+    
+  - name: claude_with_vision
+    description: Claude 3 with vision capabilities
+    components:
+      vision_api:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-opus-20240229
+          base_url: https://api.anthropic.com/v1
+          max_tokens: 4096
+          supports_vision: true
+          image_detail: high

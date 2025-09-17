@@ -17,24 +17,24 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for contributors
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Update contributors
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python scripts/update_contributors.py
-      
+
       - name: Check for changes
         id: check_changes
         run: |
@@ -43,24 +43,24 @@ jobs:
           else
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Create Pull Request
         if: steps.check_changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: '🤖 Update contributors list'
-          title: '🤖 Update Contributors List'
+          commit-message: 'chore: 🤖 update contributors list'
+          title: 'chore: 🤖 update contributors list'
           body: |
             ## 🤖 Automated Contributor Update
-            
+
             This PR automatically updates the contributors list in README.md based on GitHub data.
-            
+
             ### Changes
             - Updated contributor avatars and statistics
             - Added new contributors (if any)
             - Updated contribution counts
-            
+
             ---
             *This is an automated PR created by the [update-contributors workflow](.github/workflows/update-contributors.yml)*
           branch: update-contributors

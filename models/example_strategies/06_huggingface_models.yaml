@@ -1,0 +1,99 @@
+# Hugging Face Models
+# Strategies for using models from Hugging Face Hub
+
+strategies:
+  - name: hf_transformers_local
+    description: Run Hugging Face models locally with transformers
+    components:
+      model_app:
+        type: huggingface
+        config:
+          model_id: microsoft/phi-2
+          revision: main
+          cache_dir: ~/.cache/huggingface
+          device_map: auto
+          torch_dtype: auto
+          load_in_8bit: false
+          trust_remote_code: true
+          use_auth_token: ${HF_TOKEN}
+          max_new_tokens: 2048
+          temperature: 0.7
+          do_sample: true
+          top_p: 0.95
+    
+  - name: hf_text_generation
+    description: Text generation with various Hugging Face models
+    components:
+      gpt2:
+        type: huggingface
+        config:
+          model_id: gpt2-medium
+          device: cuda
+          max_length: 1024
+      bloom:
+        type: huggingface
+        config:
+          model_id: bigscience/bloom-560m
+          device: cuda
+          max_length: 2048
+      falcon:
+        type: huggingface
+        config:
+          model_id: tiiuae/falcon-7b-instruct
+          device: cuda
+          torch_dtype: bfloat16
+          trust_remote_code: true
+    routing_rules:
+      - pattern: "short|quick"
+        provider: gpt2
+      - pattern: "multilingual|translate"
+        provider: bloom
+      - pattern: "instruct|command"
+        provider: falcon
+      - pattern: ".*"
+        provider: gpt2
+    
+  - name: hf_specialized_models
+    description: Specialized models for specific tasks
+    components:
+      sentiment:
+        type: huggingface
+        config:
+          model_id: cardiffnlp/twitter-roberta-base-sentiment-latest
+          task: sentiment-analysis
+      ner:
+        type: huggingface
+        config:
+          model_id: dslim/bert-base-NER
+          task: token-classification
+      summarization:
+        type: huggingface
+        config:
+          model_id: facebook/bart-large-cnn
+          task: summarization
+          max_length: 1024
+          min_length: 50
+      translation:
+        type: huggingface
+        config:
+          model_id: Helsinki-NLP/opus-mt-en-de
+          task: translation
+          src_lang: en
+          tgt_lang: de
+    
+  - name: hf_quantized_models
+    description: Quantized models for efficient inference
+    components:
+      model_app:
+        type: huggingface
+        config:
+          model_id: TheBloke/Llama-2-7B-Chat-GPTQ
+          revision: main
+          device: cuda
+          quantization_config:
+            bits: 4
+            group_size: 128
+            desc_act: false
+          torch_dtype: float16
+          trust_remote_code: true
+          max_new_tokens: 2048

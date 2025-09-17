@@ -19,7 +19,6 @@ Representative third‑party packages (non‑exhaustive)
     - asgi‑correlation‑id (MIT)
     - jsonref (BSD‑3‑Clause)
     - jsonschema (MIT)
-    - appdirs (MIT)
   - Go
     - github.com/spf13/cobra (Apache‑2.0)
     - gopkg.in/yaml.v2 (Apache‑2.0)

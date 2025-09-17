@@ -1,0 +1,4 @@
+# Un-ignore shadcn util files under src/lib so they can be committed
+!src/lib/
+!src/lib/**
+

@@ -35,7 +35,7 @@ class DataService:
     data_dir/
       meta/
         <file_content_hash>.json # Metadata file
-      blobs/
+      raw/
         <file_content_hash> # File content
       index/
         by_name/
@@ -153,7 +153,11 @@ class DataService:
         # Make sure the file is not in use by another dataset
         project = ProjectService.get_project(namespace, project_id)
         other_dataset = next(
-            (ds for ds in project.config.datasets if ds.name != dataset and file.hash in ds.files),
+            (
+                ds
+                for ds in project.config.datasets
+                if ds.name != dataset and file.hash in ds.files
+            ),
             None,
         )
         if other_dataset:

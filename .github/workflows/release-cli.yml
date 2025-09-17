@@ -1,0 +1,126 @@
+name: Release - CLI
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+env:
+  CLI_NAME: llamafarm-cli
+  BINARY_NAME: lf
+
+jobs:
+  build-cli:
+    name: Build CLI Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: cli/go.sum
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Copy schema.yaml to CLI config
+        run: |
+          mkdir -p cli/cmd/config
+          cp config/schema.yaml cli/cmd/config/
+
+      - name: Build binary
+        id: build
+        working-directory: cli
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          # Set binary name with .exe extension for Windows
+          BINARY_NAME="${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            BINARY_NAME="${BINARY_NAME}-windows-${{ matrix.goarch }}.exe"
+          fi
+
+          # Build the binary
+          go build -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=${{ steps.version.outputs.version }}'" -o "${BINARY_NAME}" .
+
+          # SHA the binary
+          sha256sum "${BINARY_NAME}" > "${BINARY_NAME}.sha256"
+          echo "SHA256: $(cat ${BINARY_NAME}.sha256)"
+          echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
+
+          # # Create archive
+          # ARCHIVE_NAME="${{ env.CLI_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          # mkdir -p dist
+
+          # if [[ "${{ matrix.goos }}" == "windows" ]]; then
+          #   zip "dist/${ARCHIVE_NAME}.zip" "${BINARY_NAME}"
+          # else
+          #   tar -czf "dist/${ARCHIVE_NAME}.tar.gz" "${BINARY_NAME}"
+          # fi
+
+      - name: Upload assets to the Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          files: |
+            cli/${{ steps.build.outputs.binary_name }}
+            cli/${{ steps.build.outputs.binary_name }}.sha256
+          fail_on_unmatched_files: true
+          append_body: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ steps.build.outputs.binary_name }}"
+          path: cli/${{ steps.build.outputs.binary_name }}
+
+  test-cli-install:
+    name: Test Installation Script
+    needs: build-cli
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'release'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test install script
+        run: |
+          # Wait a bit for release to be available
+          sleep 30
+
+          # Test the install script
+          chmod +x install.sh
+          VERSION=${{ github.event.release.tag_name }} INSTALL_DIR=$HOME/.local/bin ./install.sh
+
+          # Test the installed binary
+          export PATH="$HOME/.local/bin:$PATH"
+          lf version

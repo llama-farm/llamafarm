@@ -1,8 +1,8 @@
 """Reranked strategy - sophisticated multi-factor relevance scoring."""
 
 from typing import List, Dict, Any
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
-from core.base import Document
+from rag.components.retrievers.base import RetrievalStrategy, RetrievalResult
+from rag.core.base import Document
 
 
 class RerankedStrategy(RetrievalStrategy):

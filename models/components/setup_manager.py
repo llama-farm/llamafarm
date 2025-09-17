@@ -98,7 +98,9 @@ class SetupManager:
         seen_components = set()
         
         # Analyze each strategy
-        for strategy_name, strategy in strategies.get('strategies', {}).items():
+        strategies_list = strategies.get('strategies', [])
+        for strategy in strategies_list:
+            strategy_name = strategy.get('name', 'unknown')
             if self.verbose:
                 print(f"Analyzing strategy: {strategy_name}")
             

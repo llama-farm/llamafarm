@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from core.base import Document, Component
+from rag.core.base import Document, Component
 
 
 @dataclass

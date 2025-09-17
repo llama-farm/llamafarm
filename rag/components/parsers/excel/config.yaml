@@ -1,0 +1,121 @@
+parsers:
+  - name: ExcelParser_OpenPyXL
+    display_name: Excel Parser (OpenPyXL)
+    tool: OpenPyXL
+    version: 1.0.0
+    description: Excel parser using OpenPyXL for XLSX files with formula support
+    
+    supported_extensions:
+      - .xlsx
+      - .xlsm
+      - .xltx
+      - .xltm
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel.sheet.macroEnabled.12
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - formula_extraction
+      - multi_sheet
+      - merged_cells
+    
+    dependencies:
+      required:
+        - openpyxl
+      optional: []
+    
+    default_config:
+      chunk_size: 1000
+      extract_formulas: false
+      extract_metadata: true
+      sheets: null  # null = all sheets
+      data_only: true  # true = values, false = formulas
+
+  - name: ExcelParser_Pandas
+    display_name: Excel Parser (Pandas)
+    tool: Pandas
+    version: 1.0.0
+    description: Excel parser using Pandas with data analysis capabilities
+    
+    supported_extensions:
+      - .xlsx
+      - .xls
+      - .xlsm
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+    
+    capabilities:
+      - text_extraction
+      - chunking
+      - metadata_extraction
+      - statistics
+      - data_analysis
+      - multi_sheet
+    
+    dependencies:
+      required:
+        - pandas
+        - openpyxl
+      optional:
+        - xlrd  # For older .xls files
+    
+    default_config:
+      chunk_size: 1000
+      sheets: null  # null = all sheets
+      extract_metadata: true
+      skiprows: null
+      na_values: ["", "NA", "N/A", "null", "None"]
+
+  - name: ExcelParser_LlamaIndex
+    display_name: Excel Parser (LlamaIndex)
+    tool: LlamaIndex-Pandas
+    version: 1.0.0
+    description: Excel parser using LlamaIndex with Pandas backend for advanced processing
+    
+    supported_extensions:
+      - .xlsx
+      - .xls
+      - .xlsm
+    
+    mime_types:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+      - application/vnd.ms-excel.sheet.macroEnabled.12
+    
+    capabilities:
+      - text_extraction
+      - semantic_chunking
+      - metadata_extraction
+      - statistics
+      - multi_sheet_processing
+      - sheet_combination
+      - formula_extraction
+      - data_transformation
+    
+    dependencies:
+      required:
+        - llama-index
+        - llama-index-readers-file
+        - pandas
+        - openpyxl
+      optional:
+        - xlrd
+        - tabulate  # For markdown table formatting
+    
+    default_config:
+      chunk_size: 1000
+      chunk_strategy: rows  # rows, semantic, full
+      sheets: null  # null = all sheets, or list of sheet names
+      combine_sheets: false
+      extract_metadata: true
+      extract_formulas: false
+      header_row: 0
+      skiprows: null
+      na_values: ["", "NA", "N/A", "null", "None"]
+

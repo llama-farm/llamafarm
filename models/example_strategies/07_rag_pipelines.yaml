@@ -1,0 +1,93 @@
+# RAG (Retrieval-Augmented Generation) Pipelines
+# Strategies for document retrieval and generation
+
+strategies:
+  - name: basic_rag_pipeline
+    description: Simple RAG with embeddings and generation
+    components:
+      embedder:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: text-embedding-3-small
+          base_url: https://api.openai.com/v1
+          embedding_dimensions: 1536
+      generator:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.3
+          system_prompt: "Answer based on the provided context."
+      # Note: Vector store would be configured separately
+      # This example shows the embedding and generation components
+    
+  - name: local_rag_ollama
+    description: Fully local RAG using Ollama
+    components:
+      embedder:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: nomic-embed-text:latest
+          embedding_only: true
+      generator:
+        type: ollama
+        config:
+          base_url: http://localhost:11434
+          model: llama3:8b
+          temperature: 0.3
+          num_ctx: 8192
+      # Note: Retriever configuration would be handled externally
+      # using a vector database like FAISS, Chroma, or Pinecone
+    
+  - name: hybrid_search_rag
+    description: Hybrid search combining dense and sparse retrieval
+    components:
+      dense_embedder:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: text-embedding-3-large
+          base_url: https://api.openai.com/v1
+      # Note: Sparse encoding and reranking would be handled
+      # by external libraries or services
+      reranker:
+        type: openai_compatible
+        config:
+          api_key: ${COHERE_API_KEY}
+          base_url: https://api.cohere.ai/v1
+          model: rerank-english-v2.0
+          max_tokens: 100
+      generator:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-sonnet-20240229
+          base_url: https://api.anthropic.com/v1
+          temperature: 0.2
+    
+  - name: multimodal_rag
+    description: RAG with text and image understanding
+    components:
+      text_embedder:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: text-embedding-3-small
+          base_url: https://api.openai.com/v1
+      image_embedder:
+        type: huggingface
+        config:
+          model_id: openai/clip-vit-base-patch32
+          device: cuda
+          task: feature-extraction
+      multimodal_generator:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-vision-preview
+          base_url: https://api.openai.com/v1
+          max_tokens: 4096
+          supports_vision: true

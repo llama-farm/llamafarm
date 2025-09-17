@@ -1,6 +1,7 @@
 import sys
 import time
 import uuid
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
@@ -16,13 +17,14 @@ from context_providers.project_chat_context_provider import (
     ProjectChatContextProvider,
 )
 from core.logging import FastAPIStructLogger
-from services.rag_subprocess import search_with_rag
+from services.rag_subprocess import search_with_rag, search_with_rag_database
 
-logger = FastAPIStructLogger()
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
 from config.datamodel import LlamaFarmConfig  # noqa: E402
+
+logger = FastAPIStructLogger()
 
 
 class ProjectChatService:
@@ -73,23 +75,37 @@ class ProjectChatService:
         }
 
     def _perform_rag_search(
-        self, project_config: LlamaFarmConfig, message: str, top_k: int = 5
+        self,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
+        message: str,
+        top_k: int = 5,
+        database: str | None = None,
     ) -> list[Any]:
         """Perform RAG search using the project's RAG configuration.
 
-        This implementation shells out to the rag subsystem in its own
-        Python environment to avoid cross-venv import issues.
+        This implementation searches the database directly, not through datasets.
         """
-        logger.info(f"Performing RAG search for message: {message}")
 
-        # For now, use the first available strategy
-        if not project_config.rag.strategies:
-            logger.error("No RAG strategies found in project config")
+        # First, make sure rag is enabled
+        if not project_config.rag:
+            logger.warning("RAG is not enabled in project config. Skipping.")
             return []
 
-        strategy = project_config.rag.strategies[0]
-        # Use shared helper to run RAG search
-        results = search_with_rag(strategy, message, top_k=top_k)
+        logger.info(f"Performing RAG search for message: {message}")
+
+        # Find the database configuration
+        if not database:
+            # Use the first database as default
+            if project_config.rag.databases:
+                database = project_config.rag.databases[0].name
+                logger.info(f"Using default database: {database}")
+            else:
+                logger.error("No databases found in project config")
+                return []
+
+        # Use shared helper to run RAG search on database
+        results = search_with_rag_database(project_dir, database, message, top_k=top_k)
         if results is None:
             results = []
 
@@ -108,18 +124,55 @@ class ProjectChatService:
         logger.info(f"RAG search returned {len(normalized)} results")
         return normalized
 
-    def chat(
+    async def chat(
         self,
+        project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
         message: str,
+        rag_enabled: bool | None = None,
+        database: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
     ) -> ChatCompletion:
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
 
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
+        # Use config defaults if not explicitly provided
+        # If rag_enabled is None, check if RAG is configured
+        if rag_enabled is None:
+            rag_enabled = bool(project_config.rag and project_config.rag.databases)
+            if rag_enabled:
+                logger.info("RAG enabled by default based on project configuration")
+        
+        # Use config defaults for other parameters if not provided
+        if rag_enabled and project_config.rag:
+            # If no database specified, use the first database
+            if database is None and project_config.rag.databases:
+                database = project_config.rag.databases[0].name
+                logger.info(f"Using default database from config: {database}")
+            
+            # If no top_k specified, check if there's a default in retrieval strategies
+            if rag_top_k is None:
+                # Look for default retrieval strategy's top_k
+                if project_config.rag.databases:
+                    for db in project_config.rag.databases:
+                        if db.name == database:
+                            for strategy in db.retrieval_strategies or []:
+                                if strategy.default:
+                                    rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
+                                    break
+                            break
+                if rag_top_k is None:
+                    rag_top_k = 5  # Fallback default
+        
         # Use the RAG subsystem to perform RAG based on the project config
-        rag_results = self._perform_rag_search(project_config, message)
+        rag_results = []
+        if rag_enabled:
+            rag_results = self._perform_rag_search(
+                project_dir, project_config, message, top_k=rag_top_k or 5, database=database
+            )
 
         # Store the result from the RAG subsystem in the agent's context provider
         for idx, result in enumerate(rag_results):
@@ -136,17 +189,17 @@ class ProjectChatService:
             context_provider.chunks.append(chunk_item)
 
         input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
-        agent_response = chat_agent.run(input_schema)
+        logger.info(f"Input schema: {input_schema}")
+        agent_response = await chat_agent.run_async(input_schema)
+        logger.info(f"Agent response: {agent_response}")
 
         response_message = agent_response.chat_message
 
-        # model_name should come from the project config
-        # model_name = request.model or settings.ollama_model
         completion = ChatCompletion(
             id=f"chat-{uuid.uuid4()}",
             object="chat.completion",
             created=int(time.time()),
-            model="todo: use model from project config",
+            model=project_config.runtime.model,
             choices=[
                 Choice(
                     index=0,
@@ -159,6 +212,91 @@ class ProjectChatService:
             ],
         )
         return completion
+
+    async def stream_chat(
+        self,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
+        chat_agent: ProjectChatOrchestratorAgent,
+        message: str,
+        rag_enabled: bool | None = None,
+        database: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Yield assistant content chunks, using agent-native streaming if available."""
+        context_provider = ProjectChatContextProvider(title="Project Chat Context")
+        chat_agent.register_context_provider("project_chat_context", context_provider)
+
+        # Use config defaults if not explicitly provided (same logic as chat method)
+        if rag_enabled is None:
+            rag_enabled = bool(project_config.rag and project_config.datasets)
+            if rag_enabled:
+                logger.info("RAG enabled by default based on project configuration")
+        
+        if rag_enabled and project_config.rag:
+            if database is None and project_config.datasets:
+                database = project_config.datasets[0].database
+                logger.info(f"Using default database from config: {database}")
+            
+            if rag_top_k is None:
+                if project_config.rag.databases:
+                    for db in project_config.rag.databases:
+                        if db.name == database:
+                            for strategy in db.retrieval_strategies or []:
+                                if strategy.default:
+                                    rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
+                                    break
+                            break
+                if rag_top_k is None:
+                    rag_top_k = 5
+
+        rag_results = []
+        if rag_enabled:
+            rag_results = self._perform_rag_search(
+                project_dir, project_config, message, top_k=rag_top_k or 5, database=database
+            )
+        for idx, result in enumerate(rag_results):
+            chunk_item = ChunkItem(
+                content=result.content,
+                metadata={
+                    "source": result.metadata.get("source", "unknown"),
+                    "score": getattr(result, "score", 0.0),
+                    "chunk_index": idx,
+                    "retrieval_method": "rag_search",
+                    **result.metadata,
+                },
+            )
+            context_provider.chunks.append(chunk_item)
+
+        input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
+        try:
+            logger.info("Running async stream")
+            previous_response = ""
+            async for chunk in chat_agent.run_async_stream(input_schema):
+                if hasattr(chunk, "chat_message") and chunk.chat_message:
+                    logger.info("Processing partial response", message=chunk)
+                    current_response = chunk.chat_message
+
+                    # Skip duplicates
+                    if current_response == previous_response:
+                        continue
+
+                    # If this is the first chunk, yield it entirely
+                    if not previous_response:
+                        yield current_response
+                    # Otherwise, yield only the incremental part
+                    elif len(current_response) > len(previous_response):
+                        incremental = current_response[len(previous_response) :]
+                        yield incremental
+
+                    previous_response = current_response
+            return
+        except Exception:
+            logger.error(
+                "Model call failed",
+                exc_info=True,
+            )
 
 
 project_chat_service = ProjectChatService()

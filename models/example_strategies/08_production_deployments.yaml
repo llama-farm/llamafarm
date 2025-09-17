@@ -1,0 +1,125 @@
+# Production Deployment Strategies
+# Configurations optimized for production environments
+
+strategies:
+  - name: production_api_gateway
+    description: Production API gateway with monitoring and rate limiting
+    components:
+      primary:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          timeout: 30
+          max_retries: 3
+          rate_limit:
+            requests_per_minute: 500
+            tokens_per_minute: 90000
+      secondary:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-sonnet-20240229
+          base_url: https://api.anthropic.com/v1
+          timeout: 30
+          max_retries: 3
+    monitoring:
+      prometheus_enabled: true
+      metrics_port: 9090
+      track_latency: true
+      track_errors: true
+      track_costs: true
+    security:
+      api_key_rotation: true
+      encryption_at_rest: true
+      audit_logging: true
+    
+  - name: high_availability_cluster
+    description: High availability setup with multiple regions
+    components:
+      us_east:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          region: us-east-1
+      us_west:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          region: us-west-2
+      europe:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          region: eu-west-1
+    load_balancing:
+      strategy: round_robin
+      health_check_interval: 30
+      failover_threshold: 3
+    fallback_chain:
+      - provider: us_east
+        weight: 40
+      - provider: us_west
+        weight: 40
+      - provider: europe
+        weight: 20
+    
+  - name: auto_scaling_deployment
+    description: Auto-scaling deployment based on load
+    components:
+      base_model:
+        type: vllm
+        config:
+          model: meta-llama/Llama-2-13b-chat-hf
+          tensor_parallel_size: 2
+          pipeline_parallel_size: 1
+          min_replicas: 2
+          max_replicas: 10
+          target_gpu_utilization: 0.8
+          scale_up_threshold: 0.9
+          scale_down_threshold: 0.3
+          cooldown_period: 300
+    orchestration:
+      platform: kubernetes
+      namespace: ml-models
+      service_type: LoadBalancer
+      ingress:
+        enabled: true
+        tls: true
+        hostname: api.example.com
+    
+  - name: blue_green_deployment
+    description: Blue-green deployment for zero-downtime updates
+    components:
+      blue:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          version: stable
+      green:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo-16k
+          base_url: https://api.openai.com/v1
+          version: canary
+    deployment:
+      strategy: blue_green
+      traffic_split:
+        blue: 90
+        green: 10
+      rollback_on_error: true
+      health_check:
+        endpoint: /health
+        interval: 10
+        timeout: 5
+        success_threshold: 3

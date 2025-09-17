@@ -4,6 +4,17 @@
   },
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "nxCloudId": "6890fca1e55dc20a336b5529",
+  "release": {
+    "projectsRelationship": "fixed",
+    "projects": ["*"],
+    "version": {
+      "conventionalCommits": true
+    },
+    "changelog": {
+      "workspaceChangelog": true,
+      "projectChangelogs": false
+    }
+  },
   "targets": {
   }
 }

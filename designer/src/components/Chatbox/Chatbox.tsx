@@ -1,15 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import Message from './Message'
 import FontIcon from '../../common/FontIcon'
-
-export interface Message {
-  type: 'user' | 'assistant' | 'system' | 'error'
-  content: string
-  sources?: any[]
-  metadata?: any
-  timestamp: Date
-  isLoading?: boolean
-}
+import useChatbox from '../../hooks/useChatbox'
 
 interface ChatboxProps {
   isPanelOpen: boolean
@@ -17,42 +9,53 @@ interface ChatboxProps {
 }
 
 function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      type: 'user',
-      content: 'Aircraft maintenance app',
-      timestamp: new Date(),
-    },
-    {
-      type: 'assistant',
-      content:
-        "Great start! Before we dive in, we'll need to take a look at your data. Do you have any aircraft logs or other context we can work with?",
-      timestamp: new Date(),
-    },
-    {
-      type: 'user',
-      content: 'I have aircraft logs in PDFs',
-      timestamp: new Date(),
-    },
-    {
-      type: 'assistant',
-      content:
-        'Fantastic! Please bear with us as we process your data. Background tasks in progress: Parsing PDFs: We are utilizing **PDFParserPro** to extract data from your files. This tool was selected for its accuracy and efficiency in handling complex PDF structures. Chunking Data: Next, we will segment the extracted data into manageable pieces to facilitate further analysis. While we work on this, please share where you plan to deploy your aircraft maintenance application.',
-      timestamp: new Date(),
-    },
-  ])
+  const [isDiagnosing, setIsDiagnosing] = useState<boolean>(false)
+  const diagnosingInFlightRef = useRef<boolean>(false)
+  // Use the custom chatbox hook for all chat logic
+  const {
+    messages,
+    inputValue,
+    error,
+    isSending,
+    isClearing,
+    sendMessage,
+    clearChat,
+    updateInput,
+    hasMessages,
+    canSend,
+  } = useChatbox()
 
-  const [inputValue, setInputValue] = useState('')
+  // Refs for auto-scroll
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const endRef = useRef<HTMLDivElement | null>(null)
 
-  const handleSendClick = () => {
-    const text = inputValue.trim()
-    if (!text) return
-    setMessages(prev => [
-      ...prev,
-      { type: 'user', content: text, timestamp: new Date() },
-    ])
-    setInputValue('')
-  }
+  useEffect(() => {
+    // Scroll to bottom on mount and whenever messages change
+    if (endRef.current) {
+      endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    } else if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight
+    }
+  }, [messages])
+
+  // Handle sending message
+  const handleSendClick = useCallback(async () => {
+    const messageContent = inputValue.trim()
+    if (!canSend || !messageContent) return
+
+    // Send message using the hook
+    const success = await sendMessage(messageContent)
+
+    // Clear input on successful send
+    if (success) {
+      updateInput('')
+    }
+  }, [inputValue, canSend, sendMessage, updateInput])
+
+  // Handle clear chat
+  const handleClearChat = useCallback(async () => {
+    await clearChat()
+  }, [clearChat])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -61,44 +64,140 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
     }
   }
 
+  // Compose an auto-message for diagnose intents
+  const composeDiagnoseMessage = useCallback((detail: any) => {
+    const lines: string[] = []
+    lines.push(
+      'Help me diagnose this. Identify issues and propose fixes (prompt, retrieval, tools, or settings).'
+    )
+    if (detail?.source === 'low_score') {
+      const scoreText =
+        typeof detail?.matchScore === 'number' ? `${detail.matchScore}%` : '—'
+      const testLabel = detail?.testName ? `"${detail.testName}"` : ''
+      lines.push(`Context: Test ${testLabel} scored ${scoreText}.`)
+    }
+    if (
+      detail?.source === 'message_action' ||
+      detail?.source === 'thumbs_down'
+    ) {
+      lines.push('Context: Diagnosing a specific response.')
+    }
+    if (detail?.input) {
+      lines.push(`Input:\n${detail.input}`)
+    }
+    if (detail?.expected) {
+      lines.push(`Expected:\n${detail.expected}`)
+    }
+    if (detail?.responseText) {
+      lines.push(`Response:\n${detail.responseText}`)
+    }
+    // Note: We intentionally do not dump prompts/thinking here.
+    return lines.join('\n\n')
+  }, [])
+
+  // Global diagnose listener: open panel and auto-send composed message
+  useEffect(() => {
+    const onDiagnose = async (e: Event) => {
+      const detail = (e as CustomEvent).detail as any
+      try {
+        // Prevent overlapping diagnoses if events fire rapidly
+        if (diagnosingInFlightRef.current) return
+        diagnosingInFlightRef.current = true
+        setIsDiagnosing(true)
+        setIsPanelOpen(true)
+        const message = composeDiagnoseMessage(detail)
+        if (message && message.trim()) {
+          await sendMessage(message)
+          updateInput('')
+        }
+        // keep the diagnose indicator visible briefly
+        setTimeout(() => {
+          setIsDiagnosing(false)
+          diagnosingInFlightRef.current = false
+        }, 800)
+      } catch {}
+    }
+
+    window.addEventListener('lf-diagnose', onDiagnose as EventListener)
+    return () =>
+      window.removeEventListener('lf-diagnose', onDiagnose as EventListener)
+  }, [sendMessage, updateInput, setIsPanelOpen, composeDiagnoseMessage])
+
   return (
-    <div className="w-full h-full flex flex-col transition-colors bg-[#FFFFFF] text-gray-900 dark:bg-blue-500 dark:text-white">
+    <div className="w-full h-full flex flex-col transition-colors bg-card text-foreground">
       <div
-        className={`flex  ${
-          isPanelOpen ? 'justify-end mr-1 mt-1' : 'justify-center mt-3'
-        }`}
+        className={`flex ${isPanelOpen ? 'justify-between items-center mr-1 mt-1' : 'justify-center mt-3'}`}
       >
+        {isPanelOpen && (
+          <button
+            onClick={handleClearChat}
+            disabled={isClearing}
+            className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isClearing ? 'Clearing...' : 'Clear'}
+          </button>
+        )}
         <FontIcon
           isButton
           type={isPanelOpen ? 'close-panel' : 'open-panel'}
-          className="w-6 h-6 text-blue-200 hover:text-gray-800 dark:text-blue-300 dark:hover:text-blue-100"
+          className="w-6 h-6 text-primary hover:opacity-80"
           handleOnClick={() => setIsPanelOpen(!isPanelOpen)}
         />
       </div>
-      <div
-        className={`flex flex-col justify-between h-full p-4 ${
-          isPanelOpen ? 'flex' : 'hidden'
-        }`}
-      >
-        <div className="flex flex-col gap-5">
-          {messages.map((message, index) => (
-            <Message key={index} message={message} />
-          ))}
+      {isDiagnosing && (
+        <div className="mx-4 mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+          <span>Diagnosing…</span>
         </div>
-        <div className="flex flex-col gap-3 p-3 rounded-lg bg-[#F4F4F4] dark:bg-blue-700">
+      )}
+
+      {/* Error display */}
+      {error && isPanelOpen && (
+        <div className="mx-4 mb-2 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+          {error}
+        </div>
+      )}
+
+      <div
+        className={`flex flex-col h-full p-4 overflow-hidden ${isPanelOpen ? 'flex' : 'hidden'}`}
+      >
+        <div
+          ref={listRef}
+          className="flex-1 overflow-y-auto flex flex-col gap-5 pr-1"
+        >
+          {!hasMessages ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+              Start a conversation...
+            </div>
+          ) : (
+            messages.map(message => (
+              <Message key={message.id} message={message} />
+            ))
+          )}
+          <div ref={endRef} />
+        </div>
+        <div className="flex flex-col gap-3 p-3 rounded-lg bg-secondary">
           <textarea
             value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
+            onChange={e => updateInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-gray-900 placeholder-gray-500 dark:text-white dark:placeholder-white"
-            placeholder="Type here..."
+            disabled={isSending}
+            className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
+            placeholder={isSending ? 'Waiting for response...' : 'Type here...'}
           />
-          <FontIcon
-            isButton
-            type="arrow-filled"
-            className="w-8 h-8 self-end text-blue-200 dark:text-green-100"
-            handleOnClick={handleSendClick}
-          />
+          <div className="flex justify-between items-center">
+            {isSending && (
+              <span className="text-xs text-muted-foreground">
+                Sending message...
+              </span>
+            )}
+            <FontIcon
+              isButton
+              type="arrow-filled"
+              className={`w-8 h-8 self-end ${!canSend ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+              handleOnClick={handleSendClick}
+            />
+          </div>
         </div>
       </div>
     </div>

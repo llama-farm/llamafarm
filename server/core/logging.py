@@ -69,12 +69,16 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     root_logger = logging.getLogger()
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
-    
+
     # Add our single structlog handler to the root logger
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
     root_logger.setLevel(log_level.upper())
+
+    # Configure celery logger
+    celery_logger = logging.getLogger("celery.worker")
+    celery_logger.setLevel(settings.CELERY_LOG_LEVEL.upper() or "INFO")
 
     # Configure uvicorn loggers to use our root logger setup
     for logger_name in ["uvicorn", "uvicorn.error"]:
@@ -86,6 +90,7 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
         # uvicorn_logger.propagate = True
         uvicorn_logger.name = "uvicorn"
         uvicorn_logger.setLevel(log_level.upper())
+
 
 class FastAPIStructLogger:
     def __init__(self, log_name=settings.LOG_NAME):

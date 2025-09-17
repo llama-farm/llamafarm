@@ -1,0 +1,56 @@
+# Basic OpenAI Configuration
+# Simple setup for using OpenAI's GPT models
+
+strategies:
+  - name: basic_openai_gpt4
+    description: Basic GPT-4 configuration for general-purpose tasks
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          temperature: 0.7
+          max_tokens: 4096
+          top_p: 1.0
+          frequency_penalty: 0
+          presence_penalty: 0
+    
+  - name: openai_gpt35_fast
+    description: Fast and cost-effective GPT-3.5 for simple tasks
+    components:
+      cloud_api:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.5
+          max_tokens: 2048
+          stream: true
+    
+  - name: openai_with_fallback
+    description: OpenAI with automatic fallback from GPT-4 to GPT-3.5
+    components:
+      primary_api:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          temperature: 0.7
+      fallback_api:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.7
+    fallback_chain:
+      - provider: primary_api
+        model: gpt-4-turbo-preview
+        max_retries: 2
+      - provider: fallback_api
+        model: gpt-3.5-turbo
+        max_retries: 3

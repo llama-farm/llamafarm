@@ -6,18 +6,68 @@ import GitlabLogoLight from '../../assets/logos/gitlab-logo-light.svg'
 import GithubLogoLight from '../../assets/logos/github-logo-light.svg'
 import SlackLogoLight from '../../assets/logos/slack-logo-light.svg'
 import { useTheme } from '../../contexts/ThemeContext'
-import { useEffect, useState } from 'react'
-import ModeToggle, { Mode } from '../ModeToggle'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Mode } from '../ModeToggle'
+import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
-import ProjectModal, { ProjectModalMode } from '../ProjectModal'
-import ConfigEditor from '../ConfigEditor'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
+import { useProjectModalContext } from '../../contexts/ProjectModalContext'
+// import { getCurrentNamespace } from '../../utils/namespaceUtils'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useListDatasets } from '../../hooks/useDatasets'
 
 const Dashboard = () => {
   const { theme } = useTheme()
+  const navigate = useNavigate()
+  // const namespace = getCurrentNamespace()
+  const activeProject = useActiveProject()
+
+  // All state declarations first
   const [mode, setMode] = useState<Mode>('designer')
   const [projectName, setProjectName] = useState<string>('Dashboard')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<ProjectModalMode>('edit')
+  const [versions, setVersions] = useState<
+    Array<{
+      id: string
+      name: string
+      description: string
+      date: string
+      isCurrent?: boolean
+    }>
+  >([])
+  // Datasets list for Data card
+  const { data: apiDatasets, isLoading: isDatasetsLoading } = useListDatasets(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
+
+  const datasets = useMemo(() => {
+    if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
+      return apiDatasets.datasets.map(dataset => ({
+        id: dataset.name,
+        name: dataset.name,
+        lastRun: new Date(),
+      }))
+    }
+    try {
+      const stored = localStorage.getItem('lf_demo_datasets')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((d: any) => ({
+            id: d.id || d.name,
+            name: d.name || d.id,
+            lastRun: d.lastRun || new Date(),
+          }))
+        }
+      }
+    } catch {}
+    return [] as Array<{ id: string; name: string; lastRun: string | Date }>
+  }, [apiDatasets])
+
+  // Shared modal hook
+  const projectModal = useProjectModalContext()
 
   useEffect(() => {
     const refresh = () => {
@@ -38,10 +88,73 @@ const Dashboard = () => {
       window.removeEventListener('lf-active-project', handler as EventListener)
   }, [])
 
+  // Keep default project model in sync (listen for updates)
+  const [defaultModelName, setDefaultModelName] = useState<string>(() => {
+    try {
+      const raw = localStorage.getItem('lf_default_project_model')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        return parsed?.name || 'TinyLlama'
+      }
+    } catch {}
+    return 'TinyLlama'
+  })
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem('lf_default_project_model')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          setDefaultModelName(parsed?.name || 'TinyLlama')
+        }
+      } catch {}
+    }
+    const handler = () => load()
+    window.addEventListener(
+      'lf:defaultProjectModelUpdated',
+      handler as EventListener
+    )
+    window.addEventListener('storage', handler)
+    return () => {
+      window.removeEventListener(
+        'lf:defaultProjectModelUpdated',
+        handler as EventListener
+      )
+      window.removeEventListener('storage', handler)
+    }
+  }, [])
+
+  // Load and keep versions list in sync with Versions page/localStorage
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem('lf_versions')
+        if (raw) {
+          const arr = JSON.parse(raw)
+          if (Array.isArray(arr)) setVersions(arr)
+          else setVersions([])
+        } else setVersions([])
+      } catch {
+        setVersions([])
+      }
+    }
+    load()
+    const onUpdate = () => load()
+    window.addEventListener('lf_versions_updated', onUpdate as EventListener)
+    window.addEventListener('storage', onUpdate)
+    return () => {
+      window.removeEventListener(
+        'lf_versions_updated',
+        onUpdate as EventListener
+      )
+      window.removeEventListener('storage', onUpdate)
+    }
+  }, [])
+
   return (
     <>
-      <div className="w-full flex flex-col">
-        <div className="flex items-center justify-between mb-4">
+      <div className="w-full h-full flex flex-col">
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl ">
               {mode === 'designer' ? projectName : 'Config editor'}
@@ -50,128 +163,129 @@ const Dashboard = () => {
               <button
                 className="rounded-sm hover:opacity-80"
                 onClick={() => {
-                  setModalMode('edit')
-                  setIsModalOpen(true)
+                  projectModal.openEditModal(projectName)
                 }}
               >
-                <FontIcon
-                  type="edit"
-                  className="w-5 h-5 text-blue-200 dark:text-blue-100"
-                />
+                <FontIcon type="edit" className="w-5 h-5 text-primary" />
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <ModeToggle mode={mode} onToggle={setMode} />
-            <button className="opacity-50 cursor-not-allowed text-sm px-3 py-2 rounded-lg border border-blue-50 text-blue-50 dark:text-blue-100 dark:border-blue-400">
-              Deploy
-            </button>
-          </div>
+          <PageActions mode={mode} onModeChange={setMode} />
         </div>
         {mode !== 'designer' ? (
-          <ConfigEditor />
+          <div className="flex-1 min-h-0 overflow-hidden pb-6">
+            <ConfigEditor className="h-full" />
+          </div>
         ) : (
           <>
             <DataCards />
             <div className="w-full flex flex-row gap-4 mt-4">
               <div className="w-3/5 flex flex-col gap-4">
                 <div className="flex flex-col">
-                  <div className="flex flex-row gap-2 items-center h-[40px] px-2 rounded-tl-lg rounded-tr-lg justify-between bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                    <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                  <div className="flex flex-row gap-2 items-center h-[40px] px-2 rounded-tl-lg rounded-tr-lg justify-between bg-card border-b border-border">
+                    <div className="flex flex-row gap-2 items-center text-foreground">
                       <FontIcon type="data" className="w-4 h-4" />
                       Data
                     </div>
-                    <button className="text-xs text-blue-200 dark:text-green-100">
+                    <button
+                      className="text-xs text-primary"
+                      onClick={() => navigate('/chat/data')}
+                    >
                       View and add
                     </button>
                   </div>
-                  <div className="p-6 flex flex-col gap-2 rounded-b-lg bg-white dark:bg-blue-500">
-                    <div className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-gray-200 dark:bg-blue-700">
-                      <div className="text-gray-700 dark:text-white">
-                        dataset-1-aircraft-logs
+                  <div className="p-6 flex flex-col gap-2 rounded-b-lg bg-card">
+                    {isDatasetsLoading ? (
+                      <div className="text-xs text-muted-foreground">
+                        Loading…
                       </div>
-                      <div className="text-xs text-blue-200 dark:text-blue-100">
-                        Updated 3 hours ago
+                    ) : datasets.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">
+                        No datasets yet
                       </div>
-                    </div>
-                    <div className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-gray-200 dark:bg-blue-700">
-                      <div className="text-gray-700 dark:text-white">
-                        data-set-2-aircraft-maintenance-rules
-                      </div>
-                      <div className="text-xs text-blue-200 dark:text-blue-100">
-                        Updated 6 hours ago
-                      </div>
-                    </div>
-                    <div className="text-xs text-blue-200 dark:text-blue-100">
-                      3 datasets total, showing last updated
-                    </div>
+                    ) : (
+                      <>
+                        {datasets.slice(0, 8).map(d => (
+                          <div
+                            key={d.id}
+                            className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-secondary cursor-pointer hover:bg-accent/30"
+                            onClick={() =>
+                              navigate(
+                                `/chat/data/${encodeURIComponent(d.name)}`
+                              )
+                            }
+                            role="button"
+                            aria-label={`Open dataset ${d.name}`}
+                          >
+                            <div className="text-foreground truncate">
+                              {d.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground whitespace-nowrap">
+                              {(() => {
+                                const dt = new Date(d.lastRun)
+                                return `Updated ${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                              })()}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-row gap-4 rounded-lg">
                   <div className="w-1/2">
-                    <div className="h-[40px] px-2 flex items-center rounded-tl-lg rounded-tr-lg bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                      <span className="text-gray-700 dark:text-white">
+                    <div className="h-[40px] px-2 flex items-center rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
+                      <div className="flex flex-row gap-2 items-center text-foreground">
+                        <FontIcon type="model" className="w-4 h-4" />
                         Models
-                      </span>
+                      </div>
                     </div>
-                    <div className="p-6 flex flex-col min-h-[325px] rounded-b-lg bg-white dark:bg-blue-500">
-                      <div className="mb-4">
-                        <label className="text-xs text-gray-600 dark:text-gray-100">
-                          Current model
-                        </label>
-                        <div className="w-full flex flex-row gap-2 items-center justify-between">
-                          <div className="rounded-xl px-3 py-1 my-1 w-full bg-gray-200 dark:bg-blue-600">
-                            <span className="text-gray-700 dark:text-white">
-                              TinyLlama
-                            </span>
+                    <div className="p-6 flex flex-col min-h-[325px] justify-between rounded-b-lg bg-card">
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground flex items-center gap-2">
+                            Default inference model
+                            <div className="relative group">
+                              <FontIcon
+                                type="info"
+                                className="w-3.5 h-3.5 text-muted-foreground"
+                              />
+                              <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 mt-2 w-64 rounded-md border border-border bg-popover p-2 text-xs text-popover-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                                Generates AI responses to your questions using
+                                the relevant documents as context.
+                              </div>
+                            </div>
+                          </label>
+                          <div className="mt-2 rounded-xl border border-primary/50 bg-background px-4 py-2 text-base font-medium text-foreground">
+                            {defaultModelName}
                           </div>
-                          <FontIcon
-                            type="edit"
-                            className="w-6 h-6 text-blue-200 dark:text-blue-100"
-                          />
-                        </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
-                          Why TinyLama?
                         </div>
                       </div>
-                      <div>
-                        <label className="text-xs text-gray-600 dark:text-gray-100">
-                          OpenAI API Key
-                        </label>
-                        <div className="w-full flex flex-row gap-2 items-center justify-between my-1">
-                          <div className="rounded-xl px-3 py-1 w-full bg-gray-200 dark:bg-blue-600">
-                            <span className="text-gray-500 dark:text-gray-300">
-                              Enter here
-                            </span>
-                          </div>
-                          <button className="rounded-lg p-1 w-10 h-8 flex items-center justify-center bg-blue-100 dark:bg-blue-200">
-                            <FontIcon
-                              type="add"
-                              className="w-4 h-4 text-white"
-                            />
-                          </button>
-                        </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
-                          Connect your project to OpenAI
-                        </div>
+                      <div className="pt-4">
+                        <button
+                          className="w-full text-primary border border-primary rounded-lg py-2 text-base hover:bg-primary/10"
+                          onClick={() => navigate('/chat/models')}
+                        >
+                          Go to models
+                        </button>
                       </div>
                     </div>
                   </div>
                   <div className="w-1/2">
-                    <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                      <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                    <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
+                      <div className="flex flex-row gap-2 items-center text-foreground">
                         <FontIcon type="integration" className="w-4 h-4" />
                         Integrations
                       </div>
-                      <button className="text-xs text-blue-200 dark:text-green-100 flex flex-row gap-1 items-center">
+                      <button className="text-xs text-primary flex flex-row gap-1 items-center">
                         Add
                         <FontIcon type="add" className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="p-6 flex flex-col min-h-[325px] justify-between rounded-b-lg bg-white dark:bg-blue-500">
+                    <div className="p-6 flex flex-col min-h-[325px] justify-between rounded-b-lg bg-card">
                       <div className="flex flex-col gap-2">
-                        <div className="flex flex-row gap-2 items-center border-[1px] border-solid border-blue-200 rounded-lg py-1 px-2 justify-between bg-white dark:bg-blue-600 dark:border-blue-600">
-                          <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                        <div className="flex flex-row gap-2 items-center border border-input rounded-lg py-1 px-2 justify-between bg-card">
+                          <div className="flex flex-row gap-2 items-center text-foreground">
                             <img
                               src={
                                 theme === 'dark'
@@ -184,14 +298,14 @@ const Dashboard = () => {
                             <div>Gitlab</div>
                           </div>
                           <div className="flex flex-row gap-1 items-center">
-                            <div className="w-2 h-2 bg-blue-200 dark:bg-green-100 rounded-full"></div>
-                            <div className="text-xs text-blue-200 dark:text-green-100">
+                            <div className="w-2 h-2 bg-primary rounded-full"></div>
+                            <div className="text-xs text-primary">
                               Connected
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-row gap-2 items-center border-[1px] border-solid border-blue-200 rounded-lg py-1 px-2 justify-between bg-white dark:bg-blue-600 dark:border-blue-600">
-                          <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                        <div className="flex flex-row gap-2 items-center border border-input rounded-lg py-1 px-2 justify-between bg-card">
+                          <div className="flex flex-row gap-2 items-center text-foreground">
                             <img
                               src={
                                 theme === 'dark'
@@ -204,14 +318,14 @@ const Dashboard = () => {
                             <div>Github</div>
                           </div>
                           <div className="flex flex-row gap-1 items-center">
-                            <div className="w-2 h-2 bg-blue-200 dark:bg-green-100 rounded-full"></div>
-                            <div className="text-xs text-blue-200 dark:text-green-100">
+                            <div className="w-2 h-2 bg-primary rounded-full"></div>
+                            <div className="text-xs text-primary">
                               Connected
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-row gap-2 items-center border-[1px] border-solid border-blue-200 rounded-lg py-1 px-2 justify-between bg-white dark:bg-blue-600 dark:border-blue-600">
-                          <div className="flex flex-row gap-2 items-center text-gray-700 dark:text-white">
+                        <div className="flex flex-row gap-2 items-center border border-input rounded-lg py-1 px-2 justify-between bg-card">
+                          <div className="flex flex-row gap-2 items-center text-foreground">
                             <img
                               src={
                                 theme === 'dark'
@@ -224,15 +338,15 @@ const Dashboard = () => {
                             <div>Slack</div>
                           </div>
                           <div className="flex flex-row gap-1 items-center">
-                            <div className="w-2 h-2 bg-blue-200 dark:bg-green-100 rounded-full"></div>
-                            <div className="text-xs text-blue-200 dark:text-green-100">
+                            <div className="w-2 h-2 bg-primary rounded-full"></div>
+                            <div className="text-xs text-primary">
                               Connected
                             </div>
                           </div>
                         </div>
                       </div>
                       <div>
-                        <button className="text-xs text-blue-200 dark:text-blue-100 flex flex-row gap-1 items-center justify-center">
+                        <button className="text-xs text-primary flex flex-row gap-1 items-center justify-center">
                           Edit
                           <FontIcon type="edit" className="w-4 h-4" />
                         </button>
@@ -242,55 +356,49 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="w-2/5">
-                <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-white dark:bg-blue-600 border-b-[1px] border-solid border-gray-200 dark:border-blue-600">
-                  <span className="text-gray-700 dark:text-white">
-                    Project versions
-                  </span>
-                  <FontIcon type="recently-viewed" className="w-4 h-4" />
+                <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
+                  <span className="text-foreground">Project versions</span>
                 </div>
-                <div className="p-6 flex flex-col rounded-b-lg bg-white dark:bg-blue-500">
-                  <div className="flex flex-col gap-2 h-[400px] overflow-y-auto">
-                    <div className="text-xs text-blue-200 dark:text-blue-100">
-                      Today
-                    </div>
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="flex flex-col mb-2">
-                        <div className="flex flex-row gap-2 items-center justify-between">
-                          <div className="text-gray-700 dark:text-white">
-                            Version 1.0.0
-                          </div>
-                          <div className="text-gray-500 dark:text-blue-100">
-                            7:45PM
-                          </div>
-                        </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
-                          RAG and prompt model updates
-                        </div>
+                <div className="p-6 flex flex-col min-h-[325px] justify-between rounded-b-lg bg-card">
+                  <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
+                    {versions.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">
+                        No versions yet
                       </div>
-                    ))}
-                    <div className="text-xs text-blue-200 dark:text-blue-100">
-                      July 30
-                    </div>
-                    {Array.from({ length: 2 }).map((_, index) => (
-                      <div key={index} className="flex flex-col">
-                        <div className="flex flex-row gap-2 items-center justify-between">
-                          <div className="text-gray-700 dark:text-white">
-                            Version 1.0.0
+                    ) : (
+                      versions.slice(0, 10).map((v, index) => (
+                        <div
+                          key={`${v.id}_${index}`}
+                          className="flex flex-col mb-2"
+                        >
+                          <div className="flex flex-row gap-2 items-center justify-between">
+                            <div className="text-foreground flex items-center gap-2">
+                              <span>{v.name}</span>
+                              {v.isCurrent ? (
+                                <span className="px-2 py-0.5 rounded-2xl text-[10px] border border-teal-200 text-teal-700 bg-teal-50 dark:border-teal-800 dark:text-teal-300 dark:bg-teal-900/30">
+                                  current
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {v.date}
+                            </div>
                           </div>
-                          <div className="text-gray-500 dark:text-blue-100">
-                            7:45PM
-                          </div>
+                          {v.description ? (
+                            <div className="text-xs text-muted-foreground">
+                              {v.description}
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="text-xs text-blue-200 dark:text-blue-100">
-                          RAG and prompt model updates
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                   <div className="w-full flex justify-center items-center mt-4">
-                    <button className="w-full rounded-lg py-1 border-[1px] border-solid flex flex-row gap-2 items-center justify-center border-blue-200 text-blue-200 hover:bg-blue-50 dark:border-green-100 dark:text-green-100">
-                      View config
-                      <FontIcon type="code" className="w-4 h-4" />
+                    <button
+                      className="w-full rounded-lg py-1 border flex flex-row items-center justify-center border-input text-primary hover:bg-accent/20"
+                      onClick={() => navigate('/chat/versions')}
+                    >
+                      View all versions
                     </button>
                   </div>
                 </div>
@@ -299,61 +407,7 @@ const Dashboard = () => {
           </>
         )}
       </div>
-      <ProjectModal
-        isOpen={isModalOpen}
-        mode={modalMode}
-        initialName={projectName}
-        initialDescription={''}
-        onClose={() => setIsModalOpen(false)}
-        onSave={(name: string) => {
-          try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
-            // prevent duplicate names
-            if (list.includes(name) && name !== projectName) {
-              console.warn('Project rename skipped: duplicate name', name)
-              setIsModalOpen(false)
-              return
-            }
-            const updated = list.map(n => (n === projectName ? name : n))
-            localStorage.setItem('projectsList', JSON.stringify(updated))
-            localStorage.setItem('activeProject', name)
-            setProjectName(name)
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: name })
-              )
-            } catch (err) {
-              console.error('Failed to dispatch lf-active-project event:', err)
-            }
-          } catch (err) {
-            console.error('Failed to update project in localStorage:', err)
-          }
-          setIsModalOpen(false)
-        }}
-        onDelete={() => {
-          try {
-            const stored = localStorage.getItem('projectsList')
-            const list = stored ? (JSON.parse(stored) as string[]) : []
-            const updated = list.filter(n => n !== projectName)
-            localStorage.setItem('projectsList', JSON.stringify(updated))
-            // pick a fallback active project if any
-            const next = updated[0] || 'aircraft-mx-flow'
-            localStorage.setItem('activeProject', next)
-            setProjectName(next)
-            try {
-              window.dispatchEvent(
-                new CustomEvent<string>('lf-active-project', { detail: next })
-              )
-            } catch (err) {
-              console.error('Failed to dispatch lf-active-project event:', err)
-            }
-          } catch (err) {
-            console.error('Failed to delete project from localStorage:', err)
-          }
-          setIsModalOpen(false)
-        }}
-      />
+      {/* Modal rendered globally in App */}
     </>
   )
 }

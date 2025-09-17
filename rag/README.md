@@ -1,10 +1,19 @@
-# RAG System - Complete Documentation
+# RAG System - Next Generation Document Processing
 
-A powerful, extensible RAG (Retrieval-Augmented Generation) system featuring **strategy-first configuration**, **hash-based deduplication**, and **modular architecture**. Built for developers who want production-ready document processing with minimal setup.
+A powerful, extensible RAG (Retrieval-Augmented Generation) system featuring **new schema-based configuration**, **automatic file routing**, and **unified vector storage**. Built for production-ready document processing with the new v1 schema format.
+
+## 🎉 What's New in v1
+
+- **📋 New RAG Schema Format**: Clean, structured YAML with `databases` and `data_processing_strategies`
+- **🌍 Global Config Integration**: Uses `llamafarm.yaml` for unified project configuration
+- **🚀 DirectoryParser Always Active**: Automatic file detection and routing at strategy level
+- **🔄 Unified Vector Store**: All databases can share processing strategies
+- **🎯 Clear CLI Arguments**: `--database` and `--data-processing-strategy` for explicit control
+- **📦 Enhanced Parser System**: Naming convention `{ParserType}_{Implementation}` (e.g., `PDFParser_LlamaIndex`)
 
 ## 🌟 Key Features
 
-- **🎯 Strategy-First Design**: Configure entire pipelines through YAML strategies
+- **🎯 Schema-First Design**: Configure entire pipelines through the new RAG schema
 - **🔍 Advanced Retrieval**: Multiple retrieval strategies (similarity, reranked, filtered, hybrid)
 - **🚫 Deduplication System**: Hash-based document and chunk deduplication
 - **📊 Document Management**: Full CRUD operations with version tracking
@@ -12,303 +21,258 @@ A powerful, extensible RAG (Retrieval-Augmented Generation) system featuring **s
 - **💻 CLI-First**: Comprehensive command-line interface for all operations
 - **🧹 Automatic Cleanup**: Built-in collection management and cleanup
 
-## 📚 Documentation Structure
+## 📚 Documentation
 
-- **[Quick Start](#-quick-start)** - Get running in 2 minutes
-- **[CLI Guide](cli/README.md)** - Complete CLI documentation
+- **[Schema Documentation](docs/SCHEMA.md)** - Complete v1 schema reference
+- **[Strategy System](docs/STRATEGY_SYSTEM.md)** - How strategies work
+- **[Parser Guide](docs/PARSERS.md)** - Available parsers and configuration
+- **[CLI Guide](docs/CLI.md)** - Command-line interface documentation
 - **[Demos Guide](demos/README.md)** - Interactive demonstrations
-- **[Strategy System](docs/STRATEGY_SYSTEM.md)** - Configuration and strategies
-- **[Advanced Usage](docs/ADVANCED_USAGE.md)** - Production deployment
-- **[API Reference](docs/API_REFERENCE.md)** - Programmatic usage
-- **[Component Guide](docs/COMPONENTS.md)** - Parsers, extractors, stores
+- **[Component Guide](docs/COMPONENTS.md)** - Extractors, embedders, stores
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - **Python 3.8+**
-- **UV** (recommended) or pip - [UV Installation](https://docs.astral.sh/uv/getting-started/installation/)
+- **UV** (recommended) - [UV Installation](https://docs.astral.sh/uv/)
 - **Ollama** (for local embeddings) - [Download](https://ollama.com/download)
 
-### 1. Installation (1 minute)
+### 1. Installation
 
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd rag/
 
-# Option 1: Using UV (recommended)
+# Using UV (recommended)
 uv sync
-
-# Option 2: Using pip
-pip install -r requirements.txt
 
 # Setup Ollama
 ollama serve                     # Start in separate terminal
 ollama pull nomic-embed-text     # Download embedding model
 ```
 
-### 2. Test Installation
+### 2. Test All Strategies
 
 ```bash
-# Run system test
-python cli.py test
+# Test all built-in strategies
+python demos/demo_test_strategies_quick.py
 
 # Expected output:
-# ✅ CLI is working!
-# ✅ Configuration loaded successfully
-# ✅ Ollama embedder is accessible
+# ✅ pdf_processing          PASS
+# ✅ text_processing         PASS
+# ✅ markdown_processing     PASS
+# ✅ csv_processing          PASS
+# ✅ multi_format_llamaindex PASS
+# ✅ auto_processing         PASS
 ```
 
-### 3. Run Your First Demo (30 seconds)
+### 3. Basic Usage with Global Config
 
 ```bash
-# Interactive demo menu
-python demos/run_all_cli_demos.py
+# Create a llamafarm.yaml config (see config/templates/default.yaml for example)
 
-# Or run a specific demo
-python demos/demo1_research_papers_cli.py
-```
+# Ingest documents with database and processing strategy
+uv run python cli.py --config llamafarm.yaml \
+    ingest path/to/document.pdf \
+    --database main_database \
+    --data-processing-strategy pdf_processing
 
-### 4. Basic CLI Usage
+# Search across all documents
+uv run python cli.py --config llamafarm.yaml \
+    search "your query" \
+    --database main_database
 
-```bash
-# Ingest documents
-python cli.py ingest path/to/documents --strategy research_papers_demo
-
-# Search
-python cli.py search "your query" --strategy research_papers_demo
+# Search with specific retrieval strategy
+uv run python cli.py --config llamafarm.yaml \
+    search "your query" \
+    --database main_database \
+    --retrieval-strategy filtered_search
 
 # View collection info
-python cli.py info --strategy research_papers_demo
-
-# Clean up
-python cli.py manage delete --all --strategy research_papers_demo
+uv run python cli.py --config llamafarm.yaml \
+    info --database main_database
 ```
 
-## 📖 Core Concepts
+## 📖 New Schema Structure
 
-### Strategy System
-The RAG system uses a **strategy-first** approach where entire pipelines are configured through YAML files:
+The v1 schema uses a clean, organized structure with two main sections:
 
+### Databases Configuration
 ```yaml
-research_papers_demo:
-  description: "Optimized for academic papers"
-  parsers:
-    - type: PDFParser
-    - type: TextParser
-  extractors:
-    - type: HeadingExtractor
-    - type: KeywordExtractor
-  embedder:
-    type: OllamaEmbedder
-    model: nomic-embed-text
-  vector_store:
-    type: ChromaStore
-    collection_name: research_papers
+databases:
+  - name: "main_database"
+    type: "ChromaStore"
+    config:
+      persist_directory: "./data/chroma_db"
+      collection_name: "documents"
+    embedding_strategies:
+      - name: "default_embeddings"
+        type: "OllamaEmbedder"
+        config:
+          model: "nomic-embed-text"
+    retrieval_strategies:
+      - name: "basic_search"
+        type: "BasicSimilarityStrategy"
+        config:
+          top_k: 10
 ```
 
-[Learn more about strategies →](docs/STRATEGY_SYSTEM.md)
-
-### Deduplication System
-Built-in hash-based deduplication prevents duplicate storage:
-
-- **Document-level hashing**: Entire documents tracked by content hash
-- **Chunk-level hashing**: Individual chunks have unique IDs
-- **Source tracking**: Files tracked to prevent re-ingestion
-
-[Learn more about deduplication →](docs/DEDUPLICATION.md)
-
-### Component Architecture
-
-```
-Input → Parser → Extractor → Embedder → Vector Store → Retriever
-         ↓          ↓           ↓            ↓             ↓
-     [Documents] [Metadata] [Vectors]  [Storage]    [Results]
-```
-
-[Learn more about components →](docs/COMPONENTS.md)
-
-## 🎯 Common Use Cases
-
-### 1. Research Paper Analysis
-```bash
-# Configure for academic papers
-python cli.py ingest papers/ --strategy research_papers_demo
-python cli.py search "transformer architecture" --strategy research_papers_demo
-```
-
-### 2. Customer Support System
-```bash
-# Process support tickets
-python cli.py ingest tickets.csv --strategy customer_support_demo
-python cli.py search "password reset" --strategy customer_support_demo
-```
-
-### 3. Code Documentation
-```bash
-# Index code documentation
-python cli.py ingest docs/ --strategy code_documentation_demo
-python cli.py search "API authentication" --strategy code_documentation_demo
-```
-
-### 4. Document Management
-```bash
-# Manage collections
-python cli.py manage stats --strategy my_strategy
-python cli.py manage delete --older-than 30 --strategy my_strategy
-python cli.py manage delete --all --strategy my_strategy
-```
-
-## 🔧 CLI Commands Overview
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `test` | Test system setup | `python cli.py test` |
-| `ingest` | Add documents to collection | `python cli.py ingest path/ --strategy demo` |
-| `search` | Search documents | `python cli.py search "query" --strategy demo` |
-| `info` | Show collection information | `python cli.py info --strategy demo` |
-| `manage` | Collection management | `python cli.py manage delete --all --strategy demo` |
-| `strategies` | List/show strategies | `python cli.py strategies list` |
-
-[Complete CLI Reference →](cli/README.md)
-
-## 📊 Demos
-
-The system includes 6 comprehensive demos:
-
-1. **Research Papers** - Academic document processing
-2. **Customer Support** - Ticket analysis and routing
-3. **Code Documentation** - Technical documentation search
-4. **News Analysis** - News article processing with entity extraction
-5. **Business Reports** - Financial document analysis
-6. **Document Management** - Advanced collection operations
-
-[Run Demos →](demos/README.md)
-
-## 🏗️ Project Structure
-
-```
-rag/
-├── cli.py                  # Main CLI entry point
-├── core/                   # Core abstractions
-│   ├── base.py            # Base classes
-│   ├── config.py          # Configuration management
-│   ├── document_manager.py # Document lifecycle
-│   └── strategies.py      # Strategy system
-├── components/            # Pluggable components
-│   ├── parsers/          # Document parsers
-│   ├── extractors/       # Metadata extractors
-│   ├── embedders/        # Embedding models
-│   ├── stores/           # Vector databases
-│   └── retrievers/       # Search strategies
-├── demos/                # Demo applications
-│   ├── demo_strategies.yaml # Demo configurations
-│   └── static_samples/   # Sample data
-├── utils/                # Utilities
-│   └── hash_utils.py     # Deduplication system
-└── docs/                 # Documentation
-```
-
-## 🔌 Programmatic Usage
-
-```python
-from core.strategies import StrategyManager
-from core.config import load_config
-
-# Load strategy
-manager = StrategyManager(strategies_file="demo_strategies.yaml")
-config = manager.get_strategy_config("research_papers_demo")
-
-# Create pipeline
-pipeline = create_pipeline_from_config(config)
-
-# Process documents
-results = pipeline.ingest("path/to/documents")
-
-# Search
-search_results = pipeline.search("your query", top_k=5)
-```
-
-[API Reference →](docs/API_REFERENCE.md)
-
-## 🛠️ Configuration
-
-### Environment Variables
-```bash
-export OLLAMA_HOST=http://localhost:11434
-export CHROMA_PERSIST_DIR=./vectordb
-export LOG_LEVEL=INFO
-```
-
-### Custom Strategies
-Create your own strategies in YAML:
-
+### Data Processing Strategies
 ```yaml
-my_custom_strategy:
-  description: "My custom configuration"
-  parsers:
-    - type: PDFParser
-      config:
-        extract_images: true
-  extractors:
-    - type: CustomExtractor
-      config:
-        patterns: ["\\d{4}-\\d{2}-\\d{2}"]
-  # ... more configuration
+data_processing_strategies:
+  - name: "pdf_processing"
+    description: "Standard PDF document processing"
+    # DirectoryParser configuration (ALWAYS ACTIVE)
+    directory_config:
+      recursive: true
+      include_patterns: ["*.pdf"]
+      allowed_mime_types: ["application/pdf"]
+      allowed_extensions: [".pdf"]
+    parsers:
+      - type: "PDFParser_LlamaIndex"
+        mime_types: ["application/pdf"]
+        file_extensions: [".pdf"]
+        config:
+          chunk_size: 1000
+          chunk_overlap: 200
+    extractors:
+      - type: "EntityExtractor"
+        config:
+          entity_types: ["PERSON", "ORG", "DATE"]
 ```
 
-[Configuration Guide →](docs/CONFIGURATION.md)
+## 🔧 Available Parsers
+
+All parsers follow the naming convention `{Type}_{Implementation}`:
+
+| Parser Type | Implementations | File Types |
+|------------|----------------|------------|
+| **PDF** | `PDFParser_LlamaIndex`, `PDFParser_PyPDF2` | `.pdf` |
+| **Text** | `TextParser_LlamaIndex`, `TextParser_Python` | `.txt`, `.log` |
+| **CSV** | `CSVParser_LlamaIndex`, `CSVParser_Pandas`, `CSVParser_Python` | `.csv`, `.tsv` |
+| **Excel** | `ExcelParser_LlamaIndex`, `ExcelParser_Pandas`, `ExcelParser_OpenPyXL` | `.xlsx`, `.xls` |
+| **Word** | `DocxParser_LlamaIndex`, `DocxParser_PythonDocx` | `.docx` |
+| **Markdown** | `MarkdownParser_LlamaIndex`, `MarkdownParser_Python` | `.md`, `.markdown` |
+
+## 🎯 Strategy Naming Convention
+
+Strategies are named using the pattern: `{data_processing_strategy}_{database_name}`
+
+Examples:
+- `pdf_processing_main_database`
+- `text_processing_research_database`
+- `multi_format_llamaindex_main_database`
+
+## 🚦 How It Works
+
+1. **DirectoryParser** (always active) scans files/directories based on `directory_config`
+2. Files are filtered by MIME type and extension at strategy level
+3. Each file is routed to the appropriate parser based on its type
+4. Parsers process documents into chunks
+5. Extractors enrich chunks with metadata
+6. Embedders generate vector representations
+7. Vectors are stored in the configured database
+8. Retrieval strategies enable searching
+
+## 📋 Built-in Strategies
+
+From `config/templates/default.yaml`:
+
+1. **pdf_processing** - Optimized for PDF documents
+2. **text_processing** - Plain text file processing
+3. **markdown_processing** - Markdown with structure preservation
+4. **csv_processing** - Structured data from CSV files
+5. **multi_format_llamaindex** - Handles multiple formats with LlamaIndex
+6. **auto_processing** - Generic fallback for any text-like file
 
 ## 🧪 Testing
 
 ```bash
 # Run all tests
-pytest
+uv run pytest tests/
 
-# Run specific test categories
-pytest tests/unit/
-pytest tests/integration/
-pytest tests/e2e/
+# Test specific functionality
+uv run pytest tests/test_strategies.py -v
 
-# Test with coverage
-pytest --cov=. --cov-report=html
+# Quick integration test
+python demos/demo_test_all_strategies.py
+```
+
+## 📊 Example: Complete Workflow
+
+```bash
+# 1. Start with a clean slate
+python cli.py --strategy-file config/templates/default.yaml \
+    manage delete --all --strategy pdf_processing_main_database
+
+# 2. Ingest various document types
+python cli.py --strategy-file config/templates/default.yaml \
+    ingest docs/papers/ --strategy pdf_processing_main_database
+
+python cli.py --strategy-file config/templates/default.yaml \
+    ingest docs/data.csv --strategy csv_processing_main_database
+
+# 3. Search across all documents (same vector store)
+python cli.py --strategy-file config/templates/default.yaml \
+    search "machine learning results" --top-k 5 \
+    --strategy text_processing_main_database
+
+# 4. Get collection statistics
+python cli.py --strategy-file config/templates/default.yaml \
+    info --strategy pdf_processing_main_database
+```
+
+## 🛠️ Advanced Configuration
+
+See [config/templates/advanced.yaml](config/templates/advanced.yaml) for examples of:
+- Multiple databases with different settings
+- Custom embedding strategies per database
+- Advanced retrieval strategies (hybrid, reranked)
+- Complex parser configurations
+- Custom extractor pipelines
+
+## 📝 Creating Custom Strategies
+
+1. Create a YAML file following the schema:
+```yaml
+databases:
+  - name: "custom_db"
+    type: "ChromaStore"
+    # ... database config
+
+data_processing_strategies:
+  - name: "custom_processing"
+    directory_config:
+      # File filtering rules
+    parsers:
+      # Parser configurations
+    extractors:
+      # Extractor pipeline
+```
+
+2. Use with CLI:
+```bash
+python cli.py --strategy-file my_strategies.yaml \
+    ingest documents/ --strategy custom_processing_custom_db
 ```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcome! Please ensure:
+- New parsers follow the `{Type}_{Implementation}` naming convention
+- Strategies follow the new RAG schema format
+- Tests are added for new functionality
+- Documentation is updated
 
-### Development Setup
-```bash
-# Install dev dependencies
-uv sync --dev
+## 📄 License
 
-# Run pre-commit hooks
-pre-commit install
+[License information here]
 
-# Run linting
-ruff check .
-black .
-```
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Documentation**: [Full Docs](docs/)
-- **Issues**: [GitHub Issues](https://github.com/...)
-- **Discussions**: [GitHub Discussions](https://github.com/...)
-
-## 🎉 Acknowledgments
+## 🙏 Acknowledgments
 
 Built with:
-- [ChromaDB](https://www.trychroma.com/) - Vector database
-- [Ollama](https://ollama.com/) - Local LLM embeddings
-- [LangChain](https://langchain.com/) - Optional framework support
-- [Rich](https://github.com/Textualize/rich) - Terminal formatting
-
----
-
-**Ready to build?** Start with the [CLI Guide](cli/README.md) or jump into the [Demos](demos/README.md)!
+- LlamaIndex for document parsing
+- ChromaDB for vector storage
+- Ollama for local embeddings
+- Rich for beautiful CLI output

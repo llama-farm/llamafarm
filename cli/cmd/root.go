@@ -3,9 +3,18 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
+
+var debug bool
+var serverURL string = "http://localhost:8000"
+var ollamaHost string = "http://localhost:11434"
+var serverStartTimeout time.Duration
+var overrideCwd string
 
 var rootCmd = &cobra.Command{
 	Use:   "lf",
@@ -17,6 +26,13 @@ manage your data, configurations, models,and operations.`,
 		// Default behavior when no subcommand is specified
 		fmt.Println("Welcome to LlamaFarm!")
 		cmd.Help()
+	},
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Flags are parsed at this point; honor --debug
+		if debug {
+			InitDebugLogger("")
+		}
+		return nil
 	},
 }
 
@@ -30,13 +46,35 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+	// Global persistent flags
+	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug output")
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
+	rootCmd.PersistentFlags().DurationVar(&serverStartTimeout, "server-start-timeout", 45*time.Second, "How long to wait for local server to become ready when auto-starting (e.g. 45s, 1m)")
+	rootCmd.PersistentFlags().StringVar(&overrideCwd, "cwd", "", "Override the current working directory for CLI operations")
 
-	// Example of a persistent flag
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.llamafarm-cli.yaml)")
+	if debug {
+		InitDebugLogger("")
+	}
+}
 
-	// Example of a local flag
-	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+// getEffectiveCWD returns the directory to treat as the working directory.
+// If the global --cwd flag is provided, it returns its absolute path; otherwise os.Getwd().
+func getEffectiveCWD() string {
+	if strings.TrimSpace(overrideCwd) != "" {
+		if filepath.IsAbs(overrideCwd) {
+			return overrideCwd
+		}
+		abs, err := filepath.Abs(overrideCwd)
+		if err != nil {
+			return "."
+		}
+		return abs
+	}
+
+	wd, _ := os.Getwd()
+	if wd == "" {
+		return "."
+	}
+
+	return wd
 }

@@ -1,8 +1,10 @@
-# Build stage - using bullseye instead of alpine for better ARM64 support
-FROM node:20-bullseye-slim AS builder
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+# Build stage - use Alpine to avoid dpkg/qemu issues on multi-arch
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache python3 make g++
 
 # Set working directory
 WORKDIR /app
@@ -10,19 +12,26 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with a workaround for the rollup ARM64 issue
-RUN npm install --legacy-peer-deps
+# Disable husky/lifecycle scripts during container installs
+ENV HUSKY=0
+
+# Install dependencies (allow scripts so rollup can install its native binary)
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
 
-# Workaround for rollup ARM64 dependency issue
-RUN rm -rf node_modules package-lock.json && \
-    npm install --legacy-peer-deps && \
-    npm run build
+# Workaround for rollup optional native binary on platform images
+# npm recommends reinstalling without lock after copying sources
+RUN npm cache clean --force \
+    && rm -rf node_modules package-lock.json \
+    && npm install --legacy-peer-deps
 
-# Production stage
-FROM nginx:alpine
+# Build
+RUN npm run build
+
+# Production stage (target platform)
+FROM --platform=$TARGETPLATFORM nginx:alpine
 
 # Install jq for environment variable processing
 RUN apk add --no-cache jq

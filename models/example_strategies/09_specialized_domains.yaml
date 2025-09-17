@@ -1,0 +1,111 @@
+# Specialized Domain Strategies
+# Configurations for specific use cases and domains
+
+strategies:
+  - name: medical_ai_assistant
+    description: Medical domain AI with safety constraints
+    components:
+      medical_model:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          temperature: 0.2
+          top_p: 0.95
+          system_prompt: |
+            You are a medical AI assistant. Always include disclaimers about consulting healthcare professionals.
+            Never provide diagnoses or treatment recommendations without appropriate caveats.
+    safety:
+      content_filtering: true
+      pii_detection: true
+      medical_disclaimer: true
+      audit_trail: true
+    constraints:
+      max_response_length: 2000
+      prohibited_topics: ["diagnosis", "prescription", "treatment plan"]
+      required_disclaimers: ["consult healthcare provider", "not medical advice"]
+    
+  - name: legal_document_analyzer
+    description: Legal document analysis and generation
+    components:
+      analyzer:
+        type: openai_compatible
+        config:
+          api_key: ${ANTHROPIC_API_KEY}
+          model: claude-3-opus-20240229
+          base_url: https://api.anthropic.com/v1
+          temperature: 0.1
+          max_tokens: 8192
+          system_prompt: "Analyze legal documents with precision. Cite relevant sections."
+      summarizer:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          temperature: 0.3
+    document_processing:
+      ocr_enabled: true
+      format_preservation: true
+      citation_extraction: true
+      redaction_support: true
+    
+  - name: financial_analysis
+    description: Financial analysis and reporting
+    components:
+      analyst:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          temperature: 0.1
+          system_prompt: "Provide financial analysis based on data. Include relevant metrics and ratios."
+      # Note: Code interpreter/calculator would be handled
+      # via external tool integration or function calling
+      calculator:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-4-turbo-preview
+          base_url: https://api.openai.com/v1
+          temperature: 0.0
+          system_prompt: "You are a financial calculator. Use precise calculations."
+    data_sources:
+      - type: bloomberg
+        api_key: ${BLOOMBERG_API_KEY}
+      - type: yahoo_finance
+        rate_limit: 100
+    compliance:
+      sec_regulations: true
+      gdpr_compliant: true
+      sox_compliant: true
+    
+  - name: education_tutor
+    description: Adaptive educational tutor
+    components:
+      tutor:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.7
+          system_prompt: "You are a patient, encouraging tutor. Adapt explanations to student level."
+      quiz_generator:
+        type: openai_compatible
+        config:
+          api_key: ${OPENAI_API_KEY}
+          model: gpt-3.5-turbo
+          base_url: https://api.openai.com/v1
+          temperature: 0.5
+    personalization:
+      track_progress: true
+      adaptive_difficulty: true
+      learning_style_detection: true
+    features:
+      step_by_step_solutions: true
+      visual_aids: true
+      practice_problems: true
+      progress_tracking: true

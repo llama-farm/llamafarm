@@ -4,7 +4,8 @@ import threading
 import uuid
 from pathlib import Path
 
-from atomic_agents import AtomicAgent  # type: ignore
+import celery.result
+from atomic_agents import AtomicAgent
 from fastapi import APIRouter, Header, HTTPException, Response
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel
@@ -12,7 +13,12 @@ from pydantic import BaseModel
 from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
-from api.routers.shared.response_utils import set_session_header
+from api.routers.rag.rag_query import QueryRequest, QueryResponse, handle_rag_query
+from api.routers.shared.response_utils import (
+    create_streaming_response_from_iterator,
+    set_session_header,
+)
+from core.celery import app
 from services.project_chat_service import project_chat_service
 from services.project_service import ProjectService
 
@@ -194,6 +200,7 @@ async def chat(
     session_id: str | None = Header(None, alias="X-Session-ID"),
 ):
     """Send a message to the chat agent"""
+    project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
 
     # If no session ID provided, create a new one and ensure thread-safe session map access
@@ -216,13 +223,96 @@ async def chat(
     if latest_user_message is None:
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
 
-    completion = project_chat_service.chat(
-        project_config=project_config,
-        chat_agent=agent,
-        message=latest_user_message,
-    )
+    if request.stream:
+        return create_streaming_response_from_iterator(
+            request,
+            project_chat_service.stream_chat(
+                project_dir=project_dir,
+                project_config=project_config,
+                chat_agent=agent,
+                message=latest_user_message,
+                rag_enabled=request.rag_enabled,
+                database=request.database,
+                rag_top_k=request.rag_top_k,
+                rag_score_threshold=request.rag_score_threshold,
+            ),
+            session_id,
+        )
 
-    # Set session header
+    try:
+        completion = await project_chat_service.chat(
+            project_dir=project_dir,
+            project_config=project_config,
+            chat_agent=agent,
+            message=latest_user_message,
+            rag_enabled=request.rag_enabled,
+            database=request.database,
+            rag_top_k=request.rag_top_k,
+            rag_score_threshold=request.rag_score_threshold,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chat service failed to generate a response: {e}",
+        ) from e
+
     set_session_header(response, session_id)
-
     return completion
+
+
+@router.post(
+    "/{namespace}/{project_id}/rag/query",
+    response_model=QueryResponse,
+    responses={
+        404: {"model": ErrorResponse, "description": "Database or strategy not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    }
+)
+async def rag_query(
+    namespace: str,
+    project_id: str,
+    request: QueryRequest
+):
+    """Perform a RAG query on the project's configured databases."""
+    # Get project configuration
+    project_service = ProjectService()
+    project_dir = project_service.get_project_dir(namespace, project_id)
+    
+    if not Path(project_dir).exists():
+        raise HTTPException(status_code=404, detail=f"Project {namespace}/{project_id} not found")
+    
+    project_config = ProjectService.load_config(namespace, project_id)
+    
+    if not project_config:
+        raise HTTPException(status_code=500, detail="Failed to load project configuration")
+    
+    # Handle the RAG query
+    response = await handle_rag_query(request, project_config, str(project_dir))
+    
+    return response
+
+
+@router.get("/{namespace}/{project_id}/tasks/{task_id}")
+async def get_task(namespace: str, project_id: str, task_id: str):
+    """Return state, progress meta, and result/error if available."""
+    res: celery.result.AsyncResult = app.AsyncResult(task_id)
+
+    payload = {
+        "task_id": task_id,
+        "state": res.state,
+        "meta": None,
+        "result": None,
+        "error": None,
+        "traceback": None,
+    }
+
+    if res.info:
+        payload["meta"] = res.info
+
+    if res.state == "SUCCESS":
+        payload["result"] = res.result
+    elif res.state == "FAILURE":
+        payload["error"] = str(res.result)
+        payload["traceback"] = res.traceback
+
+    return payload

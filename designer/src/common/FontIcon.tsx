@@ -18,10 +18,12 @@ const Integration = lazy(() => import('../assets/icons/Integration'))
 const MoonFilled = lazy(() => import('../assets/icons/MoonFilled'))
 const OpenPanel = lazy(() => import('../assets/icons/OpenPanel'))
 const Prompt = lazy(() => import('../assets/icons/Prompt'))
+const Model = lazy(() => import('../assets/icons/Model'))
 const RecentlyViewed = lazy(() => import('../assets/icons/RecentlyViewed'))
 const Search = lazy(() => import('../assets/icons/Search'))
 const Sun = lazy(() => import('../assets/icons/Sun'))
 const Test = lazy(() => import('../assets/icons/Test'))
+const Overflow = lazy(() => import('../assets/icons/Overflow'))
 const ThumbsDown = lazy(() => import('../assets/icons/ThumbsDown'))
 const ThumbsDownFilled = lazy(() => import('../assets/icons/ThumbsDownFilled'))
 const ThumbsUp = lazy(() => import('../assets/icons/ThumbsUp'))
@@ -29,6 +31,11 @@ const ThumbsUpFilled = lazy(() => import('../assets/icons/ThumbsUpFilled'))
 const Trashcan = lazy(() => import('../assets/icons/Trashcan'))
 const Upload = lazy(() => import('../assets/icons/Upload'))
 const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
+const Info = lazy(() => import('../assets/icons/Info'))
+const Eye = lazy(() => import('../assets/icons/Eye'))
+const EyeOff = lazy(() => import('../assets/icons/EyeOff'))
+const Rag = lazy(() => import('../assets/icons/Rag'))
+const Folder = lazy(() => import('../assets/icons/Folder'))
 
 type FontIconTypes =
   | 'add'
@@ -49,10 +56,12 @@ type FontIconTypes =
   | 'moon-filled'
   | 'open-panel'
   | 'prompt'
+  | 'model'
   | 'recently-viewed'
   | 'search'
   | 'sun'
   | 'test'
+  | 'overflow'
   | 'thumbs-down'
   | 'thumbs-down-filled'
   | 'thumbs-up'
@@ -60,6 +69,11 @@ type FontIconTypes =
   | 'trashcan'
   | 'upload'
   | 'user-avatar'
+  | 'info'
+  | 'eye'
+  | 'eye-off'
+  | 'rag'
+  | 'folder'
 
 export interface FontIconProps {
   className?: string
@@ -114,6 +128,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <OpenPanel />
       case 'prompt':
         return <Prompt />
+      case 'model':
+        return <Model />
       case 'recently-viewed':
         return <RecentlyViewed />
       case 'search':
@@ -122,6 +138,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Sun />
       case 'test':
         return <Test />
+      case 'overflow':
+        return <Overflow />
       case 'thumbs-down':
         return <ThumbsDown />
       case 'thumbs-down-filled':
@@ -136,6 +154,16 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Upload />
       case 'user-avatar':
         return <UserAvatar />
+      case 'info':
+        return <Info />
+      case 'eye':
+        return <Eye />
+      case 'eye-off':
+        return <EyeOff />
+      case 'rag':
+        return <Rag />
+      case 'folder':
+        return <Folder />
     }
   }, [type])
 

@@ -5,7 +5,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 
-from core.base import Embedder
+from rag.core.base import Embedder
 
 logger = logging.getLogger(__name__)
 

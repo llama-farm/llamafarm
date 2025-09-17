@@ -6,8 +6,8 @@ from typing import Dict, Any, List, Optional
 import logging
 import math
 
-from components.extractors.base import BaseExtractor
-from core.base import Document
+from rag.components.extractors.base import BaseExtractor
+from rag.core.base import Document
 
 logger = logging.getLogger(__name__)
 
@@ -488,18 +488,46 @@ class KeywordExtractor(BaseExtractor):
     def __init__(self, name: str = "KeywordExtractor", config: Optional[Dict[str, Any]] = None):
         super().__init__(name, config)
         
-        # Configuration
-        self.methods = self.config.get("methods", ["rake", "yake", "tfidf"])
+        # Debug logging
+        self.logger.debug(f"KeywordExtractor config received: {self.config}")
+        
+        # Configuration - check for 'algorithm' field first (from YAML config)
+        algorithm = self.config.get("algorithm", None)
+        if algorithm:
+            # Single algorithm specified (e.g., from YAML config: algorithm: yake)
+            self.methods = [algorithm.lower()]
+            self.logger.info(f"Using single algorithm from config: {algorithm}")
+        else:
+            # Fall back to 'methods' field or default - but DON'T default to all three!
+            # Only use all three if explicitly configured
+            self.methods = self.config.get("methods", ["rake"])  # Default to just RAKE
+        
         self.combine_results = self.config.get("combine_results", True)
         
         # Initialize extractors based on configuration
+        # Pass through the main config (including max_keywords) to each extractor
         self.extractors = {}
         if "rake" in self.methods:
-            self.extractors["rake"] = RAKEExtractor("RAKE", self.config.get("rake_config", {}))
+            rake_config = self.config.get("rake_config", {})
+            # Pass max_keywords from main config if not in rake_config
+            if "max_keywords" not in rake_config and "max_keywords" in self.config:
+                rake_config["max_keywords"] = self.config["max_keywords"]
+            self.extractors["rake"] = RAKEExtractor("RAKE", rake_config)
         if "yake" in self.methods:
-            self.extractors["yake"] = YAKEExtractor("YAKE", self.config.get("yake_config", {}))
+            yake_config = self.config.get("yake_config", {})
+            # Pass max_keywords from main config if not in yake_config
+            if "max_keywords" not in yake_config and "max_keywords" in self.config:
+                yake_config["max_keywords"] = self.config["max_keywords"]
+            self.extractors["yake"] = YAKEExtractor("YAKE", yake_config)
         if "tfidf" in self.methods:
-            self.extractors["tfidf"] = TFIDFExtractor("TFIDF", self.config.get("tfidf_config", {}))
+            tfidf_config = self.config.get("tfidf_config", {})
+            # Pass max_features from main config if not in tfidf_config
+            if "max_features" not in tfidf_config and "max_keywords" in self.config:
+                tfidf_config["max_features"] = self.config["max_keywords"]
+            self.extractors["tfidf"] = TFIDFExtractor("TFIDF", tfidf_config)
+        
+        # Log which extractors are being used
+        self.logger.info(f"KeywordExtractor initialized with methods: {self.methods}")
     
     def extract(self, documents: List[Document]) -> List[Document]:
         """Extract keywords using all configured methods."""

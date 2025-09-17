@@ -3,7 +3,6 @@ from asgi_correlation_id import CorrelationIdMiddleware
 
 import api.routers as routers
 from api.errors import register_exception_handlers
-from api.middleware.client_cwd import ClientCWDHeaderMiddleware
 from api.middleware.errors import ErrorHandlerMiddleware
 from api.middleware.structlog import StructLogMiddleware
 from core.logging import FastAPIStructLogger
@@ -14,13 +13,13 @@ logger = FastAPIStructLogger()
 
 API_PREFIX = "/v1"
 
+
 def llama_farm_api() -> fastapi.FastAPI:
     app = fastapi.FastAPI()
 
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(StructLogMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
-    app.add_middleware(ClientCWDHeaderMiddleware)
 
     # Register global exception handlers
     register_exception_handlers(app)
@@ -28,6 +27,9 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.projects_router, prefix=API_PREFIX)
     app.include_router(routers.datasets_router, prefix=API_PREFIX)
     app.include_router(routers.inference_router, prefix=API_PREFIX)
+    app.include_router(routers.rag_router, prefix=API_PREFIX)
+    # Health endpoints are exposed at the root (no version prefix)
+    app.include_router(routers.health_router)
 
     app.add_api_route(
         path="/", methods=["GET"], endpoint=lambda: {"message": "Hello, World!"}
@@ -42,3 +44,6 @@ def llama_farm_api() -> fastapi.FastAPI:
     )
 
     return app
+
+
+app = llama_farm_api()

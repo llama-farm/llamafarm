@@ -3,7 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -28,54 +29,29 @@ var designerStartCmd = &cobra.Command{
 		fmt.Println("Starting LlamaFarm designer container...")
 
 		// Check if Docker is available
-		if err := exec.Command("docker", "--version").Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Docker is not available. Please install Docker first.\n")
+		if err := ensureDockerAvailable(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Pull the latest llamafarm image if needed
-		fmt.Println("Pulling latest LlamaFarm image...")
-		pullCmd := exec.Command("docker", "pull", "ghcr.io/llamafarm/llamafarm:latest")
-		pullCmd.Stdout = os.Stdout
-		pullCmd.Stderr = os.Stderr
-		if err := pullCmd.Run(); err != nil {
-			fmt.Printf("Warning: Failed to pull latest image: %v\n", err)
-			fmt.Println("Continuing with existing local image...")
+		// Determine preferred port (default 7724) with env override
+		preferred := 7724
+		if v := strings.TrimSpace(os.Getenv("LF_DESIGNER_PORT")); v != "" {
+			if p, err := strconv.Atoi(v); err == nil && p > 0 && p <= 65535 {
+				preferred = p
+			}
 		}
 
-		// Start the container
-		fmt.Println("Starting container...")
-		dockerArgs := []string{
-			"run",
-			"-d", // Run in detached mode
-			"--name", "llamafarm-designer",
-			"-p", "8080:8080", // Map port 8080
-			"-v", fmt.Sprintf("%s:/workspace", getCurrentDir()), // Mount current directory
-			"llamafarm/designer:latest",
-		}
-
-		startCmd := exec.Command("docker", dockerArgs...)
-		output, err := startCmd.CombinedOutput()
-
+		url, err := StartDesignerInBackground(cmd.Context(), DesignerLaunchOptions{PreferredPort: preferred, Forced: false})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error starting container: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Output: %s\n", output)
 			os.Exit(1)
 		}
 
 		fmt.Println("🌾 LlamaFarm designer started successfully!")
-		fmt.Println("🌐 Open your browser and navigate to: http://localhost:8080")
-		fmt.Println("📁 Your current directory is mounted at /workspace in the container")
+		fmt.Printf("🌐 Open your browser and navigate to: %s\n", url)
 		fmt.Println("\nTo stop the designer, run: lf designer stop")
 	},
-}
-
-func getCurrentDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	return dir
 }
 
 func init() {

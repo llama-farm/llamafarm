@@ -1,14 +1,13 @@
-$schema: "http://json-schema.org/draft-07/schema#"
+# yaml-language-server: $schema=http://json-schema.org/draft-07/schema#
+
+$schema: http://json-schema.org/draft-07/schema#
 title: LlamaFarm Config
 type: object
 required:
   - version
   - name
   - namespace
-  - prompts
-  - rag
-  - datasets
-  - models
+  - runtime
 properties:
   version:
     type: string
@@ -28,16 +27,17 @@ properties:
     items:
       type: object
       required:
-        - prompt
+        - content
       properties:
-        name:
+        role:
           type: string
-          description: Prompt name
-        prompt:
+          description: Prompt role (e.g., "system", "user", "assistant")
+        content:
           type: string
-          description: Prompt text
-        description:
-          type: string
+          description: Prompt content (e.g., "You are a helpful assistant.")
+      example:
+        role: system
+        content: You are a helpful assistant that can answer questions and help with tasks.
     default: []
 
   rag:
@@ -51,14 +51,18 @@ properties:
       required:
         - name
         - files
+        - data_processing_strategy
+        - database
       properties:
         name:
           type: string
           description: Dataset name
-        rag_strategy:
+        data_processing_strategy:
           type: string
-          description: RAG strategy to use for the dataset
-          default: auto
+          description: RAG data processing strategy to use for the dataset
+        database:
+          type: string
+          description: RAG database to use for the dataset
         files:
           type: array
           description: List of file hashes
@@ -68,19 +72,28 @@ properties:
           default: []
     default: []
 
-  models:
-    type: array
-    description: List of model configurations
-    items:
-      type: object
-      required:
-        - provider
-        - model
-      properties:
-        provider:
-          type: string
-          enum: ["openai", "anthropic", "google", "local", "custom"]
-          default: local
-        model:
-          type: string
-          description: Model name or ID
+  runtime:
+    type: object
+    required:
+      - provider
+      - model
+    properties:
+      provider:
+        type: string
+        enum: [openai, ollama]
+        default: openai
+      model:
+        type: string
+        description: Model name or ID
+      base_url:
+        type: string
+        description: Base URL for the provider
+      api_key:
+        type: string
+        description: API key for the provider
+      instructor_mode:
+        type: string
+        description: Instructor mode to use for the provider
+      model_api_parameters:
+        description: Additional parameters passed to the API provider
+        additionalProperties: true

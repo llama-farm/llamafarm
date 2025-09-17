@@ -5,172 +5,23 @@ description: Schema for RAG system strategy configurations
 type: object
 additionalProperties: false
 properties:
-  strategies:
+  databases:
     type: array
-    title: Strategy Definitions
-    description: Array of strategy configurations
+    title: Database Configurations
+    description: Independent database definitions with their own embedding/retrieval strategies
     minItems: 1
     items:
-      $ref: "#/definitions/strategyDefinition"
-  strategy_templates:
-    type: object
-    title: Predefined Strategy Templates
-    description: Ready-to-use strategy configurations
-    default: {}
-    additionalProperties:
-      $ref: "#/definitions/strategyDefinition"
-  component_metadata:
-    type: object
-    title: Component Metadata
-    description: Metadata about available components
-    properties:
-      parsers:
-        type: object
-        additionalProperties:
-          type: object
-          properties:
-            description:
-              type: string
-            class_name:
-              type: string
-            module:
-              type: string
-            use_cases:
-              type: array
-              items:
-                type: string
-            dependencies:
-              type: object
-              properties:
-                required:
-                  type: array
-                  items:
-                    type: string
-                optional:
-                  type: array
-                  items:
-                    type: string
-      extractors:
-        type: object
-        additionalProperties:
-          type: object
-      embedders:
-        type: object
-        additionalProperties:
-          type: object
-      vector_stores:
-        type: object
-        additionalProperties:
-          type: object
-      retrieval_strategies:
-        type: object
-        additionalProperties:
-          type: object
-  compatibility_rules:
-    type: object
-    title: Component Compatibility Rules
-    description: Rules for component compatibility
-    properties:
-      component_compatibility:
-        type: object
-      embedder_store_compatibility:
-        type: object
-      strategy_store_optimization:
-        type: object
-  validation_rules:
-    type: object
-    title: Validation Rules
-    description: System-wide validation rules
-    properties:
-      required_fields:
-        type: object
-      field_constraints:
-        type: object
-      performance_warnings:
-        type: array
-        items:
-          type: object
-  best_practices:
-    type: object
-    title: Best Practices
-    description: Recommended configuration patterns
-    additionalProperties:
-      type: array
-      items:
-        type: string
-required:
-  - strategies
+      $ref: "#/definitions/databaseDefinition"
+  data_processing_strategies:
+    type: array
+    title: Data Processing Strategies
+    description: Processing pipelines for parsers and extractors
+    minItems: 1
+    items:
+      $ref: "#/definitions/dataProcessingStrategyDefinition"
+
+required: []
 definitions:
-  strategyDefinition:
-    type: object
-    title: Strategy Definition
-    description: Defines a complete RAG strategy configuration
-    required:
-      - name
-      - description
-      - components
-    additionalProperties: false
-    properties:
-      name:
-        type: string
-        pattern: ^[a-z][a-z0-9_]*$
-        minLength: 1
-        maxLength: 50
-        description: Unique strategy identifier
-        examples:
-          - simple
-          - customer_support
-          - legal_documents
-      description:
-        type: string
-        minLength: 10
-        maxLength: 500
-        description: Clear description of strategy purpose
-      tags:
-        type: array
-        uniqueItems: true
-        items:
-          type: string
-          pattern: ^[a-z0-9_-]+$
-        description: Tags for categorization
-        examples:
-          - - production
-            - optimized
-          - - development
-            - testing
-      use_cases:
-        type: array
-        minItems: 1
-        uniqueItems: true
-        items:
-          type: string
-          minLength: 3
-        description: Specific use cases
-      components:
-        $ref: "#/definitions/strategyComponents"
-  strategyComponents:
-    type: object
-    title: Strategy Components
-    required:
-      - parser
-      - embedder
-      - vector_store
-      - retrieval_strategy
-    additionalProperties: false
-    properties:
-      parser:
-        $ref: "#/definitions/parserConfig"
-      extractors:
-        type: array
-        maxItems: 10
-        items:
-          $ref: "#/definitions/extractorConfig"
-      embedder:
-        $ref: "#/definitions/embedderConfig"
-      vector_store:
-        $ref: "#/definitions/vectorStoreConfig"
-      retrieval_strategy:
-        $ref: "#/definitions/retrievalStrategyConfig"
   parserConfig:
     title: Parser Configuration
     description: Parser configuration
@@ -180,1063 +31,633 @@ definitions:
       type:
         type: string
         enum:
-          - CSVParser
-          - PDFParser
-          - MarkdownParser
-          - HTMLParser
-          - DocxParser
-          - ExcelParser
-          - PlainTextParser
+          # Auto-detection
+          - auto
+          # Tool-specific parsers from registry
+          - PDFParser_PyPDF2
+          - PDFParser_LlamaIndex
+          - CSVParser_Pandas
+          - CSVParser_Python
+          - CSVParser_LlamaIndex
+          - ExcelParser_OpenPyXL
+          - ExcelParser_Pandas
+          - ExcelParser_LlamaIndex
+          - DocxParser_PythonDocx
+          - DocxParser_LlamaIndex
+          - MarkdownParser_Python
+          - MarkdownParser_LlamaIndex
+          - TextParser_Python
+          - TextParser_LlamaIndex
       config:
         type: object
         oneOf:
-          - $ref: "#/definitions/parsers/csvParserConfig"
-          - $ref: "#/definitions/parsers/pdfParserConfig"
-          - $ref: "#/definitions/parsers/markdownParserConfig"
-          - $ref: "#/definitions/parsers/htmlParserConfig"
-          - $ref: "#/definitions/parsers/docxParserConfig"
-          - $ref: "#/definitions/parsers/excelParserConfig"
-          - $ref: "#/definitions/parsers/plainTextParserConfig"
+          # Auto-detection parser
+          - $ref: "#/definitions/parsers/autoParserConfig"
+          # Tool-specific parser configurations
+          - $ref: "#/definitions/parsers/pdfParserPyPDF2Config"
+          - $ref: "#/definitions/parsers/pdfParserLlamaIndexConfig"
+          - $ref: "#/definitions/parsers/csvParserPandasConfig"
+          - $ref: "#/definitions/parsers/csvParserPythonConfig"
+          - $ref: "#/definitions/parsers/csvParserLlamaIndexConfig"
+          - $ref: "#/definitions/parsers/excelParserOpenPyXLConfig"
+          - $ref: "#/definitions/parsers/excelParserPandasConfig"
+          - $ref: "#/definitions/parsers/excelParserLlamaIndexConfig"
+          - $ref: "#/definitions/parsers/docxParserPythonDocxConfig"
+          - $ref: "#/definitions/parsers/docxParserLlamaIndexConfig"
+          - $ref: "#/definitions/parsers/markdownParserPythonConfig"
+          - $ref: "#/definitions/parsers/markdownParserLlamaIndexConfig"
+          - $ref: "#/definitions/parsers/textParserPythonConfig"
+          - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
   parsers:
-    csvParserConfig:
+    # Auto-detection parser configuration
+    autoParserConfig:
       type: object
-      title: CSV Parser Configuration
+      title: Auto Parser Configuration
       additionalProperties: false
       properties:
-        content_fields:
-          type: array
-          items:
-            type: string
-          default:
-            - subject
-            - body
-          description: Fields to use as document content
-        metadata_fields:
-          type: array
-          items:
-            type: string
-          default: []
-          description: Fields to store as metadata
-        id_field:
-          type: string
-          default: id
-          description: Field to use as document ID
-        combine_content:
-          type: boolean
-          default: false
-          description: Whether to combine multiple content fields
-        content_separator:
-          type: string
-          default: " "
-          description: Separator for combined content
-        encoding:
-          type: string
-          default: utf-8
-          description: CSV file encoding
-        delimiter:
-          type: string
-          default: ","
-          maxLength: 1
-          description: CSV delimiter character
-    pdfParserConfig:
-      type: object
-      title: PDF Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract PDF metadata
-        extract_page_structure:
-          type: boolean
-          default: true
-          description: Extract page-level structure
-        combine_pages:
-          type: boolean
-          default: true
-          description: Combine all pages into single document
-        page_separator:
-          type: string
-          default: "
-
-
-            --- Page Break ---
-
-
-            "
-          description: Separator between pages
-        min_text_length:
-          type: integer
-          default: 10
-          minimum: 0
-          description: Minimum text length to include page
-        include_page_numbers:
-          type: boolean
-          default: true
-          description: Include page numbers in text
-        extract_outline:
-          type: boolean
-          default: true
-          description: Extract document outline
-        extract_images:
-          type: boolean
-          default: false
-          description: Extract embedded images
-        ocr_enabled:
-          type: boolean
-          default: false
-          description: Enable OCR for scanned documents
-    markdownParserConfig:
-      type: object
-      title: Markdown Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract YAML frontmatter
-        extract_headings:
-          type: boolean
-          default: true
-          description: Extract heading structure
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract all links
-        extract_code_blocks:
-          type: boolean
-          default: true
-          description: Extract code blocks
-        chunk_by_headings:
-          type: boolean
-          default: false
-          description: Split by headings
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve Markdown formatting
-        heading_level_split:
-          type: integer
-          default: 2
-          minimum: 1
-          maximum: 6
-          description: Heading level for splitting
-    htmlParserConfig:
-      type: object
-      title: HTML Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract meta tags
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract hyperlinks
-        extract_images:
-          type: boolean
-          default: true
-          description: Extract image sources
-        preserve_structure:
-          type: boolean
-          default: false
-          description: Preserve HTML structure
-        remove_scripts:
-          type: boolean
-          default: true
-          description: Remove JavaScript
-        remove_styles:
-          type: boolean
-          default: true
-          description: Remove CSS
-        text_only:
-          type: boolean
-          default: false
-          description: Extract only text
-    docxParserConfig:
-      type: object
-      title: DOCX Parser Configuration
-      additionalProperties: false
-      properties:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract document properties
-        extract_headers_footers:
-          type: boolean
-          default: true
-          description: Include headers and footers
-        extract_comments:
-          type: boolean
-          default: true
-          description: Extract comments
-        extract_tables:
-          type: boolean
-          default: true
-          description: Extract tables
-        extract_images:
-          type: boolean
-          default: false
-          description: Extract images
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve text formatting
-    excelParserConfig:
-      type: object
-      title: Excel Parser Configuration
-      additionalProperties: false
-      properties:
-        sheet_names:
-          type:
-            - array
-            - "null"
-          items:
-            type: string
-          default: null
-          description: Specific sheets to parse
-        combine_sheets:
-          type: boolean
-          default: false
-          description: Combine all sheets
-        extract_formulas:
-          type: boolean
-          default: false
-          description: Extract cell formulas
-        extract_charts:
-          type: boolean
-          default: false
-          description: Extract chart metadata
-        table_format:
-          type: string
-          enum:
-            - csv
-            - markdown
-            - json
-            - text
-          default: markdown
-          description: Table output format
-        header_row:
-          type: integer
-          default: 0
-          minimum: 0
-          description: Header row index
-    plainTextParserConfig:
-      type: object
-      title: Plain Text Parser Configuration
-      additionalProperties: false
-      properties:
-        encoding:
-          type: string
-          default: auto
-          description: Text encoding (auto-detect or specify like utf-8, latin1, etc.)
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: Chunk size in characters (null for no chunking)
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: Overlap between chunks in characters
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-          default: characters
-          description: Chunking strategy - how to split the text
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: Avoid splitting sentences in the middle when using character chunking
-        respect_paragraph_boundaries:
-          type: boolean
-          default: false
-          description: Avoid splitting paragraphs in the middle (overrides sentence boundaries)
-        min_chunk_size:
-          type: integer
-          default: 50
-          minimum: 10
-          maximum: 1000
-          description: Minimum chunk size to avoid creating tiny chunks
-        preserve_line_breaks:
-          type: boolean
-          default: true
-          description: Preserve line breaks in the text
-        strip_empty_lines:
-          type: boolean
-          default: true
-          description: Remove empty lines while preserving paragraph structure
-        detect_structure:
-          type: boolean
-          default: true
-          description: Detect and extract structural elements (headers, lists, code blocks)
-    HTMLParser:
-      description: Parses HTML documents and web pages
-      config_schema:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract meta tags
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract hyperlinks
-        extract_images:
-          type: boolean
-          default: true
-          description: Extract image sources
-        preserve_structure:
-          type: boolean
-          default: false
-          description: Preserve HTML structure
-        remove_scripts:
-          type: boolean
-          default: true
-          description: Remove JavaScript
-        remove_styles:
-          type: boolean
-          default: true
-          description: Remove CSS
-        text_only:
-          type: boolean
-          default: false
-          description: Extract only text
-
-        # Chunking configuration
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking)"
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - elements
-          default: elements
-          description: "Chunking strategy - elements uses HTML semantic structure"
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting paragraphs in the middle"
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-      defaults:
-        general_purpose:
-          name: General Purpose HTML
-          description: Standard HTML parsing
-          config:
-            extract_metadata: true
-            extract_links: true
-            extract_images: true
-            preserve_structure: false
-            remove_scripts: true
-            remove_styles: true
-            text_only: false
-          recommended_for:
-            - Web pages
-            - HTML documents
-            - Email templates
-        text_extraction:
-          name: Text Only Extraction
-          description: Extract only text content
-          config:
-            extract_metadata: false
-            extract_links: false
-            extract_images: false
-            preserve_structure: false
-            remove_scripts: true
-            remove_styles: true
-            text_only: true
-          recommended_for:
-            - Content extraction
-            - Text analysis
-            - Simplified parsing
-    DocxParser:
-      description: Parses Microsoft Word documents
-      config_schema:
-        extract_metadata:
-          type: boolean
-          default: true
-          description: Extract document properties
-        extract_headers_footers:
-          type: boolean
-          default: true
-          description: Include headers and footers
-        extract_comments:
-          type: boolean
-          default: true
-          description: Extract comments
-        extract_tables:
-          type: boolean
-          default: true
-          description: Extract tables
-        extract_images:
-          type: boolean
-          default: false
-          description: Extract images
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve text formatting
-
-        # Chunking configuration
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking)"
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - sections
-          default: paragraphs
-          description: "Chunking strategy - sections uses Word's built-in structure"
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting paragraphs in the middle"
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-      defaults:
-        general_purpose:
-          name: General Purpose DOCX
-          description: Standard Word document parsing
-          config:
-            extract_metadata: true
-            extract_headers_footers: true
-            extract_comments: true
-            extract_tables: true
-            extract_images: false
-            preserve_formatting: false
-          recommended_for:
-            - Reports
-            - Letters
-            - General documents
-        with_comments:
-          name: Documents with Comments
-          description: Extract documents with review comments
-          config:
-            extract_metadata: true
-            extract_headers_footers: true
-            extract_comments: true
-            extract_tables: true
-            extract_images: false
-            preserve_formatting: true
-          recommended_for:
-            - Reviewed documents
-            - Collaborative docs
-            - Draft documents
-    PlainTextParser:
-      description: Parses plain text files
-      config_schema:
-        encoding:
-          type: string
-          default: utf-8
-          description: Text encoding
         chunk_size:
           type: integer
           default: 1000
           minimum: 100
           maximum: 10000
-          description: Chunk size in characters
+          description: Chunk size for text splitting
         chunk_overlap:
           type: integer
           default: 200
           minimum: 0
-          maximum: 1000
+          maximum: 500
           description: Overlap between chunks
-        split_by:
+    # Tool-specific parser configurations based on actual implementations
+    pdfParserPyPDF2Config:
+      type: object
+      title: PDF Parser (PyPDF2) Configuration
+      description: Enhanced PDF parser using PyPDF2 with comprehensive capabilities
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
           type: string
-          enum:
-            - characters
-            - words
-            - sentences
-            - paragraphs
-            - lines
-          default: characters
-          description: Splitting method
-        preserve_whitespace:
+          enum: [paragraphs, sentences, characters]
+          default: paragraphs
+          description: Chunking strategy using PyPDF2 text structure
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract PDF metadata using PyPDF2
+        preserve_layout:
+          type: boolean
+          default: true
+          description: Use PyPDF2 layout-preserving extraction mode
+        extract_page_info:
+          type: boolean
+          default: true
+          description: Extract page numbers and rotation info
+        extract_annotations:
           type: boolean
           default: false
-          description: Preserve whitespace
-      defaults:
-        general_purpose:
-          name: General Purpose Text
-          description: Standard text parsing
-          config:
-            encoding: utf-8
-            chunk_size: 1000
-            chunk_overlap: 200
-            split_by: characters
-            preserve_whitespace: false
-          recommended_for:
-            - Text files
-            - Log files
-            - Plain documents
-        large_documents:
-          name: Large Documents
-          description: Large text files with overlap
-          config:
-            encoding: utf-8
-            chunk_size: 2000
-            chunk_overlap: 400
-            split_by: paragraphs
-            preserve_whitespace: false
-          recommended_for:
-            - Books
-            - Large reports
-            - Long articles
-    MarkdownParser:
-      description: Parses Markdown files with structure extraction
-      config_schema:
+          description: Extract PDF annotations using PyPDF2
+        extract_links:
+          type: boolean
+          default: false
+          description: Extract hyperlinks
+        extract_form_fields:
+          type: boolean
+          default: false
+          description: Extract form fields using PyPDF2
+        extract_outlines:
+          type: boolean
+          default: false
+          description: Extract document outlines/bookmarks
+        extract_images:
+          type: boolean
+          default: false
+          description: Extract embedded images using PyPDF2
+        extract_xmp_metadata:
+          type: boolean
+          default: false
+          description: Extract XMP metadata using PyPDF2
+        clean_text:
+          type: boolean
+          default: true
+          description: Clean extracted text
+    
+    csvParserPandasConfig:
+      type: object
+      title: CSV Parser (Pandas) Configuration
+      description: Advanced CSV parser using Pandas with data analysis capabilities
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        chunk_strategy:
+          type: string
+          enum: [rows, columns, full]
+          default: rows
+          description: How to chunk the CSV data
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract data statistics and metadata
+        encoding:
+          type: string
+          default: utf-8
+          description: File encoding
+        delimiter:
+          type: string
+          default: ","
+          description: CSV delimiter
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as NaN
+    
+    csvParserPythonConfig:
+      type: object
+      title: CSV Parser (Python) Configuration
+      description: Simple CSV parser using native Python csv module
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        encoding:
+          type: string
+          default: utf-8
+          description: File encoding
+        delimiter:
+          type: string
+          default: ","
+          description: CSV delimiter
+        quotechar:
+          type: string
+          default: '"'
+          description: Quote character
+    
+    excelParserOpenPyXLConfig:
+      type: object
+      title: Excel Parser (OpenPyXL) Configuration
+      description: Excel parser using OpenPyXL for XLSX files with formula support
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        extract_formulas:
+          type: boolean
+          default: false
+          description: Extract cell formulas using OpenPyXL
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract workbook metadata
+        sheets:
+          type: [array, "null"]
+          items:
+            type: string
+          default: null
+          description: Specific sheets to process (null = all)
+        data_only:
+          type: boolean
+          default: true
+          description: Extract values instead of formulas
+    
+    excelParserPandasConfig:
+      type: object
+      title: Excel Parser (Pandas) Configuration
+      description: Excel parser using Pandas with data analysis capabilities
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Number of rows per chunk
+        sheets:
+          type: [array, "null"]
+          items:
+            type: string
+          default: null
+          description: Specific sheets to process (null = all)
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract data statistics
+        skiprows:
+          type: ["integer", "null"]
+          default: null
+          description: Rows to skip at beginning
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as NaN
+    
+    docxParserPythonDocxConfig:
+      type: object
+      title: DOCX Parser (python-docx) Configuration
+      description: Word document parser using python-docx library
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Chunk size in characters
+        chunk_strategy:
+          type: string
+          enum: [paragraphs, sentences, characters]
+          default: paragraphs
+          description: Chunking strategy
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract document metadata
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract tables using python-docx
+        extract_headers:
+          type: boolean
+          default: true
+          description: Extract headers
+        extract_footers:
+          type: boolean
+          default: false
+          description: Extract footers
+        extract_comments:
+          type: boolean
+          default: false
+          description: Extract comments
+    
+    markdownParserPythonConfig:
+      type: object
+      title: Markdown Parser (Python) Configuration
+      description: Markdown parser using native Python with regex parsing
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          description: Chunk size in characters
+        chunk_strategy:
+          type: string
+          enum: [sections, paragraphs, characters]
+          default: sections
+          description: Chunking strategy - sections uses markdown headers
         extract_metadata:
           type: boolean
           default: true
           description: Extract YAML frontmatter
-        extract_headings:
-          type: boolean
-          default: true
-          description: Extract heading structure
-        extract_links:
-          type: boolean
-          default: true
-          description: Extract all links
         extract_code_blocks:
           type: boolean
           default: true
           description: Extract code blocks
-        chunk_by_headings:
+        extract_links:
           type: boolean
-          default: false
-          description: Split by headings
-        preserve_formatting:
-          type: boolean
-          default: false
-          description: Preserve Markdown formatting
-        heading_level_split:
-          type: integer
-          default: 2
-          minimum: 1
-          maximum: 6
-          description: Heading level for splitting
-
-        # Advanced chunking configuration
+          default: true
+          description: Extract markdown links
+    
+    textParserPythonConfig:
+      type: object
+      title: Text Parser (Python) Configuration
+      description: Text parser using native Python with encoding detection
+      additionalProperties: false
+      properties:
         chunk_size:
-          type: [integer, "null"]
-          default: null
+          type: integer
+          default: 1000
           minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking, overrides chunk_by_headings)"
+          description: Chunk size in characters
         chunk_overlap:
           type: integer
-          default: 0
+          default: 100
           minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
+          description: Overlap between chunks
         chunk_strategy:
           type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - headings
-          default: headings
-          description: "Chunking strategy - headings preserves markdown structure"
-        respect_sentence_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
-          type: boolean
-          default: true
-          description: "Avoid splitting paragraphs in the middle"
-        min_chunk_size:
-          type: integer
-          default: 100
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-      defaults:
-        general_purpose:
-          name: General Purpose Markdown
-          description: Standard Markdown parsing
-          config:
-            extract_metadata: true
-            extract_headings: true
-            extract_links: true
-            extract_code_blocks: true
-            chunk_by_headings: false
-            preserve_formatting: false
-            heading_level_split: 2
-          recommended_for:
-            - Documentation
-            - README files
-            - Blog posts
-        technical_docs:
-          name: Technical Documentation
-          description: Technical docs with code blocks
-          config:
-            extract_metadata: true
-            extract_headings: true
-            extract_links: true
-            extract_code_blocks: true
-            chunk_by_headings: true
-            preserve_formatting: true
-            heading_level_split: 2
-          recommended_for:
-            - API documentation
-            - Technical guides
-            - Developer docs
-    CSVParser:
-      description: Parser for CSV files with configurable field mapping
-      config_schema:
-        content_fields:
-          type: array
-          items:
-            type: string
-          default:
-            - subject
-            - body
-          description: CSV columns to use as document content
-        metadata_fields:
-          type: array
-          items:
-            type: string
-          default: []
-          description: CSV columns to include as metadata
-        id_field:
-          type:
-            - string
-            - "null"
-          default: null
-          description: CSV column to use as document ID
-        combine_content:
-          type: boolean
-          default: true
-          description: Combine multiple content fields into one document
-        content_separator:
-          type: string
-          default: "
-
-
-            "
-          description: Separator when combining content fields
+          enum: [sentences, paragraphs, characters]
+          default: sentences
+          description: Text chunking strategy
         encoding:
           type: string
           default: utf-8
-          description: CSV file encoding
-        delimiter:
+          description: Text encoding (utf-8 or auto-detect)
+        clean_text:
+          type: boolean
+          default: true
+          description: Remove excessive whitespace
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract file statistics
+    
+    textParserLlamaIndexConfig:
+      type: object
+      title: Text Parser (LlamaIndex) Configuration
+      description: Advanced text parser using LlamaIndex with semantic splitting, code parsing, and multi-format support
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
           type: string
-          default: ","
-          maxLength: 1
-          description: CSV delimiter character
-      defaults:
-        general_purpose:
-          name: General Purpose CSV Parsing
-          description: Basic CSV parsing with flexible field configuration
-          config:
-            content_fields:
-              - text
-              - content
-              - description
-            metadata_fields: []
-            combine_content: true
-            content_separator: "
+          enum: [characters, sentences, paragraphs, tokens, semantic, code]
+          default: semantic
+          description: Advanced chunking strategy - semantic uses content-based splitting, code preserves syntax
+        encoding:
+          type: string
+          default: utf-8
+          description: Text encoding
+        clean_text:
+          type: boolean
+          default: true
+          description: Clean extracted text
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract comprehensive file and content metadata
+        semantic_buffer_size:
+          type: integer
+          default: 1
+          minimum: 1
+          maximum: 10
+          description: Buffer size for semantic chunking
+        semantic_breakpoint_percentile_threshold:
+          type: integer
+          default: 95
+          minimum: 50
+          maximum: 99
+          description: Percentile threshold for semantic breakpoints
+        token_model:
+          type: string
+          default: gpt-3.5-turbo
+          description: Tokenizer model for token-based chunking
+        preserve_code_structure:
+          type: boolean
+          default: true
+          description: Preserve code syntax and structure when parsing code files
+        detect_language:
+          type: boolean
+          default: true
+          description: Automatically detect programming language for code files
+        include_prev_next_rel:
+          type: boolean
+          default: true
+          description: Include relationships between chunks for better context
 
-
-              "
-            encoding: utf-8
-            delimiter: ","
-          recommended_for:
-            - General CSV files
-            - Simple tabular data
-            - Mixed content
-        customer_support:
-          name: Customer Support Tickets
-          description: Optimized for customer support ticket CSV files
-          config:
-            content_fields:
-              - subject
-              - body
-              - answer
-            metadata_fields:
-              - type
-              - queue
-              - priority
-              - language
-              - status
-            combine_content: true
-            content_separator: "
-
-
-              ---
-
-
-              "
-            id_field: ticket_id
-            encoding: utf-8
-            delimiter: ","
-          recommended_for:
-            - Support tickets
-            - Help desk data
-            - Customer inquiries
-        survey_responses:
-          name: Survey Response Analysis
-          description: Parse survey responses with rating and demographic data
-          config:
-            content_fields:
-              - response_text
-              - comments
-              - feedback
-            metadata_fields:
-              - respondent_id
-              - survey_date
-              - rating
-              - age_group
-              - location
-            combine_content: true
-            content_separator: " "
-            id_field: response_id
-            encoding: utf-8
-            delimiter: ","
-          recommended_for:
-            - Survey data
-            - Feedback forms
-            - Market research
-        product_catalog:
-          name: Product Catalog Processing
-          description: Parse product information with structured metadata
-          config:
-            content_fields:
-              - name
-              - description
-              - features
-            metadata_fields:
-              - category
-              - price
-              - brand
-              - sku
-              - availability
-            combine_content: true
-            content_separator: "
-
-              "
-            id_field: sku
-            encoding: utf-8
-            delimiter: ","
-          recommended_for:
-            - E-commerce catalogs
-            - Product databases
-            - Inventory lists
-        contact_management:
-          name: Contact and CRM Data
-          description: Process contact lists and CRM exports
-          config:
-            content_fields:
-              - notes
-              - description
-              - bio
-            metadata_fields:
-              - name
-              - email
-              - phone
-              - company
-              - role
-              - tags
-            combine_content: false
-            content_separator: "
-
-
-              "
-            id_field: contact_id
-            encoding: utf-8
-            delimiter: ","
-          recommended_for:
-            - Contact lists
-            - CRM exports
-            - Lead databases
-    ExcelParser:
-      description: Parses Excel spreadsheets
-      config_schema:
-        sheet_names:
-          type:
-            - array
-            - "null"
+    pdfParserLlamaIndexConfig:
+      type: object
+      title: PDF Parser (LlamaIndex) Configuration
+      description: Advanced PDF parser using LlamaIndex with multiple fallback strategies
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [sentences, paragraphs, pages, semantic]
+          default: sentences
+          description: Chunking strategy for PDF content
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract PDF metadata
+        extract_images:
+          type: boolean
+          default: false
+          description: Extract images from PDF
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract tables from PDF
+        fallback_strategies:
+          type: array
           items:
             type: string
-          default: null
-          description: Specific sheets to parse
+            enum: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
+          default: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
+          description: Fallback strategies to try in order
+
+    csvParserLlamaIndexConfig:
+      type: object
+      title: CSV Parser (LlamaIndex) Configuration
+      description: CSV parser using LlamaIndex with Pandas backend for advanced processing
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Number of rows per chunk
+        chunk_strategy:
+          type: string
+          enum: [rows, semantic, full]
+          default: rows
+          description: Chunking strategy
+        field_mapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map CSV columns to standard fields
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract metadata from CSV
+        combine_fields:
+          type: boolean
+          default: true
+          description: Combine fields into text content
+        skiprows:
+          type: integer
+          minimum: 0
+          description: Number of rows to skip at beginning
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as missing
+
+    excelParserLlamaIndexConfig:
+      type: object
+      title: Excel Parser (LlamaIndex) Configuration
+      description: Excel parser using LlamaIndex with Pandas backend for advanced processing
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Number of rows per chunk
+        chunk_strategy:
+          type: string
+          enum: [rows, semantic, full]
+          default: rows
+          description: Chunking strategy
+        sheets:
+          type: ["array", "null"]
+          items:
+            type: string
+          description: Specific sheets to parse (null for all)
         combine_sheets:
           type: boolean
           default: false
-          description: Combine all sheets
+          description: Combine all sheets into one document
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract metadata from Excel
         extract_formulas:
           type: boolean
           default: false
-          description: Extract cell formulas
-        extract_charts:
-          type: boolean
-          default: false
-          description: Extract chart metadata
-        table_format:
-          type: string
-          enum:
-            - csv
-            - markdown
-            - json
-            - text
-          default: markdown
-          description: Table output format
+          description: Extract formulas instead of values
         header_row:
           type: integer
           default: 0
           minimum: 0
-          description: Header row index
-      defaults:
-        general_purpose:
-          name: General Purpose Excel
-          description: Standard Excel parsing
-          config:
-            sheet_names: null
-            combine_sheets: false
-            extract_formulas: false
-            extract_charts: false
-            table_format: markdown
-            header_row: 0
-          recommended_for:
-            - Spreadsheets
-            - Data tables
-            - Reports
-        financial_data:
-          name: Financial Data
-          description: Financial spreadsheets with formulas
-          config:
-            sheet_names: null
-            combine_sheets: true
-            extract_formulas: true
-            extract_charts: true
-            table_format: markdown
-            header_row: 0
-          recommended_for:
-            - Financial reports
-            - Budget sheets
-            - Accounting data
-    PDFParser:
-      description: Extracts text, metadata, and structure from PDF documents
-      config_schema:
+          description: Row index for headers
+        skiprows:
+          type: integer
+          minimum: 0
+          description: Number of rows to skip
+        na_values:
+          type: array
+          items:
+            type: string
+          default: ["", "NA", "N/A", "null", "None"]
+          description: Values to treat as missing
+
+    docxParserLlamaIndexConfig:
+      type: object
+      title: DOCX Parser (LlamaIndex) Configuration
+      description: Advanced DOCX parser using LlamaIndex with enhanced chunking
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [paragraphs, sentences, semantic]
+          default: paragraphs
+          description: Chunking strategy
         extract_metadata:
           type: boolean
           default: true
-          description: Extract PDF metadata (title, author, creation date, etc.)
-        extract_page_structure:
+          description: Extract document metadata
+        extract_tables:
           type: boolean
           default: true
-          description: Extract page-level structure information
-        combine_pages:
-          type: boolean
-          default: true
-          description: Combine all pages into single document
-        page_separator:
-          type: string
-          default: "
-
-
-            --- Page Break ---
-
-
-            "
-          description: Separator between pages when combining
-        min_text_length:
-          type: integer
-          default: 10
-          minimum: 0
-          description: Minimum text length to include page
-        include_page_numbers:
-          type: boolean
-          default: true
-          description: Include page numbers in text
-        extract_outline:
-          type: boolean
-          default: true
-          description: Extract document outline/bookmarks
+          description: Extract tables from document
         extract_images:
           type: boolean
           default: false
-          description: Extract embedded images
-        ocr_enabled:
-          type: boolean
-          default: false
-          description: Enable OCR for scanned documents
-
-        # Chunking configuration
-        chunk_size:
-          type: [integer, "null"]
-          default: null
-          minimum: 100
-          maximum: 50000
-          description: "Chunk size in characters (null for no chunking)"
-        chunk_overlap:
-          type: integer
-          default: 0
-          minimum: 0
-          maximum: 5000
-          description: "Overlap between chunks in characters"
-        chunk_strategy:
-          type: string
-          enum:
-            - characters
-            - sentences
-            - paragraphs
-            - pages
-          default: characters
-          description: "Chunking strategy - pages splits at PDF page boundaries"
-        respect_sentence_boundaries:
+          description: Extract images from document
+        preserve_formatting:
           type: boolean
           default: true
-          description: "Avoid splitting sentences in the middle when using character chunking"
-        respect_paragraph_boundaries:
+          description: Preserve text formatting
+        include_header_footer:
           type: boolean
           default: false
-          description: "Avoid splitting paragraphs in the middle (overrides sentence boundaries)"
-        min_chunk_size:
+          description: Include header and footer content
+
+    markdownParserLlamaIndexConfig:
+      type: object
+      title: Markdown Parser (LlamaIndex) Configuration
+      description: Advanced markdown parser using LlamaIndex with semantic chunking
+      additionalProperties: false
+      properties:
+        chunk_size:
           type: integer
-          default: 50
-          minimum: 10
-          maximum: 1000
-          description: "Minimum chunk size to avoid creating tiny chunks"
-      defaults:
-        general_purpose:
-          name: General Purpose PDF
-          description: Standard PDF parsing with text extraction
-          config:
-            extract_metadata: true
-            extract_page_structure: true
-            combine_pages: true
-            page_separator: "
-
-
-              --- Page Break ---
-
-
-              "
-            min_text_length: 10
-            include_page_numbers: true
-            extract_outline: true
-            extract_images: false
-            ocr_enabled: false
-          recommended_for:
-            - General documents
-            - Reports
-            - Articles
-        research_papers:
-          name: Research Papers
-          description: Academic papers with metadata and structure
-          config:
-            extract_metadata: true
-            extract_page_structure: true
-            combine_pages: true
-            page_separator: "
-
-
-              "
-            min_text_length: 50
-            include_page_numbers: true
-            extract_outline: true
-            extract_images: false
-            ocr_enabled: false
-          recommended_for:
-            - Academic papers
-            - Research documents
-            - Scientific publications
-        legal_documents:
-          name: Legal Documents
-          description: Legal documents with page-by-page processing
-          config:
-            extract_metadata: true
-            extract_page_structure: true
-            combine_pages: false
-            page_separator: "
-
-
-              [NEW PAGE]
-
-
-              "
-            min_text_length: 20
-            include_page_numbers: true
-            extract_outline: true
-            extract_images: false
-            ocr_enabled: false
-          recommended_for:
-            - Contracts
-            - Legal briefs
-            - Court documents
-        scanned_documents:
-          name: Scanned Documents
-          description: Scanned PDFs requiring OCR
-          config:
-            extract_metadata: true
-            extract_page_structure: false
-            combine_pages: true
-            page_separator: "
-
-
-              --- Page ---
-
-
-              "
-            min_text_length: 5
-            include_page_numbers: true
-            extract_outline: false
-            extract_images: true
-            ocr_enabled: true
-          recommended_for:
-            - Scanned documents
-            - Image-based PDFs
-            - Historical documents
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [headings, paragraphs, sentences, semantic]
+          default: headings
+          description: Chunking strategy for markdown
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract frontmatter metadata
+        extract_code_blocks:
+          type: boolean
+          default: true
+          description: Extract code blocks separately
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract markdown tables
+        extract_links:
+          type: boolean
+          default: true
+          description: Extract links and references
+        preserve_structure:
+          type: boolean
+          default: true
+          description: Preserve heading hierarchy
   extractorConfig:
     type: object
     title: Extractor Configuration
@@ -1247,19 +668,27 @@ definitions:
         type: string
         description: Extractor type identifier
         enum:
-          - KeywordExtractor
-          - EntityExtractor
+          - ContentStatisticsExtractor
           - DateTimeExtractor
+          - EntityExtractor
           - HeadingExtractor
+          - KeywordExtractor
           - LinkExtractor
           - PathExtractor
           - PatternExtractor
-          - StatisticsExtractor
+          - RAKEExtractor
           - SummaryExtractor
+          - TFIDFExtractor
           - TableExtractor
+          - YAKEExtractor
+      priority:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        description: Execution priority (higher numbers run first)
       config:
         type: object
-        oneOf:
+        anyOf:
           - $ref: "#/definitions/extractors/keywordExtractorConfig"
           - $ref: "#/definitions/extractors/entityExtractorConfig"
           - $ref: "#/definitions/extractors/dateTimeExtractorConfig"
@@ -1270,12 +699,19 @@ definitions:
           - $ref: "#/definitions/extractors/statisticsExtractorConfig"
           - $ref: "#/definitions/extractors/summaryExtractorConfig"
           - $ref: "#/definitions/extractors/tableExtractorConfig"
+          - $ref: "#/definitions/extractors/sentimentExtractorConfig"
+          - $ref: "#/definitions/extractors/yakeExtractorConfig"
+          - $ref: "#/definitions/extractors/contentStatisticsExtractorConfig"
   extractors:
     keywordExtractorConfig:
       type: object
       title: Keyword Extractor Configuration
       additionalProperties: false
       properties:
+        extractor_type:
+          type: string
+          const: keyword
+          description: Extractor type discriminator
         algorithm:
           type: string
           enum:
@@ -1290,20 +726,43 @@ definitions:
           default: 10
           minimum: 1
           maximum: 100
-          description: Maximum keywords
-        min_keyword_length:
+          description: Maximum keywords to extract
+        min_length:
+          type: integer
+          default: 1
+          minimum: 1
+          description: Minimum word length for keywords
+        max_length:
+          type: integer
+          default: 4
+          minimum: 1
+          description: Maximum word length for keywords
+        min_frequency:
+          type: integer
+          default: 1
+          minimum: 1
+          description: Minimum frequency for keywords
+        stop_words:
+          type: array
+          items:
+            type: string
+          description: Custom stop words
+        language:
+          type: string
+          default: en
+          description: Language for YAKE algorithm
+        max_ngram_size:
           type: integer
           default: 3
           minimum: 1
-          description: Minimum keyword length
-        include_scores:
-          type: boolean
-          default: true
-          description: Include relevance scores
-        language:
-          type: string
-          default: english
-          description: Language for stop words
+          maximum: 5
+          description: Maximum n-gram size for YAKE
+        deduplication_threshold:
+          type: number
+          default: 0.9
+          minimum: 0.0
+          maximum: 1.0
+          description: Deduplication threshold for YAKE
     entityExtractorConfig:
       type: object
       title: Entity Extractor Configuration
@@ -1328,6 +787,12 @@ definitions:
               - PHONE
               - URL
               - LAW
+              - PERCENT
+              - PRODUCT
+              - EVENT
+              - VERSION
+              - FAC
+              - LOC
           default:
             - PERSON
             - ORG
@@ -1338,6 +803,9 @@ definitions:
             - EMAIL
             - PHONE
             - URL
+            - PERCENT
+            - PRODUCT
+            - EVENT
           description: Entity types to extract
         use_fallback:
           type: boolean
@@ -1419,6 +887,10 @@ definitions:
           default: 3
           minimum: 1
           description: Minimum heading length
+        enabled:
+          type: boolean
+          default: true
+          description: Enable this extractor
     linkExtractorConfig:
       type: object
       title: Link Extractor Configuration
@@ -1444,6 +916,10 @@ definitions:
           type: boolean
           default: false
           description: Resolve URL redirects
+        enabled:
+          type: boolean
+          default: true
+          description: Enable this extractor
     pathExtractorConfig:
       type: object
       title: Path Extractor Configuration
@@ -1469,6 +945,10 @@ definitions:
           type: boolean
           default: true
           description: Normalize path formats
+        enabled:
+          type: boolean
+          default: true
+          description: Enable this extractor
     patternExtractorConfig:
       type: object
       title: Pattern Extractor Configuration
@@ -1483,11 +963,15 @@ definitions:
               - phone
               - url
               - ip
+              - ip_address
               - ssn
               - credit_card
               - zip_code
+              - file_path
+              - version
+              - date
           default: []
-          description: Predefined patterns
+          description: Use built-in patterns for common data types (e.g., email, phone). Takes precedence over 'patterns' field for matching pattern names
         custom_patterns:
           type: array
           items:
@@ -1516,6 +1000,19 @@ definitions:
           type: boolean
           default: false
           description: Return match positions
+        include_context:
+          type: boolean
+          default: false
+          description: Include surrounding context in results
+        max_matches_per_pattern:
+          type: integer
+          default: 100
+          minimum: 1
+          description: Maximum matches per pattern
+        deduplicate_matches:
+          type: boolean
+          default: true
+          description: Remove duplicate matches
     statisticsExtractorConfig:
       type: object
       title: Statistics Extractor Configuration
@@ -1537,6 +1034,10 @@ definitions:
           type: boolean
           default: false
           description: Basic sentiment analysis
+        include_sentiment_indicators:
+          type: boolean
+          default: false
+          description: Include detailed sentiment indicators
         include_language:
           type: boolean
           default: true
@@ -1569,6 +1070,92 @@ definitions:
           type: boolean
           default: true
           description: Include text statistics
+        min_sentence_length:
+          type: integer
+          default: 10
+          minimum: 1
+          description: Minimum sentence length for summary
+        max_sentence_length:
+          type: integer
+          default: 500
+          minimum: 10
+          description: Maximum sentence length for summary
+    sentimentExtractorConfig:
+      type: object
+      title: Sentiment Extractor Configuration
+      additionalProperties: false
+      properties:
+        analyze_business_tone:
+          type: boolean
+          default: false
+          description: Analyze business-specific tone
+        extract_confidence:
+          type: boolean
+          default: true
+          description: Extract confidence scores
+        categories:
+          type: array
+          items:
+            type: string
+            enum:
+              - positive
+              - negative
+              - neutral
+              - mixed
+          default: ["positive", "negative", "neutral"]
+          description: Sentiment categories to analyze
+    yakeExtractorConfig:
+      type: object
+      title: YAKE Extractor Configuration
+      additionalProperties: false
+      properties:
+        extractor_type:
+          type: string
+          const: yake
+          description: Extractor type discriminator
+        max_keywords:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 100
+          description: Maximum keywords to extract
+        language:
+          type: string
+          default: en
+          description: Language for YAKE algorithm
+        max_ngram_size:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 5
+          description: Maximum n-gram size for YAKE
+        deduplication_threshold:
+          type: number
+          default: 0.9
+          minimum: 0.0
+          maximum: 1.0
+          description: Deduplication threshold for YAKE
+    contentStatisticsExtractorConfig:
+      type: object
+      title: Content Statistics Extractor Configuration
+      additionalProperties: false
+      properties:
+        include_readability:
+          type: boolean
+          default: true
+          description: Calculate readability scores
+        include_vocabulary:
+          type: boolean
+          default: true
+          description: Analyze vocabulary
+        include_structure:
+          type: boolean
+          default: true
+          description: Analyze text structure
+        include_sentiment_indicators:
+          type: boolean
+          default: false
+          description: Include detailed sentiment indicators
     tableExtractorConfig:
       type: object
       title: Table Extractor Configuration
@@ -1596,247 +1183,11 @@ definitions:
           default: 2
           minimum: 1
           description: Minimum rows for table
-    TableExtractor:
-      description: Extract tables
-      config_schema:
         enabled:
           type: boolean
           default: true
           description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard table extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    LinkExtractor:
-      description: Extract URLs and links
-      config_schema:
-        enabled:
-          type: boolean
-          default: true
-          description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard link extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    PatternExtractor:
-      description: Extract regex patterns
-      config_schema:
-        enabled:
-          type: boolean
-          default: true
-          description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard pattern extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    EntityExtractor:
-      description: Extract named entities using NER
-      config_schema:
-        model:
-          type: string
-          default: en_core_web_sm
-          description: NER model name
-        entity_types:
-          type: array
-          items:
-            type: string
-            enum:
-              - PERSON
-              - ORG
-              - GPE
-              - DATE
-              - TIME
-              - MONEY
-              - EMAIL
-              - PHONE
-              - URL
-              - LAW
-          default:
-            - PERSON
-            - ORG
-            - GPE
-            - DATE
-            - TIME
-            - MONEY
-            - EMAIL
-            - PHONE
-            - URL
-          description: Entity types to extract
-        use_fallback:
-          type: boolean
-          default: true
-          description: Use regex fallback
-        min_entity_length:
-          type: integer
-          default: 2
-          minimum: 1
-          description: Minimum entity length
-        merge_entities:
-          type: boolean
-          default: true
-          description: Merge adjacent entities
-        confidence_threshold:
-          type: number
-          default: 0.7
-          minimum: 0.0
-          maximum: 1.0
-          description: Minimum confidence score
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard entity extraction
-          config:
-            model: en_core_web_sm
-            entity_types:
-              - PERSON
-              - ORG
-              - GPE
-              - DATE
-              - TIME
-              - MONEY
-              - EMAIL
-              - PHONE
-              - URL
-            use_fallback: true
-            min_entity_length: 2
-            merge_entities: true
-            confidence_threshold: 0.7
-          recommended_for:
-            - Documents
-            - Articles
-            - Reports
-    PathExtractor:
-      description: Extract file paths
-      config_schema:
-        enabled:
-          type: boolean
-          default: true
-          description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard path extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    DatetimeExtractor:
-      description: Extract dates and times
-      config_schema:
-        enabled:
-          type: boolean
-          default: true
-          description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard datetime extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    SummaryExtractor:
-      description: Generate summaries
-      config_schema:
-        enabled:
-          type: boolean
-          default: true
-          description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard summary extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    HeadingExtractor:
-      description: Extract document headings
-      config_schema:
-        enabled:
-          type: boolean
-          default: true
-          description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard heading extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    StatisticsExtractor:
-      description: Extract text statistics
-      config_schema:
-        enabled:
-          type: boolean
-          default: true
-          description: Enable this extractor
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard statistics extractor
-          config:
-            enabled: true
-          recommended_for:
-            - General use
-    KeywordExtractor:
-      description: Extract keywords from text using various algorithms
-      config_schema:
-        algorithm:
-          type: string
-          enum:
-            - rake
-            - yake
-            - tfidf
-            - textrank
-          default: rake
-          description: Extraction algorithm
-        max_keywords:
-          type: integer
-          default: 10
-          minimum: 1
-          maximum: 100
-          description: Maximum keywords
-        min_keyword_length:
-          type: integer
-          default: 3
-          minimum: 1
-          description: Minimum keyword length
-        include_scores:
-          type: boolean
-          default: true
-          description: Include relevance scores
-        language:
-          type: string
-          default: english
-          description: Language for stop words
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard keyword extraction
-          config:
-            algorithm: rake
-            max_keywords: 10
-            min_keyword_length: 3
-            include_scores: true
-            language: english
-          recommended_for:
-            - Documents
-            - Articles
-            - Reports
+    
   embedderConfig:
     title: Embedder Configuration
     required: [type, config]
@@ -1845,14 +1196,14 @@ definitions:
         type: string
         enum:
           - OllamaEmbedder
-          - OpenAIEmbedder
           - HuggingFaceEmbedder
+          - OpenAIEmbedder
           - SentenceTransformerEmbedder
       config:
         oneOf:
           - $ref: "#/definitions/embedders/ollamaEmbedderConfig"
-          - $ref: "#/definitions/embedders/openaiEmbedderConfig"
           - $ref: "#/definitions/embedders/huggingfaceEmbedderConfig"
+          - $ref: "#/definitions/embedders/openaiEmbedderConfig"
           - $ref: "#/definitions/embedders/sentenceTransformerConfig"
   embedders:
     ollamaEmbedderConfig:
@@ -1863,15 +1214,12 @@ definitions:
         model:
           type: string
           default: nomic-embed-text
-          enum:
-            - nomic-embed-text
-            - mxbai-embed-large
           description: Ollama model name
         base_url:
           type: string
           format: uri
           default: http://localhost:11434
-          description: Ollama API endpoint
+          description: Ollama API endpoint (preferred)
         dimension:
           type: integer
           default: 768
@@ -1893,43 +1241,6 @@ definitions:
           type: boolean
           default: true
           description: Auto-pull missing models
-    openaiEmbedderConfig:
-      type: object
-      title: OpenAI Embedder Configuration
-      required:
-        - api_key
-      additionalProperties: false
-      properties:
-        api_key:
-          type: string
-          description: OpenAI API key
-        model:
-          type: string
-          default: text-embedding-3-small
-          enum:
-            - text-embedding-3-small
-            - text-embedding-3-large
-            - text-embedding-ada-002
-          description: OpenAI model
-        dimension:
-          type:
-            - integer
-            - "null"
-          minimum: 256
-          maximum: 3072
-          description: Override dimension
-        batch_size:
-          type: integer
-          default: 100
-          minimum: 1
-          maximum: 2048
-          description: Batch size
-        max_retries:
-          type: integer
-          default: 3
-          minimum: 0
-          maximum: 10
-          description: Max retry attempts
     huggingfaceEmbedderConfig:
       type: object
       title: HuggingFace Embedder Configuration
@@ -1968,6 +1279,47 @@ definitions:
             - "null"
           default: null
           description: Model cache directory
+    openaiEmbedderConfig:
+      type: object
+      title: OpenAI Embedder Configuration
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+          default: text-embedding-3-small
+          description: OpenAI embedding model
+        api_key:
+          type: string
+          description: OpenAI API key
+        base_url:
+          type:
+            - string
+            - "null"
+          default: null
+          description: OpenAI API base URL
+        organization:
+          type:
+            - string
+            - "null"
+          default: null
+          description: OpenAI organization ID
+        batch_size:
+          type: integer
+          default: 100
+          minimum: 1
+          maximum: 2048
+          description: Batch size for API calls
+        max_retries:
+          type: integer
+          default: 3
+          minimum: 0
+          maximum: 10
+          description: Maximum retry attempts
+        timeout:
+          type: integer
+          default: 60
+          minimum: 10
+          description: Request timeout in seconds
     sentenceTransformerConfig:
       type: object
       title: Sentence Transformer Configuration
@@ -1975,91 +1327,6 @@ definitions:
       properties:
         model_name:
           type: string
-          default: all-MiniLM-L6-v2
-          description: Model name
-        device:
-          type: string
-          default: cpu
-          enum:
-            - cpu
-            - cuda
-            - mps
-          description: Computation device
-        batch_size:
-          type: integer
-          default: 32
-          minimum: 1
-          maximum: 256
-          description: Batch size
-        normalize_embeddings:
-          type: boolean
-          default: true
-          description: Normalize embeddings
-        pooling_strategy:
-          type: string
-          enum:
-            - mean
-            - max
-            - cls
-          default: mean
-          description: Token pooling strategy
-    OllamaEmbedder:
-      description: Generate embeddings using Ollama models
-      config_schema:
-        model:
-          type: string
-          default: nomic-embed-text
-          enum:
-            - nomic-embed-text
-            - mxbai-embed-large
-          description: Ollama model name
-        base_url:
-          type: string
-          format: uri
-          default: http://localhost:11434
-          description: Ollama API endpoint
-        dimension:
-          type: integer
-          default: 768
-          minimum: 128
-          maximum: 4096
-          description: Embedding dimension
-        batch_size:
-          type: integer
-          default: 16
-          minimum: 1
-          maximum: 128
-          description: Batch processing size
-        timeout:
-          type: integer
-          default: 60
-          minimum: 10
-          description: Request timeout (seconds)
-        auto_pull:
-          type: boolean
-          default: true
-          description: Auto-pull missing models
-      required: []
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard Ollama embeddings
-          config:
-            model: nomic-embed-text
-            base_url: http://localhost:11434
-            dimension: 768
-            batch_size: 16
-            timeout: 60
-            auto_pull: true
-          recommended_for:
-            - Local deployment
-            - Privacy-focused
-            - Development
-    HuggingFaceEmbedder:
-      description: HuggingFace model embeddings
-      config_schema:
-        model_name:
-          type: string
           default: sentence-transformers/all-MiniLM-L6-v2
           description: Model name
         device:
@@ -2070,119 +1337,6 @@ definitions:
             - cuda
             - mps
           description: Computation device
-        batch_size:
-          type: integer
-          default: 32
-          minimum: 1
-          maximum: 256
-          description: Batch size
-      required: []
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard configuration
-          config:
-            model_name: sentence-transformers/all-MiniLM-L6-v2
-            device: cpu
-            batch_size: 32
-          recommended_for:
-            - General use
-            - CPU inference
-    OpenAIEmbedder:
-      description: Generate embeddings using OpenAI API
-      config_schema:
-        api_key:
-          type: string
-          description: OpenAI API key
-        model:
-          type: string
-          default: text-embedding-3-small
-          enum:
-            - text-embedding-3-small
-            - text-embedding-3-large
-            - text-embedding-ada-002
-          description: OpenAI model
-        dimension:
-          type:
-            - integer
-            - "null"
-          minimum: 256
-          maximum: 3072
-          description: Override dimension
-        batch_size:
-          type: integer
-          default: 100
-          minimum: 1
-          maximum: 2048
-          description: Batch size
-        max_retries:
-          type: integer
-          default: 3
-          minimum: 0
-          maximum: 10
-          description: Max retry attempts
-      required:
-        - api_key
-      defaults:
-        small_model:
-          name: Small Model
-          description: Fast and cost-effective
-          config:
-            api_key: ${OPENAI_API_KEY}
-            model: text-embedding-3-small
-            dimension: null
-            batch_size: 100
-            max_retries: 3
-          recommended_for:
-            - Production
-            - High throughput
-            - Cost optimization
-        large_model:
-          name: Large Model
-          description: Higher quality embeddings
-          config:
-            api_key: ${OPENAI_API_KEY}
-            model: text-embedding-3-large
-            dimension: null
-            batch_size: 50
-            max_retries: 3
-          recommended_for:
-            - High accuracy
-            - Research
-            - Quality focus
-    SentencetransformerEmbedder:
-      description: Sentence transformer embeddings
-      config_schema:
-        model_name:
-          type: string
-          default: sentence-transformers/all-MiniLM-L6-v2
-          description: Model name
-        device:
-          type: string
-          default: cpu
-          enum:
-            - cpu
-            - cuda
-            - mps
-          description: Computation device
-        batch_size:
-          type: integer
-          default: 32
-          minimum: 1
-          maximum: 256
-          description: Batch size
-      required: []
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard configuration
-          config:
-            model_name: sentence-transformers/all-MiniLM-L6-v2
-            device: cpu
-            batch_size: 32
-          recommended_for:
-            - General use
-            - CPU inference
   vectorStoreConfig:
     title: Vector Store Configuration
     required: [type, config]
@@ -2235,6 +1389,24 @@ definitions:
             - ip
           default: cosine
           description: Distance metric
+        distance_metric:
+          type: string
+          enum:
+            - cosine
+            - l2
+            - ip
+          default: cosine
+          description: Alternative distance metric name
+        embedding_dimension:
+          type: integer
+          default: 768
+          minimum: 1
+          maximum: 4096
+          description: Embedding dimension
+        enable_deduplication:
+          type: boolean
+          default: true
+          description: Enable document deduplication
         embedding_function:
           type:
             - string
@@ -2617,380 +1789,230 @@ definitions:
           minimum: 1
           maximum: 1000
           description: Final number of results
-  stores:
-    QdrantStore:
-      description: Qdrant vector database
-      config_schema:
-        host:
-          type: string
-          default: localhost
-          description: Server host
-        port:
-          type: integer
-          default: 6333
-          minimum: 1
-          maximum: 65535
-          description: Server port
-        collection_name:
-          type: string
-          default: documents
-          pattern: ^[a-zA-Z0-9_-]+$
-          description: Collection name
-        vector_size:
-          type: integer
-          minimum: 1
-          maximum: 65536
-          description: Vector dimension
-        distance:
-          type: string
-          enum:
-            - Cosine
-            - Euclid
-            - Dot
-          default: Cosine
-          description: Distance metric
-      required:
-        - vector_size
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard qdrant store configuration
-          config:
-            host:
+
+  # NEW SCHEMA DEFINITIONS
+  databaseDefinition:
+    type: object
+    title: Database Definition
+    description: Database configuration with embedded embedding/retrieval strategies
+    required: [name, type]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+        minLength: 1
+        maxLength: 50
+        description: Unique database identifier
+      type:
+        type: string
+        enum: [ChromaStore, QdrantStore]
+        description: Database type (accepts both short names and Store class names)
+      config:
+        type: object
+        description: Database-specific configuration
+        additionalProperties: true
+      embedding_strategies:
+        type: array
+        title: Embedding Strategies
+        description: Multiple embedding strategies for hybrid search
+        items:
+          type: object
+          required: [name, type]
+          additionalProperties: false
+          properties:
+            name:
               type: string
-              default: localhost
-              description: Server host
-            port:
+              description: Strategy identifier
+            type:
+              type: string
+              enum: [HuggingFaceEmbedder, OllamaEmbedder, OpenAIEmbedder, SentenceTransformerEmbedder]
+              description: Embedding type
+            config:
+              type: object
+              description: Embedder configuration
+              additionalProperties: true
+            condition:
+              type: string
+              description: Optional condition for when to use this embedding (e.g., doc.type == 'code')
+            priority:
               type: integer
-              default: 6333
-              minimum: 1
-              maximum: 65535
-              description: Server port
-            collection_name:
+              default: 0
+              description: Priority for automatic selection
+      retrieval_strategies:
+        type: array
+        title: Retrieval Strategies  
+        description: Multiple retrieval strategies for different query patterns
+        items:
+          type: object
+          required: [name, type]
+          additionalProperties: false
+          properties:
+            name:
               type: string
-              default: documents
-              pattern: ^[a-zA-Z0-9_-]+$
-              description: Collection name
-            vector_size: 768
-            distance:
+              description: Strategy identifier
+            type:
               type: string
-              enum:
-                - Cosine
-                - Euclid
-                - Dot
-              default: Cosine
-              description: Distance metric
-          recommended_for:
-            - Production
-            - Scalable
-            - Cloud
-    ChromaStore:
-      description: ChromaDB vector database configuration
-      config_schema:
-        collection_name:
-          type: string
-          default: documents
-          pattern: ^[a-zA-Z0-9_-]+$
-          description: Collection name
-        persist_directory:
-          type: string
-          default: ./data/chroma_db
-          description: Persistence directory
-        host:
-          type:
-            - string
-            - "null"
-          default: null
-          description: Server host
-        port:
-          type: integer
-          default: 8000
-          minimum: 1
-          maximum: 65535
-          description: Server port
-        distance_function:
-          type: string
-          enum:
-            - cosine
-            - l2
-            - ip
-          default: cosine
-          description: Distance metric
-        embedding_function:
-          type:
-            - string
-            - "null"
-          default: null
-          description: Built-in embedding function
-      required: []
-      defaults:
-        local_persistent:
-          name: Local Persistent
-          description: Local persistent storage
-          config:
-            collection_name: documents
-            persist_directory: ./data/chroma_db
-            host: null
-            port: 8000
-            distance_function: cosine
-            embedding_function: null
-          recommended_for:
-            - Development
-            - Small scale
-            - Local deployment
-        client_server:
-          name: Client-Server
-          description: Connect to Chroma server
-          config:
-            collection_name: documents
-            persist_directory: null
-            host: localhost
-            port: 8000
-            distance_function: cosine
-            embedding_function: null
-          recommended_for:
-            - Production
-            - Distributed
-            - Scalable
-    FAISSStore:
-      description: FAISS vector index configuration
-      config_schema:
-        dimension:
-          type: integer
-          minimum: 1
-          maximum: 4096
-          description: Vector dimension
-        index_type:
-          type: string
-          enum:
-            - Flat
-            - IVF
-            - HNSW
-            - LSH
-          default: Flat
-          description: Index type
-        metric:
-          type: string
-          enum:
-            - L2
-            - IP
-            - Cosine
-          default: L2
-          description: Distance metric
-        nlist:
-          type: integer
-          default: 100
-          minimum: 1
-          description: Number of clusters (IVF)
-        nprobe:
-          type: integer
-          default: 10
-          minimum: 1
-          description: Clusters to search (IVF)
-        use_gpu:
-          type: boolean
-          default: false
-          description: Enable GPU acceleration
-      required:
-        - dimension
-      defaults:
-        flat_index:
-          name: Flat Index
-          description: Exact search, best for small datasets
-          config:
-            dimension: 768
-            index_type: Flat
-            metric: L2
-            nlist: 100
-            nprobe: 10
-            use_gpu: false
-          recommended_for:
-            - Small datasets
-            - Exact search
-            - High accuracy
-        ivf_index:
-          name: IVF Index
-          description: Approximate search for larger datasets
-          config:
-            dimension: 768
-            index_type: IVF
-            metric: Cosine
-            nlist: 1000
-            nprobe: 50
-            use_gpu: false
-          recommended_for:
-            - Large datasets
-            - Fast search
-            - Trade-off accuracy
-    PineconeStore:
-      description: Pinecone vector database
-      config_schema:
-        api_key:
-          type: string
-          description: Pinecone API key
-        environment:
-          type: string
-          default: us-east-1-aws
-          description: Pinecone environment
-        index_name:
-          type: string
-          pattern: ^[a-z0-9-]+$
-          description: Index name
-        dimension:
-          type: integer
-          minimum: 1
-          maximum: 20000
-          description: Vector dimension
-        metric:
-          type: string
-          enum:
-            - euclidean
-            - cosine
-            - dotproduct
-          default: cosine
-          description: Distance metric
-      required:
-        - api_key
-        - index_name
-        - dimension
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard pinecone store configuration
-          config:
-            api_key: ${PINECONE_API_KEY}
-            environment:
+              enum: [VectorRetriever, HybridRetriever, BM25Retriever, RerankedRetriever, GraphRetriever, ElasticRetriever, BasicSimilarityStrategy, MetadataFilteredStrategy, MultiQueryStrategy, RerankedStrategy, HybridUniversalStrategy]
+              description: Retrieval type
+            config:
+              type: object
+              description: Retrieval configuration
+              additionalProperties: true
+            default:
+              type: boolean
+              default: false
+              description: Whether this is the default strategy
+      default_embedding_strategy:
+        type: string
+        description: Name of the default embedding strategy to use
+      default_retrieval_strategy:
+        type: string
+        description: Name of the default retrieval strategy to use
+
+  dataProcessingStrategyDefinition:
+    type: object
+    title: Data Processing Strategy Definition
+    description: Processing pipeline configuration for parsers and extractors
+    required: [name, parsers]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+        minLength: 1
+        maxLength: 50
+        description: Unique strategy identifier
+      description:
+        type: string
+        minLength: 10
+        maxLength: 500
+        description: Strategy description
+      parsers:
+        type: array
+        title: Parsers
+        description: Document parsers in processing order
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            type:
               type: string
-              default: us-east-1-aws
-              description: Pinecone environment
-            index_name: documents
-            dimension: 768
-            metric:
+              enum: [
+                CSVParser_LlamaIndex,
+                CSVParser_Pandas,
+                CSVParser_Python,
+                DirectoryParser,
+                DocxParser_LlamaIndex,
+                DocxParser_PythonDocx,
+                ExcelParser_LlamaIndex,
+                ExcelParser_OpenPyXL,
+                ExcelParser_Pandas,
+                MarkdownParser_LlamaIndex,
+                MarkdownParser_Python,
+                PDFParser_LlamaIndex,
+                PDFParser_PyPDF2,
+                TextParser_LlamaIndex,
+                TextParser_Python
+              ]
+              description: Parser type
+            config:
+              type: object
+              description: Parser configuration
+              additionalProperties: true
+            file_extensions:
+              type: array
+              items:
+                type: string
+                pattern: ^\.[a-zA-Z0-9]+$
+              description: File extensions this parser handles (e.g., [".pdf", ".PDF"])
+              examples:
+                - [".pdf", ".PDF"]  # PDF parser
+                - [".csv", ".tsv"]  # CSV parser
+                - [".md", ".markdown"]  # Markdown parser
+            file_include_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to include (e.g., ["*.pdf", "report_*.pdf"])
+              examples:
+                - ["*.pdf", "*.PDF"]  # All PDF files
+                - ["report_*.csv"]  # CSV files starting with report_
+                - ["README*", "*.md"]  # README files and markdown
+            file_exclude_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to exclude (e.g., ["*_draft.pdf", "*.tmp"])
+              examples:
+                - ["*_draft.pdf", "*.tmp.pdf"]  # Draft and temp PDFs
+                - ["~$*", "*.bak"]  # Temp and backup files
+            priority:
+              type: integer
+              description: Parser priority (higher = try first)
+              default: 50
+              minimum: 0
+              maximum: 1000
+            mime_types:
+              type: array
+              items:
+                type: string
+              description: MIME types this parser handles (e.g., ["application/pdf"])
+              examples:
+                - ["application/pdf"]  # PDF parser
+                - ["text/csv", "text/tab-separated-values"]  # CSV parser
+                - ["text/markdown", "text/x-markdown"]  # Markdown parser
+            fallback_parser:
               type: string
-              enum:
-                - euclidean
-                - cosine
-                - dotproduct
-              default: cosine
-              description: Distance metric
-          recommended_for:
-            - Production
-            - Scalable
-            - Cloud
-  retrievers:
-    BasicSimilarityStrategy:
-      description: Simple vector similarity search
-      config_schema:
-        top_k:
-          type: integer
-          default: 10
-          minimum: 1
-          maximum: 1000
-          description: Number of results
-        distance_metric:
-          type: string
-          default: cosine
-          enum:
-            - cosine
-            - euclidean
-            - manhattan
-            - dot
-          description: Distance metric
-        score_threshold:
-          type:
-            - number
-            - "null"
-          default: null
-          minimum: 0.0
-          maximum: 1.0
-          description: Minimum similarity score
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard similarity search
-          config:
-            top_k: 10
-            distance_metric: cosine
-            score_threshold: null
-          recommended_for:
-            - Simple queries
-            - Fast retrieval
-            - Baseline
-        high_precision:
-          name: High Precision
-          description: Higher threshold for better precision
-          config:
-            top_k: 5
-            distance_metric: cosine
-            score_threshold: 0.7
-          recommended_for:
-            - Precise matching
-            - Quality over quantity
-    RerankedStrategy:
-      description: Re-rank results
-      config_schema:
-        top_k:
-          type: integer
-          default: 10
-          minimum: 1
-          maximum: 1000
-          description: Number of results
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard reranked retrieval
-          config:
-            top_k: 10
-          recommended_for:
-            - General use
-    MetadataFilteredStrategy:
-      description: Filter by metadata
-      config_schema:
-        top_k:
-          type: integer
-          default: 10
-          minimum: 1
-          maximum: 1000
-          description: Number of results
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard metadata filtered retrieval
-          config:
-            top_k: 10
-          recommended_for:
-            - General use
-    HybridUniversalStrategy:
-      description: Combine multiple strategies
-      config_schema:
-        top_k:
-          type: integer
-          default: 10
-          minimum: 1
-          maximum: 1000
-          description: Number of results
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard hybrid universal retrieval
-          config:
-            top_k: 10
-          recommended_for:
-            - General use
-    MultiQueryStrategy:
-      description: Multiple query variations
-      config_schema:
-        top_k:
-          type: integer
-          default: 10
-          minimum: 1
-          maximum: 1000
-          description: Number of results
-      defaults:
-        general_purpose:
-          name: General Purpose
-          description: Standard multi query retrieval
-          config:
-            top_k: 10
-          recommended_for:
-            - General use
+              description: Parser to use if this one fails
+            priority:
+              type: integer
+              default: 0
+              description: Priority for automatic selection
+      extractors:
+        type: array
+        title: Extractors
+        description: Metadata and feature extractors
+        items:
+          type: object
+          required: [type]
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              description: Extractor type
+            config:
+              type: object
+              description: Extractor configuration
+              additionalProperties: true
+            required_for:
+              type: array
+              items:
+                type: string
+              description: Database names that require this extractor
+            condition:
+              type: string
+              description: Optional condition for when to use this extractor
+            file_include_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to apply this extractor to
+              examples:
+                - ["*.pdf", "*.PDF"]  # PDF files only
+                - ["*"]  # All files
+            file_exclude_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to exclude from this extractor
+              examples:
+                - ["*.tmp", "*.bak"]  # Skip temp/backup files
+            priority:
+              type: integer
+              description: Extractor priority (higher = apply first)
+              default: 50
+              minimum: 0
+              maximum: 1000
+ 

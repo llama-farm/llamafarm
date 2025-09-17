@@ -5,12 +5,12 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from api.errors import (
+    ConfigTemplateNotFoundError,
     NamespaceNotFoundError,
     ProjectConfigError,
     ProjectNotFoundError,
-    SchemaNotFoundError,
+    ReservedNamespaceError,
 )
-from api.middleware.client_cwd import client_cwd
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
@@ -26,6 +26,8 @@ from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 logger = FastAPIStructLogger()
 
+RESERVED_NAMESPACES = ["llamafarm"]
+
 
 class Project(BaseModel):
     namespace: str
@@ -40,36 +42,34 @@ class ProjectService:
 
     @classmethod
     def get_namespace_dir(cls, namespace: str):
-        if settings.lf_project_dir is None:
-            base_path = os.path.join(settings.lf_data_dir, "projects")
-            raw_path = os.path.join(base_path, namespace)
-            norm_path = os.path.normpath(raw_path)
-            # Ensure the normalized path is within the base_path
-            if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
-                raise NamespaceNotFoundError(
-                    "Invalid namespace: path traversal detected"
-                )
-            return norm_path
-        else:
-            return None
+        base_path = os.path.join(settings.lf_data_dir, "projects")
+        raw_path = os.path.join(base_path, namespace)
+        norm_path = os.path.normpath(raw_path)
+        # Ensure the normalized path is within the base_path
+        if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
+            raise NamespaceNotFoundError("Invalid namespace: path traversal detected")
+        return norm_path
 
     @classmethod
     def get_project_dir(cls, namespace: str, project_id: str):
-        if not settings.lf_use_data_dir:
-            # Prefer client CWD (localhost CLI) when available; fallback to server CWD
-            return client_cwd.get() or os.getcwd()
-        if settings.lf_project_dir is None:
-            base_path = os.path.join(settings.lf_data_dir, "projects")
-            raw_path = os.path.join(base_path, namespace, project_id)
-            norm_path = os.path.normpath(raw_path)
-            # Ensure the normalized path is within the base_path
-            if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
-                raise NamespaceNotFoundError(
-                    "Invalid namespace or project_id: path traversal detected"
+        # The llamafarm namespace is a special case, it is used to store internal
+        # config files.
+        if namespace == "llamafarm":
+            return os.path.normpath(
+                os.path.join(
+                    Path(__file__).parent.parent, "seeds", project_id.replace("-", "_")
                 )
-            return norm_path
-        else:
-            return settings.lf_project_dir
+            )
+
+        base_path = os.path.join(settings.lf_data_dir, "projects")
+        raw_path = os.path.join(base_path, namespace, project_id)
+        norm_path = os.path.normpath(raw_path)
+        # Ensure the normalized path is within the base_path
+        if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
+            raise NamespaceNotFoundError(
+                "Invalid namespace or project_id: path traversal detected"
+            )
+        return norm_path
 
     @classmethod
     def create_project(
@@ -82,6 +82,9 @@ class ProjectService:
         Create a new project.
         @param project_id: The ID of the project to create. (e.g. MyNamespace/MyProject)
         """
+        if namespace in RESERVED_NAMESPACES:
+            raise ReservedNamespaceError(namespace)
+
         project_dir = cls.get_project_dir(namespace, project_id)
         os.makedirs(project_dir, exist_ok=True)
 
@@ -103,47 +106,26 @@ class ProjectService:
         Resolve a config template name to a concrete filesystem path.
 
         The resolution order is:
-        - If settings.lf_template_dir is set: {lf_template_dir}/{template}.yaml
+        - If settings.lf_templates_dir is set: {lf_templates_dir}/{template}.yaml
         - Otherwise, look under repo 'config/templates/{template}.yaml'
         - Finally, fall back to 'rag/schemas/consolidated.yaml' as a generic schema
         """
-        default_template = settings.lf_config_template
-        template = config_template if config_template is not None else default_template
-        schema_dir = settings.lf_template_dir
+        template = config_template or settings.lf_config_template
 
-        if schema_dir is None:
-            candidate_paths = [
-                Path(__file__).parent.parent.parent
-                / "config"
-                / "templates"
-                / f"{template}.yaml",
-                Path(__file__).parent.parent.parent
-                / "rag"
-                / "schemas"
-                / "consolidated.yaml",
-            ]
-        else:
-            candidate_paths = [Path(schema_dir) / f"{template}.yaml"]
+        absolute_path = (
+            Path(__file__).parent.parent.parent
+            / "config"
+            / "templates"
+            / f"{template}.yaml"
+        )
 
-        for candidate in candidate_paths:
-            if candidate.exists():
-                return candidate
+        if not absolute_path.exists():
+            raise ConfigTemplateNotFoundError(template, [str(absolute_path)])
 
-        raise SchemaNotFoundError(template, [str(p) for p in candidate_paths])
+        return absolute_path
 
     @classmethod
     def list_projects(cls, namespace: str) -> list[Project]:
-        if settings.lf_project_dir is not None:
-            logger.info(f"Listing projects in {settings.lf_project_dir}")
-            cfg = load_config(directory=settings.lf_project_dir, validate=False)
-            return [
-                Project(
-                    namespace=namespace,
-                    name=cfg.name,
-                    config=cfg,
-                )
-            ]
-
         namespace_dir = cls.get_namespace_dir(namespace)
         logger.info(f"Listing projects in {namespace_dir}")
 

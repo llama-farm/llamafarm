@@ -1,0 +1,97 @@
+# Fine-Tuning Workflows
+# Strategies for model fine-tuning and training
+
+strategies:
+  - name: pytorch_lora_training
+    description: LoRA fine-tuning with PyTorch
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          base_model: meta-llama/Llama-2-7b-hf
+          lora_r: 8
+          lora_alpha: 32
+          lora_dropout: 0.1
+          target_modules: ["q_proj", "v_proj"]
+          learning_rate: 2e-5
+          num_epochs: 3
+          batch_size: 4
+          gradient_accumulation_steps: 4
+          warmup_steps: 100
+          logging_steps: 10
+          save_steps: 500
+          eval_steps: 500
+          output_dir: ./fine_tuned_models/lora
+          use_wandb: true
+    
+  - name: llamafactory_qlora
+    description: QLoRA fine-tuning with LlamaFactory
+    components:
+      fine_tuner:
+        type: llamafactory
+        config:
+          model_name_or_path: meta-llama/Llama-2-7b-hf
+          stage: sft
+          do_train: true
+          finetuning_type: lora
+          quantization_bit: 4
+          lora_target: q_proj,v_proj,k_proj,o_proj
+          lora_rank: 8
+          lora_alpha: 16
+          lora_dropout: 0.1
+          learning_rate: 5e-5
+          num_train_epochs: 3
+          per_device_train_batch_size: 2
+          gradient_accumulation_steps: 8
+          warmup_ratio: 0.1
+          logging_steps: 10
+          save_steps: 100
+          output_dir: ./llamafactory_output
+          bf16: true
+          gradient_checkpointing: true
+    
+  - name: full_model_finetuning
+    description: Full model fine-tuning for maximum performance
+    components:
+      fine_tuner:
+        type: pytorch
+        config:
+          base_model: microsoft/phi-2
+          full_finetuning: true
+          learning_rate: 1e-5
+          num_epochs: 5
+          batch_size: 8
+          gradient_accumulation_steps: 2
+          warmup_ratio: 0.05
+          weight_decay: 0.01
+          max_grad_norm: 1.0
+          fp16: true
+          evaluation_strategy: steps
+          eval_steps: 100
+          save_total_limit: 3
+          load_best_model_at_end: true
+          metric_for_best_model: eval_loss
+          greater_is_better: false
+    
+  - name: continuous_pretraining
+    description: Continue pretraining on domain-specific data
+    components:
+      fine_tuner:
+        type: llamafactory
+        config:
+          model_name_or_path: meta-llama/Llama-2-7b-hf
+          stage: pt
+          do_train: true
+          finetuning_type: lora
+          dataset: domain_corpus
+          preprocessing_num_workers: 16
+          learning_rate: 2e-4
+          num_train_epochs: 1
+          per_device_train_batch_size: 4
+          gradient_accumulation_steps: 4
+          warmup_steps: 1000
+          logging_steps: 100
+          save_steps: 1000
+          output_dir: ./continued_pretraining
+          bf16: true
+          flash_attn: auto
