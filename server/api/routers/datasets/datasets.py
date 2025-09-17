@@ -153,11 +153,25 @@ async def upload_data(
     return {"filename": file.filename, "hash": metadata_file_content.hash, "processed": False}
 
 
+class FileProcessingDetail(BaseModel):
+    hash: str
+    filename: str | None = None
+    status: str  # processed, skipped, failed
+    parser: str | None = None
+    extractors: list[str] | None = None
+    chunks: int | None = None
+    chunk_size: int | None = None
+    embedder: str | None = None
+    error: str | None = None
+    reason: str | None = None  # For skipped files (e.g., "duplicate")
+
 class ProcessDatasetResponse(BaseModel):
     processed_files: int
     skipped_files: int
     failed_files: int
-    details: list[dict]
+    strategy: str | None = None
+    database: str | None = None
+    details: list[FileProcessingDetail]
 
 
 @router.post("/{dataset}/process", response_model=ProcessDatasetResponse)
@@ -204,11 +218,12 @@ async def process_dataset(
         if not os.path.exists(data_path):
             logger.warning("File not found", hash=file_hash, path=data_path)
             failed += 1
-            details.append({
-                "hash": file_hash,
-                "status": "failed",
-                "error": "File not found"
-            })
+            details.append(FileProcessingDetail(
+                hash=file_hash,
+                filename=None,
+                status="failed",
+                error="File not found"
+            ))
             continue
         
         # Check if already processed (by checking if hash exists as document ID in vector store)
@@ -222,28 +237,64 @@ async def process_dataset(
             database=database_name,
         )
         
+        # Get metadata for the file to get filename
+        import os
+        filename = None
+        file_size = 0
+        try:
+            from server.services.data_service import DataService
+            metadata = DataService.get_data_file_metadata_by_hash(
+                namespace=namespace,
+                project_id=project,
+                file_content_hash=file_hash,
+            )
+            filename = metadata.filename
+            # Get file size
+            if os.path.exists(data_path):
+                file_size = os.path.getsize(data_path)
+        except:
+            filename = os.path.basename(data_path)
+            if os.path.exists(data_path):
+                file_size = os.path.getsize(data_path)
+        
+        logger.info(f"Processing file: {filename} ({file_hash[:8]}...) - {file_size} bytes")
+        
         # Process the file
-        ok = ingest_file_with_rag(
+        ok, file_details = ingest_file_with_rag(
             project_dir=project_dir,
             project_config=project_obj.config,
             data_processing_strategy_name=data_processing_strategy_name,
             database_name=database_name,
             source_path=data_path,
+            filename=filename,
         )
         
-        if ok:
+        # Determine actual status based on file_details
+        if file_details.get("reason") == "duplicate":
+            status = "skipped"
+            skipped += 1
+        elif ok:
+            status = "processed"
             processed += 1
-            details.append({
-                "hash": file_hash,
-                "status": "processed"
-            })
         else:
+            status = "failed"
             failed += 1
-            details.append({
-                "hash": file_hash,
-                "status": "failed",
-                "error": "Ingestion failed"
-            })
+        
+        # Create detailed response
+        detail = FileProcessingDetail(
+            hash=file_hash,
+            filename=filename or file_details.get("filename"),
+            status=status,
+            parser=file_details.get("parser"),
+            extractors=file_details.get("extractors"),
+            chunks=file_details.get("chunks"),
+            chunk_size=file_details.get("chunk_size"),
+            embedder=file_details.get("embedder"),
+            error=file_details.get("error") if status == "failed" else None,
+            reason=file_details.get("reason")
+        )
+            
+        details.append(detail)
     
     logger.info(
         "Dataset processing complete",
@@ -257,6 +308,8 @@ async def process_dataset(
         processed_files=processed,
         skipped_files=skipped,
         failed_files=failed,
+        strategy=data_processing_strategy_name,
+        database=database_name,
         details=details
     )
 

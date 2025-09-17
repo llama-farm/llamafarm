@@ -120,7 +120,8 @@ def ingest_file_with_rag(
     data_processing_strategy_name: str,
     database_name: str,
     source_path: str,
-) -> bool:
+    filename: str = None,
+) -> tuple[bool, dict]:
     """
     Ingest a single file using the new RAG schema format.
 
@@ -132,14 +133,32 @@ def ingest_file_with_rag(
         source_path: Path to the file to ingest
 
     Returns:
-        True if ingestion succeeded, False otherwise
+        Tuple of (success: bool, details: dict) with processing information
     """
+    import os
+    import re
+    import json
+    
+    # Initialize details dict
+    details = {
+        "filename": filename or os.path.basename(source_path),
+        "parser": None,
+        "extractors": [],
+        "chunks": None,
+        "chunk_size": None,
+        "embedder": None,
+        "error": None,
+        "reason": None,
+        "result": None  # Store the full result from IngestHandler
+    }
+    
     try:
         # Extract RAG configuration
         rag_config = project_config.rag
         if not rag_config:
             logger.error("No RAG configuration found in project config")
-            return False
+            details["error"] = "No RAG configuration found"
+            return False, details
 
         # Find the specified data processing strategy
         data_processing_strategy = None
@@ -152,7 +171,8 @@ def ingest_file_with_rag(
             logger.error(
                 f"Data processing strategy '{data_processing_strategy_name}' not found"
             )
-            return False
+            details["error"] = f"Strategy '{data_processing_strategy_name}' not found"
+            return False, details
 
         # Find the specified database
         database_config = None
@@ -163,7 +183,46 @@ def ingest_file_with_rag(
 
         if not database_config:
             logger.error(f"Database '{database_name}' not found")
-            return False
+            details["error"] = f"Database '{database_name}' not found"
+            return False, details
+            
+        # Extract strategy details for the response
+        if data_processing_strategy:
+            logger.info(f"Processing strategy: {data_processing_strategy_name}")
+            logger.debug(f"Strategy object: {data_processing_strategy}")
+            
+            # Get parser info - use first parser if multiple
+            if data_processing_strategy.parsers and len(data_processing_strategy.parsers) > 0:
+                details["parser"] = data_processing_strategy.parsers[0].type
+                logger.info(f"Parser type: {details['parser']}")
+                # If there's chunking config in parser config
+                if data_processing_strategy.parsers[0].config:
+                    parser_config = data_processing_strategy.parsers[0].config
+                    if isinstance(parser_config, dict) and 'chunk_size' in parser_config:
+                        details["chunk_size"] = parser_config['chunk_size']
+                        logger.info(f"Chunk size from parser: {details['chunk_size']}")
+                
+            # Get extractors
+            if data_processing_strategy.extractors:
+                details["extractors"] = [e.type for e in data_processing_strategy.extractors]
+                logger.info(f"Extractors: {details['extractors']}")
+                
+        # Get embedder info from database config
+        if database_config:
+            logger.info(f"Database: {database_name}")
+            logger.debug(f"Database object: {database_config}")
+            
+            # Get first embedding strategy if available
+            if database_config.embedding_strategies and len(database_config.embedding_strategies) > 0:
+                details["embedder"] = database_config.embedding_strategies[0].type
+                logger.info(f"Embedder type: {details['embedder']}")
+            # Check for chunk size in database config
+            if database_config.config:
+                db_config = database_config.config
+                if isinstance(db_config, dict) and 'chunk_size' in db_config:
+                    if details["chunk_size"] is None:  # Only set if not already set from parser
+                        details["chunk_size"] = db_config['chunk_size']
+                        logger.info(f"Chunk size from database: {details['chunk_size']}")
 
         # Run the RAG CLI with the new schema format
         exit_code, stdout, stderr = run_rag_cli_with_config_and_strategy(
@@ -179,19 +238,81 @@ def ingest_file_with_rag(
                 database=database_name,
                 data_processing_strategy=data_processing_strategy_name,
             )
-            return False
+            
+            # Try to extract error details from stderr
+            if "duplicate" in stderr.lower():
+                details["reason"] = "duplicate"
+                details["error"] = "File already exists in database"
+            else:
+                details["error"] = stderr[:200] if stderr else "Unknown error"
+                
+            return False, details
+        
+        # Try to extract processing details from stdout
+        if stdout:
+            # Look for JSON result
+            json_match = re.search(r'\[RESULT_JSON\](.*?)\[/RESULT_JSON\]', stdout, re.DOTALL)
+            if json_match:
+                try:
+                    result = json.loads(json_match.group(1))
+                    details["result"] = result
+                    
+                    # Extract details from result
+                    if result.get('parsers_used'):
+                        details["parser"] = result['parsers_used'][0] if len(result['parsers_used']) == 1 else ', '.join(result['parsers_used'])
+                    
+                    if result.get('extractors_applied'):
+                        details["extractors"] = result['extractors_applied']
+                    
+                    if result.get('embedder'):
+                        details["embedder"] = result['embedder']
+                    
+                    if result.get('document_count'):
+                        details["chunks"] = result['document_count']
+                    
+                    if result.get('chunk_size'):
+                        details["chunk_size"] = result['chunk_size']
+                    
+                    # Set reason if it's a duplicate
+                    if result.get('status') == 'skipped' or result.get('reason') == 'duplicate':
+                        details["reason"] = "duplicate"
+                    elif result.get('stored_count', 0) == 0 and result.get('skipped_count', 0) > 0:
+                        details["reason"] = "duplicate"
+                        
+                except json.JSONDecodeError:
+                    logger.warning("Could not parse result JSON from stdout")
+            
+            # Fallback parsing for older format or if JSON parsing fails
+            if not details.get("chunks"):
+                chunk_match = re.search(r'Chunks created:\s*(\d+)', stdout)
+                if not chunk_match:
+                    chunk_match = re.search(r'(\d+)\s+chunks?', stdout, re.IGNORECASE)
+                if chunk_match:
+                    details["chunks"] = int(chunk_match.group(1))
+                    
+            # Look for stored/skipped counts
+            stored_match = re.search(r'Stored:\s*(\d+)', stdout)
+            skipped_match = re.search(r'Skipped.*?:\s*(\d+)', stdout)
+            if stored_match and int(stored_match.group(1)) == 0 and skipped_match and int(skipped_match.group(1)) > 0:
+                details["reason"] = "duplicate"
+            
+            # Also check for explicit duplicate message
+            if "FILE ALREADY PROCESSED" in stdout or "All chunks already exist" in stdout:
+                details["reason"] = "duplicate"
 
         logger.info(
             "RAG ingest succeeded",
             stdout=stdout,
             database=database_name,
             data_processing_strategy=data_processing_strategy_name,
+            details=details,
         )
-        return True
+        return True, details
 
     except Exception as e:
         logger.error(f"Error during RAG ingestion: {e}")
-        return False
+        details["error"] = str(e)
+        return False, details
 
 
 def run_rag_cli_with_config_and_strategy(
@@ -301,8 +422,25 @@ def run_rag_cli_with_config_and_strategy(
             metadata=metadata
         )
         
-        if result.get('status') == 'success':
+        # Handle different statuses
+        status = result.get('status')
+        
+        # Convert result to JSON for parsing
+        import json
+        result_json = json.dumps(result)
+        
+        if status == 'success':
             stdout = f"Successfully ingested {result.get('document_count', 0)} documents from {file_path.name}"
+            stdout += f"\nStored: {result.get('stored_count', 0)}"
+            stdout += f"\nSkipped: {result.get('skipped_count', 0)}"
+            stdout += f"\n[RESULT_JSON]{result_json}[/RESULT_JSON]"
+            return 0, stdout, ""
+        elif status == 'skipped':
+            # File was skipped (duplicate)
+            stdout = f"FILE ALREADY PROCESSED - All {result.get('skipped_count', 0)} chunks already exist in database"
+            stdout += f"\nStored: 0"
+            stdout += f"\nSkipped: {result.get('skipped_count', 0)}"
+            stdout += f"\n[RESULT_JSON]{result_json}[/RESULT_JSON]"
             return 0, stdout, ""
         else:
             stderr = f"Ingestion failed: {result.get('message', 'Unknown error')}"

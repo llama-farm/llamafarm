@@ -191,10 +191,30 @@ uv run python -m prompts.cli execute "Your task" --template research
 
 ### 🎮 Try It Live with the LlamaFarm CLI
 
+#### Building the CLI Locally
+
+If you're working with the latest changes that haven't been released yet, you can build and run the CLI locally:
+
+```bash
+# Prerequisites: Go 1.19+ must be installed
+
+# Build the CLI binary
+cd cli && go build -o lf . && cd ..
+
+# Create a symlink for easy access (optional)
+ln -sf cli/lf lf
+
+# Now you can run the CLI as ./lf from the project root
+./lf version  # Should show "LlamaFarm CLI vdev"
+
+# To rebuild after making changes to the CLI code:
+cd cli && go build -o lf . && cd ..
+```
+
 #### Complete RAG Pipeline Example
 ```bash
-# Build the CLI
-cd cli && go build -o ../lf main.go && cd ..
+# Using the locally built CLI
+./lf version  # Verify it's working
 
 # Create and populate a dataset
 ./lf datasets add my-docs -s universal_processor -b main_database

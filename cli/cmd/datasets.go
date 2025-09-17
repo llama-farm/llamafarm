@@ -21,6 +21,7 @@ var (
 	configFile             string
 	dataProcessingStrategy string
 	database               string
+	verbose                bool
 )
 
 // datasetsCmd represents the datasets command
@@ -374,10 +375,19 @@ var datasetsProcessCmd = &cobra.Command{
 			ProcessedFiles int      `json:"processed_files"`
 			SkippedFiles   int      `json:"skipped_files"`
 			FailedFiles    int      `json:"failed_files"`
+			Strategy       string   `json:"strategy,omitempty"`
+			Database       string   `json:"database,omitempty"`
 			Details        []struct {
-				Hash   string `json:"hash"`
-				Status string `json:"status"`
-				Error  string `json:"error,omitempty"`
+				Hash       string   `json:"hash"`
+				Filename   string   `json:"filename,omitempty"`
+				Status     string   `json:"status"`
+				Parser     string   `json:"parser,omitempty"`
+				Extractors []string `json:"extractors,omitempty"`
+				Chunks     *int     `json:"chunks,omitempty"`
+				ChunkSize  *int     `json:"chunk_size,omitempty"`
+				Embedder   string   `json:"embedder,omitempty"`
+				Error      string   `json:"error,omitempty"`
+				Reason     string   `json:"reason,omitempty"`
 			} `json:"details"`
 		}
 		if err := json.Unmarshal(body, &result); err != nil {
@@ -385,19 +395,84 @@ var datasetsProcessCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Display results
-		fmt.Printf("✅ Processing complete:\n")
+		// Display results - always show configuration
+		fmt.Printf("\n📊 Processing Configuration:\n")
+		if result.Strategy != "" {
+			fmt.Printf("   Strategy: %s\n", result.Strategy)
+		}
+		if result.Database != "" {
+			fmt.Printf("   Database: %s\n", result.Database)
+		}
+		
+		// Always show detailed processing info
+		fmt.Printf("\n📁 File Processing Details:\n")
+		for i, d := range result.Details {
+			// Show filename or truncated hash
+			identifier := d.Filename
+			if identifier == "" {
+				if len(d.Hash) > 8 {
+					identifier = d.Hash[:8] + "..."
+				} else {
+					identifier = d.Hash
+				}
+			}
+			
+			// Color-code status
+			statusDisplay := d.Status
+			if d.Status == "processed" {
+				statusDisplay = "✅ PROCESSED"
+			} else if d.Status == "skipped" {
+				statusDisplay = "⏭️  SKIPPED (DUPLICATE)"
+			} else if d.Status == "failed" {
+				statusDisplay = "❌ FAILED"
+			}
+			
+			fmt.Printf("\n   [%d] %s\n", i+1, identifier)
+			fmt.Printf("       Status: %s\n", statusDisplay)
+			
+			if d.Status == "processed" {
+				if d.Parser != "" {
+					fmt.Printf("       Parser: %s\n", d.Parser)
+				}
+				if len(d.Extractors) > 0 {
+					fmt.Printf("       Extractors: %s\n", strings.Join(d.Extractors, ", "))
+				}
+				if d.Chunks != nil {
+					fmt.Printf("       Chunks: %d", *d.Chunks)
+					if d.ChunkSize != nil {
+						fmt.Printf(" (size: %d)", *d.ChunkSize)
+					}
+					fmt.Println()
+				}
+				if d.Embedder != "" {
+					fmt.Printf("       Embedder: %s\n", d.Embedder)
+				}
+			} else if d.Status == "skipped" {
+				fmt.Printf("       ℹ️  File already exists in database\n")
+				if d.Reason == "duplicate" {
+					fmt.Printf("       📝 All chunks are duplicates - no new data added\n")
+				}
+				// Still show what would have been used
+				if d.Parser != "" {
+					fmt.Printf("       Would use parser: %s\n", d.Parser)
+				}
+				if d.Embedder != "" {
+					fmt.Printf("       Would use embedder: %s\n", d.Embedder)
+				}
+			} else if d.Status == "failed" {
+				if d.Error != "" {
+					fmt.Printf("       Error: %s\n", d.Error)
+				}
+			}
+		}
+		
+		fmt.Printf("\n✅ Processing Summary:\n")
 		fmt.Printf("   • Processed: %d files\n", result.ProcessedFiles)
 		if result.SkippedFiles > 0 {
-			fmt.Printf("   • Skipped: %d files (already processed)\n", result.SkippedFiles)
+			fmt.Printf("   • Skipped: %d files\n", result.SkippedFiles)
 		}
 		if result.FailedFiles > 0 {
 			fmt.Printf("   • Failed: %d files\n", result.FailedFiles)
-			for _, d := range result.Details {
-				if d.Status == "failed" && d.Error != "" {
-					fmt.Printf("     - %s: %s\n", d.Hash[:8], d.Error)
-				}
-			}
 		}
 	},
 }

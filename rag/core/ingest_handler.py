@@ -160,8 +160,19 @@ class IngestHandler:
         Returns:
             Dictionary with ingestion results
         """
+        import time
+        start_time = time.time()
+        
         filename = metadata.get("filename", "unknown")
+        file_size = len(file_data)
         logger.info(f"Ingesting file: {filename}")
+        
+        # Print file info
+        print(f"\n{'='*60}")
+        print(f"📁 FILE: {filename}")
+        print(f"   Size: {file_size:,} bytes ({file_size/1024:.1f} KB)")
+        print(f"   Type: {metadata.get('content_type', 'unknown')}")
+        print(f"{'='*60}")
         
         try:
             # Process the blob with the blob processor
@@ -197,12 +208,79 @@ class IngestHandler:
                 # Set embedding on the document object itself
                 if embedding and len(embedding) > 0:
                     doc.embeddings = embedding[0]  # Get first embedding from list
+                    if i == 0:  # Print embedding info only once
+                        print(f"\n🧠 Embedding with {self.embedder.__class__.__name__}:")
+                        print(f"   └─ Dimensions: {len(doc.embeddings)}")
                 embedded_documents.append(doc)
             
-            # Store documents in vector store
-            doc_ids = self.vector_store.add_documents(embedded_documents)
+            # Store documents in vector store with duplicate detection
+            stored_count = 0
+            skipped_count = 0
+            doc_ids = []
             
-            logger.info(f"Successfully ingested {len(documents)} documents from {filename}")
+            for doc in embedded_documents:
+                try:
+                    # Check if document already exists in store
+                    existing = self.vector_store.get_documents(doc.id) if hasattr(self.vector_store, 'get_documents') else None
+                    if existing:
+                        logger.info(f"Document {doc.id} already exists in database - skipping")
+                        skipped_count += 1
+                        print(f"[DUPLICATE] Document {doc.id} already in database - skipping")
+                    else:
+                        # Add single document
+                        result = self.vector_store.add_documents([doc])
+                        if result:
+                            # result is a list of added document IDs
+                            if isinstance(result, list) and len(result) > 0:
+                                doc_ids.extend(result)
+                                stored_count += len(result)
+                                logger.info(f"Stored document {doc.id} with {len(doc.embeddings) if hasattr(doc, 'embeddings') else 0} dimensions")
+                                print(f"[STORED] Document {doc.id} embedded and stored")
+                            else:
+                                # Document was skipped (duplicate)
+                                skipped_count += 1
+                                logger.info(f"Document {doc.id} already exists - skipped")
+                                print(f"[DUPLICATE] Document {doc.id} already in database - skipping")
+                except Exception as e:
+                    # If add fails with duplicate error, count as skipped
+                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                        skipped_count += 1
+                        logger.info(f"Document {doc.id} is duplicate - skipping")
+                        print(f"[DUPLICATE] Document {doc.id} already in database - skipping")
+                    else:
+                        # Try batch add if individual fails
+                        try:
+                            result = self.vector_store.add_documents(embedded_documents)
+                            doc_ids = result
+                            stored_count = len(embedded_documents)
+                            logger.info(f"Batch stored {stored_count} documents")
+                            print(f"[BATCH STORED] {stored_count} documents embedded and stored")
+                            break
+                        except Exception as batch_e:
+                            logger.error(f"Failed to store documents: {batch_e}")
+                            raise
+            
+            # Calculate processing time
+            elapsed_time = time.time() - start_time
+            
+            # Output storage details
+            print(f"\n💾 Database Storage ({self.vector_store.__class__.__name__}):")
+            if stored_count > 0:
+                print(f"   ✅ Stored: {stored_count} new chunks")
+            if skipped_count > 0:
+                print(f"   ⏭️  Skipped: {skipped_count} duplicate chunks")
+            
+            # Summary
+            print(f"\n📈 Processing Summary:")
+            print(f"   ⏱️  Total time: {elapsed_time:.2f} seconds")
+            if stored_count > 0:
+                print(f"   ✅ Status: SUCCESS - {stored_count}/{len(documents)} chunks stored")
+            elif skipped_count > 0:
+                print(f"   ⚠️  Status: DUPLICATE - All {skipped_count} chunks already in database")
+            else:
+                print(f"   ❌ Status: FAILED")
+            
+            logger.info(f"Ingestion complete: {stored_count} stored, {skipped_count} skipped from {filename}")
             
             # Extract parser names safely
             parser_names = []
@@ -213,13 +291,28 @@ class IngestHandler:
                 else:
                     parser_names.append(str(parser))
             
+            # Determine overall status
+            if stored_count == 0 and skipped_count > 0:
+                # All chunks were duplicates
+                status = "skipped"
+                reason = "duplicate"
+                print(f"\n⚠️ FILE ALREADY PROCESSED - All {skipped_count} chunks already exist in database")
+            else:
+                status = "success"
+                reason = None
+            
             return {
-                "status": "success",
+                "status": status,
                 "filename": filename,
                 "document_count": len(documents),
+                "stored_count": stored_count,
+                "skipped_count": skipped_count,
                 "document_ids": doc_ids,
                 "parsers_used": list(set(parser_names)),
-                "extractors_applied": self._get_applied_extractors(documents[0] if documents else None)
+                "extractors_applied": self._get_applied_extractors(documents[0] if documents else None),
+                "embedder": self.embedder.__class__.__name__,
+                "chunk_size": documents[0].metadata.get('chunk_size') if documents else None,
+                "reason": reason
             }
             
         except Exception as e:

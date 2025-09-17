@@ -193,7 +193,7 @@ class ChromaStore(VectorStore):
 
             if not ids:
                 logger.warning("No valid documents with embeddings to add (all may be duplicates)")
-                return True
+                return []  # Return empty list when no documents were added
 
             # DEBUG: Check for duplicate IDs
             id_counts = {}
@@ -228,7 +228,7 @@ class ChromaStore(VectorStore):
                 logger.info(f"Added {len(ids)} documents, skipped {skipped_duplicates} duplicates")
             else:
                 logger.info(f"Added {len(ids)} documents to ChromaDB collection")
-            return True
+            return ids  # Return the list of IDs that were actually added
 
         except Exception as e:
             logger.error(f"Failed to add documents to ChromaDB: {e}")
