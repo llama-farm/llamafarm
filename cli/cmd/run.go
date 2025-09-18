@@ -124,7 +124,7 @@ Examples:
 		if ns == "" || proj == "" {
 			cfg, err := config.LoadConfig(cwd)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "No config file found in target directory.\n")
+				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 				os.Exit(1)
 			}
 

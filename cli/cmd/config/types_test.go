@@ -218,6 +218,19 @@ func TestInvalidJSONConfig(t *testing.T) {
 	}
 }
 
+func TestInvalidYAMLConfig(t *testing.T) {
+	// Test error handling for invalid YAML
+	invalidYAML := `version: v1
+name: test
+invalid yaml: [ unclosed bracket`
+	dir := writeTempConfigDir(t, invalidYAML)
+
+	_, err := LoadConfig(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML, but got none")
+	}
+}
+
 func TestIsConfigFile(t *testing.T) {
 	// Test that IsConfigFile correctly identifies config files
 	tests := []struct {
