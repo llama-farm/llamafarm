@@ -77,6 +77,9 @@ var datasetsListCmd = &cobra.Command{
 	Short:   "List all datasets on the server for the selected project",
 	Long:    `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Start config watcher for this command
+		StartConfigWatcherForCommand()
+
 		// Resolve server and routing
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
@@ -143,6 +146,9 @@ Examples:
   lf datasets add -s text_processing -b main_database my-pdfs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Start config watcher for this command
+		StartConfigWatcherForCommand()
+
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -240,6 +246,9 @@ var datasetsRemoveCmd = &cobra.Command{
 	Long:    `Deletes a dataset from the LlamaFarm server for the selected project.`,
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Start config watcher for this command
+		StartConfigWatcherForCommand()
+
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -284,6 +293,9 @@ Examples:
   lf datasets ingest my-docs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Start config watcher for this command
+		StartConfigWatcherForCommand()
+
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -326,10 +338,13 @@ Examples:
 var datasetsProcessCmd = &cobra.Command{
 	Use:   "process [dataset-name]",
 	Short: "Process uploaded files into the vector database",
-	Long: `Process all uploaded files in the dataset into the vector database using the configured data processing strategy and embeddings.`,
+	Long:  `Process all uploaded files in the dataset into the vector database using the configured data processing strategy and embeddings.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		// Start config watcher for this command
+		StartConfigWatcherForCommand()
+
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -343,9 +358,9 @@ var datasetsProcessCmd = &cobra.Command{
 		fmt.Printf("Processing dataset '%s'...\n", datasetName)
 
 		// Call the process endpoint
-		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process", 
+		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process",
 			serverCfg.Namespace, serverCfg.Project, datasetName))
-		
+
 		req, err := http.NewRequest("POST", url, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
@@ -372,11 +387,11 @@ var datasetsProcessCmd = &cobra.Command{
 
 		// Parse response
 		var result struct {
-			ProcessedFiles int      `json:"processed_files"`
-			SkippedFiles   int      `json:"skipped_files"`
-			FailedFiles    int      `json:"failed_files"`
-			Strategy       string   `json:"strategy,omitempty"`
-			Database       string   `json:"database,omitempty"`
+			ProcessedFiles int    `json:"processed_files"`
+			SkippedFiles   int    `json:"skipped_files"`
+			FailedFiles    int    `json:"failed_files"`
+			Strategy       string `json:"strategy,omitempty"`
+			Database       string `json:"database,omitempty"`
 			Details        []struct {
 				Hash       string   `json:"hash"`
 				Filename   string   `json:"filename,omitempty"`
@@ -403,7 +418,7 @@ var datasetsProcessCmd = &cobra.Command{
 		if result.Database != "" {
 			fmt.Printf("   Database: %s\n", result.Database)
 		}
-		
+
 		// Always show detailed processing info
 		fmt.Printf("\n📁 File Processing Details:\n")
 		fmt.Printf("────────────────────────────────────────────────────────────────────────\n")
@@ -419,7 +434,7 @@ var datasetsProcessCmd = &cobra.Command{
 				// Just show full hash if no filename
 				identifier = d.Hash
 			}
-			
+
 			// Color-code status
 			statusDisplay := d.Status
 			statusBadge := ""
@@ -433,17 +448,17 @@ var datasetsProcessCmd = &cobra.Command{
 				statusDisplay = "FAILED"
 				statusBadge = "❌"
 			}
-			
+
 			// File header with number, status badge, and identifier
 			fmt.Printf("\n   %s [%d] %s\n", statusBadge, i+1, identifier)
 			fmt.Printf("       ├─ Status: %s\n", statusDisplay)
-			
+
 			if d.Status == "processed" {
 				// Parser information
 				if d.Parser != "" {
 					fmt.Printf("       ├─ Parser: %s\n", d.Parser)
 				}
-				
+
 				// Chunks information - show more detail
 				if d.Chunks != nil {
 					chunkInfo := fmt.Sprintf("%d chunks created", *d.Chunks)
@@ -452,7 +467,7 @@ var datasetsProcessCmd = &cobra.Command{
 					}
 					fmt.Printf("       ├─ Chunking: %s\n", chunkInfo)
 				}
-				
+
 				// Extractors - show count and types
 				if len(d.Extractors) > 0 {
 					fmt.Printf("       ├─ Extractors: %d applied\n", len(d.Extractors))
@@ -469,7 +484,7 @@ var datasetsProcessCmd = &cobra.Command{
 						}
 					}
 				}
-				
+
 				// Embedder information
 				if d.Embedder != "" {
 					fmt.Printf("       └─ Embedder: %s\n", d.Embedder)
@@ -494,7 +509,7 @@ var datasetsProcessCmd = &cobra.Command{
 				}
 			}
 		}
-		
+
 		// Summary with more context
 		fmt.Printf("\n────────────────────────────────────────────────────────────────────────\n")
 		totalFiles := result.ProcessedFiles + result.SkippedFiles + result.FailedFiles
@@ -507,7 +522,7 @@ var datasetsProcessCmd = &cobra.Command{
 		} else {
 			fmt.Printf("\n✅ Processing Complete:\n")
 		}
-		
+
 		fmt.Printf("   📊 Total files: %d\n", totalFiles)
 		if result.ProcessedFiles > 0 {
 			fmt.Printf("   ✅ Successfully processed: %d\n", result.ProcessedFiles)
@@ -532,6 +547,7 @@ var datasetsProcessCmd = &cobra.Command{
 }
 
 func init() {
+
 	// Server routing flags (align with projects chat)
 	datasetsCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
 	datasetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")

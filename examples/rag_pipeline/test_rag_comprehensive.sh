@@ -78,8 +78,19 @@ if [ ! -f "$PROJECT_CONFIG" ]; then
     fi
 fi
 
+# Get the folder path to $PROJECT_CONFIG
+PROJECT_CONFIG_DIR="$(dirname "$PROJECT_CONFIG")"
+
+# LlamaFarm CLI command
+LF_PATH=${LF_PATH:-"./lf"}
+LF_CMD="${LF_PATH} --cwd $PROJECT_CONFIG_DIR"
+
 # Sample files from the examples directory
-SAMPLE_DIR="examples/rag_pipeline/sample_files"
+if [ -n "$SAMPLE_DIR" ]; then
+    SAMPLE_DIR="$SAMPLE_DIR"
+else
+    SAMPLE_DIR="$PWD/sample_files"
+fi
 
 print_header "RAG CLI Comprehensive Test"
 echo "Test Database: ${TEST_DB}"
@@ -118,7 +129,45 @@ new_db = {
         'distance_function': 'cosine',
         'persist_directory': './data/${TEST_DB}',
         'port': 8000
-    }
+    },
+    'embedding_strategies': [
+       {
+            'name': 'default_embeddings',
+            'type': 'OllamaEmbedder',
+            'config': {
+                'auto_pull': True,
+                'base_url': 'http://localhost:11434/',
+                'batch_size': 16,
+                'dimension': 768,
+                'model': 'nomic-embed-text',
+                'timeout': 60
+            },
+            'priority': 0
+        }
+    ],
+    'retrieval_strategies': [
+        {
+            'name': 'basic_search',
+            'type': 'BasicSimilarityStrategy',
+            'config': {
+                'distance_metric': 'cosine',
+                'top_k': 10
+            },
+            'default': True
+        },
+        {
+            'name': 'filtered_search',
+            'type': 'MetadataFilteredStrategy',
+            'config': {
+                'fallback_multiplier': 2,
+                'filter_mode': 'post',
+                'top_k': 10
+            },
+            'default': False
+        }
+    ],
+    'default_embedding_strategy': 'default_embeddings',
+    'default_retrieval_strategy': 'basic_search'
 }
 
 # Check if database already exists
@@ -126,7 +175,7 @@ db_exists = any(db['name'] == '${TEST_DB}' for db in config.get('rag', {}).get('
 
 if not db_exists:
     config['rag']['databases'].append(new_db)
-    
+
     # Write back the updated config
     with open(config_file, 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -137,7 +186,7 @@ EOF
 else
     # Fallback: manually append database to YAML
     print_info "PyYAML not found, using manual approach..."
-    
+
     # Check if database already exists
     if grep -q "name: ${TEST_DB}" "$PROJECT_CONFIG"; then
         print_info "Database '${TEST_DB}' already exists in configuration"
@@ -153,11 +202,38 @@ else
             print "      distance_function: cosine"
             print "      persist_directory: ./data/" db
             print "      port: 8000"
+            print "    embedding_strategies:"
+            print "    - name: default_embeddings"
+            print "      type: OllamaEmbedder"
+            print "      config:"
+            print "        auto_pull: true"
+            print "        base_url: http://localhost:11434/"
+            print "        batch_size: 16"
+            print "        dimension: 768"
+            print "        model: nomic-embed-text"
+            print "        timeout: 60"
+            print "      priority: 0"
+            print "    retrieval_strategies:"
+            print "    - name: basic_search"
+            print "      type: BasicSimilarityStrategy"
+            print "      config:"
+            print "        distance_metric: cosine"
+            print "        top_k: 10"
+            print "      default: true"
+            print "    - name: filtered_search"
+            print "      type: MetadataFilteredStrategy"
+            print "      config:"
+            print "        fallback_multiplier: 2"
+            print "        filter_mode: post"
+            print "        top_k: 10"
+            print "      default: false"
+            print "    default_embedding_strategy: default_embeddings"
+            print "    default_retrieval_strategy: basic_search"
             done = 1
         }
         { print }
         ' "$PROJECT_CONFIG" > "${PROJECT_CONFIG}.tmp" && mv "${PROJECT_CONFIG}.tmp" "$PROJECT_CONFIG"
-        
+
         print_success "Database '${TEST_DB}' added to configuration (manual method)"
     fi
 fi
@@ -171,8 +247,8 @@ print_success "Database configuration updated"
 print_header "Step 2: Creating New Dataset"
 print_step "Creating dataset '${TEST_DATASET}' with universal_processor strategy..."
 
-echo "Command: ./lf datasets add ${TEST_DATASET} -s universal_processor -b ${TEST_DB}"
-./lf datasets add "${TEST_DATASET}" -s universal_processor -b "${TEST_DB}"
+echo "Command: ${LF_CMD} datasets add ${TEST_DATASET} -s universal_processor -b ${TEST_DB}"
+${LF_CMD} datasets add "${TEST_DATASET}" -s universal_processor -b "${TEST_DB}"
 
 print_success "Dataset created"
 
@@ -183,22 +259,22 @@ print_success "Dataset created"
 print_header "Step 3: Ingesting Various Document Types"
 
 print_step "Adding research papers (text files)..."
-echo "Command: ./lf datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/research_papers/*.txt"
-./lf datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/research_papers/*.txt
+echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/research_papers/*.txt"
+${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/research_papers/*.txt
 
 print_step "Adding code documentation (markdown files)..."
-echo "Command: ./lf datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code_documentation/*.md"
-./lf datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code_documentation/*.md
+echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code_documentation/*.md"
+${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code_documentation/*.md
 
 print_step "Adding code examples (Python files)..."
-echo "Command: ./lf datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code/*.py"
-./lf datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code/*.py
+echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code/*.py"
+${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code/*.py
 
 # Check if PDF files exist and add them
 if ls ${SAMPLE_DIR}/fda/*.pdf 1> /dev/null 2>&1; then
     print_step "Adding FDA documents (PDF files)..."
-    echo "Command: ./lf datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/fda/*.pdf"
-    ./lf datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/fda/*.pdf
+    echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/fda/*.pdf"
+    ${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/fda/*.pdf
 else
     print_info "No PDF files found, skipping..."
 fi
@@ -212,8 +288,8 @@ print_success "All documents ingested"
 print_header "Step 4: Processing Documents into Vector Database"
 print_step "Processing all ingested documents..."
 
-echo "Command: ./lf datasets process ${TEST_DATASET}"
-./lf datasets process "${TEST_DATASET}"
+echo "Command: ${LF_CMD} datasets process ${TEST_DATASET}"
+${LF_CMD} datasets process "${TEST_DATASET}"
 
 print_success "Documents processed"
 
@@ -224,8 +300,8 @@ print_success "Documents processed"
 print_header "Step 5: Verifying Dataset Status"
 print_step "Listing all datasets..."
 
-echo "Command: ./lf datasets list"
-./lf datasets list | grep -A 5 -B 5 "${TEST_DATASET}" || ./lf datasets list
+echo "Command: ${LF_CMD} datasets list"
+${LF_CMD} datasets list | grep -A 5 -B 5 "${TEST_DATASET}" || ${LF_CMD} datasets list
 
 # ================================================================
 # Step 6: Test RAG Queries
@@ -234,16 +310,16 @@ echo "Command: ./lf datasets list"
 print_header "Step 6: Testing RAG Queries"
 
 print_step "Query 1: Basic query about transformer architecture"
-echo "Command: ./lf rag query --database ${TEST_DB} \"What is transformer architecture?\""
-./lf rag query --database "${TEST_DB}" "What is transformer architecture?"
+echo "Command: ${LF_CMD} rag query --database ${TEST_DB} \"What is transformer architecture?\""
+${LF_CMD} rag query --database "${TEST_DB}" "What is transformer architecture?"
 
 print_step "Query 2: Query with custom top-k setting"
-echo "Command: ./lf rag query --database ${TEST_DB} --top-k 3 \"Explain attention mechanism\""
-./lf rag query --database "${TEST_DB}" --top-k 3 "Explain attention mechanism"
+echo "Command: ${LF_CMD} rag query --database ${TEST_DB} --top-k 3 \"Explain attention mechanism\""
+${LF_CMD} rag query --database "${TEST_DB}" --top-k 3 "Explain attention mechanism"
 
 print_step "Query 3: Query with score threshold"
-echo "Command: ./lf rag query --database ${TEST_DB} --score-threshold 0.7 \"Best practices for API design\""
-./lf rag query --database "${TEST_DB}" --score-threshold 0.7 "Best practices for API design"
+echo "Command: ${LF_CMD} rag query --database ${TEST_DB} --score-threshold 0.7 \"Best practices for API design\""
+${LF_CMD} rag query --database "${TEST_DB}" --score-threshold 0.7 "Best practices for API design"
 
 print_success "RAG queries completed"
 
@@ -254,12 +330,12 @@ print_success "RAG queries completed"
 print_header "Step 7: Testing Chat with RAG Integration"
 
 print_step "Test 1: Chat WITH RAG (default behavior)"
-echo "Command: timeout 10 ./lf run --database ${TEST_DB} \"What are the key components of transformer architecture?\""
-timeout 10 ./lf run --database "${TEST_DB}" "What are the key components of transformer architecture?" || true
+echo "Command: timeout 10 ${LF_CMD} run --database ${TEST_DB} \"What are the key components of transformer architecture?\""
+timeout 10 ${LF_CMD} run --database "${TEST_DB}" "What are the key components of transformer architecture?" || true
 
 print_step "Test 2: Chat WITHOUT RAG (LLM only)"
-echo "Command: timeout 10 ./lf run --no-rag \"What are the key components of transformer architecture?\""
-timeout 10 ./lf run --no-rag "What are the key components of transformer architecture?" || true
+echo "Command: timeout 10 ${LF_CMD} run --no-rag \"What are the key components of transformer architecture?\""
+timeout 10 ${LF_CMD} run --no-rag "What are the key components of transformer architecture?" || true
 
 print_success "Chat tests completed"
 
@@ -272,16 +348,16 @@ print_header "Step 8: Direct Comparison - RAG vs No-RAG"
 QUERY="What is the DataProcessor class mentioned in our documentation?"
 
 print_step "Asking about DataProcessor WITH RAG context:"
-echo "Command: timeout 10 ./lf run --database ${TEST_DB} \"${QUERY}\""
+echo "Command: timeout 10 ${LF_CMD} run --database ${TEST_DB} \"${QUERY}\""
 echo -e "${GREEN}Response with RAG:${NC}"
-timeout 10 ./lf run --database "${TEST_DB}" "${QUERY}" || true
+timeout 10 ${LF_CMD} run --database "${TEST_DB}" "${QUERY}" || true
 
 echo -e "\n${CYAN}────────────────────────────────────────────────────────────────────────${NC}\n"
 
 print_step "Asking about DataProcessor WITHOUT RAG context:"
-echo "Command: timeout 10 ./lf run --no-rag \"${QUERY}\""
+echo "Command: timeout 10 ${LF_CMD} run --no-rag \"${QUERY}\""
 echo -e "${RED}Response without RAG:${NC}"
-timeout 10 ./lf run --no-rag "${QUERY}" || true
+timeout 10 ${LF_CMD} run --no-rag "${QUERY}" || true
 
 # ================================================================
 # Step 9: Test Duplicate Detection
@@ -295,8 +371,8 @@ echo -e "${MAGENTA}════════════════════�
 echo -e "${YELLOW}EXPECTED: All files should be SKIPPED as duplicates${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════════════════════════════════════${NC}\n"
 
-echo "Command: ./lf datasets process ${TEST_DATASET}"
-./lf datasets process "${TEST_DATASET}"
+echo "Command: ${LF_CMD} datasets process ${TEST_DATASET}"
+${LF_CMD} datasets process "${TEST_DATASET}"
 
 print_success "First re-process complete - files should show as SKIPPED"
 
@@ -308,8 +384,8 @@ print_header "Step 10: Processing Same Dataset Again (Third Time)"
 
 print_step "Processing the SAME dataset for the third time..."
 echo -e "${YELLOW}This should ALSO show all files as SKIPPED${NC}\n"
-echo "Command: ./lf datasets process ${TEST_DATASET}"
-./lf datasets process "${TEST_DATASET}"
+echo "Command: ${LF_CMD} datasets process ${TEST_DATASET}"
+${LF_CMD} datasets process "${TEST_DATASET}"
 
 print_success "Duplicate detection test completed"
 print_info "Files should consistently show as SKIPPED on subsequent processing attempts"
@@ -324,11 +400,11 @@ read -p "Do you want to remove the test dataset? (y/N): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_step "Removing test dataset..."
-    echo "Command: ./lf datasets remove ${TEST_DATASET}"
-    ./lf datasets remove "${TEST_DATASET}"
-    
+    echo "Command: ${LF_CMD} datasets remove ${TEST_DATASET}"
+    ${LF_CMD} datasets remove "${TEST_DATASET}"
+
     print_step "Removing test database from configuration..."
-    
+
     if python3 -c "import yaml" 2>/dev/null; then
         python3 << EOF
 import yaml
@@ -365,12 +441,12 @@ EOF
         sed -i.bak "/name: ${TEST_DATASET}/,+3d" "$PROJECT_CONFIG"
         print_success "Test entries removed from configuration"
     fi
-    
+
     print_success "Cleanup completed"
 else
     print_info "Keeping test dataset and database for manual inspection"
     echo "To remove later, run:"
-    echo "  ./lf datasets remove ${TEST_DATASET}"
+    echo "  ${LF_CMD} datasets remove ${TEST_DATASET}"
 fi
 
 # ================================================================

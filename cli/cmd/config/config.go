@@ -14,6 +14,10 @@ import (
 // LoadConfig loads a llamafarm config file from the specified directory
 func LoadConfig(configDir string) (*LlamaFarmConfig, error) {
 	// configDir should always be a directory path
+	if configDir == "" {
+		return nil, fmt.Errorf("config directory is required")
+	}
+
 	// Search for config files in the specified directory
 	foundFile, err := FindConfigFile(configDir)
 	if err != nil {
@@ -64,6 +68,10 @@ func loadConfigFile(filePath string) (*LlamaFarmConfig, error) {
 // FindConfigFile searches for llamafarm config files (yaml/toml/json) in the specified directory
 func FindConfigFile(searchPath string) (string, error) {
 	// Search for config files in the specified directory
+	if searchPath == "" {
+		return "", fmt.Errorf("search path is required")
+	}
+
 	for _, configFile := range SupportedLlamaFarmConfigFiles {
 		fullPath := filepath.Join(searchPath, configFile)
 		if _, err := os.Stat(fullPath); err == nil {
@@ -207,41 +215,6 @@ func GetServerConfig(configPath string, serverURL string, namespace string, proj
 	}
 	if finalProject == "" {
 		return nil, fmt.Errorf("project is required (provide via --project or set 'name' and 'namespace' in llamafarm.yaml)")
-	}
-
-	return &ServerConfig{
-		URL:       finalServerURL,
-		Namespace: finalNamespace,
-		Project:   finalProject,
-	}, nil
-}
-
-// GetServerConfigLenient returns server configuration, allowing empty namespace/project.
-// It attempts to populate from config if available but will not error if missing.
-func GetServerConfigLenient(configPath string, serverURL string, namespace string, project string) (*ServerConfig, error) {
-	// Load configuration if available
-	cfg, err := LoadConfig(configPath)
-	if err != nil {
-		cfg = &LlamaFarmConfig{}
-	}
-
-	finalServerURL := serverURL
-	if finalServerURL == "" {
-		finalServerURL = "http://localhost:8000"
-	}
-
-	finalNamespace := namespace
-	finalProject := project
-
-	if cfg != nil && (finalNamespace == "" || finalProject == "") {
-		if projectInfo, err := cfg.GetProjectInfo(); err == nil {
-			if finalNamespace == "" {
-				finalNamespace = projectInfo.Namespace
-			}
-			if finalProject == "" {
-				finalProject = projectInfo.Project
-			}
-		}
 	}
 
 	return &ServerConfig{

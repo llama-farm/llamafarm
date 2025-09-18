@@ -28,13 +28,13 @@ The RAG (Retrieval-Augmented Generation) pipeline in LlamaFarm allows you to enh
    ```bash
    # Install Ollama (if not already installed)
    curl -fsSL https://ollama.ai/install.sh | sh
-   
+
    # Start Ollama
    ollama serve
-   
+
    # Pull embedding model
    ollama pull nomic-embed-text
-   
+
    # Pull LLM model (if not already available)
    ollama pull llama3.1:8b
    ```
@@ -43,7 +43,7 @@ The RAG (Retrieval-Augmented Generation) pipeline in LlamaFarm allows you to enh
    ```bash
    # Using nx (recommended)
    nx start server
-   
+
    # Or using lf directly
    lf server start
    ```
@@ -55,7 +55,7 @@ The RAG (Retrieval-Augmented Generation) pipeline in LlamaFarm allows you to enh
 lf init my-rag-project
 
 # Navigate to your project
-cd ~/.llamafarm/projects/default/my-rag-project
+cd my-rag-project
 ```
 
 ## Configuration
@@ -95,7 +95,7 @@ rag:
         distance_function: cosine
         persist_directory: ./data/chroma_db
         port: 8000
-      
+
       # Embedding strategies
       embedding_strategies:
         - name: default_embeddings
@@ -108,7 +108,7 @@ rag:
             dimension: 768
             model: nomic-embed-text
             timeout: 60
-      
+
       # Retrieval strategies
       retrieval_strategies:
         - name: basic_search
@@ -117,7 +117,7 @@ rag:
           config:
             distance_metric: cosine
             top_k: 10
-        
+
         - name: filtered_search
           type: MetadataFilteredStrategy
           default: false
@@ -125,7 +125,7 @@ rag:
             fallback_multiplier: 2
             filter_mode: post
             top_k: 10
-      
+
       default_embedding_strategy: default_embeddings
       default_retrieval_strategy: basic_search
 
@@ -146,7 +146,7 @@ rag:
             extract_metadata: true
             extract_images: false
             preserve_equations: true
-        
+
         - type: PDFParser_PyPDF2
           file_include_patterns: ["*.pdf", "*.PDF"]
           file_exclude_patterns: ["*_draft.pdf", "*.tmp.pdf", "~$*.pdf"]
@@ -156,7 +156,7 @@ rag:
             chunk_size: 1000
             chunk_overlap: 150
             extract_metadata: true
-        
+
         # Word Document Parser
         - type: DocxParser_LlamaIndex
           file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
@@ -166,7 +166,7 @@ rag:
             chunk_size: 1000
             chunk_overlap: 150
             extract_metadata: true
-        
+
         # CSV/TSV Parser
         - type: CSVParser_Pandas
           file_include_patterns: ["*.csv", "*.CSV", "*.tsv", "*.TSV", "*.dat"]
@@ -176,7 +176,7 @@ rag:
             chunk_size: 500
             chunk_strategy: rows
             extract_metadata: true
-        
+
         # Excel Parser
         - type: ExcelParser_LlamaIndex
           file_include_patterns: ["*.xlsx", "*.XLSX", "*.xls", "*.XLS"]
@@ -185,7 +185,7 @@ rag:
           config:
             chunk_size: 500
             extract_metadata: true
-        
+
         # Markdown Parser
         - type: MarkdownParser_Python
           file_include_patterns: ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*", "CHANGELOG*"]
@@ -197,7 +197,7 @@ rag:
             extract_metadata: true
             extract_code_blocks: true
             extract_links: true
-        
+
         # Universal Text Parser (catch-all)
         - type: TextParser_Python
           file_include_patterns: [
@@ -223,7 +223,7 @@ rag:
             extract_metadata: true
             encoding: utf-8
             clean_text: true
-      
+
       # Extractors with pattern matching
       extractors:
         # Universal extractors (apply to all files)
@@ -235,7 +235,7 @@ rag:
             include_readability: true
             include_structure: true
             include_vocabulary: true
-        
+
         - type: EntityExtractor
           file_include_patterns: ["*"]
           file_exclude_patterns: []
@@ -244,7 +244,7 @@ rag:
             entity_types: [PERSON, ORG, GPE, DATE, PRODUCT, MONEY, PERCENT]
             min_entity_length: 2
             use_fallback: true
-        
+
         - type: KeywordExtractor
           file_include_patterns: ["*"]
           file_exclude_patterns: []
@@ -256,6 +256,12 @@ rag:
 
 # Datasets (will be populated as you add data)
 datasets: []
+```
+
+### Run the test script on this project
+From the `examples/rag_pipeline` folder, run the following commands:
+```bash
+LLAMAFARM_CONFIG=~/REPLACE/WITH/PATH/TO/YOUR/PROJECT/llamafarm.yaml ./test_rag_comprehensive.sh
 ```
 
 ## Dataset Management
@@ -484,7 +490,7 @@ lf run "What are our API rate limits?"
 
 echo "=== With RAG ==="
 lf run --rag "What are our API rate limits?"
-# Output: "Based on the documentation, the API rate limits are: 
+# Output: "Based on the documentation, the API rate limits are:
 #         - Standard tier: 1000 requests/hour
 #         - Premium tier: 10000 requests/hour..."
 ```
@@ -644,7 +650,7 @@ rag:
           default: true
           config:
             top_k: 10
-    
+
     # Customer data
     - name: customer_data
       type: ChromaStore
@@ -685,7 +691,7 @@ data_processing_strategies:
       - type: PatternExtractor
         config:
           patterns: ["function", "class", "import", "TODO", "FIXME"]
-  
+
   # For research papers
   - name: research_processor
     description: "For academic papers"
@@ -766,7 +772,7 @@ tail -f ~/logs/llamafarm-server.log
 
 ## Performance Optimization
 
-1. **Chunk Size**: 
+1. **Chunk Size**:
    - Smaller (500-1000) for precise retrieval
    - Larger (2000-3000) for more context
 
@@ -790,7 +796,7 @@ tail -f ~/logs/llamafarm-server.log
 The `sample_files/` directory contains realistic example documents:
 
 - **`research_papers/`** - Technical papers on AI/ML topics (transformer architecture, scaling laws)
-- **`code_documentation/`** - API references and implementation guides 
+- **`code_documentation/`** - API references and implementation guides
 - **`news_articles/`** - HTML articles on technology topics
 - **`code/`** - Python code examples
 
@@ -1065,7 +1071,7 @@ rm -rf ./data/chroma_db
 ```
 RAG Pipeline Flow:
 1. Documents → Parser (by file type)
-2. Parsed content → Chunking (configurable size)  
+2. Parsed content → Chunking (configurable size)
 3. Chunks → Embedder (Ollama)
 4. Embeddings → Vector Store (ChromaDB)
 5. Query → Retrieval → Context → Response

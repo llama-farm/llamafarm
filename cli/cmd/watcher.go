@@ -13,60 +13,42 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+type ConfigPaths struct {
+	CwdDir         string
+	CwdConfigPath  string
+	HomeConfigDir  string
+	HomeConfigPath string
+}
+
+func SyncConfigForProject(namespace, project string) error {
+	configPaths, err := resolveConfigPaths(namespace, project)
+	if err != nil {
+		return fmt.Errorf("failed to resolve config paths: %w", err)
+	}
+
+	cwdConfigPath := configPaths.CwdConfigPath
+	homeConfigPath := configPaths.HomeConfigPath
+
+	return syncConfigFiles(cwdConfigPath, homeConfigPath)
+}
+
 // StartConfigWatcher starts a background file watcher that synchronizes
 // llamafarm config files (yaml/toml/json) between the current directory and the home directory
 func StartConfigWatcher(namespace, project string) error {
-	if namespace == "" || project == "" {
-		return fmt.Errorf("namespace and project are required for config watcher")
-	}
-
-	// Get the effective current working directory
-	cwd := getEffectiveCWD()
-
-	// Find config files in both locations
-	cwdConfigPath, err := config.FindConfigFile(cwd)
+	configPaths, err := resolveConfigPaths(namespace, project)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: No llamafarm config file found in current directory: %v\n", err)
+		return fmt.Errorf("failed to resolve config paths: %w", err)
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
-	}
-	homeConfigDir := filepath.Join(homeDir, ".llamafarm", "projects", namespace, project)
-
-	// Watch home directory (create if needed)
-	if err := os.MkdirAll(homeConfigDir, 0755); err != nil {
-		return fmt.Errorf("failed to create home config directory: %w", err)
-	}
+	cwd := configPaths.CwdDir
+	cwdConfigPath := configPaths.CwdConfigPath
+	homeConfigDir := configPaths.HomeConfigDir
+	homeConfigPath := configPaths.HomeConfigPath
 
 	// Create watcher
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create file watcher: %w", err)
-	}
-
-	homeConfigPath, _ := config.FindConfigFile(homeConfigDir)
-	if homeConfigPath == "" {
-		homeConfigPath = filepath.Join(homeConfigDir, "llamafarm.yaml")
-	}
-
-	// Compute the config file name
-	var configFileName string
-	if cwdConfigPath != "" {
-		configFileName = filepath.Base(cwdConfigPath)
-	} else if homeConfigPath != "" {
-		configFileName = filepath.Base(homeConfigPath)
-	} else {
-		configFileName = "llamafarm.yaml"
-	}
-
-	if homeConfigPath == "" {
-		homeConfigPath = filepath.Join(homeConfigDir, configFileName)
-	}
-
-	if cwdConfigPath == "" {
-		cwdConfigPath = filepath.Join(cwd, configFileName)
 	}
 
 	if err := watcher.Add(homeConfigDir); err != nil {
@@ -194,6 +176,62 @@ func StartConfigWatcher(namespace, project string) error {
 	return nil
 }
 
+func resolveConfigPaths(namespace, project string) (*ConfigPaths, error) {
+	if namespace == "" || project == "" {
+		return nil, fmt.Errorf("namespace and project are required for config watcher")
+	}
+
+	// Get the effective current working directory
+	cwd := getEffectiveCWD()
+
+	// Find config files in both locations
+	cwdConfigPath, err := config.FindConfigFile(cwd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: No llamafarm config file found in current directory: %v\n", err)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	homeConfigDir := filepath.Join(homeDir, ".llamafarm", "projects", namespace, project)
+
+	// Watch home directory (create if needed)
+	if err := os.MkdirAll(homeConfigDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create home config directory: %w", err)
+	}
+
+	homeConfigPath, _ := config.FindConfigFile(homeConfigDir)
+	if homeConfigPath == "" {
+		homeConfigPath = filepath.Join(homeConfigDir, "llamafarm.yaml")
+	}
+
+	// Compute the config file name
+	var configFileName string
+	if cwdConfigPath != "" {
+		configFileName = filepath.Base(cwdConfigPath)
+	} else if homeConfigPath != "" {
+		configFileName = filepath.Base(homeConfigPath)
+	} else {
+		configFileName = "llamafarm.yaml"
+	}
+
+	if homeConfigPath == "" {
+		homeConfigPath = filepath.Join(homeConfigDir, configFileName)
+	}
+
+	if cwdConfigPath == "" {
+		cwdConfigPath = filepath.Join(cwd, configFileName)
+	}
+
+	return &ConfigPaths{
+		CwdDir:         cwd,
+		CwdConfigPath:  cwdConfigPath,
+		HomeConfigDir:  homeConfigDir,
+		HomeConfigPath: homeConfigPath,
+	}, nil
+}
+
 // syncConfigFiles copies the source config file to the target location
 func syncConfigFiles(sourcePath, targetPath string) error {
 	// Ensure target directory exists
@@ -228,4 +266,28 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 	}
 
 	return nil
+}
+
+// StartConfigWatcherForCommand is a helper function that starts the config watcher
+// for any command that needs it. It loads the project configuration and starts
+// the watcher if both namespace and project can be determined.
+func StartConfigWatcherForCommand() {
+	// Load config to get namespace and project for watcher
+	cwd := getEffectiveCWD()
+	cfg, err := config.LoadConfig(cwd)
+	if err != nil {
+		// If no config file found, don't start watcher (not an error)
+		return
+	}
+
+	projectInfo, err := cfg.GetProjectInfo()
+	if err != nil {
+		// If project info can't be extracted, don't start watcher (not an error)
+		return
+	}
+
+	// Start the config file watcher in background
+	if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to start config watcher: %v\n", err)
+	}
 }

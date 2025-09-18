@@ -39,7 +39,7 @@ Examples:
   # Clear without confirmation prompt
   lf rag clear --force`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -55,7 +55,7 @@ Examples:
 			}
 			fmt.Printf("⚠️  WARNING: This will permanently delete all documents from database '%s'\n", database)
 			fmt.Print("Are you sure? Type 'yes' to confirm: ")
-			
+
 			var response string
 			fmt.Scanln(&response)
 			if response != "yes" {
@@ -104,7 +104,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -131,7 +131,7 @@ Examples:
 		if !force {
 			fmt.Printf("⚠️  WARNING: This will delete %d document(s)\n", count)
 			fmt.Print("Are you sure? Type 'yes' to confirm: ")
-			
+
 			var response string
 			fmt.Scanln(&response)
 			if response != "yes" {
@@ -172,7 +172,7 @@ Examples:
   # Prune without confirmation
   lf rag prune --force`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -198,7 +198,7 @@ Examples:
 		if !force {
 			fmt.Printf("\n⚠️  WARNING: This will remove %d vectors\n", preview.TotalToRemove)
 			fmt.Print("Are you sure? Type 'yes' to confirm: ")
-			
+
 			var response string
 			fmt.Scanln(&response)
 			if response != "yes" {
@@ -237,7 +237,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		outputFile := args[0]
 
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -246,7 +246,7 @@ Examples:
 		ensureServerAvailable(serverCfg.URL, true)
 
 		fmt.Printf("📦 Exporting database to %s...\n", outputFile)
-		
+
 		exportData, err := exportRAGDatabase(serverCfg, manageDatabase, metadataOnly)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error exporting database: %v\n", err)
@@ -282,7 +282,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		inputFile := args[0]
 
-		serverCfg, err := config.GetServerConfig(configFile, serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -314,60 +314,60 @@ var metadataOnly bool
 // Request/Response types
 
 type DeleteRequest struct {
-	Database  string   `json:"database,omitempty"`
-	IDs       []string `json:"ids,omitempty"`
-	Filenames []string `json:"filenames,omitempty"`
+	Database  string                 `json:"database,omitempty"`
+	IDs       []string               `json:"ids,omitempty"`
+	Filenames []string               `json:"filenames,omitempty"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type DeleteResult struct {
-	Success         bool     `json:"success"`
-	DocumentsDeleted int     `json:"documents_deleted"`
-	ChunksDeleted   int      `json:"chunks_deleted"`
-	Errors          []string `json:"errors,omitempty"`
+	Success          bool     `json:"success"`
+	DocumentsDeleted int      `json:"documents_deleted"`
+	ChunksDeleted    int      `json:"chunks_deleted"`
+	Errors           []string `json:"errors,omitempty"`
 }
 
 type ClearResult struct {
-	Success         bool     `json:"success"`
-	DocumentsCleared int     `json:"documents_cleared"`
-	ChunksCleared   int      `json:"chunks_cleared"`
-	Message         string   `json:"message"`
+	Success          bool   `json:"success"`
+	DocumentsCleared int    `json:"documents_cleared"`
+	ChunksCleared    int    `json:"chunks_cleared"`
+	Message          string `json:"message"`
 }
 
 type PrunePreview struct {
-	Duplicates      int `json:"duplicates"`
-	Orphaned        int `json:"orphaned"`
-	Corrupted       int `json:"corrupted"`
-	TotalToRemove   int `json:"total_to_remove"`
+	Duplicates    int `json:"duplicates"`
+	Orphaned      int `json:"orphaned"`
+	Corrupted     int `json:"corrupted"`
+	TotalToRemove int `json:"total_to_remove"`
 }
 
 type PruneResult struct {
-	Success         bool     `json:"success"`
-	Removed         int      `json:"removed"`
-	Duration        float64  `json:"duration_seconds"`
-	Errors          []string `json:"errors,omitempty"`
+	Success  bool     `json:"success"`
+	Removed  int      `json:"removed"`
+	Duration float64  `json:"duration_seconds"`
+	Errors   []string `json:"errors,omitempty"`
 }
 
 type ExportData struct {
-	Version         string                   `json:"version"`
-	ExportDate      string                   `json:"export_date"`
-	Database        string                   `json:"database"`
-	Documents       []ExportDocument         `json:"documents"`
-	Metadata        map[string]interface{}   `json:"metadata,omitempty"`
+	Version    string                 `json:"version"`
+	ExportDate string                 `json:"export_date"`
+	Database   string                 `json:"database"`
+	Documents  []ExportDocument       `json:"documents"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type ExportDocument struct {
-	ID              string                   `json:"id"`
-	Content         string                   `json:"content,omitempty"`
-	Embedding       []float64                `json:"embedding,omitempty"`
-	Metadata        map[string]interface{}   `json:"metadata"`
+	ID        string                 `json:"id"`
+	Content   string                 `json:"content,omitempty"`
+	Embedding []float64              `json:"embedding,omitempty"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 type ImportResult struct {
-	Success         bool     `json:"success"`
-	DocumentsImported int    `json:"documents_imported"`
-	ChunksCreated   int      `json:"chunks_created"`
-	Errors          []string `json:"errors,omitempty"`
+	Success           bool     `json:"success"`
+	DocumentsImported int      `json:"documents_imported"`
+	ChunksCreated     int      `json:"chunks_created"`
+	Errors            []string `json:"errors,omitempty"`
 }
 
 // Helper functions
@@ -395,7 +395,7 @@ func buildDeleteRequest() DeleteRequest {
 
 func getDeleteCount(cfg *config.ServerConfig, req DeleteRequest) (int, error) {
 	url := buildServerURL(cfg.URL, fmt.Sprintf("/v1/projects/%s/%s/rag/delete/preview", cfg.Namespace, cfg.Project))
-	
+
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return 0, err
@@ -468,7 +468,7 @@ func clearRAGDatabase(cfg *config.ServerConfig, database string) (*ClearResult, 
 
 func deleteRAGDocuments(cfg *config.ServerConfig, req DeleteRequest) (*DeleteResult, error) {
 	url := buildServerURL(cfg.URL, fmt.Sprintf("/v1/projects/%s/%s/rag/delete", cfg.Namespace, cfg.Project))
-	
+
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -573,7 +573,7 @@ func pruneRAGDatabase(cfg *config.ServerConfig, database string) (*PruneResult, 
 
 func exportRAGDatabase(cfg *config.ServerConfig, database string, metadataOnly bool) (*ExportData, error) {
 	url := buildServerURL(cfg.URL, fmt.Sprintf("/v1/projects/%s/%s/rag/export", cfg.Namespace, cfg.Project))
-	
+
 	params := []string{}
 	if database != "" {
 		params = append(params, "database="+database)
@@ -615,7 +615,7 @@ func exportRAGDatabase(cfg *config.ServerConfig, database string, metadataOnly b
 
 func importRAGDatabase(cfg *config.ServerConfig, database string, strategy string, data *ExportData) (*ImportResult, error) {
 	url := buildServerURL(cfg.URL, fmt.Sprintf("/v1/projects/%s/%s/rag/import", cfg.Namespace, cfg.Project))
-	
+
 	params := []string{}
 	if database != "" {
 		params = append(params, "database="+database)
@@ -764,26 +764,26 @@ func init() {
 	ragCmd.AddCommand(ragPruneCmd)
 	ragCmd.AddCommand(ragExportCmd)
 	ragCmd.AddCommand(ragImportCmd)
-	
+
 	// Clear command flags
 	ragClearCmd.Flags().StringVar(&manageDatabase, "database", "", "Database to clear")
 	ragClearCmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
-	
+
 	// Delete command flags
 	ragDeleteCmd.Flags().StringVar(&manageDatabase, "database", "", "Database to delete from")
 	ragDeleteCmd.Flags().StringSliceVar(&deleteDocIDs, "id", []string{}, "Document IDs to delete")
 	ragDeleteCmd.Flags().StringSliceVar(&deleteFilenames, "filename", []string{}, "Filenames to delete (supports wildcards)")
 	ragDeleteCmd.Flags().StringSliceVar(&deleteMetadata, "metadata", []string{}, "Metadata filters (format: key:value)")
 	ragDeleteCmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
-	
+
 	// Prune command flags
 	ragPruneCmd.Flags().StringVar(&manageDatabase, "database", "", "Database to prune")
 	ragPruneCmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
-	
+
 	// Export command flags
 	ragExportCmd.Flags().StringVar(&manageDatabase, "database", "", "Database to export")
 	ragExportCmd.Flags().BoolVar(&metadataOnly, "metadata-only", false, "Export metadata only (no content/embeddings)")
-	
+
 	// Import command flags
 	ragImportCmd.Flags().StringVar(&manageDatabase, "database", "", "Database to import into")
 	ragImportCmd.Flags().StringVarP(&ragDataStrategy, "strategy", "s", "", "Data processing strategy for import")
