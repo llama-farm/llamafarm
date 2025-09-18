@@ -121,6 +121,7 @@ def ingest_file_with_rag(
     database_name: str,
     source_path: str,
     filename: str = None,
+    dataset_name: str = None,
 ) -> tuple[bool, dict]:
     """
     Ingest a single file using the new RAG schema format.
@@ -226,7 +227,7 @@ def ingest_file_with_rag(
 
         # Run the RAG CLI with the new schema format
         exit_code, stdout, stderr = run_rag_cli_with_config_and_strategy(
-            source_path, project_dir, database_name, data_processing_strategy_name
+            source_path, project_dir, database_name, data_processing_strategy_name, dataset_name
         )
 
         if exit_code != 0:
@@ -273,11 +274,21 @@ def ingest_file_with_rag(
                     if result.get('chunk_size'):
                         details["chunk_size"] = result['chunk_size']
                     
+                    # Pass through the status and counts
+                    if result.get('status'):
+                        details["status"] = result['status']
+                    if 'stored_count' in result:
+                        details["stored_count"] = result['stored_count']
+                    if 'skipped_count' in result:
+                        details["skipped_count"] = result['skipped_count']
+                    
                     # Set reason if it's a duplicate
                     if result.get('status') == 'skipped' or result.get('reason') == 'duplicate':
                         details["reason"] = "duplicate"
+                        details["status"] = "skipped"
                     elif result.get('stored_count', 0) == 0 and result.get('skipped_count', 0) > 0:
                         details["reason"] = "duplicate"
+                        details["status"] = "skipped"
                         
                 except json.JSONDecodeError:
                     logger.warning("Could not parse result JSON from stdout")
@@ -320,6 +331,7 @@ def run_rag_cli_with_config_and_strategy(
     project_dir: str,
     database_name: str,
     data_processing_strategy_name: str,
+    dataset_name: str = None,
     cwd: Path | None = None,
 ) -> tuple[int, str, str]:
     """
@@ -367,7 +379,8 @@ def run_rag_cli_with_config_and_strategy(
             handler = IngestHandler(
                 config_path=config_path,
                 data_processing_strategy=data_processing_strategy_name,
-                database=database_name
+                database=database_name,
+                dataset_name=dataset_name  # Pass dataset name for logging
             )
         except Exception as e:
             logger.error(f"Failed to initialize IngestHandler: {e}")

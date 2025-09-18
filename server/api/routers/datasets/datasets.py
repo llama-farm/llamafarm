@@ -267,12 +267,21 @@ async def process_dataset(
             database_name=database_name,
             source_path=data_path,
             filename=filename,
+            dataset_name=dataset,  # Pass dataset name for logging
         )
         
         # Determine actual status based on file_details
-        if file_details.get("reason") == "duplicate":
+        # Check multiple indicators for duplicates
+        is_duplicate = (
+            file_details.get("reason") == "duplicate" or
+            file_details.get("status") == "skipped" or
+            (file_details.get("stored_count", 0) == 0 and file_details.get("skipped_count", 0) > 0)
+        )
+        
+        if is_duplicate:
             status = "skipped"
             skipped += 1
+            logger.info(f"File {filename} marked as SKIPPED (duplicate)")
         elif ok:
             status = "processed"
             processed += 1
@@ -304,7 +313,25 @@ async def process_dataset(
         failed=failed
     )
     
-    return ProcessDatasetResponse(
+    # Add log file location info
+    log_info = None
+    try:
+        import sys
+        import os
+        # Add rag module to path if needed
+        rag_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
+        if rag_path not in sys.path:
+            sys.path.insert(0, rag_path)
+        
+        from rag.core.processing_logger import ProcessingLogger
+        log_files = ProcessingLogger.get_latest_logs(project_dir, dataset)
+        if log_files:
+            log_info = f"Processing logs saved to: {log_files[0]}"
+            logger.info(log_info)
+    except Exception as e:
+        logger.debug(f"Could not get log info: {e}")
+    
+    response = ProcessDatasetResponse(
         processed_files=processed,
         skipped_files=skipped,
         failed_files=failed,
@@ -312,6 +339,12 @@ async def process_dataset(
         database=database_name,
         details=details
     )
+    
+    # Add log location to response summary if available
+    if log_info:
+        print(f"\n📝 {log_info}")
+    
+    return response
 
 
 @router.delete("/{dataset}/data/{file_hash}")

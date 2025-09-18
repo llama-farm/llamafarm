@@ -17,6 +17,9 @@ A complete example of the Retrieval-Augmented Generation pipeline showing:
 # Run the complete example
 ./examples/rag_pipeline/run_example.sh
 
+# Run comprehensive RAG test with duplicate detection
+./examples/rag_pipeline/test_rag_comprehensive.sh
+
 # Or view the detailed guide
 cat examples/rag_pipeline/README.md
 ```
@@ -88,6 +91,12 @@ The LlamaFarm CLI (`lf`) provides all functionality. Here are examples using rea
 
 # Process all uploaded files into the vector database
 ./lf datasets process my-dataset
+
+# Re-process to see duplicate detection (files show as SKIPPED)
+./lf datasets process my-dataset
+# Files already in database will show:
+#   ⏭️ Status: SKIPPED
+#   Reason: All chunks already exist in database
 
 # List all datasets
 ./lf datasets list
@@ -220,7 +229,39 @@ nx start server  # Or the CLI will auto-start it
 
 ## Testing and Validation
 
-Run validation scripts to ensure everything works:
+### Comprehensive RAG Test Script
+
+The `test_rag_comprehensive.sh` script provides a complete test of the RAG pipeline with enhanced features:
+
+```bash
+# Run the comprehensive test
+./examples/rag_pipeline/test_rag_comprehensive.sh
+```
+
+**What it tests:**
+1. **Database Creation** - Automatically adds a test database to llamafarm.yaml
+2. **Dataset Management** - Creates and manages a test dataset
+3. **Document Ingestion** - Ingests multiple document types (TXT, MD, PY, PDF)
+4. **Processing Pipeline** - Processes documents into vector database
+5. **RAG Queries** - Tests various query parameters (top-k, score threshold)
+6. **Chat Integration** - Tests chat with and without RAG augmentation
+7. **Duplicate Detection** - Verifies that re-processing shows files as SKIPPED
+8. **Cleanup** - Optional removal of test data
+
+**Key Features:**
+- **Duplicate Detection Display**: Files processed multiple times show as:
+  ```
+  ⏭️ [1] transformer_architecture.txt
+      ├─ Status: SKIPPED
+      ├─ Reason: All chunks already exist in database
+      └─ Action: No new data added (file previously processed)
+  ```
+- **Detailed Processing Info**: Shows parsers, extractors, embedders used
+- **Colored Output**: Clear visual indicators for different statuses
+- **Automatic Configuration**: Updates llamafarm.yaml automatically
+- **Non-Interactive Mode**: Can be run in CI/CD pipelines
+
+### Other Validation Scripts
 
 ```bash
 # Quick validation of examples

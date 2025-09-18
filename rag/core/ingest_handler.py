@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 import importlib
 from rag.core.blob_processor import BlobProcessor
 from rag.core.strategies.handler import SchemaHandler
+from rag.core.processing_logger import ProcessingLogger
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class IngestHandler:
     Coordinates blob processing, embedding, and storage.
     """
     
-    def __init__(self, config_path: str, data_processing_strategy: str, database: str):
+    def __init__(self, config_path: str, data_processing_strategy: str, database: str, dataset_name: Optional[str] = None):
         """
         Initialize the ingest handler.
         
@@ -28,10 +29,17 @@ class IngestHandler:
             config_path: Path to the LlamaFarm configuration file
             data_processing_strategy: Name of the data processing strategy
             database: Name of the database to use
+            dataset_name: Optional dataset name for logging
         """
         self.config_path = Path(config_path)
         self.data_processing_strategy = data_processing_strategy
         self.database = database
+        self.dataset_name = dataset_name
+        
+        # Initialize processing logger
+        # Get project directory from config path (parent of llamafarm.yaml)
+        project_dir = self.config_path.parent
+        self.process_logger = ProcessingLogger(str(project_dir), dataset_name)
         
         # Initialize schema handler
         self.schema_handler = SchemaHandler(config_path)
@@ -167,6 +175,16 @@ class IngestHandler:
         file_size = len(file_data)
         logger.info(f"Ingesting file: {filename}")
         
+        # Log file processing start
+        self.process_logger.log_file_processing(
+            filename, 
+            "started",
+            {
+                "size_bytes": file_size,
+                "content_type": metadata.get('content_type', 'unknown')
+            }
+        )
+        
         # Print file info
         print(f"\n{'='*60}")
         print(f"📁 FILE: {filename}")
@@ -214,51 +232,67 @@ class IngestHandler:
                 embedded_documents.append(doc)
             
             # Store documents in vector store with duplicate detection
+            # Try batch add first (more efficient)
             stored_count = 0
             skipped_count = 0
             doc_ids = []
             
-            for doc in embedded_documents:
-                try:
-                    # Check if document already exists in store
-                    existing = self.vector_store.get_documents(doc.id) if hasattr(self.vector_store, 'get_documents') else None
-                    if existing:
-                        logger.info(f"Document {doc.id} already exists in database - skipping")
-                        skipped_count += 1
-                        print(f"[DUPLICATE] Document {doc.id} already in database - skipping")
+            try:
+                # Batch add all documents at once
+                result = self.vector_store.add_documents(embedded_documents)
+                
+                # ChromaStore returns a list of IDs for successfully added documents
+                # Empty list means all were duplicates
+                if isinstance(result, list):
+                    if len(result) > 0:
+                        # Some or all documents were stored
+                        doc_ids = result
+                        stored_count = len(result)
+                        skipped_count = len(embedded_documents) - stored_count
+                        
+                        if stored_count == len(embedded_documents):
+                            logger.info(f"Stored all {stored_count} documents")
+                            print(f"[STORED] All {stored_count} documents embedded and stored")
+                        else:
+                            logger.info(f"Stored {stored_count} documents, skipped {skipped_count} duplicates")
+                            print(f"[PARTIAL] Stored {stored_count} new documents, skipped {skipped_count} duplicates")
                     else:
-                        # Add single document
+                        # All documents were duplicates
+                        skipped_count = len(embedded_documents)
+                        logger.info(f"All {skipped_count} documents were duplicates - skipped")
+                        print(f"[DUPLICATE] All {skipped_count} documents already in database - skipped")
+                        
+                        # Log duplicate detection
+                        self.process_logger.log_duplicate_detection(
+                            file_hash,
+                            skipped_count,
+                            "skipped_all"
+                        )
+                else:
+                    # Fallback for unexpected return type
+                    logger.warning(f"Unexpected return type from add_documents: {type(result)}")
+                    stored_count = len(embedded_documents)
+                    doc_ids = [doc.id for doc in embedded_documents]
+                    
+            except Exception as e:
+                # If batch add fails, try individual adds for better error handling
+                logger.warning(f"Batch add failed: {e}, trying individual adds")
+                
+                for doc in embedded_documents:
+                    try:
                         result = self.vector_store.add_documents([doc])
-                        if result:
-                            # result is a list of added document IDs
-                            if isinstance(result, list) and len(result) > 0:
-                                doc_ids.extend(result)
-                                stored_count += len(result)
-                                logger.info(f"Stored document {doc.id} with {len(doc.embeddings) if hasattr(doc, 'embeddings') else 0} dimensions")
-                                print(f"[STORED] Document {doc.id} embedded and stored")
-                            else:
-                                # Document was skipped (duplicate)
-                                skipped_count += 1
-                                logger.info(f"Document {doc.id} already exists - skipped")
-                                print(f"[DUPLICATE] Document {doc.id} already in database - skipping")
-                except Exception as e:
-                    # If add fails with duplicate error, count as skipped
-                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
-                        skipped_count += 1
-                        logger.info(f"Document {doc.id} is duplicate - skipping")
-                        print(f"[DUPLICATE] Document {doc.id} already in database - skipping")
-                    else:
-                        # Try batch add if individual fails
-                        try:
-                            result = self.vector_store.add_documents(embedded_documents)
-                            doc_ids = result
-                            stored_count = len(embedded_documents)
-                            logger.info(f"Batch stored {stored_count} documents")
-                            print(f"[BATCH STORED] {stored_count} documents embedded and stored")
-                            break
-                        except Exception as batch_e:
-                            logger.error(f"Failed to store documents: {batch_e}")
-                            raise
+                        if isinstance(result, list) and len(result) > 0:
+                            doc_ids.extend(result)
+                            stored_count += 1
+                            logger.info(f"Stored document {doc.id}")
+                            print(f"[STORED] Document {doc.id} embedded and stored")
+                        else:
+                            skipped_count += 1
+                            logger.info(f"Document {doc.id} is duplicate - skipped")
+                            print(f"[DUPLICATE] Document {doc.id} already in database - skipped")
+                    except Exception as doc_e:
+                        logger.error(f"Failed to store document {doc.id}: {doc_e}")
+                        print(f"[ERROR] Failed to store document {doc.id}: {doc_e}")
             
             # Calculate processing time
             elapsed_time = time.time() - start_time
@@ -301,6 +335,21 @@ class IngestHandler:
                 status = "success"
                 reason = None
             
+            # Log final file processing status
+            self.process_logger.log_file_processing(
+                filename,
+                status,
+                {
+                    "total_chunks": len(documents),
+                    "stored_chunks": stored_count,
+                    "skipped_chunks": skipped_count,
+                    "parsers": list(set(parser_names)),
+                    "embedder": self.embedder.__class__.__name__,
+                    "processing_time_seconds": elapsed_time,
+                    "reason": reason
+                }
+            )
+            
             return {
                 "status": status,
                 "filename": filename,
@@ -317,6 +366,17 @@ class IngestHandler:
             
         except Exception as e:
             logger.error(f"Error ingesting file {filename}: {e}")
+            
+            # Log error
+            self.process_logger.log_error(
+                "ingestion_error",
+                str(e),
+                {
+                    "filename": filename,
+                    "file_size": file_size
+                }
+            )
+            
             return {
                 "status": "error",
                 "message": str(e),

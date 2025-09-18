@@ -406,51 +406,80 @@ var datasetsProcessCmd = &cobra.Command{
 		
 		// Always show detailed processing info
 		fmt.Printf("\n📁 File Processing Details:\n")
+		fmt.Printf("────────────────────────────────────────────────────────────────────────\n")
 		for i, d := range result.Details {
-			// Show filename or truncated hash
-			identifier := d.Filename
-			if identifier == "" {
-				if len(d.Hash) > 8 {
-					identifier = d.Hash[:8] + "..."
-				} else {
-					identifier = d.Hash
+			// Show both filename and hash for clarity
+			identifier := ""
+			if d.Filename != "" {
+				identifier = fmt.Sprintf("%s", d.Filename)
+				if len(d.Hash) > 12 {
+					identifier += fmt.Sprintf(" [%s...]", d.Hash[:12])
 				}
+			} else {
+				// Just show full hash if no filename
+				identifier = d.Hash
 			}
 			
 			// Color-code status
 			statusDisplay := d.Status
+			statusBadge := ""
 			if d.Status == "processed" {
-				statusDisplay = "✅ PROCESSED"
+				statusDisplay = "PROCESSED"
+				statusBadge = "✅"
 			} else if d.Status == "skipped" {
-				statusDisplay = "⏭️  SKIPPED (DUPLICATE)"
+				statusDisplay = "SKIPPED"
+				statusBadge = "⏭️"
 			} else if d.Status == "failed" {
-				statusDisplay = "❌ FAILED"
+				statusDisplay = "FAILED"
+				statusBadge = "❌"
 			}
 			
-			fmt.Printf("\n   [%d] %s\n", i+1, identifier)
-			fmt.Printf("       Status: %s\n", statusDisplay)
+			// File header with number, status badge, and identifier
+			fmt.Printf("\n   %s [%d] %s\n", statusBadge, i+1, identifier)
+			fmt.Printf("       ├─ Status: %s\n", statusDisplay)
 			
 			if d.Status == "processed" {
+				// Parser information
 				if d.Parser != "" {
-					fmt.Printf("       Parser: %s\n", d.Parser)
+					fmt.Printf("       ├─ Parser: %s\n", d.Parser)
 				}
-				if len(d.Extractors) > 0 {
-					fmt.Printf("       Extractors: %s\n", strings.Join(d.Extractors, ", "))
-				}
+				
+				// Chunks information - show more detail
 				if d.Chunks != nil {
-					fmt.Printf("       Chunks: %d", *d.Chunks)
+					chunkInfo := fmt.Sprintf("%d chunks created", *d.Chunks)
 					if d.ChunkSize != nil {
-						fmt.Printf(" (size: %d)", *d.ChunkSize)
+						chunkInfo += fmt.Sprintf(" (target size: %d chars)", *d.ChunkSize)
 					}
-					fmt.Println()
+					fmt.Printf("       ├─ Chunking: %s\n", chunkInfo)
 				}
+				
+				// Extractors - show count and types
+				if len(d.Extractors) > 0 {
+					fmt.Printf("       ├─ Extractors: %d applied\n", len(d.Extractors))
+					// Show first 3 extractors inline, rest on new lines
+					if len(d.Extractors) <= 3 {
+						fmt.Printf("       │   └─ %s\n", strings.Join(d.Extractors, ", "))
+					} else {
+						for j, ext := range d.Extractors {
+							if j < len(d.Extractors)-1 {
+								fmt.Printf("       │   ├─ %s\n", ext)
+							} else {
+								fmt.Printf("       │   └─ %s\n", ext)
+							}
+						}
+					}
+				}
+				
+				// Embedder information
 				if d.Embedder != "" {
-					fmt.Printf("       Embedder: %s\n", d.Embedder)
+					fmt.Printf("       └─ Embedder: %s\n", d.Embedder)
 				}
 			} else if d.Status == "skipped" {
-				fmt.Printf("       ℹ️  File already exists in database\n")
 				if d.Reason == "duplicate" {
-					fmt.Printf("       📝 All chunks are duplicates - no new data added\n")
+					fmt.Printf("       ├─ Reason: All chunks already exist in database\n")
+					fmt.Printf("       └─ Action: No new data added (file previously processed)\n")
+				} else if d.Reason != "" {
+					fmt.Printf("       └─ Reason: %s\n", d.Reason)
 				}
 				// Still show what would have been used
 				if d.Parser != "" {
@@ -466,13 +495,38 @@ var datasetsProcessCmd = &cobra.Command{
 			}
 		}
 		
-		fmt.Printf("\n✅ Processing Summary:\n")
-		fmt.Printf("   • Processed: %d files\n", result.ProcessedFiles)
+		// Summary with more context
+		fmt.Printf("\n────────────────────────────────────────────────────────────────────────\n")
+		totalFiles := result.ProcessedFiles + result.SkippedFiles + result.FailedFiles
+		if totalFiles == 0 {
+			fmt.Printf("\n⚠️  No files to process\n")
+		} else if result.FailedFiles > 0 {
+			fmt.Printf("\n⚠️  Processing Complete with Errors:\n")
+		} else if result.SkippedFiles == totalFiles {
+			fmt.Printf("\n✓ Processing Complete (All files already in database):\n")
+		} else {
+			fmt.Printf("\n✅ Processing Complete:\n")
+		}
+		
+		fmt.Printf("   📊 Total files: %d\n", totalFiles)
+		if result.ProcessedFiles > 0 {
+			fmt.Printf("   ✅ Successfully processed: %d\n", result.ProcessedFiles)
+			// Calculate total chunks from details
+			totalChunks := 0
+			for _, d := range result.Details {
+				if d.Status == "processed" && d.Chunks != nil {
+					totalChunks += *d.Chunks
+				}
+			}
+			if totalChunks > 0 {
+				fmt.Printf("   📝 Total chunks created: %d\n", totalChunks)
+			}
+		}
 		if result.SkippedFiles > 0 {
-			fmt.Printf("   • Skipped: %d files\n", result.SkippedFiles)
+			fmt.Printf("   ⏭️  Skipped (duplicates): %d\n", result.SkippedFiles)
 		}
 		if result.FailedFiles > 0 {
-			fmt.Printf("   • Failed: %d files\n", result.FailedFiles)
+			fmt.Printf("   ❌ Failed: %d\n", result.FailedFiles)
 		}
 	},
 }
