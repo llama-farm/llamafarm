@@ -15,7 +15,7 @@ var (
 	runRAGDatabase       string
 	runRetrievalStrategy string
 	runRAGTopK           int
-	runNoRAG             bool // Changed: now we track if RAG is disabled
+	runNoRAG             bool
 	runRAGScoreThreshold float64
 )
 
@@ -161,7 +161,7 @@ Examples:
 			MaxTokens:   maxTokens,
 			HTTPClient:  getHTTPClient(),
 			// RAG settings - RAG is enabled by default unless --no-rag is used
-			RAGEnabled:           !runNoRAG, // Changed: RAG is on by default
+			RAGEnabled:           !runNoRAG,
 			RAGDatabase:          runRAGDatabase,
 			RAGRetrievalStrategy: runRetrievalStrategy,
 			RAGTopK:              runRAGTopK,
@@ -185,7 +185,6 @@ Examples:
 func init() {
 	runCmd.Flags().StringVarP(&runInputFile, "file", "f", "", "path to file containing input text")
 
-	// RAG flags - RAG is enabled by default now
 	runCmd.Flags().BoolVar(&runNoRAG, "no-rag", false, "Disable RAG (use LLM only without document retrieval)")
 	runCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use for RAG (default: from config)")
 	runCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
