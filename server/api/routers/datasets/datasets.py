@@ -210,11 +210,28 @@ async def process_dataset(
     failed = 0
     details = []
     
+    import os
+    # Safely construct the raw data directory path
+    raw_data_dir = os.path.normpath(os.path.join(project_dir, "lf_data", "raw"))
+    abs_raw_data_dir = os.path.abspath(raw_data_dir)
+    
     for file_hash in dataset_config.files or []:
-        data_path = f"{project_dir}/lf_data/raw/{file_hash}"
+        # Safely construct and validate data path to prevent path traversal
+        data_path = os.path.normpath(os.path.join(raw_data_dir, file_hash))
+        
+        # Validate that the path is within the intended directory
+        if not os.path.abspath(data_path).startswith(abs_raw_data_dir + os.sep):
+            logger.warning("Path traversal attempt detected", hash=file_hash, path=data_path)
+            failed += 1
+            details.append(FileProcessingDetail(
+                hash=file_hash,
+                filename=None,
+                status="failed",
+                error="Invalid file path (security violation)"
+            ))
+            continue
         
         # Check if file exists
-        import os
         if not os.path.exists(data_path):
             logger.warning("File not found", hash=file_hash, path=data_path)
             failed += 1
@@ -238,7 +255,6 @@ async def process_dataset(
         )
         
         # Get metadata for the file to get filename
-        import os
         filename = None
         file_size = 0
         try:
@@ -249,13 +265,12 @@ async def process_dataset(
                 file_content_hash=file_hash,
             )
             filename = metadata.filename
-            # Get file size
-            if os.path.exists(data_path):
-                file_size = os.path.getsize(data_path)
+            # Get file size (data_path already validated above)
+            file_size = os.path.getsize(data_path)
         except:
             filename = os.path.basename(data_path)
-            if os.path.exists(data_path):
-                file_size = os.path.getsize(data_path)
+            # Get file size (data_path already validated above)
+            file_size = os.path.getsize(data_path)
         
         logger.info(f"Processing file: {filename} ({file_hash[:8]}...) - {file_size} bytes")
         

@@ -250,11 +250,26 @@ def ingest_file_with_rag(
         
         # Try to extract processing details from stdout
         if stdout:
-            # Look for JSON result
-            json_match = re.search(r'\[RESULT_JSON\](.*?)\[/RESULT_JSON\]', stdout, re.DOTALL)
-            if json_match:
+            # Look for JSON result - use non-greedy match with explicit end marker
+            # Limit search to prevent ReDoS attacks
+            max_json_size = 100000  # Limit JSON block to 100KB
+            if len(stdout) > max_json_size:
+                search_text = stdout[:max_json_size]
+            else:
+                search_text = stdout
+            
+            # Use more specific pattern that avoids catastrophic backtracking
+            json_start = search_text.find('[RESULT_JSON]')
+            json_end = search_text.find('[/RESULT_JSON]', json_start) if json_start != -1 else -1
+            
+            if json_start != -1 and json_end != -1:
+                json_match_text = search_text[json_start + 13:json_end]
+            else:
+                json_match_text = None
+            
+            if json_match_text:
                 try:
-                    result = json.loads(json_match.group(1))
+                    result = json.loads(json_match_text)
                     details["result"] = result
                     
                     # Extract details from result
@@ -294,21 +309,28 @@ def ingest_file_with_rag(
             
             # Fallback parsing for older format or if JSON parsing fails
             if not details.get("chunks"):
-                # Try multiple patterns to extract chunk count
+                # Try multiple patterns to extract chunk count - use limited search to prevent ReDoS
+                # Limit to first 10KB of output for performance
+                chunk_search_text = stdout[:10000] if len(stdout) > 10000 else stdout
+                
+                # Use more specific patterns with limited backtracking
                 chunk_match = (
-                    re.search(r'Chunks created:\s*(\d+)', stdout) or
-                    re.search(r'(\d+)\s+chunks?', stdout, re.IGNORECASE) or
-                    re.search(r'created\s+(\d+)\s+chunks?', stdout, re.IGNORECASE) or
-                    re.search(r'total.*?(\d+)\s+chunks?', stdout, re.IGNORECASE)
+                    re.search(r'Chunks created:\s{0,10}(\d{1,6})', chunk_search_text) or
+                    re.search(r'(?:^|\s)(\d{1,6})\s+chunks?\b', chunk_search_text, re.IGNORECASE | re.MULTILINE) or
+                    re.search(r'\bcreated\s+(\d{1,6})\s+chunks?\b', chunk_search_text, re.IGNORECASE) or
+                    re.search(r'\btotal[^0-9]{0,20}(\d{1,6})\s+chunks?\b', chunk_search_text, re.IGNORECASE)
                 )
                 if chunk_match:
                     details["chunks"] = int(chunk_match.group(1))
                 else:
                     logger.warning("Could not extract chunk count from stdout using fallback patterns. Output may be non-standard.")
                     
-            # Look for stored/skipped counts
-            stored_match = re.search(r'Stored:\s*(\d+)', stdout)
-            skipped_match = re.search(r'Skipped.*?:\s*(\d+)', stdout)
+            # Look for stored/skipped counts - use bounded patterns to prevent ReDoS
+            # Limit search to first 10KB for performance
+            count_search_text = stdout[:10000] if len(stdout) > 10000 else stdout
+            stored_match = re.search(r'Stored:\s{0,10}(\d{1,6})', count_search_text)
+            # Use more specific pattern with limited characters between "Skipped" and the number
+            skipped_match = re.search(r'Skipped[^:]{0,50}:\s{0,10}(\d{1,6})', count_search_text)
             if stored_match and int(stored_match.group(1)) == 0 and skipped_match and int(skipped_match.group(1)) > 0:
                 details["reason"] = "duplicate"
             
