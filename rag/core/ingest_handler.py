@@ -268,11 +268,14 @@ class IngestHandler:
                             skipped_count,
                             "skipped_all"
                         )
+                elif result is False:
+                    # Database error occurred
+                    logger.error("Database error occurred during document storage")
+                    raise Exception("Failed to add documents to vector store - database error")
                 else:
-                    # Fallback for unexpected return type
-                    logger.warning(f"Unexpected return type from add_documents: {type(result)}")
-                    stored_count = len(embedded_documents)
-                    doc_ids = [doc.id for doc in embedded_documents]
+                    # Unexpected return type
+                    logger.error(f"Unexpected return type from add_documents: {type(result)}, value: {result}")
+                    raise Exception(f"Unexpected return from vector store: {type(result)}")
                     
             except Exception as e:
                 # If batch add fails, try individual adds for better error handling
@@ -286,13 +289,25 @@ class IngestHandler:
                             stored_count += 1
                             logger.info(f"Stored document {doc.id}")
                             print(f"[STORED] Document {doc.id} embedded and stored")
-                        else:
+                        elif isinstance(result, list) and len(result) == 0:
+                            # Empty list means duplicate
                             skipped_count += 1
                             logger.info(f"Document {doc.id} is duplicate - skipped")
                             print(f"[DUPLICATE] Document {doc.id} already in database - skipped")
+                        elif result is False:
+                            # Database error
+                            logger.error(f"Database error storing document {doc.id}")
+                            print(f"[ERROR] Database error storing document {doc.id}")
+                            raise Exception(f"Database error storing document {doc.id}")
+                        else:
+                            # Unexpected return
+                            logger.error(f"Unexpected return from add_documents for {doc.id}: {result}")
+                            raise Exception(f"Unexpected return storing document {doc.id}: {type(result)}")
                     except Exception as doc_e:
                         logger.error(f"Failed to store document {doc.id}: {doc_e}")
                         print(f"[ERROR] Failed to store document {doc.id}: {doc_e}")
+                        # Re-raise to ensure error is not silently ignored
+                        raise
             
             # Calculate processing time
             elapsed_time = time.time() - start_time
