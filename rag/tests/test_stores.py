@@ -48,9 +48,11 @@ class TestVectorStores:
                 )
             ]
             
-            # Add documents
-            success = store.add_documents(docs)
-            assert success is True
+            # Add documents - returns list of IDs
+            result = store.add_documents(docs)
+            assert isinstance(result, list)
+            assert len(result) == 2
+            assert result == ["doc1", "doc2"]
             
             # Search documents
             results = store.search(query_embedding=[0.1, 0.2, 0.3], top_k=1)

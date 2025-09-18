@@ -84,9 +84,13 @@ class TestChromaStore:
     
     def test_add_documents(self, test_store, sample_documents):
         """Test adding documents to the store."""
-        # Add documents
-        success = test_store.add_documents(sample_documents)
-        assert success == True
+        # Add documents - returns list of IDs
+        result = test_store.add_documents(sample_documents)
+        
+        # Should return list of added document IDs
+        assert isinstance(result, list)
+        assert len(result) == len(sample_documents)
+        assert result == ["doc1", "doc2", "doc3"]
         
         # Verify documents were added
         info = test_store.get_collection_info()
@@ -200,27 +204,30 @@ class TestChromaStore:
             )
         ]
         
-        # Should handle gracefully
-        success = test_store.add_documents(docs_no_embeddings)
-        # May succeed or fail depending on implementation
-        assert isinstance(success, bool)
+        # Should handle gracefully - returns False on error or list on success
+        result = test_store.add_documents(docs_no_embeddings)
+        # May return False (error) or empty list (no embeddings to add) or list of IDs
+        assert isinstance(result, (bool, list))
     
     def test_duplicate_document_handling(self, test_store, sample_documents):
         """Test handling of duplicate document IDs."""
-        # Add documents
-        test_store.add_documents(sample_documents)
+        # Add documents - first time should add all
+        result1 = test_store.add_documents(sample_documents)
+        assert isinstance(result1, list)
+        assert len(result1) == len(sample_documents)
         
-        # Add same documents again
-        success = test_store.add_documents(sample_documents)
+        # Add same documents again - should return empty list (all duplicates)
+        result2 = test_store.add_documents(sample_documents)
         
-        # Should handle gracefully (update or skip)
-        assert isinstance(success, bool)
+        # Should return empty list since all are duplicates
+        assert isinstance(result2, list)
+        assert len(result2) == 0  # No new documents added
         
         # Collection should not have duplicates
         info = test_store.get_collection_info()
         if info:
-            # Should not have more than original count
-            assert info.get("document_count", 0) <= len(sample_documents) * 2
+            # Should have exactly the original count
+            assert info.get("document_count", 0) == len(sample_documents)
     
     def test_large_batch_operations(self, test_store):
         """Test operations with larger batches of documents."""
@@ -236,9 +243,13 @@ class TestChromaStore:
             )
             large_batch.append(doc)
         
-        # Add large batch
-        success = test_store.add_documents(large_batch)
-        assert success == True
+        # Add large batch - should return list of IDs
+        result = test_store.add_documents(large_batch)
+        assert isinstance(result, list)
+        assert len(result) == len(large_batch)
+        # Check IDs match
+        expected_ids = [f"batch_doc_{i}" for i in range(50)]
+        assert result == expected_ids
         
         # Verify count
         info = test_store.get_collection_info()
