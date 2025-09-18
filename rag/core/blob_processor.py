@@ -356,10 +356,11 @@ class BlobProcessor:
                     avg_chunk_size = sum(chunk_sizes) // len(chunk_sizes) if chunk_sizes else 0
                     
                     logger.info(f"Successfully parsed {filename} with {config['type']} - got {len(documents)} chunks")
-                    print(f"\n📄 Parser Output: {config['type']}")
-                    print(f"   ├─ Chunks created: {len(documents)}")
-                    print(f"   ├─ Average chunk size: {avg_chunk_size} chars")
-                    print(f"   └─ Chunk sizes: min={min(chunk_sizes)}, max={max(chunk_sizes)}")
+                    # Use debug level for detailed parser output
+                    logger.debug(f"\n📄 Parser Output: {config['type']}")
+                    logger.debug(f"   ├─ Chunks created: {len(documents)}")
+                    logger.debug(f"   ├─ Average chunk size: {avg_chunk_size} chars")
+                    logger.debug(f"   └─ Chunk sizes: min={min(chunk_sizes)}, max={max(chunk_sizes)}")
                     
                     # Apply extractors to the documents
                     documents = self._apply_extractors(documents, filename)
@@ -481,16 +482,16 @@ class BlobProcessor:
                 logger.warning(f"Extractor {config['type']} failed for {filename}: {e}")
                 continue
         
-        # Print extractor outputs
+        # Log extractor outputs at debug level
         if extractor_outputs:
-            print(f"\n🔍 Extractors Applied:")
+            logger.debug("\n🔍 Extractors Applied:")
             for output in extractor_outputs:
                 if output['count'] > 0:
-                    print(f"   ├─ {output['name']}: extracted {output['count']} items")
+                    logger.debug(f"   ├─ {output['name']}: extracted {output['count']} items")
                 elif output['new_fields']:
-                    print(f"   ├─ {output['name']}: added fields {output['new_fields']}")
+                    logger.debug(f"   ├─ {output['name']}: added fields {output['new_fields']}")
                 else:
-                    print(f"   ├─ {output['name']}: applied")
+                    logger.debug(f"   ├─ {output['name']}: applied")
         
         return documents
     

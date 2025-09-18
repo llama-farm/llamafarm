@@ -54,7 +54,29 @@ print_error() {
 # Test database and dataset names
 TEST_DB="test_rag_cli_db_$(date +%s)"
 TEST_DATASET="test_rag_cli_dataset_$(date +%s)"
-PROJECT_CONFIG="/Users/robthelen/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
+
+# Determine project configuration path dynamically
+# First try the default location
+PROJECT_CONFIG="$HOME/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
+
+# If not found, try relative to the script location
+if [ ! -f "$PROJECT_CONFIG" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+    PROJECT_CONFIG="$PROJECT_ROOT/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
+fi
+
+# If still not found, use environment variable or prompt
+if [ ! -f "$PROJECT_CONFIG" ]; then
+    if [ -n "$LLAMAFARM_CONFIG" ]; then
+        PROJECT_CONFIG="$LLAMAFARM_CONFIG"
+    else
+        echo "Warning: Could not find llamafarm.yaml automatically."
+        echo "Please set LLAMAFARM_CONFIG environment variable to the path of your llamafarm.yaml"
+        echo "Example: export LLAMAFARM_CONFIG=~/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
+        exit 1
+    fi
+fi
 
 # Sample files from the examples directory
 SAMPLE_DIR="examples/rag_pipeline/sample_files"

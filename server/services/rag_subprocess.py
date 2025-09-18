@@ -220,10 +220,9 @@ def ingest_file_with_rag(
             # Check for chunk size in database config
             if database_config.config:
                 db_config = database_config.config
-                if isinstance(db_config, dict) and 'chunk_size' in db_config:
-                    if details["chunk_size"] is None:  # Only set if not already set from parser
-                        details["chunk_size"] = db_config['chunk_size']
-                        logger.info(f"Chunk size from database: {details['chunk_size']}")
+                if isinstance(db_config, dict) and 'chunk_size' in db_config and details["chunk_size"] is None:
+                    details["chunk_size"] = db_config['chunk_size']
+                    logger.info(f"Chunk size from database: {details['chunk_size']}")
 
         # Run the RAG CLI with the new schema format
         exit_code, stdout, stderr = run_rag_cli_with_config_and_strategy(
@@ -295,11 +294,17 @@ def ingest_file_with_rag(
             
             # Fallback parsing for older format or if JSON parsing fails
             if not details.get("chunks"):
-                chunk_match = re.search(r'Chunks created:\s*(\d+)', stdout)
-                if not chunk_match:
-                    chunk_match = re.search(r'(\d+)\s+chunks?', stdout, re.IGNORECASE)
+                # Try multiple patterns to extract chunk count
+                chunk_match = (
+                    re.search(r'Chunks created:\s*(\d+)', stdout) or
+                    re.search(r'(\d+)\s+chunks?', stdout, re.IGNORECASE) or
+                    re.search(r'created\s+(\d+)\s+chunks?', stdout, re.IGNORECASE) or
+                    re.search(r'total.*?(\d+)\s+chunks?', stdout, re.IGNORECASE)
+                )
                 if chunk_match:
                     details["chunks"] = int(chunk_match.group(1))
+                else:
+                    logger.warning("Could not extract chunk count from stdout using fallback patterns. Output may be non-standard.")
                     
             # Look for stored/skipped counts
             stored_match = re.search(r'Stored:\s*(\d+)', stdout)
@@ -321,7 +326,15 @@ def ingest_file_with_rag(
         return True, details
 
     except Exception as e:
-        logger.error(f"Error during RAG ingestion: {e}")
+        import traceback
+        logger.error(
+            "Error during RAG ingestion",
+            error=str(e),
+            source_path=source_path,
+            database=database_name,
+            strategy=data_processing_strategy_name,
+            traceback=traceback.format_exc()
+        )
         details["error"] = str(e)
         return False, details
 
