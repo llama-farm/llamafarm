@@ -211,16 +211,23 @@ async def process_dataset(
     details = []
     
     import os
-    # Safely construct the raw data directory path
+    # Safely construct the raw data directory path and validate containment
     raw_data_dir = os.path.normpath(os.path.join(project_dir, "lf_data", "raw"))
     abs_raw_data_dir = os.path.abspath(raw_data_dir)
+    
+    # Validate that raw_data_dir is inside project_dir
+    abs_project_dir = os.path.abspath(project_dir)
+    if not abs_raw_data_dir.startswith(abs_project_dir + os.sep):
+        logger.error("Raw data directory path traversal attempt", raw_data_dir=raw_data_dir)
+        raise HTTPException(status_code=400, detail="Invalid raw data directory (security violation)")
     
     for file_hash in dataset_config.files or []:
         # Safely construct and validate data path to prevent path traversal
         data_path = os.path.normpath(os.path.join(raw_data_dir, file_hash))
+        abs_data_path = os.path.abspath(data_path)
         
-        # Validate that the path is within the intended directory
-        if not os.path.abspath(data_path).startswith(abs_raw_data_dir + os.sep):
+        # Validate that the data path is within the raw_data_dir
+        if not abs_data_path.startswith(abs_raw_data_dir + os.sep):
             logger.warning("Path traversal attempt detected", hash=file_hash, path=data_path)
             failed += 1
             details.append(FileProcessingDetail(
@@ -230,6 +237,9 @@ async def process_dataset(
                 error="Invalid file path (security violation)"
             ))
             continue
+        
+        # Use the validated absolute path for all operations
+        data_path = abs_data_path
         
         # Check if file exists
         if not os.path.exists(data_path):
