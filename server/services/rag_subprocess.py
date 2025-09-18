@@ -120,8 +120,8 @@ def ingest_file_with_rag(
     data_processing_strategy_name: str,
     database_name: str,
     source_path: str,
-    filename: str = None,
-    dataset_name: str = None,
+    filename: str | None = None,
+    dataset_name: str | None = None,
 ) -> tuple[bool, dict]:
     """
     Ingest a single file using the new RAG schema format.

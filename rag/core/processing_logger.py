@@ -38,7 +38,13 @@ class ProcessingLogger:
         # Create main processing log file
         log_filename = f"processing_{self.session_timestamp}"
         if dataset_name:
-            log_filename += f"_{dataset_name}"
+            # Sanitize dataset_name to prevent path traversal
+            import re
+            safe_dataset_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', dataset_name)
+            # Remove any leading/trailing underscores
+            safe_dataset_name = safe_dataset_name.strip('_')
+            if safe_dataset_name:
+                log_filename += f"_{safe_dataset_name}"
         log_filename += ".log"
         
         self.log_file = self.logs_dir / log_filename
@@ -53,8 +59,8 @@ class ProcessingLogger:
         self.logger = logging.getLogger(f"ProcessingLogger_{self.session_timestamp}")
         self.logger.setLevel(logging.DEBUG)
         
-        # File handler for detailed logs
-        file_handler = logging.FileHandler(self.log_file)
+        # File handler for detailed logs with UTF-8 encoding
+        file_handler = logging.FileHandler(self.log_file, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         file_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -167,7 +173,13 @@ class ProcessingLogger:
         
         self.logger.error(f"{error_type}: {error_message}")
         if context:
-            self.logger.error(f"Context: {json.dumps(context, indent=2)}")
+            try:
+                context_str = json.dumps(context, indent=2, default=str)
+            except (TypeError, ValueError) as e:
+                # Fallback for non-serializable objects
+                context_str = str(context)
+                self.logger.warning(f"Could not JSON serialize context: {e}")
+            self.logger.error(f"Context: {context_str}")
         
         self._save_json_log()
     
@@ -198,7 +210,7 @@ class ProcessingLogger:
     def _save_json_log(self):
         """Save the current events to JSON log file."""
         try:
-            with open(self.json_log_file, 'w') as f:
+            with open(self.json_log_file, 'w', encoding='utf-8') as f:
                 json.dump({
                     "session": {
                         "timestamp": self.session_timestamp,
@@ -206,7 +218,7 @@ class ProcessingLogger:
                         "dataset": self.dataset_name
                     },
                     "events": self.processing_events
-                }, f, indent=2)
+                }, f, indent=2, default=str, ensure_ascii=False)
         except Exception as e:
             self.logger.error(f"Failed to save JSON log: {e}")
     
