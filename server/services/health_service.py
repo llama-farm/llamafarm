@@ -16,14 +16,13 @@ def _now_ms() -> int:
 def _check_server() -> dict:
     start = _now_ms()
     try:
-        # If this code runs, server is up; do a cheap no-op
         return {
             "name": "server",
             "status": "healthy",
             "message": "FastAPI process responding",
             "latency_ms": _now_ms() - start,
         }
-    except Exception as e:  # pragma: no cover - defensive
+    except Exception as e:
         return {
             "name": "server",
             "status": "unhealthy",
@@ -40,7 +39,6 @@ def _check_storage() -> dict:
         data_dir.mkdir(parents=True, exist_ok=True)
         projects_dir.mkdir(parents=True, exist_ok=True)
 
-        # Writability check
         test_file = projects_dir / ".health_write_test"
         try:
             test_file.write_text("ok", encoding="utf-8")
@@ -219,6 +217,39 @@ def _check_celery() -> dict:
         }
 
 
+def _check_rag() -> dict:
+    start = _now_ms()
+    try:
+        from core.celery.tasks.rag_tasks import rag_health_check_task
+
+        result = rag_health_check_task.delay()
+
+        health_result = result.get(timeout=2.0)
+
+        if health_result.get('status') == 'healthy':
+            return {
+                "name": "rag",
+                "status": "healthy",
+                "message": health_result.get('message', 'RAG worker responding'),
+                "latency_ms": _now_ms() - start,
+            }
+        else:
+            return {
+                "name": "rag",
+                "status": "unhealthy",
+                "message": health_result.get('message', 'RAG worker unhealthy'),
+                "latency_ms": _now_ms() - start,
+            }
+
+    except Exception as e:
+        return {
+            "name": "rag",
+            "status": "unhealthy",
+            "message": f"RAG health check failed: {str(e)}",
+            "latency_ms": _now_ms() - start,
+        }
+
+
 def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
@@ -228,7 +259,6 @@ def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
 
 
 def health_summary() -> dict[str, Any]:
-    """Compute health summary. Keep checks quick; small timeouts only."""
     components: list[dict] = []
     seeds: list[dict] = []
 
@@ -236,6 +266,7 @@ def health_summary() -> dict[str, Any]:
     components.append(_check_storage())
     components.append(_check_ollama())
     components.append(_check_celery())
+    components.append(_check_rag())
 
     seeds.append(_check_seed_project())
 
