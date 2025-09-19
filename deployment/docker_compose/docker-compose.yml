@@ -8,13 +8,52 @@ services:
       - "7744:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      # Celery configuration (optional - will use filesystem by default)
+      - CELERY_REDIS_HOST=${CELERY_REDIS_HOST:-}
+      - CELERY_REDIS_PORT=${CELERY_REDIS_PORT:-6379}
+      - CELERY_REDIS_DB=${CELERY_REDIS_DB:-0}
+      - CELERY_REDIS_PASSWORD=${CELERY_REDIS_PASSWORD:-}
+      - CELERY_RABBITMQ_HOST=${CELERY_RABBITMQ_HOST:-}
+      - CELERY_RABBITMQ_PORT=${CELERY_RABBITMQ_PORT:-5672}
+      - CELERY_RABBITMQ_USER=${CELERY_RABBITMQ_USER:-guest}
+      - CELERY_RABBITMQ_PASSWORD=${CELERY_RABBITMQ_PASSWORD:-guest}
+      - CELERY_RABBITMQ_VHOST=${CELERY_RABBITMQ_VHOST:-/}
+    volumes:
+      - llamafarm_data:/var/lib/llamafarm
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     restart: unless-stopped
+    depends_on:
+      - rag
+    networks:
+      - llamafarm-network
+
+  # RAG Worker Service
+  rag:
+    build:
+      context: ../../
+      dockerfile: rag/Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Celery configuration (optional - will use filesystem by default)
+      - CELERY_REDIS_HOST=${CELERY_REDIS_HOST:-}
+      - CELERY_REDIS_PORT=${CELERY_REDIS_PORT:-6379}
+      - CELERY_REDIS_DB=${CELERY_REDIS_DB:-0}
+      - CELERY_REDIS_PASSWORD=${CELERY_REDIS_PASSWORD:-}
+      - CELERY_RABBITMQ_HOST=${CELERY_RABBITMQ_HOST:-}
+      - CELERY_RABBITMQ_PORT=${CELERY_RABBITMQ_PORT:-5672}
+      - CELERY_RABBITMQ_USER=${CELERY_RABBITMQ_USER:-guest}
+      - CELERY_RABBITMQ_PASSWORD=${CELERY_RABBITMQ_PASSWORD:-guest}
+      - CELERY_RABBITMQ_VHOST=${CELERY_RABBITMQ_VHOST:-/}
+    volumes:
+      - llamafarm_data:/var/lib/llamafarm
+    restart: unless-stopped
+    networks:
+      - llamafarm-network
 
   # React Frontend Designer
   designer:
@@ -36,6 +75,8 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    networks:
+      - llamafarm-network
 
   # Python Runtime Service
   runtime:
@@ -47,12 +88,13 @@ services:
     depends_on:
       - server
     restart: unless-stopped
+    networks:
+      - llamafarm-network
 
 networks:
-  default:
+  llamafarm-network:
     driver: bridge
 
-volumes: {}
-  # Add persistent volumes if needed
-  # server_data:
-  # designer_data:
+volumes:
+  llamafarm_data:
+    driver: local
