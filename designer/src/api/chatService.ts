@@ -7,6 +7,7 @@ import {
   StreamingChatOptions,
   NetworkError,
 } from '../types/chat'
+import { handleSSEResponse } from '../utils/sseUtils'
 
 
 /**
@@ -137,53 +138,17 @@ export async function chatInferenceStreaming(
     // Extract session ID from response headers
     const responseSessionId = response.headers.get('x-session-id') || sessionId || ''
 
-    // Handle the streaming response
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new NetworkError('No response body available', new Error('Missing response body'))
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        
-        if (done) break
-
-        const decodedChunk = decoder.decode(value, { stream: true })
-        buffer += decodedChunk
-        
-        // Process complete lines
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          
-          if (trimmedLine === '') continue
-          if (trimmedLine === 'data: [DONE]') {
-            onComplete?.()
-            return responseSessionId
-          }
-          
-          if (trimmedLine.startsWith('data: ')) {
-            try {
-              const jsonData = trimmedLine.slice(6) // Remove 'data: ' prefix
-              const chunk: ChatStreamChunk = JSON.parse(jsonData)
-              onChunk?.(chunk)
-            } catch (parseError) {
-              console.warn('Failed to parse SSE chunk:', parseError, 'Line:', trimmedLine)
-            }
-          }
-        }
+    // Handle the streaming response using SSE utility
+    await handleSSEResponse<ChatStreamChunk>(
+      response,
+      (chunk) => onChunk?.(chunk),
+      {
+        signal,
+        onComplete,
+        onError
       }
-    } finally {
-      reader.releaseLock()
-    }
+    )
 
-    onComplete?.()
     return responseSessionId
 
   } catch (error) {
