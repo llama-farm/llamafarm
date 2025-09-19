@@ -1,34 +1,83 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # FastAPI Backend Server (Development)
   server:
     build:
-      context: ../server
+      context: ../../server
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
       - RELOAD=true
+      # Celery configuration (optional - will use filesystem by default)
+      - CELERY_REDIS_HOST=${CELERY_REDIS_HOST:-}
+      - CELERY_REDIS_PORT=${CELERY_REDIS_PORT:-6379}
+      - CELERY_REDIS_DB=${CELERY_REDIS_DB:-0}
+      - CELERY_REDIS_PASSWORD=${CELERY_REDIS_PASSWORD:-}
+      - CELERY_RABBITMQ_HOST=${CELERY_RABBITMQ_HOST:-}
+      - CELERY_RABBITMQ_PORT=${CELERY_RABBITMQ_PORT:-5672}
+      - CELERY_RABBITMQ_USER=${CELERY_RABBITMQ_USER:-guest}
+      - CELERY_RABBITMQ_PASSWORD=${CELERY_RABBITMQ_PASSWORD:-guest}
+      - CELERY_RABBITMQ_VHOST=${CELERY_RABBITMQ_VHOST:-/}
     volumes:
       - ../server:/app
-    command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+      - llamafarm_data:/var/lib/llamafarm
+    command:
+      [
+        "uv",
+        "run",
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    depends_on:
+      - rag
+    networks:
+      - llamafarm-network
+
+  # RAG Worker Service (Development)
+  rag:
+    build:
+      context: ../../rag
+      dockerfile: Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Celery configuration (optional - will use filesystem by default)
+      - CELERY_REDIS_HOST=${CELERY_REDIS_HOST:-}
+      - CELERY_REDIS_PORT=${CELERY_REDIS_PORT:-6379}
+      - CELERY_REDIS_DB=${CELERY_REDIS_DB:-0}
+      - CELERY_REDIS_PASSWORD=${CELERY_REDIS_PASSWORD:-}
+      - CELERY_RABBITMQ_HOST=${CELERY_RABBITMQ_HOST:-}
+      - CELERY_RABBITMQ_PORT=${CELERY_RABBITMQ_PORT:-5672}
+      - CELERY_RABBITMQ_USER=${CELERY_RABBITMQ_USER:-guest}
+      - CELERY_RABBITMQ_PASSWORD=${CELERY_RABBITMQ_PASSWORD:-guest}
+      - CELERY_RABBITMQ_VHOST=${CELERY_RABBITMQ_VHOST:-/}
+    volumes:
+      - ../rag:/app
+      - llamafarm_data:/var/lib/llamafarm
+    networks:
+      - llamafarm-network
 
   # React Frontend Designer (Development)
   designer:
     build:
-      context: ../designer
+      context: ../../designer
       dockerfile: Dockerfile
       target: builder
     ports:
-      - "5173:5173"  # Vite dev server port
+      - "5173:5173" # Vite dev server port
     environment:
       - VITE_APP_API_URL=http://localhost:8000
       - VITE_APP_ENV=development
@@ -38,11 +87,13 @@ services:
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     depends_on:
       - server
+    networks:
+      - llamafarm-network
 
   # Python Runtime Service (Development)
   runtime:
     build:
-      context: ../runtime
+      context: ../../runtime
       dockerfile: Dockerfile
     environment:
       - PYTHONUNBUFFERED=1
@@ -50,7 +101,13 @@ services:
       - ../runtime:/app
     depends_on:
       - server
+    networks:
+      - llamafarm-network
 
 networks:
-  default:
+  llamafarm-network:
     driver: bridge
+
+volumes:
+  llamafarm_data:
+    driver: local
