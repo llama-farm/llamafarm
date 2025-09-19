@@ -13,8 +13,7 @@ import { ChatStreamChunk, NetworkError } from '../types/chat'
  * Now includes session persistence and restoration with streaming support
  */
 export function useChatbox(initialSessionId?: string, enableStreaming: boolean = true) {
-  // Allow disabling streaming via environment variable for debugging
-  const streamingEnabled = enableStreaming && !import.meta.env.VITE_DISABLE_STREAMING
+  const streamingEnabled = enableStreaming
   // Session management with persistence
   const {
     currentSessionId: sessionId,
