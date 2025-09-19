@@ -1,17 +1,11 @@
-"""
-Configuration loader for LlamaFarm that supports YAML, TOML, and JSON formats
-with JSON schema validation and write capabilities.
-"""
-
 import json
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
-# urllib.parse imports removed - no longer needed for $ref resolution
 
 try:
-    import yaml  # type: ignore
+    import yaml
 except ImportError:
     yaml = None
 
@@ -21,10 +15,10 @@ try:
     else:
         import tomli as tomllib
 except ImportError:
-    tomllib = None  # type: ignore
+    tomllib = None
 
 try:
-    import tomli_w  # type: ignore
+    import tomli_w
 except ImportError:
     tomli_w = None
 
@@ -248,6 +242,8 @@ def load_config(
     """
 
     config_dict = load_config_dict(config_path, directory, validate)
+    # Handle encrypted fields during loading
+    _process_encrypted_fields_on_load(config_dict)
     return LlamaFarmConfig(**config_dict)
 
 
@@ -367,6 +363,9 @@ def save_config(
     # Validate configuration before saving
     config_dict = config.model_dump(mode="json", exclude_none=True)
 
+    # Process encrypted fields before saving
+    config_dict = _process_encrypted_fields_for_save(config_dict)
+
     # Create backup if requested and file exists
     backup_path = None
     if create_backup and config_file.exists():
@@ -409,6 +408,70 @@ def save_config(
             except Exception:
                 pass  # Don't mask the original error
         raise
+
+
+# ============================================================================
+# ENCRYPTION HELPERS
+def _process_encrypted_fields_on_load(config_dict: dict) -> None:
+    try:
+        import sys
+        from pathlib import Path
+        server_path = Path(__file__).parent.parent.parent / "server"
+        if str(server_path) not in sys.path:
+            sys.path.insert(0, str(server_path))
+        from core.encryption import is_encrypted
+
+        def _process_dict_recursive(data: dict) -> None:
+            if 'runtime' in data and isinstance(data['runtime'], dict):
+                runtime = data['runtime']
+                if 'api_key' in runtime:
+                    api_key_value = runtime['api_key']
+                    if isinstance(api_key_value, dict) and is_encrypted(api_key_value):
+                        pass
+                    elif isinstance(api_key_value, str):
+                        pass
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    _process_dict_recursive(value)
+
+        _process_dict_recursive(config_dict)
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"Warning: Error processing encrypted fields during load: {e}")
+
+def _process_encrypted_fields_for_save(config_dict: dict) -> dict:
+    try:
+        import sys
+        from pathlib import Path
+        server_path = Path(__file__).parent.parent.parent / "server"
+        if str(server_path) not in sys.path:
+            sys.path.insert(0, str(server_path))
+        from core.encryption import encrypt_secret_value, is_encrypted
+
+        def _process_dict_recursive(data: dict) -> None:
+            if 'runtime' in data and isinstance(data['runtime'], dict):
+                runtime = data['runtime']
+                if 'api_key' in runtime:
+                    api_key_value = runtime['api_key']
+                    if isinstance(api_key_value, str) and api_key_value and not is_encrypted(api_key_value):
+                        if api_key_value != "[ENCRYPTED]" and api_key_value != "[ENCRYPTION_FAILED]":
+                            try:
+                                runtime['api_key'] = encrypt_secret_value(api_key_value)
+                            except Exception as e:
+                                print(f"Warning: Failed to encrypt API key: {e}")
+
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    _process_dict_recursive(value)
+
+        _process_dict_recursive(config_dict)
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"Warning: Error processing encrypted fields during save: {e}")
+
+    return config_dict
 
 
 def update_config(
