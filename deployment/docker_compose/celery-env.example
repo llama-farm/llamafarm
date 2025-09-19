@@ -1,0 +1,38 @@
+# LlamaFarm Docker Compose Environment Variables for Celery Configuration
+# Copy this file to .env and modify as needed
+
+# Celery Configuration (Optional)
+# By default, Celery uses filesystem broker. Uncomment and configure for external brokers.
+
+# Redis Configuration (for both broker and result backend)
+# CELERY_REDIS_HOST=redis
+# CELERY_REDIS_PORT=6379
+# CELERY_REDIS_DB=0
+# CELERY_REDIS_PASSWORD=
+
+# RabbitMQ Configuration (for broker only, Redis used for results)
+# CELERY_RABBITMQ_HOST=rabbitmq
+# CELERY_RABBITMQ_PORT=5672
+# CELERY_RABBITMQ_USER=guest
+# CELERY_RABBITMQ_PASSWORD=guest
+# CELERY_RABBITMQ_VHOST=/
+
+# Example configurations for different setups:
+
+# 1. Using Redis for both broker and results:
+# CELERY_REDIS_HOST=redis
+# CELERY_REDIS_PORT=6379
+# CELERY_REDIS_DB=0
+
+# 2. Using RabbitMQ for broker and Redis for results:
+# CELERY_RABBITMQ_HOST=rabbitmq
+# CELERY_RABBITMQ_PORT=5672
+# CELERY_RABBITMQ_USER=guest
+# CELERY_RABBITMQ_PASSWORD=guest
+# CELERY_RABBITMQ_VHOST=/
+# CELERY_REDIS_HOST=redis
+# CELERY_REDIS_PORT=6379
+# CELERY_REDIS_DB=0
+
+# 3. Using only filesystem (default - no configuration needed):
+# Leave all CELERY_* variables commented out or empty
