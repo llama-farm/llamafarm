@@ -6,6 +6,7 @@ import {
   ChatStreamChunk,
   StreamingChatOptions,
   NetworkError,
+  ValidationError,
 } from '../types/chat'
 import { handleSSEResponse } from '../utils/sseUtils'
 
@@ -94,13 +95,13 @@ export async function chatInferenceStreaming(
     
     // Validate the request format
     if (!streamingRequest.messages || streamingRequest.messages.length === 0) {
-      throw new NetworkError('No messages in chat request', new Error('Invalid request format'))
+      throw new ValidationError('No messages in chat request', { messages: streamingRequest.messages })
     }
     
     // Ensure all messages have valid content
     for (const message of streamingRequest.messages) {
       if (!message.content || typeof message.content !== 'string') {
-        throw new NetworkError('Invalid message content', new Error('Message content must be a string'))
+        throw new ValidationError('Message content must be a string', { message })
       }
     }
     
