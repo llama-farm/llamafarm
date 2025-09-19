@@ -119,11 +119,13 @@ export function useChatboxWithProjectSession(
       id: generateMessageId(),
     }
     
-    // Always use project session system
+    // Always use project session system - it will create temporary session if needed
     try {
       projectSession.addMessage(message.content, message.type === 'user' ? 'user' : 'assistant')
     } catch (err) {
-      console.warn('Failed to add message to project session:', err)
+      console.error('Failed to add message to project session:', err)
+      // Don't fail silently - this is a critical error
+      throw err
     }
     
     return newMessage.id

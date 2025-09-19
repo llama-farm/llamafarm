@@ -120,6 +120,40 @@ function cleanupOldSessions(): void {
 }
 
 /**
+ * Cleanup orphaned temporary sessions (older than 1 hour)
+ */
+export function cleanupOrphanedTempSessions(): void {
+  try {
+    const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
+    const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
+    const now = Date.now()
+    const oneHourAgo = now - (60 * 60 * 1000)
+    
+    let cleanedCount = 0
+    
+    Object.entries(sessions).forEach(([sessionId, session]) => {
+      if (sessionId.startsWith('temp_')) {
+        const createdAt = new Date(session.createdAt).getTime()
+        if (createdAt < oneHourAgo) {
+          console.log('Cleaning up orphaned temp session:', sessionId)
+          delete sessions[sessionId]
+          delete chatHistory[sessionId]
+          cleanedCount++
+        }
+      }
+    })
+    
+    if (cleanedCount > 0) {
+      setToStorage(STORAGE_KEYS.SESSIONS, sessions)
+      setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
+      console.log(`Cleaned up ${cleanedCount} orphaned temporary sessions`)
+    }
+  } catch (error) {
+    console.error('Failed to cleanup orphaned temp sessions:', error)
+  }
+}
+
+/**
  * Find existing session for context (namespace + project + chatService)
  */
 export function findSessionForContext(
@@ -343,4 +377,5 @@ export default {
   getSessionsForContext,
   getAllSessions,
   isStorageAvailable,
+  cleanupOrphanedTempSessions,
 }

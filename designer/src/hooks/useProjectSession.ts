@@ -15,6 +15,9 @@ import {
   clearChatHistory,
   deleteSession,
   getSessionsForContext,
+  saveSession,
+  initializeChatHistory,
+  cleanupOrphanedTempSessions,
   type ChatMessage,
   type SessionMetadata,
 } from '../utils/projectSessionManager'
@@ -59,6 +62,11 @@ export function useProjectSession(
     return `${activeProject.namespace}/${activeProject.project}/${chatService}`
   }, [activeProject?.namespace, activeProject?.project, chatService])
   
+  // Cleanup orphaned temporary sessions on mount
+  useEffect(() => {
+    cleanupOrphanedTempSessions()
+  }, [])
+  
   // Load existing session when project context changes
   useEffect(() => {
     if (!activeProject || !projectKey) {
@@ -82,10 +90,12 @@ export function useProjectSession(
         setSessionId(existingSessionId)
         const history = loadChatHistory(existingSessionId)
         setMessages(history)
+        console.log('Loaded existing session for project:', projectKey, 'session:', existingSessionId)
       } else {
         // No existing session - will be created on first message
         setSessionId(null)
         setMessages([])
+        console.log('No existing session found for project:', projectKey)
       }
     } catch (err) {
       console.error('Failed to load session:', err)
@@ -94,15 +104,59 @@ export function useProjectSession(
     } finally {
       setIsLoading(false)
     }
-  }, [projectKey])
+  }, [projectKey, activeProject?.namespace, activeProject?.project, chatService])
   
   // Add message to history
   const addMessage = useCallback((content: string, role: 'user' | 'assistant'): ChatMessage => {
-    if (!sessionId) {
-      throw new Error('No active session')
+    // CRITICAL FIX: Ensure session exists for current context
+    let currentSessionId = sessionId
+    
+    if (!currentSessionId) {
+      if (!activeProject) {
+        throw new Error('No active project and no session')
+      }
+      
+      // Check if we already have a session for this context (including temporary ones)
+      const existingSessionId = getExistingSession(
+        activeProject.namespace,
+        activeProject.project,
+        chatService
+      )
+      
+      if (existingSessionId) {
+        // Reuse existing session (temporary or real)
+        currentSessionId = existingSessionId
+        setSessionId(currentSessionId)
+        const history = loadChatHistory(currentSessionId)
+        setMessages(history)
+        console.log('Reusing existing session:', currentSessionId)
+      } else {
+        // Create a new temporary session only if none exists
+        currentSessionId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+        
+        // Create temporary session metadata
+        const tempSessionData = {
+          namespace: activeProject.namespace,
+          project: activeProject.project,
+          chatService,
+          createdAt: new Date().toISOString(),
+          lastUsed: new Date().toISOString(),
+        }
+        
+        // Store temporary session
+        saveSession(currentSessionId, tempSessionData)
+        initializeChatHistory(currentSessionId)
+        
+        // Update local state immediately
+        setSessionId(currentSessionId)
+        setMessages([])
+        
+        console.log('Created new temporary session:', currentSessionId)
+      }
     }
     
-    const message = addMessageToHistory(sessionId, {
+    // Use the current session ID (either existing or newly created)
+    const message = addMessageToHistory(currentSessionId, {
       role,
       content,
       timestamp: new Date().toISOString(),
@@ -110,7 +164,7 @@ export function useProjectSession(
     
     setMessages(prev => [...prev, message])
     return message
-  }, [sessionId])
+  }, [sessionId, activeProject, chatService])
   
   // Clear chat history
   const clearHistory = useCallback(() => {
@@ -168,23 +222,62 @@ export function useProjectSession(
     }
     
     try {
-      createSessionFromServer(
-        serverSessionId,
-        activeProject.namespace,
-        activeProject.project,
-        chatService
-      )
+      // Check if we have a temporary session to migrate
+      const isTemporarySession = sessionId && sessionId.startsWith('temp_')
       
-      setSessionId(serverSessionId)
-      setMessages([])
-      setError(null)
+      if (isTemporarySession) {
+        console.log('Migrating temporary session to real session:', sessionId, '->', serverSessionId)
+        
+        // Get messages from temporary session
+        const tempMessages = loadChatHistory(sessionId)
+        console.log('Messages to migrate:', tempMessages.length)
+        
+        // Create real session with server ID
+        createSessionFromServer(
+          serverSessionId,
+          activeProject.namespace,
+          activeProject.project,
+          chatService
+        )
+        
+        // Migrate messages to real session
+        tempMessages.forEach(message => {
+          addMessageToHistory(serverSessionId, {
+            role: message.role,
+            content: message.content,
+            timestamp: message.timestamp,
+          })
+        })
+        
+        // Clean up temporary session
+        deleteSession(sessionId)
+        
+        // Update local state with real session
+        setSessionId(serverSessionId)
+        setMessages(tempMessages) // Show migrated messages immediately
+        setError(null)
+        
+        console.log('Successfully migrated temporary session with', tempMessages.length, 'messages')
+      } else {
+        // No temporary session, just create new one
+        createSessionFromServer(
+          serverSessionId,
+          activeProject.namespace,
+          activeProject.project,
+          chatService
+        )
+        
+        setSessionId(serverSessionId)
+        setMessages([])
+        setError(null)
+      }
     } catch (err) {
       console.error('Failed to create session from server:', err)
       const errorMessage = err instanceof Error ? err.message : 'Failed to create session from server'
       setError(errorMessage)
       throw new Error(errorMessage)
     }
-  }, [projectKey])
+  }, [activeProject?.namespace, activeProject?.project, chatService, sessionId])
   
   return {
     // State
