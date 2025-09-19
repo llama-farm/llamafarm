@@ -21,10 +21,19 @@ export interface ProjectChatSessionState {
 }
 
 /**
- * Hook to manage project chat sessions with server-provided session IDs
- * Provides session creation, continuation, and cleanup functionality
+ * Base session management configuration
  */
-export const useProjectChatSession = (namespace?: string, projectId?: string) => {
+interface SessionManagerConfig {
+  namespace?: string
+  projectId?: string
+}
+
+/**
+ * Base session management hook that provides common session functionality
+ * Used by both regular and streaming session hooks
+ */
+function useProjectChatSessionBase(config: SessionManagerConfig) {
+  const { namespace, projectId } = config
   const queryClient = useQueryClient()
   const [sessionState, setSessionState] = useState<ProjectChatSessionState>({
     sessionId: null,
@@ -34,6 +43,111 @@ export const useProjectChatSession = (namespace?: string, projectId?: string) =>
 
   // Ref to track if we're in the middle of starting a session
   const startingSessionRef = useRef(false)
+
+  /**
+   * Common session success handler
+   */
+  const handleSessionSuccess = useCallback((sessionId: string) => {
+    setSessionState({
+      sessionId,
+      isSessionActive: true,
+      sessionError: null,
+    })
+    
+    // Invalidate conversation queries for this project
+    if (namespace && projectId) {
+      queryClient.invalidateQueries({ 
+        queryKey: projectChatKeys.conversation(namespace, projectId) 
+      })
+    }
+    
+    startingSessionRef.current = false
+  }, [namespace, projectId, queryClient])
+
+  /**
+   * Common session error handler
+   */
+  const handleSessionError = useCallback((error: unknown, operation: string) => {
+    const sessionError = error instanceof Error ? error : new Error(`Failed to ${operation}`)
+    setSessionState(prev => ({
+      ...prev,
+      sessionError,
+    }))
+    startingSessionRef.current = false
+    console.error(`Failed to ${operation}:`, error)
+  }, [])
+
+  /**
+   * Update session state (for continuing sessions)
+   */
+  const updateSessionState = useCallback((sessionId: string) => {
+    setSessionState(prev => ({
+      ...prev,
+      sessionId,
+      sessionError: null,
+    }))
+    
+    // Invalidate conversation queries for this project
+    if (namespace && projectId) {
+      queryClient.invalidateQueries({ 
+        queryKey: projectChatKeys.conversation(namespace, projectId) 
+      })
+    }
+  }, [namespace, projectId, queryClient])
+
+  /**
+   * Set an existing session ID (from external source)
+   */
+  const setSessionId = useCallback((sessionId: string | null) => {
+    setSessionState({
+      sessionId,
+      isSessionActive: !!sessionId,
+      sessionError: null,
+    })
+  }, [])
+
+  /**
+   * Clear the current session (start fresh)
+   */
+  const clearSession = useCallback(() => {
+    setSessionState({
+      sessionId: null,
+      isSessionActive: false,
+      sessionError: null,
+    })
+    startingSessionRef.current = false
+  }, [])
+
+  /**
+   * Reset session state (useful when switching projects)
+   */
+  const resetSessionState = useCallback(() => {
+    clearSession()
+  }, [clearSession])
+
+  return {
+    sessionState,
+    setSessionState,
+    startingSessionRef,
+    handleSessionSuccess,
+    handleSessionError,
+    updateSessionState,
+    setSessionId,
+    clearSession,
+    resetSessionState,
+    
+    // Computed states
+    hasActiveSession: sessionState.isSessionActive && !!sessionState.sessionId,
+  }
+}
+
+/**
+ * Hook to manage project chat sessions with server-provided session IDs
+ * Provides session creation, continuation, and cleanup functionality
+ */
+export const useProjectChatSession = (namespace?: string, projectId?: string) => {
+  const base = useProjectChatSessionBase({ namespace, projectId })
+  const { sessionState, setSessionState, startingSessionRef, handleSessionSuccess, handleSessionError, updateSessionState } = base
 
   /**
    * Mutation to start a new session with the server
@@ -53,28 +167,10 @@ export const useProjectChatSession = (namespace?: string, projectId?: string) =>
       return await startNewProjectChatSession(namespace, projectId, message, options)
     },
     onSuccess: (result) => {
-      setSessionState({
-        sessionId: result.sessionId,
-        isSessionActive: true,
-        sessionError: null,
-      })
-      
-      // Invalidate conversation queries for this project
-      if (namespace && projectId) {
-        queryClient.invalidateQueries({ 
-          queryKey: projectChatKeys.conversation(namespace, projectId) 
-        })
-      }
-      
-      startingSessionRef.current = false
+      handleSessionSuccess(result.sessionId)
     },
     onError: (error) => {
-      setSessionState(prev => ({
-        ...prev,
-        sessionError: error instanceof Error ? error : new Error('Failed to start session'),
-      }))
-      startingSessionRef.current = false
-      console.error('Failed to start project chat session:', error)
+      handleSessionError(error, 'start session')
     }
   })
 
@@ -98,26 +194,10 @@ export const useProjectChatSession = (namespace?: string, projectId?: string) =>
       return await continueProjectChatSession(namespace, projectId, sessionId, message, options)
     },
     onSuccess: (result) => {
-      // Update session ID in case server provides a different one
-      setSessionState(prev => ({
-        ...prev,
-        sessionId: result.sessionId,
-        sessionError: null,
-      }))
-      
-      // Invalidate conversation queries for this project
-      if (namespace && projectId) {
-        queryClient.invalidateQueries({ 
-          queryKey: projectChatKeys.conversation(namespace, projectId) 
-        })
-      }
+      updateSessionState(result.sessionId)
     },
     onError: (error) => {
-      setSessionState(prev => ({
-        ...prev,
-        sessionError: error instanceof Error ? error : new Error('Failed to continue session'),
-      }))
-      console.error('Failed to continue project chat session:', error)
+      handleSessionError(error, 'continue session')
     }
   })
 
@@ -194,36 +274,6 @@ export const useProjectChatSession = (namespace?: string, projectId?: string) =>
     }
   }, [sessionState.isSessionActive, sessionState.sessionId, continueSession, startNewSession])
 
-  /**
-   * Set an existing session ID (from external source)
-   */
-  const setSessionId = useCallback((sessionId: string | null) => {
-    setSessionState({
-      sessionId,
-      isSessionActive: !!sessionId,
-      sessionError: null,
-    })
-  }, [])
-
-  /**
-   * Clear the current session (start fresh)
-   */
-  const clearSession = useCallback(() => {
-    setSessionState({
-      sessionId: null,
-      isSessionActive: false,
-      sessionError: null,
-    })
-    startingSessionRef.current = false
-  }, [])
-
-  /**
-   * Reset session state (useful when switching projects)
-   */
-  const resetSessionState = useCallback(() => {
-    clearSession()
-  }, [clearSession])
-
   return {
     // Session state
     sessionId: sessionState.sessionId,
@@ -234,9 +284,7 @@ export const useProjectChatSession = (namespace?: string, projectId?: string) =>
     startNewSession,
     continueSession,
     sendMessage,
-    setSessionId,
-    clearSession,
-    resetSessionState,
+    ...base, // Include all base operations
     
     // Mutation states
     isStartingSession: startSessionMutation.isPending,
@@ -245,7 +293,7 @@ export const useProjectChatSession = (namespace?: string, projectId?: string) =>
     continueSessionError: continueSessionMutation.error,
     
     // Computed states
-    hasActiveSession: sessionState.isSessionActive && !!sessionState.sessionId,
+    hasActiveSession: base.hasActiveSession,
     isLoading: startSessionMutation.isPending || continueSessionMutation.isPending,
     error: sessionState.sessionError || startSessionMutation.error || continueSessionMutation.error,
   }
@@ -255,14 +303,8 @@ export const useProjectChatSession = (namespace?: string, projectId?: string) =>
  * Hook for streaming project chat sessions with server-managed session IDs
  */
 export const useProjectChatStreamingSession = (namespace?: string, projectId?: string) => {
-  const queryClient = useQueryClient()
-  const [sessionState, setSessionState] = useState<ProjectChatSessionState>({
-    sessionId: null,
-    isSessionActive: false,
-    sessionError: null,
-  })
-
-  const startingSessionRef = useRef(false)
+  const base = useProjectChatSessionBase({ namespace, projectId })
+  const { sessionState, setSessionState, startingSessionRef, handleSessionSuccess, handleSessionError, updateSessionState } = base
 
   /**
    * Mutation to start a new streaming session
@@ -290,28 +332,10 @@ export const useProjectChatStreamingSession = (namespace?: string, projectId?: s
       )
     },
     onSuccess: (sessionId) => {
-      setSessionState({
-        sessionId,
-        isSessionActive: true,
-        sessionError: null,
-      })
-      
-      // Invalidate conversation queries for this project
-      if (namespace && projectId) {
-        queryClient.invalidateQueries({ 
-          queryKey: projectChatKeys.conversation(namespace, projectId) 
-        })
-      }
-      
-      startingSessionRef.current = false
+      handleSessionSuccess(sessionId)
     },
     onError: (error) => {
-      setSessionState(prev => ({
-        ...prev,
-        sessionError: error instanceof Error ? error : new Error('Failed to start streaming session'),
-      }))
-      startingSessionRef.current = false
-      console.error('Failed to start streaming project chat session:', error)
+      handleSessionError(error, 'start streaming session')
     }
   })
 
@@ -344,26 +368,10 @@ export const useProjectChatStreamingSession = (namespace?: string, projectId?: s
       )
     },
     onSuccess: (sessionId) => {
-      // Update session ID in case server provides a different one
-      setSessionState(prev => ({
-        ...prev,
-        sessionId,
-        sessionError: null,
-      }))
-      
-      // Invalidate conversation queries for this project
-      if (namespace && projectId) {
-        queryClient.invalidateQueries({ 
-          queryKey: projectChatKeys.conversation(namespace, projectId) 
-        })
-      }
+      updateSessionState(sessionId)
     },
     onError: (error) => {
-      setSessionState(prev => ({
-        ...prev,
-        sessionError: error instanceof Error ? error : new Error('Failed to continue streaming session'),
-      }))
-      console.error('Failed to continue streaming project chat session:', error)
+      handleSessionError(error, 'continue streaming session')
     }
   })
 
@@ -445,29 +453,6 @@ export const useProjectChatStreamingSession = (namespace?: string, projectId?: s
     }
   }, [sessionState.isSessionActive, sessionState.sessionId, continueStreamingSession, startNewStreamingSession])
 
-  /**
-   * Set an existing session ID (from external source)
-   */
-  const setSessionId = useCallback((sessionId: string | null) => {
-    setSessionState({
-      sessionId,
-      isSessionActive: !!sessionId,
-      sessionError: null,
-    })
-  }, [])
-
-  /**
-   * Clear the current session (start fresh)
-   */
-  const clearSession = useCallback(() => {
-    setSessionState({
-      sessionId: null,
-      isSessionActive: false,
-      sessionError: null,
-    })
-    startingSessionRef.current = false
-  }, [])
-
   return {
     // Session state
     sessionId: sessionState.sessionId,
@@ -478,8 +463,7 @@ export const useProjectChatStreamingSession = (namespace?: string, projectId?: s
     startNewStreamingSession,
     continueStreamingSession,
     sendStreamingMessage,
-    setSessionId,
-    clearSession,
+    ...base, // Include all base operations
     
     // Mutation states
     isStartingSession: startStreamingSessionMutation.isPending,
@@ -488,7 +472,7 @@ export const useProjectChatStreamingSession = (namespace?: string, projectId?: s
     continueSessionError: continueStreamingSessionMutation.error,
     
     // Computed states
-    hasActiveSession: sessionState.isSessionActive && !!sessionState.sessionId,
+    hasActiveSession: base.hasActiveSession,
     isLoading: startStreamingSessionMutation.isPending || continueStreamingSessionMutation.isPending,
     error: sessionState.sessionError || startStreamingSessionMutation.error || continueStreamingSessionMutation.error,
   }

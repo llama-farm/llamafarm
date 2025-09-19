@@ -6,7 +6,9 @@ import {
   ChatStreamChunk,
   StreamingChatOptions,
   NetworkError,
+  ValidationError,
 } from '../types/chat'
+import { handleSSEResponse } from '../utils/sseUtils'
 
 
 /**
@@ -93,13 +95,13 @@ export async function chatInferenceStreaming(
     
     // Validate the request format
     if (!streamingRequest.messages || streamingRequest.messages.length === 0) {
-      throw new NetworkError('No messages in chat request', new Error('Invalid request format'))
+      throw new ValidationError('No messages in chat request', { messages: streamingRequest.messages })
     }
     
     // Ensure all messages have valid content
     for (const message of streamingRequest.messages) {
       if (!message.content || typeof message.content !== 'string') {
-        throw new NetworkError('Invalid message content', new Error('Message content must be a string'))
+        throw new ValidationError('Message content must be a string', { message })
       }
     }
     
@@ -137,53 +139,17 @@ export async function chatInferenceStreaming(
     // Extract session ID from response headers
     const responseSessionId = response.headers.get('x-session-id') || sessionId || ''
 
-    // Handle the streaming response
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new NetworkError('No response body available', new Error('Missing response body'))
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        
-        if (done) break
-
-        const decodedChunk = decoder.decode(value, { stream: true })
-        buffer += decodedChunk
-        
-        // Process complete lines
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          
-          if (trimmedLine === '') continue
-          if (trimmedLine === 'data: [DONE]') {
-            onComplete?.()
-            return responseSessionId
-          }
-          
-          if (trimmedLine.startsWith('data: ')) {
-            try {
-              const jsonData = trimmedLine.slice(6) // Remove 'data: ' prefix
-              const chunk: ChatStreamChunk = JSON.parse(jsonData)
-              onChunk?.(chunk)
-            } catch (parseError) {
-              console.warn('Failed to parse SSE chunk:', parseError, 'Line:', trimmedLine)
-            }
-          }
-        }
+    // Handle the streaming response using SSE utility
+    await handleSSEResponse<ChatStreamChunk>(
+      response,
+      (chunk) => onChunk?.(chunk),
+      {
+        signal,
+        onComplete,
+        onError
       }
-    } finally {
-      reader.releaseLock()
-    }
+    )
 
-    onComplete?.()
     return responseSessionId
 
   } catch (error) {

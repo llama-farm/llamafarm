@@ -4,12 +4,13 @@ import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { 
-  useProjectChatMessage,
+  useProjectChatStreamingMessage,
   useProjectChatParams 
 } from '../../hooks/useProjectChat'
-import { useProjectChatSession } from '../../hooks/useProjectChatSession'
+import { useProjectChatStreamingSession } from '../../hooks/useProjectChatSession'
+import { ProjectChatStreamChunk } from '../../api/projectChatService'
+import { useChatbox } from '../../hooks/useChatbox'
 import { useProjectSession as useProjectSessionHook } from '../../hooks/useProjectSession'
-import { addMessageToHistory } from '../../utils/projectSessionManager'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -18,7 +19,6 @@ export interface TestChatProps {
   showPrompts?: boolean
   showThinking?: boolean
   showGenSettings?: boolean
-  useProjectSession?: boolean
 }
 
 const containerClasses =
@@ -59,26 +59,34 @@ export default function TestChat({
   showPrompts,
   showThinking,
   showGenSettings,
-  useProjectSession = true,
 }: TestChatProps) {
   // Get active project for project chat API
   const activeProject = useActiveProject()
   const chatParams = useProjectChatParams(activeProject)
   
-  // Project chat session management
-  const projectChatSession = useProjectChatSession(
+  // Project chat streaming session management
+  const projectChatStreamingSession = useProjectChatStreamingSession(
     chatParams?.namespace,
     chatParams?.projectId
   )
   
-  // Project chat message sending
-  const projectChatMessage = useProjectChatMessage()
-  
-  // Project session management for Project Chat
-  const projectSession = useProjectSessionHook({
-    chatService: 'project',
-    autoCreate: false, // Sessions created on first message
-  })
+  // Project chat streaming message sending
+  const projectChatStreamingMessage = useProjectChatStreamingMessage()
+
+  const {
+    messages,
+    inputValue,
+    isSending,
+    isClearing,
+    error,
+    sendMessage: fallbackSendMessage,
+    clearChat,
+    updateInput,
+    hasMessages,
+    canSend,
+    addMessage,
+    updateMessage,
+  } = useChatbox()
 
   // Mock mode controlled by parent
   const MOCK_MODE = Boolean(useTestData)
@@ -86,103 +94,23 @@ export default function TestChat({
   // Use project chat if we have an active project and not in mock mode
   const USE_PROJECT_CHAT = !MOCK_MODE && !!chatParams
   
-  // Input state management
-  const [inputValue, setInputValue] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  
-  // Convert project session messages to chatbox message format
-  const projectSessionMessages = projectSession.messages.map((msg: { id: string; role: 'user' | 'assistant'; content: string; timestamp: string }) => ({
-    id: msg.id,
-    type: msg.role === 'user' ? 'user' : 'assistant' as 'user' | 'assistant',
-    content: msg.content,
-    timestamp: new Date(msg.timestamp),
-  }))
-  
-  // Use project session for UI when available
-  const useProjectSessionForUI = useProjectSession && !MOCK_MODE && USE_PROJECT_CHAT
-  const messages = useProjectSessionForUI ? projectSessionMessages : []
-  const hasMessages = useProjectSessionForUI ? projectSession.messages.length > 0 : false
-  
-  // Loading and error states
-  const isProjectChatLoading = projectChatMessage.isPending
-  const isProjectSessionLoading = projectSession.isLoading
-  const combinedIsSending = isProjectChatLoading || isProjectSessionLoading
+  // Combined loading state
+  const isProjectChatLoading = projectChatStreamingMessage.isPending
+  const combinedIsSending = isSending || isProjectChatLoading
   
   // Combined error state
-  const projectChatError = projectChatMessage.error || projectChatSession.error
-  const projectSessionError = projectSession.error
-  const combinedError = error || 
-    (projectChatError ? projectChatError.message : null) || 
-    projectSessionError
+  const projectChatError = projectChatStreamingMessage.error || projectChatStreamingSession.error
+  const combinedError = error || (projectChatError ? projectChatError.message : null)
   
-  // Can send state
-  const combinedCanSend = inputValue.trim().length > 0 && !combinedIsSending && (!USE_PROJECT_CHAT || !!chatParams)
+  // Combined canSend state
+  const combinedCanSend = canSend && !isProjectChatLoading
 
-  // Clear chat state
-  const [isClearing, setIsClearing] = useState(false)
+  // Project session management for test runs
+  const projectSession = useProjectSessionHook({
+    chatService: 'project',
+    autoCreate: false, // Sessions created on first message
+  })
 
-  // Chat management functions for compatibility with test-run events
-  const addMessage = useCallback((message: Partial<ChatboxMessage> & { type: 'user' | 'assistant', content: string }) => {
-    if (!projectSession.sessionId) return ''
-    
-    const messageId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    addMessageToHistory(projectSession.sessionId, {
-      role: message.type === 'user' ? 'user' : 'assistant',
-      content: message.content,
-      timestamp: new Date().toISOString(),
-    })
-    projectSession.refreshSession()
-    return messageId
-  }, [projectSession.sessionId, projectSession.refreshSession])
-
-  const updateMessage = useCallback((_messageId: string, updates: Partial<ChatboxMessage>) => {
-    // For project sessions, we'll simulate message updates by finding the last assistant message
-    // and updating it with the new content
-    if (!projectSession.sessionId || !updates.content) return
-    
-    const messages = projectSession.messages
-    // Find last assistant message by iterating backwards
-    let lastAssistantIndex = -1
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant') {
-        lastAssistantIndex = i
-        break
-      }
-    }
-    
-    if (lastAssistantIndex >= 0) {
-      // Replace the last assistant message with updated content
-      const updatedMessages = [...messages]
-      updatedMessages[lastAssistantIndex] = {
-        ...updatedMessages[lastAssistantIndex],
-        content: updates.content,
-        timestamp: new Date().toISOString(),
-      }
-      
-      // Clear and re-add all messages (simple approach for now)
-      projectSession.clearHistory()
-      updatedMessages.forEach(msg => {
-        addMessageToHistory(projectSession.sessionId!, {
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp,
-        })
-      })
-      projectSession.refreshSession()
-    }
-  }, [projectSession.sessionId, projectSession.messages, projectSession.clearHistory, projectSession.refreshSession])
-
-  const clearChat = useCallback(async () => {
-    setIsClearing(true)
-    try {
-      if (useProjectSessionForUI && projectSession.sessionId) {
-        projectSession.clearHistory()
-      }
-      setError(null)
-    } finally {
-      setIsClearing(false)
-    }
-  }, [useProjectSessionForUI, projectSession.sessionId, projectSession.clearHistory])
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
@@ -213,19 +141,17 @@ export default function TestChat({
     resizeTextarea()
   }, [inputValue, resizeTextarea])
 
-  // Clear project session when active project changes (start fresh session)
+  // Clear chat when active project changes (start fresh session)
   useEffect(() => {
-    // Only clear if we have a valid project and not in mock mode
-    if (!MOCK_MODE && chatParams?.namespace && chatParams?.projectId && useProjectSession) {
+    // Only clear if we have a valid project and we're not in mock mode
+    if (!MOCK_MODE && chatParams?.namespace && chatParams?.projectId) {
+      // Clear existing chat when switching projects
+      clearChat()
       // Reset session for new project
-      projectSession.clearHistory()
+      projectChatStreamingSession.clearSession()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatParams?.namespace, chatParams?.projectId, useProjectSession]) // Only trigger when project actually changes
-
-  const updateInput = useCallback((value: string) => {
-    setInputValue(value)
-  }, [])
+  }, [chatParams?.namespace, chatParams?.projectId]) // Only trigger when project actually changes
 
   const handleSend = useCallback(async () => {
     const content = inputValue.trim()
@@ -236,83 +162,184 @@ export default function TestChat({
       return
     }
     
-    // TestChat only supports project sessions (no mock mode)
-    if (USE_PROJECT_CHAT && chatParams && useProjectSession) {
+    if (MOCK_MODE) {
+      // Local-only optimistic flow without backend
+      addMessage({ type: 'user', content, timestamp: new Date() })
+      lastUserInputRef.current = content
+      const assistantId = addMessage({
+        type: 'assistant',
+        content: 'Thinking…',
+        timestamp: new Date(),
+        isLoading: true,
+      })
+      updateInput('')
+      setTimeout(() => {
+        const mockAnswer = `Here is a mock response to: "${content}"\n\n- Point A\n- Point B\n\nThis is sample output while backend is disconnected.`
+        const mockPrompts = [
+          'System: You are an expert assistant. Answer clearly and concisely.',
+          'Instruction: Provide helpful, safe, and accurate output.',
+          `User input: ${content}`,
+        ]
+        const mockThinking = [
+          'Identified intent and key entities.',
+          'Searched internal knowledge for relevant facts.',
+          'Composed structured response with bullet points.',
+        ]
+        updateMessage(assistantId, {
+          content: mockAnswer,
+          isLoading: false,
+          sources: [
+            {
+              source: 'dataset/manuals/aircraft_mx_guide.pdf',
+              score: 0.83,
+              page: 12,
+              chunk: 4,
+              length: 182,
+              content:
+                'Hydraulic pressure drops during taxi often indicate minor leaks or entrained air. Inspect lines and fittings.',
+            },
+            {
+              source: 'dataset/bulletins/bulletin-2024-17.md',
+              score: 0.71,
+              page: 3,
+              chunk: 2,
+              length: 126,
+              content:
+                'Pressure sensor calibration drifts were reported in batch 24B. Verify calibration if readings fluctuate.',
+            },
+          ],
+          metadata: {
+            prompts: mockPrompts,
+            thinking: mockThinking,
+            generation: {
+              temperature: 0.7,
+              topP: 0.9,
+              maxTokens: 256,
+              presencePenalty: 0.0,
+              frequencyPenalty: 0.0,
+              seed: undefined,
+            },
+          },
+        })
+      }, 1000)
+      return
+    }
+
+    if (USE_PROJECT_CHAT && chatParams) {
+      // Use project chat streaming API
+      let assistantId: string | undefined
+      let accumulatedContent = ''
+      
       try {
+        // Add user message to UI
+        addMessage({ type: 'user', content, timestamp: new Date() })
         lastUserInputRef.current = content
+        
+        // Add streaming assistant message
+        assistantId = addMessage({
+          type: 'assistant',
+          content: 'Thinking…',
+          timestamp: new Date(),
+          isStreaming: true,
+        })
+        
         updateInput('')
         
-        // Send message via project chat API
-        const result = await projectChatMessage.mutateAsync({
+        // Send streaming message via project chat
+        const finalSessionId = await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
           message: content,
-          sessionId: projectSession.sessionId || undefined,
+          sessionId: projectChatStreamingSession.sessionId || undefined,
+          streamingOptions: {
+            onChunk: (chunk: ProjectChatStreamChunk) => {
+              // Handle content chunks
+              if (chunk.choices?.[0]?.delta?.content) {
+                accumulatedContent += chunk.choices[0].delta.content
+                updateMessage(assistantId!, {
+                  content: accumulatedContent,
+                  isStreaming: true,
+                })
+              }
+              // Clear "Thinking..." on first chunk even if no content (role assignment)
+              else if (chunk.choices?.[0]?.delta && accumulatedContent === '') {
+                updateMessage(assistantId!, {
+                  content: '',
+                  isStreaming: true,
+                })
+              }
+            },
+            onError: (error: Error) => {
+              console.error('Project chat streaming error:', error)
+              if (assistantId) {
+                updateMessage(assistantId, {
+                  content: `Error: ${error.message}`,
+                  isStreaming: false,
+                  isLoading: false,
+                })
+              }
+            },
+            onComplete: () => {
+              if (assistantId) {
+                updateMessage(assistantId, {
+                  content: accumulatedContent || 'No response received',
+                  isStreaming: false,
+                  isLoading: false,
+                  // Add mock metadata for consistency with existing UI
+                  metadata: {
+                    prompts: ['System: You are a helpful assistant.', `User: ${content}`],
+                    thinking: ['Processing user request...', 'Generating response...'],
+                    generation: {
+                      temperature: 0.7,
+                      topP: 0.9,
+                      maxTokens: 512,
+                      presencePenalty: 0.0,
+                      frequencyPenalty: 0.0,
+                      seed: undefined,
+                    },
+                  },
+                })
+              }
+            },
+          },
         })
         
-        // Handle session creation if we got a new session ID from server
-        if (result.sessionId && !projectSession.sessionId) {
-          try {
-            projectSession.createSessionFromServer(result.sessionId)
-          } catch (sessionError) {
-            console.error('Failed to create session from server response:', sessionError)
-            // Don't fail the whole request for session management errors
-          }
-        }
-        
-        // Add messages to project session (now that we have a session)
-        const activeSessionId = result.sessionId || projectSession.sessionId
-        if (activeSessionId) {
-          // Add messages directly to storage and update hook state
-          addMessageToHistory(activeSessionId, {
-            role: 'user',
-            content: content,
-            timestamp: new Date().toISOString(),
-          })
-          const assistantContent = result.completion.choices[0]?.message?.content || 'No response received'
-          addMessageToHistory(activeSessionId, {
-            role: 'assistant',
-            content: assistantContent,
-            timestamp: new Date().toISOString(),
-          })
-          
-          // Refresh the hook state to reflect the new messages
-          projectSession.refreshSession()
+        // Update session ID if we got a new one
+        if (finalSessionId && finalSessionId !== projectChatStreamingSession.sessionId) {
+          projectChatStreamingSession.setSessionId(finalSessionId)
         }
         
       } catch (error) {
-        console.error('Project chat error with project session:', error)
-        // Add error message to project session if we have one
-        if (projectSession.sessionId) {
-          addMessageToHistory(projectSession.sessionId, {
-            role: 'assistant',
+        console.error('Project chat streaming error:', error)
+        // Update assistant message with error using the stored assistantId
+        if (assistantId) {
+          updateMessage(assistantId, {
             content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
-            timestamp: new Date().toISOString(),
+            isStreaming: false,
+            isLoading: false,
           })
-          projectSession.refreshSession()
         }
       }
       return
     }
 
-    // If no project chat available, show error
-    if (!USE_PROJECT_CHAT || !chatParams) {
-      setError('No project selected. Please select a project to use Test Chat.')
-      return
-    }
-    
-    setError('Test Chat requires a valid project configuration.')
+    // Fallback to original chat system
+    const ok = await fallbackSendMessage(content)
+    if (ok) updateInput('')
   }, [
     combinedCanSend, 
     inputValue, 
+    combinedIsSending,
     MOCK_MODE, 
     USE_PROJECT_CHAT, 
     chatParams, 
-    projectChatMessage, 
+    projectChatStreamingMessage, 
+    projectChatStreamingSession.sessionId,
+    projectChatStreamingSession.setSessionId,
+    addMessage, 
+    updateMessage, 
     updateInput, 
-    useProjectSession,
-    projectSession,
-    combinedIsSending,
+    fallbackSendMessage
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -398,23 +425,28 @@ export default function TestChat({
 
       // For test runs, we need to ensure we're using project chat
       if (!USE_PROJECT_CHAT || !chatParams) {
-        setError('Test runs require a valid project configuration.')
+        console.error('Test runs require a valid project configuration.')
         return
       }
 
       try {
         // Ensure we have a session for test execution
         if (!projectSession.sessionId) {
-          // Create a session first
-          const sessionResult = await projectChatMessage.mutateAsync({
+          // Create a session first using streaming API
+          const sessionId = await projectChatStreamingMessage.mutateAsync({
             namespace: chatParams.namespace,
             projectId: chatParams.projectId,
             message: 'Starting test session...',
             sessionId: undefined,
+            streamingOptions: {
+              onChunk: () => {}, // No-op for test session creation
+              onError: () => {},
+              onComplete: () => {},
+            },
           })
           
-          if (sessionResult.sessionId) {
-            projectSession.createSessionFromServer(sessionResult.sessionId)
+          if (sessionId) {
+            projectSession.createSessionFromServer(sessionId)
           }
         }
 
@@ -423,6 +455,7 @@ export default function TestChat({
         addMessage({
           type: 'user',
           content: userMessage,
+          timestamp: new Date(),
           metadata: {
             isTest: true,
             testId: detail.id,
@@ -436,20 +469,33 @@ export default function TestChat({
         const assistantId = addMessage({
           type: 'assistant',
           content: 'Evaluating…',
+          timestamp: new Date(),
           isLoading: true,
           metadata: { isTest: true, testId: detail.id, testName: detail.name },
         })
 
-        // Send the actual test input via project chat
-        const result = await projectChatMessage.mutateAsync({
+        // Send the actual test input via project chat streaming
+        let accumulatedContent = ''
+        await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
           message: userMessage,
           sessionId: projectSession.sessionId || undefined,
+          streamingOptions: {
+            onChunk: (chunk: ProjectChatStreamChunk) => {
+              if (chunk.choices?.[0]?.delta?.content) {
+                accumulatedContent += chunk.choices[0].delta.content
+              }
+            },
+            onError: (error: Error) => {
+              console.error('Test streaming error:', error)
+            },
+            onComplete: () => {},
+          },
         })
 
         // Extract the response content
-        const actualResponse = result.completion.choices[0]?.message?.content || 'No response received'
+        const actualResponse = accumulatedContent || 'No response received'
         
         // Compute test evaluation
         const testResult = evaluateTest(input, expected, actualResponse)
@@ -492,6 +538,7 @@ export default function TestChat({
         addMessage({
           type: 'assistant',
           content: `Error running test: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date(),
           metadata: {
             isTest: true,
             testId: detail.id,
@@ -505,7 +552,7 @@ export default function TestChat({
     window.addEventListener('lf-test-run', onRun as EventListener)
     return () =>
       window.removeEventListener('lf-test-run', onRun as EventListener)
-  }, [addMessage, updateMessage, evaluateTest, USE_PROJECT_CHAT, chatParams, projectChatMessage, projectSession.sessionId, projectSession.createSessionFromServer])
+  }, [addMessage, updateMessage, evaluateTest, USE_PROJECT_CHAT, chatParams, projectChatStreamingMessage, projectSession.sessionId, projectSession.createSessionFromServer])
 
   return (
     <div className={containerClasses}>
@@ -515,9 +562,9 @@ export default function TestChat({
           {USE_PROJECT_CHAT && chatParams ? (
             <span>
               Project: {chatParams.namespace}/{chatParams.projectId}
-              {projectChatSession.sessionId && (
+              {projectChatStreamingSession.sessionId && (
                 <span className="ml-2 opacity-60">
-                  • Session: {projectChatSession.sessionId.slice(-8)}
+                  • Session: {projectChatStreamingSession.sessionId.slice(-8)}
                 </span>
               )}
             </span>
@@ -530,7 +577,7 @@ export default function TestChat({
           onClick={() => {
             clearChat()
             if (!MOCK_MODE && chatParams) {
-              projectChatSession.clearSession()
+              projectChatStreamingSession.clearSession()
             }
           }}
           disabled={isClearing}
