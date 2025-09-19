@@ -43,34 +43,42 @@ class TestConfigLoader:
 
         # Verify RAG configuration
         rag = config["rag"]
-        # New strict schema: strategies array
-        assert isinstance(rag["strategies"], list) and len(rag["strategies"]) >= 1
-        strat = rag["strategies"][0]
-        # Parser uses enum names like CSVParser_LlamaIndex per new schema
-        assert strat["components"]["parser"]["type"] in [
+        # New schema: databases and data_processing_strategies arrays
+        assert isinstance(rag["databases"], list) and len(rag["databases"]) >= 1
+        assert (
+            isinstance(rag["data_processing_strategies"], list)
+            and len(rag["data_processing_strategies"]) >= 1
+        )
+
+        # Verify database configuration
+        db = rag["databases"][0]
+        assert db["type"] == "ChromaStore"
+        assert isinstance(db["embedding_strategies"], list) and len(db["embedding_strategies"]) >= 1
+        assert db["embedding_strategies"][0]["type"] == "OllamaEmbedder"
+
+        # Verify data processing strategy
+        strat = rag["data_processing_strategies"][0]
+        assert isinstance(strat["parsers"], list) and len(strat["parsers"]) >= 1
+        assert strat["parsers"][0]["type"] in [
             "CSVParser_LlamaIndex",
             "CSVParser_Pandas",
             "CSVParser_Python",
         ]
-        assert strat["components"]["embedder"]["type"] == "OllamaEmbedder"
-        assert strat["components"]["vector_store"]["type"] == "ChromaStore"
 
         # Verify parser config
-        parser_config = strat["components"]["parser"]["config"]
-        assert isinstance(parser_config, dict)
-        if "content_fields" in parser_config:
-            assert (
-                isinstance(parser_config["content_fields"], list)
-                and len(parser_config["content_fields"]) >= 1
-            )
+        parser_config = strat["parsers"][0]["config"]
+        assert "question" in parser_config["content_fields"]
+        assert "answer" in parser_config["content_fields"]
+        assert "category" in parser_config["metadata_fields"]
+        assert "timestamp" in parser_config["metadata_fields"]
 
         # Verify embedder config
-        embedder_config = strat["components"]["embedder"]["config"]
+        embedder_config = db["embedding_strategies"][0]["config"]
         assert embedder_config["model"] == "mxbai-embed-large"
         assert embedder_config["batch_size"] == 32
 
         # Verify vector store config
-        vector_config = strat["components"]["vector_store"]["config"]
+        vector_config = db["config"]
         assert vector_config["collection_name"] == "customer_support_knowledge_base"
         assert vector_config["persist_directory"] == "./data/vector_store/chroma"
 
@@ -89,9 +97,10 @@ class TestConfigLoader:
         assert config["version"] == "v1"
 
         # Verify TOML-specific parsing worked correctly
-        strat = config["rag"]["strategies"][0]
-        assert strat["components"]["embedder"]["config"]["batch_size"] == 32
-        assert isinstance(strat["components"]["parser"]["config"]["content_fields"], list)
+        db = config["rag"]["databases"][0]
+        assert db["embedding_strategies"][0]["config"]["batch_size"] == 32
+        strat = config["rag"]["data_processing_strategies"][0]
+        assert isinstance(strat["parsers"][0]["config"]["content_fields"], list)
 
     def test_load_minimal_config(self, test_data_dir):
         """Test loading minimal valid configuration."""
@@ -107,9 +116,10 @@ class TestConfigLoader:
             assert "content" in config["prompts"][0]
 
         # RAG should be properly configured
-        strat = config["rag"]["strategies"][0]
-        assert strat["components"]["parser"]["config"]["content_fields"] == ["question"]
-        assert strat["components"]["embedder"]["config"]["model"] == "nomic-embed-text"
+        strat = config["rag"]["data_processing_strategies"][0]
+        assert strat["parsers"][0]["config"]["content_fields"] == ["question"]
+        db = config["rag"]["databases"][0]
+        assert db["embedding_strategies"][0]["config"]["model"] == "nomic-embed-text"
 
     def test_validation_with_invalid_config(self, test_data_dir):
         """Test that validation catches invalid configurations."""
@@ -205,9 +215,10 @@ models:
         assert isinstance(rag, dict)
 
         # Test RAG structure (strict schema)
-        strat = rag["strategies"][0]
-        assert isinstance(strat["components"]["parser"]["config"]["content_fields"], list)
-        assert isinstance(strat["components"]["embedder"]["config"]["batch_size"], int)
+        strat = rag["data_processing_strategies"][0]
+        assert isinstance(strat["parsers"][0]["config"]["content_fields"], list)
+        db = rag["databases"][0]
+        assert isinstance(db["embedding_strategies"][0]["config"]["batch_size"], int)
 
     def test_config_with_no_prompts(self, test_data_dir):
         """Test configuration loading with minimal prompts section."""
@@ -263,10 +274,11 @@ def test_integration_usage():
     assert config["version"] == "v1"
 
     # Test accessing RAG configuration (common use case)
-    strat = config["rag"]["strategies"][0]
-    parser_type = strat["components"]["parser"]["type"]
-    embedder_model = strat["components"]["embedder"]["config"]["model"]
-    collection_name = strat["components"]["vector_store"]["config"]["collection_name"]
+    strat = config["rag"]["data_processing_strategies"][0]
+    parser_type = strat["parsers"][0]["type"]
+    db = config["rag"]["databases"][0]
+    embedder_model = db["embedding_strategies"][0]["config"]["model"]
+    collection_name = db["config"]["collection_name"]
 
     assert parser_type in ["CSVParser_LlamaIndex", "CSVParser_Pandas", "CSVParser_Python"]
     assert embedder_model == "mxbai-embed-large"

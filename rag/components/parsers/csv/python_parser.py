@@ -24,7 +24,7 @@ class CSVParser_Python:
     
     def parse(self, source: str, **kwargs):
         """Parse CSV using Python's csv module."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
         
         path = Path(source)
         if not path.exists():

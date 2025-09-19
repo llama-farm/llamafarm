@@ -7,8 +7,8 @@ import sys
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
-from components.extractors.entity_extractor.entity_extractor import EntityExtractor
+from rag.core.base import Document
+from rag.components.extractors.entity_extractor.entity_extractor import EntityExtractor
 
 
 class TestEntityExtractor:

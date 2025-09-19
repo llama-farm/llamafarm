@@ -6,10 +6,8 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 import logging
 
-# Import from parent directory
-import sys
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from core.base import Document, ProcessingResult
+# Import from rag module
+from rag.core.base import Document, ProcessingResult
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +75,39 @@ class BaseParser(ABC):
             True if parser can handle the file
         """
         pass
+    
+    def parse_blob(self, blob_data: bytes, metadata: Dict[str, Any]) -> List[Document]:
+        """Parse raw blob data.
+        
+        Args:
+            blob_data: Raw bytes of the document
+            metadata: Metadata about the blob (filename, content_type, etc.)
+            
+        Returns:
+            List of Document objects
+        """
+        # Default implementation writes to temp file and calls parse
+        import tempfile
+        import os
+        
+        filename = metadata.get("filename", "temp")
+        suffix = Path(filename).suffix if filename else ".txt"
+        
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(blob_data)
+            tmp_path = tmp.name
+        
+        try:
+            result = self.parse(tmp_path)
+            # Convert ProcessingResult to list of Documents
+            documents = result.documents if hasattr(result, 'documents') else []
+            # Add metadata to each document
+            for doc in documents:
+                doc.metadata.update(metadata)
+                doc.metadata["parser"] = self.__class__.__name__
+            return documents
+        finally:
+            os.unlink(tmp_path)
     
     def _validate_config(self):
         """Validate configuration against parser schema."""

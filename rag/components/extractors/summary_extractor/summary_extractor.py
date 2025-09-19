@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional
 from collections import Counter
 import math
 
-from components.extractors.base import BaseExtractor
+from rag.components.extractors.base import BaseExtractor
 
 
 class SummaryExtractor(BaseExtractor):
@@ -47,7 +47,7 @@ class SummaryExtractor(BaseExtractor):
     
     def extract(self, documents: List['Document']) -> List['Document']:
         """Extract summaries from documents."""
-        from core.base import Document
+        from rag.core.base import Document
         
         for doc in documents:
             try:

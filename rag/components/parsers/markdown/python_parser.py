@@ -25,7 +25,7 @@ class MarkdownParser_Python:
     
     def parse(self, source: str, **kwargs):
         """Parse Markdown using Python."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
         
         path = Path(source)
         if not path.exists():

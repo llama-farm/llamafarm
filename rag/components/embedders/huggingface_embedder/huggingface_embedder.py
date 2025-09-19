@@ -14,7 +14,7 @@ Status: Implementation in progress
 """
 
 from typing import List, Dict, Any, Optional
-from core.base import Embedder, Document
+from rag.core.base import Embedder, Document
 
 
 class HuggingFaceEmbedder(Embedder):

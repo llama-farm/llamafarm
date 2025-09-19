@@ -92,7 +92,8 @@ def _validate_config(config: dict, schema: dict) -> None:
         # Simple validation since schema is already fully dereferenced by compile_schema.py
         jsonschema.validate(config, schema)
     except jsonschema.ValidationError as e:
-        raise ConfigError(f"Configuration validation error: {e.message}") from e
+        path_str = ".".join(str(p) for p in e.path) if hasattr(e, "path") else ""
+        raise ConfigError(f"Configuration validation error: {e.message}" + (f" at path {path_str}" if path_str else "")) from e
     except Exception as e:
         raise ConfigError(f"Error during validation: {e}") from e
 

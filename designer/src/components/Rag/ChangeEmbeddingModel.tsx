@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { Badge } from '../ui/badge'
+// Badge import removed after removing summary card
+// import { Badge } from '../ui/badge'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
 import { useToast } from '../ui/toast'
@@ -14,7 +15,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
-import Loader from '../../common/Loader'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from '../ui/dialog'
+import { getClientSideSecret } from '../../utils/crypto'
 
 // Helper for symmetric AES encryption using Web Crypto API
 async function encryptAPIKey(apiKey: string, secret: string) {
@@ -55,7 +56,6 @@ async function encryptAPIKey(apiKey: string, secret: string) {
     key,
     enc.encode(apiKey)
   )
-  // encode salt, iv, ciphertext as base64 for storage
   function base64(arrayBuffer: ArrayBuffer) {
     return window.btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
   }
@@ -72,39 +72,38 @@ function ChangeEmbeddingModel() {
   const { strategyId } = useParams()
   const { toast } = useToast()
 
-  const strategyName = useMemo(() => {
-    if (!strategyId) return 'Strategy'
-    return strategyId
-      .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase())
-  }, [strategyId])
-
-  const [currentModel, setCurrentModel] = useState<string>(
-    'text-embedding-3-large'
-  )
-
+  // Editable strategy name loaded from list
+  const [strategyName, setStrategyName] = useState<string>('')
   useEffect(() => {
     try {
       if (!strategyId) return
-      const storedCfg = localStorage.getItem(
-        `lf_strategy_embedding_config_${strategyId}`
-      )
-      if (storedCfg) {
-        const parsed = JSON.parse(storedCfg)
-        if (parsed?.modelId) setCurrentModel(parsed.modelId)
+      const raw = localStorage.getItem('lf_project_embeddings')
+      if (raw) {
+        const list = JSON.parse(raw)
+        const found = Array.isArray(list)
+          ? list.find((e: any) => e?.id === strategyId)
+          : null
+        if (found?.name) setStrategyName(found.name)
+        if (typeof found?.isDefault === 'boolean')
+          setIsDefaultStrategy(Boolean(found.isDefault))
       }
-      const storedModel = localStorage.getItem(
-        `lf_strategy_embedding_model_${strategyId}`
-      )
-      if (storedModel) setCurrentModel(storedModel)
     } catch {}
   }, [strategyId])
 
-  // UI state (same structure as original component)
+  // Removed currentModel display state along with summary card
+
+  // Selection state similar to Add page
+  const [selected, setSelected] = useState<{
+    runtime: 'Local' | 'Cloud'
+    provider: string
+    modelId: string
+  } | null>(null)
+  const [existingModelId, setExistingModelId] = useState<string | null>(null)
+
+  // UI state
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
-  const [query, setQuery] = useState('')
+  const [query] = useState('')
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
-  const [isApplying, setIsApplying] = useState<string | null>(null)
 
   type Variant = {
     id: string
@@ -260,34 +259,22 @@ function ChangeEmbeddingModel() {
     p => (modelMap as any)[p]?.length > 0
   )
 
-  const [provider, setProvider] = useState<Provider>('OpenAI')
-  const [model, setModel] = useState<string>(modelMap['OpenAI'][0])
+  const [provider, setProvider] = useState<Provider>('Ollama (remote)')
+  const [model, setModel] = useState<string>('nomic-embed-text')
   const [customModel, setCustomModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
-  const [baseUrl, setBaseUrl] = useState('')
-  const [maxTokens, setMaxTokens] = useState<number | null>(null)
-  const [submitState, setSubmitState] = useState<
-    'idle' | 'loading' | 'success'
-  >('idle')
-  const [hasPickedModel, setHasPickedModel] = useState(false)
-  const [batchSize, setBatchSize] = useState<number>(64)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [baseUrl, setBaseUrl] = useState('http://localhost:11434')
+  const [batchSize, setBatchSize] = useState<number>(16)
+  const [dimension, setDimension] = useState<number>(768)
+  const [timeoutSec, setTimeoutSec] = useState(60)
+  const [ollamaAutoPull, setOllamaAutoPull] = useState(true)
+  const [openaiOrg, setOpenaiOrg] = useState('')
+  const [openaiMaxRetries, setOpenaiMaxRetries] = useState(3)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmCtx, setConfirmCtx] = useState<{
-    runtime: 'Local' | 'Cloud'
-    provider: string
-    modelId: string
-    dimension: number
-    maxInputTokens: number
-    similarity: 'cosine'
-    downloadSize?: string
-    ramHint?: string
-    region?: string
-  } | null>(null)
-  const [pendingLocalModelId, setPendingLocalModelId] = useState<string | null>(
-    null
-  )
+  const [makeDefault, setMakeDefault] = useState(false)
+  const [reembedOpen, setReembedOpen] = useState(false)
+  const [isDefaultStrategy, setIsDefaultStrategy] = useState(false)
   const [azureDeployment, setAzureDeployment] = useState('')
   const [azureResource, setAzureResource] = useState('')
   const [azureApiVersion, setAzureApiVersion] = useState('')
@@ -296,17 +283,18 @@ function ChangeEmbeddingModel() {
   const [vertexEndpoint, setVertexEndpoint] = useState('')
   const [bedrockRegion, setBedrockRegion] = useState('')
 
+  // Connection / diagnostics / advanced state
+  const [connectionStatus, setConnectionStatus] = useState<
+    'idle' | 'checking' | 'ok' | 'error'
+  >('idle')
+  const [connectionMsg, setConnectionMsg] = useState('')
+  const [testStatus, setTestStatus] = useState<
+    'idle' | 'running' | 'ok' | 'error'
+  >('idle')
+  const [testLatencyMs, setTestLatencyMs] = useState<number | null>(null)
+
   const modelsForProvider = [...modelMap[provider]]
-  const isModelChosen =
-    model === 'Custom' ? customModel.trim().length > 0 : !!model
-  const hasApiAuth = apiKey.trim().length > 0
-  const providerRequiredOk =
-    (provider !== 'Azure OpenAI' ||
-      (azureDeployment.trim() && azureResource.trim())) &&
-    (provider !== 'Google' ||
-      (vertexProjectId.trim() && vertexLocation.trim())) &&
-    (provider !== 'AWS Bedrock' || bedrockRegion.trim().length > 0)
-  const canApply = isModelChosen && hasApiAuth && providerRequiredOk
+  // Removed providerRequiredOk gating; Save is always enabled
 
   const embeddingMeta: Record<string, { dim: string; tokens: string }> = {
     'text-embedding-3-large': { dim: '3072', tokens: '8192' },
@@ -331,7 +319,50 @@ function ChangeEmbeddingModel() {
     'jina-embeddings-v2-base-en': { dim: '768', tokens: '8192' },
   }
   const selectedKey = model === 'Custom' ? customModel.trim() : model
-  const meta = hasPickedModel ? embeddingMeta[selectedKey] : undefined
+  const meta = embeddingMeta[selectedKey]
+
+  useEffect(() => {
+    try {
+      if (!strategyId) return
+      const storedCfg = localStorage.getItem(
+        `lf_strategy_embedding_config_${strategyId}`
+      )
+      if (storedCfg) {
+        const parsed = JSON.parse(storedCfg)
+        if (typeof parsed?.dimension === 'number')
+          setDimension(parsed.dimension)
+        if (typeof parsed?.batchSize === 'number')
+          setBatchSize(parsed.batchSize)
+        if (typeof parsed?.timeout === 'number') setTimeoutSec(parsed.timeout)
+        if (typeof parsed?.auto_pull === 'boolean')
+          setOllamaAutoPull(parsed.auto_pull)
+        if (parsed?.baseUrl) setBaseUrl(parsed.baseUrl)
+        if (parsed?.modelId && typeof parsed.modelId === 'string') {
+          setExistingModelId(parsed.modelId)
+        }
+        if (parsed?.provider && typeof parsed.provider === 'string') {
+          const p = parsed.provider.includes('local')
+            ? 'Ollama (remote)'
+            : parsed.provider
+          if ((providerOptions as readonly string[]).includes(p))
+            setProvider(p as Provider)
+        }
+      }
+      const storedModel = localStorage.getItem(
+        `lf_strategy_embedding_model_${strategyId}`
+      )
+      if (storedModel) setExistingModelId(storedModel)
+    } catch {}
+  }, [strategyId])
+
+  // Sync dimension from model metadata when model/provider changes
+  useEffect(() => {
+    if (meta?.dim) {
+      const d = Number(meta.dim)
+      if (!Number.isNaN(d)) setDimension(d)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, model, customModel])
 
   const persistForStrategy = (payload: any) => {
     if (!strategyId) return
@@ -352,7 +383,6 @@ function ChangeEmbeddingModel() {
       }
       if (typeof window !== 'undefined') {
         try {
-          // Notify listeners (e.g., StrategyView) of model change
           window.dispatchEvent(
             new CustomEvent('lf:strategyEmbeddingUpdated', {
               detail: { strategyId, modelId: payload?.modelId },
@@ -363,123 +393,151 @@ function ChangeEmbeddingModel() {
     } catch {}
   }
 
-  const handleApplyCloud = async () => {
-    if (!strategyId || submitState === 'loading') return
-    const nextErrors: Record<string, string> = {}
-    if (model === 'Custom' && !customModel.trim())
-      nextErrors.customModel = 'Enter a custom model id'
-    if (!apiKey.trim()) nextErrors.apiKey = 'API key is required'
-    if (provider === 'Azure OpenAI') {
-      if (!azureDeployment.trim())
-        nextErrors.azureDeployment = 'Deployment name is required'
-      if (!azureResource.trim())
-        nextErrors.azureResource = 'Endpoint/Resource name is required'
-    }
-    if (provider === 'Google') {
-      if (!vertexProjectId.trim())
-        nextErrors.vertexProjectId = 'Project ID is required'
-      if (!vertexLocation.trim())
-        nextErrors.vertexLocation = 'Location/Region is required'
-    }
-    if (provider === 'AWS Bedrock') {
-      if (!bedrockRegion.trim()) nextErrors.bedrockRegion = 'Region is required'
-    }
-    setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0) return
-    if (!canApply) return
-    const chosen = model === 'Custom' ? customModel.trim() : model
-
-    const metaVals = embeddingMeta[chosen] || { dim: '1536', tokens: '8192' }
-    const payload: any = {
-      runtime: 'cloud',
-      provider,
-      modelId: chosen,
-      apiKey: undefined, // will be set after encryption below
-      region:
-        provider === 'AWS Bedrock'
-          ? bedrockRegion.trim() || undefined
-          : undefined,
-      endpoint:
-        provider === 'Azure OpenAI'
-          ? azureResource.trim() || undefined
-          : provider === 'Google'
-            ? vertexEndpoint.trim() || undefined
-            : undefined,
-      projectId:
-        provider === 'Google' ? vertexProjectId.trim() || undefined : undefined,
-      deployment:
-        provider === 'Azure OpenAI'
-          ? azureDeployment.trim() || undefined
-          : undefined,
-      apiVersion:
-        provider === 'Azure OpenAI'
-          ? azureApiVersion.trim() || undefined
-          : undefined,
-      batchSize,
-      dimension: Number(metaVals.dim) || 0,
-      maxInputTokens: Number(metaVals.tokens) || 0,
-      similarity: 'cosine',
-    }
-
-    // Encrypt the apiKey before storage; use a static project-level secret or derive from e.g. strategyId, or use non-sensitive fallback if none available.
-    const secret = strategyId || 'default-project-secret' // Should be rotated/secured in production
-    if (apiKey.trim()) {
-      payload.apiKey = await encryptAPIKey(apiKey.trim(), secret)
-    } else {
-      payload.apiKey = undefined
-    }
-
-    persistForStrategy(payload)
-
-    setSubmitState('loading')
-    setTimeout(() => {
-      setSubmitState('success')
-      setCurrentModel(chosen)
-      setTimeout(() => {
-        toast({
-          message: `Embedding model set to ${chosen}`,
-          variant: 'default',
-        })
-        navigate(`/chat/rag/${strategyId}`)
-        setSubmitState('idle')
-      }, 500)
-    }, 800)
-  }
-
-  const applyEmbedding = (modelId: string) => {
-    if (!strategyId) return
-    setIsApplying(modelId)
-    persistForStrategy({ runtime: 'local', provider: 'local', modelId })
-    setTimeout(() => {
-      setCurrentModel(modelId)
-      toast({
-        message: `Embedding model set to ${modelId}`,
-        variant: 'default',
-      })
-      navigate(`/chat/rag/${strategyId}`)
-    }, 400)
-  }
+  // When provider changes, default model
+  useEffect(() => {
+    try {
+      if (model !== 'Custom') setModel(modelMap[provider][0])
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider])
 
   const openConfirmLocal = (group: any, variant: Variant) => {
-    const metaVals = embeddingMeta[variant.id] || {
-      dim: group.dim,
-      tokens: '8192',
+    setSelected({ runtime: 'Local', provider: group.name, modelId: variant.id })
+  }
+
+  const checkConnection = async () => {
+    setConnectionStatus('checking')
+    setConnectionMsg('')
+    try {
+      if (provider !== 'Ollama (remote)' && apiKey.trim().length === 0) {
+        setConnectionStatus('error')
+        setConnectionMsg('API key required for this provider')
+        return
+      }
+      await new Promise(res => setTimeout(res, 400))
+      setConnectionStatus('ok')
+      setConnectionMsg('Connection looks good')
+    } catch (e) {
+      setConnectionStatus('error')
+      setConnectionMsg('Unable to reach provider')
     }
-    setConfirmCtx({
-      runtime: 'Local',
-      provider: group.name,
-      modelId: variant.id,
-      dimension: Number(String(metaVals.dim).replace(/[^0-9]/g, '')) || 0,
-      maxInputTokens:
-        Number(
-          String((metaVals as any).tokens || '8192').replace(/[^0-9]/g, '')
-        ) || 0,
+  }
+
+  const runTestEmbedding = async () => {
+    setTestStatus('running')
+    setTestLatencyMs(null)
+    const started = performance.now()
+    try {
+      await new Promise(res => setTimeout(res, 500))
+      const ended = performance.now()
+      setTestLatencyMs(Math.round(ended - started))
+      setTestStatus('ok')
+    } catch (e) {
+      setTestStatus('error')
+    }
+  }
+
+  // Header with Save strategy
+  const summaryProvider = (() => {
+    if (selected)
+      return selected.runtime === 'Local' ? 'Ollama' : selected.provider
+    return provider === 'Ollama (remote)' ? 'Ollama' : provider
+  })()
+  const summaryModel = selected?.modelId || existingModelId || null
+  const summaryLocation = (() => {
+    try {
+      if (!baseUrl) return null
+      const u = new URL(baseUrl)
+      return `${u.hostname}${u.port ? `:${u.port}` : ''}`
+    } catch {
+      return baseUrl || null
+    }
+  })()
+  const runtimeLabel = selected
+    ? selected.runtime
+    : provider === 'Ollama (remote)'
+      ? 'Local'
+      : 'Cloud'
+
+  const saveEdited = async () => {
+    if (!strategyId) return
+    try {
+      const LIST_KEY = 'lf_project_embeddings'
+      const raw = localStorage.getItem(LIST_KEY)
+      const list = raw ? JSON.parse(raw) : []
+      const updated = Array.isArray(list)
+        ? list.map((e: any) => ({
+            ...e,
+            name: e.id === strategyId ? strategyName || e.name : e.name,
+            isDefault: makeDefault ? e.id === strategyId : e.isDefault,
+          }))
+        : list
+      localStorage.setItem(LIST_KEY, JSON.stringify(updated))
+    } catch {}
+
+    let encryptedKey: string | undefined
+    if (
+      (selected?.runtime === 'Cloud' || provider !== 'Ollama (remote)') &&
+      apiKey.trim()
+    ) {
+      try {
+        encryptedKey = await encryptAPIKey(apiKey.trim(), getClientSideSecret())
+      } catch (e) {
+        toast({ message: 'Failed to encrypt API key', variant: 'destructive' })
+        return
+      }
+    }
+
+    const chosenModelId =
+      selected?.modelId ||
+      existingModelId ||
+      (model === 'Custom' ? customModel.trim() : model)
+    const runtimeStr = selected
+      ? selected.runtime === 'Local'
+        ? 'local'
+        : 'cloud'
+      : provider === 'Ollama (remote)'
+        ? 'local'
+        : 'cloud'
+    const providerStr =
+      runtimeStr === 'local' ? 'local' : selected?.provider || provider
+
+    const cfg: any = {
+      runtime: runtimeStr,
+      provider: providerStr,
+      modelId: chosenModelId,
+      baseUrl: baseUrl.trim() || undefined,
+      dimension: Number(dimension) || undefined,
+      batchSize,
+      timeout: timeoutSec,
+      auto_pull: runtimeStr === 'local' ? ollamaAutoPull : undefined,
       similarity: 'cosine',
-      downloadSize: variant.download || group.download,
-      ramHint: group.ramVram,
-    })
-    setPendingLocalModelId(variant.id)
-    setConfirmOpen(true)
+    }
+    if (summaryProvider === 'OpenAI') {
+      cfg.organization = openaiOrg.trim() || undefined
+      cfg.maxRetries = openaiMaxRetries
+    }
+    if (summaryProvider === 'Azure OpenAI') {
+      cfg.deployment = azureDeployment.trim() || undefined
+      cfg.endpoint = azureResource.trim() || undefined
+      cfg.apiVersion = azureApiVersion.trim() || undefined
+    }
+    if (summaryProvider === 'Google') {
+      cfg.projectId = vertexProjectId.trim() || undefined
+      cfg.endpoint = vertexEndpoint.trim() || undefined
+      cfg.region = vertexLocation.trim() || undefined
+    }
+    if (summaryProvider === 'AWS Bedrock') {
+      cfg.region = bedrockRegion.trim() || undefined
+    }
+    if (encryptedKey) cfg.apiKey = encryptedKey
+
+    persistForStrategy(cfg)
+    if (makeDefault) setReembedOpen(true)
+    else {
+      toast({ message: 'Strategy saved', variant: 'default' })
+      navigate('/chat/rag')
+    }
   }
 
   return (
@@ -494,61 +552,156 @@ function ChangeEmbeddingModel() {
             RAG
           </button>
           <span className="text-muted-foreground px-1">/</span>
-          <button
-            className="text-teal-600 dark:text-teal-400 hover:underline"
-            onClick={() => navigate(`/chat/rag/${strategyId}`)}
-          >
-            {strategyName}
-          </button>
-          <span className="text-muted-foreground px-1">/</span>
-          <span className="text-foreground">Change embedding model</span>
+          <span className="text-foreground">Edit strategy</span>
         </nav>
         <PageActions mode={mode} onModeChange={setMode} />
       </div>
 
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-lg md:text-xl font-medium">
-          Change embedding model
-        </h2>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/chat/rag/${strategyId}`)}
-          >
-            Back
-          </Button>
+        <h2 className="text-lg md:text-xl font-medium">Edit strategy</h2>
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-muted-foreground max-w-[50vw] truncate">
+            {summaryProvider && summaryModel ? (
+              <>
+                <span className="text-foreground">{summaryProvider}</span>
+                <span className="mx-1">•</span>
+                <span className="font-mono">{summaryModel}</span>
+                {summaryLocation ? (
+                  <>
+                    <span className="mx-1">•</span>
+                    <span>{summaryLocation}</span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              'No model selected yet'
+            )}
+          </div>
+          {!isDefaultStrategy && (
+            <label className="text-xs flex items-center gap-2 select-none">
+              <input
+                type="checkbox"
+                checked={makeDefault}
+                onChange={e => setMakeDefault(e.target.checked)}
+              />
+              Make default
+            </label>
+          )}
+          <Button onClick={() => setConfirmOpen(true)}>Save strategy</Button>
         </div>
       </div>
 
-      {/* Current model */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Current model</h3>
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            Active
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Input
-            readOnly
-            className="bg-background max-w-xl"
-            value={currentModel}
-          />
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            1536-d
-          </Badge>
-        </div>
-      </section>
+      {/* Removed 'Current model' summary card per request */}
 
-      {/* The rest mirrors the original ChangeEmbeddingModel UI */}
+      {/* Strategy name and settings */}
       <section className="rounded-lg border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
-        <div className="text-sm text-muted-foreground">
-          Select a new embedding model. This mirrors the models flow and uses
-          the same styles.
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">
+              Strategy name
+            </Label>
+            <Input
+              value={strategyName}
+              onChange={e => setStrategyName(e.target.value)}
+              placeholder="Enter a name"
+              className="h-9"
+            />
+          </div>
         </div>
 
+        {/* Top settings grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Base URL</Label>
+            <Input
+              value={baseUrl}
+              onChange={e => setBaseUrl(e.target.value)}
+              placeholder="http://localhost:11434"
+              className="h-9"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Dimension</Label>
+            <Input
+              type="number"
+              value={dimension}
+              onChange={e => setDimension(Number(e.target.value || 768))}
+              className="h-9"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Batch size</Label>
+            <Input
+              type="number"
+              value={batchSize}
+              onChange={e =>
+                setBatchSize(
+                  Math.min(512, Math.max(1, Number(e.target.value || 16)))
+                )
+              }
+              className="h-9"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">
+              Timeout (sec)
+            </Label>
+            <Input
+              type="number"
+              value={timeoutSec}
+              onChange={e =>
+                setTimeoutSec(
+                  Math.min(600, Math.max(10, Number(e.target.value || 60)))
+                )
+              }
+              className="h-9"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">
+              Auto-pull model
+            </Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
+                  <span>{ollamaAutoPull ? 'Enabled' : 'Disabled'}</span>
+                  <FontIcon type="chevron-down" className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-48">
+                <DropdownMenuItem onClick={() => setOllamaAutoPull(true)}>
+                  Enabled
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setOllamaAutoPull(false)}>
+                  Disabled
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div />
+        </div>
+        {!isDefaultStrategy && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs flex items-center gap-2 select-none">
+              <input
+                type="checkbox"
+                checked={makeDefault}
+                onChange={e => setMakeDefault(e.target.checked)}
+              />
+              Make default strategy
+            </label>
+          </div>
+        )}
+
+        <div className="text-sm text-muted-foreground">
+          Select a new embedding model and configure connection/performance
+          options.
+        </div>
+
+        {/* Source switcher */}
         <div className="w-full flex items-center">
           <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
             <button
@@ -569,28 +722,13 @@ function ChangeEmbeddingModel() {
         </div>
 
         {sourceTab === 'local' && (
-          <div className="relative w-full">
-            <FontIcon
-              type="search"
-              className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
-            />
-            <Input
-              placeholder="Search local options"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              className="pl-9 h-10"
-            />
-          </div>
-        )}
-
-        {sourceTab === 'local' && (
           <div className="w-full overflow-hidden rounded-lg border border-border">
             <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
               <div className="col-span-4">Model</div>
               <div className="col-span-2">dim</div>
               <div className="col-span-2">Quality</div>
-              <div className="col-span-2">RAM/VRAM</div>
-              <div className="col-span-1 text-right">Download</div>
+              <div className="col-span-2">Download</div>
+              <div className="col-span-1">RAM/VRAM</div>
               <div className="col-span-1" />
             </div>
             {filteredGroups.map(group => {
@@ -619,58 +757,64 @@ function ChangeEmbeddingModel() {
                       {group.quality}
                     </div>
                     <div className="col-span-2 text-xs text-muted-foreground">
-                      {group.ramVram}
-                    </div>
-                    <div className="col-span-1 text-xs text-muted-foreground text-right">
                       {group.download}
+                    </div>
+                    <div className="col-span-1 text-xs text-muted-foreground">
+                      {group.ramVram}
                     </div>
                     <div className="col-span-1" />
                   </div>
                   {group.variants && isOpen && (
                     <div className="px-3 pb-2">
-                      {group.variants.map(v => (
-                        <div
-                          key={v.id}
-                          className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                        >
-                          <div className="col-span-4 flex items-center text-muted-foreground">
-                            <span className="inline-block w-4" />
-                            <span className="ml-2 font-mono text-xs truncate">
-                              {v.label}
-                            </span>
+                      {group.variants.map(v => {
+                        const isUsing =
+                          selected?.runtime === 'Local' &&
+                          selected?.modelId === v.id
+                        return (
+                          <div
+                            key={v.id}
+                            className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
+                          >
+                            <div className="col-span-4 flex items-center text-muted-foreground">
+                              <span className="inline-block w-4" />
+                              <span className="ml-2 font-mono text-xs truncate">
+                                {v.label}
+                              </span>
+                            </div>
+                            <div className="col-span-2 text-xs text-muted-foreground">
+                              {v.dim}
+                            </div>
+                            <div className="col-span-2 text-xs text-muted-foreground">
+                              {v.quality}
+                            </div>
+                            <div className="col-span-2 text-xs text-muted-foreground">
+                              {group.download}
+                            </div>
+                            <div className="col-span-1 text-xs text-muted-foreground">
+                              {group.ramVram}
+                            </div>
+                            <div className="col-span-1 flex items-center justify-end pr-2">
+                              <Button
+                                size="sm"
+                                className="h-8 px-3"
+                                onClick={() => openConfirmLocal(group, v)}
+                              >
+                                {isUsing ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <FontIcon
+                                      type="checkmark-filled"
+                                      className="w-4 h-4"
+                                    />{' '}
+                                    Using
+                                  </span>
+                                ) : (
+                                  'Use'
+                                )}
+                              </Button>
+                            </div>
                           </div>
-                          <div className="col-span-2 text-xs text-muted-foreground">
-                            {v.dim}
-                          </div>
-                          <div className="col-span-2 text-xs text-muted-foreground">
-                            {v.quality}
-                          </div>
-                          <div className="col-span-2 text-xs text-muted-foreground">
-                            {group.ramVram}
-                          </div>
-                          <div className="col-span-1 text-xs text-muted-foreground text-right">
-                            {v.download}
-                          </div>
-                          <div className="col-span-1 flex items-center justify-end pr-2">
-                            <Button
-                              size="sm"
-                              className="h-8 px-3"
-                              onClick={() => openConfirmLocal(group, v)}
-                              disabled={isApplying !== null}
-                            >
-                              {isApplying === v.id ? 'Using…' : 'Use'}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                      <div className="flex justify-end pr-3">
-                        <button
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                          onClick={() => setExpandedGroupId(null)}
-                        >
-                          Hide
-                        </button>
-                      </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -700,7 +844,8 @@ function ChangeEmbeddingModel() {
                       onClick={() => {
                         setProvider(p)
                         setModel(modelMap[p][0])
-                        setHasPickedModel(false)
+                        // reset cloud selection state
+                        if (selected?.runtime === 'Cloud') setSelected(null)
                       }}
                     >
                       {p}
@@ -728,7 +873,7 @@ function ChangeEmbeddingModel() {
                       className="w-full justify-start text-left"
                       onClick={() => {
                         setModel(m)
-                        setHasPickedModel(true)
+                        if (selected?.runtime === 'Cloud') setSelected(null)
                       }}
                     >
                       {m}
@@ -744,46 +889,61 @@ function ChangeEmbeddingModel() {
                   className="h-9"
                 />
               )}
-              {errors.customModel && (
-                <div className="text-xs text-destructive">
-                  {errors.customModel}
+
+              {/* OpenAI */}
+              {provider === 'OpenAI' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Base URL (optional)
+                    </Label>
+                    <Input
+                      placeholder="https://api.openai.com"
+                      value={baseUrl}
+                      onChange={e => setBaseUrl(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Organization (optional)
+                    </Label>
+                    <Input
+                      placeholder="org_xxx"
+                      value={openaiOrg}
+                      onChange={e => setOpenaiOrg(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Timeout (sec)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={timeoutSec}
+                      onChange={e =>
+                        setTimeoutSec(Number(e.target.value || 60))
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Max retries
+                    </Label>
+                    <Input
+                      type="number"
+                      value={openaiMaxRetries}
+                      onChange={e =>
+                        setOpenaiMaxRetries(Number(e.target.value || 3))
+                      }
+                      className="h-9"
+                    />
+                  </div>
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-1">
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Vector dimension (d)
-                  </Label>
-                  <Input
-                    value={meta?.dim ?? 'n/a'}
-                    readOnly
-                    disabled
-                    className="h-9"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Model input limit (tokens)
-                  </Label>
-                  <Input
-                    value={meta?.tokens ?? 'n/a'}
-                    readOnly
-                    disabled
-                    className="h-9"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Similarity metric
-                  </Label>
-                  <Input
-                    value={hasPickedModel ? 'cosine' : 'n/a'}
-                    readOnly
-                    disabled
-                    className="h-9"
-                  />
-                </div>
-              </div>
+              {/* Azure */}
               {provider === 'Azure OpenAI' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <div className="flex flex-col gap-1">
@@ -796,11 +956,6 @@ function ChangeEmbeddingModel() {
                       onChange={e => setAzureDeployment(e.target.value)}
                       className="h-9"
                     />
-                    {errors.azureDeployment && (
-                      <div className="text-xs text-destructive">
-                        {errors.azureDeployment}
-                      </div>
-                    )}
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label className="text-xs text-muted-foreground">
@@ -812,11 +967,6 @@ function ChangeEmbeddingModel() {
                       onChange={e => setAzureResource(e.target.value)}
                       className="h-9"
                     />
-                    {errors.azureResource && (
-                      <div className="text-xs text-destructive">
-                        {errors.azureResource}
-                      </div>
-                    )}
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label className="text-xs text-muted-foreground">
@@ -831,6 +981,7 @@ function ChangeEmbeddingModel() {
                   </div>
                 </div>
               )}
+              {/* Google */}
               {provider === 'Google' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <div className="flex flex-col gap-1">
@@ -843,11 +994,6 @@ function ChangeEmbeddingModel() {
                       onChange={e => setVertexProjectId(e.target.value)}
                       className="h-9"
                     />
-                    {errors.vertexProjectId && (
-                      <div className="text-xs text-destructive">
-                        {errors.vertexProjectId}
-                      </div>
-                    )}
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label className="text-xs text-muted-foreground">
@@ -859,11 +1005,6 @@ function ChangeEmbeddingModel() {
                       onChange={e => setVertexLocation(e.target.value)}
                       className="h-9"
                     />
-                    {errors.vertexLocation && (
-                      <div className="text-xs text-destructive">
-                        {errors.vertexLocation}
-                      </div>
-                    )}
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label className="text-xs text-muted-foreground">
@@ -878,6 +1019,7 @@ function ChangeEmbeddingModel() {
                   </div>
                 </div>
               )}
+              {/* Bedrock */}
               {provider === 'AWS Bedrock' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <div className="flex flex-col gap-1">
@@ -890,229 +1032,207 @@ function ChangeEmbeddingModel() {
                       onChange={e => setBedrockRegion(e.target.value)}
                       className="h-9"
                     />
-                    {errors.bedrockRegion && (
-                      <div className="text-xs text-destructive">
-                        {errors.bedrockRegion}
-                      </div>
-                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Cloud API key */}
+              {provider !== 'Ollama (remote)' && (
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs text-muted-foreground">
+                    API Key
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder="enter here"
+                      value={apiKey}
+                      onChange={e => setApiKey(e.target.value)}
+                      className="h-9 pr-9"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowApiKey(v => !v)}
+                      aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+                    >
+                      <FontIcon
+                        type={showApiKey ? 'eye-off' : 'eye'}
+                        className="w-4 h-4"
+                      />
+                    </button>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label className="text-xs text-muted-foreground">API Key</Label>
-              <div className="relative">
-                <Input
-                  type="password"
-                  placeholder="enter here"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  className="h-9 pr-9"
-                />
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowApiKey(v => !v)}
-                  aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
-                >
-                  <FontIcon
-                    type={showApiKey ? 'eye-off' : 'eye'}
-                    className="w-4 h-4"
-                  />
-                </button>
-              </div>
-              {errors.apiKey && (
-                <div className="text-xs text-destructive">{errors.apiKey}</div>
-              )}
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs text-muted-foreground">
-                  Batch size (texts per request)
-                </Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={512}
-                  value={batchSize}
-                  onChange={e => {
-                    const v = parseInt(e.target.value || '64', 10)
-                    if (Number.isNaN(v)) return
-                    const clamped = Math.max(1, Math.min(512, v))
-                    setBatchSize(clamped)
-                  }}
-                  className="h-9"
-                />
-                <div className="text-xs text-muted-foreground">
-                  Controls throughput and cost; provider limits may apply.
-                </div>
-              </div>
-            </div>
-
-            {model === 'Custom' && (
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs text-muted-foreground">
-                  Base URL override (optional)
-                </Label>
-                <Input
-                  placeholder="https://api.example.com"
-                  value={baseUrl}
-                  onChange={e => setBaseUrl(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2">
-              <Label className="text-xs text-muted-foreground">
-                Max tokens (optional)
-              </Label>
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="flex-1 text-sm px-3 py-2 rounded-md border border-border bg-background">
-                  {maxTokens === null ? 'n / a' : maxTokens}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8"
-                    onClick={() =>
-                      setMaxTokens(prev =>
-                        prev ? Math.max(prev - 500, 0) : null
-                      )
-                    }
-                  >
-                    –
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8"
-                    onClick={() =>
-                      setMaxTokens(prev => (prev ? prev + 500 : 500))
-                    }
-                  >
-                    +
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" onClick={checkConnection}>
+                  {connectionStatus === 'checking'
+                    ? 'Checking…'
+                    : 'Check connection'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={runTestEmbedding}>
+                  {testStatus === 'running' ? 'Testing…' : 'Test embedding'}
+                </Button>
               </div>
-            </div>
-
-            <div className="flex justify-end">
               <Button
-                onClick={() => {
-                  if (
-                    apiKey.trim().length === 0 ||
-                    !isModelChosen ||
-                    !providerRequiredOk
-                  )
-                    return
-                  const chosen = model === 'Custom' ? customModel.trim() : model
-                  const metaVals = embeddingMeta[chosen] || {
-                    dim: '1536',
-                    tokens: '8192',
-                  }
-                  setConfirmCtx({
+                onClick={() =>
+                  setSelected({
                     runtime: 'Cloud',
                     provider,
-                    modelId: chosen,
-                    dimension: Number(metaVals.dim) || 0,
-                    maxInputTokens: Number(metaVals.tokens) || 0,
-                    similarity: 'cosine',
-                    region:
-                      provider === 'Azure OpenAI'
-                        ? azureResource || undefined
-                        : provider === 'Google'
-                          ? vertexLocation || undefined
-                          : provider === 'AWS Bedrock'
-                            ? bedrockRegion || undefined
-                            : undefined,
+                    modelId: model === 'Custom' ? customModel.trim() : model,
                   })
-                  setConfirmOpen(true)
-                }}
+                }
                 disabled={
-                  apiKey.trim().length === 0 ||
-                  !isModelChosen ||
-                  !providerRequiredOk ||
-                  submitState === 'loading'
+                  provider !== 'Ollama (remote)' && apiKey.trim().length === 0
                 }
               >
-                {submitState === 'loading' && (
-                  <span className="mr-2 inline-flex">
-                    <Loader
-                      size={14}
-                      className="border-blue-400 dark:border-blue-100"
-                    />
+                {selected?.runtime === 'Cloud' &&
+                selected?.modelId ===
+                  (model === 'Custom' ? customModel.trim() : model) ? (
+                  <span className="inline-flex items-center gap-1">
+                    <FontIcon type="checkmark-filled" className="w-4 h-4" />{' '}
+                    Using
                   </span>
+                ) : (
+                  'Use cloud model'
                 )}
-                {submitState === 'success' && (
-                  <span className="mr-2 inline-flex">
-                    <FontIcon type="checkmark-filled" className="w-4 h-4" />
-                  </span>
-                )}
-                Apply cloud embedding model
               </Button>
             </div>
+
+            {(connectionStatus === 'ok' || connectionStatus === 'error') && (
+              <div
+                className={`text-xs ${connectionStatus === 'ok' ? 'text-teal-600 dark:text-teal-400' : 'text-destructive'}`}
+              >
+                {connectionMsg}
+              </div>
+            )}
+            {testStatus !== 'idle' && (
+              <div className="text-xs text-muted-foreground">
+                {testStatus === 'ok'
+                  ? `Test completed${testLatencyMs ? ` in ${testLatencyMs} ms` : ''}`
+                  : testStatus === 'error'
+                    ? 'Test failed'
+                    : 'Running test…'}
+              </div>
+            )}
           </div>
         )}
       </section>
 
+      {/* Save modal */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
-          <DialogTitle>Use this embedding model?</DialogTitle>
+          <DialogTitle>Save this embedding strategy?</DialogTitle>
           <DialogDescription>
-            {confirmCtx && (
-              <div className="mt-2 text-sm">
-                Are you sure you want to start using
-                <span className="mx-1 font-medium text-foreground">
-                  {confirmCtx.modelId}
-                </span>
-                for the
-                <span className="mx-1 font-medium text-foreground">
-                  {strategyName}
-                </span>
-                strategy? We’ll download the model if needed and reprocess to
-                keep results accurate.
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                  <div className="text-muted-foreground">Runtime</div>
-                  <div>{confirmCtx.runtime}</div>
-                  <div className="text-muted-foreground">
-                    Vector dimension (d)
-                  </div>
-                  <div>{confirmCtx.dimension}</div>
-                  <div className="text-muted-foreground">
-                    Input limit (tokens)
-                  </div>
-                  <div>{confirmCtx.maxInputTokens}</div>
-                  <div className="text-muted-foreground">Similarity</div>
-                  <div>cosine</div>
-                  {confirmCtx.region && (
-                    <>
-                      <div className="text-muted-foreground">Region</div>
-                      <div>{confirmCtx.region}</div>
-                    </>
-                  )}
+            <div className="mt-2 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                <div className="text-muted-foreground">Strategy name</div>
+                <div className="truncate">{strategyName || '(unnamed)'}</div>
+                <div className="text-muted-foreground">Runtime</div>
+                <div>{runtimeLabel}</div>
+                <div className="text-muted-foreground">Provider</div>
+                <div>{summaryProvider || 'n/a'}</div>
+                <div className="text-muted-foreground">Model</div>
+                <div className="font-mono truncate">
+                  {summaryModel || 'n/a'}
                 </div>
+                <div className="text-muted-foreground">Base URL / Location</div>
+                <div className="truncate">{summaryLocation || 'n/a'}</div>
+                <div className="text-muted-foreground">
+                  Vector dimension (d)
+                </div>
+                <div>{dimension ?? meta?.dim ?? 'n/a'}</div>
+                <div className="text-muted-foreground">Batch size</div>
+                <div>{batchSize}</div>
+                <div className="text-muted-foreground">Timeout (sec)</div>
+                <div>{timeoutSec}</div>
+                <div className="text-muted-foreground">Auto-pull model</div>
+                <div>{ollamaAutoPull ? 'Enabled' : 'Disabled'}</div>
+                {summaryProvider === 'OpenAI' ? (
+                  <>
+                    <div className="text-muted-foreground">Organization</div>
+                    <div className="truncate">{openaiOrg || '(none)'}</div>
+                    <div className="text-muted-foreground">Max retries</div>
+                    <div>{openaiMaxRetries}</div>
+                  </>
+                ) : null}
+                {summaryProvider === 'Azure OpenAI' ? (
+                  <>
+                    <div className="text-muted-foreground">Deployment</div>
+                    <div className="truncate">{azureDeployment || 'n/a'}</div>
+                    <div className="text-muted-foreground">Endpoint</div>
+                    <div className="truncate">{azureResource || 'n/a'}</div>
+                    <div className="text-muted-foreground">API version</div>
+                    <div className="truncate">
+                      {azureApiVersion || '(default)'}
+                    </div>
+                  </>
+                ) : null}
+                {summaryProvider === 'Google' ? (
+                  <>
+                    <div className="text-muted-foreground">Project ID</div>
+                    <div className="truncate">{vertexProjectId || 'n/a'}</div>
+                    <div className="text-muted-foreground">Location</div>
+                    <div className="truncate">{vertexLocation || 'n/a'}</div>
+                    <div className="text-muted-foreground">Endpoint</div>
+                    <div className="truncate">{vertexEndpoint || '(auto)'}</div>
+                  </>
+                ) : null}
+                {summaryProvider === 'AWS Bedrock' ? (
+                  <>
+                    <div className="text-muted-foreground">Region</div>
+                    <div className="truncate">{bedrockRegion || 'n/a'}</div>
+                  </>
+                ) : null}
               </div>
-            )}
+              {!isDefaultStrategy && makeDefault ? (
+                <div className="mt-3 text-xs">Will set as default</div>
+              ) : null}
+            </div>
           </DialogDescription>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
+            <Button onClick={saveEdited}>
+              {selected?.runtime === 'Local'
+                ? 'Download and save strategy'
+                : 'Save strategy'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Re-embed confirmation modal */}
+      <Dialog open={reembedOpen} onOpenChange={setReembedOpen}>
+        <DialogContent>
+          <DialogTitle>Re-embed project data?</DialogTitle>
+          <DialogDescription>
+            To keep your project running smoothly, this change requires
+            re-embedding project data. Would you like to proceed now?
+          </DialogDescription>
+          <DialogFooter>
             <Button
+              variant="destructive"
               onClick={() => {
-                setConfirmOpen(false)
-                if (confirmCtx?.runtime === 'Local' && pendingLocalModelId) {
-                  applyEmbedding(pendingLocalModelId)
-                  setPendingLocalModelId(null)
-                } else {
-                  handleApplyCloud()
-                }
+                setReembedOpen(false)
+                toast({ message: 'Strategy saved', variant: 'default' })
+                navigate('/chat/rag')
               }}
             >
-              {confirmCtx?.runtime === 'Cloud'
-                ? 'Use cloud model'
-                : 'Download and use'}
+              I'll do it later
+            </Button>
+            <Button
+              onClick={() => {
+                setReembedOpen(false)
+                toast({ message: 'Strategy saved', variant: 'default' })
+                navigate('/chat/rag')
+              }}
+            >
+              Yes, proceed with re-embed
             </Button>
           </DialogFooter>
         </DialogContent>

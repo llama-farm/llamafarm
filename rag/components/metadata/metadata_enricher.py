@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional, Union
 import mimetypes
 import json
 
-from core.base import Document
+from rag.core.base import Document
 from .metadata_config import MetadataSchema, DocumentMetadata, CoreMetadataConfig
 
 logger = logging.getLogger(__name__)

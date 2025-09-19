@@ -18,9 +18,12 @@ import Models from './components/Models/Models'
 import Rag from './components/Rag/Rag'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
-import ExtractionSettings from './components/Rag/ExtractionSettings'
-import ParsingStrategy from './components/Rag/ParsingStrategy'
+// @ts-ignore - component is TSX local file
+import AddEmbeddingStrategy from './components/Rag/AddEmbeddingStrategy'
+// Removed legacy per-strategy pages in favor of unified StrategyView
 import RetrievalMethod from './components/Rag/RetrievalMethod'
+// @ts-ignore - component is TSX local file
+import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
 // Projects standalone page removed; Home now hosts projects section
 
 function ProjectModalRoot() {
@@ -57,19 +60,22 @@ function App() {
                 <Route path="data/:datasetId" element={<DatasetView />} />
                 <Route path="models" element={<Models />} />
                 <Route path="rag" element={<Rag />} />
+                {/* Project-level pages */}
+                <Route
+                  path="rag/add-embedding"
+                  element={<AddEmbeddingStrategy />}
+                />
+                <Route
+                  path="rag/add-retrieval"
+                  element={<AddRetrievalStrategy />}
+                />
+                <Route path="rag/processing" element={<StrategyView />} />
                 <Route path="rag/:strategyId" element={<StrategyView />} />
                 <Route
                   path="rag/:strategyId/change-embedding"
                   element={<ChangeEmbeddingModel />}
                 />
-                <Route
-                  path="rag/:strategyId/extraction"
-                  element={<ExtractionSettings />}
-                />
-                <Route
-                  path="rag/:strategyId/parsing"
-                  element={<ParsingStrategy />}
-                />
+                {/* Legacy routes above remain; new entries reuse same components */}
                 <Route
                   path="rag/:strategyId/retrieval"
                   element={<RetrievalMethod />}

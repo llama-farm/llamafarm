@@ -119,37 +119,6 @@ func TestGetServerConfig_Strict(t *testing.T) {
 	}
 }
 
-func TestGetServerConfig_Lenient(t *testing.T) {
-	// No config file, but lenient should still return defaults
-	sc, err := GetServerConfigLenient("", "", "", "")
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if sc.URL != "http://localhost:8000" || sc.Namespace != "" || sc.Project != "" {
-		t.Fatalf("unexpected server config: %+v", sc)
-	}
-
-	// With config file and overrides
-	path := writeTempConfig(t, "name: shop\nnamespace: acme\nversion: v1\n")
-	sc, err = GetServerConfigLenient(path, "http://x", "ns", "proj")
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if sc.URL != "http://x" || sc.Namespace != "ns" || sc.Project != "proj" {
-		t.Fatalf("unexpected server config: %+v", sc)
-	}
-
-	// Config file missing project fields, should fallback to empty namespace/project
-	pathMissingName := writeTempConfig(t, "version: v1\n")
-	sc, err = GetServerConfigLenient(pathMissingName, "", "", "")
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if sc.Namespace != "" || sc.Project != "" {
-		t.Fatalf("expected empty namespace/project for missing name, got: %+v", sc)
-	}
-}
-
 func TestLoadTOMLConfig(t *testing.T) {
 	// Test loading a TOML config file from directory
 	tomlContent := `version = "v1"
@@ -246,6 +215,19 @@ func TestInvalidJSONConfig(t *testing.T) {
 	_, err := LoadConfig(dir)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, but got none")
+	}
+}
+
+func TestInvalidYAMLConfig(t *testing.T) {
+	// Test error handling for invalid YAML
+	invalidYAML := `version: v1
+name: test
+invalid yaml: [ unclosed bracket`
+	dir := writeTempConfigDir(t, invalidYAML)
+
+	_, err := LoadConfig(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML, but got none")
 	}
 }
 

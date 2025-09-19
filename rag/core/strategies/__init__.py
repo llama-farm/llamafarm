@@ -1,13 +1,10 @@
 """
-RAG Strategies Module
+RAG Strategies Module - New Schema Only
 
-This module provides a high-level strategy system for configuring RAG pipelines.
-Instead of manually configuring individual parsers, extractors, embedders, and retrieval strategies,
-users can select from predefined strategies optimized for specific use cases.
+This module provides strategy handling for the new RAG schema format.
+NO BACKWARD COMPATIBILITY - everything uses new schema directly.
 """
 
-from .manager import StrategyManager
-from .config import StrategyConfig
-from .loader import StrategyLoader
+from .handler import SchemaHandler
 
-__all__ = ["StrategyManager", "StrategyConfig", "StrategyLoader"]
+__all__ = ["SchemaHandler"]

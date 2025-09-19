@@ -84,8 +84,9 @@ Create a short note in `thoughts/shared/research/<issue_id>_<slug>.md` including
 - **Affected modules**: files/dirs and why
 - **Key flows**: sequence from entry to side effects
 - **Risks**: edge cases, cross-project impacts, data migrations
-- **Open questions**: unknowns and how to answer them
-- **Proposed plan**: minimal, measurable steps to implement and verify
+- **Open questions**: unknowns and how to answer them (bulleted, no answers); list questions to present to the user; do not include answers or decisions in the research doc
+
+Do NOT include any implementation plan in the research note. Planning is a separate document.
 
 Example template:
 ```markdown
@@ -98,8 +99,6 @@ Example template:
 ## Risks
 
 ## Open questions
-
-## Proposed plan
 ```
 
 ## Citing code and commands
@@ -123,10 +122,11 @@ router = APIRouter()
 - **Don’t refactor while exploring**; keep research separate from changes.
 - **Don’t rely on single search hits**; corroborate via tests and callers.
 - **Don’t skip verification**; always plan how you’ll test the change.
+- **Don't plan yet**; planning implementation is done via a separate step after research. Do not place plan content in research notes.
 - **Don't plan yet**; planning implementation is done via a separate step after research.
 
 ## Timebox and check-ins
-- **Timebox discovery**: ~5 minutes to produce the research note.
+- **Timebox discovery**: ~15 minutes to produce the research note.
 - **Escalate blockers** early with specific questions and file references.
 
 ---

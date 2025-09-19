@@ -46,24 +46,26 @@ func (e *HealthError) Error() string {
 // If not reachable and the host is localhost, it attempts to start the
 // server via Docker, then waits for readiness. Returns an error if it
 // ultimately cannot ensure availability.
-func ensureServerAvailable(serverURL string) {
+func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
 	if serverURL == "" {
 		serverURL = "http://localhost:8000"
 	}
 
-	if err := checkServerHealth(serverURL); err == nil {
-		return
+	if hr, err := checkServerHealth(serverURL); err == nil {
+		return hr
 	} else {
 		// If we already got a health payload, render a clean, readable error
 		url := strings.TrimRight(serverURL, "/") + "/health/liveness"
 		if perr := pingURL(url); perr == nil {
 			// The server is reachable, but not healthy
 			if herr, ok := err.(*HealthError); ok {
-				prettyPrintHealth(os.Stderr, herr.HealthResp)
+				if printStatus || herr.Status == "unhealthy" {
+					prettyPrintHealth(os.Stderr, herr.HealthResp)
+				}
 				if herr.Status == "unhealthy" {
 					os.Exit(1)
 				} else {
-					return
+					return &herr.HealthResp
 				}
 			}
 		}
@@ -90,8 +92,8 @@ func ensureServerAvailable(serverURL string) {
 
 	fmt.Fprintf(os.Stderr, "Waiting for server to become ready...\n")
 	for {
-		if err := checkServerHealth(serverURL); err == nil {
-			return
+		if hr, err := checkServerHealth(serverURL); err == nil {
+			return hr
 		} else {
 			lastError = err
 			if time.Now().After(deadline) {
@@ -104,7 +106,9 @@ func ensureServerAvailable(serverURL string) {
 	fmt.Fprintf(os.Stderr, "Server did not become ready at %s within timeout\n", serverURL)
 	if herr, ok := lastError.(*HealthError); ok {
 		// Render once on each failed poll tick to aid diagnosis
-		prettyPrintHealth(os.Stderr, herr.HealthResp)
+		if printStatus || herr.Status == "unhealthy" {
+			prettyPrintHealth(os.Stderr, herr.HealthResp)
+		}
 		if herr.Status == "unhealthy" {
 			os.Exit(1)
 		}
@@ -112,10 +116,11 @@ func ensureServerAvailable(serverURL string) {
 		fmt.Fprintf(os.Stderr, "%v\n", lastError)
 		os.Exit(1)
 	}
+	return nil
 }
 
 // checkServerHealth requires /health to be healthy.
-func checkServerHealth(serverURL string) error {
+func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	base := strings.TrimRight(serverURL, "/")
 	healthURL := base + "/health"
 
@@ -124,25 +129,25 @@ func checkServerHealth(serverURL string) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var payload HealthPayload
 		if err := json.Unmarshal(body, &payload); err != nil {
-			return fmt.Errorf("invalid health payload: %v", err)
+			return nil, fmt.Errorf("invalid health payload: %v", err)
 		}
 		if strings.EqualFold(payload.Status, "healthy") {
-			return nil
+			return &payload, nil
 		}
-		return &HealthError{Status: payload.Status, HealthResp: payload}
+		return nil, &HealthError{Status: payload.Status, HealthResp: payload}
 	}
-	return fmt.Errorf("unexpected health status %d", resp.StatusCode)
+	return nil, fmt.Errorf("unexpected health status %d", resp.StatusCode)
 }
 
 func isLocalhost(serverURL string) bool {
@@ -163,7 +168,7 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	port := resolvePort(serverURL, 8000)
-	
+
 	// Get the dynamic image URL using our version-aware resolution
 	image, err := getImageURL("server")
 	if err != nil {
@@ -253,11 +258,13 @@ func resolvePort(serverURL string, defaultPort int) int {
 // prettyPrintHealth decodes a /health payload and renders a concise, readable summary
 func prettyPrintHealth(w io.Writer, hr HealthPayload) {
 	prefix := "❌"
-	if hr.Status == "degraded" {
+	switch hr.Status {
+	case "degraded":
 		prefix = "⚠️"
-	} else if hr.Status == "healthy" {
+	case "healthy":
 		prefix = "✅"
 	}
+
 	fmt.Fprintf(w, "%s Server is %s\n", prefix, hr.Status)
 	if strings.TrimSpace(hr.Summary) != "" {
 		fmt.Fprintf(w, "Summary: %s\n", hr.Summary)
@@ -284,6 +291,32 @@ func prettyPrintHealth(w io.Writer, hr HealthPayload) {
 	}
 }
 
+// prettyPrintHealthProblems prints only the non-healthy components and seeds from a HealthPayload.
+// It is intended for concise error reporting.
+func prettyPrintHealthProblems(w io.Writer, hr HealthPayload) {
+	// Check components
+	for _, c := range hr.Components {
+		if c.Status != "healthy" {
+			icon := iconForStatus(c.Status)
+			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, c.Name, c.Status, c.Message, c.LatencyMs)
+			for k, v := range c.Details {
+				fmt.Fprintf(w, "      %s: %v\n", k, v)
+			}
+		}
+	}
+
+	// Check seeds
+	for _, s := range hr.Seeds {
+		if s.Status != "healthy" {
+			icon := iconForStatus(s.Status)
+			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs)
+			for k, v := range s.Runtime {
+				fmt.Fprintf(w, "      %s: %v\n", k, v)
+			}
+		}
+	}
+}
+
 func iconForStatus(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	switch s {
@@ -294,7 +327,7 @@ func iconForStatus(s string) string {
 	case "unhealthy":
 		return "❌"
 	default:
-		return "•"
+		return "❓"
 	}
 }
 

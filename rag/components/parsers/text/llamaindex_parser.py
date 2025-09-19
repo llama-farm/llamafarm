@@ -40,7 +40,7 @@ class TextParser_LlamaIndex:
 
     def parse(self, source: str, **kwargs):
         """Parse text using LlamaIndex node parsers."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
 
         try:
             # Try importing LlamaIndex components
@@ -407,7 +407,6 @@ class TextParser_LlamaIndex:
         comment_chars = comment_patterns.get(extension, [])
         function_keywords = function_patterns.get(extension, [])
         class_keywords = class_patterns.get(extension, [])
-
         for line in lines:
             stripped = line.strip()
             if any(stripped.startswith(comment) for comment in comment_chars):

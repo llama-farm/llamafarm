@@ -38,6 +38,12 @@ type ChatRequest struct {
 	FrequencyPenalty *float64           `json:"frequency_penalty,omitempty"`
 	PresencePenalty  *float64           `json:"presence_penalty,omitempty"`
 	LogitBias        map[string]float64 `json:"logit_bias,omitempty"`
+	// RAG fields
+	RAGEnabled          *bool              `json:"rag_enabled,omitempty"`
+	RAGDatabase         *string            `json:"database,omitempty"`
+	RAGRetrievalStrategy *string           `json:"rag_retrieval_strategy,omitempty"`
+	RAGTopK             *int               `json:"rag_top_k,omitempty"`
+	RAGScoreThreshold   *float64           `json:"rag_score_threshold,omitempty"`
 }
 
 // ChatChoice represents a choice in the chat response
@@ -66,6 +72,12 @@ type ChatSessionContext struct {
 	MaxTokens   int
 	Streaming   bool
 	HTTPClient  HTTPClient
+	// RAG fields
+	RAGEnabled          bool
+	RAGDatabase         string
+	RAGRetrievalStrategy string
+	RAGTopK             int
+	RAGScoreThreshold   float64
 }
 
 func newDefaultContextFromGlobals() *ChatSessionContext {
@@ -144,6 +156,23 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 		}
 		streamTrue := true
 		request := ChatRequest{Messages: messages, Stream: &streamTrue}
+		
+		// Add RAG parameters if enabled
+		if ctx.RAGEnabled {
+			request.RAGEnabled = &ctx.RAGEnabled
+			if ctx.RAGDatabase != "" {
+				request.RAGDatabase = &ctx.RAGDatabase
+			}
+			if ctx.RAGRetrievalStrategy != "" {
+				request.RAGRetrievalStrategy = &ctx.RAGRetrievalStrategy
+			}
+			if ctx.RAGTopK > 0 {
+				request.RAGTopK = &ctx.RAGTopK
+			}
+			if ctx.RAGScoreThreshold > 0 {
+				request.RAGScoreThreshold = &ctx.RAGScoreThreshold
+			}
+		}
 
 		jsonData, err := json.Marshal(request)
 		logDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))

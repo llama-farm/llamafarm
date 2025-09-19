@@ -34,7 +34,7 @@ var devCmd = &cobra.Command{
 		cwd := getEffectiveCWD()
 		cfg, err := config.LoadConfig(cwd)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "No config file found in target directory. Run `lf init` to create a new project.\n")
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\nRun `lf init` to create a new project if none exists.\n", err)
 			os.Exit(1)
 		}
 
@@ -48,8 +48,8 @@ var devCmd = &cobra.Command{
 			}
 		}
 
-		ensureServerAvailable(serverURL)
-		runChatSessionTUI(projectInfo)
+		serverHealth := ensureServerAvailable(serverURL, false)
+		runChatSessionTUI(projectInfo, serverHealth)
 	},
 }
 

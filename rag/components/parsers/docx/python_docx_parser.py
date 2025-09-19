@@ -26,7 +26,7 @@ class DocxParser_PythonDocx:
     
     def parse(self, source: str, **kwargs):
         """Parse DOCX using python-docx."""
-        from core.base import Document, ProcessingResult
+        from rag.core.base import Document, ProcessingResult
         
         try:
             import docx

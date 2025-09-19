@@ -21,42 +21,47 @@ description = "Prompt for conducting code reviews and providing feedback"
 
 [rag]
 
-[[rag.strategies]]
-name = "default"
-description = "Customer support strategy for testing"
+[[rag.databases]]
+name = "support_db"
+type = "ChromaStore"
 
-[rag.strategies.components.parser]
-type = "CSVParser_LlamaIndex"
+[rag.databases.config]
+collection_name = "customer_support_knowledge_base"
+persist_directory = "./data/vector_store/chroma"
 
-[rag.strategies.components.parser.config]
-content_fields = ["question", "answer"]
-metadata_fields = ["category", "timestamp"]
-combine_content = true
-table_format = "markdown"
-
-
-[rag.strategies.components.embedder]
+[[rag.databases.embedding_strategies]]
+name = "default_embedding"
 type = "OllamaEmbedder"
 
-[rag.strategies.components.embedder.config]
+[rag.databases.embedding_strategies.config]
 model = "mxbai-embed-large"
 base_url = "http://localhost:11434"
 batch_size = 32
 timeout = 60
 auto_pull = true
 
-[rag.strategies.components.vector_store]
-type = "ChromaStore"
-
-[rag.strategies.components.vector_store.config]
-collection_name = "customer_support_knowledge_base"
-persist_directory = "./data/vector_store/chroma"
-
-[rag.strategies.components.retrieval_strategy]
+[[rag.databases.retrieval_strategies]]
+name = "default_retrieval"
 type = "BasicSimilarityStrategy"
+default = true
 
-[rag.strategies.components.retrieval_strategy.config]
+[rag.databases.retrieval_strategies.config]
 distance_metric = "cosine"
+
+[[rag.data_processing_strategies]]
+name = "default"
+description = "Customer support strategy for testing"
+
+[[rag.data_processing_strategies.parsers]]
+type = "CSVParser_Pandas"
+file_extensions = [".csv"]
+
+[rag.data_processing_strategies.parsers.config]
+content_fields = ["question", "answer", "solution", "explanation"]
+metadata_fields = ["category", "timestamp", "priority", "tags", "author"]
+id_field = "id"
+combine_content = true
+content_separator = "\n\n"
 
 [[models]]
 provider = "local"
@@ -93,7 +98,8 @@ model = "custom-fine-tuned-model-v1"
 [[datasets]]
 name = "sample_dataset"
 files = ["test_file.csv"]
-rag_strategy = "default"
+data_processing_strategy = "default"
+database = "support_db"
 
 [runtime]
 provider = "openai"

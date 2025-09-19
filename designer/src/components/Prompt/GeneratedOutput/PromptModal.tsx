@@ -77,7 +77,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="flex items-center justify-between gap-2">
+        <DialogFooter className="flex flex-row items-center justify-between sm:justify-between gap-2">
           {mode === 'edit' ? (
             <button
               className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
