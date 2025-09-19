@@ -26,7 +26,7 @@ import {
   useDeleteDatasetFile,
   useDeleteDataset,
 } from '../../hooks/useDatasets'
-import { DatasetFile, FlexibleDataset } from '../../types/datasets'
+import { DatasetFile } from '../../types/datasets'
 import { defaultStrategies } from '../Rag/strategies'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
