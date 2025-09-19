@@ -7,6 +7,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Check for libmagic availability
+try:
+    from utils.libmagic_helper import check_libmagic
+
+    check_libmagic()  # This will show warnings if libmagic is missing
+except ImportError:
+    pass  # Helper not available, continue anyway
+
 # Try to import base components
 try:
     from .base import BaseParser, LlamaIndexParser, ParserRegistry, SmartRouter
@@ -80,6 +88,19 @@ class ParserFactory:
                 return ToolAwareParserFactory.create_parser(
                     parser_name=name, config=config
                 )
+            except ImportError as e:
+                if "llama-index" in str(e).lower() or "llama_index" in str(e).lower():
+                    logger.warning(
+                        "LlamaIndex not installed. Install with: uv pip install llama-index"
+                    )
+                elif "magic" in str(e).lower():
+                    logger.warning(
+                        "python-magic not installed. Install with: uv pip install python-magic"
+                    )
+                else:
+                    logger.debug(
+                        f"Import error in ToolAwareParserFactory for {name}: {e}"
+                    )
             except Exception as e:
                 logger.debug(f"ToolAwareParserFactory failed for {name}: {e}")
 
@@ -92,7 +113,23 @@ class ParserFactory:
         # Try to get from registry first
         if registry and hasattr(registry, "get_parser"):
             try:
-                return registry.get_parser(name, config)
+                parser_info = registry.get_parser(name)
+                if parser_info:
+                    # Create parser instance from registry info
+                    parser_class = parser_info.get("class")
+                    if parser_class:
+                        # Import and instantiate the parser
+                        module_name = parser_info.get(
+                            "module", f"components.parsers.{name}"
+                        )
+                        try:
+                            import importlib
+
+                            module = importlib.import_module(module_name)
+                            cls = getattr(module, parser_class)
+                            return cls(config=config)
+                        except Exception as e:
+                            logger.warning(f"Failed to import parser {name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get parser from registry: {e}")
 
@@ -118,22 +155,39 @@ class ParserFactory:
         except Exception as e:
             logger.warning(f"Failed to import parser {name}: {e}")
 
-        # Try simple fallback parsers
+        # Try LlamaIndex parsers as fallback
         try:
-            from .simple_text_parser import SimpleTextParser, SimplePDFParser
-
             if name in ["text", "markdown"]:
-                return SimpleTextParser(name=name, config=config)
+                from .text.llamaindex_parser import TextParser_LlamaIndex
+
+                logger.info(f"Using LlamaIndex text parser as fallback for {name}")
+                return TextParser_LlamaIndex(name=name, config=config)
             elif name == "pdf":
-                return SimplePDFParser(name=name, config=config)
+                from .pdf.llamaindex_parser import PDFParser_LlamaIndex
+
+                logger.info("Using LlamaIndex PDF parser as fallback")
+                return PDFParser_LlamaIndex(name=name, config=config)
             elif name == "csv_excel":
-                # Use text parser for CSV as fallback
-                return SimpleTextParser(name=name, config=config)
+                # Use pandas CSV parser as fallback
+                try:
+                    from .csv.pandas_parser import CSVParser_Pandas
+
+                    logger.info("Using Pandas CSV parser as fallback")
+                    return CSVParser_Pandas(name=name, config=config)
+                except ImportError:
+                    # If pandas not available, use Python CSV parser
+                    from .csv.python_parser import CSVParser_Python
+
+                    logger.info("Using Python CSV parser as fallback")
+                    return CSVParser_Python(name=name, config=config)
             elif name in ["docx", "web"]:
                 # Use text parser as fallback
-                return SimpleTextParser(name=name, config=config)
+                from .text.llamaindex_parser import TextParser_LlamaIndex
+
+                logger.info(f"Using LlamaIndex text parser as fallback for {name}")
+                return TextParser_LlamaIndex(name=name, config=config)
         except Exception as e:
-            logger.warning(f"Failed to use simple parser fallback: {e}")
+            logger.warning(f"Failed to use LlamaIndex parser fallback: {e}")
 
         raise ValueError(f"Parser '{name}' not found")
 
@@ -233,35 +287,42 @@ class DirectoryParser:
 
     def parse(self, source: str, **kwargs):
         """Parse all files in a directory."""
-        from core.base import ProcessingResult
+        from rag.core.base import ProcessingResult
 
         source_path = Path(source)
 
         if not source_path.exists():
             return ProcessingResult(
                 documents=[],
-                errors=[{"error": f"Directory not found: {source}", "source": source}],
-            )
-
-        if not source_path.is_dir():
-            return ProcessingResult(
-                documents=[],
-                errors=[
-                    {"error": f"Path is not a directory: {source}", "source": source}
-                ],
+                errors=[{"error": f"Path not found: {source}", "source": source}],
             )
 
         all_documents = []
         all_errors = []
         files_processed = 0
 
-        # Get file list
-        if self.recursive:
-            file_pattern = "**/*"
-        else:
-            file_pattern = "*"
+        # Handle single file or directory
+        if source_path.is_file():
+            # Single file - process it directly
+            files = [source_path]
+        elif source_path.is_dir():
+            # Directory - get file list
+            if self.recursive:
+                file_pattern = "**/*"
+            else:
+                file_pattern = "*"
 
-        files = list(source_path.glob(file_pattern))
+            files = list(source_path.glob(file_pattern))
+        else:
+            return ProcessingResult(
+                documents=[],
+                errors=[
+                    {
+                        "error": f"Path is neither file nor directory: {source}",
+                        "source": source,
+                    }
+                ],
+            )
 
         # Filter files
         filtered_files = []
@@ -335,7 +396,38 @@ class DirectoryParser:
         """Get the appropriate parser for a file."""
         extension = file_path.suffix.lower()
 
-        # Check explicit parser mapping
+        # NEW: If we have a parsers list, use it directly
+        if hasattr(self.config, "get") and "parsers" in self.config:
+            parsers_list = self.config.get("parsers", [])
+
+            # Try each parser in the list to see if it can handle this file
+            for parser_info in parsers_list:
+                parser_type = parser_info.get("type")
+                parser_config = parser_info.get("config", {})
+
+                # Check if this parser handles this extension
+                # Look for file_extensions in parser config
+                file_extensions = parser_info.get("file_extensions", [])
+                if extension in file_extensions:
+                    try:
+                        return ParserFactory.create_parser(parser_type, parser_config)
+                    except Exception as e:
+                        logger.warning(f"Failed to create parser {parser_type}: {e}")
+                        continue
+
+            # If no specific match, use the first parser as default for text files
+            if parsers_list and extension in [".txt", ".text", ".log"]:
+                parser_info = parsers_list[0]
+                parser_type = parser_info.get("type")
+                parser_config = parser_info.get("config", {})
+                try:
+                    return ParserFactory.create_parser(parser_type, parser_config)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to create default parser {parser_type}: {e}"
+                    )
+
+        # OLD: Check explicit parser mapping
         if extension in self.parser_map:
             parser_name = self.parser_map[extension]
             # Get the config for this specific parser
@@ -358,34 +450,35 @@ class DirectoryParser:
             except Exception as e:
                 logger.warning(f"Failed to create parser {parser_name}: {e}")
 
-        # Try to determine parser by extension
-        extension_to_parser = {
-            ".pdf": "pdf",
-            ".txt": "text",
-            ".text": "text",
-            ".md": "markdown",
-            ".markdown": "markdown",
-            ".csv": "csv_excel",
-            ".xls": "csv_excel",
-            ".xlsx": "csv_excel",
-            ".docx": "docx",
-            ".doc": "docx",
-            ".html": "web",
-            ".htm": "web",
-        }
+        # Try to determine parser by extension using parser_configs keys
+        if self.parser_configs:
+            # Look for a parser that matches the extension
+            for parser_name, parser_config in self.parser_configs.items():
+                # Check if parser name contains the extension type
+                if extension == ".txt" and "Text" in parser_name:
+                    try:
+                        return ParserFactory.create_parser(parser_name, parser_config)
+                    except Exception as e:
+                        logger.warning(f"Failed to create parser {parser_name}: {e}")
+                elif extension == ".pdf" and "PDF" in parser_name:
+                    try:
+                        return ParserFactory.create_parser(parser_name, parser_config)
+                    except Exception as e:
+                        logger.warning(f"Failed to create parser {parser_name}: {e}")
+                elif extension in [".csv", ".tsv"] and "CSV" in parser_name:
+                    try:
+                        return ParserFactory.create_parser(parser_name, parser_config)
+                    except Exception as e:
+                        logger.warning(f"Failed to create parser {parser_name}: {e}")
 
-        if extension in extension_to_parser:
-            parser_name = extension_to_parser[extension]
-            parser_config = self.parser_configs.get(parser_name, {})
-            try:
-                return ParserFactory.create_parser(parser_name, parser_config)
-            except Exception as e:
-                logger.warning(f"Failed to create parser {parser_name}: {e}")
-
-        # Default to text parser
+        # Default to LlamaIndex text parser as fallback
         try:
-            return ParserFactory.create_parser("text", {})
-        except:
+            from .text.llamaindex_parser import TextParser_LlamaIndex
+
+            logger.info("Using LlamaIndex text parser as default fallback")
+            return TextParser_LlamaIndex(name="text", config={})
+        except Exception as e:
+            logger.warning(f"Failed to create LlamaIndex text parser: {e}")
             return None
 
 

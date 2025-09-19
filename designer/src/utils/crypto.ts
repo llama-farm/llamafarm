@@ -92,3 +92,19 @@ function fromBase64(b64: string): ArrayBuffer {
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
   return out.buffer
 }
+
+// Derive a client-side secret for local obfuscation purposes.
+// Prefer an environment-provided value; fallback to a random per-session secret.
+let cachedClientSecret: string | null = null
+export function getClientSideSecret(): string {
+  if (cachedClientSecret) return cachedClientSecret
+  const env = (import.meta as any)?.env?.VITE_LF_ENCRYPTION_SECRET
+  if (typeof env === 'string' && env.trim().length >= 16) {
+    cachedClientSecret = env
+    return cachedClientSecret
+  }
+  // per-session random secret to avoid guessable constants
+  const rand = crypto.getRandomValues(new Uint8Array(24))
+  cachedClientSecret = toBase64(rand)
+  return cachedClientSecret
+}

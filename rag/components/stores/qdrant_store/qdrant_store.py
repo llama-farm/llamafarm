@@ -15,7 +15,7 @@ Status: Implementation in progress
 """
 
 from typing import List, Dict, Any, Optional
-from core.base import VectorStore, Document
+from rag.core.base import VectorStore, Document
 
 
 class QdrantStore(VectorStore):

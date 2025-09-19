@@ -8,40 +8,44 @@ prompts:
     content: "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Customer support strategy for testing"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["question", "answer"]
-            metadata_fields: ["category", "timestamp"]
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "support_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "customer_support_knowledge_base"
+        persist_directory: "./data/vector_store/chroma"
+      embedding_strategies:
+        - name: "default_embedding"
           type: "OllamaEmbedder"
           config:
             model: "mxbai-embed-large"
             base_url: "http://localhost:11434"
             batch_size: 32
             timeout: 60
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "customer_support_knowledge_base"
-            persist_directory: "./data/vector_store/chroma"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "default_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Customer support strategy for testing"
+      parsers:
+        - type: "CSVParser_LlamaIndex"
+          config:
+            content_fields: ["question", "answer"]
+            metadata_fields: ["category", "timestamp"]
+            combine_content: true
+            table_format: "markdown"
+          file_extensions: [".csv"]
+      extractors: []
 
 datasets:
   - name: "sample_dataset"
     files: ["test_file.csv"]
-    rag_strategy: "default"
+    data_processing_strategy: "default"
+    database: "support_db"
 
 runtime:
   provider: "openai"

@@ -152,6 +152,7 @@ function DatasetView() {
   const [isDropped, setIsDropped] = useState(false)
   // Strategy modal search
   const [strategyQuery, setStrategyQuery] = useState('')
+  const [processingMetaTick, setProcessingMetaTick] = useState(0)
 
   // Helpers to validate available strategies for this view
   type RagStrategyType = import('../Rag/strategies').RagStrategy
@@ -447,57 +448,149 @@ function DatasetView() {
     )
   }
 
-  // Derived RAG strategy info for this dataset
-  const [strategyName, setStrategyName] = useState<string>('PDF Simple')
+  // Processing strategy selection (id + name)
+  const [strategyId, setStrategyId] = useState<string>('processing-universal')
+  const [strategyName, setStrategyName] = useState<string>(
+    'Universal document processor'
+  )
+
+  const getAllStrategies = (): import('../Rag/strategies').RagStrategy[] => {
+    return [...defaultStrategies, ...getCustomStrategies()]
+  }
+
+  const getStrategyNameForId = (id: string): string => {
+    try {
+      const override = localStorage.getItem(`lf_strategy_name_override_${id}`)
+      if (override && override.trim().length > 0) return override
+    } catch {}
+    const found = getAllStrategies().find(s => s.id === id)
+    return found?.name || id
+  }
+
   useEffect(() => {
     if (!datasetId) return
     try {
-      const stored = localStorage.getItem(
+      const storedId = localStorage.getItem(
+        `lf_dataset_strategy_id_${datasetId}`
+      )
+      if (storedId && typeof storedId === 'string') {
+        setStrategyId(storedId)
+        setStrategyName(getStrategyNameForId(storedId))
+        return
+      }
+      // Fallback: old storage only had name, attempt to map → id
+      const storedName = localStorage.getItem(
         `lf_dataset_strategy_name_${datasetId}`
       )
-      const availableNames = [
-        ...defaultStrategies,
-        ...getCustomStrategies(),
-      ].map(s => s.name)
-      if (typeof stored === 'string' && availableNames.includes(stored)) {
-        setStrategyName(stored)
-      } else {
-        setStrategyName('PDF Simple')
+      if (storedName && typeof storedName === 'string') {
+        const match = getAllStrategies().find(s => s.name === storedName)
+        if (match) {
+          setStrategyId(match.id)
+          setStrategyName(match.name)
+          try {
+            localStorage.setItem(
+              `lf_dataset_strategy_id_${datasetId}`,
+              match.id
+            )
+          } catch {}
+          return
+        }
       }
+      // Default
+      setStrategyId('processing-universal')
+      setStrategyName(getStrategyNameForId('processing-universal'))
     } catch {
-      setStrategyName('PDF Simple')
+      setStrategyId('processing-universal')
+      setStrategyName(getStrategyNameForId('processing-universal'))
     }
   }, [datasetId])
 
-  const slugify = (v: string) =>
-    v
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-
-  const strategyId = useMemo(() => slugify(strategyName), [strategyName])
-
-  const docType = useMemo(() => {
-    const id = strategyId
-    if (id.includes('pdf')) return 'PDFs'
-    if (id.includes('csv')) return 'CSVs'
-    if (id.includes('chat')) return 'Conversations'
-    if (id.includes('json')) return 'JSON'
-    return 'Documents'
-  }, [strategyId])
-
-  const embeddingModel = useMemo(() => {
-    try {
-      return (
-        localStorage.getItem(`lf_strategy_embedding_model_${strategyId}`) ||
-        'text-embedding-3-large'
+  // Listen for processing updates from strategy page to refresh summaries
+  useEffect(() => {
+    const onProcessingUpdate = () => setProcessingMetaTick(t => t + 1)
+    window.addEventListener(
+      'lf:processingUpdated',
+      onProcessingUpdate as EventListener
+    )
+    return () =>
+      window.removeEventListener(
+        'lf:processingUpdated',
+        onProcessingUpdate as EventListener
       )
+  }, [])
+
+  // Load parsers/extractors summary for selected strategy
+  type ParserRowLite = {
+    id?: string
+    name?: string
+    priority?: number
+    include?: string
+    summary?: string
+  }
+  type ExtractorRowLite = {
+    id?: string
+    name?: string
+    priority?: number
+    applyTo?: string
+    summary?: string
+  }
+
+  const loadParsers = (sid: string): ParserRowLite[] => {
+    try {
+      const raw = localStorage.getItem(`lf_strategy_parsers_${sid}`)
+      if (!raw) return []
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr : []
     } catch {
-      return 'text-embedding-3-large'
+      return []
     }
-  }, [strategyId])
+  }
+  const loadExtractors = (sid: string): ExtractorRowLite[] => {
+    try {
+      const raw = localStorage.getItem(`lf_strategy_extractors_${sid}`)
+      if (!raw) return []
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr : []
+    } catch {
+      return []
+    }
+  }
+
+  const parsersSummary = useMemo(() => {
+    const rows = loadParsers(strategyId)
+    if (!rows || rows.length === 0)
+      return 'Using default parsers (not customized)'
+    const sorted = [...rows].sort(
+      (a, b) => (b.priority || 0) - (a.priority || 0)
+    )
+    const top = sorted
+      .slice(0, 2)
+      .map(
+        r =>
+          `${r.name || 'Parser'}${typeof r.priority === 'number' ? ` (${r.priority})` : ''}`
+      )
+    const more = sorted.length > 2 ? `, +${sorted.length - 2} more` : ''
+    return `${sorted.length} configured: ${top.join(', ')}${more}`
+  }, [strategyId, processingMetaTick])
+
+  const extractorsSummary = useMemo(() => {
+    const rows = loadExtractors(strategyId)
+    if (!rows || rows.length === 0)
+      return 'Using default extractors (not customized)'
+    const sorted = [...rows].sort(
+      (a, b) => (b.priority || 0) - (a.priority || 0)
+    )
+    const top = sorted
+      .slice(0, 2)
+      .map(
+        r =>
+          `${r.name || 'Extractor'}${typeof r.priority === 'number' ? ` (${r.priority})` : ''}`
+      )
+    const more = sorted.length > 2 ? `, +${sorted.length - 2} more` : ''
+    return `${sorted.length} configured: ${top.join(', ')}${more}`
+  }, [strategyId, processingMetaTick])
+
+  // Removed unused derived values
 
   return (
     <div
@@ -592,10 +685,10 @@ function DatasetView() {
         </div>
       </div>
 
-      {/* RAG Strategy card */}
+      {/* Processing Strategy card */}
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">RAG strategy</h3>
+          <h3 className="text-sm font-medium">Processing strategy</h3>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -610,12 +703,12 @@ function DatasetView() {
               </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Choose a RAG strategy</DialogTitle>
+                  <DialogTitle>Choose a processing strategy</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-3">
                   <div className="w-full">
                     <SearchInput
-                      placeholder="Search strategies"
+                      placeholder="Search processing strategies"
                       value={strategyQuery}
                       onChange={e => setStrategyQuery(e.target.value)}
                     />
@@ -632,49 +725,56 @@ function DatasetView() {
                         .map(s => (
                           <li
                             key={s.id}
-                            className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
+                            className="px-3 py-3 border-b last:border-b-0 border-border/60 hover:bg-muted/30 transition-colors"
                           >
-                            <div className="flex items-center gap-2">
-                              <Badge
-                                variant="default"
-                                size="sm"
-                                className="rounded-xl"
-                              >
-                                {s.name}
-                              </Badge>
-                              <div className="text-xs text-muted-foreground">
-                                {s.description}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Badge
+                                  variant="default"
+                                  size="sm"
+                                  className="rounded-xl shrink-0"
+                                >
+                                  {s.name}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => navigate(`/chat/rag/${s.id}`)}
+                                >
+                                  Configure
+                                </Button>
+                                <DialogClose asChild>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!datasetId) return
+                                      try {
+                                        localStorage.setItem(
+                                          `lf_dataset_strategy_id_${datasetId}`,
+                                          s.id
+                                        )
+                                        localStorage.setItem(
+                                          `lf_dataset_strategy_name_${datasetId}`,
+                                          s.name
+                                        )
+                                      } catch {}
+                                      setStrategyId(s.id)
+                                      setStrategyName(s.name)
+                                      toast({
+                                        message: `Processing strategy set to ${s.name}`,
+                                        variant: 'default',
+                                      })
+                                    }}
+                                  >
+                                    Use
+                                  </Button>
+                                </DialogClose>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => navigate(`/chat/rag/${s.id}`)}
-                              >
-                                Configure
-                              </Button>
-                              <DialogClose asChild>
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    if (!datasetId) return
-                                    try {
-                                      localStorage.setItem(
-                                        `lf_dataset_strategy_name_${datasetId}`,
-                                        s.name
-                                      )
-                                    } catch {}
-                                    setStrategyName(s.name)
-                                    toast({
-                                      message: `RAG strategy set to ${s.name}`,
-                                      variant: 'default',
-                                    })
-                                  }}
-                                >
-                                  Use
-                                </Button>
-                              </DialogClose>
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              {s.description}
                             </div>
                           </li>
                         ))}
@@ -686,7 +786,7 @@ function DatasetView() {
                       size="sm"
                       onClick={() => navigate('/chat/rag')}
                     >
-                      Manage or add strategies
+                      Manage or add processing strategies
                     </Button>
                   </div>
                 </div>
@@ -705,34 +805,18 @@ function DatasetView() {
               : '—'}
           </Badge>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Document type</div>
-            <Input value={docType} readOnly className="bg-background" />
+            <div className="text-xs text-muted-foreground">Parsers</div>
+            <Input value={parsersSummary} readOnly className="bg-background" />
           </div>
           <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Search</div>
-            <Input value="Hybrid" readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Embedding model</div>
-            <Input value={embeddingModel} readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Chunks</div>
+            <div className="text-xs text-muted-foreground">Extractors</div>
             <Input
-              value={dataset?.numChunks?.toLocaleString?.() || '—'}
+              value={extractorsSummary}
               readOnly
               className="bg-background"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Results</div>
-            <Input value="8" readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Avg query time</div>
-            <Input value="180ms" readOnly className="bg-background" />
           </div>
         </div>
       </section>

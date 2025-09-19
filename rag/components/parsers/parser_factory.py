@@ -111,6 +111,23 @@ class ToolAwareParserFactory:
             logger.error(f"Parser {parser_name} not found")
             return None
         
+        # Check dependencies BEFORE trying to load
+        deps = info.get('dependencies', {})
+        required_deps = deps.get('required', [])
+        missing_deps = []
+        
+        for dep in required_deps:
+            try:
+                # Try to import the dependency
+                __import__(dep.replace('-', '_'))
+            except ImportError:
+                missing_deps.append(dep)
+        
+        if missing_deps:
+            logger.warning(f"Parser {parser_name} missing dependencies: {missing_deps}")
+            # Return None to trigger fallback
+            return None
+        
         parser_type = info['parser_type']
         
         # Try to find the implementation file
@@ -201,16 +218,18 @@ class ToolAwareParserFactory:
                 else:
                     logger.warning(f"No {file_type} parser found for tool {tool}, using default")
             
-            # Use the first available parser
-            if available_parsers:
-                selected = available_parsers[0]
+            # Try each available parser until one loads successfully
+            for selected in available_parsers:
                 parser_class = cls.load_parser_class(selected['name'])
                 if parser_class:
                     # Merge default config with provided config
                     final_config = selected.get('default_config', {}).copy()
                     if config:
                         final_config.update(config)
+                    logger.info(f"Using parser {selected['name']} for {file_type}")
                     return parser_class(name=selected['name'], config=final_config)
+                else:
+                    logger.warning(f"Could not load parser {selected['name']}, trying next...")
         
         raise ValueError("Unable to create parser: specify parser_name or file_type")
     

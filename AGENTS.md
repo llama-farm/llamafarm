@@ -51,7 +51,7 @@ This is a monorepo containing several interconnected projects:
 - Do not commit secrets. Use `.env` locally and update `.env.example` with examples for new keys.
 - Prefer provider keys via environment variables; validate with `uv run` commands before opening PRs.
 
-## Further guidance
+## Further instructions and guidance
 Use the files in the following locations as additional rules and background information when operating on this project.
 - .agents/**
 - thoughts/**

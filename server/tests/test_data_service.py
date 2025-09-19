@@ -66,31 +66,55 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
                     {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
-                            "extractors": [],
-                            "embedder": {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
                                 "type": "OllamaEmbedder",
                                 "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
                                 "type": "BasicSimilarityStrategy",
                                 "config": {},
-                            },
-                        },
+                                "default": True,
+                            }
+                        ],
                     }
-                ]
+                ],
+                "data_processing_strategies": [
+                    {
+                        "name": "default_processing",
+                        "description": "Default data processing strategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_LlamaIndex",
+                                "config": {},
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
+                    }
+                ],
             },
             datasets=[
                 Dataset(
-                    name="dataset1", rag_strategy="auto", files=[self.test_file_hash]
+                    name="dataset1",
+                    data_processing_strategy="default_processing",
+                    database="default_db",
+                    files=[self.test_file_hash],
                 ),
-                Dataset(name="dataset2", rag_strategy="auto", files=["other_hash"]),
+                Dataset(
+                    name="dataset2",
+                    data_processing_strategy="default_processing",
+                    database="default_db",
+                    files=["other_hash"],
+                ),
             ],
             runtime=Runtime(
                 provider=Provider.openai,
@@ -300,30 +324,47 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
+                    {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
+                                "type": "OllamaEmbedder",
+                                "config": {"model": "nomic-embed-text"},
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
+                    }
+                ],
+                "data_processing_strategies": [
                     {
                         "name": "default",
                         "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
-                            },
-                        },
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
                     }
-                ]
+                ],
             },
             datasets=[
                 Dataset(
                     name="target_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=[self.test_file_hash],
                 )
             ],
@@ -378,35 +419,53 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
+                    {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
+                                "type": "OllamaEmbedder",
+                                "config": {"model": "nomic-embed-text"},
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
+                    }
+                ],
+                "data_processing_strategies": [
                     {
                         "name": "default",
                         "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
-                            },
-                        },
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
                     }
-                ]
+                ],
             },
             datasets=[
                 Dataset(
                     name="target_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=[self.test_file_hash],
                 ),
                 Dataset(
                     name="other_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=["other_hash", self.test_file_hash],
                 ),
             ],
@@ -454,30 +513,47 @@ class TestDataService:
                 )
             ],
             rag={
-                "strategies": [
+                "databases": [
+                    {
+                        "name": "default_db",
+                        "type": "ChromaStore",
+                        "config": {},
+                        "embedding_strategies": [
+                            {
+                                "name": "default_embedding",
+                                "type": "OllamaEmbedder",
+                                "config": {"model": "nomic-embed-text"},
+                            }
+                        ],
+                        "retrieval_strategies": [
+                            {
+                                "name": "default_retrieval",
+                                "type": "BasicSimilarityStrategy",
+                                "config": {},
+                                "default": True,
+                            }
+                        ],
+                    }
+                ],
+                "data_processing_strategies": [
                     {
                         "name": "default",
                         "description": "Default strategy configuration",
-                        "components": {
-                            "parser": {"type": "CSVParser_LlamaIndex", "config": {}},
-                            "extractors": [],
-                            "embedder": {
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            },
-                            "vector_store": {"type": "ChromaStore", "config": {}},
-                            "retrieval_strategy": {
-                                "type": "BasicSimilarityStrategy",
+                        "parsers": [
+                            {
+                                "type": "CSVParser_LlamaIndex",
                                 "config": {},
-                            },
-                        },
+                                "file_extensions": [".pdf"],
+                            }
+                        ],
                     }
-                ]
+                ],
             },
             datasets=[
                 Dataset(
                     name="target_dataset",
-                    rag_strategy="auto",
+                    data_processing_strategy="default",
+                    database="default_db",
                     files=[self.test_file_hash],
                 )
             ],

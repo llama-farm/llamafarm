@@ -27,6 +27,11 @@ class ChatRequest(BaseModel):
     frequency_penalty: float | None = None
     presence_penalty: float | None = None
     logit_bias: dict[str, float] = Field(default_factory=dict)
+    # RAG parameters (None means use config defaults)
+    rag_enabled: bool | None = None
+    database: str | None = None
+    rag_top_k: int | None = None
+    rag_score_threshold: float | None = None
 
 
 class ChatChoice(BaseModel):

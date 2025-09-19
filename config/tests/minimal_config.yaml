@@ -4,35 +4,38 @@ name: minimal_config
 namespace: test
 
 rag:
-  strategies:
-    - name: "default"
-      description: "Minimal strategy for testing"
-      components:
-        parser:
-          type: "CSVParser_LlamaIndex"
-          config:
-            content_fields: ["question"]
-            metadata_fields: []
-            combine_content: true
-            table_format: "markdown"
-        extractors: []
-        embedder:
+  databases:
+    - name: "minimal_db"
+      type: "ChromaStore"
+      config:
+        collection_name: "minimal_collection"
+        persist_directory: "./data/minimal"
+      embedding_strategies:
+        - name: "minimal_embedding"
           type: "OllamaEmbedder"
           config:
             model: "nomic-embed-text"
             base_url: "http://localhost:11434"
             batch_size: 16
             timeout: 30
-            auto_pull: true
-        vector_store:
-          type: "ChromaStore"
-          config:
-            collection_name: "minimal_collection"
-            persist_directory: "./data/minimal"
-        retrieval_strategy:
+      retrieval_strategies:
+        - name: "minimal_retrieval"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
+          default: true
+  data_processing_strategies:
+    - name: "default"
+      description: "Minimal strategy for testing"
+      parsers:
+        - type: "CSVParser_Pandas"
+          config:
+            content_fields: ["question"]
+            metadata_fields: ["category"]
+            id_field: "id"
+            combine_content: true
+          file_extensions: [".csv"]
+      extractors: []
 
 models:
   - provider: "local"
@@ -41,7 +44,8 @@ models:
 datasets:
   - name: "minimal_dataset"
     files: ["test_file.csv"]
-    rag_strategy: "default"
+    data_processing_strategy: "default"
+    database: "minimal_db"
 
 prompts:
   - role: "system"

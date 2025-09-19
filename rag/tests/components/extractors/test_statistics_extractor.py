@@ -7,8 +7,8 @@ import sys
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
-from components.extractors.statistics_extractor.statistics_extractor import ContentStatisticsExtractor
+from rag.core.base import Document
+from rag.components.extractors.statistics_extractor.statistics_extractor import ContentStatisticsExtractor
 
 
 class TestContentStatisticsExtractor:

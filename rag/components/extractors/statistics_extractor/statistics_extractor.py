@@ -7,8 +7,8 @@ from collections import Counter
 from typing import Dict, Any, List, Optional
 import logging
 
-from components.extractors.base import BaseExtractor
-from core.base import Document
+from rag.components.extractors.base import BaseExtractor
+from rag.core.base import Document
 
 logger = logging.getLogger(__name__)
 

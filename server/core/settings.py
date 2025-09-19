@@ -18,6 +18,8 @@ class Settings(BaseSettings, env_file=".env"):
     LOG_NAME: str = "server"
     LOG_ACCESS_NAME: str = "server.access"
 
+    CELERY_LOG_LEVEL: str = "INFO"
+
     lf_data_dir: str = default_data_dir
     lf_config_template: str = "default"
 

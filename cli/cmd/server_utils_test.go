@@ -82,7 +82,7 @@ func TestCheckServerHealth_SuccessAndFailure(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	if err := checkServerHealth(ts.URL); err != nil {
+	if _, err := checkServerHealth(ts.URL); err != nil {
 		t.Fatalf("expected nil from checkServerHealth on healthy, got %v", err)
 	}
 
@@ -95,7 +95,7 @@ func TestCheckServerHealth_SuccessAndFailure(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer ts2.Close()
-	if err := checkServerHealth(ts2.URL); err == nil {
+	if _, err := checkServerHealth(ts2.URL); err == nil {
 		t.Fatalf("expected error from checkServerHealth on unhealthy status, got nil")
 	}
 }
@@ -113,7 +113,7 @@ func TestEnsureServerAvailable_LocalhostUp(t *testing.T) {
 	defer ts.Close()
 
 	// ensureServerAvailable should return without error for a healthy localhost server
-	ensureServerAvailable(ts.URL)
+	ensureServerAvailable(ts.URL, true)
 }
 
 // dummy HTTP client used to test VerboseHTTPClient behavior

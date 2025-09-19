@@ -238,6 +238,17 @@ function Header() {
               </button>
               <button
                 className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                  isSelected === 'prompt'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => navigate('/chat/prompt')}
+              >
+                <FontIcon type="prompt" className="w-6 h-6" />
+                <span>Prompts</span>
+              </button>
+              <button
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
                   isSelected === 'data'
                     ? 'bg-primary text-primary-foreground'
                     : 'text-foreground hover:bg-secondary/80'
@@ -246,17 +257,6 @@ function Header() {
               >
                 <FontIcon type="data" className="w-6 h-6" />
                 <span>Data</span>
-              </button>
-              <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'models'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => navigate('/chat/models')}
-              >
-                <FontIcon type="model" className="w-6 h-6" />
-                <span>Models</span>
               </button>
               <button
                 className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
@@ -271,14 +271,14 @@ function Header() {
               </button>
               <button
                 className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'prompt'
+                  isSelected === 'models'
                     ? 'bg-primary text-primary-foreground'
                     : 'text-foreground hover:bg-secondary/80'
                 }`}
-                onClick={() => navigate('/chat/prompt')}
+                onClick={() => navigate('/chat/models')}
               >
-                <FontIcon type="prompt" className="w-6 h-6" />
-                <span>Prompt</span>
+                <FontIcon type="model" className="w-6 h-6" />
+                <span>Models</span>
               </button>
               <button
                 className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${

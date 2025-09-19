@@ -1,8 +1,8 @@
 """Hybrid universal strategy - combines multiple strategies with configurable weights."""
 
 from typing import List, Dict, Any
-from components.retrievers.base import RetrievalStrategy, RetrievalResult, HybridRetrievalStrategy
-from core.base import Document
+from rag.components.retrievers.base import RetrievalStrategy, RetrievalResult, HybridRetrievalStrategy
+from rag.core.base import Document
 
 
 class HybridUniversalStrategy(HybridRetrievalStrategy):
@@ -47,10 +47,10 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
             strategies_config: List of strategy configurations with types and weights
         """
         # Import strategies dynamically to avoid circular imports
-        from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
-        from components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
-        from components.retrievers.multi_query.multi_query import MultiQueryStrategy
-        from components.retrievers.reranked.reranked import RerankedStrategy
+        from rag.components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
+        from rag.components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
+        from rag.components.retrievers.multi_query.multi_query import MultiQueryStrategy
+        from rag.components.retrievers.reranked.reranked import RerankedStrategy
         
         # Map strategy types to classes
         strategy_classes = {
@@ -97,7 +97,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
         """
         if not self.strategies:
             # Fallback to basic strategy if no strategies configured
-            from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
+            from rag.components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
             basic_strategy = BasicSimilarityStrategy()
             return basic_strategy.retrieve(query_embedding, vector_store, top_k, **kwargs)
         

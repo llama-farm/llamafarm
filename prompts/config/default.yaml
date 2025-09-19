@@ -527,7 +527,8 @@ integrations:
     # Vector store configuration
     vector_store:
       type: "chromadb"
-      collection: "documents"
+      collection: "documents"  # Or pdf_documents, test_documents based on database
+      persist_directory: "./data/chroma_db"  # Adjusts based on database name
       # connection:
       #   host: "localhost"
       #   port: 8000
@@ -535,9 +536,14 @@ integrations:
     # Retrieval settings
     retrieval:
       top_k: 5
-      # score_threshold: 0.7
+      score_threshold: 0.0  # Default threshold, can be adjusted
       # rerank: true
       # rerank_model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    
+    # Available databases (configured in llamafarm.yaml)
+    # - main_database: Primary document storage
+    # - test_rag_db: Testing and development
+    # - pdf_test_db: PDF-specific storage
   
   # LangGraph Integration
   # langgraph:

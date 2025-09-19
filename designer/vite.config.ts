@@ -12,7 +12,7 @@ export default defineConfig({
       open: true,
       gzipSize: true,
       brotliSize: true,
-    })
+    }),
   ],
   resolve: {
     alias: {
@@ -24,10 +24,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           // CodeMirror core packages (loaded together as they're tightly coupled)
-          'codemirror-core': [
-            '@codemirror/state',
-            '@codemirror/view'
-          ],
+          'codemirror-core': ['@codemirror/state', '@codemirror/view'],
           // CodeMirror language and features (loaded on-demand)
           'codemirror-features': [
             '@codemirror/language',
@@ -35,33 +32,26 @@ export default defineConfig({
             '@codemirror/lang-json',
             '@codemirror/search',
             '@codemirror/theme-one-dark',
-            '@lezer/highlight'
+            '@lezer/highlight',
           ],
           // React vendor libraries
-          'react-vendor': [
-            'react',
-            'react-dom',
-            'react-router-dom'
-          ],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           // UI vendor libraries
           'ui-vendor': [
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-label',
-            '@radix-ui/react-slot'
+            '@radix-ui/react-slot',
           ],
           // Data fetching and utilities
-          'utils-vendor': [
-            '@tanstack/react-query',
-            'axios'
-          ]
-        }
-      }
+          'utils-vendor': ['@tanstack/react-query', 'axios'],
+        },
+      },
     },
     // Increase chunk size warning limit since we're intentionally chunking
     chunkSizeWarningLimit: 600,
     // Enable source maps for better debugging
-    sourcemap: true
+    sourcemap: true,
   },
   server: {
     proxy: {
@@ -72,17 +62,19 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         // Rewrite path to remove /api prefix
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: path => path.replace(/^\/api/, ''),
         // Preserve headers and cookies
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
             // Log proxy requests for debugging
             const originalUrl = req.url
             const rewrittenUrl = originalUrl?.replace(/^\/api/, '') || ''
-            console.log(`[PROXY] ${req.method} ${originalUrl} -> ${options.target}${rewrittenUrl}`)
+            console.log(
+              `[PROXY] ${req.method} ${originalUrl} -> ${options.target}${rewrittenUrl}`
+            )
           })
-        }
-      }
-    }
-  }
+        },
+      },
+    },
+  },
 })
