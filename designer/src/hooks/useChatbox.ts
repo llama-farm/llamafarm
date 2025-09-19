@@ -161,7 +161,6 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
           const abortController = new AbortController()
           streamingAbortControllerRef.current = abortController
           
-          // Set a timeout for streaming requests (45 seconds - increased for slow models)
           timeoutId = setTimeout(() => {
             console.log('Streaming request timed out after 1 minute')
             abortController.abort()
