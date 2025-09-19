@@ -26,11 +26,21 @@ repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 
+from .config_utils import sanitize_config_for_client
+
 
 class Project(BaseModel):
     namespace: str
     name: str
-    config: LlamaFarmConfig
+    config: Dict[str, Any]
+
+    @classmethod
+    def from_project_service(cls, namespace: str, name: str, config: LlamaFarmConfig):
+        return cls(
+            namespace=namespace,
+            name=name,
+            config=sanitize_config_for_client(config)
+        )
 
 
 class ListProjectsResponse(BaseModel):
@@ -84,11 +94,7 @@ async def list_projects(namespace: str):
     return ListProjectsResponse(
         total=len(projects),
         projects=[
-            Project(
-                namespace=namespace,
-                name=project.name,
-                config=project.config,
-            )
+            Project.from_project_service(namespace, project.name, project.config)
             for project in projects
         ],
     )
@@ -108,11 +114,7 @@ async def create_project(namespace: str, request: CreateProjectRequest):
         namespace, request.name, request.config_template
     )
     return CreateProjectResponse(
-        project=Project(
-            namespace=namespace,
-            name=request.name,
-            config=cfg,
-        ),
+        project=Project.from_project_service(namespace, request.name, cfg),
     )
 
 
@@ -128,11 +130,7 @@ async def create_project(namespace: str, request: CreateProjectRequest):
 async def get_project(namespace: str, project_id: str):
     project = ProjectService.get_project(namespace, project_id)
     return GetProjectResponse(
-        project=Project(
-            namespace=project.namespace,
-            name=project.name,
-            config=project.config,
-        ),
+        project=Project.from_project_service(project.namespace, project.name, project.config),
     )
 
 
@@ -156,11 +154,7 @@ async def update_project(
         request.config,
     )
     return UpdateProjectResponse(
-        project=Project(
-            namespace=namespace,
-            name=project_id,
-            config=updated_config,
-        )
+        project=Project.from_project_service(namespace, project_id, updated_config),
     )
 
 
@@ -175,11 +169,8 @@ async def update_project(
 )
 async def delete_project(namespace: str, project_id: str):
     # TODO: Implement actual delete in ProjectService; placeholder response for now
-    project = Project(
-        namespace=namespace,
-        name=project_id,
-        config=ProjectService.load_config(namespace, project_id),
-    )
+    config = ProjectService.load_config(namespace, project_id)
+    project = Project.from_project_service(namespace, project_id, config)
     return DeleteProjectResponse(
         project=project,
     )
@@ -277,18 +268,18 @@ async def rag_query(
     # Get project configuration
     project_service = ProjectService()
     project_dir = project_service.get_project_dir(namespace, project_id)
-    
+
     if not Path(project_dir).exists():
         raise HTTPException(status_code=404, detail=f"Project {namespace}/{project_id} not found")
-    
+
     project_config = ProjectService.load_config(namespace, project_id)
-    
+
     if not project_config:
         raise HTTPException(status_code=500, detail="Failed to load project configuration")
-    
+
     # Handle the RAG query
     response = await handle_rag_query(request, project_config, str(project_dir))
-    
+
     return response
 
 
