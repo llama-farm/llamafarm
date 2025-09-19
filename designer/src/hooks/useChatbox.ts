@@ -34,6 +34,8 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
   // Refs for streaming and debounced save
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const streamingAbortControllerRef = useRef<AbortController | null>(null)
+  const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isMountedRef = useRef(true)
 
   // API hooks
   const queryClient = useQueryClient()
@@ -84,14 +86,54 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
   // Cleanup timeout and abort streaming on unmount
   useEffect(() => {
     return () => {
+      isMountedRef.current = false
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
+      }
+      if (fallbackTimeoutRef.current) {
+        clearTimeout(fallbackTimeoutRef.current)
       }
       if (streamingAbortControllerRef.current) {
         streamingAbortControllerRef.current.abort()
       }
     }
   }, [])
+
+  // Helper function to execute fallback non-streaming request
+  const executeFallbackRequest = useCallback(async (
+    messageContent: string,
+    currentSessionId: string,
+    onSuccess: (response: any) => void,
+    onError: (error: Error) => void
+  ) => {
+    // Check if component is still mounted before proceeding
+    if (!isMountedRef.current) {
+      return
+    }
+
+    try {
+      const chatRequest = createChatRequest(messageContent)
+      const response = await chatMutation.mutateAsync({
+        chatRequest,
+        sessionId: currentSessionId,
+      })
+      
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) {
+        return
+      }
+      
+      onSuccess(response)
+    } catch (fallbackError) {
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) {
+        return
+      }
+      
+      console.error('Fallback request also failed:', fallbackError)
+      onError(fallbackError instanceof Error ? fallbackError : new Error('Unknown fallback error'))
+    }
+  }, [chatMutation])
 
   // Add message to state
   const addMessage = useCallback((message: Omit<ChatboxMessage, 'id'>) => {
@@ -197,52 +239,66 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
                 // Remove streaming message
                 setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
 
-                // For abort errors or network issues, try fallback to non-streaming
-                if (error instanceof NetworkError && 
-                    (error.message.includes('cancelled') || error.message.includes('aborted'))) {
-                  // Silently fall back to non-streaming mode
-                  setTimeout(async () => {
-                    try {
-                      const chatRequest = createChatRequest(messageContent)
-                      const response = await chatMutation.mutateAsync({
-                        chatRequest,
-                        sessionId,
-                      })
-                      
-                      // Add the response as a new message
-                      if (response.data.choices && response.data.choices.length > 0) {
-                        const assistantResponse = response.data.choices[0].message.content
+                // Only attempt fallback for network errors that are NOT user-initiated cancellations
+                // User cancellations (AbortError) should not trigger fallback
+                const isUserCancellation = error instanceof Error && error.name === 'AbortError'
+                const isNetworkError = error instanceof NetworkError && 
+                    (error.message.includes('cancelled') || error.message.includes('aborted'))
+                
+                if (isNetworkError && !isUserCancellation) {
+                  // Clear any existing fallback timeout
+                  if (fallbackTimeoutRef.current) {
+                    clearTimeout(fallbackTimeoutRef.current)
+                  }
+                  
+                  // Set up tracked fallback timeout
+                  fallbackTimeoutRef.current = setTimeout(() => {
+                    fallbackTimeoutRef.current = null
+                    
+                    executeFallbackRequest(
+                      messageContent,
+                      sessionId,
+                      (response) => {
+                        // Add the response as a new message
+                        if (response.data.choices && response.data.choices.length > 0) {
+                          const assistantResponse = response.data.choices[0].message.content
+                          addMessage({
+                            type: 'assistant',
+                            content: assistantResponse,
+                            timestamp: new Date(),
+                          })
+                        } else {
+                          addMessage({
+                            type: 'assistant',
+                            content: "Sorry, I didn't receive a proper response.",
+                            timestamp: new Date(),
+                          })
+                        }
+                      },
+                      (fallbackError) => {
+                        const errorMessage = fallbackError instanceof Error 
+                          ? fallbackError.message 
+                          : 'Failed to get response'
+                        setError(errorMessage)
                         addMessage({
-                          type: 'assistant',
-                          content: assistantResponse,
-                          timestamp: new Date(),
-                        })
-                      } else {
-                        addMessage({
-                          type: 'assistant',
-                          content: "Sorry, I didn't receive a proper response.",
+                          type: 'error',
+                          content: `Error: ${errorMessage}`,
                           timestamp: new Date(),
                         })
                       }
-                    } catch (fallbackError) {
-                      console.error('Fallback request also failed:', fallbackError)
-                      const errorMessage = fallbackError instanceof Error 
-                        ? fallbackError.message 
-                        : 'Failed to get response'
-                      setError(errorMessage)
-                      addMessage({
-                        type: 'error',
-                        content: `Error: ${errorMessage}`,
-                        timestamp: new Date(),
-                      })
-                    }
+                    )
                   }, 100)
                 } else {
-                  // For other errors, show error message
-                  const errorMessage = error instanceof NetworkError 
-                    ? error.message 
-                    : 'Streaming connection failed'
-                  setError(errorMessage)
+                  // For user cancellations or other errors, show error message
+                  const errorMessage = isUserCancellation 
+                    ? 'Request was cancelled'
+                    : (error instanceof NetworkError 
+                        ? error.message 
+                        : 'Streaming connection failed')
+                  
+                  if (!isUserCancellation) {
+                    setError(errorMessage)
+                  }
 
                   addMessage({
                     type: 'error',
@@ -260,38 +316,44 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
                   // Remove the streaming message and try non-streaming
                   setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
                   
-                  // Retry with non-streaming
-                  setTimeout(async () => {
-                    try {
-                      const chatRequest = createChatRequest(messageContent)
-                      const response = await chatMutation.mutateAsync({
-                        chatRequest,
-                        sessionId,
-                      })
-                      
-                      // Add the response as a new message
-                      if (response.data.choices && response.data.choices.length > 0) {
-                        const assistantResponse = response.data.choices[0].message.content
+                  // Clear any existing fallback timeout
+                  if (fallbackTimeoutRef.current) {
+                    clearTimeout(fallbackTimeoutRef.current)
+                  }
+                  
+                  // Set up tracked fallback timeout
+                  fallbackTimeoutRef.current = setTimeout(() => {
+                    fallbackTimeoutRef.current = null
+                    
+                    executeFallbackRequest(
+                      messageContent,
+                      sessionId,
+                      (response) => {
+                        // Add the response as a new message
+                        if (response.data.choices && response.data.choices.length > 0) {
+                          const assistantResponse = response.data.choices[0].message.content
+                          addMessage({
+                            type: 'assistant',
+                            content: assistantResponse,
+                            timestamp: new Date(),
+                          })
+                        } else {
+                          addMessage({
+                            type: 'assistant',
+                            content: "Sorry, I didn't receive a proper response.",
+                            timestamp: new Date(),
+                          })
+                        }
+                      },
+                      (fallbackError) => {
+                        console.error('Fallback request also failed:', fallbackError)
                         addMessage({
-                          type: 'assistant',
-                          content: assistantResponse,
-                          timestamp: new Date(),
-                        })
-                      } else {
-                        addMessage({
-                          type: 'assistant',
-                          content: "Sorry, I didn't receive a proper response.",
+                          type: 'error',
+                          content: 'Error: Failed to get response',
                           timestamp: new Date(),
                         })
                       }
-                    } catch (fallbackError) {
-                      console.error('Fallback request also failed:', fallbackError)
-                      addMessage({
-                        type: 'error',
-                        content: 'Error: Failed to get response',
-                        timestamp: new Date(),
-                      })
-                    }
+                    )
                   }, 100)
                   
                   return
@@ -318,6 +380,8 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
             }
           }
 
+          // For streaming, we return true immediately as the request is initiated
+          // The actual success/failure will be handled by the streaming callbacks
           return true
 
         } else {
@@ -392,7 +456,8 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
       updateMessage, 
       streamingEnabled, 
       isStreaming,
-      hasInitialSync
+      hasInitialSync,
+      executeFallbackRequest
     ]
   )
 
