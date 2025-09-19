@@ -24,6 +24,7 @@ docker-compose down
 ```
 
 Services will be available at:
+
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 
@@ -38,6 +39,7 @@ docker-compose -f docker-compose.dev.yml up server
 ```
 
 Development services:
+
 - Frontend: http://localhost:5173 (Vite dev server)
 - Backend API: http://localhost:8000 (with auto-reload)
 
@@ -50,7 +52,7 @@ You can customize the deployment by creating a `.env` file:
 VITE_APP_API_URL=http://localhost:8000
 VITE_APP_ENV=production
 
-# Backend environment variables  
+# Backend environment variables
 PYTHONUNBUFFERED=1
 ```
 
