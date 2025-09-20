@@ -2,10 +2,10 @@
 
 import logging
 from typing import Dict, Any, Type
-from rag.core.base import Parser, Embedder, VectorStore
+from core.base import Parser, Embedder, VectorStore
 
 # Import parsers using the new modular system
-from rag.components.parsers import (
+from components.parsers import (
     ParserFactory as NewParserFactory,
     DirectoryParser,
     LlamaIndexTextParser,
@@ -29,18 +29,18 @@ CustomerSupportCSVParser = LlamaIndexCSVExcelParser
 PDF_AVAILABLE = True  # Always available through fallback
 
 # Import embedders
-from rag.components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
+from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
 
 # Conditional imports for embedders with dependencies
 try:
-    from rag.components.embedders.openai_embedder.openai_embedder import OpenAIEmbedder
+    from components.embedders.openai_embedder.openai_embedder import OpenAIEmbedder
 
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
 
 try:
-    from rag.components.embedders.huggingface_embedder.huggingface_embedder import (
+    from components.embedders.huggingface_embedder.huggingface_embedder import (
         HuggingFaceEmbedder,
     )
 
@@ -49,7 +49,7 @@ except ImportError:
     HUGGINGFACE_AVAILABLE = False
 
 try:
-    from rag.components.embedders.sentence_transformer_embedder.sentence_transformer_embedder import (
+    from components.embedders.sentence_transformer_embedder.sentence_transformer_embedder import (
         SentenceTransformerEmbedder,
     )
 
@@ -59,65 +59,65 @@ except ImportError:
 
 # Conditional imports for vector stores
 try:
-    from rag.components.stores.chroma_store.chroma_store import ChromaStore
+    from components.stores.chroma_store.chroma_store import ChromaStore
 
     CHROMA_AVAILABLE = True
 except ImportError:
     CHROMA_AVAILABLE = False
 
 try:
-    from rag.components.stores.faiss_store.faiss_store import FAISSStore
+    from components.stores.faiss_store.faiss_store import FAISSStore
 
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
 
 try:
-    from rag.components.stores.pinecone_store.pinecone_store import PineconeStore
+    from components.stores.pinecone_store.pinecone_store import PineconeStore
 
     PINECONE_AVAILABLE = True
 except ImportError:
     PINECONE_AVAILABLE = False
 
 try:
-    from rag.components.stores.qdrant_store.qdrant_store import QdrantStore
+    from components.stores.qdrant_store.qdrant_store import QdrantStore
 
     QDRANT_AVAILABLE = True
 except ImportError:
     QDRANT_AVAILABLE = False
 
 # Import extractors
-from rag.components.extractors.keyword_extractor.keyword_extractor import (
+from components.extractors.keyword_extractor.keyword_extractor import (
     YAKEExtractor,
     RAKEExtractor,
     TFIDFExtractor,
 )
-from rag.components.extractors.entity_extractor.entity_extractor import EntityExtractor
-from rag.components.extractors.datetime_extractor.datetime_extractor import (
+from components.extractors.entity_extractor.entity_extractor import EntityExtractor
+from components.extractors.datetime_extractor.datetime_extractor import (
     DateTimeExtractor,
 )
-from rag.components.extractors.statistics_extractor.statistics_extractor import (
+from components.extractors.statistics_extractor.statistics_extractor import (
     ContentStatisticsExtractor,
 )
-from rag.components.extractors.summary_extractor.summary_extractor import SummaryExtractor
-from rag.components.extractors.pattern_extractor.pattern_extractor import PatternExtractor
-from rag.components.extractors.table_extractor.table_extractor import TableExtractor
-from rag.components.extractors.link_extractor.link_extractor import LinkExtractor
-from rag.components.extractors.heading_extractor.heading_extractor import HeadingExtractor
+from components.extractors.summary_extractor.summary_extractor import SummaryExtractor
+from components.extractors.pattern_extractor.pattern_extractor import PatternExtractor
+from components.extractors.table_extractor.table_extractor import TableExtractor
+from components.extractors.link_extractor.link_extractor import LinkExtractor
+from components.extractors.heading_extractor.heading_extractor import HeadingExtractor
 
 # Import retrieval strategies
-from rag.components.retrievers.basic_similarity.basic_similarity import (
+from components.retrievers.basic_similarity.basic_similarity import (
     BasicSimilarityStrategy,
 )
 
-from rag.components.retrievers.hybrid_universal.hybrid_universal import (
+from components.retrievers.hybrid_universal.hybrid_universal import (
     HybridUniversalStrategy,
 )
-from rag.components.retrievers.metadata_filtered.metadata_filtered import (
+from components.retrievers.metadata_filtered.metadata_filtered import (
     MetadataFilteredStrategy,
 )
-from rag.components.retrievers.multi_query.multi_query import MultiQueryStrategy
-from rag.components.retrievers.reranked.reranked import RerankedStrategy
+from components.retrievers.multi_query.multi_query import MultiQueryStrategy
+from components.retrievers.reranked.reranked import RerankedStrategy
 
 
 class ComponentFactory:

@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
-from api.routers.rag.rag_query import QueryRequest, QueryResponse, handle_rag_query
+
+# RAG imports moved to function level to avoid circular imports
 from api.routers.shared.response_utils import (
     create_streaming_response_from_iterator,
     set_session_header,
@@ -262,33 +263,41 @@ async def chat(
 
 @router.post(
     "/{namespace}/{project_id}/rag/query",
-    response_model=QueryResponse,
     responses={
         404: {"model": ErrorResponse, "description": "Database or strategy not found"},
         500: {"model": ErrorResponse, "description": "Internal server error"},
-    }
+    },
 )
 async def rag_query(
     namespace: str,
     project_id: str,
-    request: QueryRequest
+    request: dict,  # Using dict to avoid circular import, will validate inside function
 ):
     """Perform a RAG query on the project's configured databases."""
+    # Import here to avoid circular import
+    from api.routers.rag.rag_query import QueryRequest, QueryResponse, handle_rag_query
+
+    # Validate request
+    request = QueryRequest(**request)
     # Get project configuration
     project_service = ProjectService()
     project_dir = project_service.get_project_dir(namespace, project_id)
-    
+
     if not Path(project_dir).exists():
-        raise HTTPException(status_code=404, detail=f"Project {namespace}/{project_id} not found")
-    
+        raise HTTPException(
+            status_code=404, detail=f"Project {namespace}/{project_id} not found"
+        )
+
     project_config = ProjectService.load_config(namespace, project_id)
-    
+
     if not project_config:
-        raise HTTPException(status_code=500, detail="Failed to load project configuration")
-    
+        raise HTTPException(
+            status_code=500, detail="Failed to load project configuration"
+        )
+
     # Handle the RAG query
     response = await handle_rag_query(request, project_config, str(project_dir))
-    
+
     return response
 
 

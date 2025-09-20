@@ -349,3 +349,178 @@ func pingURL(base string) error {
 	}
 	return fmt.Errorf("status %d", resp.StatusCode)
 }
+
+// MultiContainerOrchestrator manages the startup sequence of server and RAG containers
+type MultiContainerOrchestrator struct {
+	networkManager *NetworkManager
+	ragManager     *RAGContainerManager
+}
+
+// NewMultiContainerOrchestrator creates a new orchestrator for multi-container setup
+func NewMultiContainerOrchestrator() *MultiContainerOrchestrator {
+	networkManager := NewNetworkManager()
+	ragManager := NewRAGContainerManager(networkManager)
+
+	return &MultiContainerOrchestrator{
+		networkManager: networkManager,
+		ragManager:     ragManager,
+	}
+}
+
+// startLocalServerWithNetwork starts the server container connected to the custom network
+func (mco *MultiContainerOrchestrator) startLocalServerWithNetwork(serverURL string) error {
+	// Ensure network exists
+	if err := mco.networkManager.EnsureNetwork(); err != nil {
+		return fmt.Errorf("failed to ensure network: %v", err)
+	}
+
+	networkName := mco.networkManager.GetNetworkName()
+
+	// Parse server URL to get port
+	port := resolvePort(serverURL, 8000)
+
+	// Remove existing container
+	if err := removeContainer(containerName); err != nil {
+		return fmt.Errorf("failed to remove existing server container: %v", err)
+	}
+
+	// Get server image
+	image, err := getImageURL("server")
+	if err != nil {
+		return fmt.Errorf("failed to get server image URL: %v", err)
+	}
+
+	// Pull the image
+	if err := pullImage(image); err != nil {
+		return fmt.Errorf("failed to pull server image: %v", err)
+	}
+
+	// Get Ollama host for container configuration
+	ollamaHost := os.Getenv("OLLAMA_HOST")
+	if ollamaHost == "" {
+		ollamaHost = "http://localhost:11434"
+	}
+
+	// Build docker run command with network
+	runArgs := []string{
+		"run",
+		"-d",
+		"--name", containerName,
+		"--network", networkName,
+		"-p", fmt.Sprintf("%d:8000", port),
+		"-v", fmt.Sprintf("%s:%s", os.ExpandEnv("$HOME/.llamafarm"), "/var/lib/llamafarm"),
+		"--label", "llamafarm.component=server",
+		"--label", "llamafarm.managed=true",
+	}
+
+	// Mount effective working directory into the container at the same path
+	if cwd := getEffectiveCWD(); strings.TrimSpace(cwd) != "" {
+		runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s", cwd, cwd))
+	} else {
+		fmt.Fprintln(os.Stderr, "Warning: could not determine current directory; continuing without volume mount")
+	}
+
+	// Pass through or configure Ollama access inside the container
+	if isLocalhost(ollamaHost) {
+		ollamaPort := resolvePort(ollamaHost, 11434)
+		runArgs = append(runArgs, "--add-host", "host.docker.internal:host-gateway")
+		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_HOST=http://host.docker.internal:%d", ollamaPort))
+	} else {
+		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_HOST=%s", ollamaHost))
+	}
+
+	if v, ok := os.LookupEnv("OLLAMA_PORT"); ok && strings.TrimSpace(v) != "" {
+		runArgs = append(runArgs, "-e", fmt.Sprintf("OLLAMA_PORT=%s", v))
+	}
+
+	// Image last
+	runArgs = append(runArgs, image)
+
+	logDebug(fmt.Sprintf("Starting server container with network: %s", networkName))
+	runCmd := exec.Command("docker", runArgs...)
+	runOut, err := runCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to start server container: %v\n%s", err, string(runOut))
+	}
+
+	return nil
+}
+
+// EnsureMultiContainerStack ensures both server and RAG containers are running
+func (mco *MultiContainerOrchestrator) EnsureMultiContainerStack(serverURL string, printStatus bool) *HealthPayload {
+	// First, try to check if server is already available
+	if hr, err := checkServerHealth(serverURL); err == nil {
+		// Server is healthy, check if RAG is also running
+		if mco.ragManager.IsRAGContainerRunning() {
+			return hr
+		}
+		// Server is healthy but RAG is not running - start RAG
+		logDebug("Server is healthy but RAG container is not running, starting RAG...")
+	}
+
+	// Start server with network
+	if err := mco.startLocalServerWithNetwork(serverURL); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Could not start server container: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Wait for server to be ready
+	fmt.Fprintf(os.Stderr, "Waiting for server to become ready...\n")
+	timeout := serverStartTimeout
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
+
+	deadline := time.Now().Add(timeout)
+	var lastError error
+
+	for time.Now().Before(deadline) {
+		if hr, err := checkServerHealth(serverURL); err == nil {
+			// Server is ready, now start RAG container
+			fmt.Fprintf(os.Stderr, "Server ready, starting RAG service...\n")
+
+			if err := mco.ragManager.StartRAGContainer(); err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Could not start RAG container: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Wait for RAG to be ready
+			if err := mco.ragManager.WaitForRAGContainer(30 * time.Second); err != nil {
+				fmt.Fprintf(os.Stderr, "⚠️  RAG container may not be fully ready: %v\n", err)
+				// Don't exit - server can still function without RAG initially
+			} else {
+				fmt.Fprintf(os.Stderr, "✅ Multi-container stack is ready\n")
+			}
+
+			return hr
+		} else {
+			lastError = err
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "❌ Server did not become healthy within %v: %v\n", timeout, lastError)
+	os.Exit(1)
+	return nil
+}
+
+// StopMultiContainerStack stops both server and RAG containers
+func (mco *MultiContainerOrchestrator) StopMultiContainerStack() error {
+	var errors []string
+
+	// Stop RAG container first
+	if err := mco.ragManager.StopRAGContainer(); err != nil {
+		errors = append(errors, fmt.Sprintf("RAG container: %v", err))
+	}
+
+	// Stop server container
+	if err := removeContainer(containerName); err != nil {
+		errors = append(errors, fmt.Sprintf("server container: %v", err))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("errors stopping containers: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}

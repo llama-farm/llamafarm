@@ -1,12 +1,11 @@
 from pathlib import Path
 
-from celery import Task
+from celery import Task, signature
 
 from core.celery import app
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService
 from services.project_service import ProjectService
-from services.rag_subprocess import ingest_file_with_rag
 
 logger = FastAPIStructLogger(__name__)
 
@@ -42,12 +41,25 @@ def process_dataset_task(self: Task, namespace: str, project: str, dataset: str)
         if not file_path.exists():
             raise FileNotFoundError(f"Raw file not found: {file_path}")
         logger.info(f"Ingesting file {file_path}")
-        if not ingest_file_with_rag(
-            project_config,
-            ds_data_processing_strategy_name,
-            dataset_config.database,
-            str(file_path),
-        ):
+
+        # Use Celery task to ingest file via RAG service
+        project_dir = str(Path(DataService.get_data_dir(namespace, project)).parent)
+        task = signature(
+            "rag.ingest_file",
+            args=[
+                project_dir,
+                ds_data_processing_strategy_name,
+                dataset_config.database,
+                str(file_path),
+                None,  # filename
+                dataset,  # dataset_name
+            ],
+            app=app,
+        )
+        result = task.apply_async()
+        success, details = result.get(timeout=300)
+
+        if not success:
             raise Exception(f"Failed to ingest file {file_path}")
         files_ingested.append(file_hash)
         self.update_state(
@@ -61,6 +73,6 @@ def process_dataset_task(self: Task, namespace: str, project: str, dataset: str)
         "namespace": namespace,
         "project": project,
         "dataset": dataset,
-        "strategy": strategy_name,
+        "strategy": ds_data_processing_strategy_name,
         "files": dataset_config.files,
     }

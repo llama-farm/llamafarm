@@ -219,6 +219,76 @@ def _check_celery() -> dict:
         }
 
 
+def _check_rag_service() -> dict:
+    """Check RAG service health via Celery task availability."""
+    start = _now_ms()
+    try:
+        from core.celery.celery import app as celery_app  # type: ignore
+        from celery import signature
+
+        try:
+            # Check if RAG worker is available by looking for RAG-specific queues/tasks
+            active_tasks = celery_app.control.inspect().active()
+            registered_tasks = celery_app.control.inspect().registered()
+
+            if not active_tasks and not registered_tasks:
+                return {
+                    "name": "rag-service",
+                    "status": "degraded",
+                    "message": "No Celery workers responding",
+                    "latency_ms": _now_ms() - start,
+                }
+
+            # Check if any worker has RAG tasks registered
+            rag_tasks_found = False
+            worker_count = 0
+
+            if registered_tasks:
+                for worker, tasks in registered_tasks.items():
+                    worker_count += 1
+                    if tasks and any(task.startswith("rag.") for task in tasks):
+                        rag_tasks_found = True
+                        break
+
+            if rag_tasks_found:
+                return {
+                    "name": "rag-service",
+                    "status": "healthy",
+                    "message": f"RAG worker available ({worker_count} total workers)",
+                    "latency_ms": _now_ms() - start,
+                }
+            elif worker_count > 0:
+                return {
+                    "name": "rag-service",
+                    "status": "degraded",
+                    "message": f"No RAG tasks registered ({worker_count} workers found)",
+                    "latency_ms": _now_ms() - start,
+                }
+            else:
+                return {
+                    "name": "rag-service",
+                    "status": "unhealthy",
+                    "message": "No Celery workers available",
+                    "latency_ms": _now_ms() - start,
+                }
+
+        except Exception as e:
+            return {
+                "name": "rag-service",
+                "status": "degraded",
+                "message": f"RAG service check failed: {e}",
+                "latency_ms": _now_ms() - start,
+            }
+    except Exception:
+        # Celery not configured/importable
+        return {
+            "name": "rag-service",
+            "status": "unhealthy",
+            "message": "Celery not configured",
+            "latency_ms": _now_ms() - start,
+        }
+
+
 def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
@@ -236,6 +306,7 @@ def health_summary() -> dict[str, Any]:
     components.append(_check_storage())
     components.append(_check_ollama())
     components.append(_check_celery())
+    components.append(_check_rag_service())
 
     seeds.append(_check_seed_project())
 

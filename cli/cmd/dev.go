@@ -48,7 +48,9 @@ var devCmd = &cobra.Command{
 			}
 		}
 
-		serverHealth := ensureServerAvailable(serverURL, false)
+		// Use multi-container orchestrator for development
+		orchestrator := NewMultiContainerOrchestrator()
+		serverHealth := orchestrator.EnsureMultiContainerStack(serverURL, false)
 		runChatSessionTUI(projectInfo, serverHealth)
 	},
 }

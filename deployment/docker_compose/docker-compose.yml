@@ -1,5 +1,5 @@
 services:
-  # FastAPI Backend Server
+  # FastAPI Backend Server (Lightweight - no RAG dependencies)
   server:
     build:
       context: ../../
@@ -8,13 +8,41 @@ services:
       - "7744:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - LF_DATA_DIR=/var/lib/llamafarm
+    volumes:
+      - llamafarm_data:/var/lib/llamafarm
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     restart: unless-stopped
+    networks:
+      - llamafarm
+
+  # RAG Service (Separate container with RAG dependencies)
+  rag:
+    build:
+      context: ../../
+      dockerfile: rag/Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LF_DATA_DIR=/var/lib/llamafarm
+    volumes:
+      - llamafarm_data:/var/lib/llamafarm
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import celery; print('RAG worker running')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - llamafarm
 
   # React Frontend Designer
   designer:
@@ -24,7 +52,7 @@ services:
     ports:
       - "3123:80"
     environment:
-      - VITE_APP_API_URL=http://localhost:8000
+      - VITE_APP_API_URL=http://server:8000
       - VITE_APP_ENV=production
     depends_on:
       server:
@@ -36,6 +64,8 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    networks:
+      - llamafarm
 
   # Python Runtime Service
   runtime:
@@ -46,13 +76,19 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - server
+      - rag
     restart: unless-stopped
+    networks:
+      - llamafarm
 
 networks:
-  default:
+  llamafarm:
     driver: bridge
+    labels:
+      - "llamafarm.managed=true"
 
-volumes: {}
-  # Add persistent volumes if needed
-  # server_data:
-  # designer_data:
+volumes:
+  llamafarm_data:
+    driver: local
+    labels:
+      - "llamafarm.managed=true"

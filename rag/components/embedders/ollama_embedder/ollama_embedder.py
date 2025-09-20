@@ -5,7 +5,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 
-from rag.core.base import Embedder
+from core.base import Embedder
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +13,22 @@ logger = logging.getLogger(__name__)
 class OllamaEmbedder(Embedder):
     """Embedder using Ollama API for local embeddings."""
 
-    def __init__(self, name: str = "OllamaEmbedder", config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, name: str = "OllamaEmbedder", config: Optional[Dict[str, Any]] = None
+    ):
         # Ensure name is always a string
         if not isinstance(name, str):
             name = "OllamaEmbedder"
         super().__init__(name, config)
         config = config or {}
         self.model = config.get("model", "nomic-embed-text")
-        self.api_base = config.get("api_base") or config.get("base_url", "http://localhost:11434")
+        self.api_base = config.get("api_base") or config.get(
+            "base_url", "http://localhost:11434"
+        )
         self.base_url = self.api_base  # Alias for compatibility
-        self.batch_size = max(config.get("batch_size", 32), 1)  # Ensure positive batch size
+        self.batch_size = max(
+            config.get("batch_size", 32), 1
+        )  # Ensure positive batch size
         self.timeout = config.get("timeout", 60)
 
     def validate_config(self) -> bool:
@@ -64,19 +70,19 @@ class OllamaEmbedder(Embedder):
             return []
 
         embeddings = []
-        
+
         # Process in batches
         for i in range(0, len(texts), self.batch_size):
-            batch = texts[i:i + self.batch_size]
+            batch = texts[i : i + self.batch_size]
             batch_embeddings = self._embed_batch(batch)
             embeddings.extend(batch_embeddings)
-        
+
         return embeddings
 
     def _embed_batch(self, texts: List[str]) -> List[List[float]]:
         """Embed a batch of texts."""
         embeddings = []
-        
+
         for text in texts:
             try:
                 result = self._call_ollama_api(text)
@@ -89,7 +95,7 @@ class OllamaEmbedder(Embedder):
             except Exception as e:
                 logger.error(f"Error generating embedding: {e}")
                 embeddings.append([0.0] * self.get_embedding_dimension())
-        
+
         return embeddings
 
     def get_embedding_dimension(self) -> int:
@@ -98,47 +104,44 @@ class OllamaEmbedder(Embedder):
         dimension_map = {
             "nomic-embed-text": 768,
             "all-minilm": 384,
-            "sentence-transformers": 384
+            "sentence-transformers": 384,
         }
-        
+
         for model_name, dim in dimension_map.items():
             if model_name in self.model:
                 return dim
-        
+
         return 768  # Default
-    
+
     def _call_ollama_api(self, text: str) -> Dict[str, Any]:
         """Call Ollama API for a single text."""
         response = requests.post(
             f"{self.base_url}/api/embeddings",
-            json={
-                "model": self.model,
-                "prompt": text
-            },
-            timeout=self.timeout
+            json={"model": self.model, "prompt": text},
+            timeout=self.timeout,
         )
-        
+
         if response.status_code == 200:
             return response.json()
         else:
             raise Exception(f"Ollama API error {response.status_code}: {response.text}")
-    
+
     def embed_text(self, text: str) -> List[float]:
         """Embed a single text string."""
         if not text or not text.strip():
             return [0.0] * self.get_embedding_dimension()
-        
+
         try:
             result = self._call_ollama_api(text)
             return result.get("embedding", [0.0] * self.get_embedding_dimension())
         except Exception as e:
             logger.error(f"Error embedding text: {e}")
             return [0.0] * self.get_embedding_dimension()
-    
+
     def _check_model_availability(self) -> bool:
         """Check if the model is available."""
         return self.validate_config()
-    
+
     @classmethod
     def get_description(cls) -> str:
         """Get embedder description."""

@@ -1,56 +1,103 @@
 version: '3.8'
 
 services:
-  # FastAPI Backend Server (Development)
+  # FastAPI Backend Server (Development - Lightweight)
   server:
     build:
-      context: ../server
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: server/Dockerfile
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
       - RELOAD=true
+      - LF_DATA_DIR=/var/lib/llamafarm
     volumes:
-      - ../server:/app
+      - ../../server:/app/server
+      - ../../config:/app/config
+      - llamafarm_dev_data:/var/lib/llamafarm
     command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - llamafarm-dev
+
+  # RAG Service (Development)
+  rag:
+    build:
+      context: ../../
+      dockerfile: rag/Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LF_DATA_DIR=/var/lib/llamafarm
+    volumes:
+      - ../../rag:/app/rag
+      - ../../config:/app/config
+      - ../../models:/app/models
+      - llamafarm_dev_data:/var/lib/llamafarm
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import celery; print('RAG worker running')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - llamafarm-dev
 
   # React Frontend Designer (Development)
   designer:
     build:
-      context: ../designer
+      context: ../../designer
       dockerfile: Dockerfile
       target: builder
     ports:
       - "5173:5173"  # Vite dev server port
     environment:
-      - VITE_APP_API_URL=http://localhost:8000
+      - VITE_APP_API_URL=http://server:8000
       - VITE_APP_ENV=development
     volumes:
-      - ../designer:/app
+      - ../../designer:/app
       - /app/node_modules
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     depends_on:
       - server
+    networks:
+      - llamafarm-dev
 
   # Python Runtime Service (Development)
   runtime:
     build:
-      context: ../runtime
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: runtime/Dockerfile
     environment:
       - PYTHONUNBUFFERED=1
+      - LF_DATA_DIR=/var/lib/llamafarm
     volumes:
-      - ../runtime:/app
+      - ../../runtime:/app
+      - llamafarm_dev_data:/var/lib/llamafarm
     depends_on:
       - server
+      - rag
+    networks:
+      - llamafarm-dev
 
 networks:
-  default:
+  llamafarm-dev:
     driver: bridge
+    labels:
+      - "llamafarm.managed=true"
+      - "llamafarm.env=development"
+
+volumes:
+  llamafarm_dev_data:
+    driver: local
+    labels:
+      - "llamafarm.managed=true"
+      - "llamafarm.env=development"

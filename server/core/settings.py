@@ -28,5 +28,12 @@ class Settings(BaseSettings, env_file=".env"):
     ollama_model: str = "qwen3:8b"
     ollama_api_key: str = "ollama"
 
+    # Celery Broker Override Configuration
+    # If set, these will override the default filesystem broker
+    celery_broker_url: str = (
+        ""  # e.g., "redis://localhost:6379/0" or "amqp://guest@localhost//"
+    )
+    celery_result_backend: str = ""  # e.g., "redis://localhost:6379/0"
+
 
 settings = Settings()

@@ -31,36 +31,17 @@ dependencies = [
     "atomic-agents==2.1.0",
     "jsonref>=1.1.0",
     "celery>=5.5.3",
-    "requests>=2.25.0",
-    # RAG dependencies
-    "chromadb>=1.0.0",
+    # Configuration parsing
     "pyyaml>=6.0.0",
-    "python-magic>=0.4.27",
-    "python-magic-bin>=0.4.14; sys_platform == 'win32'",  # Windows support
-    # PDF parsing dependencies
-    "pypdf2>=3.0.0",
-    "llama-index>=0.13.6",
-    # Additional document parsing
-    "beautifulsoup4>=4.12.0",
-    "python-docx>=1.0.0",
-    "pandas>=2.0.0",
-    "openpyxl>=3.1.2",
     # Fix dotenv parsing
     "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest>=8.0.0",
-    "pytest-mock>=3.12.0",
-]
+test = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 
 [dependency-groups]
-test = [
-    "pytest>=8.4.1",
-    "pytest-asyncio>=1.1.0",
-    "pytest-mock>=3.14.1",
-]
+test = ["pytest>=8.4.1", "pytest-asyncio>=1.1.0", "pytest-mock>=3.14.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -70,7 +51,7 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 
 [tool.ruff]
-line-length = 88  # Match Black's default
+line-length = 88         # Match Black's default
 target-version = "py311"
 
 # Enable auto-fixes

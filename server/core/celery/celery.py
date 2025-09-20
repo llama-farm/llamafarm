@@ -17,18 +17,35 @@ _folders = [
 for folder in _folders:
     os.makedirs(folder, exist_ok=True)
 
-app.conf.update(
-    {
-        "broker_url": "filesystem://",
-        "broker_transport_options": {
-            "data_folder_in": f"{settings.lf_data_dir}/broker/in",
-            "data_folder_out": f"{settings.lf_data_dir}/broker/in",  # has to be the same as 'data_folder_in'  # noqa: E501
-            "data_folder_processed": f"{settings.lf_data_dir}/broker/processed",
-        },
-        "result_backend": f"file://{settings.lf_data_dir}/broker/results",
-        "result_persistent": True,
-    }
-)
+# Configure broker based on settings
+if settings.celery_broker_url and settings.celery_result_backend:
+    # Use external broker (Redis, RabbitMQ, etc.)
+    app.conf.update(
+        {
+            "broker_url": settings.celery_broker_url,
+            "result_backend": settings.celery_result_backend,
+            "result_persistent": True,
+            "task_serializer": "json",
+            "accept_content": ["json"],
+            "result_serializer": "json",
+            "timezone": "UTC",
+            "enable_utc": True,
+        }
+    )
+else:
+    # Use default filesystem broker
+    app.conf.update(
+        {
+            "broker_url": "filesystem://",
+            "broker_transport_options": {
+                "data_folder_in": f"{settings.lf_data_dir}/broker/in",
+                "data_folder_out": f"{settings.lf_data_dir}/broker/in",  # has to be the same as 'data_folder_in'  # noqa: E501
+                "data_folder_processed": f"{settings.lf_data_dir}/broker/processed",
+            },
+            "result_backend": f"file://{settings.lf_data_dir}/broker/results",
+            "result_persistent": True,
+        }
+    )
 
 
 # Intentionally empty function to prevent Celery from overriding root logger config

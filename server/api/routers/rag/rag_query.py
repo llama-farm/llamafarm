@@ -6,19 +6,8 @@ import structlog
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-import sys
-from pathlib import Path
-
-# Add parent directories to path for imports
-repo_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
 from config.datamodel import LlamaFarmConfig
-from rag.core.factories import (
-    VectorStoreFactory,
-    EmbedderFactory,
-    RetrievalStrategyFactory,
-)
+from services.rag_service import search_with_rag_database
 
 logger = structlog.get_logger()
 
@@ -64,7 +53,7 @@ class QueryResponse(BaseModel):
 async def handle_rag_query(
     request: QueryRequest, project_config: LlamaFarmConfig, project_dir: str
 ) -> QueryResponse:
-    """Handle RAG query request."""
+    """Handle RAG query request using Celery service."""
     start_time = time.time()
 
     # Determine which database to use
@@ -79,150 +68,60 @@ async def handle_rag_query(
             status_code=400, detail="No database specified and no default available"
         )
 
-    # Find the database configuration
-    database_config = None
+    # Validate database exists
+    database_exists = False
     if project_config.rag:
         for db in project_config.rag.databases:
             if db.name == database_name:
-                database_config = db
+                database_exists = True
                 break
 
-    if not database_config:
+    if not database_exists:
         raise HTTPException(
             status_code=404, detail=f"Database '{database_name}' not found"
         )
 
-    # Determine retrieval strategy
-    retrieval_strategy_name = request.retrieval_strategy
-    if not retrieval_strategy_name:
-        # Use default retrieval strategy from database config
-        retrieval_strategy_name = database_config.default_retrieval_strategy
-
-        # Use first strategy as fallback
-        if not retrieval_strategy_name and database_config.retrieval_strategies:
-            retrieval_strategy_name = database_config.retrieval_strategies[0].name
-
-    if not retrieval_strategy_name:
-        raise HTTPException(
-            status_code=400,
-            detail="No retrieval strategy specified and no default available",
-        )
-
-    # Find the retrieval strategy configuration
-    retrieval_config = None
-    for strategy in database_config.retrieval_strategies:
-        if strategy.name == retrieval_strategy_name:
-            retrieval_config = strategy
-            break
-
-    if not retrieval_config:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Retrieval strategy '{retrieval_strategy_name}' not found",
-        )
-
-    # Get embedder for the query
-    embedder_name = database_config.default_embedding_strategy
-    embedder_config = None
-    for emb_strategy in database_config.embedding_strategies:
-        if emb_strategy.name == embedder_name:
-            embedder_config = emb_strategy
-            break
-
-    if not embedder_config:
-        raise HTTPException(
-            status_code=500, detail=f"Embedding strategy '{embedder_name}' not found"
-        )
-
     try:
-        # Initialize embedder - handle enum type
-        embedder_type = embedder_config.type
-        if hasattr(embedder_type, "value"):
-            embedder_type = embedder_type.value
-        embedder = EmbedderFactory.create(
-            component_type=embedder_type, config=embedder_config.config
-        )
-
-        # Generate query embedding
-        logger.info(f"Generating embedding for query: {request.query[:100]}...")
-        query_embedding = embedder.embed_text(request.query)
-
-        # Initialize store - handle enum type and resolve paths
-        store_type = database_config.type
-        if hasattr(store_type, "value"):
-            store_type = store_type.value
-
-        # Copy config and resolve persist_directory if it's relative
-        store_config = database_config.config.copy() if database_config.config else {}
-        if "persist_directory" in store_config and not store_config[
-            "persist_directory"
-        ].startswith("/"):
-            # Make persist_directory absolute based on project_dir
-            from pathlib import Path
-
-            store_config["persist_directory"] = str(
-                Path(project_dir) / store_config["persist_directory"]
-            )
-            logger.info(
-                f"Resolved persist_directory to: {store_config['persist_directory']}"
-            )
-
-        store = VectorStoreFactory.create(
-            component_type=store_type, config=store_config
-        )
-
-        # Initialize retriever without store in config (it's passed as a parameter)
-        retriever_config = (
-            retrieval_config.config.copy() if retrieval_config.config else {}
-        )
-        retriever_type = retrieval_config.type
-        if hasattr(retriever_type, "value"):
-            retriever_type = retriever_type.value
-        retriever = RetrievalStrategyFactory.create(
-            component_type=retriever_type, config=retriever_config
-        )
-
-        # Perform search - pass vector_store as parameter
+        # Use Celery service to perform search
         logger.info(
-            f"Searching with strategy '{retrieval_strategy_name}' in database '{database_name}'"
-        )
-        search_results = retriever.retrieve(
-            query_embedding=query_embedding,
-            vector_store=store,
-            top_k=request.top_k,
-            score_threshold=request.score_threshold,
-            metadata_filters=request.metadata_filters,
-            distance_metric=request.distance_metric,
+            f"Performing RAG search via Celery service: query='{request.query[:100]}...', database='{database_name}'"
         )
 
-        # Format results - search_results is a RetrievalResult object
+        search_results = search_with_rag_database(
+            project_dir=project_dir,
+            database=database_name,
+            query=request.query,
+            top_k=request.top_k,
+            retrieval_strategy=request.retrieval_strategy,
+        )
+
+        # Format results from Celery service response
         results = []
-        for doc, score in zip(search_results.documents, search_results.scores):
+        for result in search_results:
             results.append(
                 QueryResult(
-                    content=doc.content,
-                    score=score,
-                    metadata=doc.metadata or {},
-                    chunk_id=doc.metadata.get("chunk_id") if doc.metadata else None,
-                    document_id=doc.metadata.get("document_id")
-                    if doc.metadata
-                    else None,
+                    content=result.get("content", ""),
+                    score=result.get("score", 0.0),
+                    metadata=result.get("metadata", {}),
+                    chunk_id=result.get("id"),
+                    document_id=result.get("metadata", {}).get("document_id"),
                 )
             )
 
-        processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        processing_time = (time.time() - start_time) * 1000
+        logger.info(
+            f"Query completed in {processing_time:.2f}ms with {len(results)} results"
+        )
 
         return QueryResponse(
             query=request.query,
             results=results,
             total_results=len(results),
             processing_time_ms=processing_time,
-            retrieval_strategy_used=retrieval_strategy_name,
+            retrieval_strategy_used=request.retrieval_strategy or "default",
             database_used=database_name,
         )
 
     except Exception as e:
-        logger.error(f"Error performing RAG query: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to perform RAG query: {str(e)}"
-        )
+        logger.error(f"Error during RAG query: {e}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
