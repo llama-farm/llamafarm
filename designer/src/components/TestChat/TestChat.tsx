@@ -9,6 +9,7 @@ import {
 } from '../../hooks/useProjectChat'
 import { useProjectChatStreamingSession } from '../../hooks/useProjectChatSession'
 import { useProjectSession } from '../../hooks/useProjectSession'
+import { useChatbox } from '../../hooks/useChatbox'
 import { ProjectChatStreamChunk } from '../../api/projectChatService'
 
 export interface TestChatProps {
@@ -78,15 +79,27 @@ export default function TestChat({
     autoCreate: false, // Sessions created on first message
   })
 
-  // TestChat only uses Project Chat - no fallback to Designer Chat
+  // Fallback chatbox for when project chat is not available
+  const {
+    messages: fallbackMessages,
+    inputValue: fallbackInputValue,
+    isSending: fallbackIsSending,
+    isClearing: fallbackIsClearing,
+    error: fallbackError,
+    sendMessage: fallbackSendMessage,
+    clearChat: fallbackClearChat,
+    updateInput: fallbackUpdateInput,
+    hasMessages: fallbackHasMessages,
+    canSend: fallbackCanSend,
+    addMessage: fallbackAddMessage,
+    updateMessage: fallbackUpdateMessage,
+  } = useChatbox()
 
   // Mock mode controlled by parent
   const MOCK_MODE = Boolean(useTestData)
   
-  // TestChat requires an active project (except in mock mode)
-  if (!MOCK_MODE && !chatParams) {
-    throw new Error('TestChat requires an active project to function')
-  }
+  // Use project chat if we have an active project and not in mock mode
+  const USE_PROJECT_CHAT = !MOCK_MODE && !!chatParams
   
   // Project chat state management
   const [projectInputValue, setProjectInputValue] = useState('')
@@ -100,52 +113,74 @@ export default function TestChat({
     timestamp: new Date(msg.timestamp),
   }))
   
-  // TestChat only uses Project Chat - no fallback
-  const messages = projectSessionMessages
-  const inputValue = projectInputValue
-  const isSending = isProjectSending
-  const isClearing = false // Project chat doesn't have clearing in this context
-  const error = projectSession.error
-  const hasMessages = projectSessionMessages.length > 0
-  const canSend = !isProjectSending && projectInputValue.trim().length > 0 && !projectChatStreamingMessage.isPending
+  // Choose which chat system to use
+  const messages = USE_PROJECT_CHAT ? projectSessionMessages : fallbackMessages
+  const inputValue = USE_PROJECT_CHAT ? projectInputValue : fallbackInputValue
+  const isSending = USE_PROJECT_CHAT ? isProjectSending : fallbackIsSending
+  const isClearing = USE_PROJECT_CHAT ? false : fallbackIsClearing // Project chat doesn't have clearing in this context
+  const error = USE_PROJECT_CHAT ? projectSession.error : fallbackError
+  const hasMessages = USE_PROJECT_CHAT ? projectSessionMessages.length > 0 : fallbackHasMessages
+  const canSend = USE_PROJECT_CHAT 
+    ? (!isProjectSending && projectInputValue.trim().length > 0 && !projectChatStreamingMessage.isPending)
+    : fallbackCanSend
 
-  // Legacy variable names for compatibility
-  const combinedCanSend = canSend
-  const combinedIsSending = isSending
-  const combinedError = error
+  // Combined loading state
+  const isProjectChatLoading = projectChatStreamingMessage.isPending
+  const combinedIsSending = isSending || isProjectChatLoading
+  
+  // Combined error state
+  const projectChatError = projectChatStreamingMessage.error || projectChatStreamingSession.error
+  const combinedError = error || (projectChatError ? projectChatError.message : null)
+  
+  // Combined canSend state
+  const combinedCanSend = canSend && !isProjectChatLoading
   const projectSessionId = projectSession.sessionId
-
-
 
   // Project chat message management functions
   const addMessage = useCallback((message: Omit<ChatboxMessage, 'id'>) => {
-    // Add message to project session (which handles persistence and creates temp session if needed)
-    try {
-      const sessionMessage = projectSession.addMessage(
-        message.content,
-        message.type === 'user' ? 'user' : 'assistant'
-      )
-      return sessionMessage.id
-    } catch (err) {
-      console.error('Failed to add message to project session:', err)
-      // Generate a fallback ID for UI purposes
-      return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    if (USE_PROJECT_CHAT) {
+      // Add message to project session (which handles persistence and creates temp session if needed)
+      try {
+        const sessionMessage = projectSession.addMessage(
+          message.content,
+          message.type === 'user' ? 'user' : 'assistant'
+        )
+        return sessionMessage.id
+      } catch (err) {
+        console.error('Failed to add message to project session:', err)
+        // Generate a fallback ID for UI purposes
+        return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      }
+    } else {
+      return fallbackAddMessage(message)
     }
-  }, [projectSession])
+  }, [USE_PROJECT_CHAT, projectSession, fallbackAddMessage])
 
-  const updateMessage = useCallback((_id: string, _updates: Partial<ChatboxMessage>) => {
-    // For project session, we can't update individual messages after they're saved
-    // This is only used for streaming updates before final save
-    console.warn('updateMessage called on project session - this should only be used for streaming updates')
-  }, [])
+  const updateMessage = useCallback((id: string, updates: Partial<ChatboxMessage>) => {
+    if (USE_PROJECT_CHAT) {
+      // For project session, we can't update individual messages after they're saved
+      // This is only used for streaming updates before final save
+      console.warn('updateMessage called on project session - this should only be used for streaming updates')
+    } else {
+      fallbackUpdateMessage(id, updates)
+    }
+  }, [USE_PROJECT_CHAT, fallbackUpdateMessage])
 
   const clearChat = useCallback(() => {
-    projectSession.clearHistory()
-  }, [projectSession])
+    if (USE_PROJECT_CHAT) {
+      projectSession.clearHistory()
+    } else {
+      fallbackClearChat()
+    }
+  }, [USE_PROJECT_CHAT, projectSession, fallbackClearChat])
 
   const updateInput = useCallback((value: string) => {
-    setProjectInputValue(value)
-  }, [])
+    if (USE_PROJECT_CHAT) {
+      setProjectInputValue(value)
+    } else {
+      fallbackUpdateInput(value)
+    }
+  }, [USE_PROJECT_CHAT, fallbackUpdateInput])
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
@@ -180,9 +215,10 @@ export default function TestChat({
   useEffect(() => {
     // Only clear if we have a valid project and we're not in mock mode
     if (!MOCK_MODE && chatParams?.namespace && chatParams?.projectId) {
+      // Clear existing chat when switching projects
+      clearChat()
       // Reset session for new project
       projectChatStreamingSession.clearSession()
-      // Project session will automatically load the correct session for the new project
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatParams?.namespace, chatParams?.projectId]) // Only trigger when project actually changes
@@ -259,103 +295,124 @@ export default function TestChat({
       return
     }
 
-    // TestChat only uses Project Chat - no fallback
-    if (!chatParams) {
-      throw new Error('TestChat requires an active project to function')
-    }
-
-    // Use project chat streaming API
-    let assistantId: string | undefined
-    let accumulatedContent = ''
-    
-    setIsProjectSending(true)
-    
-    try {
-      // Add user message to project session
-      projectSession.addMessage(content, 'user')
-      lastUserInputRef.current = content
+    if (USE_PROJECT_CHAT && chatParams) {
+      // Use project chat streaming API
+      let assistantId: string | undefined
+      let accumulatedContent = ''
       
-      // Add streaming assistant message (temporary, will be replaced with final message)
-      assistantId = addMessage({
-        type: 'assistant',
-        content: 'Thinking…',
-        timestamp: new Date(),
-        isStreaming: true,
-      })
+      setIsProjectSending(true)
       
-      updateInput('')
-      
-      // Send streaming message via project chat
-      const finalSessionId = await projectChatStreamingMessage.mutateAsync({
-        namespace: chatParams.namespace,
-        projectId: chatParams.projectId,
-        message: content,
-        sessionId: projectChatStreamingSession.sessionId || undefined,
-        streamingOptions: {
-          onChunk: (chunk: ProjectChatStreamChunk) => {
-            // Handle content chunks
-            if (chunk.choices?.[0]?.delta?.content) {
-              accumulatedContent += chunk.choices[0].delta.content
-              updateMessage(assistantId!, {
-                content: accumulatedContent,
-                isStreaming: true,
-              })
-            }
-            // Clear "Thinking..." on first chunk even if no content (role assignment)
-            else if (chunk.choices?.[0]?.delta && accumulatedContent === '') {
-              updateMessage(assistantId!, {
-                content: '',
-                isStreaming: true,
-              })
-            }
+      try {
+        // Add user message to project session
+        projectSession.addMessage(content, 'user')
+        lastUserInputRef.current = content
+        
+        // Add streaming assistant message (temporary, will be replaced with final message)
+        assistantId = addMessage({
+          type: 'assistant',
+          content: 'Thinking…',
+          timestamp: new Date(),
+          isStreaming: true,
+        })
+        
+        updateInput('')
+        
+        // Send streaming message via project chat
+        const finalSessionId = await projectChatStreamingMessage.mutateAsync({
+          namespace: chatParams.namespace,
+          projectId: chatParams.projectId,
+          message: content,
+          sessionId: projectChatStreamingSession.sessionId || undefined,
+          streamingOptions: {
+            onChunk: (chunk: ProjectChatStreamChunk) => {
+              // Handle content chunks
+              if (chunk.choices?.[0]?.delta?.content) {
+                accumulatedContent += chunk.choices[0].delta.content
+                updateMessage(assistantId!, {
+                  content: accumulatedContent,
+                  isStreaming: true,
+                })
+              }
+              // Clear "Thinking..." on first chunk even if no content (role assignment)
+              else if (chunk.choices?.[0]?.delta && accumulatedContent === '') {
+                updateMessage(assistantId!, {
+                  content: '',
+                  isStreaming: true,
+                })
+              }
+            },
+            onError: (error: Error) => {
+              console.error('Project chat streaming error:', error)
+              if (assistantId) {
+                updateMessage(assistantId, {
+                  content: `Error: ${error.message}`,
+                  isStreaming: false,
+                  isLoading: false,
+                })
+              }
+            },
+            onComplete: () => {
+              if (assistantId && accumulatedContent) {
+                // Save final message to project session
+                projectSession.addMessage(accumulatedContent, 'assistant')
+                updateMessage(assistantId, {
+                  content: accumulatedContent,
+                  isStreaming: false,
+                  isLoading: false,
+                  // Add mock metadata for consistency with existing UI
+                  metadata: {
+                    prompts: ['System: You are a helpful assistant.', `User: ${content}`],
+                    thinking: ['Processing user request...', 'Generating response...'],
+                    generation: {
+                      temperature: 0.7,
+                      topP: 0.9,
+                      maxTokens: 512,
+                      presencePenalty: 0.0,
+                      frequencyPenalty: 0.0,
+                      seed: undefined,
+                    },
+                  },
+                })
+              }
+            },
           },
-          onError: (error: Error) => {
-            console.error('Project chat streaming error:', error)
-            if (assistantId) {
-              updateMessage(assistantId, {
-                content: `Error: ${error.message}`,
-                isStreaming: false,
-                isLoading: false,
-              })
-            }
-          },
-          onComplete: () => {
-            if (assistantId && accumulatedContent) {
-              // Save final message to project session
-              projectSession.addMessage(accumulatedContent, 'assistant')
-            }
-          },
-        },
-      })
-      
-      // Update session ID if we got a new one
-      if (finalSessionId && finalSessionId !== projectChatStreamingSession.sessionId) {
-        projectChatStreamingSession.setSessionId(finalSessionId)
-      }
-      
+        })
+        
+        // Update session ID if we got a new one
+        if (finalSessionId && finalSessionId !== projectChatStreamingSession.sessionId) {
+          projectChatStreamingSession.setSessionId(finalSessionId)
+        }
+        
         // Create project session if we got a new session ID
         if (finalSessionId) {
           projectSession.createSessionFromServer(finalSessionId)
         }
-      
-    } catch (error) {
-      console.error('Project chat streaming error:', error)
-      // Update assistant message with error using the stored assistantId
-      if (assistantId) {
-        updateMessage(assistantId, {
-          content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
-          isStreaming: false,
-          isLoading: false,
-        })
+        
+      } catch (error) {
+        console.error('Project chat streaming error:', error)
+        // Update assistant message with error using the stored assistantId
+        if (assistantId) {
+          updateMessage(assistantId, {
+            content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+            isStreaming: false,
+            isLoading: false,
+          })
+        }
+      } finally {
+        setIsProjectSending(false)
       }
-    } finally {
-      setIsProjectSending(false)
+      return
     }
+
+    // Fallback to original chat system
+    const ok = await fallbackSendMessage(content)
+    if (ok) updateInput('')
   }, [
     combinedCanSend, 
     inputValue, 
     combinedIsSending,
     MOCK_MODE, 
+    USE_PROJECT_CHAT, 
     chatParams, 
     projectChatStreamingMessage, 
     projectChatStreamingSession.sessionId,
@@ -363,7 +420,8 @@ export default function TestChat({
     projectSession,
     addMessage, 
     updateMessage, 
-    updateInput
+    updateInput,
+    fallbackSendMessage
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -582,7 +640,7 @@ export default function TestChat({
       {/* Header row actions */}
       <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
         <div className="text-xs md:text-sm text-muted-foreground">
-          {chatParams ? (
+          {USE_PROJECT_CHAT && chatParams ? (
             <span>
               Project: {chatParams.namespace}/{chatParams.projectId}
               {projectChatStreamingSession.sessionId && (
@@ -668,7 +726,7 @@ export default function TestChat({
         <div className="flex items-center justify-between">
           {combinedIsSending && (
             <span className="text-xs text-muted-foreground">
-              Sending to project…
+              {USE_PROJECT_CHAT ? 'Sending to project…' : 'Sending…'}
             </span>
           )}
           <FontIcon

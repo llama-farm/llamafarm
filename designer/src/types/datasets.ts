@@ -1,9 +1,25 @@
 /**
  * Dataset API Types - aligned with server/api/routers/datasets/
- * 
+ *
  * This file contains types for Dataset API communication.
  * These types should remain stable and aligned with the API contract.
  */
+
+/**
+ * File information with metadata
+ */
+export interface DatasetFile {
+  /** File content hash */
+  hash: string
+  /** Original filename */
+  original_filename: string
+  /** File size in bytes */
+  size: number
+  /** MIME type of the file */
+  mime_type: string
+  /** Upload timestamp */
+  timestamp: number
+}
 
 /**
  * Core Dataset entity structure for API communication
@@ -16,6 +32,31 @@ export interface Dataset {
   rag_strategy: string
   /** Array of file hashes included in this dataset */
   files: string[]
+}
+
+/**
+ * Enhanced Dataset with file details for API responses
+ */
+export interface DatasetWithFileDetails {
+  /** Dataset name within the project */
+  name: string
+  /** RAG strategy used for processing */
+  rag_strategy: string
+  /** Array of files with detailed metadata */
+  files: DatasetFile[]
+}
+
+/**
+ * Flexible Dataset that can contain either file hashes or file details
+ * Used for backward compatibility in API responses
+ */
+export interface FlexibleDataset {
+  /** Dataset name within the project */
+  name: string
+  /** RAG strategy used for processing */
+  rag_strategy: string
+  /** Array of files - either hashes (legacy) or detailed metadata (enhanced) */
+  files: string[] | DatasetFile[]
 }
 
 /**
@@ -42,8 +83,8 @@ export interface CreateDatasetResponse {
 export interface ListDatasetsResponse {
   /** Total number of datasets */
   total: number
-  /** Array of datasets */
-  datasets: Dataset[]
+  /** Array of datasets with flexible file format */
+  datasets: FlexibleDataset[]
 }
 
 /**
@@ -140,7 +181,11 @@ export interface DatasetApiError {
  * Base error classes for Dataset API operations
  */
 export class DatasetError extends Error {
-  constructor(message: string, public statusCode?: number, public data?: any) {
+  constructor(
+    message: string,
+    public statusCode?: number,
+    public data?: any
+  ) {
     super(message)
     this.name = 'DatasetError'
   }

@@ -1,8 +1,8 @@
-from config.datamodel import Dataset
+from config.datamodel import Dataset, DatasetWithFileDetails, DatasetFile
 
 from api.errors import DatasetNotFoundError, NotFoundError
 from core.logging import FastAPIStructLogger
-from services.data_service import MetadataFileContent
+from services.data_service import DataService, MetadataFileContent
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
@@ -18,6 +18,45 @@ class DatasetService:
         """
         project_config = ProjectService.load_config(namespace, project)
         return project_config.datasets or []
+
+    @classmethod
+    def list_datasets_with_file_details(cls, namespace: str, project: str) -> list[DatasetWithFileDetails]:
+        """
+        List all datasets for a given project with file details including original filenames
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        datasets_with_details = []
+        
+        for dataset in project_config.datasets:
+            files_with_details = []
+            for file_hash in dataset.files:
+                try:
+                    metadata = DataService.get_data_file_metadata_by_hash(
+                        namespace=namespace,
+                        project_id=project,
+                        file_content_hash=file_hash
+                    )
+                    file_detail = DatasetFile(
+                        hash=metadata.hash,
+                        original_filename=metadata.original_file_name,
+                        size=metadata.size,
+                        mime_type=metadata.mime_type,
+                        timestamp=metadata.timestamp
+                    )
+                    files_with_details.append(file_detail)
+                except FileNotFoundError:
+                    # Skip files that no longer exist on disk
+                    logger.warning(f"File metadata not found for hash: {file_hash}")
+                    continue
+            
+            dataset_with_details = DatasetWithFileDetails(
+                name=dataset.name,
+                rag_strategy=dataset.rag_strategy,
+                files=files_with_details
+            )
+            datasets_with_details.append(dataset_with_details)
+        
+        return datasets_with_details
 
     @classmethod
     def create_dataset(
