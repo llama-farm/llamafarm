@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.0.4](https://github.com/llama-farm/llamafarm/compare/v0.0.3...v0.0.4) (2025-09-22)
+
+
+### Features
+
+* **cli:** run designer in background on `lf dev` ([#145](https://github.com/llama-farm/llamafarm/issues/145)) ([f868502](https://github.com/llama-farm/llamafarm/commit/f8685023c44e5317085433a60e7824d6e8d46f89))
+* **designer:** add project chat to test tab ([9a3944d](https://github.com/llama-farm/llamafarm/commit/9a3944deae2eac892031c9f963b4eab875d5ed6d))
+* **designer:** add/edit parsers and extractors with correct fields from the rag schema.yaml ([0aeab41](https://github.com/llama-farm/llamafarm/commit/0aeab4116c034ac4aafa1ab72f35d85d57da0245))
+* **designer:** allow muletiple retrival strategies (edit/make default, add flows) ([d33eec0](https://github.com/llama-farm/llamafarm/commit/d33eec0f32f49dec51c2b4447c21fadde3406b74))
+* **designer:** allow users to diagnose bad responses or tests via designer chat ([1a35583](https://github.com/llama-farm/llamafarm/commit/1a355836915e2a5f48a7159fdd1c3a21084880bb))
+* **designer:** embedding model / strategy show port and more details. update RAG page layout ([568f568](https://github.com/llama-farm/llamafarm/commit/568f56879a541f4307d8430c1f6184266a793dee))
+* **designer:** embedding models - edit, change, add - better reflect the config and schema options ([c65295a](https://github.com/llama-farm/llamafarm/commit/c65295a6af95226d93bdce92eaf890b8fd5e7754))
+* **designer:** enable chat streaming ([#180](https://github.com/llama-farm/llamafarm/issues/180)) ([93d8c55](https://github.com/llama-farm/llamafarm/commit/93d8c551fd7910bcba54b7f0068d951585750a7c))
+* **designer:** generation settings bar ([4112233](https://github.com/llama-farm/llamafarm/commit/4112233672035e6843e0591f064c663f5294133a))
+* **designer:** more response detail (prompts sent, thinking steps, temperature and settings, raw chunk data) ([5e74fd3](https://github.com/llama-farm/llamafarm/commit/5e74fd3b8a197dca4abbf928b473312e97aafc1a))
+* **designer:** processing strategy - edit add remove parsers and extractors ([2c35c26](https://github.com/llama-farm/llamafarm/commit/2c35c268dd775b32658a3c1f5b37b35ce77b7f21))
+* **designer:** Processing strategy view with extractors and parsers tables ([42ea217](https://github.com/llama-farm/llamafarm/commit/42ea217c38b877336b47f2b234f34bc5861b0275))
+* **designer:** RAG home page restructure ([4608449](https://github.com/llama-farm/llamafarm/commit/46084495e1fe2ec81cdd056a1149a7940e095e27))
+* **designer:** RAG home page restructure ([24b27d2](https://github.com/llama-farm/llamafarm/commit/24b27d2ea96897f07576c0d80543457b8af2b5b0))
+* **designer:** reorder header tabs to flow nicer ([31e4da1](https://github.com/llama-farm/llamafarm/commit/31e4da1a5624580c1dd7e016d8ef38ae2fd826fd))
+* **designer:** retrieval methods add templates and relevant settings for each from schema ([f22a27a](https://github.com/llama-farm/llamafarm/commit/f22a27a502deebb591358f179a5eef1a97a380fc))
+* **designer:** run tests in project chat ([a2b8fc8](https://github.com/llama-farm/llamafarm/commit/a2b8fc8e38ba31e48823597bc1a64edf0e287df6))
+* **designer:** update dataset view to include processing strategy instead of RAG strategy ([ce05d32](https://github.com/llama-farm/llamafarm/commit/ce05d3274f46ab24c7270dd22f8ee6ea00d88a89))
+* **designer:** updates to 'diagnose' feature ([a3f2d57](https://github.com/llama-farm/llamafarm/commit/a3f2d572943e79b558bdd92620d2f2312c973018))
+* Include file names in dataset API responses ([#153](https://github.com/llama-farm/llamafarm/issues/153)) ([d380457](https://github.com/llama-farm/llamafarm/commit/d380457fd2da480393a0a4fdf1f622039b1a604b))
+* **parsers:** add comprehensive LlamaIndex parser support ([#126](https://github.com/llama-farm/llamafarm/issues/126)) ([e9ef35b](https://github.com/llama-farm/llamafarm/commit/e9ef35bbfa0a35b02612e41d0ba332fd40e339b2))
+* **rag:** enhanced processing feedback and duplicate detection ([#168](https://github.com/llama-farm/llamafarm/issues/168)) ([664ce43](https://github.com/llama-farm/llamafarm/commit/664ce43f4b37c4222f9c75356847c8d8cb82937c))
+* **rag:** new strategy approach + lf cli integration  ([#148](https://github.com/llama-farm/llamafarm/issues/148)) ([e645479](https://github.com/llama-farm/llamafarm/commit/e6454791d332241af7a82322e47ea6182ccaaac8))
+
+
+### Bug Fixes
+
+* add default system prompt to new project templates ([#155](https://github.com/llama-farm/llamafarm/issues/155)) ([275c0ee](https://github.com/llama-farm/llamafarm/commit/275c0eef6084b3a8b3462bbfc7447066958c1af4))
+* **deisgner:** addressing co-pilot and sourcery comments + build errors ([d26736d](https://github.com/llama-farm/llamafarm/commit/d26736dff537c9e69d4c725f70dc1cbed60f0373))
+* **designer:** address sorcery issues for create project modal changes ([60fa35d](https://github.com/llama-farm/llamafarm/commit/60fa35d8bf080cad2f6885b7a0d972774b4cd057))
+* **designer:** addressing cubic issues ([229d4af](https://github.com/llama-farm/llamafarm/commit/229d4af4c823fe4f9820418df2d86f2fb20b565c))
+* **designer:** addressing racheal comment ([8a434d6](https://github.com/llama-farm/llamafarm/commit/8a434d67474d22810c712e431f6315d90c254279))
+* **designer:** build errors ([5ee53fd](https://github.com/llama-farm/llamafarm/commit/5ee53fd61caf727366b8083a627d0860a7c63fb9))
+* **designer:** clean up Prompts page to avoid repetition in new test ([4e531f0](https://github.com/llama-farm/llamafarm/commit/4e531f0915a32824f4f3f46d207153e4bf583a9d))
+* **designer:** clean up Prompts page to avoid repetition in new test exp and polish ([136a5f2](https://github.com/llama-farm/llamafarm/commit/136a5f2dd8dca2420520302ed8ce366b962b3059))
+* **designer:** creating project experience was not working ([d7fd8af](https://github.com/llama-farm/llamafarm/commit/d7fd8af8307190930896726aa81122a0fd79f5d9))
+* **designer:** creating project experience was not working ([635badd](https://github.com/llama-farm/llamafarm/commit/635badd5f4935b4015ea3d2244d5f9df3649e2b8))
+* **designer:** fix build error ([9376223](https://github.com/llama-farm/llamafarm/commit/93762233e48f9bf606e560bfc9a699315f1804f6))
+* **designer:** fix build errors pt 2 ([6d2b0ee](https://github.com/llama-farm/llamafarm/commit/6d2b0eef0a060030cb9dd8365a717d534f870ca3))
+* **designer:** hybrid retrieval strategies need to have all the same settings within sub strategies ([5f805af](https://github.com/llama-farm/llamafarm/commit/5f805afcdad67b41080ad19c668386b6bfc3cacd))
+* **designer:** parsers and extractors priority numbers were flipped - now 1 is top instead of 100 ([40e3904](https://github.com/llama-farm/llamafarm/commit/40e3904e0090f48b279ddc5bde9a88f6d50067b9))
+* **designer:** polishing test experience - empty state and helper texts ([89b3c21](https://github.com/llama-farm/llamafarm/commit/89b3c21af72de23bb80140c6505d38deac3efdfd))
+* **designer:** remove redundant line in docker file ([77fa523](https://github.com/llama-farm/llamafarm/commit/77fa5232c37ed576f3839b2278c8d643ebd0ebd6))
+* **designer:** swap processing strat and embedding/retrival on rag page ([a0a9ccd](https://github.com/llama-farm/llamafarm/commit/a0a9ccd249a312cdf362502e94263cb448087c42))
+* lf run project path + jsonschema validation error output ([#170](https://github.com/llama-farm/llamafarm/issues/170)) ([8880a93](https://github.com/llama-farm/llamafarm/commit/8880a934f909525a40fe895e1a076a39b6646a57))
+* **rag:** context accumulation in chat history ([#162](https://github.com/llama-farm/llamafarm/issues/162)) ([870b3c2](https://github.com/llama-farm/llamafarm/commit/870b3c22f90ba384217429bd491d57bff8a81638))
+
+
+### Miscellaneous Chores
+
+* release 0.0.4 ([1015c6e](https://github.com/llama-farm/llamafarm/commit/1015c6eb1538a4e11906a29ad9a3be30cdec9d5d))
+
 ## [0.0.3](https://github.com/llama-farm/llamafarm/compare/v0.0.2...v0.0.3) (2025-09-11)
 
 
