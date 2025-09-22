@@ -51,13 +51,13 @@ export function generateMessageId(): string {
 }
 
 /**
- * Generate client session ID with context-aware naming
+ * Generate client session ID - clean, short identifier
+ * Context information belongs in SessionMetadata, not the ID
  */
-export function generateClientSessionId(namespace: string, project: string, chatService: string): string {
+export function generateClientSessionId(): string {
   const timestamp = Date.now()
   const random = Math.random().toString(36).substring(2, 9)
-  const context = `${namespace}_${project}_${chatService}`.replace(/[^a-zA-Z0-9]/g, '_')
-  return `client_${timestamp}_${random}_${context}`
+  return `client_${timestamp}_${random}`
 }
 
 /**
@@ -250,7 +250,7 @@ export function createOptimisticSession(
   project: string, 
   chatService: 'designer' | 'project'
 ): string {
-  const sessionId = generateClientSessionId(namespace, project, chatService)
+  const sessionId = generateClientSessionId()
   
   const sessionData: SessionMetadata = {
     namespace,
