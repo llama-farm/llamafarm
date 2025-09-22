@@ -15,6 +15,9 @@ export interface SessionMetadata {
   chatService: 'designer' | 'project'
   createdAt: string
   lastUsed: string
+  serverId?: string    // Server-provided ID when available
+  isPending?: boolean  // Waiting for server confirmation
+  clientId: string     // Always track original client ID
 }
 
 export interface ChatMessage {
@@ -45,6 +48,16 @@ export function generateMessageId(): string {
   const timestamp = Date.now()
   const random = Math.random().toString(36).substring(2, 9)
   return `msg_${timestamp}_${random}`
+}
+
+/**
+ * Generate client session ID with context-aware naming
+ */
+export function generateClientSessionId(namespace: string, project: string, chatService: string): string {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).substring(2, 9)
+  const context = `${namespace}_${project}_${chatService}`.replace(/[^a-zA-Z0-9]/g, '_')
+  return `client_${timestamp}_${random}_${context}`
 }
 
 /**
@@ -120,41 +133,64 @@ function cleanupOldSessions(): void {
 }
 
 /**
- * Cleanup orphaned temporary sessions (older than 1 hour)
+ * Cleanup pending sessions older than specified time
+ * Conservative approach: only removes empty pending sessions
  */
-export function cleanupOrphanedTempSessions(): void {
+export function cleanupPendingSessions(olderThanMinutes: number = 120): void { // Increased from 60 to 120
   try {
     const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
     const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-    const now = Date.now()
-    const oneHourAgo = now - (60 * 60 * 1000)
+    const cutoff = Date.now() - (olderThanMinutes * 60 * 1000)
     
     let cleanedCount = 0
+    let preservedCount = 0
+    let skipCount = 0
     
     Object.entries(sessions).forEach(([sessionId, session]) => {
-      if (sessionId.startsWith('temp_')) {
-        const createdAt = new Date(session.createdAt).getTime()
-        if (createdAt < oneHourAgo) {
-          console.log('Cleaning up orphaned temp session:', sessionId)
+      const sessionAge = Date.now() - new Date(session.createdAt).getTime();
+      const sessionAgeMinutes = sessionAge / (60 * 1000);
+      
+      // Only cleanup pending sessions that are old AND have no messages AND are really old (> cutoff)
+      if (session.isPending && new Date(session.createdAt).getTime() < cutoff) {
+        const messages = chatHistory[sessionId] || []
+        const sessionAgeHours = sessionAgeMinutes / 60;
+        
+        // Additional safety: Don't cleanup sessions that are less than 1 hour old, regardless of other conditions
+        // This prevents accidental cleanup of sessions that were just created
+        if (sessionAgeHours < 1) {
+          skipCount++
+        } else if (messages.length === 0) {
           delete sessions[sessionId]
           delete chatHistory[sessionId]
           cleanedCount++
+        } else {
+          preservedCount++
         }
+      } else {
+        skipCount++
       }
     })
     
     if (cleanedCount > 0) {
       setToStorage(STORAGE_KEYS.SESSIONS, sessions)
       setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-      console.log(`Cleaned up ${cleanedCount} orphaned temporary sessions`)
     }
   } catch (error) {
-    console.error('Failed to cleanup orphaned temp sessions:', error)
+    console.error('Failed to cleanup pending sessions:', error)
   }
 }
 
 /**
+ * @deprecated Use cleanupPendingSessions instead
+ * Cleanup orphaned temporary sessions (older than 1 hour)
+ */
+export function cleanupOrphanedTempSessions(): void {
+  cleanupPendingSessions(60)
+}
+
+/**
  * Find existing session for context (namespace + project + chatService)
+ * Prioritizes confirmed sessions over pending ones with enhanced debugging
  */
 export function findSessionForContext(
   namespace: string,
@@ -163,17 +199,38 @@ export function findSessionForContext(
 ): string | null {
   const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
   
-  for (const [sessionId, metadata] of Object.entries(sessions)) {
-    if (
-      metadata.namespace === namespace &&
-      metadata.project === project &&
-      metadata.chatService === chatService
-    ) {
-      return sessionId
-    }
+  // Find all matching sessions
+  const matches = Object.entries(sessions).filter(([, session]) => {
+    return session.namespace === namespace &&
+           session.project === project &&
+           session.chatService === chatService;
+  });
+  
+  if (matches.length === 0) {
+    return null;
   }
   
-  return null
+  // Sort: confirmed sessions first, then by lastUsed (most recent first)
+  matches.sort(([, a], [, b]) => {
+    // Prioritize confirmed sessions (isPending: false)
+    if (a.isPending !== b.isPending) {
+      return a.isPending ? 1 : -1;
+    }
+    // Then sort by most recent
+    return new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime();
+  });
+  
+  const [sessionId, sessionData] = matches[0];
+  
+  // Update lastUsed timestamp
+  updateSessionLastUsed(sessionId);
+  
+  // Return the appropriate ID (serverId if available and different, otherwise sessionId)
+  const finalId = sessionData.serverId && sessionData.serverId !== sessionId 
+    ? sessionData.serverId 
+    : sessionId;
+    
+  return finalId;
 }
 
 /**
@@ -183,6 +240,83 @@ export function initializeChatHistory(sessionId: string): void {
   const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
   chatHistory[sessionId] = []
   setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
+}
+
+/**
+ * Create optimistic session with client-generated ID
+ */
+export function createOptimisticSession(
+  namespace: string, 
+  project: string, 
+  chatService: 'designer' | 'project'
+): string {
+  const sessionId = generateClientSessionId(namespace, project, chatService)
+  
+  const sessionData: SessionMetadata = {
+    namespace,
+    project,
+    chatService,
+    createdAt: getCurrentTimestamp(),
+    lastUsed: getCurrentTimestamp(),
+    clientId: sessionId,
+    isPending: true
+  }
+  
+  saveSession(sessionId, sessionData)
+  initializeChatHistory(sessionId)
+  
+  return sessionId
+}
+
+/**
+ * Reconcile client session with server-provided session ID
+ */
+export function reconcileSessionWithServer(
+  clientSessionId: string, 
+  serverSessionId: string
+): string {
+  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
+  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
+  
+  const sessionData = sessions[clientSessionId]
+  if (!sessionData) {
+    console.warn('Client session not found for reconciliation:', clientSessionId)
+    return serverSessionId
+  }
+
+  // Get existing chat history from client session
+  const existingMessages = chatHistory[clientSessionId] || []
+
+  // Update session metadata
+  const updatedSession: SessionMetadata = {
+    ...sessionData,
+    serverId: serverSessionId,
+    isPending: false,
+    lastUsed: getCurrentTimestamp()
+  }
+
+  if (clientSessionId === serverSessionId) {
+    // Same ID, just update metadata
+    sessions[clientSessionId] = updatedSession
+  } else {
+    // Different IDs, migrate data
+    
+    // Create new session with server ID
+    sessions[serverSessionId] = updatedSession
+    
+    // Migrate chat history to server session ID
+    chatHistory[serverSessionId] = existingMessages
+    
+    // Clean up old client session
+    delete sessions[clientSessionId]
+    delete chatHistory[clientSessionId]
+  }
+
+  // Save updated data
+  setToStorage(STORAGE_KEYS.SESSIONS, sessions)
+  setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
+  
+  return serverSessionId
 }
 
 /**
@@ -218,6 +352,9 @@ export function createSessionFromServer(
     chatService,
     createdAt: getCurrentTimestamp(),
     lastUsed: getCurrentTimestamp(),
+    serverId: sessionId,
+    clientId: sessionId,
+    isPending: false
   }
   
   saveSession(sessionId, sessionData)
@@ -277,11 +414,81 @@ export function addMessageToHistory(sessionId: string, message: Omit<ChatMessage
 }
 
 /**
- * Load chat history for session
+ * Load chat history for session with enhanced lookup and recovery
+ * Checks both client and server session IDs to handle reconciliation cases
  */
 export function loadChatHistory(sessionId: string): ChatMessage[] {
   const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  return chatHistory[sessionId] || []
+  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
+  
+  // First try the direct session ID
+  if (chatHistory[sessionId]) {
+    return chatHistory[sessionId]
+  }
+  
+  // Get the session metadata for this session ID
+  const session = sessions[sessionId]
+  
+  if (session) {
+    // If this session has a client ID, try that
+    if (session.clientId && session.clientId !== sessionId && chatHistory[session.clientId]) {
+      // For safety, only return messages without migrating storage automatically
+      // Let the reconciliation process handle this more carefully
+      return chatHistory[session.clientId]
+    }
+    
+    // If this session has a server ID, try that
+    if (session.serverId && session.serverId !== sessionId && chatHistory[session.serverId]) {
+      return chatHistory[session.serverId]
+    }
+  }
+  
+  // If this might be a server ID, find the session that has this as serverId
+  const sessionWithThisServerId = Object.entries(sessions).find(
+    ([, s]) => s.serverId === sessionId
+  )
+  
+  if (sessionWithThisServerId) {
+    const [clientId, sessionData] = sessionWithThisServerId
+    
+    // Try messages under the client ID
+    if (chatHistory[clientId]) {
+      // Migrate to server ID if different
+      if (clientId !== sessionId) {
+        const messages = chatHistory[clientId]
+        chatHistory[sessionId] = messages
+        delete chatHistory[clientId]
+        setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
+        return messages
+      }
+      return chatHistory[clientId]
+    }
+    
+    // Try messages under the clientId of the session
+    if (sessionData.clientId && chatHistory[sessionData.clientId]) {
+      const messages = chatHistory[sessionData.clientId]
+      chatHistory[sessionId] = messages
+      delete chatHistory[sessionData.clientId]
+      setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
+      return messages
+    }
+  }
+  
+  return []
+}
+
+/**
+ * Save chat history for session
+ */
+export function saveChatHistory(sessionId: string, messages: ChatMessage[]): void {
+  try {
+    const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
+    chatHistory[sessionId] = messages
+    setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
+    updateSessionLastUsed(sessionId)
+  } catch (error) {
+    console.error('Failed to save chat history:', error);
+  }
 }
 
 /**
@@ -359,11 +566,118 @@ export function isStorageAvailable(): boolean {
   }
 }
 
+
+/**
+ * Debug utility to inspect session storage state
+ * Call this from browser console: window.debugSessions()
+ */
+export function debugSessionStorage(): void {
+  console.log('=== SESSION STORAGE DEBUG ===');
+  
+  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
+  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
+  
+  console.log('Sessions:', sessions);
+  console.log('Chat History Keys:', Object.keys(chatHistory));
+  
+  Object.entries(sessions).forEach(([sessionId, session]) => {
+    const messageCount = chatHistory[sessionId]?.length || 0
+    const serverMessageCount = session.serverId && session.serverId !== sessionId ? 
+      (chatHistory[session.serverId]?.length || 0) : 0
+      
+    console.log(`
+📝 Session: ${sessionId}`);
+    console.log(`  • Namespace: ${session.namespace}`);
+    console.log(`  • Project: ${session.project}`);
+    console.log(`  • Service: ${session.chatService}`);
+    console.log(`  • Pending: ${session.isPending}`);
+    console.log(`  • Client ID: ${session.clientId}`);
+    console.log(`  • Server ID: ${session.serverId}`);
+    console.log(`  • Messages (client): ${messageCount}`);
+    if (serverMessageCount > 0) {
+      console.log(`  • Messages (server): ${serverMessageCount}`);
+    }
+    
+    if (messageCount > 0) {
+      console.log(`  • Sample messages:`, chatHistory[sessionId]?.slice(0, 2));
+    }
+  });
+  
+  // Check for orphaned chat history
+  const sessionIds = new Set(Object.keys(sessions))
+  const serverIds = new Set(Object.values(sessions).map(s => s.serverId).filter(Boolean))
+  const allValidIds = new Set([...sessionIds, ...serverIds])
+  
+  const orphanedHistory = Object.keys(chatHistory).filter(id => !allValidIds.has(id))
+  if (orphanedHistory.length > 0) {
+    console.log(`
+⚠️ Orphaned chat history found:`, orphanedHistory);
+    orphanedHistory.forEach(id => {
+      console.log(`  • ${id}: ${chatHistory[id]?.length || 0} messages`);
+    });
+  }
+  
+  console.log('=== END DEBUG ===');
+}
+
+/**
+ * Debug session state transitions
+ * Call from browser console: window.debugSessionState()
+ */
+export function debugSessionState(): { sessions: SessionsStorage; chatHistory: ChatHistoryStorage } {
+  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
+  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
+  
+  console.log('=== SESSION DEBUG ===');
+  console.log('Total sessions:', Object.keys(sessions).length);
+  console.log('Sessions with messages:', Object.keys(chatHistory).filter(id => (chatHistory[id] || []).length > 0).length);
+  
+  // Group sessions by project context
+  const projectGroups: Record<string, Array<{ id: string; session: SessionMetadata; messageCount: number }>> = {}
+  
+  Object.entries(sessions).forEach(([id, session]) => {
+    const messageCount = (chatHistory[id] || []).length
+    const key = `${session.namespace}/${session.project}/${session.chatService}`
+    
+    if (!projectGroups[key]) projectGroups[key] = []
+    projectGroups[key].push({ id, session, messageCount })
+    
+    console.log(`Session ${id}:`, {
+      ...session,
+      messageCount,
+      hasMessages: messageCount > 0
+    })
+  })
+  
+  // Show duplicate sessions
+  console.log('\n=== PROJECT GROUPS ===');
+  Object.entries(projectGroups).forEach(([project, sessions]) => {
+    console.log(`Project ${project}:`, sessions.length, 'sessions');
+    if (sessions.length > 1) {
+      console.log('🔴 MULTIPLE SESSIONS FOR SAME PROJECT:', sessions);
+    }
+    sessions.forEach(({ id, session, messageCount }) => {
+      console.log(`  • ${id}: ${session.isPending ? 'PENDING' : 'CONFIRMED'}, ${messageCount} messages`);
+    })
+  })
+  
+  return { sessions, chatHistory }
+}
+
+// Make debug functions available globally for browser console
+if (typeof window !== 'undefined') {
+  (window as any).debugSessions = debugSessionStorage;
+  (window as any).debugSessionState = debugSessionState;
+}
+
 /**
  * Export all session management functions
  */
 export default {
   generateMessageId,
+  generateClientSessionId,
+  createOptimisticSession,
+  reconcileSessionWithServer,
   findSessionForContext,
   getExistingSession,
   createSessionFromServer,
@@ -372,10 +686,14 @@ export default {
   updateSessionLastUsed,
   addMessageToHistory,
   loadChatHistory,
+  saveChatHistory,
   clearChatHistory,
   deleteSession,
   getSessionsForContext,
   getAllSessions,
   isStorageAvailable,
+  cleanupPendingSessions,
   cleanupOrphanedTempSessions,
+  debugSessionStorage,
+  debugSessionState,
 }

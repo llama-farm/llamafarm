@@ -5,7 +5,7 @@
  * Maintains backward compatibility while adding project context session management
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useChatInference, useDeleteChatSession } from './useChat'
 import { createChatRequest, chatInferenceStreaming } from '../api/chatService'
 import { useProjectSession } from './useProjectSession'
@@ -60,8 +60,11 @@ export function useChatboxWithProjectSession(
 
   // Get current state from project session system (always used)
   const currentSessionId = projectSession.sessionId
-  const projectSessionMessages = projectSession.messages.map(projectSessionToChatboxMessage)
-  const isLoadingSession = projectSession.isLoading
+  const projectSessionMessages = useMemo(() => {
+    const mapped = projectSession.messages.map(projectSessionToChatboxMessage)
+    return mapped
+  }, [projectSession.messages, currentSessionId])
+  const isLoadingSession = false // Session loading is now synchronous
 
   // Cleanup timeout and abort streaming on unmount
   useEffect(() => {
@@ -151,7 +154,10 @@ export function useChatboxWithProjectSession(
   )
   
   // Combine project session messages with temporary streaming messages
-  const currentMessages = [...projectSessionMessages, ...streamingMessages]
+  const currentMessages = useMemo(() => {
+    const combined = [...projectSessionMessages, ...streamingMessages]
+    return combined
+  }, [projectSessionMessages, streamingMessages])
   
   // Handle sending message with streaming or non-streaming API integration
   const sendMessage = useCallback(
@@ -371,12 +377,23 @@ export function useChatboxWithProjectSession(
             }
           )
           
-          // Handle session creation if we got a new session ID from server
-          if (responseSessionId && !currentSessionId) {
+          // Handle session reconciliation if we got a session ID from server
+          if (responseSessionId) {
             try {
-              projectSession.createSessionFromServer(responseSessionId)
+              // Check if we have any existing session (even if currentSessionId is null)
+              const existingSessionId = currentSessionId || projectSession.sessionId
+              
+              if (existingSessionId) {
+                // Reconcile existing session with server ID
+                console.log('🔄 Reconciling existing session:', existingSessionId, 'with server:', responseSessionId);
+                projectSession.reconcileWithServer(existingSessionId, responseSessionId)
+              } else {
+                // Truly no existing session, create new one
+                console.log('✨ Creating new session from server:', responseSessionId);
+                projectSession.createSessionFromServer(responseSessionId)
+              }
             } catch (sessionError) {
-              console.error('Failed to create session from server response:', sessionError)
+              console.error('Failed to handle session from server response:', sessionError)
               // Don't fail the whole request for session management errors
             }
           }
@@ -392,12 +409,23 @@ export function useChatboxWithProjectSession(
             sessionId: currentSessionId || undefined,
           })
           
-          // Handle session creation if we got a new session ID from server
-          if (response.sessionId && !currentSessionId) {
+          // Handle session reconciliation if we got a session ID from server
+          if (response.sessionId) {
             try {
-              projectSession.createSessionFromServer(response.sessionId)
+              // Check if we have any existing session (even if currentSessionId is null)
+              const existingSessionId = currentSessionId || projectSession.sessionId
+              
+              if (existingSessionId) {
+                // Reconcile existing session with server ID
+                console.log('🔄 Reconciling existing session:', existingSessionId, 'with server:', response.sessionId);
+                projectSession.reconcileWithServer(existingSessionId, response.sessionId)
+              } else {
+                // Truly no existing session, create new one
+                console.log('✨ Creating new session from server:', response.sessionId);
+                projectSession.createSessionFromServer(response.sessionId)
+              }
             } catch (sessionError) {
-              console.error('Failed to create session from server response:', sessionError)
+              console.error('Failed to handle session from server response:', sessionError)
               // Don't fail the whole request for session management errors
             }
           }
