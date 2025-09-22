@@ -4,7 +4,6 @@ RAG Query Tasks
 Celery tasks for complex RAG query operations and processing.
 """
 
-import importlib.util
 import logging
 import sys
 from pathlib import Path
@@ -13,24 +12,10 @@ from typing import Any, Dict, List, Optional
 from celery import Task
 from celery_app import app
 
-# Add parent directory to path for imports - ensure we can import from rag modules
-rag_root = Path(__file__).parent.parent
-if str(rag_root) not in sys.path:
-    sys.path.insert(0, str(rag_root))
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from api import DatabaseSearchAPI
-except ImportError as e:
-    # Fallback: try importing from absolute path
-    api_path = rag_root / "api.py"
-    if api_path.exists():
-        spec = importlib.util.spec_from_file_location("api", api_path)
-        if spec and spec.loader:
-            api_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(api_module)
-            DatabaseSearchAPI = api_module.DatabaseSearchAPI
-    else:
-        raise ImportError(f"Could not import DatabaseSearchAPI: {e}")
+from api import DatabaseSearchAPI
 
 logger = logging.getLogger(__name__)
 

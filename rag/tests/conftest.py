@@ -13,7 +13,7 @@ project_root = rag_dir.parent  # /path/to/llamafarm-1
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(rag_dir))
 
-from rag.core.base import Document
+from core.base import Document
 
 
 @pytest.fixture
@@ -32,14 +32,14 @@ def sample_documents() -> list[Document]:
             id="doc1",
             content="This is a test document about machine learning",
             metadata={"type": "technical"},
-            embeddings=[0.1, 0.2, 0.3]
+            embeddings=[0.1, 0.2, 0.3],
         ),
         Document(
             id="doc2",
             content="Another document about data processing",
             metadata={"type": "technical"},
-            embeddings=[0.4, 0.5, 0.6]
-        )
+            embeddings=[0.4, 0.5, 0.6],
+        ),
     ]
 
 

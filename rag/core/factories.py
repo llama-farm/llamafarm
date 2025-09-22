@@ -151,7 +151,7 @@ class ParserFactoryWrapper(ComponentFactory):
     @classmethod
     def create(cls, component_type: str, config: Dict[str, Any] = None):
         """Create a parser instance using the new ParserFactory."""
-        # Use the new ParserFactory from rag.components.parsers
+        # Use the new ParserFactory from components.parsers
         return NewParserFactory.create_parser(component_type, config)
 
     @classmethod

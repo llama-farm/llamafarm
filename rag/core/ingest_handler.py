@@ -103,7 +103,7 @@ class IngestHandler:
         # Dynamically import the embedder based on type from config
         # Convert type like "OllamaEmbedder" to module path
         embedder_name_lower = embedder_type.replace("Embedder", "_embedder").lower()
-        module_path = f"rag.components.embedders.{embedder_name_lower}"
+        module_path = f"components.embedders.{embedder_name_lower}"
 
         try:
             # Import the module
@@ -160,7 +160,7 @@ class IngestHandler:
         # Dynamically import the store based on type from config
         # Convert type like "ChromaStore" to module path
         store_name_lower = vector_store_type.replace("Store", "_store").lower()
-        module_path = f"rag.components.stores.{store_name_lower}"
+        module_path = f"components.stores.{store_name_lower}"
 
         try:
             # Import the module

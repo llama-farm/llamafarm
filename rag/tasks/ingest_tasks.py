@@ -4,7 +4,6 @@ RAG Ingestion Tasks
 Celery tasks for RAG file ingestion and processing operations.
 """
 
-import importlib.util
 import json
 import logging
 import sys
@@ -12,28 +11,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from celery import Task
+
 from celery_app import app
 
-# Add parent directory to path for imports - ensure we can import from rag modules
-rag_root = Path(__file__).parent.parent
-if str(rag_root) not in sys.path:
-    sys.path.insert(0, str(rag_root))
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from core.ingest_handler import IngestHandler
-except ImportError as e:
-    # Fallback: try importing from absolute path
-    ingest_handler_path = rag_root / "core" / "ingest_handler.py"
-    if ingest_handler_path.exists():
-        spec = importlib.util.spec_from_file_location(
-            "core.ingest_handler", ingest_handler_path
-        )
-        if spec and spec.loader:
-            ingest_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(ingest_module)
-            IngestHandler = ingest_module.IngestHandler
-    else:
-        raise ImportError(f"Could not import IngestHandler: {e}")
+from core.ingest_handler import IngestHandler
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +218,7 @@ def ingest_file_with_rag_task(
                 "database": database_name,
                 "strategy": data_processing_strategy_name,
             },
+            exc_info=True,
         )
         details["error"] = str(e)
         return False, details

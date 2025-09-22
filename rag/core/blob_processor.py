@@ -93,7 +93,7 @@ class BlobProcessor:
 
         This follows the convention:
         - Parser type: PDFParser_LlamaIndex
-        - Module path: rag.components.parsers.pdf.llamaindex_parser
+        - Module path: components.parsers.pdf.llamaindex_parser
         - Class name: PDFParser_LlamaIndex
 
         Args:
@@ -128,10 +128,10 @@ class BlobProcessor:
 
         # Build potential module paths to try
         potential_paths = [
-            f"rag.components.parsers.{parser_category}.{implementation}_parser",
-            f"rag.components.parsers.{parser_category}.{parser_category}_parser",
-            f"rag.components.parsers.{parser_type.lower()}",
-            f"rag.components.parsers.{parser_category}.parser",
+            f"components.parsers.{parser_category}.{implementation}_parser",
+            f"components.parsers.{parser_category}.{parser_category}_parser",
+            f"components.parsers.{parser_type.lower()}",
+            f"components.parsers.{parser_category}.parser",
         ]
 
         # Also check if there's a direct mapping based on file structure
@@ -146,7 +146,9 @@ class BlobProcessor:
                     # Look for implementation files
                     for py_file in category_dir.glob("*_parser.py"):
                         if implementation in py_file.stem.lower():
-                            module_name = f"rag.components.parsers.{category_dir.name}.{py_file.stem}"
+                            module_name = (
+                                f"components.parsers.{category_dir.name}.{py_file.stem}"
+                            )
                             potential_paths.insert(0, module_name)
 
         # Try to import from potential paths
@@ -249,26 +251,26 @@ class BlobProcessor:
         # Build potential module paths to try
         potential_paths = [
             # Try subdirectory first (most extractors are in subdirs)
-            f"rag.components.extractors.{snake_name}.{snake_name}",
-            f"rag.components.extractors.{snake_name}",
+            f"components.extractors.{snake_name}.{snake_name}",
+            f"components.extractors.{snake_name}",
             # Try without 'extractor' suffix
-            f"rag.components.extractors.{snake_name.replace('_extractor', '')}.{snake_name.replace('_extractor', '')}_extractor",
+            f"components.extractors.{snake_name.replace('_extractor', '')}.{snake_name.replace('_extractor', '')}_extractor",
             # Try in base module
-            f"rag.components.extractors.base",
+            f"components.extractors.base",
         ]
 
         # Special cases for known extractors
         if extractor_type == "ContentStatisticsExtractor":
             potential_paths.insert(
-                0, "rag.components.extractors.statistics_extractor.statistics_extractor"
+                0, "components.extractors.statistics_extractor.statistics_extractor"
             )
         elif extractor_type == "EntityExtractor":
             potential_paths.insert(
-                0, "rag.components.extractors.entity_extractor.entity_extractor"
+                0, "components.extractors.entity_extractor.entity_extractor"
             )
         elif extractor_type == "KeywordExtractor":
             potential_paths.insert(
-                0, "rag.components.extractors.keyword_extractor.keyword_extractor"
+                0, "components.extractors.keyword_extractor.keyword_extractor"
             )
 
         # Try to import from potential paths

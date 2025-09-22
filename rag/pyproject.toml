@@ -67,6 +67,7 @@ dependencies = [
     "llama-index>=0.13.6",
     # Celery for task queue processing
     "celery>=5.5.3",
+    "structlog>=25.4.0",
 ]
 
 [project.optional-dependencies]

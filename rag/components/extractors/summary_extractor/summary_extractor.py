@@ -141,7 +141,7 @@ class SummaryExtractor(BaseExtractor):
 
     def extract(self, documents: List["Document"]) -> List["Document"]:
         """Extract summaries from documents."""
-        from rag.core.base import Document
+        from core.base import Document
 
         for doc in documents:
             try:

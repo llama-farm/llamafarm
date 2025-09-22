@@ -287,7 +287,7 @@ class DirectoryParser:
 
     def parse(self, source: str, **kwargs):
         """Parse all files in a directory."""
-        from rag.core.base import ProcessingResult
+        from core.base import ProcessingResult
 
         source_path = Path(source)
 

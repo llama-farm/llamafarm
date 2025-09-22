@@ -4,8 +4,8 @@ import pytest
 import tempfile
 import shutil
 
-from rag.core.base import Document
-from rag.components.stores.chroma_store.chroma_store import ChromaStore
+from core.base import Document
+from components.stores.chroma_store.chroma_store import ChromaStore
 
 
 class TestVectorStores:
@@ -16,10 +16,10 @@ class TestVectorStores:
         with tempfile.TemporaryDirectory() as temp_dir:
             config = {
                 "collection_name": "test_collection",
-                "persist_directory": temp_dir
+                "persist_directory": temp_dir,
             }
             store = ChromaStore(config=config)
-            
+
             assert store.collection_name == "test_collection"
             assert store.persist_directory == temp_dir
 
@@ -27,33 +27,32 @@ class TestVectorStores:
     def test_document_operations(self):
         """Test adding and searching documents."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = ChromaStore(config={
-                "collection_name": "test",
-                "persist_directory": temp_dir
-            })
-            
+            store = ChromaStore(
+                config={"collection_name": "test", "persist_directory": temp_dir}
+            )
+
             # Create test documents
             docs = [
                 Document(
                     id="doc1",
                     content="First document",
                     embeddings=[0.1, 0.2, 0.3],
-                    metadata={"type": "test"}
+                    metadata={"type": "test"},
                 ),
                 Document(
-                    id="doc2", 
+                    id="doc2",
                     content="Second document",
                     embeddings=[0.4, 0.5, 0.6],
-                    metadata={"type": "test"}
-                )
+                    metadata={"type": "test"},
+                ),
             ]
-            
+
             # Add documents - returns list of IDs
             result = store.add_documents(docs)
             assert isinstance(result, list)
             assert len(result) == 2
             assert result == ["doc1", "doc2"]
-            
+
             # Search documents
             results = store.search(query_embedding=[0.1, 0.2, 0.3], top_k=1)
             assert len(results) == 1
@@ -63,16 +62,16 @@ class TestVectorStores:
         """Test store handles errors gracefully."""
         # Test with a valid temporary directory instead
         import tempfile
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = ChromaStore(config={
-                "collection_name": "test",
-                "persist_directory": temp_dir
-            })
-            
+            store = ChromaStore(
+                config={"collection_name": "test", "persist_directory": temp_dir}
+            )
+
             # Test with invalid document (no embeddings)
             doc = Document(id="test", content="test")
             result = store.add_documents([doc])
             # Should handle gracefully
-            
+
             result = store.delete_collection()
             assert result is True

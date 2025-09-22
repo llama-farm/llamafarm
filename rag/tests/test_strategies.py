@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from rag.core.strategies.handler import SchemaHandler
+from core.strategies.handler import SchemaHandler
 
 
 class TestStrategies:
@@ -17,14 +17,17 @@ class TestStrategies:
     def test_schema_loading(self, test_config_path):
         """Test loading schema from YAML file."""
         handler = SchemaHandler(test_config_path)
-        
+
         assert handler.rag_config is not None
-        assert "databases" in handler.rag_config or "data_processing_strategies" in handler.rag_config
+        assert (
+            "databases" in handler.rag_config
+            or "data_processing_strategies" in handler.rag_config
+        )
 
     def test_get_available_strategies(self, test_config_path):
         """Test getting available strategies."""
         handler = SchemaHandler(test_config_path)
-        
+
         available = handler.get_available_strategies()
         assert isinstance(available, list)
         assert len(available) > 0
@@ -33,7 +36,7 @@ class TestStrategies:
         """Test parsing strategy names."""
         handler = SchemaHandler(test_config_path)
         available = handler.get_available_strategies()
-        
+
         if available:
             proc_name, db_name = handler.parse_strategy_name(available[0])
             assert proc_name is not None or db_name is not None
@@ -42,7 +45,7 @@ class TestStrategies:
         """Test getting combined configuration."""
         handler = SchemaHandler(test_config_path)
         available = handler.get_available_strategies()
-        
+
         if available:
             config = handler.get_combined_config(available[0])
             assert config is not None
@@ -52,7 +55,7 @@ class TestStrategies:
         """Test database configuration."""
         handler = SchemaHandler(test_config_path)
         databases = handler.get_database_names()
-        
+
         if databases:
             db_config = handler.create_database_config(databases[0])
             # New schema structure - check for 'config' instead of 'vector_store'

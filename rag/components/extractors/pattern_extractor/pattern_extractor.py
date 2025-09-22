@@ -120,7 +120,7 @@ class PatternExtractor(BaseExtractor):
         Returns:
             List of enhanced documents with pattern metadata
         """
-        from rag.core.base import Document
+        from core.base import Document
 
         enhanced_docs = []
         for doc in documents:

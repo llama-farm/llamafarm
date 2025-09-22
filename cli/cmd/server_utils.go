@@ -124,14 +124,14 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	base := strings.TrimRight(serverURL, "/")
 	healthURL := base + "/health"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}

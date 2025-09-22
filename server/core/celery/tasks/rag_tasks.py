@@ -7,7 +7,9 @@ are in the RAG container.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
+
 from celery import signature
+
 from core.celery import app
 
 

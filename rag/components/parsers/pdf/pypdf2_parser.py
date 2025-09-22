@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
-from rag.components.parsers.base.base_parser import BaseParser, ParserConfig
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class PDFParser_PyPDF2(BaseParser):
         self.extract_images = self.config.get("extract_images", False)
         self.extract_xmp_metadata = self.config.get("extract_xmp_metadata", False)
         self.clean_text = self.config.get("clean_text", True)
-    
+
     def _load_metadata(self) -> ParserConfig:
         """Load parser metadata."""
         return ParserConfig(
@@ -48,20 +48,24 @@ class PDFParser_PyPDF2(BaseParser):
             version="1.0.0",
             supported_extensions=[".pdf"],
             mime_types=["application/pdf"],
-            capabilities=["text_extraction", "metadata_extraction", "layout_preservation"],
+            capabilities=[
+                "text_extraction",
+                "metadata_extraction",
+                "layout_preservation",
+            ],
             dependencies={"PyPDF2": ["PyPDF2>=3.0.0"]},
             default_config={
                 "chunk_size": 1000,
                 "chunk_overlap": 100,
                 "chunk_strategy": "paragraphs",
                 "extract_metadata": True,
-                "preserve_layout": True
-            }
+                "preserve_layout": True,
+            },
         )
-    
+
     def can_parse(self, file_path: str) -> bool:
         """Check if this parser can handle the given file."""
-        return file_path.lower().endswith('.pdf')
+        return file_path.lower().endswith(".pdf")
 
     def validate_config(self) -> bool:
         """Validate configuration."""
@@ -71,23 +75,23 @@ class PDFParser_PyPDF2(BaseParser):
 
     def parse_blob(self, data: bytes, metadata: Dict[str, Any] = None) -> List:
         """Parse PDF from raw bytes."""
-        from rag.core.base import Document
+        from core.base import Document
         import io
-        
+
         try:
             import PyPDF2
         except ImportError:
             print("PyPDF2 not installed. Install with: pip install PyPDF2")
             return []
-        
+
         try:
             # Create a BytesIO object from the raw data
             pdf_file = io.BytesIO(data)
             pdf_reader = PyPDF2.PdfReader(pdf_file)
-            
+
             documents = []
             total_text = ""
-            
+
             # Extract text from all pages
             for page_num, page in enumerate(pdf_reader.pages, 1):
                 try:
@@ -97,31 +101,35 @@ class PDFParser_PyPDF2(BaseParser):
                 except Exception as e:
                     print(f"Error extracting text from page {page_num}: {e}")
                     continue
-            
+
             # Create document if we extracted any text
             if total_text.strip():
-                filename = metadata.get("filename", "unknown.pdf") if metadata else "unknown.pdf"
+                filename = (
+                    metadata.get("filename", "unknown.pdf")
+                    if metadata
+                    else "unknown.pdf"
+                )
                 doc = Document(
                     content=total_text,
                     metadata={
                         "source": filename,
                         "parser": "PDFParser_PyPDF2",
                         "page_count": len(pdf_reader.pages),
-                        **(metadata or {})
+                        **(metadata or {}),
                     },
-                    source=filename
+                    source=filename,
                 )
                 documents.append(doc)
-            
+
             return documents
-            
+
         except Exception as e:
             print(f"Error parsing PDF: {e}")
             return []
-    
+
     def parse(self, source: str, **kwargs):
         """Parse PDF using PyPDF2."""
-        from rag.core.base import Document, ProcessingResult
+        from core.base import Document, ProcessingResult
 
         try:
             import PyPDF2

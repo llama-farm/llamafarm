@@ -8,13 +8,12 @@ Tasks are organized by functionality:
 - query_tasks: Complex RAG query operations
 """
 
-from .search_tasks import search_with_rag_database_task
 from .ingest_tasks import ingest_file_with_rag_task
-from .query_tasks import handle_rag_query_task, batch_search_task
+from .query_tasks import handle_rag_query_task
+from .search_tasks import search_with_rag_database_task
 
 __all__ = [
     "search_with_rag_database_task",
     "ingest_file_with_rag_task",
     "handle_rag_query_task",
-    "batch_search_task",
 ]

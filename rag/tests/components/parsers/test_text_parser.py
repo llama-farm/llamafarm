@@ -9,8 +9,8 @@ import os
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from rag.core.base import Document
-from rag.components.parsers.text.python_parser import TextParser_Python
+from core.base import Document
+from components.parsers.text.python_parser import TextParser_Python
 
 
 class TestPlainTextParser:
@@ -94,7 +94,7 @@ The document concludes with this final section that summarizes the content."""
         result = default_parser.parse(temp_text_file)
 
         # Should return ProcessingResult
-        from rag.core.base import ProcessingResult
+        from core.base import ProcessingResult
 
         assert isinstance(result, ProcessingResult)
         assert isinstance(result.documents, list)

@@ -7,7 +7,7 @@ import re
 from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rag.core.base import Document
+    from core.base import Document
 
 from components.extractors.base import BaseExtractor
 
@@ -55,7 +55,7 @@ class HeadingExtractor(BaseExtractor):
         Returns:
             List of enhanced documents with heading metadata
         """
-        from rag.core.base import Document
+        from core.base import Document
 
         for doc in documents:
             try:
