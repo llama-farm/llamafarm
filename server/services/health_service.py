@@ -219,6 +219,62 @@ def _check_celery() -> dict:
         }
 
 
+def _check_rag_service() -> dict:
+    """Check RAG service health using cached status with background updates."""
+    start = _now_ms()
+    try:
+        from services.rag_health_cache import get_rag_health_cache
+        
+        # Get cached health status (non-blocking)
+        cache = get_rag_health_cache()
+        health_data = cache.get_cached_health()
+        
+        # Convert to health service format
+        status = health_data.get("status", "unhealthy")
+        message = health_data.get("message", "Unknown RAG status")
+        
+        # Add cache metadata to message if available
+        cache_age = health_data.get("cache_age_seconds", -1)
+        source = health_data.get("source", "unknown")
+        
+        if source == "cache" and cache_age >= 0:
+            if cache_age < 60:
+                message += f" (cached: {cache_age}s ago)"
+            else:
+                message += f" (cached: {cache_age//60}m ago)"
+        elif source == "immediate_check":
+            message += " (immediate check)"
+            
+        # Add detailed information if available
+        details = {}
+        if "worker_id" in health_data:
+            details["worker_id"] = health_data["worker_id"]
+        if "checks" in health_data:
+            details["checks"] = health_data["checks"]
+        if "metrics" in health_data:
+            details["metrics"] = health_data["metrics"]
+            
+        result = {
+            "name": "rag-service",
+            "status": status,
+            "message": message,
+            "latency_ms": _now_ms() - start,
+        }
+        
+        if details:
+            result["details"] = details
+            
+        return result
+        
+    except Exception as e:
+        return {
+            "name": "rag-service",
+            "status": "unhealthy",
+            "message": f"RAG health cache error: {e}",
+            "latency_ms": _now_ms() - start,
+        }
+
+
 def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
@@ -236,6 +292,7 @@ def health_summary() -> dict[str, Any]:
     components.append(_check_storage())
     components.append(_check_ollama())
     components.append(_check_celery())
+    components.append(_check_rag_service())
 
     seeds.append(_check_seed_project())
 
