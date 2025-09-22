@@ -5,7 +5,7 @@ This service handles RAG operations by delegating to the RAG container
 via Celery tasks instead of subprocess calls.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from core.logging import FastAPIStructLogger
 from core.celery.tasks.rag_tasks import (
     search_with_rag_database as search_task,
@@ -23,8 +23,8 @@ def search_with_rag_database(
     database: str,
     query: str,
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    retrieval_strategy: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
 
@@ -73,15 +73,15 @@ def search_with_rag_database(
         return []
 
 
-def ingest_file_with_rag(
+async def ingest_file_with_rag(
     project_dir: str,
     project_config: LlamaFarmConfig,
     data_processing_strategy_name: str,
     database_name: str,
     source_path: str,
-    filename: Optional[str] = None,
-    dataset_name: Optional[str] = None,
-) -> Tuple[bool, Dict[str, Any]]:
+    filename: str | None = None,
+    dataset_name: str | None = None,
+) -> tuple[bool, dict[str, Any]]:
     """
     Ingest a single file using the RAG system via Celery task.
 
@@ -108,7 +108,7 @@ def ingest_file_with_rag(
     )
 
     try:
-        success, details = ingest_task(
+        success, details = await ingest_task(
             project_dir=project_dir,
             data_processing_strategy_name=data_processing_strategy_name,
             database_name=database_name,
@@ -132,6 +132,7 @@ def ingest_file_with_rag(
             project_dir=project_dir,
             database=database_name,
             strategy=data_processing_strategy_name,
+            exc_info=True,
         )
         return False, {
             "filename": filename or source_path.split("/")[-1],
@@ -150,10 +151,10 @@ def handle_rag_query(
     project_dir: str,
     database: str,
     query: str,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> Dict[str, Any]:
+    retrieval_strategy: str | None = None,
+) -> dict[str, Any]:
     """
     Handle complex RAG query operations via Celery task.
 
@@ -218,8 +219,8 @@ def search_with_rag(
     dataset: str,
     query: str,
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    retrieval_strategy: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Run a search via RAG API (dataset-based search).
 

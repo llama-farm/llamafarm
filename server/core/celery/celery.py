@@ -30,6 +30,13 @@ if settings.celery_broker_url and settings.celery_result_backend:
             "result_serializer": "json",
             "timezone": "UTC",
             "enable_utc": True,
+            # Task routing - only handle server tasks, ignore rag.* tasks
+            "task_routes": {
+                "rag.*": {"queue": "rag"},
+                "core.celery.tasks.*": {"queue": "server"},
+            },
+            # Import server task modules
+            "imports": ("core.celery.tasks.task_process_dataset",),
         }
     )
 else:
@@ -44,6 +51,13 @@ else:
             },
             "result_backend": f"file://{settings.lf_data_dir}/broker/results",
             "result_persistent": True,
+            # Task routing - only handle server tasks, ignore rag.* tasks
+            "task_routes": {
+                "rag.*": {"queue": "rag"},
+                "core.celery.tasks.*": {"queue": "server"},
+            },
+            # Import server task modules
+            "imports": ("core.celery.tasks.task_process_dataset",),
         }
     )
 
@@ -65,7 +79,8 @@ def setup_celery_logging(**kwargs):
 
 
 def run_worker():
-    app.worker_main(argv=["worker", "-P", "solo", "--uid", "0"])
+    # Only consume from the 'celery' queue, not the 'rag' queue
+    app.worker_main(argv=["worker", "-P", "solo", "--uid", "0", "-Q", "server"])
 
 
 t = threading.Thread(target=run_worker, daemon=True)

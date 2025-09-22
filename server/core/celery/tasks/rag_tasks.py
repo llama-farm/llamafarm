@@ -6,9 +6,10 @@ with the RAG service. These are task signatures - the actual implementations
 are in the RAG container.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any
 
-from celery import signature
+from celery import current_task, signature
 
 from core.celery import app
 
@@ -18,10 +19,11 @@ def search_with_rag_database(
     database: str,
     query: str,
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    retrieval_strategy: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
+    This version is safe to call from both regular code and within Celery tasks.
 
     Args:
         project_dir: Directory containing llamafarm.yaml config
@@ -39,19 +41,43 @@ def search_with_rag_database(
         app=app,
     )
     result = task.apply_async()
-    return result.get(timeout=30)  # 30 second timeout
+
+    # Check if we're already inside a Celery task context
+    if current_task and getattr(current_task.request, "id", None):
+        # We're inside a task - poll for result without using result.get()
+        timeout = 30
+        poll_interval = 0.5
+        waited = 0.0
+
+        while waited < timeout:
+            if result.status not in ("PENDING", "STARTED"):
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+
+        if result.status == "SUCCESS":
+            return result.result
+        elif result.status == "FAILURE":
+            # Re-raise the exception
+            result.get()  # This will raise the exception
+        else:
+            return []  # Return empty list on timeout or other status
+    else:
+        # We're not inside a task - safe to use result.get()
+        return result.get(timeout=30)  # 30 second timeout
 
 
-def ingest_file_with_rag(
+async def ingest_file_with_rag(
     project_dir: str,
     data_processing_strategy_name: str,
     database_name: str,
     source_path: str,
-    filename: Optional[str] = None,
-    dataset_name: Optional[str] = None,
-) -> Tuple[bool, Dict[str, Any]]:
+    filename: str | None = None,
+    dataset_name: str | None = None,
+) -> tuple[bool, dict[str, Any]]:
     """
     Ingest a single file using the RAG system via Celery task.
+    This version is safe to call from both regular code and within Celery tasks.
 
     Args:
         project_dir: The directory of the project
@@ -77,19 +103,59 @@ def ingest_file_with_rag(
         app=app,
     )
     result = task.apply_async()
-    return result.get(timeout=120)  # 2 minute timeout for file processing
+
+    poll_interval = 2  # seconds
+    max_wait = 120  # seconds
+    waited = 0
+
+    # Check if we're already inside a Celery task context
+    if current_task and getattr(current_task.request, "id", None):
+        # We're inside a task - use polling without result.get()
+        while True:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+            if waited >= max_wait:
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+
+        # Get the result without using result.get() to avoid the error
+        if result.status == "SUCCESS":
+            return result.result
+        elif result.status == "FAILURE":
+            # Re-raise the exception
+            result.get()  # This will raise the exception
+        else:
+            # Timeout or other status
+            return False, {
+                "error": f"Task timed out or failed with status: {result.status}"
+            }
+    else:
+        # We're not inside a task - safe to use result.get()
+        while True:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+            if waited >= max_wait:
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+
+        return result.get()  # Safe to call from non-task context
 
 
 def handle_rag_query(
     project_dir: str,
     database: str,
     query: str,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> Dict[str, Any]:
+    retrieval_strategy: str | None = None,
+) -> dict[str, Any]:
     """
     Handle complex RAG query operations via Celery task.
+    This version is safe to call from both regular code and within Celery tasks.
 
     Args:
         project_dir: Directory containing llamafarm.yaml config
@@ -108,18 +174,51 @@ def handle_rag_query(
         app=app,
     )
     result = task.apply_async()
-    return result.get(timeout=60)  # 1 minute timeout
+
+    # Check if we're already inside a Celery task context
+    if current_task and getattr(current_task.request, "id", None):
+        # We're inside a task - poll for result without using result.get()
+        timeout = 60
+        poll_interval = 1
+        waited = 0
+
+        while waited < timeout:
+            if result.status not in ("PENDING", "STARTED"):
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+
+        if result.status == "SUCCESS":
+            return result.result
+        elif result.status == "FAILURE":
+            # Re-raise the exception
+            result.get()  # This will raise the exception
+        else:
+            # Return empty result on timeout or other status
+            return {
+                "query": query,
+                "database": database,
+                "results": [],
+                "total_results": 0,
+                "retrieval_strategy": retrieval_strategy,
+                "context": context,
+                "error": f"Task timed out or failed: {result.status}",
+            }
+    else:
+        # We're not inside a task - safe to use result.get()
+        return result.get(timeout=60)  # 1 minute timeout
 
 
 def batch_search(
     project_dir: str,
     database: str,
-    queries: List[str],
+    queries: list[str],
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    retrieval_strategy: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Handle batch search operations via Celery task.
+    This version is safe to call from both regular code and within Celery tasks.
 
     Args:
         project_dir: Directory containing llamafarm.yaml config
@@ -137,4 +236,28 @@ def batch_search(
         app=app,
     )
     result = task.apply_async()
-    return result.get(timeout=len(queries) * 10)  # 10 seconds per query timeout
+
+    timeout = len(queries) * 10  # 10 seconds per query timeout
+
+    # Check if we're already inside a Celery task context
+    if current_task and getattr(current_task.request, "id", None):
+        # We're inside a task - poll for result without using result.get()
+        poll_interval = 1
+        waited = 0
+
+        while waited < timeout:
+            if result.status not in ("PENDING", "STARTED"):
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+
+        if result.status == "SUCCESS":
+            return result.result
+        elif result.status == "FAILURE":
+            # Re-raise the exception
+            result.get()  # This will raise the exception
+        else:
+            return []  # Return empty list on timeout or other status
+    else:
+        # We're not inside a task - safe to use result.get()
+        return result.get(timeout=timeout)

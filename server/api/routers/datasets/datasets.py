@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel
 
@@ -6,7 +8,6 @@ from core.logging import FastAPIStructLogger
 from services.data_service import DataService, FileExistsInAnotherDatasetError
 from services.dataset_service import Dataset, DatasetService
 from services.project_service import ProjectService
-from services.rag_service import ingest_file_with_rag
 
 logger = FastAPIStructLogger()
 
@@ -171,12 +172,14 @@ class FileProcessingDetail(BaseModel):
 
 
 class ProcessDatasetResponse(BaseModel):
+    message: str
     processed_files: int
     skipped_files: int
     failed_files: int
     strategy: str | None = None
     database: str | None = None
     details: list[FileProcessingDetail]
+    task_id: str | None = None  # For async processing
 
 
 @router.post("/{dataset}/process", response_model=ProcessDatasetResponse)
@@ -184,8 +187,13 @@ async def process_dataset(
     namespace: str,
     project: str,
     dataset: str,
+    async_processing: bool = False,
 ):
-    """Process all unprocessed files in the dataset into the vector database"""
+    """Process all unprocessed files in the dataset into the vector database
+
+    Args:
+        async_processing: If True, use task chaining and return immediately with task info
+    """
     logger.bind(namespace=namespace, project=project, dataset=dataset)
 
     # Get project and dataset configuration
@@ -231,6 +239,44 @@ async def process_dataset(
             status_code=400, detail="Invalid raw data directory (security violation)"
         )
 
+    # If async processing is requested, use task chaining
+    if async_processing:
+        from core.celery.tasks import create_dataset_processing_chain
+
+        # Create task chain for all files
+        task_chain = create_dataset_processing_chain(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            data_processing_strategy_name=data_processing_strategy_name,
+            database_name=database_name,
+            file_hashes=dataset_config.files or [],
+        )
+
+        # Execute the chain asynchronously
+        result = task_chain.apply_async()
+
+        # Return immediately with task information
+        return ProcessDatasetResponse(
+            message="Dataset processing started asynchronously",
+            processed_files=0,
+            skipped_files=0,
+            failed_files=0,
+            strategy=data_processing_strategy_name,
+            database=database_name,
+            details=[
+                FileProcessingDetail(
+                    hash=file_hash,
+                    filename=None,
+                    status="pending",
+                    error=None,
+                )
+                for file_hash in dataset_config.files or []
+            ],
+            task_id=result.id,  # Add task ID for tracking
+        )
+
+    # Synchronous processing (existing behavior)
     for file_hash in dataset_config.files or []:
         # Safely construct and validate data path to prevent path traversal
         data_path = os.path.normpath(os.path.join(raw_data_dir, file_hash))
@@ -294,7 +340,7 @@ async def process_dataset(
             filename = metadata.filename
             # Get file size (data_path already validated above)
             file_size = os.path.getsize(data_path)
-        except:
+        except Exception:
             filename = os.path.basename(data_path)
             # Get file size (data_path already validated above)
             file_size = os.path.getsize(data_path)
@@ -303,16 +349,81 @@ async def process_dataset(
             f"Processing file: {filename} ({file_hash[:8]}...) - {file_size} bytes"
         )
 
-        # Process the file
-        ok, file_details = ingest_file_with_rag(
-            project_dir=project_dir,
-            project_config=project_obj.config,
+        # Process the file using task chaining instead of direct call
+        from core.celery.tasks import process_single_file_task
+
+        # Use the file hash as the identifier
+        task = process_single_file_task.delay(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hash=file_hash,
             data_processing_strategy_name=data_processing_strategy_name,
             database_name=database_name,
-            source_path=data_path,
-            filename=filename,
-            dataset_name=dataset,  # Pass dataset name for logging
         )
+
+        # Wait for the task to complete using polling to avoid result.get() error
+        timeout = 300  # 5 minutes
+        poll_interval = 2  # seconds
+        waited = 0
+
+        try:
+            while waited < timeout:
+                if task.status not in ("PENDING", "STARTED"):
+                    break
+                time.sleep(poll_interval)
+                waited += poll_interval
+
+            if task.status == "SUCCESS":
+                result = task.result
+                ok = result["success"]
+                file_details = result["details"]
+            elif task.status == "FAILURE":
+                # Handle task failure
+                logger.error(f"Task failed for file {file_hash}: {task.result}")
+                ok = False
+                file_details = {
+                    "filename": filename,
+                    "error": str(task.result),
+                    "parser": None,
+                    "extractors": [],
+                    "chunks": None,
+                    "chunk_size": None,
+                    "embedder": None,
+                    "reason": None,
+                    "result": None,
+                }
+            else:
+                # Timeout or other status
+                logger.error(
+                    f"Task timed out or failed for file {file_hash}: {task.status}"
+                )
+                ok = False
+                file_details = {
+                    "filename": filename,
+                    "error": f"Task timed out or failed with status: {task.status}",
+                    "parser": None,
+                    "extractors": [],
+                    "chunks": None,
+                    "chunk_size": None,
+                    "embedder": None,
+                    "reason": None,
+                    "result": None,
+                }
+        except Exception as e:
+            logger.error(f"Unexpected error for file {file_hash}: {e}")
+            ok = False
+            file_details = {
+                "filename": filename,
+                "error": str(e),
+                "parser": None,
+                "extractors": [],
+                "chunks": None,
+                "chunk_size": None,
+                "embedder": None,
+                "reason": None,
+                "result": None,
+            }
 
         # Determine actual status based on file_details
         # Check multiple indicators for duplicates
@@ -355,9 +466,9 @@ async def process_dataset(
     logger.info(
         "Dataset processing complete",
         dataset=dataset,
-        processed=processed,
-        skipped=skipped,
-        failed=failed,
+        processed_files=processed,
+        skipped_files=skipped,
+        failed_files=failed,
     )
 
     # Add log file location info
@@ -387,6 +498,7 @@ async def process_dataset(
         logger.debug(f"Could not get log info: {e}")
 
     response = ProcessDatasetResponse(
+        message="Dataset processing completed",
         processed_files=processed,
         skipped_files=skipped,
         failed_files=failed,
