@@ -187,6 +187,8 @@ async def delete_project(namespace: str, project_id: str):
 
 agent_sessions: builtins.dict[str, AtomicAgent] = {}
 _agent_sessions_lock = threading.RLock()
+# Track echo counts per session to detect problematic sessions
+_session_echo_counts: builtins.dict[str, int] = {}
 
 
 @router.post(

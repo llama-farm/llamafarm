@@ -4,6 +4,7 @@ with JSON schema validation and write capabilities.
 """
 
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -262,15 +263,20 @@ def _save_yaml_file(config: dict, file_path: Path) -> None:
         raise ConfigError("PyYAML is required to save YAML files.")
 
     try:
+        # First dump to string to ensure complete serialization
+        yaml_content = yaml.dump(
+            config,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+            indent=2,
+        )
+        
+        # Then write the complete string to file atomically
         with open(file_path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                config,
-                f,
-                default_flow_style=False,
-                allow_unicode=True,
-                sort_keys=False,
-                indent=2,
-            )
+            f.write(yaml_content)
+            f.flush()  # Explicitly flush to ensure all data is written
+            os.fsync(f.fileno())  # Force write to disk
     except Exception as e:
         raise ConfigError(f"Error saving YAML file {file_path}: {e}") from e
 

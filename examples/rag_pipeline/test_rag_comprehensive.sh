@@ -56,24 +56,22 @@ TEST_DB="test_rag_cli_db_$(date +%s)"
 TEST_DATASET="test_rag_cli_dataset_$(date +%s)"
 
 # Determine project configuration path dynamically
-# First try the default location
-PROJECT_CONFIG="$HOME/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
-
-# If not found, try relative to the script location
-if [ ! -f "$PROJECT_CONFIG" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-    PROJECT_CONFIG="$PROJECT_ROOT/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
-fi
-
-# If still not found, use environment variable or prompt
-if [ ! -f "$PROJECT_CONFIG" ]; then
-    if [ -n "$LLAMAFARM_CONFIG" ]; then
-        PROJECT_CONFIG="$LLAMAFARM_CONFIG"
+# First check if LLAMAFARM_CONFIG is set
+if [ -n "$LLAMAFARM_CONFIG" ]; then
+    PROJECT_CONFIG="$LLAMAFARM_CONFIG"
+else
+    # Try to find llamafarm.yaml in the current working directory
+    if [ -f "$(pwd)/llamafarm.yaml" ]; then
+        PROJECT_CONFIG="$(pwd)/llamafarm.yaml"
+    # If not found, try relative to the script location
+    elif [ -f "$(cd "$(dirname "$0")/../.." && pwd)/llamafarm.yaml" ]; then
+        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+        PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+        PROJECT_CONFIG="$PROJECT_ROOT/llamafarm.yaml"
     else
-        echo "Warning: Could not find llamafarm.yaml automatically."
-        echo "Please set LLAMAFARM_CONFIG environment variable to the path of your llamafarm.yaml"
-        echo "Example: export LLAMAFARM_CONFIG=~/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
+        echo "Warning: Could not find llamafarm.yaml in current directory or project root."
+        echo "Please run this script from the llamafarm-1 directory or set LLAMAFARM_CONFIG"
+        echo "Example: export LLAMAFARM_CONFIG=/path/to/llamafarm.yaml"
         exit 1
     fi
 fi
@@ -81,9 +79,13 @@ fi
 # Get the folder path to $PROJECT_CONFIG
 PROJECT_CONFIG_DIR="$(dirname "$PROJECT_CONFIG")"
 
-# LlamaFarm CLI command
-LF_PATH=${LF_PATH:-"./lf"}
-LF_CMD="${LF_PATH} --cwd $PROJECT_CONFIG_DIR"
+# LlamaFarm CLI command - use 'lf' directly without path prefix
+# When running from the project directory, we don't need --cwd
+if [ "$PROJECT_CONFIG_DIR" = "$(pwd)" ]; then
+    LF_CMD="lf"
+else
+    LF_CMD="lf --cwd $PROJECT_CONFIG_DIR"
+fi
 
 # Sample files from the examples directory
 if [ -n "$SAMPLE_DIR" ]; then

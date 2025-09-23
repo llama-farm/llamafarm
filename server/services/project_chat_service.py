@@ -200,6 +200,26 @@ class ProjectChatService:
         logger.info(f"Agent response: {agent_response}")
 
         response_message = agent_response.chat_message
+        
+        # Check if response is echoing input - this is a critical issue
+        if response_message == message:
+            logger.error(f"CRITICAL: Response is echoing input! Input: {message}, Response: {response_message}")
+            
+            # Clear the corrupted history to prevent learning from bad responses
+            if hasattr(chat_agent, 'history'):
+                logger.warning("Clearing agent history due to echo response")
+                # Remove the last exchange if it was an echo
+                if len(chat_agent.history) >= 2:
+                    # Remove the last assistant response (the echo)
+                    chat_agent.history = chat_agent.history[:-1]
+            
+            # Generate a fallback response
+            response_message = (
+                "I apologize, but I'm having trouble processing your question properly. "
+                "Could you please try rephrasing it or asking something else? "
+                "If this continues, you may want to start a new session."
+            )
+            logger.info(f"Using fallback response instead of echo")
 
         completion = ChatCompletion(
             id=f"chat-{uuid.uuid4()}",
@@ -287,6 +307,11 @@ class ProjectChatService:
 
                     # Skip duplicates
                     if current_response == previous_response:
+                        continue
+                    
+                    # Skip if response is just echoing the input
+                    if current_response == message:
+                        logger.warning(f"Skipping echoed input in stream: {current_response}")
                         continue
 
                     # If this is the first chunk, yield it entirely

@@ -31,6 +31,7 @@ class ProjectChatOrchestratorAgentInputSchema(BaseIOSchema):
 class ProjectChatOrchestratorAgentOutputSchema(BaseIOSchema):
     """
     Output schema for the project chat orchestrator agent.
+    This schema is intentionally simple to ensure compatibility with Ollama's JSON parsing.
     """
 
     chat_message: str
@@ -43,6 +44,7 @@ class ProjectChatOrchestratorAgent(
     ]
 ):
     def __init__(self, project_config: LlamaFarmConfig):
+        self.project_config = project_config
         history = _get_history(project_config)
         client = _get_client(project_config)
 
@@ -119,11 +121,19 @@ def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
 
 
 def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor:
-    mode = (
-        instructor.mode.Mode[project_config.runtime.instructor_mode.upper()]
-        if project_config.runtime.instructor_mode is not None
-        else instructor.Mode.TOOLS
-    )
+    # For Ollama, use JSON mode which is more reliable
+    if project_config.runtime.provider == Provider.ollama:
+        # Force JSON mode for Ollama as it's most compatible
+        mode = instructor.Mode.JSON
+        logger.info(f"Using JSON mode for Ollama provider (most compatible)")
+    else:
+        mode = (
+            instructor.mode.Mode[project_config.runtime.instructor_mode.upper()]
+            if project_config.runtime.instructor_mode is not None
+            else instructor.Mode.TOOLS
+        )
+    
+    logger.info(f"Instructor mode: {mode}")
 
     if project_config.runtime.provider == Provider.openai:
         return instructor.from_openai(
@@ -134,7 +144,7 @@ def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor
             mode=mode,
         )
     if project_config.runtime.provider == Provider.ollama:
-        return instructor.from_openai(
+        client = instructor.from_openai(
             AsyncOpenAI(
                 api_key=project_config.runtime.api_key or settings.ollama_api_key,
                 base_url=project_config.runtime.base_url
@@ -142,6 +152,9 @@ def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor
             ),
             mode=mode,
         )
+        # Set max_retries to handle Ollama's occasional parsing issues
+        client.max_retries = 2
+        return client
     else:
         raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")
 

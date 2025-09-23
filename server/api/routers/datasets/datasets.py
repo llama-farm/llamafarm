@@ -21,7 +21,8 @@ router = APIRouter(
 
 class FlexibleDataset(BaseModel):
     name: str
-    rag_strategy: str
+    data_processing_strategy: str
+    database: str
     files: Union[list[str], list[DatasetFile]]
 
 
@@ -42,7 +43,8 @@ async def list_datasets(
         datasets = [
             FlexibleDataset(
                 name=ds.name,
-                rag_strategy=ds.rag_strategy or "auto",
+                data_processing_strategy=getattr(ds, 'data_processing_strategy', 'auto'),
+                database=getattr(ds, 'database', 'main_database'),
                 files=ds.files
             )
             for ds in detailed_datasets
@@ -53,7 +55,8 @@ async def list_datasets(
         datasets = [
             FlexibleDataset(
                 name=ds.name,
-                rag_strategy=ds.rag_strategy or "auto",
+                data_processing_strategy=ds.data_processing_strategy,
+                database=ds.database,
                 files=ds.files
             )
             for ds in basic_datasets

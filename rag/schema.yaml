@@ -1833,7 +1833,7 @@ definitions:
               description: Embedder configuration
               additionalProperties: true
             condition:
-              type: string
+              type: ["string", "null"]
               description: Optional condition for when to use this embedding (e.g., doc.type == 'code')
             priority:
               type: integer
@@ -1922,7 +1922,7 @@ definitions:
               description: Parser configuration
               additionalProperties: true
             file_extensions:
-              type: array
+              type: ["array", "null"]
               items:
                 type: string
                 pattern: ^\.[a-zA-Z0-9]+$
@@ -1955,7 +1955,7 @@ definitions:
               minimum: 0
               maximum: 1000
             mime_types:
-              type: array
+              type: ["array", "null"]
               items:
                 type: string
               description: MIME types this parser handles (e.g., ["application/pdf"])
@@ -1964,7 +1964,7 @@ definitions:
                 - ["text/csv", "text/tab-separated-values"]  # CSV parser
                 - ["text/markdown", "text/x-markdown"]  # Markdown parser
             fallback_parser:
-              type: string
+              type: ["string", "null"]
               description: Parser to use if this one fails
             priority:
               type: integer
@@ -1987,12 +1987,12 @@ definitions:
               description: Extractor configuration
               additionalProperties: true
             required_for:
-              type: array
+              type: ["array", "null"]
               items:
                 type: string
               description: Database names that require this extractor
             condition:
-              type: string
+              type: ["string", "null"]
               description: Optional condition for when to use this extractor
             file_include_patterns:
               type: array
