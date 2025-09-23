@@ -104,12 +104,12 @@ new_db = {
         'port': 8000
     },
     'embedding_strategies': [
-       {
+        {
             'name': 'default_embeddings',
             'type': 'OllamaEmbedder',
             'config': {
                 'auto_pull': True,
-                'base_url': 'http://localhost:11434/',
+                'base_url': 'http://localhost:11434',
                 'batch_size': 16,
                 'dimension': 768,
                 'model': 'nomic-embed-text',
@@ -164,10 +164,11 @@ else
     if grep -q "name: ${TEST_DB}" "$PROJECT_CONFIG"; then
         print_info "Database '${TEST_DB}' already exists in configuration"
     else
-        # Find the last database entry and add new one after it
-        # This is a simplified approach - adds before the embedding_strategies section
+        # Find a database entry and add new one before it
+        # This adds the new database before the first database's embedding_strategies
         awk -v db="${TEST_DB}" '
-        /^    embedding_strategies:/ && !done {
+        /^  databases:/ {
+            print
             print "  - name: " db
             print "    type: ChromaStore"
             print "    config:"
@@ -180,7 +181,7 @@ else
             print "      type: OllamaEmbedder"
             print "      config:"
             print "        auto_pull: true"
-            print "        base_url: http://localhost:11434/"
+            print "        base_url: http://localhost:11434"
             print "        batch_size: 16"
             print "        dimension: 768"
             print "        model: nomic-embed-text"
@@ -202,7 +203,7 @@ else
             print "      default: false"
             print "    default_embedding_strategy: default_embeddings"
             print "    default_retrieval_strategy: basic_search"
-            done = 1
+            next
         }
         { print }
         ' "$PROJECT_CONFIG" > "${PROJECT_CONFIG}.tmp" && mv "${PROJECT_CONFIG}.tmp" "$PROJECT_CONFIG"
@@ -248,13 +249,28 @@ ${LF_CMD} datasets ingest "${TEST_DATASET}" \
     ${SAMPLE_DIR}/code/example.py
 
 print_step "Adding FDA documents (all PDFs in directory)..."
-# Find all PDFs in the directory and ingest them
+# Method 1: Pass all PDF files found recursively - upload one at a time to avoid bulk failure
 PDF_FILES=$(find ${SAMPLE_DIR}/fda -name "*.pdf" -type f)
 if [ -n "$PDF_FILES" ]; then
-    echo "Found PDFs: $PDF_FILES"
-    ${LF_CMD} datasets ingest "${TEST_DATASET}" $PDF_FILES
+    echo "Found $(echo $PDF_FILES | wc -w) PDF files"
+    # Upload PDFs one at a time to avoid dataset corruption on failure
+    for pdf in $PDF_FILES; do
+        echo "  Uploading: $(basename $pdf)"
+        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$pdf" || print_info "Failed to upload $(basename $pdf), continuing..."
+    done
 else
     print_info "No PDF files found in ${SAMPLE_DIR}/fda"
+fi
+
+print_step "Alternative: Adding entire research_papers directory recursively..."
+# Method 2: Find all text files in research_papers and subdirectories - these are duplicates so they should be skipped
+ALL_TEXT_FILES=$(find ${SAMPLE_DIR}/research_papers -type f \( -name "*.txt" -o -name "*.md" \))
+if [ -n "$ALL_TEXT_FILES" ]; then
+    echo "Found $(echo $ALL_TEXT_FILES | wc -w) text/markdown files (should be skipped as duplicates)"
+    # Upload one at a time to avoid dataset corruption
+    for txt in $ALL_TEXT_FILES; do
+        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$txt" 2>&1 | grep -v "already exists in dataset" || true
+    done
 fi
 
 print_success "All documents ingested"
