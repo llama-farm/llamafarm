@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from celery import Task
+
 from celery_app import app
 
 # Add parent directory to path for imports
@@ -31,8 +32,8 @@ class QueryTask(Task):
                 "task_id": task_id,
                 "task_name": self.name,
                 "error": str(exc),
-                "args": args,
-                "kwargs": kwargs,
+                "task_args": args,
+                "task_kwargs": kwargs,
             },
         )
 

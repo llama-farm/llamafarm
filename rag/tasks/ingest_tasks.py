@@ -33,9 +33,10 @@ class IngestTask(Task):
                 "task_id": task_id,
                 "task_name": self.name,
                 "error": str(exc),
-                "args": args,
-                "kwargs": kwargs,
+                "task_args": args,
+                "task_kwargs": kwargs,
             },
+            exc_info=True,
         )
 
 
@@ -48,7 +49,7 @@ def ingest_file_with_rag_task(
     source_path: str,
     filename: Optional[str] = None,
     dataset_name: Optional[str] = None,
-) -> Tuple[bool, Dict[str, Any]]:
+) -> tuple[bool, dict[str, Any]]:
     """
     Ingest a single file using the RAG system via Celery task.
 
@@ -71,7 +72,7 @@ def ingest_file_with_rag_task(
             "strategy": data_processing_strategy_name,
             "database": database_name,
             "source_path": source_path,
-            "filename": filename,
+            "file_name": filename,
             "dataset_name": dataset_name,
         },
     )

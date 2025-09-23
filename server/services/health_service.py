@@ -220,71 +220,57 @@ def _check_celery() -> dict:
 
 
 def _check_rag_service() -> dict:
-    """Check RAG service health via Celery task availability."""
+    """Check RAG service health using cached status with background updates."""
     start = _now_ms()
     try:
-        from core.celery.celery import app as celery_app  # type: ignore
-        from celery import signature
+        from services.rag_health_cache import get_rag_health_cache
 
-        try:
-            # Check if RAG worker is available by looking for RAG-specific queues/tasks
-            active_tasks = celery_app.control.inspect().active()
-            registered_tasks = celery_app.control.inspect().registered()
+        # Get cached health status (non-blocking)
+        cache = get_rag_health_cache()
+        health_data = cache.get_cached_health()
 
-            if not active_tasks and not registered_tasks:
-                return {
-                    "name": "rag-service",
-                    "status": "degraded",
-                    "message": "No Celery workers responding",
-                    "latency_ms": _now_ms() - start,
-                }
+        # Convert to health service format
+        status = health_data.get("status", "unhealthy")
+        message = health_data.get("message", "Unknown RAG status")
 
-            # Check if any worker has RAG tasks registered
-            rag_tasks_found = False
-            worker_count = 0
+        # Add cache metadata to message if available
+        cache_age = health_data.get("cache_age_seconds", -1)
+        source = health_data.get("source", "unknown")
 
-            if registered_tasks:
-                for worker, tasks in registered_tasks.items():
-                    worker_count += 1
-                    if tasks and any(task.startswith("rag.") for task in tasks):
-                        rag_tasks_found = True
-                        break
-
-            if rag_tasks_found:
-                return {
-                    "name": "rag-service",
-                    "status": "healthy",
-                    "message": f"RAG worker available ({worker_count} total workers)",
-                    "latency_ms": _now_ms() - start,
-                }
-            elif worker_count > 0:
-                return {
-                    "name": "rag-service",
-                    "status": "degraded",
-                    "message": f"No RAG tasks registered ({worker_count} workers found)",
-                    "latency_ms": _now_ms() - start,
-                }
+        if source == "cache" and cache_age >= 0:
+            if cache_age < 60:
+                message += f" (checked: {cache_age}s ago)"
             else:
-                return {
-                    "name": "rag-service",
-                    "status": "unhealthy",
-                    "message": "No Celery workers available",
-                    "latency_ms": _now_ms() - start,
-                }
+                message += f" (checked: {cache_age // 60}m ago)"
+        elif source == "immediate_check":
+            message += " (immediate check)"
 
-        except Exception as e:
-            return {
-                "name": "rag-service",
-                "status": "degraded",
-                "message": f"RAG service check failed: {e}",
-                "latency_ms": _now_ms() - start,
-            }
-    except Exception:
-        # Celery not configured/importable
+        # Add detailed information if available
+        details = {}
+        if "worker_id" in health_data:
+            details["worker_id"] = health_data["worker_id"]
+        if "checks" in health_data:
+            details["checks"] = health_data["checks"]
+        if "metrics" in health_data:
+            details["metrics"] = health_data["metrics"]
+
+        result = {
+            "name": "rag-service",
+            "status": status,
+            "message": message,
+            "latency_ms": _now_ms() - start,
+        }
+
+        if details:
+            result["details"] = details
+
+        return result
+
+    except Exception as e:
         return {
             "name": "rag-service",
             "status": "unhealthy",
-            "message": "Celery not configured",
+            "message": f"RAG health cache error: {e}",
             "latency_ms": _now_ms() - start,
         }
 

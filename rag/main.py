@@ -13,6 +13,7 @@ from pathlib import Path
 
 from celery_app import app
 from core.logging import FastAPIStructLogger, setup_logging
+from celery_app import run_worker
 # import tasks
 
 logger = FastAPIStructLogger()
@@ -53,6 +54,8 @@ def main():
         )
     except Exception as e:
         logger.warning(f"Could not list registered tasks: {e}")
+
+    run_worker()
 
 
 if __name__ == "__main__":

@@ -42,29 +42,27 @@ def search_with_rag_database(
     )
     result = task.apply_async()
 
-    # Check if we're already inside a Celery task context
-    if current_task and getattr(current_task.request, "id", None):
-        # We're inside a task - poll for result without using result.get()
-        timeout = 30
-        poll_interval = 0.5
-        waited = 0.0
+    # Always use polling approach to avoid any result.get() issues
+    timeout = 30
+    poll_interval = 0.5
+    waited = 0.0
 
-        while waited < timeout:
-            if result.status not in ("PENDING", "STARTED"):
-                break
-            time.sleep(poll_interval)
-            waited += poll_interval
+    while waited < timeout:
+        if result.status not in ("PENDING", "STARTED"):
+            break
+        time.sleep(poll_interval)
+        waited += poll_interval
 
-        if result.status == "SUCCESS":
-            return result.result
-        elif result.status == "FAILURE":
-            # Re-raise the exception
-            result.get()  # This will raise the exception
+    if result.status == "SUCCESS":
+        return result.result
+    elif result.status == "FAILURE":
+        # Get the exception info and raise it without using result.get()
+        if hasattr(result, "traceback") and result.traceback:
+            raise Exception(f"Task failed: {result.traceback}")
         else:
-            return []  # Return empty list on timeout or other status
+            raise Exception(f"Task failed with status: {result.status}")
     else:
-        # We're not inside a task - safe to use result.get()
-        return result.get(timeout=30)  # 30 second timeout
+        return []  # Return empty list on timeout or other status
 
 
 async def ingest_file_with_rag(
@@ -108,41 +106,30 @@ async def ingest_file_with_rag(
     max_wait = 120  # seconds
     waited = 0
 
-    # Check if we're already inside a Celery task context
-    if current_task and getattr(current_task.request, "id", None):
-        # We're inside a task - use polling without result.get()
-        while True:
-            status = result.status
-            if status not in ("PENDING", "STARTED"):
-                break
-            if waited >= max_wait:
-                break
-            time.sleep(poll_interval)
-            waited += poll_interval
+    # Always use polling approach to avoid any result.get() issues
+    while True:
+        status = result.status
+        if status not in ("PENDING", "STARTED"):
+            break
+        if waited >= max_wait:
+            break
+        time.sleep(poll_interval)
+        waited += poll_interval
 
-        # Get the result without using result.get() to avoid the error
-        if result.status == "SUCCESS":
-            return result.result
-        elif result.status == "FAILURE":
-            # Re-raise the exception
-            result.get()  # This will raise the exception
+    # Get the result without using result.get() to avoid the error
+    if result.status == "SUCCESS":
+        return result.result
+    elif result.status == "FAILURE":
+        # Get the exception info and raise it without using result.get()
+        if hasattr(result, "traceback") and result.traceback:
+            raise Exception(f"Task failed: {result.traceback}")
         else:
-            # Timeout or other status
-            return False, {
-                "error": f"Task timed out or failed with status: {result.status}"
-            }
+            raise Exception(f"Task failed with status: {result.status}")
     else:
-        # We're not inside a task - safe to use result.get()
-        while True:
-            status = result.status
-            if status not in ("PENDING", "STARTED"):
-                break
-            if waited >= max_wait:
-                break
-            time.sleep(poll_interval)
-            waited += poll_interval
-
-        return result.get()  # Safe to call from non-task context
+        # Timeout or other status
+        return False, {
+            "error": f"Task timed out or failed with status: {result.status}"
+        }
 
 
 def handle_rag_query(
@@ -175,38 +162,36 @@ def handle_rag_query(
     )
     result = task.apply_async()
 
-    # Check if we're already inside a Celery task context
-    if current_task and getattr(current_task.request, "id", None):
-        # We're inside a task - poll for result without using result.get()
-        timeout = 60
-        poll_interval = 1
-        waited = 0
+    # Always use polling approach to avoid any result.get() issues
+    timeout = 60
+    poll_interval = 1
+    waited = 0
 
-        while waited < timeout:
-            if result.status not in ("PENDING", "STARTED"):
-                break
-            time.sleep(poll_interval)
-            waited += poll_interval
+    while waited < timeout:
+        if result.status not in ("PENDING", "STARTED"):
+            break
+        time.sleep(poll_interval)
+        waited += poll_interval
 
-        if result.status == "SUCCESS":
-            return result.result
-        elif result.status == "FAILURE":
-            # Re-raise the exception
-            result.get()  # This will raise the exception
+    if result.status == "SUCCESS":
+        return result.result
+    elif result.status == "FAILURE":
+        # Get the exception info and raise it without using result.get()
+        if hasattr(result, "traceback") and result.traceback:
+            raise Exception(f"Task failed: {result.traceback}")
         else:
-            # Return empty result on timeout or other status
-            return {
-                "query": query,
-                "database": database,
-                "results": [],
-                "total_results": 0,
-                "retrieval_strategy": retrieval_strategy,
-                "context": context,
-                "error": f"Task timed out or failed: {result.status}",
-            }
+            raise Exception(f"Task failed with status: {result.status}")
     else:
-        # We're not inside a task - safe to use result.get()
-        return result.get(timeout=60)  # 1 minute timeout
+        # Return empty result on timeout or other status
+        return {
+            "query": query,
+            "database": database,
+            "results": [],
+            "total_results": 0,
+            "retrieval_strategy": retrieval_strategy,
+            "context": context,
+            "error": f"Task timed out or failed: {result.status}",
+        }
 
 
 def batch_search(
@@ -239,25 +224,23 @@ def batch_search(
 
     timeout = len(queries) * 10  # 10 seconds per query timeout
 
-    # Check if we're already inside a Celery task context
-    if current_task and getattr(current_task.request, "id", None):
-        # We're inside a task - poll for result without using result.get()
-        poll_interval = 1
-        waited = 0
+    # Always use polling approach to avoid any result.get() issues
+    poll_interval = 1
+    waited = 0
 
-        while waited < timeout:
-            if result.status not in ("PENDING", "STARTED"):
-                break
-            time.sleep(poll_interval)
-            waited += poll_interval
+    while waited < timeout:
+        if result.status not in ("PENDING", "STARTED"):
+            break
+        time.sleep(poll_interval)
+        waited += poll_interval
 
-        if result.status == "SUCCESS":
-            return result.result
-        elif result.status == "FAILURE":
-            # Re-raise the exception
-            result.get()  # This will raise the exception
+    if result.status == "SUCCESS":
+        return result.result
+    elif result.status == "FAILURE":
+        # Get the exception info and raise it without using result.get()
+        if hasattr(result, "traceback") and result.traceback:
+            raise Exception(f"Task failed: {result.traceback}")
         else:
-            return []  # Return empty list on timeout or other status
+            raise Exception(f"Task failed with status: {result.status}")
     else:
-        # We're not inside a task - safe to use result.get()
-        return result.get(timeout=timeout)
+        return []  # Return empty list on timeout or other status

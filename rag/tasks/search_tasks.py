@@ -33,8 +33,8 @@ class SearchTask(Task):
                 "task_id": task_id,
                 "task_name": self.name,
                 "error": str(exc),
-                "args": args,
-                "kwargs": kwargs,
+                "task_args": args,
+                "task_kwargs": kwargs,
             },
         )
 

@@ -53,6 +53,7 @@ if celery_broker_url and celery_result_backend:
             "tasks.search_tasks",
             "tasks.ingest_tasks",
             "tasks.query_tasks",
+            "tasks.health_tasks",
         ),
     )
 else:
@@ -80,6 +81,7 @@ else:
             "tasks.search_tasks",
             "tasks.ingest_tasks",
             "tasks.query_tasks",
+            "tasks.health_tasks",
         ),
     )
 
@@ -101,8 +103,20 @@ def run_worker():
         raise
 
 
-# t = threading.Thread(target=run_worker, daemon=False)
+# Ensure task modules are imported when celery_app is imported
+# This fixes the issue where Celery's auto-import doesn't work reliably
+try:
+    # Import all task modules to register them with the Celery app
+    import tasks.search_tasks  # noqa: F401
+    import tasks.ingest_tasks  # noqa: F401
+    import tasks.query_tasks  # noqa: F401
+    import tasks.health_tasks  # noqa: F401
 
-# t.start()
+    logger.info("RAG task modules imported successfully")
+except Exception as e:
+    logger.warning(f"Failed to import RAG task modules: {e}")
 
-run_worker()
+
+# Only run worker if this module is the main entry point
+if __name__ == "__main__":
+    run_worker()
