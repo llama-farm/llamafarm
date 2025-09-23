@@ -1,15 +1,13 @@
 import time
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from config.datamodel import Dataset
+from fastapi import APIRouter, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from core.celery.tasks import process_dataset_task
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, FileExistsInAnotherDatasetError
-from services.dataset_service import Dataset, DatasetService
-from config.datamodel import DatasetWithFileDetails, DatasetFile
-from typing import Union, Any, Dict
-from fastapi import Query
+from services.dataset_service import DatasetService, DatasetWithFileDetails
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
@@ -20,31 +18,31 @@ router = APIRouter(
 )
 
 
-class FlexibleDataset(BaseModel):
-    name: str
-    rag_strategy: str
-    files: Union[list[str], list[DatasetFile]]
-
-
 class ListDatasetsResponse(BaseModel):
     total: int
-    datasets: list[FlexibleDataset]
+    datasets: list[Dataset | DatasetWithFileDetails]
 
 
 @router.get("/", response_model=ListDatasetsResponse)
 async def list_datasets(
     namespace: str,
     project: str,
-    include_file_details: bool = Query(True, description="Include detailed file information with original filenames")
+    include_extra_details: bool = Query(
+        True, description="Include detailed file information with original filenames"
+    ),
 ):
     logger.bind(namespace=namespace, project=project)
-    if include_file_details:
-        detailed_datasets = DatasetService.list_datasets_with_file_details(namespace, project)
+    if include_extra_details:
+        detailed_datasets = DatasetService.list_datasets_with_file_details(
+            namespace, project
+        )
         datasets = [
-            FlexibleDataset(
+            DatasetWithFileDetails(
                 name=ds.name,
-                rag_strategy=ds.rag_strategy or "auto",
-                files=ds.files
+                data_processing_strategy=ds.data_processing_strategy,
+                files=ds.files,
+                database=ds.database,
+                details=ds.details,
             )
             for ds in detailed_datasets
         ]
@@ -52,10 +50,11 @@ async def list_datasets(
         # Backward compatibility: return old format for CLI
         basic_datasets = DatasetService.list_datasets(namespace, project)
         datasets = [
-            FlexibleDataset(
+            Dataset(
                 name=ds.name,
-                rag_strategy=ds.rag_strategy or "auto",
-                files=ds.files
+                database=ds.database,
+                data_processing_strategy=ds.data_processing_strategy,
+                files=ds.files,
             )
             for ds in basic_datasets
         ]

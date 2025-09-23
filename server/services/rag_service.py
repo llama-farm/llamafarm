@@ -6,19 +6,27 @@ via Celery tasks instead of subprocess calls.
 """
 
 from typing import Any
-from core.logging import FastAPIStructLogger
+
+from config.datamodel import LlamaFarmConfig
+
 from core.celery.tasks.rag_tasks import (
-    search_with_rag_database as search_task,
-    ingest_file_with_rag as ingest_task,
-    handle_rag_query as query_task,
     batch_search as batch_search_task,
 )
-from config.datamodel import LlamaFarmConfig
+from core.celery.tasks.rag_tasks import (
+    handle_rag_query as query_task,
+)
+from core.celery.tasks.rag_tasks import (
+    ingest_file_with_rag as ingest_task,
+)
+from core.celery.tasks.rag_tasks import (
+    search_with_rag_database as search_task,
+)
+from core.logging import FastAPIStructLogger
 
 logger = FastAPIStructLogger()
 
 
-def search_with_rag_database(
+def search_with_rag(
     project_dir: str,
     database: str,
     query: str,
@@ -212,44 +220,3 @@ def handle_rag_query(
             "context": context,
             "error": str(e),
         }
-
-
-def search_with_rag(
-    project_dir: str,
-    dataset: str,
-    query: str,
-    top_k: int = 5,
-    retrieval_strategy: str | None = None,
-) -> list[dict[str, Any]]:
-    """
-    Run a search via RAG API (dataset-based search).
-
-    This is a compatibility wrapper - for new code, use search_with_rag_database
-    with the specific database name.
-
-    Args:
-        project_dir: Directory containing llamafarm.yaml config
-        dataset: Dataset name (mapped to database)
-        query: Search query string
-        top_k: Maximum number of results to return
-        retrieval_strategy: Optional retrieval strategy name
-
-    Returns:
-        List of search results as dictionaries
-    """
-    logger.info(
-        "Legacy dataset search - mapping to database search",
-        dataset=dataset,
-        query=query[:100] + "..." if len(query) > 100 else query,
-    )
-
-    # For compatibility, use the dataset name as the database name
-    # In a real implementation, you might want to load the project config
-    # to map datasets to databases properly
-    return search_with_rag_database(
-        project_dir=project_dir,
-        database=dataset,
-        query=query,
-        top_k=top_k,
-        retrieval_strategy=retrieval_strategy,
-    )

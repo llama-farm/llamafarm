@@ -1,9 +1,5 @@
 import { apiClient } from './client'
-import {
-  NetworkError,
-  ChatApiError,
-  ValidationError
-} from '../types/chat'
+import { NetworkError, ChatApiError, ValidationError } from '../types/chat'
 import { handleSSEResponse } from '../utils/sseUtils'
 
 /**
@@ -25,8 +21,16 @@ export interface LlamaFarmConfig {
   rag?: Record<string, any>
   datasets?: Array<{
     name: string
-    rag_strategy?: string
+    data_processing_strategy?: string
+    database?: string
     files?: string[]
+    details?: {
+      files_metadata?: Array<{
+        original_file_name?: string
+        resolved_file_name?: string
+        hash?: string
+      }>
+    }
   }>
   runtime: Record<string, any>
 }
@@ -116,7 +120,9 @@ export interface ProjectChatStreamChunk {
 /**
  * Callback function types for streaming
  */
-export type ProjectChatStreamChunkHandler = (chunk: ProjectChatStreamChunk) => void
+export type ProjectChatStreamChunkHandler = (
+  chunk: ProjectChatStreamChunk
+) => void
 export type ProjectChatStreamErrorHandler = (error: Error) => void
 export type ProjectChatStreamCompleteHandler = () => void
 
@@ -154,24 +160,31 @@ export async function sendProjectChatMessage(
 ): Promise<ProjectChatResult> {
   // Validate inputs
   if (!namespace || !projectId) {
-    throw new ValidationError('Namespace and project ID are required', { namespace, projectId })
+    throw new ValidationError('Namespace and project ID are required', {
+      namespace,
+      projectId,
+    })
   }
 
   if (!request.messages || request.messages.length === 0) {
-    throw new ValidationError('At least one message is required', { messages: request.messages })
+    throw new ValidationError('At least one message is required', {
+      messages: request.messages,
+    })
   }
 
   // Validate message content
   for (const message of request.messages) {
     if (!message.content || typeof message.content !== 'string') {
-      throw new ValidationError('All messages must have valid string content', { message })
+      throw new ValidationError('All messages must have valid string content', {
+        message,
+      })
     }
   }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
-  
+
   // Only add session header if we have a session ID (for continuing conversation)
   if (sessionId) {
     headers['X-Session-ID'] = sessionId
@@ -188,10 +201,11 @@ export async function sendProjectChatMessage(
     )
 
     // Extract session ID from response headers (server provides this)
-    const responseSessionId = response.headers['x-session-id'] || 
-                             response.headers['X-Session-ID'] ||
-                             sessionId || // Fallback to sent session ID
-                             ''
+    const responseSessionId =
+      response.headers['x-session-id'] ||
+      response.headers['X-Session-ID'] ||
+      sessionId || // Fallback to sent session ID
+      ''
 
     if (!responseSessionId) {
       console.warn('No session ID received from server response')
@@ -199,13 +213,17 @@ export async function sendProjectChatMessage(
 
     return {
       completion: response.data,
-      sessionId: responseSessionId
+      sessionId: responseSessionId,
     }
   } catch (error) {
-    if (error instanceof ChatApiError || error instanceof ValidationError || error instanceof NetworkError) {
+    if (
+      error instanceof ChatApiError ||
+      error instanceof ValidationError ||
+      error instanceof NetworkError
+    ) {
       throw error
     }
-    
+
     throw new NetworkError(
       `Failed to send project chat message: ${error instanceof Error ? error.message : 'Unknown error'}`,
       error instanceof Error ? error : new Error('Unknown error')
@@ -233,13 +251,18 @@ export async function streamProjectChatMessage(
 
   // Validate inputs
   if (!namespace || !projectId) {
-    const error = new ValidationError('Namespace and project ID are required', { namespace, projectId })
+    const error = new ValidationError('Namespace and project ID are required', {
+      namespace,
+      projectId,
+    })
     onError?.(error)
     throw error
   }
 
   if (!request.messages || request.messages.length === 0) {
-    const error = new ValidationError('At least one message is required', { messages: request.messages })
+    const error = new ValidationError('At least one message is required', {
+      messages: request.messages,
+    })
     onError?.(error)
     throw error
   }
@@ -247,7 +270,10 @@ export async function streamProjectChatMessage(
   // Validate message content
   for (const message of request.messages) {
     if (!message.content || typeof message.content !== 'string') {
-      const error = new ValidationError('All messages must have valid string content', { message })
+      const error = new ValidationError(
+        'All messages must have valid string content',
+        { message }
+      )
       onError?.(error)
       throw error
     }
@@ -256,13 +282,13 @@ export async function streamProjectChatMessage(
   try {
     // Ensure streaming is enabled
     const streamingRequest = { ...request, stream: true }
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
+      Accept: 'text/event-stream',
       'Cache-Control': 'no-cache',
     }
-    
+
     // Only add session header if we have a session ID (for continuing conversation)
     if (sessionId) {
       headers['X-Session-ID'] = sessionId
@@ -271,7 +297,7 @@ export async function streamProjectChatMessage(
     // Use fetch directly for streaming instead of axios
     const baseURL = apiClient.defaults.baseURL || ''
     const url = `${baseURL}/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`
-    
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -291,10 +317,11 @@ export async function streamProjectChatMessage(
     }
 
     // Extract session ID from response headers (server provides this)
-    const responseSessionId = response.headers.get('x-session-id') || 
-                             response.headers.get('X-Session-ID') ||
-                             sessionId || // Fallback to sent session ID
-                             ''
+    const responseSessionId =
+      response.headers.get('x-session-id') ||
+      response.headers.get('X-Session-ID') ||
+      sessionId || // Fallback to sent session ID
+      ''
 
     if (!responseSessionId) {
       console.warn('No session ID received from streaming response headers')
@@ -303,31 +330,36 @@ export async function streamProjectChatMessage(
     // Handle the streaming response using SSE utility
     await handleSSEResponse<ProjectChatStreamChunk>(
       response,
-      (chunk) => onChunk?.(chunk),
+      chunk => onChunk?.(chunk),
       {
         signal,
         onComplete,
-        onError
+        onError,
       }
     )
 
     return responseSessionId
-
   } catch (error) {
     // Handle abort errors specifically
     if (error instanceof Error && error.name === 'AbortError') {
-      const abortError = new NetworkError('Project chat streaming request was cancelled', error)
+      const abortError = new NetworkError(
+        'Project chat streaming request was cancelled',
+        error
+      )
       onError?.(abortError)
       throw abortError
     }
-    
-    const networkError = error instanceof NetworkError 
-      ? error 
-      : new NetworkError(
-          error instanceof Error ? error.message : 'Unknown project chat streaming error',
-          error instanceof Error ? error : new Error('Unknown error')
-        )
-    
+
+    const networkError =
+      error instanceof NetworkError
+        ? error
+        : new NetworkError(
+            error instanceof Error
+              ? error.message
+              : 'Unknown project chat streaming error',
+            error instanceof Error ? error : new Error('Unknown error')
+          )
+
     onError?.(networkError)
     throw networkError
   }
@@ -390,7 +422,13 @@ export async function startNewProjectChatStreamingSession(
 ): Promise<string> {
   const request = createProjectChatRequest(message, requestOptions)
   // Don't pass sessionId - server will create new session
-  return await streamProjectChatMessage(namespace, projectId, request, undefined, streamingOptions)
+  return await streamProjectChatMessage(
+    namespace,
+    projectId,
+    request,
+    undefined,
+    streamingOptions
+  )
 }
 
 /**
@@ -412,7 +450,13 @@ export async function continueProjectChatStreamingSession(
   requestOptions: Partial<ProjectChatRequest> = {}
 ): Promise<string> {
   const request = createProjectChatRequest(message, requestOptions)
-  return await streamProjectChatMessage(namespace, projectId, request, sessionId, streamingOptions)
+  return await streamProjectChatMessage(
+    namespace,
+    projectId,
+    request,
+    sessionId,
+    streamingOptions
+  )
 }
 
 /**
@@ -441,7 +485,9 @@ export function createProjectChatRequest(
  * @param messages - Array of chat messages
  * @returns string | null - The latest user message content or null if not found
  */
-export function extractLatestUserMessage(messages: ProjectChatMessage[]): string | null {
+export function extractLatestUserMessage(
+  messages: ProjectChatMessage[]
+): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]
     if (message.role === 'user' && message.content) {

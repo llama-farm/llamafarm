@@ -17,7 +17,7 @@ from context_providers.project_chat_context_provider import (
     ProjectChatContextProvider,
 )
 from core.logging import FastAPIStructLogger
-from services.rag_service import search_with_rag, search_with_rag_database
+from services.rag_service import search_with_rag
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -98,14 +98,14 @@ class ProjectChatService:
         if not database:
             # Use the first database as default
             if project_config.rag.databases:
-                database = project_config.rag.databases[0].name
+                database = str(project_config.rag.databases[0].name)
                 logger.info(f"Using default database: {database}")
             else:
                 logger.error("No databases found in project config")
                 return []
 
         # Use shared helper to run RAG search on database
-        results = search_with_rag_database(project_dir, database, message, top_k=top_k)
+        results = search_with_rag(project_dir, database, message, top_k=top_k)
         if results is None:
             results = []
 
@@ -133,7 +133,7 @@ class ProjectChatService:
                 and chat_agent.context_providers
             ):
                 chat_agent.context_providers.pop("project_chat_context", None)
-        except Exception as e:
+        except Exception:
             logger.warning("Failed to clear RAG context provider", exc_info=True)
 
     async def chat(
@@ -175,7 +175,10 @@ class ProjectChatService:
                                 if strategy.default:
                                     rag_top_k = (
                                         strategy.config.top_k
-                                        if hasattr(strategy.config, "top_k")
+                                        if (
+                                            strategy.config
+                                            and hasattr(strategy.config, "top_k")
+                                        )
                                         else 5
                                     )
                                     break
@@ -250,13 +253,13 @@ class ProjectChatService:
 
         # Use config defaults if not explicitly provided (same logic as chat method)
         if rag_enabled is None:
-            rag_enabled = bool(project_config.rag and project_config.datasets)
+            rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
                 logger.info("RAG enabled by default based on project configuration")
 
         if rag_enabled and project_config.rag:
-            if database is None and project_config.datasets:
-                database = project_config.datasets[0].database
+            if database is None and project_config.rag.databases:
+                database = project_config.rag.databases[0].name
                 logger.info(f"Using default database from config: {database}")
 
             if rag_top_k is None:
@@ -267,7 +270,10 @@ class ProjectChatService:
                                 if strategy.default:
                                     rag_top_k = (
                                         strategy.config.top_k
-                                        if hasattr(strategy.config, "top_k")
+                                        if (
+                                            strategy.config
+                                            and hasattr(strategy.config, "top_k")
+                                        )
                                         else 5
                                     )
                                     break

@@ -1,13 +1,14 @@
 """RAG Query endpoint for semantic search."""
 
-from typing import Optional, List, Dict, Any
 import time
+from typing import Any, Dict, List, Optional
+
 import structlog
+from config.datamodel import LlamaFarmConfig
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from config.datamodel import LlamaFarmConfig
-from services.rag_service import search_with_rag_database
+from services.rag_service import search_with_rag
 
 logger = structlog.get_logger()
 
@@ -87,7 +88,7 @@ async def handle_rag_query(
             f"Performing RAG search via Celery service: query='{request.query[:100]}...', database='{database_name}'"
         )
 
-        search_results = search_with_rag_database(
+        search_results = search_with_rag(
             project_dir=project_dir,
             database=database_name,
             query=request.query,
