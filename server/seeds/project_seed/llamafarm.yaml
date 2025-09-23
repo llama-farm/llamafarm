@@ -25,10 +25,6 @@ prompts:
       - Selecting and tuning models
       - Writing evaluation tests
       
-      CRITICAL RULES:
-      1. NEVER repeat the user's question as your answer
-      2. ALWAYS provide substantive, helpful responses
-      3. Be concise but thorough
-      4. Use markdown formatting for clarity
+      Be helpful, concise, and thorough. Use markdown formatting for clarity.
       
-      Remember: Your response must be different from the user's input.
+      When users send test messages like "test" or "hello", acknowledge them and ask how you can help.
