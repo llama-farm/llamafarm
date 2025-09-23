@@ -201,9 +201,9 @@ class ProjectChatService:
 
         response_message = agent_response.chat_message
         
-        # Check if response is echoing input - this is a critical issue
+        # Check if response is echoing input
         if response_message == message:
-            logger.error(f"CRITICAL: Response is echoing input! Input: {message}, Response: {response_message}")
+            logger.warning(f"Response is echoing input! Input: {message}, Response: {response_message}")
             
             # Clear the corrupted history to prevent learning from bad responses
             if hasattr(chat_agent, 'history'):
