@@ -38,7 +38,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Text Processing :: Linguistic",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "chromadb>=1.0.0",
     "requests>=2.31.0",
@@ -165,13 +165,10 @@ rag = "cli:main"
 packages = [
     "core",
     "components", # Include all components (parsers, embedders, extractors, stores)
-    "parsers",    # Legacy parsers support
     "embedders",
     "stores",
     "utils",
     "retrieval",  # Retrieval strategies
-    "config",     # Configuration system
-    "api",        # API interfaces
     "cli",        # CLI system
 ]
 

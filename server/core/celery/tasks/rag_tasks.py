@@ -9,7 +9,7 @@ are in the RAG container.
 import time
 from typing import Any
 
-from celery import current_task, signature
+from celery import signature
 
 from core.celery import app
 
@@ -191,6 +191,59 @@ def handle_rag_query(
             "retrieval_strategy": retrieval_strategy,
             "context": context,
             "error": f"Task timed out or failed: {result.status}",
+        }
+
+
+def get_rag_health(
+    project_dir: str,
+    database: str,
+) -> dict[str, Any]:
+    """
+    Get RAG system health status via Celery task.
+    This version is safe to call from both regular code and within Celery tasks.
+
+    Args:
+        project_dir: Directory containing llamafarm.yaml config
+        database: Database name to check health for
+
+    Returns:
+        Dictionary containing health status and diagnostic information
+    """
+    task = signature(
+        "rag.health_check_database",
+        args=[project_dir, database],
+        app=app,
+    )
+    result = task.apply_async()
+
+    # Always use polling approach to avoid any result.get() issues
+    timeout = 30
+    poll_interval = 0.5
+    waited = 0.0
+
+    while waited < timeout:
+        if result.status not in ("PENDING", "STARTED"):
+            break
+        time.sleep(poll_interval)
+        waited += poll_interval
+
+    if result.status == "SUCCESS":
+        return result.result
+    elif result.status == "FAILURE":
+        # Get the exception info and raise it without using result.get()
+        if hasattr(result, "traceback") and result.traceback:
+            raise Exception(f"Health check task failed: {result.traceback}")
+        else:
+            raise Exception(f"Health check task failed with status: {result.status}")
+    else:
+        # Return degraded status on timeout or other status
+        return {
+            "status": "degraded",
+            "message": f"Health check timed out or failed: {result.status}",
+            "database": database,
+            "checks": {},
+            "metrics": {},
+            "errors": [f"Health check task status: {result.status}"],
         }
 
 

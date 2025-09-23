@@ -1,5 +1,6 @@
 # src/core/logger.py
 import logging
+import os
 import re
 from typing import Any
 
@@ -76,7 +77,7 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
 
     # Configure celery logger
     celery_logger = logging.getLogger("celery.worker")
-    celery_logger.setLevel("DEBUG")
+    celery_logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
     # Configure uvicorn loggers to use our root logger setup
     for logger_name in ["uvicorn", "uvicorn.error"]:

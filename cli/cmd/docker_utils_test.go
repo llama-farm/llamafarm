@@ -338,3 +338,185 @@ func TestGetImageURL(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDockerProgress(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		expected *DockerPullProgress
+	}{
+		{
+			name: "downloading progress with MB and progress bar",
+			line: "a1b2c3d4e5f6: Downloading [==============>                                    ]  123.4MB/456.7MB",
+			expected: &DockerPullProgress{
+				ID:      "a1b2c3d4e5f6",
+				Status:  "Downloading",
+				Current: 129394688, // 123.4 * 1024 * 1024
+				Total:   478885478, // 456.7 * 1024 * 1024
+			},
+		},
+		{
+			name: "extracting progress with KB and progress bar",
+			line: "deadbeef1234: Extracting [============================>                      ]  234.5KB/456.7KB",
+			expected: &DockerPullProgress{
+				ID:      "deadbeef1234",
+				Status:  "Extracting",
+				Current: 240128, // 234.5 * 1024
+				Total:   467660, // 456.7 * 1024
+			},
+		},
+		{
+			name: "simple progress without progress bar",
+			line: "abcdef123456: Downloading 100.0MB/200.0MB",
+			expected: &DockerPullProgress{
+				ID:      "abcdef123456",
+				Status:  "Downloading",
+				Current: 104857600, // 100.0 * 1024 * 1024
+				Total:   209715200, // 200.0 * 1024 * 1024
+			},
+		},
+		{
+			name: "progress with GB and progress bar",
+			line: "fedcba987654: Downloading [======================================>            ]  1.2GB/1.5GB",
+			expected: &DockerPullProgress{
+				ID:      "fedcba987654",
+				Status:  "Downloading",
+				Current: 1288490188, // 1.2 * 1024 * 1024 * 1024
+				Total:   1610612736, // 1.5 * 1024 * 1024 * 1024
+			},
+		},
+		{
+			name: "progress with bytes and progress bar",
+			line: "abcdef123456: Verifying [=================================================> ]  1000B/1024B",
+			expected: &DockerPullProgress{
+				ID:      "abcdef123456",
+				Status:  "Verifying",
+				Current: 1000,
+				Total:   1024,
+			},
+		},
+		{
+			name:     "non-progress line",
+			line:     "Pulling from ghcr.io/example/image",
+			expected: nil,
+		},
+		{
+			name:     "status line without progress",
+			line:     "a1b2c3d4e5f6: Pull complete",
+			expected: nil,
+		},
+		{
+			name:     "empty line",
+			line:     "",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseDockerProgress(tt.line)
+
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("parseDockerProgress(%q) = %+v, want nil", tt.line, result)
+				}
+				return
+			}
+
+			if result == nil {
+				t.Errorf("parseDockerProgress(%q) = nil, want %+v", tt.line, tt.expected)
+				return
+			}
+
+			if result.ID != tt.expected.ID {
+				t.Errorf("parseDockerProgress(%q).ID = %q, want %q", tt.line, result.ID, tt.expected.ID)
+			}
+			if result.Status != tt.expected.Status {
+				t.Errorf("parseDockerProgress(%q).Status = %q, want %q", tt.line, result.Status, tt.expected.Status)
+			}
+			if result.Current != int64(tt.expected.Current) {
+				t.Errorf("parseDockerProgress(%q).Current = %d, want %d", tt.line, result.Current, int64(tt.expected.Current))
+			}
+			if result.Total != int64(tt.expected.Total) {
+				t.Errorf("parseDockerProgress(%q).Total = %d, want %d", tt.line, result.Total, int64(tt.expected.Total))
+			}
+		})
+	}
+}
+
+func TestParseSize(t *testing.T) {
+	tests := []struct {
+		sizeStr  string
+		unit     string
+		expected int64
+	}{
+		{"100", "B", 100},
+		{"1.5", "KB", 1536},
+		{"2.5", "MB", 2621440},
+		{"1.2", "GB", 1288490188},
+		{"0.5", "TB", 549755813888},
+		{"123.45", "", 123},   // No unit defaults to bytes, truncated
+		{"invalid", "MB", -1}, // Invalid number
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.sizeStr+"_"+tt.unit, func(t *testing.T) {
+			result := parseSize(tt.sizeStr, tt.unit)
+			if result != tt.expected {
+				t.Errorf("parseSize(%q, %q) = %d, want %d", tt.sizeStr, tt.unit, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestProgressTracker(t *testing.T) {
+	tracker := NewProgressTracker()
+
+	// Initially should have 0 progress
+	if progress := tracker.GetProgress(); progress != 0 {
+		t.Errorf("Initial progress = %f, want 0", progress)
+	}
+
+	// Add some layer progress
+	layer1 := &DockerPullProgress{
+		ID:      "layer1",
+		Status:  "Downloading",
+		Current: 100 * 1024 * 1024, // 100MB
+		Total:   200 * 1024 * 1024, // 200MB
+	}
+	tracker.Update(layer1)
+
+	// Should be 50% progress
+	if progress := tracker.GetProgress(); progress != 50.0 {
+		t.Errorf("Progress after layer1 = %f, want 50.0", progress)
+	}
+
+	// Add another layer
+	layer2 := &DockerPullProgress{
+		ID:      "layer2",
+		Status:  "Downloading",
+		Current: 50 * 1024 * 1024,  // 50MB
+		Total:   100 * 1024 * 1024, // 100MB
+	}
+	tracker.Update(layer2)
+
+	// Should be 50% overall: (100+50)/(200+100) = 150/300 = 50%
+	if progress := tracker.GetProgress(); progress != 50.0 {
+		t.Errorf("Progress after layer2 = %f, want 50.0", progress)
+	}
+
+	// Update layer1 to complete
+	layer1Complete := &DockerPullProgress{
+		ID:      "layer1",
+		Status:  "Extracting",
+		Current: 200 * 1024 * 1024, // 200MB (complete)
+		Total:   200 * 1024 * 1024, // 200MB
+	}
+	tracker.Update(layer1Complete)
+
+	// Should be ~83.33% overall: (200+50)/(200+100) = 250/300 = 83.33%
+	expectedProgress := float64(250) / float64(300) * 100
+	if progress := tracker.GetProgress(); progress != expectedProgress {
+		t.Errorf("Progress after layer1 complete = %f, want %f", progress, expectedProgress)
+	}
+}

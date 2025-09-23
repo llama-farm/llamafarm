@@ -124,14 +124,14 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	base := strings.TrimRight(serverURL, "/")
 	healthURL := base + "/health"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -270,8 +270,11 @@ func prettyPrintHealth(w io.Writer, hr HealthPayload) {
 		fmt.Fprintf(w, "Summary: %s\n", hr.Summary)
 	}
 	if len(hr.Components) > 0 {
-		fmt.Fprintln(w, "Components:")
 		for _, c := range hr.Components {
+			if c.Status == "healthy" {
+				continue
+			}
+
 			icon := iconForStatus(c.Status)
 			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, c.Name, c.Status, c.Message, c.LatencyMs)
 			for k, v := range c.Details {
@@ -280,14 +283,22 @@ func prettyPrintHealth(w io.Writer, hr HealthPayload) {
 		}
 	}
 	if len(hr.Seeds) > 0 {
-		fmt.Fprintln(w, "Seeds:")
+		var builder strings.Builder
 		for _, s := range hr.Seeds {
+			if s.Status == "healthy" {
+				continue
+			}
+
 			icon := iconForStatus(s.Status)
-			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs)
+			builder.WriteString(fmt.Sprintf("  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs))
 			for k, v := range s.Runtime {
-				fmt.Fprintf(w, "      %s: %v\n", k, v)
+				builder.WriteString(fmt.Sprintf("      %s: %v\n", k, v))
 			}
 		}
+		if builder.Len() > 0 {
+			fmt.Fprintln(w, "Seeds:")
+		}
+		fmt.Fprintln(w, builder.String())
 	}
 }
 

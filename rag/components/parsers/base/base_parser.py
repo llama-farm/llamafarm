@@ -1,10 +1,10 @@
 """Abstract base parser class for all RAG parsers."""
 
-from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
 import logging
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List
 
 # Import from rag module
 from core.base import Document, ProcessingResult

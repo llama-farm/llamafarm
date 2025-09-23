@@ -5,13 +5,13 @@ Celery tasks for RAG search operations including database searches
 and retrieval operations.
 """
 
-import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from celery import Task
+
 from celery_app import app
 
 # Add parent directory to path for imports
@@ -47,7 +47,7 @@ def search_with_rag_database_task(
     query: str,
     top_k: int = 5,
     retrieval_strategy: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
 

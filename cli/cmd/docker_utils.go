@@ -28,6 +28,97 @@ var knownComponents = map[string]bool{
 	"models":   true,
 }
 
+// DockerPullProgress represents the progress of a Docker pull operation
+type DockerPullProgress struct {
+	ID      string
+	Status  string
+	Current int64
+	Total   int64
+}
+
+// ProgressTracker tracks overall pull progress across all layers
+type ProgressTracker struct {
+	layers     map[string]*DockerPullProgress
+	totalBytes int64
+	doneBytes  int64
+	lastUpdate time.Time
+}
+
+// NewProgressTracker creates a new progress tracker
+func NewProgressTracker() *ProgressTracker {
+	return &ProgressTracker{
+		layers:     make(map[string]*DockerPullProgress),
+		lastUpdate: time.Now(),
+	}
+}
+
+// Update updates the progress tracker with new layer information
+func (pt *ProgressTracker) Update(progress *DockerPullProgress) {
+	if progress.ID == "" {
+		return
+	}
+
+	// Store the layer progress
+	pt.layers[progress.ID] = progress
+
+	// Recalculate totals
+	pt.recalculate()
+	pt.lastUpdate = time.Now()
+}
+
+// recalculate recalculates total and done bytes across all layers
+func (pt *ProgressTracker) recalculate() {
+	pt.totalBytes = 0
+	pt.doneBytes = 0
+
+	for _, layer := range pt.layers {
+		if layer.Total > 0 {
+			pt.totalBytes += layer.Total
+			pt.doneBytes += layer.Current
+		}
+	}
+}
+
+// GetProgress returns the overall progress percentage (0-100)
+func (pt *ProgressTracker) GetProgress() float64 {
+	if pt.totalBytes == 0 {
+		return 0
+	}
+	return float64(pt.doneBytes) / float64(pt.totalBytes) * 100
+}
+
+// GetTransferRate returns the transfer rate in bytes per second
+func (pt *ProgressTracker) GetTransferRate() float64 {
+	elapsed := time.Since(pt.lastUpdate).Seconds()
+	if elapsed == 0 {
+		return 0
+	}
+	return float64(pt.doneBytes) / elapsed
+}
+
+// FormatTransferRate formats transfer rate in human-readable format
+func (pt *ProgressTracker) FormatTransferRate() string {
+	rate := pt.GetTransferRate()
+	if rate < 1024 {
+		return fmt.Sprintf("%.1f B/s", rate)
+	} else if rate < 1024*1024 {
+		return fmt.Sprintf("%.1f KB/s", rate/1024)
+	} else if rate < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB/s", rate/(1024*1024))
+	} else {
+		return fmt.Sprintf("%.1f GB/s", rate/(1024*1024*1024))
+	}
+}
+
+// DisplayProgress displays a single-line progress update
+func (pt *ProgressTracker) DisplayProgress(imageName string) {
+	progress := pt.GetProgress()
+	rate := pt.FormatTransferRate()
+
+	// Use \r to overwrite the current line
+	fmt.Fprintf(os.Stderr, "\rPulling %s: %.1f%% (%s)    ", imageName, progress, rate)
+}
+
 // ensureDockerAvailable checks whether docker is available on PATH
 func ensureDockerAvailable() error {
 	if err := exec.Command("docker", "--version").Run(); err != nil {
@@ -36,16 +127,184 @@ func ensureDockerAvailable() error {
 	return nil
 }
 
-// pullImage pulls a docker image, capturing output to avoid breaking TUIs
-func pullImage(image string) error {
-	pullCmd := exec.Command("docker", "pull", image)
-	out, err := pullCmd.CombinedOutput()
+// parseDockerProgress parses a Docker progress line and extracts progress information
+// Examples of Docker progress lines (default format):
+// "a1b2c3d4e5f6: Downloading [==============>                                    ]  123.4MB/456.7MB"
+// "a1b2c3d4e5f6: Extracting  [============================>                      ]  234.5MB/456.7MB"
+// "Downloading from ghcr.io/llama-farm/llamafarm/server"
+func parseDockerProgress(line string) *DockerPullProgress {
+	// First try the progress bar format (with layer ID)
+	progressRegex := regexp.MustCompile(`^([a-f0-9]{12}):\s+(\w+)\s+\[.*?\]\s+([0-9.]+)([KMGT]?B)/([0-9.]+)([KMGT]?B)`)
+	matches := progressRegex.FindStringSubmatch(line)
+
+	if len(matches) == 7 {
+		layerID := matches[1]
+		status := matches[2]
+		currentStr := matches[3]
+		currentUnit := matches[4]
+		totalStr := matches[5]
+		totalUnit := matches[6]
+
+		// Convert sizes to bytes
+		current := parseSize(currentStr, currentUnit)
+		total := parseSize(totalStr, totalUnit)
+
+		if current >= 0 && total >= 0 {
+			return &DockerPullProgress{
+				ID:      layerID,
+				Status:  status,
+				Current: current,
+				Total:   total,
+			}
+		}
+	}
+
+	// Try alternative format without progress bar but with size info
+	// "a1b2c3d4e5f6: Downloading 123.4MB/456.7MB"
+	simpleRegex := regexp.MustCompile(`^([a-f0-9]{12}):\s+(\w+)\s+([0-9.]+)([KMGT]?B)/([0-9.]+)([KMGT]?B)`)
+	matches = simpleRegex.FindStringSubmatch(line)
+
+	if len(matches) == 7 {
+		layerID := matches[1]
+		status := matches[2]
+		currentStr := matches[3]
+		currentUnit := matches[4]
+		totalStr := matches[5]
+		totalUnit := matches[6]
+
+		// Convert sizes to bytes
+		current := parseSize(currentStr, currentUnit)
+		total := parseSize(totalStr, totalUnit)
+
+		if current >= 0 && total >= 0 {
+			return &DockerPullProgress{
+				ID:      layerID,
+				Status:  status,
+				Current: current,
+				Total:   total,
+			}
+		}
+	}
+
+	return nil
+}
+
+// parseSize converts a size string with unit to bytes
+func parseSize(sizeStr, unit string) int64 {
+	size, err := strconv.ParseFloat(sizeStr, 64)
 	if err != nil {
-		return fmt.Errorf("docker pull failed: %v\n%s", err, string(out))
+		return -1
 	}
-	if debug && len(out) > 0 {
-		logDebug(fmt.Sprintf("docker pull output: %s", string(out)))
+
+	switch unit {
+	case "B":
+		return int64(size)
+	case "KB":
+		return int64(size * 1024)
+	case "MB":
+		return int64(size * 1024 * 1024)
+	case "GB":
+		return int64(size * 1024 * 1024 * 1024)
+	case "TB":
+		return int64(size * 1024 * 1024 * 1024 * 1024)
+	default:
+		return int64(size) // Assume bytes if no unit
 	}
+}
+
+// pullImage pulls a docker image with progress tracking, capturing output to avoid breaking TUIs
+func pullImage(image string) error {
+	// Extract image name for display (remove registry/tag parts for brevity)
+	imageParts := strings.Split(image, "/")
+	displayName := imageParts[len(imageParts)-1]
+	if tagIdx := strings.Index(displayName, ":"); tagIdx > 0 {
+		displayName = displayName[:tagIdx]
+	}
+
+	fmt.Fprintf(os.Stderr, "Pulling image: %s\n", image)
+
+	// Use standard docker pull command (no --progress flag for compatibility)
+	pullCmd := exec.Command("docker", "pull", image)
+
+	// Create pipes to capture stdout and stderr separately
+	stdout, err := pullCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %v", err)
+	}
+	stderr, err := pullCmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %v", err)
+	}
+
+	// Start the command
+	if err := pullCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start docker pull: %v", err)
+	}
+
+	// Create progress tracker
+	tracker := NewProgressTracker()
+	lastProgressTime := time.Now()
+
+	// Channel to collect all output for debug logging
+	var allOutput strings.Builder
+
+	// Track whether we've seen any progress information
+	hasProgress := false
+
+	// Read and process stdout (progress output)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			allOutput.WriteString(line + "\n")
+
+			// Try to parse progress information
+			if progress := parseDockerProgress(line); progress != nil {
+				hasProgress = true
+				tracker.Update(progress)
+
+				// Throttle display updates to avoid overwhelming the terminal
+				if time.Since(lastProgressTime) > 100*time.Millisecond {
+					tracker.DisplayProgress(displayName)
+					lastProgressTime = time.Now()
+				}
+			} else if !hasProgress {
+				// If no progress info yet, show basic status for certain lines
+				if strings.Contains(line, "Downloading") || strings.Contains(line, "Extracting") || strings.Contains(line, "Pull complete") {
+					fmt.Fprintf(os.Stderr, "\rPulling %s...    ", displayName)
+				}
+			}
+		}
+	}()
+
+	// Read and process stderr (also capture for debug)
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			allOutput.WriteString(line + "\n")
+		}
+	}()
+
+	// Wait for command to complete
+	if err := pullCmd.Wait(); err != nil {
+		// Clear the progress line before showing error
+		fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", 80))
+		return fmt.Errorf("docker pull failed: %v", err)
+	}
+
+	// Clear the progress line and show completion
+	fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", 80))
+	fmt.Fprintf(os.Stderr, "✓ Pulled %s successfully\n", displayName)
+
+	// Log all output to debug if enabled
+	if debug {
+		output := allOutput.String()
+		if len(output) > 0 {
+			logDebug(fmt.Sprintf("docker pull output: %s", output))
+		}
+	}
+
 	return nil
 }
 

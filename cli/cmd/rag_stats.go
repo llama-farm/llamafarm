@@ -24,9 +24,9 @@ var (
 // ragStatsCmd represents the rag stats command
 var ragStatsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "Show RAG database statistics and health",
+	Short: "Show RAG database statistics",
 	Long: `Display comprehensive statistics about the RAG database including vector count,
-document count, storage usage, and health status.
+document count, and storage usage.
 
 Examples:
   # Show stats for default database
@@ -491,30 +491,31 @@ func displayStatsJSON(stats *RAGStats) {
 func displayHealthStatus(health *RAGHealth) {
 	// Determine overall status icon
 	statusIcon := "✅"
-	if health.Status == "degraded" {
+	switch health.Status {
+	case "degraded":
 		statusIcon = "⚠️"
-	} else if health.Status == "unhealthy" {
+	case "unhealthy":
 		statusIcon = "❌"
 	}
 
-	fmt.Printf("\n%s RAG System Health: %s\n", statusIcon, strings.ToUpper(health.Status))
+	fmt.Printf("\nRAG database status: %s %s\n", statusIcon, strings.ToLower(health.Status))
 	fmt.Println(strings.Repeat("═", 60))
 
 	fmt.Printf("Database: %s\n", health.Database)
 	fmt.Printf("Last Check: %s\n\n", health.LastCheck.Format("2006-01-02 15:04:05"))
 
-	fmt.Println("Components:")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "Component\tStatus\tLatency\tMessage")
 	fmt.Fprintln(w, "---------\t------\t-------\t-------")
 
 	for name, comp := range health.Components {
-		statusStr := comp.Status
-		if comp.Status == "healthy" {
+		var statusStr string
+		switch comp.Status {
+		case "healthy":
 			statusStr = "✅ " + comp.Status
-		} else if comp.Status == "degraded" {
+		case "degraded":
 			statusStr = "⚠️  " + comp.Status
-		} else {
+		default:
 			statusStr = "❌ " + comp.Status
 		}
 
