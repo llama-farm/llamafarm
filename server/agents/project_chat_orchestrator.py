@@ -121,17 +121,25 @@ def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
 
 
 def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor:
-    # For Ollama, use JSON mode which is more reliable
-    if project_config.runtime.provider == Provider.ollama:
-        # Force JSON mode for Ollama as it's most compatible
-        mode = instructor.Mode.JSON
-        logger.info(f"Using JSON mode for Ollama provider (most compatible)")
+    # Use the configured instructor mode or default based on provider
+    if project_config.runtime.instructor_mode is not None and project_config.runtime.instructor_mode.value is not None:
+        # It's an enum with a non-None value, get the string value
+        mode_str = project_config.runtime.instructor_mode.value
+        
+        if mode_str.upper() in ['TOOLS', 'JSON', 'MD_JSON']:
+            mode = instructor.mode.Mode[mode_str.upper()]
+            logger.info(f"Using configured instructor mode: {mode}")
+        else:
+            # Default for invalid values
+            mode = instructor.Mode.MD_JSON if project_config.runtime.provider == Provider.ollama else instructor.Mode.TOOLS
+            logger.info(f"Invalid mode '{mode_str}', using default: {mode}")
+    elif project_config.runtime.provider == Provider.ollama:
+        # Default to MD_JSON for Ollama as it's most compatible
+        mode = instructor.Mode.MD_JSON
+        logger.info(f"Using MD_JSON mode for Ollama provider (default)")
     else:
-        mode = (
-            instructor.mode.Mode[project_config.runtime.instructor_mode.upper()]
-            if project_config.runtime.instructor_mode is not None
-            else instructor.Mode.TOOLS
-        )
+        mode = instructor.Mode.TOOLS
+        logger.info(f"Using TOOLS mode (default for non-Ollama)")
     
     logger.info(f"Instructor mode: {mode}")
 
