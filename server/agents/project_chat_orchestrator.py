@@ -126,13 +126,14 @@ def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor
         # It's an enum with a non-None value, get the string value
         mode_str = project_config.runtime.instructor_mode.value
         
-        if mode_str.upper() in ['TOOLS', 'JSON', 'MD_JSON']:
+        # Map the configured mode string to instructor.Mode
+        # This should always work since the schema validates the enum values
+        try:
             mode = instructor.mode.Mode[mode_str.upper()]
             logger.info(f"Using configured instructor mode: {mode}")
-        else:
-            # Default for invalid values
-            mode = instructor.Mode.MD_JSON if project_config.runtime.provider == Provider.ollama else instructor.Mode.TOOLS
-            logger.info(f"Invalid mode '{mode_str}', using default: {mode}")
+        except KeyError:
+            # This shouldn't happen if schema validation is working, but handle it gracefully
+            raise ValueError(f"Invalid instructor_mode '{mode_str}'. Valid modes are: tools, json, md_json")
     elif project_config.runtime.provider == Provider.ollama:
         # Default to MD_JSON for Ollama as it's most compatible
         mode = instructor.Mode.MD_JSON
