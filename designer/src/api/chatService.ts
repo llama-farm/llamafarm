@@ -138,6 +138,13 @@ export async function chatInferenceStreaming(
 
     // Extract session ID from response headers
     const responseSessionId = response.headers.get('x-session-id') || sessionId || ''
+    
+    console.log('🔍 Session ID extraction in chatInferenceStreaming:', {
+      headerValue: response.headers.get('x-session-id'),
+      inputSessionId: sessionId,
+      finalResponseSessionId: responseSessionId,
+      allHeaders: Object.fromEntries(response.headers.entries())
+    });
 
     // Handle the streaming response using SSE utility
     await handleSSEResponse<ChatStreamChunk>(

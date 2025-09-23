@@ -22,12 +22,17 @@ function projectSessionToChatboxMessage(msg: {
   content: string
   timestamp: string
 }): ChatboxMessage {
-  return {
+  console.log('🔄 Converting project session message:', msg);
+  
+  const chatboxMsg: ChatboxMessage = {
     id: msg.id,
     type: msg.role === 'user' ? 'user' : 'assistant',
     content: msg.content,
     timestamp: new Date(msg.timestamp),
   }
+  
+  console.log('🔄 Converted to chatbox message:', chatboxMsg);
+  return chatboxMsg;
 }
 
 /**
@@ -61,7 +66,12 @@ export function useChatboxWithProjectSession(
   // Get current state from project session system (always used)
   const currentSessionId = projectSession.sessionId
   const projectSessionMessages = useMemo(() => {
+    console.log('🎪 Chatbox: Converting project session messages to chatbox format');
+    console.log('🎪 Chatbox: Raw project session messages:', projectSession.messages.length, projectSession.messages);
+    
     const mapped = projectSession.messages.map(projectSessionToChatboxMessage)
+    
+    console.log('🎪 Chatbox: Mapped chatbox messages:', mapped.length, mapped);
     return mapped
   }, [projectSession.messages, currentSessionId])
   const isLoadingSession = false // Session loading is now synchronous
@@ -115,20 +125,34 @@ export function useChatboxWithProjectSession(
     }
   }, [chatMutation])
 
-  // Add message to state
+  // Add message to both streaming state and project session
   const addMessage = useCallback((message: Omit<ChatboxMessage, 'id'>) => {
     const newMessage: ChatboxMessage = {
       ...message,
       id: generateMessageId(),
     }
     
-    // Always use project session system - it will create temporary session if needed
-    try {
-      projectSession.addMessage(message.content, message.type === 'user' ? 'user' : 'assistant')
-    } catch (err) {
-      console.error('Failed to add message to project session:', err)
-      // Don't fail silently - this is a critical error
-      throw err
+    // Check if this is a placeholder message that should skip project session in persistent mode
+    const isThinkingPlaceholder = message.content === 'Thinking...' && message.type === 'assistant';
+    const shouldSkipProjectSession = isThinkingPlaceholder && !projectSession.isTemporaryMode;
+    
+    if (shouldSkipProjectSession) {
+      console.log('🚫 Skipping project session for "Thinking..." placeholder in persistent mode');
+    } else {
+      // Add to project session system - it will create temporary session if needed
+      try {
+        console.log('🔗 Calling projectSession.addMessage with:', { 
+          content: `"${message.content}"`, 
+          role: message.type === 'user' ? 'user' : 'assistant',
+          contentLength: message.content.length 
+        });
+        projectSession.addMessage(message.content, message.type === 'user' ? 'user' : 'assistant')
+      } catch (err) {
+        console.error('❌ Failed to add message to project session:', err)
+        console.error('❌ Message details:', { content: `"${message.content}"`, type: message.type });
+        // Don't fail silently - this is a critical error
+        throw err
+      }
     }
     
     return newMessage.id
@@ -155,14 +179,69 @@ export function useChatboxWithProjectSession(
   
   // Combine project session messages with temporary streaming messages
   const currentMessages = useMemo(() => {
+    console.log('🎪 Chatbox: Combining messages for UI display');
+    console.log('🎪 Chatbox: Project session messages:', projectSessionMessages.length, projectSessionMessages);
+    console.log('🎪 Chatbox: Streaming messages:', streamingMessages.length, streamingMessages);
+    
     const combined = [...projectSessionMessages, ...streamingMessages]
-    return combined
+    
+    // Filter out "Thinking..." placeholder messages for UI display
+    const filteredForUI = combined.filter(msg => {
+      const isThinkingPlaceholder = msg.type === 'assistant' && msg.content === 'Thinking...' && !msg.isStreaming && !msg.isLoading;
+      if (isThinkingPlaceholder) {
+        console.log('🚫 Filtering out "Thinking..." placeholder from UI display:', msg.id);
+        return false;
+      }
+      return true;
+    });
+    
+    console.log('🎪 Chatbox: Combined messages before filtering:', combined.length, combined);
+    console.log('🎪 Chatbox: Final filtered messages for UI:', filteredForUI.length, filteredForUI);
+    console.log('🎪 Chatbox: Each message content:');
+    filteredForUI.forEach((msg, idx) => {
+      console.log(`  ${idx}: ${msg.type} | isLoading: ${msg.isLoading} | isStreaming: ${msg.isStreaming} | content: "${msg.content}"`);
+    });
+    
+    return filteredForUI
   }, [projectSessionMessages, streamingMessages])
+  
+  // DEBUG: Log when final messages change (indicates re-render)
+  useEffect(() => {
+    console.log('🎪 Chatbox: currentMessages changed - component re-rendering');
+    console.log('🎪 Chatbox: New message count for UI:', currentMessages.length);
+    
+    if (currentMessages.length === 0) {
+      console.warn('⚠️ Chatbox: UI will show 0 messages - this might be the display bug!');
+    } else {
+      console.log('✅ Chatbox: UI should show', currentMessages.length, 'messages');
+    }
+  }, [currentMessages])
   
   // Handle sending message with streaming or non-streaming API integration
   const sendMessage = useCallback(
     async (messageContent: string) => {
-      if (!messageContent.trim() || chatMutation.isPending || isStreaming) return false
+      console.log('🔍 sendMessage called with:', `"${messageContent}"`, 'Length:', messageContent.length);
+      
+      // Validate input
+      if (!messageContent || messageContent.trim() === '') {
+        console.warn('⚠️ Attempted to send empty message, aborting');
+        return false;
+      }
+      
+      if (chatMutation.isPending || isStreaming) {
+        console.warn('⚠️ Message sending already in progress, aborting');
+        return false;
+      }
+      
+      const trimmedContent = messageContent.trim();
+      console.log('🔍 Processing message:', `"${trimmedContent}"`);
+      
+      // Phase 2: Log current mode for debugging
+      console.log('📤 Sending message in mode:', {
+        isTemporaryMode: projectSession.isTemporaryMode,
+        sessionId: projectSession.sessionId,
+        content: trimmedContent.substring(0, 50) + (trimmedContent.length > 50 ? '...' : '')
+      })
       
       // Sessions will be created when API responds with session ID
       
@@ -185,7 +264,7 @@ export function useChatboxWithProjectSession(
       // Add loading/streaming assistant message
       const assistantMessageId = addMessage({
         type: 'assistant',
-        content: streamingEnabled ? '' : 'Thinking...',
+        content: 'Thinking...',
         timestamp: new Date(),
         isLoading: !streamingEnabled,
         isStreaming: streamingEnabled,
@@ -212,6 +291,7 @@ export function useChatboxWithProjectSession(
           }, 60000)
           
           let accumulatedContent = ''
+          let deferredSessionId: string | null = null
           
           const responseSessionId = await chatInferenceStreaming(
             chatRequest,
@@ -263,12 +343,25 @@ export function useChatboxWithProjectSession(
                         // Add the response as a new message
                         if (response.data.choices && response.data.choices.length > 0) {
                           const assistantResponse = response.data.choices[0].message.content
-                          addMessage({
-                            type: 'assistant',
-                            content: assistantResponse,
-                            timestamp: new Date(),
-                          })
+                          console.log('🤖 Processing fallback assistant response (1):', `"${assistantResponse}"`, 'Length:', assistantResponse?.length || 0);
+                          
+                          // Skip empty responses
+                          if (!assistantResponse || assistantResponse.trim() === '') {
+                            console.warn('⚠️ Received empty fallback response, using default message');
+                            addMessage({
+                              type: 'assistant',
+                              content: "Sorry, I didn't receive a proper response.",
+                              timestamp: new Date(),
+                            })
+                          } else {
+                            addMessage({
+                              type: 'assistant',
+                              content: assistantResponse,
+                              timestamp: new Date(),
+                            })
+                          }
                         } else {
+                          console.warn('⚠️ No choices in fallback response');
                           addMessage({
                             type: 'assistant',
                             content: "Sorry, I didn't receive a proper response.",
@@ -316,9 +409,50 @@ export function useChatboxWithProjectSession(
                 if (accumulatedContent && accumulatedContent.trim()) {
                   // Save final message to project session and remove temporary streaming message
                   try {
+                    console.log('🤖 Processing streaming assistant response:', `"${accumulatedContent.substring(0, 50)}..."`, 'Length:', accumulatedContent.length);
+                    
+                    // Add final response to project session (will go to temp messages since streaming happens before session transfer)
                     projectSession.addMessage(accumulatedContent, 'assistant')
+                    
                     // Remove the temporary streaming message
                     setStreamingMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+                    
+                    // NOW handle session creation/reconciliation after all messages are added
+                    // Use a small delay to ensure the addMessage state update has completed
+                    setTimeout(() => {
+                      if (deferredSessionId) {
+                        console.log('🔍 Processing deferred session creation with ID:', deferredSessionId);
+                        try {
+                          // Check if we have any existing session
+                          const existingSessionId = currentSessionId || projectSession.sessionId
+                          
+                          if (existingSessionId) {
+                            // Check if reconciliation is actually needed
+                            if (existingSessionId === deferredSessionId) {
+                              console.log('✅ Server confirmed same session ID, no reconciliation needed:', existingSessionId);
+                            } else {
+                              // Session IDs differ, reconciliation needed
+                              console.log('🔄 Reconciling existing session:', existingSessionId, 'with server:', deferredSessionId);
+                              projectSession.reconcileWithServer(existingSessionId, deferredSessionId)
+                            }
+                          } else {
+                            // Truly no existing session, create new one with all temp messages
+                            console.log('✨ Creating new session from server after all messages added:', deferredSessionId);
+                            projectSession.createSessionFromServer(deferredSessionId)
+                          }
+                        } catch (sessionError) {
+                          console.error('Failed to handle deferred session creation:', sessionError)
+                          // Don't fail the whole request for session management errors
+                        }
+                      } else {
+                        // FALLBACK: No session ID from server, create local session for persistence
+                        if (projectSession.isTemporaryMode && projectSession.tempMessages.length >= 2) {
+                          console.log('🔄 No server session ID, creating local session for persistence');
+                          const localSessionId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                          projectSession.createSessionFromServer(localSessionId);
+                        }
+                      }
+                    }, 10); // Small delay to ensure state updates have completed
                   } catch (err) {
                     console.warn('Failed to save to project session:', err)
                     // Keep the message in streaming state with final content
@@ -329,8 +463,22 @@ export function useChatboxWithProjectSession(
                     })
                   }
                 } else {
+                  console.warn('⚠️ Streaming completed but no content accumulated, trying fallback');
                   // No content received, try non-streaming fallback
                   setStreamingMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+                  
+                  // Handle deferred session even without content
+                  if (deferredSessionId) {
+                    try {
+                      const existingSessionId = currentSessionId || projectSession.sessionId
+                      if (!existingSessionId) {
+                        console.log('✨ Creating empty session from server after streaming failed:', deferredSessionId);
+                        projectSession.createSessionFromServer(deferredSessionId)
+                      }
+                    } catch (sessionError) {
+                      console.error('Failed to handle deferred session after streaming failure:', sessionError)
+                    }
+                  }
                   
                   // Clear any existing fallback timeout
                   if (fallbackTimeoutRef.current) {
@@ -348,12 +496,25 @@ export function useChatboxWithProjectSession(
                         // Add the response as a new message
                         if (response.data.choices && response.data.choices.length > 0) {
                           const assistantResponse = response.data.choices[0].message.content
-                          addMessage({
-                            type: 'assistant',
-                            content: assistantResponse,
-                            timestamp: new Date(),
-                          })
+                          console.log('🤖 Processing fallback assistant response (2):', `"${assistantResponse}"`, 'Length:', assistantResponse?.length || 0);
+                          
+                          // Skip empty responses
+                          if (!assistantResponse || assistantResponse.trim() === '') {
+                            console.warn('⚠️ Received empty fallback response, using default message');
+                            addMessage({
+                              type: 'assistant',
+                              content: "Sorry, I didn't receive a proper response.",
+                              timestamp: new Date(),
+                            })
+                          } else {
+                            addMessage({
+                              type: 'assistant',
+                              content: assistantResponse,
+                              timestamp: new Date(),
+                            })
+                          }
                         } else {
+                          console.warn('⚠️ No choices in fallback response');
                           addMessage({
                             type: 'assistant',
                             content: "Sorry, I didn't receive a proper response.",
@@ -377,25 +538,11 @@ export function useChatboxWithProjectSession(
             }
           )
           
-          // Handle session reconciliation if we got a session ID from server
+          // Store session ID for deferred processing after all messages are added
           if (responseSessionId) {
-            try {
-              // Check if we have any existing session (even if currentSessionId is null)
-              const existingSessionId = currentSessionId || projectSession.sessionId
-              
-              if (existingSessionId) {
-                // Reconcile existing session with server ID
-                console.log('🔄 Reconciling existing session:', existingSessionId, 'with server:', responseSessionId);
-                projectSession.reconcileWithServer(existingSessionId, responseSessionId)
-              } else {
-                // Truly no existing session, create new one
-                console.log('✨ Creating new session from server:', responseSessionId);
-                projectSession.createSessionFromServer(responseSessionId)
-              }
-            } catch (sessionError) {
-              console.error('Failed to handle session from server response:', sessionError)
-              // Don't fail the whole request for session management errors
-            }
+            deferredSessionId = responseSessionId
+            console.log('🔍 Stored deferred session ID for later processing:', deferredSessionId);
+            console.log('⏳ Session creation deferred until streaming completes and final message is added');
           }
 
           // For streaming, we return true immediately as the request is initiated
@@ -416,9 +563,14 @@ export function useChatboxWithProjectSession(
               const existingSessionId = currentSessionId || projectSession.sessionId
               
               if (existingSessionId) {
-                // Reconcile existing session with server ID
-                console.log('🔄 Reconciling existing session:', existingSessionId, 'with server:', response.sessionId);
-                projectSession.reconcileWithServer(existingSessionId, response.sessionId)
+                // Check if reconciliation is actually needed
+                if (existingSessionId === response.sessionId) {
+                  console.log('✅ Server confirmed same session ID, no reconciliation needed:', existingSessionId);
+                } else {
+                  // Session IDs differ, reconciliation needed
+                  console.log('🔄 Reconciling existing session:', existingSessionId, 'with server:', response.sessionId);
+                  projectSession.reconcileWithServer(existingSessionId, response.sessionId)
+                }
               } else {
                 // Truly no existing session, create new one
                 console.log('✨ Creating new session from server:', response.sessionId);
@@ -433,19 +585,30 @@ export function useChatboxWithProjectSession(
           // Update assistant message with response
           if (response.data.choices && response.data.choices.length > 0) {
             const assistantResponse = response.data.choices[0].message.content
+            console.log('🤖 Processing non-streaming assistant response:', `"${assistantResponse}"`, 'Length:', assistantResponse?.length || 0);
             
-            // Save final message to project session and remove temporary one
-            try {
-              projectSession.addMessage(assistantResponse, 'assistant')
-              setStreamingMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
-            } catch (err) {
-              console.warn('Failed to save to project session:', err)
+            // Skip empty responses
+            if (!assistantResponse || assistantResponse.trim() === '') {
+              console.warn('⚠️ Received empty non-streaming response, using default message');
               updateMessage(assistantMessageId, {
-                content: assistantResponse,
+                content: "Sorry, I didn't receive a proper response.",
                 isLoading: false,
               })
+            } else {
+              // Save final message to project session and remove temporary one
+              try {
+                projectSession.addMessage(assistantResponse, 'assistant')
+                setStreamingMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+              } catch (err) {
+                console.warn('Failed to save to project session:', err)
+                updateMessage(assistantMessageId, {
+                  content: assistantResponse,
+                  isLoading: false,
+                })
+              }
             }
           } else {
+            console.warn('⚠️ No choices in non-streaming response');
             updateMessage(assistantMessageId, {
               content: "Sorry, I didn't receive a proper response.",
               isLoading: false,
@@ -554,7 +717,7 @@ export function useChatboxWithProjectSession(
     return ''
   }, [isStreaming, cancelStreaming])
   
-  return {
+  const result = {
     // State
     sessionId: currentSessionId,
     messages: currentMessages,
@@ -581,6 +744,16 @@ export function useChatboxWithProjectSession(
     hasMessages: currentMessages.length > 0,
     canSend: !chatMutation.isPending && !isStreaming && inputValue.trim().length > 0,
   }
+  
+  // DEBUG: Log computed values being returned
+  console.log('🎪 useChatboxWithProjectSession returning:', {
+    messagesLength: result.messages.length,
+    hasMessages: result.hasMessages,
+    projectSessionMessagesLength: projectSessionMessages.length,
+    streamingMessagesLength: streamingMessages.length
+  });
+  
+  return result;
 }
 
 export default useChatboxWithProjectSession

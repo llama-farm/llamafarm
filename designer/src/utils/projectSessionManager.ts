@@ -1,24 +1,9 @@
 /**
- * Project Session Manager
+ * Project Session Manager - Phase 1: Simplified Storage
  * 
- * Manages localStorage structure for Designer Chat (chatService) and Project Chat (projectChatService)
- * with separate conversation streams per project context.
- * 
- * Storage Structure:
- * - "llamafarm_project_sessions": Session metadata by session ID
- * - "llamafarm_project_chat_history": Chat message history by session ID
+ * Simple single-bucket storage for project sessions with messages included.
+ * Only server-provided session IDs are stored - no client session generation.
  */
-
-export interface SessionMetadata {
-  namespace: string
-  project: string
-  chatService: 'designer' | 'project'
-  createdAt: string
-  lastUsed: string
-  serverId?: string    // Server-provided ID when available
-  isPending?: boolean  // Waiting for server confirmation
-  clientId: string     // Always track original client ID
-}
 
 export interface ChatMessage {
   id: string
@@ -27,19 +12,19 @@ export interface ChatMessage {
   timestamp: string
 }
 
-export interface SessionsStorage {
-  [sessionId: string]: SessionMetadata
+interface SessionData {
+  namespace: string
+  project: string
+  chatService: 'designer' | 'project'
+  createdAt: string
+  lastUsed: string
+  messages: ChatMessage[]
 }
 
-export interface ChatHistoryStorage {
-  [sessionId: string]: ChatMessage[]
-}
+type SessionStorage = Record<string, SessionData>
 
-// localStorage keys
-const STORAGE_KEYS = {
-  SESSIONS: 'llamafarm_project_sessions',
-  CHAT_HISTORY: 'llamafarm_project_chat_history',
-} as const
+// Single localStorage key
+const STORAGE_KEY = 'lf_sessions'
 
 /**
  * Generate unique message ID with format: msg_{timestamp}_{randomId}
@@ -51,649 +36,234 @@ export function generateMessageId(): string {
 }
 
 /**
- * Generate client session ID - clean, short identifier
- * Context information belongs in SessionMetadata, not the ID
+ * Get stored sessions from localStorage
  */
-export function generateClientSessionId(): string {
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).substring(2, 9)
-  return `client_${timestamp}_${random}`
-}
-
-/**
- * Get current timestamp in ISO format
- */
-function getCurrentTimestamp(): string {
-  return new Date().toISOString()
-}
-
-/**
- * Safely get data from localStorage with error handling
- */
-function getFromStorage<T>(key: string, defaultValue: T): T {
+function getStoredSessions(): SessionStorage {
   try {
-    const data = localStorage.getItem(key)
-    return data ? JSON.parse(data) : defaultValue
+    const data = localStorage.getItem(STORAGE_KEY)
+    return data ? JSON.parse(data) : {}
   } catch (error) {
-    console.warn(`Failed to parse ${key} from localStorage:`, error)
-    return defaultValue
+    console.warn('Failed to parse sessions from localStorage:', error)
+    return {}
   }
 }
 
 /**
- * Safely set data to localStorage with error handling
+ * Save sessions to localStorage
  */
-function setToStorage<T>(key: string, data: T): void {
+function saveStoredSessions(sessions: SessionStorage): void {
   try {
-    localStorage.setItem(key, JSON.stringify(data))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
   } catch (error) {
-    console.error(`Failed to save ${key} to localStorage:`, error)
-    // Handle quota exceeded or other storage errors
-    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-      cleanupOldSessions()
-      // Try again after cleanup
-      try {
-        localStorage.setItem(key, JSON.stringify(data))
-      } catch (retryError) {
-        console.error(`Failed to save ${key} even after cleanup:`, retryError)
-      }
-    }
+    console.error('Failed to save sessions to localStorage:', error)
   }
 }
 
 /**
- * Cleanup old sessions when storage quota is exceeded
+ * Find existing session for context
  */
-function cleanupOldSessions(): void {
-  try {
-    const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-    const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-    
-    // Get sessions sorted by lastUsed (oldest first)
-    const sessionEntries = Object.entries(sessions).sort(
-      ([, a], [, b]) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime()
-    )
-    
-    // Remove oldest 50% of sessions
-    const toRemove = Math.ceil(sessionEntries.length * 0.5)
-    const sessionsToRemove = sessionEntries.slice(0, toRemove)
-    
-    sessionsToRemove.forEach(([sessionId]) => {
-      delete sessions[sessionId]
-      delete chatHistory[sessionId]
-    })
-    
-    setToStorage(STORAGE_KEYS.SESSIONS, sessions)
-    setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-    
-    console.log(`Cleaned up ${toRemove} old sessions due to storage quota`)
-  } catch (error) {
-    console.error('Failed to cleanup old sessions:', error)
-  }
-}
-
-/**
- * Cleanup pending sessions older than specified time
- * Conservative approach: only removes empty pending sessions
- */
-export function cleanupPendingSessions(olderThanMinutes: number = 120): void { // Increased from 60 to 120
-  try {
-    const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-    const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-    const cutoff = Date.now() - (olderThanMinutes * 60 * 1000)
-    
-    let cleanedCount = 0
-    let preservedCount = 0
-    let skipCount = 0
-    
-    Object.entries(sessions).forEach(([sessionId, session]) => {
-      const sessionAge = Date.now() - new Date(session.createdAt).getTime();
-      const sessionAgeMinutes = sessionAge / (60 * 1000);
-      
-      // Only cleanup pending sessions that are old AND have no messages AND are really old (> cutoff)
-      if (session.isPending && new Date(session.createdAt).getTime() < cutoff) {
-        const messages = chatHistory[sessionId] || []
-        const sessionAgeHours = sessionAgeMinutes / 60;
-        
-        // Additional safety: Don't cleanup sessions that are less than 1 hour old, regardless of other conditions
-        // This prevents accidental cleanup of sessions that were just created
-        if (sessionAgeHours < 1) {
-          skipCount++
-        } else if (messages.length === 0) {
-          delete sessions[sessionId]
-          delete chatHistory[sessionId]
-          cleanedCount++
-        } else {
-          preservedCount++
-        }
-      } else {
-        skipCount++
-      }
-    })
-    
-    if (cleanedCount > 0) {
-      setToStorage(STORAGE_KEYS.SESSIONS, sessions)
-      setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-    }
-  } catch (error) {
-    console.error('Failed to cleanup pending sessions:', error)
-  }
-}
-
-/**
- * @deprecated Use cleanupPendingSessions instead
- * Cleanup orphaned temporary sessions (older than 1 hour)
- */
-export function cleanupOrphanedTempSessions(): void {
-  cleanupPendingSessions(60)
-}
-
-/**
- * Find existing session for context (namespace + project + chatService)
- * Prioritizes confirmed sessions over pending ones with enhanced debugging
- */
-export function findSessionForContext(
+function findExistingSession(
   namespace: string,
   project: string,
   chatService: 'designer' | 'project'
 ): string | null {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
+  const sessions = getStoredSessions()
+
   
-  // Find all matching sessions
-  const matches = Object.entries(sessions).filter(([, session]) => {
-    return session.namespace === namespace &&
-           session.project === project &&
-           session.chatService === chatService;
-  });
+  console.log('🔍 findExistingSession called with:', { namespace, project, chatService });
+  console.log('🔍 Available sessions:', sessions);
   
-  if (matches.length === 0) {
-    return null;
-  }
-  
-  // Sort: confirmed sessions first, then by lastUsed (most recent first)
-  matches.sort(([, a], [, b]) => {
-    // Prioritize confirmed sessions (isPending: false)
-    if (a.isPending !== b.isPending) {
-      return a.isPending ? 1 : -1;
+  for (const [sessionId, session] of Object.entries(sessions)) {
+    console.log('🔍 Checking session:', sessionId, {
+      storedNamespace: session.namespace,
+      storedProject: session.project,
+      storedChatService: session.chatService,
+      matches: {
+        namespace: session.namespace === namespace,
+        project: session.project === project,
+        chatService: session.chatService === chatService
+      }
+    });
+    
+    if (session.namespace === namespace &&
+        session.project === project &&
+        session.chatService === chatService) {
+      console.log('✅ Found matching session:', sessionId);
+      return sessionId
     }
-    // Then sort by most recent
-    return new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime();
-  });
-  
-  const [sessionId, sessionData] = matches[0];
-  
-  // Update lastUsed timestamp
-  updateSessionLastUsed(sessionId);
-  
-  // Return the appropriate ID (serverId if available and different, otherwise sessionId)
-  const finalId = sessionData.serverId && sessionData.serverId !== sessionId 
-    ? sessionData.serverId 
-    : sessionId;
-    
-  return finalId;
-}
-
-/**
- * Initialize empty chat history for session
- */
-export function initializeChatHistory(sessionId: string): void {
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  chatHistory[sessionId] = []
-  setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-}
-
-/**
- * Create optimistic session with client-generated ID
- */
-export function createOptimisticSession(
-  namespace: string, 
-  project: string, 
-  chatService: 'designer' | 'project'
-): string {
-  const sessionId = generateClientSessionId()
-  
-  const sessionData: SessionMetadata = {
-    namespace,
-    project,
-    chatService,
-    createdAt: getCurrentTimestamp(),
-    lastUsed: getCurrentTimestamp(),
-    clientId: sessionId,
-    isPending: true
   }
   
-  saveSession(sessionId, sessionData)
-  initializeChatHistory(sessionId)
-  
-  return sessionId
-}
-
-/**
- * Reconcile client session with server-provided session ID
- */
-export function reconcileSessionWithServer(
-  clientSessionId: string, 
-  serverSessionId: string
-): string {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  
-  const sessionData = sessions[clientSessionId]
-  if (!sessionData) {
-    console.warn('Client session not found for reconciliation:', clientSessionId)
-    return serverSessionId
-  }
-
-  // Get existing chat history from client session
-  const existingMessages = chatHistory[clientSessionId] || []
-
-  // Update session metadata
-  const updatedSession: SessionMetadata = {
-    ...sessionData,
-    serverId: serverSessionId,
-    isPending: false,
-    lastUsed: getCurrentTimestamp()
-  }
-
-  if (clientSessionId === serverSessionId) {
-    // Same ID, just update metadata
-    sessions[clientSessionId] = updatedSession
-  } else {
-    // Different IDs, migrate data
-    
-    // Create new session with server ID
-    sessions[serverSessionId] = updatedSession
-    
-    // Migrate chat history to server session ID
-    chatHistory[serverSessionId] = existingMessages
-    
-    // Clean up old client session
-    delete sessions[clientSessionId]
-    delete chatHistory[clientSessionId]
-  }
-
-  // Save updated data
-  setToStorage(STORAGE_KEYS.SESSIONS, sessions)
-  setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-  
-  return serverSessionId
-}
-
-/**
- * Get existing session for current context or return null
- * Sessions are created on first message send, not proactively
- */
-export function getExistingSession(
-  namespace: string,
-  project: string,
-  chatService: 'designer' | 'project'
-): string | null {
-  const existingSessionId = findSessionForContext(namespace, project, chatService)
-  if (existingSessionId) {
-    updateSessionLastUsed(existingSessionId)
-    return existingSessionId
-  }
+  console.log('❌ No matching session found');
   return null
 }
 
 /**
- * Create and store a new session with server-provided session ID
- * This is called after receiving a session ID from the server
+ * Create a message object with generated ID and timestamp
  */
-export function createSessionFromServer(
+function createMessage(role: 'user' | 'assistant', content: string): ChatMessage {
+  // Add validation and logging
+  console.log('🔍 Creating message:', { role, content: `"${content}"`, contentLength: content.length });
+  
+  if (!content || content.trim() === '') {
+    console.warn('⚠️ Attempting to create message with empty content!');
+    console.trace('Empty message creation stack trace');
+    throw new Error('Cannot create message with empty content');
+  }
+  
+  const message = {
+    id: generateMessageId(),
+    role,
+    content: content.trim(), // Ensure we trim whitespace
+    timestamp: new Date().toISOString()
+  };
+  
+  console.log('✅ Created message:', message);
+  return message;
+}
+
+/**
+ * Create and save a persistent session to localStorage
+ */
+function createPersistentSession(
   sessionId: string,
   namespace: string,
   project: string,
-  chatService: 'designer' | 'project'
+  chatService: 'designer' | 'project',
+  initialMessages: ChatMessage[] = []
 ): void {
-  const sessionData: SessionMetadata = {
+  console.log('💾 Creating persistent session:', sessionId, 'with', initialMessages.length, 'messages');
+  
+  // SAFEGUARD: Check if session already exists with messages
+  const existingSessions = getStoredSessions();
+  if (existingSessions[sessionId] && existingSessions[sessionId].messages.length > 0) {
+    console.warn('⚠️ Session already exists with', existingSessions[sessionId].messages.length, 'messages');
+    console.log('⚠️ New session would have', initialMessages.length, 'messages');
+    
+    if (initialMessages.length === 0) {
+      console.error('❌ PREVENTED: Overwrite of session with empty messages array!');
+      console.log('❌ Keeping existing session with', existingSessions[sessionId].messages.length, 'messages');
+      return; // Don't overwrite existing session with empty array
+    }
+    
+    if (initialMessages.length < existingSessions[sessionId].messages.length) {
+      console.warn('⚠️ WARNING: New session has fewer messages than existing. Proceeding but this may be unintended.');
+    }
+  }
+  
+  const sessions = getStoredSessions()
+  sessions[sessionId] = {
     namespace,
     project,
     chatService,
-    createdAt: getCurrentTimestamp(),
-    lastUsed: getCurrentTimestamp(),
-    serverId: sessionId,
-    clientId: sessionId,
-    isPending: false
+    createdAt: existingSessions[sessionId]?.createdAt || new Date().toISOString(),
+    lastUsed: new Date().toISOString(),
+    messages: initialMessages
   }
+  saveStoredSessions(sessions)
   
-  saveSession(sessionId, sessionData)
-  initializeChatHistory(sessionId)
+  // Verify save worked
+  const verification = getStoredSessions();
+  if (verification[sessionId]) {
+    console.log('✅ Session saved successfully:', sessionId, 'with', verification[sessionId].messages.length, 'messages');
+  } else {
+    console.error('❌ Session save failed:', sessionId);
+  }
 }
 
 /**
- * Save session metadata to localStorage
+ * Add a message to an existing persistent session
  */
-export function saveSession(sessionId: string, sessionData: SessionMetadata): void {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  sessions[sessionId] = sessionData
-  setToStorage(STORAGE_KEYS.SESSIONS, sessions)
-}
-
-/**
- * Load session by ID
- */
-export function loadSession(sessionId: string): SessionMetadata | null {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  return sessions[sessionId] || null
-}
-
-/**
- * Update session lastUsed timestamp
- */
-export function updateSessionLastUsed(sessionId: string): void {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
+function addMessageToPersistentSession(sessionId: string, message: ChatMessage): void {
+  console.log('💾 Adding message to persistent session:', sessionId);
+  
+  const sessions = getStoredSessions();
   if (sessions[sessionId]) {
-    sessions[sessionId].lastUsed = getCurrentTimestamp()
-    setToStorage(STORAGE_KEYS.SESSIONS, sessions)
-  }
-}
-
-/**
- * Add message to chat history
- */
-export function addMessageToHistory(sessionId: string, message: Omit<ChatMessage, 'id'>): ChatMessage {
-  const messageWithId: ChatMessage = {
-    ...message,
-    id: generateMessageId(),
-  }
-  
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  
-  if (!chatHistory[sessionId]) {
-    chatHistory[sessionId] = []
-  }
-  
-  chatHistory[sessionId].push(messageWithId)
-  setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-  
-  // Update session lastUsed
-  updateSessionLastUsed(sessionId)
-  
-  return messageWithId
-}
-
-/**
- * Load chat history for session with enhanced lookup and recovery
- * Checks both client and server session IDs to handle reconciliation cases
- */
-export function loadChatHistory(sessionId: string): ChatMessage[] {
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  
-  // First try the direct session ID
-  if (chatHistory[sessionId]) {
-    return chatHistory[sessionId]
-  }
-  
-  // Get the session metadata for this session ID
-  const session = sessions[sessionId]
-  
-  if (session) {
-    // If this session has a client ID, try that
-    if (session.clientId && session.clientId !== sessionId && chatHistory[session.clientId]) {
-      // For safety, only return messages without migrating storage automatically
-      // Let the reconciliation process handle this more carefully
-      return chatHistory[session.clientId]
-    }
-    
-    // If this session has a server ID, try that
-    if (session.serverId && session.serverId !== sessionId && chatHistory[session.serverId]) {
-      return chatHistory[session.serverId]
-    }
-  }
-  
-  // If this might be a server ID, find the session that has this as serverId
-  const sessionWithThisServerId = Object.entries(sessions).find(
-    ([, s]) => s.serverId === sessionId
-  )
-  
-  if (sessionWithThisServerId) {
-    const [clientId, sessionData] = sessionWithThisServerId
-    
-    // Try messages under the client ID
-    if (chatHistory[clientId]) {
-      // Migrate to server ID if different
-      if (clientId !== sessionId) {
-        const messages = chatHistory[clientId]
-        chatHistory[sessionId] = messages
-        delete chatHistory[clientId]
-        setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-        return messages
-      }
-      return chatHistory[clientId]
-    }
-    
-    // Try messages under the clientId of the session
-    if (sessionData.clientId && chatHistory[sessionData.clientId]) {
-      const messages = chatHistory[sessionData.clientId]
-      chatHistory[sessionId] = messages
-      delete chatHistory[sessionData.clientId]
-      setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-      return messages
-    }
-  }
-  
-  return []
-}
-
-/**
- * Save chat history for session
- */
-export function saveChatHistory(sessionId: string, messages: ChatMessage[]): void {
-  try {
-    const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-    chatHistory[sessionId] = messages
-    setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-    updateSessionLastUsed(sessionId)
-  } catch (error) {
-    console.error('Failed to save chat history:', error);
-  }
-}
-
-/**
- * Clear chat history for session
- */
-export function clearChatHistory(sessionId: string): void {
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  chatHistory[sessionId] = []
-  setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-  updateSessionLastUsed(sessionId)
-}
-
-/**
- * Delete session and its chat history
- */
-export function deleteSession(sessionId: string): void {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  
-  delete sessions[sessionId]
-  delete chatHistory[sessionId]
-  
-  setToStorage(STORAGE_KEYS.SESSIONS, sessions)
-  setToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory)
-}
-
-/**
- * Get all sessions for a specific context
- */
-export function getSessionsForContext(
-  namespace: string,
-  project: string,
-  chatService?: 'designer' | 'project'
-): Array<{sessionId: string, metadata: SessionMetadata}> {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  
-  return Object.entries(sessions)
-    .filter(([, metadata]) => {
-      const matchesNamespace = metadata.namespace === namespace
-      const matchesProject = metadata.project === project
-      const matchesService = !chatService || metadata.chatService === chatService
-      
-      return matchesNamespace && matchesProject && matchesService
-    })
-    .map(([sessionId, metadata]) => ({ sessionId, metadata }))
-    .sort((a, b) => 
-      new Date(b.metadata.lastUsed).getTime() - new Date(a.metadata.lastUsed).getTime()
-    )
-}
-
-/**
- * Get all sessions
- */
-export function getAllSessions(): Array<{sessionId: string, metadata: SessionMetadata}> {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  
-  return Object.entries(sessions)
-    .map(([sessionId, metadata]) => ({ sessionId, metadata }))
-    .sort((a, b) => 
-      new Date(b.metadata.lastUsed).getTime() - new Date(a.metadata.lastUsed).getTime()
-    )
-}
-
-/**
- * Check if localStorage is available
- */
-export function isStorageAvailable(): boolean {
-  try {
-    const testKey = '__storage_test__'
-    localStorage.setItem(testKey, 'test')
-    localStorage.removeItem(testKey)
-    return true
-  } catch (error) {
-    return false
+    sessions[sessionId].messages.push(message);
+    sessions[sessionId].lastUsed = new Date().toISOString();
+    saveStoredSessions(sessions);
+    console.log('✅ Message added to persistent session:', sessionId);
+  } else {
+    console.error('❌ Session not found for message addition:', sessionId);
   }
 }
 
 
-/**
- * Debug utility to inspect session storage state
- * Call this from browser console: window.debugSessions()
- */
-export function debugSessionStorage(): void {
-  console.log('=== SESSION STORAGE DEBUG ===');
-  
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  
-  console.log('Sessions:', sessions);
-  console.log('Chat History Keys:', Object.keys(chatHistory));
-  
-  Object.entries(sessions).forEach(([sessionId, session]) => {
-    const messageCount = chatHistory[sessionId]?.length || 0
-    const serverMessageCount = session.serverId && session.serverId !== sessionId ? 
-      (chatHistory[session.serverId]?.length || 0) : 0
-      
-    console.log(`
-📝 Session: ${sessionId}`);
-    console.log(`  • Namespace: ${session.namespace}`);
-    console.log(`  • Project: ${session.project}`);
-    console.log(`  • Service: ${session.chatService}`);
-    console.log(`  • Pending: ${session.isPending}`);
-    console.log(`  • Client ID: ${session.clientId}`);
-    console.log(`  • Server ID: ${session.serverId}`);
-    console.log(`  • Messages (client): ${messageCount}`);
-    if (serverMessageCount > 0) {
-      console.log(`  • Messages (server): ${serverMessageCount}`);
-    }
-    
-    if (messageCount > 0) {
-      console.log(`  • Sample messages:`, chatHistory[sessionId]?.slice(0, 2));
-    }
-  });
-  
-  // Check for orphaned chat history
-  const sessionIds = new Set(Object.keys(sessions))
-  const serverIds = new Set(Object.values(sessions).map(s => s.serverId).filter(Boolean))
-  const allValidIds = new Set([...sessionIds, ...serverIds])
-  
-  const orphanedHistory = Object.keys(chatHistory).filter(id => !allValidIds.has(id))
-  if (orphanedHistory.length > 0) {
-    console.log(`
-⚠️ Orphaned chat history found:`, orphanedHistory);
-    orphanedHistory.forEach(id => {
-      console.log(`  • ${id}: ${chatHistory[id]?.length || 0} messages`);
-    });
-  }
-  
-  console.log('=== END DEBUG ===');
-}
-
-/**
- * Debug session state transitions
- * Call from browser console: window.debugSessionState()
- */
-export function debugSessionState(): { sessions: SessionsStorage; chatHistory: ChatHistoryStorage } {
-  const sessions = getFromStorage<SessionsStorage>(STORAGE_KEYS.SESSIONS, {})
-  const chatHistory = getFromStorage<ChatHistoryStorage>(STORAGE_KEYS.CHAT_HISTORY, {})
-  
-  console.log('=== SESSION DEBUG ===');
-  console.log('Total sessions:', Object.keys(sessions).length);
-  console.log('Sessions with messages:', Object.keys(chatHistory).filter(id => (chatHistory[id] || []).length > 0).length);
-  
-  // Group sessions by project context
-  const projectGroups: Record<string, Array<{ id: string; session: SessionMetadata; messageCount: number }>> = {}
-  
-  Object.entries(sessions).forEach(([id, session]) => {
-    const messageCount = (chatHistory[id] || []).length
-    const key = `${session.namespace}/${session.project}/${session.chatService}`
-    
-    if (!projectGroups[key]) projectGroups[key] = []
-    projectGroups[key].push({ id, session, messageCount })
-    
-    console.log(`Session ${id}:`, {
-      ...session,
-      messageCount,
-      hasMessages: messageCount > 0
-    })
-  })
-  
-  // Show duplicate sessions
-  console.log('\n=== PROJECT GROUPS ===');
-  Object.entries(projectGroups).forEach(([project, sessions]) => {
-    console.log(`Project ${project}:`, sessions.length, 'sessions');
-    if (sessions.length > 1) {
-      console.log('🔴 MULTIPLE SESSIONS FOR SAME PROJECT:', sessions);
-    }
-    sessions.forEach(({ id, session, messageCount }) => {
-      console.log(`  • ${id}: ${session.isPending ? 'PENDING' : 'CONFIRMED'}, ${messageCount} messages`);
-    })
-  })
-  
-  return { sessions, chatHistory }
-}
-
-// Make debug functions available globally for browser console
+// Make functions available globally for testing in browser console
 if (typeof window !== 'undefined') {
-  (window as any).debugSessions = debugSessionStorage;
-  (window as any).debugSessionState = debugSessionState;
+  // Individual functions
+  (window as any).getStoredSessions = getStoredSessions;
+  (window as any).saveStoredSessions = saveStoredSessions;
+  (window as any).findExistingSession = findExistingSession;
+  (window as any).generateMessageId = generateMessageId;
+  (window as any).createMessage = createMessage;
+  (window as any).createPersistentSession = createPersistentSession;
+  (window as any).addMessageToPersistentSession = addMessageToPersistentSession;
+  
+  // Debug helper for session restoration issues
+  (window as any).debugSessionRestore = () => {
+    console.log('=== SESSION RESTORE DEBUG ===');
+    const sessions = getStoredSessions();
+    console.log('All stored sessions:', sessions);
+    console.log('Session count:', Object.keys(sessions).length);
+    
+    Object.entries(sessions).forEach(([sessionId, session]) => {
+      console.log(`Session ${sessionId}:`, {
+        namespace: session.namespace,
+        project: session.project,
+        chatService: session.chatService,
+        messageCount: session.messages?.length || 0,
+        lastUsed: session.lastUsed
+      });
+    });
+    
+    console.log('=== END DEBUG ===');
+  };
+  
+  // Phase 2: Add test helper for creating sessions with messages
+  (window as any).createTestSession = (sessionId: string, namespace: string = 'default', project: string = 'testproject') => {
+    const testMessages = [
+      createMessage('user', 'Hello, this is a test message'),
+      createMessage('assistant', 'Hello! This is a test response from the assistant.')
+    ]
+    createPersistentSession(sessionId, namespace, project, 'designer', testMessages)
+    console.log('✅ Created test session:', sessionId, 'with', testMessages.length, 'messages')
+    return { sessionId, messages: testMessages }
+  }
+  
+  // Test empty message validation
+  (window as any).testEmptyMessage = () => {
+    console.log('🧪 Testing empty message validation...');
+    try {
+      createMessage('user', '');
+    } catch (error) {
+      console.log('✅ Empty message correctly rejected:', error instanceof Error ? error.message : String(error));
+    }
+    
+    try {
+      createMessage('assistant', '   ');
+    } catch (error) {
+      console.log('✅ Whitespace-only message correctly rejected:', error instanceof Error ? error.message : String(error));
+    }
+    
+    try {
+      const validMessage = createMessage('user', 'This is valid');
+      console.log('✅ Valid message created:', validMessage);
+    } catch (error) {
+      console.log('❌ Valid message incorrectly rejected:', error instanceof Error ? error.message : String(error));
+    }
+    
+    console.log('🧪 Empty message validation test complete');
+  }
 }
 
 /**
- * Export all session management functions
+ * Phase 3: Export message helper functions including persistence
  */
-export default {
-  generateMessageId,
-  generateClientSessionId,
-  createOptimisticSession,
-  reconcileSessionWithServer,
-  findSessionForContext,
-  getExistingSession,
-  createSessionFromServer,
-  saveSession,
-  loadSession,
-  updateSessionLastUsed,
-  addMessageToHistory,
-  loadChatHistory,
-  saveChatHistory,
-  clearChatHistory,
-  deleteSession,
-  getSessionsForContext,
-  getAllSessions,
-  isStorageAvailable,
-  cleanupPendingSessions,
-  cleanupOrphanedTempSessions,
-  debugSessionStorage,
-  debugSessionState,
+export {
+  getStoredSessions,
+  saveStoredSessions,
+  findExistingSession,
+  createMessage,
+  createPersistentSession,
+  addMessageToPersistentSession
 }
