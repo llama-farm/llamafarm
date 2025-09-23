@@ -213,6 +213,14 @@ class Rag(BaseModel):
     )
 
 
+class DatasetFile(BaseModel):
+    hash: str = Field(..., description="File content hash")
+    original_filename: str = Field(..., description="Original filename")
+    size: int = Field(..., description="File size in bytes")
+    mime_type: str = Field(..., description="MIME type of the file")
+    timestamp: float = Field(..., description="Upload timestamp")
+
+
 class Dataset(BaseModel):
     name: str = Field(..., description="Dataset name")
     data_processing_strategy: str = Field(
@@ -220,6 +228,12 @@ class Dataset(BaseModel):
     )
     database: str = Field(..., description="RAG database to use for the dataset")
     files: list[str] = Field(..., description="List of file hashes")
+
+
+class DatasetWithFileDetails(BaseModel):
+    name: str = Field(..., description="Dataset name")
+    rag_strategy: Optional[str] = Field("auto", description="RAG strategy to use for the dataset")
+    files: list[DatasetFile] = Field(..., description="List of files with details")
 
 
 class Provider(Enum):

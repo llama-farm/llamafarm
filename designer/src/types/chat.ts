@@ -112,3 +112,49 @@ export class ValidationError extends Error {
   }
 }
 
+// Streaming-specific types
+
+/**
+ * Streaming chunk structure from Server-Sent Events
+ * Matches the format returned by the backend streaming endpoint
+ */
+export interface ChatStreamChunk {
+  id: string
+  object: string
+  created: number
+  model?: string | null
+  choices: Array<{
+    index: number
+    delta: {
+      role?: string
+      content?: string
+    }
+    finish_reason: string | null
+  }>
+}
+
+/**
+ * Callback function type for handling streaming chunks
+ */
+export type StreamChunkHandler = (chunk: ChatStreamChunk) => void
+
+/**
+ * Callback function type for handling streaming errors
+ */
+export type StreamErrorHandler = (error: Error) => void
+
+/**
+ * Callback function type for handling stream completion
+ */
+export type StreamCompleteHandler = () => void
+
+/**
+ * Configuration for streaming chat requests
+ */
+export interface StreamingChatOptions {
+  onChunk?: StreamChunkHandler
+  onError?: StreamErrorHandler
+  onComplete?: StreamCompleteHandler
+  signal?: AbortSignal
+}
+

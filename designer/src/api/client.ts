@@ -18,7 +18,7 @@ export const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // Timeout for API operations (30 seconds)
+  timeout: 60000, // Timeout for API operations (60 seconds)
 })
 
 // Response interceptor for consistent error handling across all services

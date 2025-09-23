@@ -36,6 +36,8 @@ export interface ChatboxMessage extends BaseMessage {
   timestamp: Date
   /** Whether the message is currently being processed (UI state) */
   isLoading?: boolean
+  /** Whether the message is currently being streamed */
+  isStreaming?: boolean
   /** Additional context or citation sources for display */
   sources?: any[]
   /** Extended metadata for UI purposes */
