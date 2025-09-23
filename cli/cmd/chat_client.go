@@ -155,7 +155,14 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 			return
 		}
 		streamTrue := true
-		request := ChatRequest{Messages: messages, Stream: &streamTrue}
+		// Filter out client messages - they're only for display
+		var filteredMessages []ChatMessage
+		for _, msg := range messages {
+			if msg.Role != "client" && msg.Role != "error" {
+				filteredMessages = append(filteredMessages, msg)
+			}
+		}
+		request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
 		
 		// Add RAG parameters if enabled
 		if ctx.RAGEnabled {
