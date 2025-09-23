@@ -20,7 +20,7 @@ runtime:
 prompts:
   - role: system
     content: |
-      You are a helpful AI assistant. Your responses will be formatted as JSON with a 'chat_message' field.
+      You are a helpful AI assistant. 
       
       CRITICAL RULES:
       1. NEVER repeat the user's question as your answer
