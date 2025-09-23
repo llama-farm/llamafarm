@@ -21,7 +21,7 @@ from services.data_service import MetadataFileContent
 from services.dataset_service import (
     DatasetService,
     DatasetWithFileDetails,
-    DatsetDetails,
+    DatasetDetails,
 )
 from services.project_service import ProjectService
 
@@ -246,7 +246,7 @@ class TestDatasetServiceExtraDetails:
         assert dataset_1.data_processing_strategy == "test_strategy"
         assert dataset_1.database == "test_db"
         assert dataset_1.files == [self.file_hash_1, self.file_hash_2]
-        assert isinstance(dataset_1.details, DatsetDetails)
+        assert isinstance(dataset_1.details, DatasetDetails)
         assert len(dataset_1.details.files_metadata) == 2
 
         # Verify file metadata for first dataset
@@ -496,9 +496,9 @@ class TestDatasetServiceExtraDetails:
 
         # Verify it has the additional details field
         assert hasattr(dataset, "details")
-        assert isinstance(dataset.details, DatsetDetails)
+        assert isinstance(dataset.details, DatasetDetails)
 
-        # Verify DatsetDetails structure
+        # Verify DatasetDetails structure
         assert hasattr(dataset.details, "files_metadata")
         assert isinstance(dataset.details.files_metadata, list)
 

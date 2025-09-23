@@ -11,12 +11,12 @@ from services.project_service import ProjectService
 logger = FastAPIStructLogger()
 
 
-class DatsetDetails(BaseModel):
+class DatasetDetails(BaseModel):
     files_metadata: list[MetadataFileContent]
 
 
 class DatasetWithFileDetails(Dataset):
-    details: DatsetDetails
+    details: DatasetDetails
 
 
 class DatasetService:
@@ -68,7 +68,7 @@ class DatasetService:
                 data_processing_strategy=dataset.data_processing_strategy,
                 database=dataset.database,
                 files=dataset.files,
-                details=DatsetDetails(files_metadata=files_with_details),
+                details=DatasetDetails(files_metadata=files_with_details),
             )
             datasets_with_details.append(dataset_with_details)
 
