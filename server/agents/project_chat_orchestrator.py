@@ -44,7 +44,6 @@ class ProjectChatOrchestratorAgent(
     ]
 ):
     def __init__(self, project_config: LlamaFarmConfig):
-        self.project_config = project_config
         history = _get_history(project_config)
         client = _get_client(project_config)
 
@@ -122,18 +121,21 @@ def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
 
 def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor:
     # Use the configured instructor mode or default based on provider
-    if project_config.runtime.instructor_mode is not None and project_config.runtime.instructor_mode.value is not None:
-        # It's an enum with a non-None value, get the string value
-        mode_str = project_config.runtime.instructor_mode.value
+    if project_config.runtime.instructor_mode is not None:
+        # It's a string value
+        mode_str = project_config.runtime.instructor_mode
         
         # Map the configured mode string to instructor.Mode
-        # This should always work since the schema validates the enum values
         try:
             mode = instructor.mode.Mode[mode_str.upper()]
             logger.info(f"Using configured instructor mode: {mode}")
         except KeyError:
-            # This shouldn't happen if schema validation is working, but handle it gracefully
-            raise ValueError(f"Invalid instructor_mode '{mode_str}'. Valid modes are: tools, json, md_json")
+            # Invalid mode specified
+            raise ValueError(
+                f"Invalid instructor_mode '{mode_str}'. "
+                f"Common modes include: tools, json, md_json, anthropic_tools, gemini_json. "
+                f"See instructor documentation for full list of supported modes."
+            )
     elif project_config.runtime.provider == Provider.ollama:
         # Default to MD_JSON for Ollama as it's most compatible
         mode = instructor.Mode.MD_JSON
