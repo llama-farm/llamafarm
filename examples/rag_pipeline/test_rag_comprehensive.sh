@@ -55,49 +55,20 @@ print_error() {
 TEST_DB="test_rag_cli_db_$(date +%s)"
 TEST_DATASET="test_rag_cli_dataset_$(date +%s)"
 
-# Determine project configuration path dynamically
-# First check if LLAMAFARM_CONFIG is set
-if [ -n "$LLAMAFARM_CONFIG" ]; then
-    PROJECT_CONFIG="$LLAMAFARM_CONFIG"
-else
-    # Try to find llamafarm.yaml in the current working directory
-    if [ -f "$(pwd)/llamafarm.yaml" ]; then
-        PROJECT_CONFIG="$(pwd)/llamafarm.yaml"
-    # If not found, try relative to the script location
-    elif [ -f "$(cd "$(dirname "$0")/../.." && pwd)/llamafarm.yaml" ]; then
-        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-        PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-        PROJECT_CONFIG="$PROJECT_ROOT/llamafarm.yaml"
-    else
-        echo "Warning: Could not find llamafarm.yaml in current directory or project root."
-        echo "Please run this script from the llamafarm-1 directory or set LLAMAFARM_CONFIG"
-        echo "Example: export LLAMAFARM_CONFIG=/path/to/llamafarm.yaml"
-        exit 1
-    fi
-fi
+# Just use llamafarm.yaml in current directory
+PROJECT_CONFIG="./llamafarm.yaml"
 
-# Get the folder path to $PROJECT_CONFIG
-PROJECT_CONFIG_DIR="$(dirname "$PROJECT_CONFIG")"
+# Simple LF command
+LF_CMD="./lf"
 
-# LlamaFarm CLI command - use 'lf' directly without path prefix
-# When running from the project directory, we don't need --cwd
-if [ "$PROJECT_CONFIG_DIR" = "$(pwd)" ]; then
-    LF_CMD="lf"
-else
-    LF_CMD="lf --cwd $PROJECT_CONFIG_DIR"
-fi
-
-# Sample files from the examples directory
-if [ -n "$SAMPLE_DIR" ]; then
-    SAMPLE_DIR="$SAMPLE_DIR"
-else
-    SAMPLE_DIR="$PWD/sample_files"
-fi
+# Sample files directory - just use the actual path
+SAMPLE_DIR="examples/rag_pipeline/sample_files"
 
 print_header "RAG CLI Comprehensive Test"
 echo "Test Database: ${TEST_DB}"
 echo "Test Dataset: ${TEST_DATASET}"
 echo "Config File: ${PROJECT_CONFIG}"
+echo "Sample Files: ${SAMPLE_DIR}"
 
 # ================================================================
 # Step 1: Add new database to llamafarm.yaml
@@ -261,24 +232,29 @@ print_success "Dataset created"
 print_header "Step 3: Ingesting Various Document Types"
 
 print_step "Adding research papers (text files)..."
-echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/research_papers/*.txt"
-${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/research_papers/*.txt
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/research_papers/transformer_architecture.txt \
+    ${SAMPLE_DIR}/research_papers/neural_scaling_laws.txt \
+    ${SAMPLE_DIR}/research_papers/llm_scaling_laws.txt
 
 print_step "Adding code documentation (markdown files)..."
-echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code_documentation/*.md"
-${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code_documentation/*.md
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/code_documentation/api_reference.md \
+    ${SAMPLE_DIR}/code_documentation/implementation_guide.md \
+    ${SAMPLE_DIR}/code_documentation/best_practices.md
 
 print_step "Adding code examples (Python files)..."
-echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code/*.py"
-${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code/*.py
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/code/example.py
 
-# Check if PDF files exist and add them
-if ls ${SAMPLE_DIR}/fda/*.pdf 1> /dev/null 2>&1; then
-    print_step "Adding FDA documents (PDF files)..."
-    echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/fda/*.pdf"
-    ${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/fda/*.pdf
+print_step "Adding FDA documents (all PDFs in directory)..."
+# Find all PDFs in the directory and ingest them
+PDF_FILES=$(find ${SAMPLE_DIR}/fda -name "*.pdf" -type f)
+if [ -n "$PDF_FILES" ]; then
+    echo "Found PDFs: $PDF_FILES"
+    ${LF_CMD} datasets ingest "${TEST_DATASET}" $PDF_FILES
 else
-    print_info "No PDF files found, skipping..."
+    print_info "No PDF files found in ${SAMPLE_DIR}/fda"
 fi
 
 print_success "All documents ingested"
