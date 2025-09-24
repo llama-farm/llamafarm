@@ -3,16 +3,50 @@ name: default-project
 namespace: default
 
 # =============================================================================
-# RUNTIME CONFIGURATION (required - most important)
+# MULTI-MODEL RUNTIME CONFIGURATION
 # =============================================================================
-runtime:
-  provider: ollama
-  model: llama3.1:8b
-  base_url: http://localhost:11434/v1  # Note: /v1 for OpenAI compatibility
-  temperature: 0.7
-  # api_key: optional, not needed for ollama
-  # instructor_mode: optional
-  # model_api_parameters: optional additional parameters
+# Single place to change the default model
+default_model: primary
+
+# Named model configurations for easy switching
+runtime_models:
+  - name: primary
+    provider: ollama
+    model: llama3.1:8b
+    base_url: http://localhost:11434/v1  # Note: /v1 for OpenAI compatibility
+    instructor_mode: json
+    parameters:
+      temperature: 0.7
+      max_tokens: 2048
+    
+  - name: creative
+    provider: ollama
+    model: llama3.1:8b  # Same model, different parameters for creative tasks
+    base_url: http://localhost:11434/v1
+    instructor_mode: markdown
+    parameters:
+      temperature: 0.9
+      top_p: 0.95
+      max_tokens: 4096
+    
+  - name: precise
+    provider: ollama
+    model: llama3.1:8b  # Same model, tuned for precision
+    base_url: http://localhost:11434/v1
+    instructor_mode: json
+    parameters:
+      temperature: 0.3
+      top_k: 10
+      max_tokens: 2048
+
+# =============================================================================
+# LEGACY RUNTIME (deprecated - use runtime_models above)
+# =============================================================================
+# runtime:
+#   provider: ollama
+#   model: llama3.1:8b
+#   base_url: http://localhost:11434/v1
+#   temperature: 0.7
 
 # =============================================================================
 # PROMPTS CONFIGURATION

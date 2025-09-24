@@ -7,7 +7,7 @@ required:
   - version
   - name
   - namespace
-  - runtime
+# runtime is now optional - either use runtime (deprecated) or runtime_models
 properties:
   version:
     type: string
@@ -43,6 +43,13 @@ properties:
   rag:
     $ref: "../rag/schema.yaml"
 
+  # NEW: Multi-model support
+  default_model:
+    $ref: "../models/runtime_schema.yaml#/properties/default_model"
+    
+  runtime_models:
+    $ref: "../models/runtime_schema.yaml#/properties/runtime_models"
+
   datasets:
     type: array
     description: List of dataset configurations
@@ -74,6 +81,8 @@ properties:
 
   runtime:
     type: object
+    description: "DEPRECATED: Use runtime_models for multi-model support. This field will be removed in v2.0"
+    deprecated: true
     required:
       - provider
       - model

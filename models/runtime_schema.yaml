@@ -1,0 +1,102 @@
+# Runtime Models Schema - For multi-model support
+# Version: 1.0.0
+$schema: http://json-schema.org/draft-07/schema#
+
+title: Runtime Models Configuration
+description: Schema for multi-model runtime support with named configurations
+
+type: object
+properties:
+  default_model:
+    type: string
+    description: Name of the default model to use
+    pattern: "^[a-z0-9][a-z0-9-_]*$"
+    
+  runtime_models:
+    type: array
+    description: Named model configurations for runtime use
+    minItems: 1
+    items:
+      type: object
+      required: [name, provider, model]
+      properties:
+        name:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9-_]*$"
+          description: Unique model configuration name
+        
+        provider:
+          type: string
+          enum: [openai, ollama, anthropic]
+          description: Model provider
+          
+        model:
+          type: string
+          description: Model identifier (e.g., llama3.1:8b, gpt-4, claude-3)
+          
+        base_url:
+          type: string
+          format: uri
+          description: API base URL for the provider
+          
+        api_key:
+          type: string
+          description: API key (if required by provider)
+          
+        instructor_mode:
+          type: string
+          enum: [json, markdown, text]
+          default: json
+          description: Instructor mode for structured output
+          
+        parameters:
+          type: object
+          description: Model-specific parameters
+          properties:
+            temperature:
+              type: number
+              minimum: 0
+              maximum: 2
+              default: 0.7
+              description: Sampling temperature
+            top_p:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Top-p sampling parameter
+            top_k:
+              type: integer
+              minimum: 1
+              description: Top-k sampling parameter
+            max_tokens:
+              type: integer
+              minimum: 1
+              description: Maximum tokens to generate
+            presence_penalty:
+              type: number
+              minimum: -2
+              maximum: 2
+              description: Presence penalty
+            frequency_penalty:
+              type: number
+              minimum: -2
+              maximum: 2
+              description: Frequency penalty
+            seed:
+              type: integer
+              description: Random seed for deterministic generation
+          additionalProperties: true
+
+# Validation rules
+allOf:
+  - if:
+      properties:
+        runtime_models:
+          type: array
+          minItems: 1
+    then:
+      properties:
+        default_model:
+          type: string
+      # Ensure default_model references an existing model name
+      # This will be validated at runtime by the RuntimeManager

@@ -17,6 +17,7 @@ var (
 	runRAGTopK           int
 	runNoRAG             bool
 	runRAGScoreThreshold float64
+	runModelName         string // NEW: Named model configuration
 )
 
 // runCmd represents the `lf run` command
@@ -48,7 +49,11 @@ Examples:
   lf run --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"
 
   # Run WITHOUT RAG (LLM only)
-  lf run --no-rag "What is machine learning?"`,
+  lf run --no-rag "What is machine learning?"
+
+  # Run with specific named model configuration
+  lf run --model creative "Write a story about a robot"
+  lf run --model precise "Explain quantum computing"`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		// Valid forms:
 		// 1) run <ns>/<proj> <input>
@@ -160,6 +165,8 @@ Examples:
 			Temperature: temperature,
 			MaxTokens:   maxTokens,
 			HTTPClient:  getHTTPClient(),
+			// Model selection
+			ModelName:            runModelName, // NEW: Pass the selected model name
 			// RAG settings - RAG is enabled by default unless --no-rag is used
 			RAGEnabled:           !runNoRAG,
 			RAGDatabase:          runRAGDatabase,
@@ -185,6 +192,10 @@ Examples:
 func init() {
 	runCmd.Flags().StringVarP(&runInputFile, "file", "f", "", "path to file containing input text")
 
+	// Model selection
+	runCmd.Flags().StringVar(&runModelName, "model", "", "Named model configuration to use (default: from config)")
+
+	// RAG settings
 	runCmd.Flags().BoolVar(&runNoRAG, "no-rag", false, "Disable RAG (use LLM only without document retrieval)")
 	runCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use for RAG (default: from config)")
 	runCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")

@@ -72,6 +72,8 @@ type ChatSessionContext struct {
 	MaxTokens   int
 	Streaming   bool
 	HTTPClient  HTTPClient
+	// Model selection
+	ModelName           string
 	// RAG fields
 	RAGEnabled          bool
 	RAGDatabase         string
@@ -156,6 +158,11 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 		}
 		streamTrue := true
 		request := ChatRequest{Messages: messages, Stream: &streamTrue}
+		
+		// Add model selection if specified
+		if ctx.ModelName != "" {
+			request.Model = &ctx.ModelName
+		}
 		
 		// Add RAG parameters if enabled
 		if ctx.RAGEnabled {
