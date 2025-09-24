@@ -232,6 +232,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// CRITICAL: Prevent negative viewport height that causes slice bounds panic
+		// Note: headerHeight is now predictable (1 line) due to compact status bar design
 		newHeight := msg.Height - footerHeight - headerHeight
 		if newHeight < 1 {
 			newHeight = 1 // Minimum viable height to prevent panic
@@ -548,58 +549,65 @@ func renderChatInput(m chatModel) string {
 }
 
 func renderInfoBar(m chatModel) string {
-	headerW := m.width
-	headerStyle := lipgloss.NewStyle().
-		Width(headerW).
-		Background(lipgloss.Color("#027ffd")).
-		Foreground(lipgloss.AdaptiveColor{Light: "236", Dark: "248"}).
-		PaddingLeft(1)
+	// Compact single-line status bar: 📁 Project: default/llamafarm | Session: 7c727f84 | Status: ✓ | localhost:8000
 
-	// Left/middle parts (already rendered strings)
-	var left string
+	// Project info
+	var project string
 	if m.projectInfo != nil {
-		left = fmt.Sprintf("%s %s/%s", projectPrompt, m.projectInfo.Namespace, m.projectInfo.Project)
+		project = fmt.Sprintf("%s/%s", m.projectInfo.Namespace, m.projectInfo.Project)
 	} else {
-		left = fmt.Sprintf("%s unknown/unknown", projectPrompt)
+		project = "unknown/unknown"
 	}
-	mid := ""
-	if sessionID != "" {
-		mid = fmt.Sprintf(" (%s %s)", sessionPrompt, sessionID)
-	}
-	leftRendered := lipgloss.NewStyle().Render(left + mid)
 
-	// Right (server status)
-	right := fmt.Sprintf("%s %s", iconForStatus(func() string {
+	// Session info (truncate to 8 chars for compactness)
+	var session string
+	if sessionID != "" {
+		if len(sessionID) > 8 {
+			session = sessionID[:8]
+		} else {
+			session = sessionID
+		}
+	} else {
+		session = "none"
+	}
+
+	// Server status (just icon + simple host)
+	statusIcon := iconForStatus(func() string {
 		if m.serverHealth != nil {
 			return m.serverHealth.Status
 		}
 		return "degraded"
-	}()), serverURL)
+	}())
 
-	// If headerStyle has padding/borders, subtract them
-	frameW, _ := headerStyle.GetFrameSize()
-	contentW := headerW - frameW
-
-	// Give the right part the remaining width and align it
-	avail := contentW - lipgloss.Width(leftRendered)
-	if avail < 1 {
-		avail = 1
+	// Extract just the host from serverURL for compactness
+	serverHost := serverURL
+	if strings.HasPrefix(serverHost, "http://") {
+		serverHost = strings.TrimPrefix(serverHost, "http://")
+	} else if strings.HasPrefix(serverHost, "https://") {
+		serverHost = strings.TrimPrefix(serverHost, "https://")
 	}
 
-	rightWithStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#141e47")).
+	// Build compact status line
+	statusLine := fmt.Sprintf("📁 Project: %s | Session: %s | Status: %s | %s",
+		project, session, statusIcon, serverHost)
+
+	// Apply single-line styling - simple blue background, no complex layouts
+	style := lipgloss.NewStyle().
+		Width(m.width).
+		Background(lipgloss.Color("#027ffd")).
 		Foreground(lipgloss.Color("#ffffff")).
-		Padding(0, 1).
-		Render(right)
+		PaddingLeft(1).
+		PaddingRight(1)
 
-	rightRendered := lipgloss.NewStyle().
-		Width(avail).
-		Align(lipgloss.Right).
-		Render(rightWithStyle)
+	// Truncate if too long for terminal width
+	if lipgloss.Width(statusLine) > m.width-2 { // -2 for padding
+		maxLen := m.width - 5 // -5 for padding and "..."
+		if maxLen > 0 {
+			statusLine = statusLine[:maxLen] + "..."
+		}
+	}
 
-	// Join and render the full header line
-	line := lipgloss.JoinHorizontal(lipgloss.Top, leftRendered, rightRendered)
-	return headerStyle.Render(line)
+	return style.Render(statusLine)
 }
 
 func (m chatModel) View() string {
