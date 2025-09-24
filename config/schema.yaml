@@ -72,44 +72,6 @@ properties:
           default: []
     default: []
 
-  # Server-specific dataset models
-  dataset_file:
-    type: object
-    description: Represents a file in a dataset with metadata
-    required:
-      - file_hash
-      - original_filename
-      - size
-      - created_at
-    properties:
-      file_hash:
-        type: string
-        description: SHA256 hash of the file
-      original_filename:
-        type: string
-        description: Original filename
-      size:
-        type: integer
-        description: File size in bytes
-      created_at:
-        type: string
-        description: Timestamp when file was added
-
-  dataset_with_file_details:
-    type: object
-    description: Dataset with detailed file information
-    allOf:
-      - $ref: "#/properties/datasets/items"
-      - type: object
-        required:
-          - file_details
-        properties:
-          file_details:
-            type: array
-            description: Detailed file information
-            items:
-              $ref: "#/properties/dataset_file"
-
   runtime:
     type: object
     required:
