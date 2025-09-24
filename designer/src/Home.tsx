@@ -10,13 +10,18 @@ import {
   getProjectsList,
 } from './utils/projectConstants'
 import { getCurrentNamespace } from './utils/namespaceUtils'
+import { 
+  createProjectFromChat, 
+  encodeMessageForUrl 
+} from './utils/homePageUtils'
 
 function Home() {
   const [inputValue, setInputValue] = useState('')
   const [search, setSearch] = useState('')
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
   const navigate = useNavigate()
 
-  // No chat functionality needed on Home page
+  // Enhanced chat functionality for project creation
 
   const projectOptions = [
     { id: 1, text: 'AI Agent for Enterprise Product' },
@@ -50,18 +55,43 @@ function Home() {
     setInputValue(option.text)
   }
 
-  const handleSendClick = () => {
+  const handleSendClick = async () => {
     const messageContent = inputValue.trim()
 
-    // Navigate to chat with the input value
-    // Chat page will handle message sending with proper project context
-    if (messageContent) {
-      // Store the message in localStorage so Chat page can pick it up
-      localStorage.setItem('pendingChatMessage', messageContent)
-      setInputValue('')
+    // Validate message for project creation
+    if (!messageContent || messageContent.length < 3) {
+      console.warn('Message too short for project creation:', messageContent)
+      return
     }
+
+    setIsCreatingProject(true)
     
-    navigate('/chat/data')
+    try {
+      console.log('🏠 Creating project from home chat message:', messageContent)
+      
+      // 1. Create the project using the existing API
+      const { namespace, projectName } = await createProjectFromChat(messageContent)
+      
+      console.log('✅ Project created, navigating to:', { namespace, projectName })
+      
+      // 2. Set the active project (using existing localStorage mechanism)
+      localStorage.setItem('activeProject', projectName)
+      
+      // 3. Navigate to the new project with the message as a URL parameter
+      // This allows the project page to pick up the conversation
+      const encodedMessage = encodeMessageForUrl(messageContent)
+      navigate(`/chat/dashboard?initialMessage=${encodedMessage}`)
+      
+      // Clear input on successful creation
+      setInputValue('')
+      
+    } catch (error) {
+      console.error('❌ Failed to create project from chat:', error)
+      // Show error to user - you might want to add a toast notification here
+      alert(`Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsCreatingProject(false)
+    }
   }
 
   const openProject = (name: string) => {
@@ -124,21 +154,42 @@ function Home() {
                 }
               }}
               className="w-full h-24 sm:h-28 bg-transparent border-none resize-none p-4 pr-12 placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed text-foreground placeholder-foreground/50"
-              placeholder="I'm building an agent that will work with my app..."
+              placeholder={
+                isCreatingProject 
+                  ? "Creating your project..." 
+                  : "I'm building an agent that will work with my app..."
+              }
+              disabled={isCreatingProject}
             />
             <button
               onClick={handleSendClick}
-              className="absolute bottom-2 right-2 p-0 bg-transparent text-primary hover:opacity-90"
-              aria-label={inputValue.trim() ? 'Send' : 'Go to Chat'}
+              disabled={isCreatingProject || !inputValue.trim()}
+              className="absolute bottom-2 right-2 p-0 bg-transparent text-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label={
+                isCreatingProject 
+                  ? 'Creating project...' 
+                  : inputValue.trim() 
+                    ? 'Create project and start chat' 
+                    : 'Enter a message to create project'
+              }
             >
-              <FontIcon type="arrow-filled" className="w-6 h-6 text-primary" />
+              {isCreatingProject ? (
+                <div className="w-6 h-6 flex items-center justify-center">
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <FontIcon type="arrow-filled" className="w-6 h-6 text-primary" />
+              )}
             </button>
           </div>
         </div>
 
         <p className="max-w-2xl mx-auto text-sm sm:text-base leading-relaxed text-foreground/80">
-          We'll help you bring your AI project dreams to life, all while showing
-          you how we're doing it.
+          {isCreatingProject ? (
+            "Creating your project and setting up the chat environment..."
+          ) : (
+            "Describe what you're building and we'll create a project for you to start chatting about it right away."
+          )}
         </p>
 
         {/* Project option buttons */}

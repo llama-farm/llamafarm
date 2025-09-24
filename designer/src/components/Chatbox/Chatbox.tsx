@@ -6,10 +6,12 @@ import useChatboxWithProjectSession from '../../hooks/useChatboxWithProjectSessi
 interface ChatboxProps {
   isPanelOpen: boolean
   setIsPanelOpen: (isOpen: boolean) => void
+  initialMessage?: string | null
 }
 
-function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
+function Chatbox({ isPanelOpen, setIsPanelOpen, initialMessage }: ChatboxProps) {
   const [isDiagnosing, setIsDiagnosing] = useState<boolean>(false)
+  const [hasProcessedInitialMessage, setHasProcessedInitialMessage] = useState(false)
   const diagnosingInFlightRef = useRef<boolean>(false)
   // Use the enhanced chatbox hook with project session management for Designer Chat
   const {
@@ -25,6 +27,7 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
     cancelStreaming,
     hasMessages,
     canSend,
+    sessionId,
   } = useChatboxWithProjectSession()
 
   // Refs for auto-scroll
@@ -39,6 +42,21 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
       listRef.current.scrollTop = listRef.current.scrollHeight
     }
   }, [messages])
+
+  // Handle initial message from home page project creation
+  useEffect(() => {
+    if (initialMessage && 
+        !hasProcessedInitialMessage && 
+        !hasMessages && // Only if no existing messages
+        sessionId === null // Only if no existing session
+    ) {
+      console.log('🏠 Processing initial message from home page:', initialMessage)
+      
+      // Use the existing sendMessage function - this will trigger normal session creation
+      sendMessage(initialMessage)
+      setHasProcessedInitialMessage(true)
+    }
+  }, [initialMessage, hasProcessedInitialMessage, hasMessages, sessionId, sendMessage])
 
   // Handle sending message
   const handleSendClick = useCallback(async () => {
