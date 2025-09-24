@@ -231,9 +231,21 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		// CRITICAL: Prevent negative viewport height that causes slice bounds panic
+		newHeight := msg.Height - footerHeight - headerHeight
+		if newHeight < 1 {
+			newHeight = 1 // Minimum viable height to prevent panic
+		}
+
 		m.viewport.Width = msg.Width
-		m.textarea.SetWidth(msg.Width - 2)
-		m.viewport.Height = msg.Height - footerHeight - headerHeight
+		m.viewport.Height = newHeight // Now guaranteed positive
+
+		// Also protect textarea width calculation
+		newWidth := msg.Width - 2
+		if newWidth < 10 {
+			newWidth = 10
+		}
+		m.textarea.SetWidth(newWidth)
 		m.width = msg.Width
 
 	case tea.KeyMsg:
