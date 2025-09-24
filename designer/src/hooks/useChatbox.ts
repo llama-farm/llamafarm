@@ -282,18 +282,6 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
           return false
         }
 
-        // For streaming errors, try fallback if enabled
-        if (streamingEnabled && !import.meta.env.VITE_DISABLE_FALLBACK) {
-          console.log('Streaming failed, attempting fallback request...')
-          try {
-            const chatRequest = createChatRequest(messageContent)
-            return await executeFallbackRequest(chatRequest, assistantMessageId)
-          } catch (fallbackError) {
-            console.error('Fallback request also failed:', fallbackError)
-            // Continue to error handling below
-          }
-        }
-
         // Remove loading message
         setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
 

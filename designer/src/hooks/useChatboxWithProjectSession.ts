@@ -444,13 +444,6 @@ export function useChatboxWithProjectSession(
                           console.error('Failed to handle deferred session creation:', sessionError)
                           // Don't fail the whole request for session management errors
                         }
-                      } else {
-                        // FALLBACK: No session ID from server, create local session for persistence
-                        if (projectSession.isTemporaryMode && projectSession.tempMessages.length >= 2) {
-                          console.log('🔄 No server session ID, creating local session for persistence');
-                          const localSessionId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-                          projectSession.createSessionFromServer(localSessionId);
-                        }
                       }
                     }, 10); // Small delay to ensure state updates have completed
                   } catch (err) {
