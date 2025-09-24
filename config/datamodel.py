@@ -5,7 +5,7 @@
 from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, confloat, conint, constr
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, confloat, conint, constr, model_validator
 
 
 class Version(Enum):
@@ -265,13 +265,11 @@ class Dataset(BaseModel):
     files: list[str] = Field(..., description="List of file hashes")
 
 
-class Provider1(Enum):
-    openai = "openai"
-    ollama = "ollama"
-
+# Provider1 is deprecated - use Provider instead
+# Keeping for backward compatibility but using the same Provider enum
 
 class Runtime(BaseModel):
-    provider: Provider1
+    provider: Provider  # Using main Provider enum instead of duplicate Provider1
     model: str = Field(..., description="Model name or ID")
     base_url: Optional[str] = Field(None, description="Base URL for the provider")
     api_key: Optional[str] = Field(None, description="API key for the provider")
@@ -304,3 +302,24 @@ class LlamaFarmConfig(BaseModel):
         None,
         description="DEPRECATED: Use runtime_models for multi-model support. This field will be removed in v2.0",
     )
+    
+    @model_validator(mode='after')
+    def validate_runtime_configuration(self):
+        """Validate that either runtime_models or runtime is set, but not both."""
+        if self.runtime and self.runtime_models:
+            raise ValueError(
+                "Both 'runtime' and 'runtime_models' are set. Please migrate to 'runtime_models' "
+                "and remove 'runtime' configuration. The 'runtime' field is deprecated."
+            )
+        if not self.runtime and not self.runtime_models:
+            raise ValueError(
+                "No runtime configuration found. Please add 'runtime_models' configuration. "
+                "Example:\n"
+                "runtime_models:\n"
+                "  - name: primary\n"
+                "    provider: ollama\n"
+                "    model: llama3.1:8b\n"
+                "    base_url: http://localhost:11434/v1\n"
+                "    instructor_mode: json"
+            )
+        return self

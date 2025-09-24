@@ -205,9 +205,15 @@ async def chat(
 
     # If no session ID provided, create a new one and ensure thread-safe session map access
     with _agent_sessions_lock:
-        if not session_id or session_id not in agent_sessions:
-            if not session_id:
-                session_id = str(uuid.uuid4())
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            # Pass the model name from request if provided
+            agent = ProjectChatOrchestratorAgentFactory.create_agent(
+                project_config, 
+                model_name=request.model
+            )
+            agent_sessions[session_id] = agent
+        elif session_id not in agent_sessions:
             # Pass the model name from request if provided
             agent = ProjectChatOrchestratorAgentFactory.create_agent(
                 project_config, 
@@ -219,12 +225,12 @@ async def chat(
             # Note: Model switching within a session is not supported
             agent = agent_sessions[session_id]
 
-    # Extract the latest user message
-    latest_user_message = None
-    for msg in reversed(request.messages):
-        if msg.role == "user" and msg.content:
-            latest_user_message = msg.content
-            break
+    # Extract the latest user message using next()
+    latest_user_message = next(
+        (msg.content for msg in reversed(request.messages) 
+         if msg.role == "user" and msg.content),
+        None
+    )
     if latest_user_message is None:
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
 

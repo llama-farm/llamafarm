@@ -8,6 +8,8 @@ between different models and their parameters.
 import subprocess
 import json
 import logging
+import hashlib
+import fnmatch
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from copy import deepcopy
@@ -27,6 +29,7 @@ class RuntimeManager:
         self.config = config
         self.runtime_models = self._load_runtime_models()
         self.default_model = config.get('default_model')
+        self.safe_name_to_tag = {}  # Track safe name to original tag mapping
         
         # Validate configuration
         self._validate_config()
@@ -116,6 +119,39 @@ class RuntimeManager:
             raise ValueError(f"Model '{name}' not found")
         self.default_model = name
     
+    def _generate_safe_name(self, model_tag: str, prefix: str = None) -> str:
+        """Generate a safe name for a model tag with collision detection.
+        
+        Args:
+            model_tag: Original model tag (e.g., "llama3.1:8b")
+            prefix: Optional prefix to add
+            
+        Returns:
+            Safe name that avoids collisions
+            
+        Raises:
+            ValueError: If a collision is detected with different model tags
+        """
+        # Basic replacement
+        base = model_tag.replace(':', '-').replace('.', '-')
+        
+        # Add hash to ensure uniqueness
+        tag_hash = hashlib.sha256(model_tag.encode('utf-8')).hexdigest()[:8]
+        safe_name = f"{base}-{tag_hash}"
+        
+        if prefix:
+            safe_name = f"{prefix}{safe_name}"
+        
+        # Check for collisions
+        if safe_name in self.safe_name_to_tag:
+            if self.safe_name_to_tag[safe_name] != model_tag:
+                logger.error(f"Safe name collision detected for '{model_tag}' and '{self.safe_name_to_tag[safe_name]}' as '{safe_name}'")
+                raise ValueError(f"Safe name collision detected for '{model_tag}' and '{self.safe_name_to_tag[safe_name]}' as '{safe_name}'")
+        else:
+            self.safe_name_to_tag[safe_name] = model_tag
+        
+        return safe_name
+    
     def import_ollama_models(self, prefix: str = "", filter_patterns: List[str] = None) -> List[str]:
         """Import models from Ollama.
         
@@ -152,19 +188,15 @@ class RuntimeManager:
                 
                 # Apply filters if specified
                 if filter_patterns:
-                    matched = False
-                    for pattern in filter_patterns:
-                        import fnmatch
-                        if fnmatch.fnmatch(model_tag, pattern):
-                            matched = True
-                            break
+                    matched = any(
+                        fnmatch.fnmatch(model_tag, pattern) 
+                        for pattern in filter_patterns
+                    )
                     if not matched:
                         continue
                 
-                # Generate safe name
-                safe_name = model_tag.replace(':', '-').replace('.', '-')
-                if prefix:
-                    safe_name = f"{prefix}{safe_name}"
+                # Generate safe name with collision detection
+                safe_name = self._generate_safe_name(model_tag, prefix)
                 
                 # Skip if already configured
                 if safe_name in self.runtime_models:
@@ -195,8 +227,22 @@ class RuntimeManager:
                 logger.info(f"Imported model '{model_tag}' as '{safe_name}'")
                 
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to run 'ollama list': {e}")
-            raise RuntimeError("Cannot connect to Ollama. Ensure it's running with 'ollama serve'")
+            error_details = e.stderr.decode() if hasattr(e, "stderr") and e.stderr else "No stderr output."
+            logger.error(
+                f"Failed to run 'ollama list': {e}\n"
+                f"Stderr: {error_details}\n"
+                "Troubleshooting steps:\n"
+                "- Ensure Ollama is installed and accessible in your PATH.\n"
+                "- Verify you have permission to run Ollama commands.\n"
+                "- Make sure Ollama is running with 'ollama serve'."
+            )
+            raise RuntimeError(
+                "Cannot connect to Ollama. Please check the following:\n"
+                "- Ollama is installed and available in your PATH.\n"
+                "- You have permission to run Ollama commands.\n"
+                "- Ollama is running with 'ollama serve'.\n"
+                f"Stderr output: {error_details}"
+            ) from e
         except Exception as e:
             logger.error(f"Error importing Ollama models: {e}")
             raise
