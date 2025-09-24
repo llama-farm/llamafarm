@@ -1,18 +1,23 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 // versionPattern matches semantic versions with or without leading "v"
@@ -36,19 +41,36 @@ type DockerPullProgress struct {
 	Total   int64
 }
 
+// DockerSDKProgress represents the JSON progress structure from Docker SDK
+type DockerSDKProgress struct {
+	ID             string `json:"id"`
+	Status         string `json:"status"`
+	Error          string `json:"error,omitempty"`
+	Progress       string `json:"progress,omitempty"`
+	ProgressDetail struct {
+		Current int64 `json:"current"`
+		Total   int64 `json:"total"`
+	} `json:"progressDetail,omitempty"`
+}
+
 // ProgressTracker tracks overall pull progress across all layers
 type ProgressTracker struct {
-	layers     map[string]*DockerPullProgress
-	totalBytes int64
-	doneBytes  int64
-	lastUpdate time.Time
+	layers        map[string]*DockerPullProgress
+	totalBytes    int64
+	doneBytes     int64
+	lastUpdate    time.Time
+	lastDoneBytes int64 // Track previous doneBytes for rate calculation
+	startTime     time.Time
 }
 
 // NewProgressTracker creates a new progress tracker
 func NewProgressTracker() *ProgressTracker {
+	now := time.Now()
 	return &ProgressTracker{
-		layers:     make(map[string]*DockerPullProgress),
-		lastUpdate: time.Now(),
+		layers:        make(map[string]*DockerPullProgress),
+		lastUpdate:    now,
+		startTime:     now,
+		lastDoneBytes: 0,
 	}
 }
 
@@ -66,7 +88,7 @@ func (pt *ProgressTracker) Update(progress *DockerPullProgress) {
 	pt.lastUpdate = time.Now()
 }
 
-// recalculate recalculates total and done bytes across all layers
+// recalculate recalculates total and done bytes across all layers for transfer rate calculation
 func (pt *ProgressTracker) recalculate() {
 	pt.totalBytes = 0
 	pt.doneBytes = 0
@@ -74,23 +96,59 @@ func (pt *ProgressTracker) recalculate() {
 	for _, layer := range pt.layers {
 		if layer.Total > 0 {
 			pt.totalBytes += layer.Total
-			pt.doneBytes += layer.Current
+
+			// Handle different layer states for transfer rate calculation
+			switch layer.Status {
+			case "Download complete", "Verifying Checksum", "Extracting", "Pull complete":
+				// Layer download is complete, count full size towards transfer rate
+				pt.doneBytes += layer.Total
+			case "Downloading":
+				// Layer is still downloading, use current progress for transfer rate
+				pt.doneBytes += layer.Current
+			default:
+				// For other statuses, use current progress if available
+				if layer.Current > 0 {
+					pt.doneBytes += layer.Current
+				}
+			}
 		}
 	}
 }
 
-// GetProgress returns the overall progress percentage (0-100)
+// GetProgress returns the overall progress percentage (0-100) based on layer completion
 func (pt *ProgressTracker) GetProgress() float64 {
-	if pt.totalBytes == 0 {
-		return 0
+	if len(pt.layers) == 0 {
+		return 0.0
 	}
-	return float64(pt.doneBytes) / float64(pt.totalBytes) * 100
+
+	completedLayers := 0
+	totalLayers := len(pt.layers)
+
+	for _, layer := range pt.layers {
+		switch layer.Status {
+		case "Download complete", "Verifying Checksum", "Extracting", "Pull complete":
+			completedLayers++
+		}
+	}
+
+	// Calculate progress based on completed layers
+	progress := float64(completedLayers) / float64(totalLayers) * 100
+
+	// Ensure progress stays within bounds
+	if progress > 100.0 {
+		progress = 100.0
+	} else if progress < 0.0 {
+		progress = 0.0
+	}
+
+	return progress
 }
 
 // GetTransferRate returns the transfer rate in bytes per second
 func (pt *ProgressTracker) GetTransferRate() float64 {
-	elapsed := time.Since(pt.lastUpdate).Seconds()
-	if elapsed == 0 {
+	// Calculate rate based on total progress over total time elapsed
+	elapsed := time.Since(pt.startTime).Seconds()
+	if elapsed < 1.0 { // Avoid division by very small numbers
 		return 0
 	}
 	return float64(pt.doneBytes) / elapsed
@@ -99,6 +157,13 @@ func (pt *ProgressTracker) GetTransferRate() float64 {
 // FormatTransferRate formats transfer rate in human-readable format
 func (pt *ProgressTracker) FormatTransferRate() string {
 	rate := pt.GetTransferRate()
+
+	// Cap unrealistic rates to prevent display issues
+	maxReasonableRate := float64(1024 * 1024 * 1024) // 1 GB/s max
+	if rate > maxReasonableRate {
+		rate = maxReasonableRate
+	}
+
 	if rate < 1024 {
 		return fmt.Sprintf("%.1f B/s", rate)
 	} else if rate < 1024*1024 {
@@ -115,77 +180,57 @@ func (pt *ProgressTracker) DisplayProgress(imageName string) {
 	progress := pt.GetProgress()
 	rate := pt.FormatTransferRate()
 
+	// Count layers in different states for more informative display
+	downloading := 0
+	extracting := 0
+	complete := 0
+	total := len(pt.layers)
+
+	for _, layer := range pt.layers {
+		switch layer.Status {
+		case "Downloading":
+			downloading++
+		case "Extracting":
+			extracting++
+		case "Download complete", "Pull complete":
+			complete++
+		}
+	}
+
 	// Use \r to overwrite the current line
-	fmt.Fprintf(os.Stderr, "\rPulling %s: %.1f%% (%s)    ", imageName, progress, rate)
+	if total > 1 {
+		fmt.Fprintf(os.Stderr, "\rPulling %s: %.1f%% (%s) [%d/%d layers]    ",
+			imageName, progress, rate, complete+extracting, total)
+	} else {
+		fmt.Fprintf(os.Stderr, "\rPulling %s: %.1f%% (%s)    ", imageName, progress, rate)
+	}
 }
 
-// ensureDockerAvailable checks whether docker is available on PATH
+// createDockerClient creates a new Docker client with API version negotiation
+func createDockerClient() (*client.Client, error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	return cli, nil
+}
+
+// ensureDockerAvailable checks whether docker is available by creating a client
 func ensureDockerAvailable() error {
-	if err := exec.Command("docker", "--version").Run(); err != nil {
-		return errors.New("docker is not available. Please install Docker and try again")
+	cli, err := createDockerClient()
+	if err != nil {
+		return fmt.Errorf("docker is not available. Please install Docker and try again: %v", err)
 	}
-	return nil
-}
+	defer cli.Close()
 
-// parseDockerProgress parses a Docker progress line and extracts progress information
-// Examples of Docker progress lines (default format):
-// "a1b2c3d4e5f6: Downloading [==============>                                    ]  123.4MB/456.7MB"
-// "a1b2c3d4e5f6: Extracting  [============================>                      ]  234.5MB/456.7MB"
-// "Downloading from ghcr.io/llama-farm/llamafarm/server"
-func parseDockerProgress(line string) *DockerPullProgress {
-	// First try the progress bar format (with layer ID)
-	progressRegex := regexp.MustCompile(`^([a-f0-9]{12}):\s+(\w+)\s+\[.*?\]\s+([0-9.]+)([KMGT]?B)/([0-9.]+)([KMGT]?B)`)
-	matches := progressRegex.FindStringSubmatch(line)
+	// Try to ping the Docker daemon
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	if len(matches) == 7 {
-		layerID := matches[1]
-		status := matches[2]
-		currentStr := matches[3]
-		currentUnit := matches[4]
-		totalStr := matches[5]
-		totalUnit := matches[6]
-
-		// Convert sizes to bytes
-		current := parseSize(currentStr, currentUnit)
-		total := parseSize(totalStr, totalUnit)
-
-		if current >= 0 && total >= 0 {
-			return &DockerPullProgress{
-				ID:      layerID,
-				Status:  status,
-				Current: current,
-				Total:   total,
-			}
-		}
+	_, err = cli.Ping(ctx)
+	if err != nil {
+		return fmt.Errorf("docker daemon is not running: %v", err)
 	}
-
-	// Try alternative format without progress bar but with size info
-	// "a1b2c3d4e5f6: Downloading 123.4MB/456.7MB"
-	simpleRegex := regexp.MustCompile(`^([a-f0-9]{12}):\s+(\w+)\s+([0-9.]+)([KMGT]?B)/([0-9.]+)([KMGT]?B)`)
-	matches = simpleRegex.FindStringSubmatch(line)
-
-	if len(matches) == 7 {
-		layerID := matches[1]
-		status := matches[2]
-		currentStr := matches[3]
-		currentUnit := matches[4]
-		totalStr := matches[5]
-		totalUnit := matches[6]
-
-		// Convert sizes to bytes
-		current := parseSize(currentStr, currentUnit)
-		total := parseSize(totalStr, totalUnit)
-
-		if current >= 0 && total >= 0 {
-			return &DockerPullProgress{
-				ID:      layerID,
-				Status:  status,
-				Current: current,
-				Total:   total,
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -212,34 +257,30 @@ func parseSize(sizeStr, unit string) int64 {
 	}
 }
 
-// pullImage pulls a docker image with progress tracking, capturing output to avoid breaking TUIs
-func pullImage(image string) error {
+// pullImageSDK pulls a docker image using the Docker SDK with progress tracking
+func pullImage(imageName string) error {
+	ctx := context.Background()
+	cli, err := createDockerClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
 	// Extract image name for display (remove registry/tag parts for brevity)
-	imageParts := strings.Split(image, "/")
+	imageParts := strings.Split(imageName, "/")
 	displayName := imageParts[len(imageParts)-1]
 	if tagIdx := strings.Index(displayName, ":"); tagIdx > 0 {
 		displayName = displayName[:tagIdx]
 	}
 
-	fmt.Fprintf(os.Stderr, "Pulling image: %s\n", image)
+	fmt.Fprintf(os.Stderr, "Pulling image: %s\n", imageName)
 
-	// Use standard docker pull command (no --progress flag for compatibility)
-	pullCmd := exec.Command("docker", "pull", image)
-
-	// Create pipes to capture stdout and stderr separately
-	stdout, err := pullCmd.StdoutPipe()
+	// Pull the image
+	out, err := cli.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %v", err)
+		return fmt.Errorf("failed to pull image: %v", err)
 	}
-	stderr, err := pullCmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stderr pipe: %v", err)
-	}
-
-	// Start the command
-	if err := pullCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start docker pull: %v", err)
-	}
+	defer out.Close()
 
 	// Create progress tracker
 	tracker := NewProgressTracker()
@@ -251,46 +292,65 @@ func pullImage(image string) error {
 	// Track whether we've seen any progress information
 	hasProgress := false
 
-	// Read and process stdout (progress output)
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			line := scanner.Text()
-			allOutput.WriteString(line + "\n")
+	// Read and process the JSON stream
+	decoder := json.NewDecoder(out)
+	for {
+		var progress DockerSDKProgress
+		if err := decoder.Decode(&progress); err != nil {
+			if err == io.EOF {
+				break
+			}
+			// Log decode errors but continue
+			if debug {
+				logDebug(fmt.Sprintf("Error decoding progress: %v", err))
+			}
+			continue
+		}
 
-			// Try to parse progress information
-			if progress := parseDockerProgress(line); progress != nil {
-				hasProgress = true
-				tracker.Update(progress)
+		// Log all progress for debugging
+		if debug {
+			progressJSON, _ := json.Marshal(progress)
+			logDebug(string(progressJSON) + "\n")
+		}
 
-				// Throttle display updates to avoid overwhelming the terminal
-				if time.Since(lastProgressTime) > 100*time.Millisecond {
-					tracker.DisplayProgress(displayName)
-					lastProgressTime = time.Now()
-				}
-			} else if !hasProgress {
-				// If no progress info yet, show basic status for certain lines
-				if strings.Contains(line, "Downloading") || strings.Contains(line, "Extracting") || strings.Contains(line, "Pull complete") {
-					fmt.Fprintf(os.Stderr, "\rPulling %s...    ", displayName)
+		// Handle errors in the progress stream
+		if progress.Error != "" {
+			return fmt.Errorf("docker pull failed: %s", progress.Error)
+		}
+
+		// Convert SDK progress to our internal format
+		if progress.ID != "" {
+			hasProgress = true
+			dockerProgress := &DockerPullProgress{
+				ID:      progress.ID,
+				Status:  progress.Status,
+				Current: progress.ProgressDetail.Current,
+				Total:   progress.ProgressDetail.Total,
+			}
+
+			// For layers without progress details but with status updates,
+			// preserve the previous total if we had one
+			if dockerProgress.Total == 0 {
+				if existingLayer, exists := tracker.layers[progress.ID]; exists && existingLayer.Total > 0 {
+					dockerProgress.Total = existingLayer.Total
 				}
 			}
-		}
-	}()
 
-	// Read and process stderr (also capture for debug)
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			allOutput.WriteString(line + "\n")
-		}
-	}()
+			tracker.Update(dockerProgress)
 
-	// Wait for command to complete
-	if err := pullCmd.Wait(); err != nil {
-		// Clear the progress line before showing error
-		fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", 80))
-		return fmt.Errorf("docker pull failed: %v", err)
+			// Throttle display updates to avoid overwhelming the terminal and reduce fluctuations
+			if time.Since(lastProgressTime) > 500*time.Millisecond {
+				tracker.DisplayProgress(displayName)
+				lastProgressTime = time.Now()
+			}
+		} else if !hasProgress {
+			// If no progress info yet, show basic status for certain statuses
+			if strings.Contains(progress.Status, "Downloading") ||
+				strings.Contains(progress.Status, "Extracting") ||
+				strings.Contains(progress.Status, "Pull complete") {
+				fmt.Fprintf(os.Stderr, "\rPulling %s...    ", displayName)
+			}
+		}
 	}
 
 	// Clear the progress line and show completion
@@ -309,28 +369,62 @@ func pullImage(image string) error {
 }
 
 func containerExists(name string) bool {
-	cmd := exec.Command("docker", "ps", "-a", "--format", "{{.Names}}")
-	out, err := cmd.Output()
+	ctx := context.Background()
+	cli, err := createDockerClient()
 	if err != nil {
+		if debug {
+			logDebug(fmt.Sprintf("Failed to create Docker client: %v", err))
+		}
 		return false
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.TrimSpace(line) == name {
-			return true
+	defer cli.Close()
+
+	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		if debug {
+			logDebug(fmt.Sprintf("Failed to list containers: %v", err))
+		}
+		return false
+	}
+
+	for _, c := range containers {
+		for _, containerName := range c.Names {
+			// Container names from the API include leading slash
+			cleanName := strings.TrimPrefix(containerName, "/")
+			if cleanName == name {
+				return true
+			}
 		}
 	}
 	return false
 }
 
 func isContainerRunning(name string) bool {
-	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}")
-	out, err := cmd.Output()
+	ctx := context.Background()
+	cli, err := createDockerClient()
 	if err != nil {
+		if debug {
+			logDebug(fmt.Sprintf("Failed to create Docker client: %v", err))
+		}
 		return false
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.TrimSpace(line) == name {
-			return true
+	defer cli.Close()
+
+	containers, err := cli.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		if debug {
+			logDebug(fmt.Sprintf("Failed to list running containers: %v", err))
+		}
+		return false
+	}
+
+	for _, c := range containers {
+		for _, containerName := range c.Names {
+			// Container names from the API include leading slash
+			cleanName := strings.TrimPrefix(containerName, "/")
+			if cleanName == name {
+				return true
+			}
 		}
 	}
 	return false
@@ -430,13 +524,49 @@ func removeContainer(name string) error {
 	if !containerExists(name) {
 		return nil
 	}
-	rmCmd := exec.Command("docker", "rm", "-f", name)
-	out, err := rmCmd.CombinedOutput()
+
+	ctx := context.Background()
+	cli, err := createDockerClient()
 	if err != nil {
-		return fmt.Errorf("docker rm failed: %v\n%s", err, string(out))
+		return fmt.Errorf("failed to create Docker client: %v", err)
 	}
-	if debug && len(out) > 0 {
-		logDebug(fmt.Sprintf("docker rm output: %s", string(out)))
+	defer cli.Close()
+
+	// Find the container by name
+	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %v", err)
+	}
+
+	var containerID string
+	for _, c := range containers {
+		for _, containerName := range c.Names {
+			cleanName := strings.TrimPrefix(containerName, "/")
+			if cleanName == name {
+				containerID = c.ID
+				break
+			}
+		}
+		if containerID != "" {
+			break
+		}
+	}
+
+	if containerID == "" {
+		return nil // Container not found, nothing to remove
+	}
+
+	// Remove the container (force=true to stop and remove)
+	removeOptions := container.RemoveOptions{
+		Force: true,
+	}
+
+	if err := cli.ContainerRemove(ctx, containerID, removeOptions); err != nil {
+		return fmt.Errorf("failed to remove container %s: %v", name, err)
+	}
+
+	if debug {
+		logDebug(fmt.Sprintf("Successfully removed container: %s (ID: %s)", name, containerID))
 	}
 	return nil
 }
@@ -490,7 +620,42 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 	// Pull image best-effort (captured)
 	_ = pullImage(spec.Image)
 
-	runArgs := []string{"run", "-d", "--name", spec.Name}
+	ctx := context.Background()
+	cli, err := createDockerClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer cli.Close()
+
+	// Prepare container configuration
+	config := &container.Config{
+		Image:      spec.Image,
+		Env:        make([]string, 0, len(spec.Env)),
+		Labels:     spec.Labels,
+		WorkingDir: spec.Workdir,
+		Cmd:        spec.Cmd,
+	}
+
+	// Add environment variables
+	for k, v := range spec.Env {
+		config.Env = append(config.Env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// Set entrypoint if specified
+	if len(spec.Entrypoint) > 0 {
+		config.Entrypoint = spec.Entrypoint
+	}
+
+	// Prepare host configuration
+	hostConfig := &container.HostConfig{
+		Binds:      spec.Volumes,
+		ExtraHosts: spec.AddHosts,
+		AutoRemove: false,
+	}
+
+	// Handle port configuration
+	exposedPorts := make(nat.PortSet)
+	portBindings := make(nat.PortMap)
 
 	useDynamic := false
 	if policy != nil && policy.PreferredHostPort > 0 && len(spec.StaticPorts) > 0 {
@@ -504,7 +669,17 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 				if protocol == "" {
 					protocol = "tcp"
 				}
-				runArgs = append(runArgs, "-p", fmt.Sprintf("%d:%d/%s", hostPort, pm.Container, protocol))
+
+				port, err := nat.NewPort(protocol, strconv.Itoa(pm.Container))
+				if err != nil {
+					return nil, fmt.Errorf("invalid port specification: %v", err)
+				}
+				exposedPorts[port] = struct{}{}
+				portBindings[port] = []nat.PortBinding{
+					{
+						HostPort: strconv.Itoa(hostPort),
+					},
+				}
 			}
 		} else {
 			if policy.Forced {
@@ -517,38 +692,37 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 	}
 
 	if useDynamic {
-		runArgs = append(runArgs, "-P")
+		hostConfig.PublishAllPorts = true
+		// For dynamic ports, we need to expose the static ports if any
+		for _, pm := range spec.StaticPorts {
+			protocol := pm.Protocol
+			if protocol == "" {
+				protocol = "tcp"
+			}
+			port, err := nat.NewPort(protocol, strconv.Itoa(pm.Container))
+			if err != nil {
+				return nil, fmt.Errorf("invalid port specification: %v", err)
+			}
+			exposedPorts[port] = struct{}{}
+		}
 	}
 
-	for k, v := range spec.Env {
-		runArgs = append(runArgs, "-e", fmt.Sprintf("%s=%s", k, v))
-	}
-	for _, v := range spec.Volumes {
-		runArgs = append(runArgs, "-v", v)
-	}
-	for _, h := range spec.AddHosts {
-		runArgs = append(runArgs, "--add-host", h)
-	}
-	for k, v := range spec.Labels {
-		runArgs = append(runArgs, "--label", fmt.Sprintf("%s=%s", k, v))
-	}
-	if strings.TrimSpace(spec.Workdir) != "" {
-		runArgs = append(runArgs, "-w", spec.Workdir)
-	}
-	if len(spec.Entrypoint) > 0 {
-		runArgs = append(runArgs, "--entrypoint", strings.Join(spec.Entrypoint, " "))
-	}
+	config.ExposedPorts = exposedPorts
+	hostConfig.PortBindings = portBindings
 
-	runArgs = append(runArgs, spec.Image)
-	runArgs = append(runArgs, spec.Cmd...)
-
-	runCmd := exec.Command("docker", runArgs...)
-	runOut, err := runCmd.CombinedOutput()
+	// Create the container
+	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, spec.Name)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start docker container: %v\n%s", err, string(runOut))
+		return nil, fmt.Errorf("failed to create container: %v", err)
 	}
-	if debug && len(runOut) > 0 {
-		logDebug(fmt.Sprintf("docker run output: %s", string(runOut)))
+
+	// Start the container
+	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return nil, fmt.Errorf("failed to start container: %v", err)
+	}
+
+	if debug {
+		logDebug(fmt.Sprintf("Successfully started container: %s (ID: %s)", spec.Name, resp.ID))
 	}
 
 	// Resolve published ports
@@ -572,29 +746,53 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 
 // GetPublishedPorts returns a map like "80/tcp" -> "49154"
 func GetPublishedPorts(name string) (map[string]string, error) {
-	cmd := exec.Command("docker", "port", name)
-	out, err := cmd.CombinedOutput()
+	ctx := context.Background()
+	cli, err := createDockerClient()
 	if err != nil {
-		return nil, fmt.Errorf("docker port failed: %v\n%s", err, string(out))
+		return nil, fmt.Errorf("failed to create Docker client: %v", err)
 	}
+	defer cli.Close()
+
+	// Find the container by name
+	containers, err := cli.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %v", err)
+	}
+
+	var containerID string
+	for _, c := range containers {
+		for _, containerName := range c.Names {
+			cleanName := strings.TrimPrefix(containerName, "/")
+			if cleanName == name {
+				containerID = c.ID
+				break
+			}
+		}
+		if containerID != "" {
+			break
+		}
+	}
+
+	if containerID == "" {
+		return nil, fmt.Errorf("container %s not found", name)
+	}
+
+	// Get container details
+	containerJSON, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect container %s: %v", name, err)
+	}
+
 	res := make(map[string]string)
-	s := bufio.NewScanner(strings.NewReader(string(out)))
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		// Example: "80/tcp -> 0.0.0.0:49154" or "80/tcp -> :::49154"
-		parts := strings.Split(line, " -> ")
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		host := strings.TrimSpace(parts[1])
-		idx := strings.LastIndex(host, ":")
-		if idx > -1 && idx+1 < len(host) {
-			res[key] = host[idx+1:]
+	for port, bindings := range containerJSON.NetworkSettings.Ports {
+		if len(bindings) > 0 {
+			// Take the first binding if multiple exist
+			res[string(port)] = bindings[0].HostPort
 		}
 	}
-	if debug && len(out) > 0 {
-		logDebug(fmt.Sprintf("docker port output: %s", string(out)))
+
+	if debug {
+		logDebug(fmt.Sprintf("Published ports for %s: %v", name, res))
 	}
 	return res, nil
 }
