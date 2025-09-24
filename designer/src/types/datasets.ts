@@ -12,7 +12,9 @@ export interface DatasetFile {
   /** File content hash */
   hash: string
   /** Original filename */
-  original_filename: string
+  original_file_name: string
+  /** Resolved filename */
+  resolved_file_name: string
   /** File size in bytes */
   size: number
   /** MIME type of the file */
@@ -28,35 +30,22 @@ export interface DatasetFile {
 export interface Dataset {
   /** Dataset name within the project */
   name: string
-  /** RAG strategy used for processing */
-  rag_strategy: string
+  /** Data processing strategy used for processing */
+  data_processing_strategy: string
+  /** Database used for processing */
+  database: string
   /** Array of file hashes included in this dataset */
   files: string[]
+  /** Extra details about the dataset */
+  details?: DatasetDetails
 }
 
 /**
- * Enhanced Dataset with file details for API responses
+ * Extra details about the dataset
  */
-export interface DatasetWithFileDetails {
-  /** Dataset name within the project */
-  name: string
-  /** RAG strategy used for processing */
-  rag_strategy: string
-  /** Array of files with detailed metadata */
-  files: DatasetFile[]
-}
-
-/**
- * Flexible Dataset that can contain either file hashes or file details
- * Used for backward compatibility in API responses
- */
-export interface FlexibleDataset {
-  /** Dataset name within the project */
-  name: string
-  /** RAG strategy used for processing */
-  rag_strategy: string
-  /** Array of files - either hashes (legacy) or detailed metadata (enhanced) */
-  files: string[] | DatasetFile[]
+export interface DatasetDetails {
+  /** Array of file details */
+  files_metadata: DatasetFile[]
 }
 
 /**
@@ -66,7 +55,9 @@ export interface CreateDatasetRequest {
   /** Dataset name */
   name: string
   /** RAG strategy to use for processing */
-  rag_strategy: string
+  data_processing_strategy: string
+  /** Database to use for processing */
+  database: string
 }
 
 /**
@@ -84,7 +75,7 @@ export interface ListDatasetsResponse {
   /** Total number of datasets */
   total: number
   /** Array of datasets with flexible file format */
-  datasets: FlexibleDataset[]
+  datasets: Dataset[]
 }
 
 /**
