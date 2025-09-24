@@ -57,8 +57,6 @@ export async function createProjectFromChat(
   const projectName = generateProjectNameFromMessage(message)
   
   try {
-    console.log('🏠 Creating project from chat:', { namespace, projectName, message: message.substring(0, 100) })
-    
     // Use the existing project creation API
     const request: CreateProjectRequest = {
       name: projectName,
@@ -66,8 +64,6 @@ export async function createProjectFromChat(
     }
     
     const response = await projectService.createProject(namespace, request)
-    
-    console.log('✅ Project created successfully:', response.project)
     
     return {
       namespace,
@@ -86,29 +82,22 @@ export async function createProjectFromChat(
  * @returns true if valid, false otherwise
  */
 export function validateMessageForProjectCreation(message: string): boolean {
-  console.log('🔍 Validating message for project creation:', { message, type: typeof message })
-  
   if (!message || typeof message !== 'string') {
-    console.log('❌ Validation failed: message is not a string or is falsy')
     return false
   }
   
   const trimmed = message.trim()
-  console.log('🔍 Trimmed message:', { trimmed, length: trimmed.length })
   
   // Must have content
   if (trimmed.length === 0) {
-    console.log('❌ Validation failed: message is empty after trimming')
     return false
   }
   
   // Must be reasonable length (not too short or too long)
   if (trimmed.length < 3 || trimmed.length > 1000) {
-    console.log('❌ Validation failed: message length is invalid', { length: trimmed.length, min: 3, max: 1000 })
     return false
   }
   
-  console.log('✅ Validation passed')
   return true
 }
 

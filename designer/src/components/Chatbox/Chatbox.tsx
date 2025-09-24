@@ -50,7 +50,6 @@ function Chatbox({ isPanelOpen, setIsPanelOpen, initialMessage }: ChatboxProps) 
         !hasMessages && // Only if no existing messages
         sessionId === null // Only if no existing session
     ) {
-      console.log('🏠 Processing initial message from home page:', initialMessage)
       
       // Use the existing sendMessage function - this will trigger normal session creation
       sendMessage(initialMessage)

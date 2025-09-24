@@ -67,12 +67,10 @@ function Home() {
     setIsCreatingProject(true)
     
     try {
-      console.log('🏠 Creating project from home chat message:', messageContent)
       
       // 1. Create the project using the existing API
-      const { namespace, projectName } = await createProjectFromChat(messageContent)
+      const { projectName } = await createProjectFromChat(messageContent)
       
-      console.log('✅ Project created, navigating to:', { namespace, projectName })
       
       // 2. Set the active project (using existing localStorage mechanism)
       localStorage.setItem('activeProject', projectName)

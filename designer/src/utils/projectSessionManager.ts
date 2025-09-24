@@ -68,32 +68,15 @@ function findExistingSession(
   chatService: 'designer' | 'project'
 ): string | null {
   const sessions = getStoredSessions()
-
-  
-  console.log('🔍 findExistingSession called with:', { namespace, project, chatService });
-  console.log('🔍 Available sessions:', sessions);
   
   for (const [sessionId, session] of Object.entries(sessions)) {
-    console.log('🔍 Checking session:', sessionId, {
-      storedNamespace: session.namespace,
-      storedProject: session.project,
-      storedChatService: session.chatService,
-      matches: {
-        namespace: session.namespace === namespace,
-        project: session.project === project,
-        chatService: session.chatService === chatService
-      }
-    });
-    
     if (session.namespace === namespace &&
         session.project === project &&
         session.chatService === chatService) {
-      console.log('✅ Found matching session:', sessionId);
       return sessionId
     }
   }
   
-  console.log('❌ No matching session found');
   return null
 }
 
@@ -101,24 +84,16 @@ function findExistingSession(
  * Create a message object with generated ID and timestamp
  */
 function createMessage(role: 'user' | 'assistant', content: string): ChatMessage {
-  // Add validation and logging
-  console.log('🔍 Creating message:', { role, content: `"${content}"`, contentLength: content.length });
-  
   if (!content || content.trim() === '') {
-    console.warn('⚠️ Attempting to create message with empty content!');
-    console.trace('Empty message creation stack trace');
     throw new Error('Cannot create message with empty content');
   }
   
-  const message = {
+  return {
     id: generateMessageId(),
     role,
     content: content.trim(), // Ensure we trim whitespace
     timestamp: new Date().toISOString()
   };
-  
-  console.log('✅ Created message:', message);
-  return message;
 }
 
 /**
@@ -131,22 +106,11 @@ function createPersistentSession(
   chatService: 'designer' | 'project',
   initialMessages: ChatMessage[] = []
 ): void {
-  console.log('💾 Creating persistent session:', sessionId, 'with', initialMessages.length, 'messages');
-  
   // SAFEGUARD: Check if session already exists with messages
   const existingSessions = getStoredSessions();
   if (existingSessions[sessionId] && existingSessions[sessionId].messages.length > 0) {
-    console.warn('⚠️ Session already exists with', existingSessions[sessionId].messages.length, 'messages');
-    console.log('⚠️ New session would have', initialMessages.length, 'messages');
-    
     if (initialMessages.length === 0) {
-      console.error('❌ PREVENTED: Overwrite of session with empty messages array!');
-      console.log('❌ Keeping existing session with', existingSessions[sessionId].messages.length, 'messages');
       return; // Don't overwrite existing session with empty array
-    }
-    
-    if (initialMessages.length < existingSessions[sessionId].messages.length) {
-      console.warn('⚠️ WARNING: New session has fewer messages than existing. Proceeding but this may be unintended.');
     }
   }
   
@@ -160,30 +124,19 @@ function createPersistentSession(
     messages: initialMessages
   }
   saveStoredSessions(sessions)
-  
-  // Verify save worked
-  const verification = getStoredSessions();
-  if (verification[sessionId]) {
-    console.log('✅ Session saved successfully:', sessionId, 'with', verification[sessionId].messages.length, 'messages');
-  } else {
-    console.error('❌ Session save failed:', sessionId);
-  }
 }
 
 /**
  * Add a message to an existing persistent session
  */
 function addMessageToPersistentSession(sessionId: string, message: ChatMessage): void {
-  console.log('💾 Adding message to persistent session:', sessionId);
-  
   const sessions = getStoredSessions();
   if (sessions[sessionId]) {
     sessions[sessionId].messages.push(message);
     sessions[sessionId].lastUsed = new Date().toISOString();
     saveStoredSessions(sessions);
-    console.log('✅ Message added to persistent session:', sessionId);
   } else {
-    console.error('❌ Session not found for message addition:', sessionId);
+    console.error('Session not found for message addition:', sessionId);
   }
 }
 
@@ -226,33 +179,29 @@ if (typeof window !== 'undefined') {
       createMessage('assistant', 'Hello! This is a test response from the assistant.')
     ]
     createPersistentSession(sessionId, namespace, project, 'designer', testMessages)
-    console.log('✅ Created test session:', sessionId, 'with', testMessages.length, 'messages')
     return { sessionId, messages: testMessages }
   }
   
   // Test empty message validation
   (window as any).testEmptyMessage = () => {
-    console.log('🧪 Testing empty message validation...');
     try {
       createMessage('user', '');
     } catch (error) {
-      console.log('✅ Empty message correctly rejected:', error instanceof Error ? error.message : String(error));
+      // Empty message correctly rejected
     }
     
     try {
       createMessage('assistant', '   ');
     } catch (error) {
-      console.log('✅ Whitespace-only message correctly rejected:', error instanceof Error ? error.message : String(error));
+      // Whitespace-only message correctly rejected
     }
     
     try {
-      const validMessage = createMessage('user', 'This is valid');
-      console.log('✅ Valid message created:', validMessage);
+      createMessage('user', 'This is valid');
+      // Valid message created
     } catch (error) {
-      console.log('❌ Valid message incorrectly rejected:', error instanceof Error ? error.message : String(error));
+      // Valid message incorrectly rejected
     }
-    
-    console.log('🧪 Empty message validation test complete');
   }
 }
 
