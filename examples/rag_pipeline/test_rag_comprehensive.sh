@@ -107,10 +107,10 @@ cp "$PROJECT_CONFIG" "${PROJECT_CONFIG}.backup_$(date +%s)"
 
 print_step "Adding database '${TEST_DB}' to configuration..."
 
-# Check if PyYAML is available, if not use sed approach
-if python3 -c "import yaml" 2>/dev/null; then
-    # Use Python to safely add the database to YAML
-    python3 << EOF
+# Check if PyYAML is available via UV, if not use sed approach
+if uv run python -c "import yaml" 2>/dev/null; then
+    # Use UV Python to safely add the database to YAML
+    uv run python << EOF
 import yaml
 import sys
 
@@ -405,8 +405,8 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 
     print_step "Removing test database from configuration..."
 
-    if python3 -c "import yaml" 2>/dev/null; then
-        python3 << EOF
+    if uv run python -c "import yaml" 2>/dev/null; then
+        uv run python << EOF
 import yaml
 
 config_file = "${PROJECT_CONFIG}"

@@ -208,10 +208,15 @@ async def chat(
         if not session_id or session_id not in agent_sessions:
             if not session_id:
                 session_id = str(uuid.uuid4())
-            agent = ProjectChatOrchestratorAgentFactory.create_agent(project_config)
+            # Pass the model name from request if provided
+            agent = ProjectChatOrchestratorAgentFactory.create_agent(
+                project_config, 
+                model_name=request.model
+            )
             agent_sessions[session_id] = agent
         else:
             # Use existing agent to maintain conversation context
+            # Note: Model switching within a session is not supported
             agent = agent_sessions[session_id]
 
     # Extract the latest user message

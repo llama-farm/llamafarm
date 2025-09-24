@@ -42,18 +42,19 @@ class ProjectChatOrchestratorAgent(
         ProjectChatOrchestratorAgentOutputSchema,
     ]
 ):
-    def __init__(self, project_config: LlamaFarmConfig):
+    def __init__(self, project_config: LlamaFarmConfig, model_name: str | None = None):
         history = _get_history(project_config)
-        client = _get_client(project_config)
+        runtime_config = _get_runtime_config(project_config, model_name)
+        client = _get_client_from_runtime(runtime_config)
 
         agent_config = AgentConfig(
             client=client,
-            model=project_config.runtime.model,
+            model=runtime_config.get("model"),
             history=history,
             system_prompt_generator=LFSystemPromptGenerator(
                 project_config=project_config
             ),
-            model_api_parameters=project_config.runtime.model_api_parameters,
+            model_api_parameters=runtime_config.get("parameters", {}),
         )
         super().__init__(config=agent_config)
 
@@ -118,35 +119,107 @@ def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
     return history
 
 
-def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor:
-    mode = (
-        instructor.mode.Mode[project_config.runtime.instructor_mode.upper()]
-        if project_config.runtime.instructor_mode is not None
-        else instructor.Mode.TOOLS
+def _get_runtime_config(project_config: LlamaFarmConfig, model_name: str | None = None) -> dict:
+    """Get runtime configuration from the new multi-model format."""
+    
+    # Require runtime_models to be present
+    if not hasattr(project_config, 'runtime_models') or not project_config.runtime_models:
+        raise ValueError(
+            "No runtime_models configured. Please update your llamafarm.yaml to use the new multi-model format:\n"
+            "  default_model: primary\n"
+            "  runtime_models:\n"
+            "    - name: primary\n"
+            "      provider: ollama\n"
+            "      model: llama3.1:8b\n"
+            "      ...\n"
+        )
+    
+    # If model_name specified, find that model
+    if model_name:
+        for model in project_config.runtime_models:
+            if model.name == model_name:
+                return model.model_dump()
+        
+        # Model not found - provide helpful error with available models
+        available = ", ".join([m.name for m in project_config.runtime_models])
+        raise ValueError(
+            f"Model '{model_name}' not found. Available models: {available}"
+        )
+    
+    # Use default_model if specified
+    if hasattr(project_config, 'default_model') and project_config.default_model:
+        for model in project_config.runtime_models:
+            if model.name == project_config.default_model:
+                return model.model_dump()
+        
+        # Default model not found - this is a config error
+        raise ValueError(
+            f"Default model '{project_config.default_model}' not found in runtime_models"
+        )
+    
+    # No default specified, use first model with a warning
+    logger.warning(
+        "No default_model specified, using first model in runtime_models list. "
+        "Consider setting default_model in your configuration."
     )
+    return project_config.runtime_models[0].model_dump()
 
-    if project_config.runtime.provider == Provider.openai:
+
+def _get_client_from_runtime(runtime_config: dict) -> instructor.client.Instructor:
+    """Create client from runtime configuration dictionary."""
+    instructor_mode = runtime_config.get("instructor_mode", "TOOLS")
+    
+    # Handle both string and enum values
+    if hasattr(instructor_mode, 'value'):
+        # It's an enum, get its value
+        instructor_mode = instructor_mode.value
+    elif instructor_mode is None:
+        instructor_mode = "TOOLS"
+    
+    # Convert to uppercase for Mode lookup
+    mode = instructor.mode.Mode[instructor_mode.upper()]
+
+    provider = runtime_config.get("provider", "")
+    
+    # Handle both string and enum values for provider
+    if hasattr(provider, 'value'):
+        # It's an enum, get its value
+        provider = provider.value
+    
+    provider = str(provider).lower()
+    
+    # Get base_url and convert from Pydantic URL if needed
+    base_url = runtime_config.get("base_url")
+    if base_url and hasattr(base_url, '__str__'):
+        base_url = str(base_url)
+    
+    if provider == "openai":
         return instructor.from_openai(
             AsyncOpenAI(
-                api_key=project_config.runtime.api_key,
-                base_url=project_config.runtime.base_url,
+                api_key=runtime_config.get("api_key"),
+                base_url=base_url,
             ),
             mode=mode,
         )
-    if project_config.runtime.provider == Provider.ollama:
+    if provider == "ollama":
         return instructor.from_openai(
             AsyncOpenAI(
-                api_key=project_config.runtime.api_key or settings.ollama_api_key,
-                base_url=project_config.runtime.base_url
-                or f"{settings.ollama_host}/v1",
+                api_key=runtime_config.get("api_key") or settings.ollama_api_key,
+                base_url=base_url or f"{settings.ollama_host}/v1",
             ),
             mode=mode,
         )
     else:
-        raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")
+        raise ValueError(f"Unsupported provider: {provider}")
+
+
+def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor:
+    """Create client from project configuration (uses default model)."""
+    runtime_config = _get_runtime_config(project_config, None)
+    return _get_client_from_runtime(runtime_config)
 
 
 class ProjectChatOrchestratorAgentFactory:
     @staticmethod
-    def create_agent(project_config: LlamaFarmConfig) -> ProjectChatOrchestratorAgent:
-        return ProjectChatOrchestratorAgent(project_config)
+    def create_agent(project_config: LlamaFarmConfig, model_name: str | None = None) -> ProjectChatOrchestratorAgent:
+        return ProjectChatOrchestratorAgent(project_config, model_name)

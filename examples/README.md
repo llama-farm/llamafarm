@@ -4,6 +4,20 @@ Clean, practical examples demonstrating LlamaFarm CLI capabilities.
 
 ## Available Examples
 
+### 🚀 Multi-Model & Multi-Database Demo (`e2e/rag_model_comprehensive.sh`) **NEW!**
+Advanced demonstration showcasing:
+- Multiple named model configurations (primary, creative, precise)
+- Multiple specialized RAG databases for different use cases
+- Model selection based on task requirements
+- Database routing based on content type
+- Comprehensive production features
+
+**Quick Start:**
+```bash
+# Run the advanced multi-model demo
+SAMPLE_DIR=examples/rag_pipeline/sample_files bash examples/e2e/rag_model_comprehensive.sh
+```
+
 ### 📚 RAG Pipeline (`rag_pipeline/`)
 A complete example of the Retrieval-Augmented Generation pipeline showing:
 - Document ingestion using CLI commands
@@ -18,7 +32,7 @@ A complete example of the Retrieval-Augmented Generation pipeline showing:
 ./examples/rag_pipeline/run_example.sh
 
 # Run comprehensive RAG test with duplicate detection
-./examples/rag_pipeline/test_rag_comprehensive.sh
+SAMPLE_DIR=examples/rag_pipeline/sample_files bash examples/rag_pipeline/test_rag_comprehensive.sh
 
 # Or view the detailed guide
 cat examples/rag_pipeline/README.md

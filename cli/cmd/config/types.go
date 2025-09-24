@@ -13,13 +13,16 @@ var (
 
 // LlamaFarmConfig represents the complete llamafarm configuration
 type LlamaFarmConfig struct {
-	Version   string    `yaml:"version" toml:"version"`
-	Name      string    `yaml:"name,omitempty" toml:"name,omitempty"`
-	Namespace string    `yaml:"namespace,omitempty" toml:"namespace,omitempty"`
-	Prompts   []Prompt  `yaml:"prompts,omitempty" toml:"prompts,omitempty"`
-	RAG       RAGConfig `yaml:"rag,omitempty" toml:"rag,omitempty"`
-	Datasets  []Dataset `yaml:"datasets,omitempty" toml:"datasets,omitempty"`
-	Models    []Model   `yaml:"models,omitempty" toml:"models,omitempty"`
+	Version       string         `yaml:"version" toml:"version"`
+	Name          string         `yaml:"name,omitempty" toml:"name,omitempty"`
+	Namespace     string         `yaml:"namespace,omitempty" toml:"namespace,omitempty"`
+	Prompts       []Prompt       `yaml:"prompts,omitempty" toml:"prompts,omitempty"`
+	RAG           RAGConfig      `yaml:"rag,omitempty" toml:"rag,omitempty"`
+	Datasets      []Dataset      `yaml:"datasets,omitempty" toml:"datasets,omitempty"`
+	Models        []Model        `yaml:"models,omitempty" toml:"models,omitempty"`
+	DefaultModel  string         `yaml:"default_model,omitempty" toml:"default_model,omitempty"`
+	RuntimeModels []RuntimeModel `yaml:"runtime_models,omitempty" toml:"runtime_models,omitempty"`
+	Runtime       *RuntimeConfig `yaml:"runtime,omitempty" toml:"runtime,omitempty"` // Legacy
 }
 
 // Dataset represents a dataset configuration
@@ -91,4 +94,26 @@ type DefaultsConfig struct {
 type Model struct {
 	Provider string `yaml:"provider" toml:"provider"`
 	Model    string `yaml:"model" toml:"model"`
+}
+
+// RuntimeModel represents a named runtime model configuration
+type RuntimeModel struct {
+	Name           string                 `yaml:"name" toml:"name" json:"name"`
+	Provider       string                 `yaml:"provider" toml:"provider" json:"provider"`
+	Model          string                 `yaml:"model" toml:"model" json:"model"`
+	BaseURL        string                 `yaml:"base_url,omitempty" toml:"base_url,omitempty" json:"base_url,omitempty"`
+	APIKey         string                 `yaml:"api_key,omitempty" toml:"api_key,omitempty" json:"api_key,omitempty"`
+	InstructorMode string                 `yaml:"instructor_mode,omitempty" toml:"instructor_mode,omitempty" json:"instructor_mode,omitempty"`
+	Parameters     map[string]interface{} `yaml:"parameters,omitempty" toml:"parameters,omitempty" json:"parameters,omitempty"`
+}
+
+// RuntimeConfig represents legacy runtime configuration
+type RuntimeConfig struct {
+	Provider       string  `yaml:"provider" toml:"provider" json:"provider"`
+	Model          string  `yaml:"model" toml:"model" json:"model"`
+	BaseURL        string  `yaml:"base_url,omitempty" toml:"base_url,omitempty" json:"base_url,omitempty"`
+	APIKey         string  `yaml:"api_key,omitempty" toml:"api_key,omitempty" json:"api_key,omitempty"`
+	InstructorMode string  `yaml:"instructor_mode,omitempty" toml:"instructor_mode,omitempty" json:"instructor_mode,omitempty"`
+	Temperature    float64 `yaml:"temperature,omitempty" toml:"temperature,omitempty" json:"temperature,omitempty"`
+	MaxTokens      int     `yaml:"max_tokens,omitempty" toml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
 }

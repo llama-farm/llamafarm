@@ -105,9 +105,9 @@ Example:
 		}
 
 		// Find the model
-		model := cfg.GetRuntimeModel(modelName)
-		if model == nil {
-			fmt.Fprintf(os.Stderr, "Model '%s' not found\n", modelName)
+		model, err := cfg.GetRuntimeModel(modelName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -162,9 +162,9 @@ Example:
 		}
 
 		// Verify model exists
-		model := cfg.GetRuntimeModel(modelName)
-		if model == nil {
-			fmt.Fprintf(os.Stderr, "Model '%s' not found\n", modelName)
+		_, err = cfg.GetRuntimeModel(modelName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			
 			// List available models
 			models := cfg.GetRuntimeModels()
