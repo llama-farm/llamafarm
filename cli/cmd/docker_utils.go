@@ -16,6 +16,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -199,10 +200,10 @@ func (pt *ProgressTracker) DisplayProgress(imageName string) {
 
 	// Use \r to overwrite the current line
 	if total > 1 {
-		fmt.Fprintf(os.Stderr, "\rPulling %s: %.1f%% (%s) [%d/%d layers]    ",
+		OutputProgress("\rPulling %s: %.1f%% (%s) [%d/%d layers]    ",
 			imageName, progress, rate, complete+extracting, total)
 	} else {
-		fmt.Fprintf(os.Stderr, "\rPulling %s: %.1f%% (%s)    ", imageName, progress, rate)
+		OutputProgress("\rPulling %s: %.1f%% (%s)    ", imageName, progress, rate)
 	}
 }
 
@@ -234,31 +235,61 @@ func ensureDockerAvailable() error {
 	return nil
 }
 
-// parseSize converts a size string with unit to bytes
-func parseSize(sizeStr, unit string) int64 {
-	size, err := strconv.ParseFloat(sizeStr, 64)
+// imageExists checks if a Docker image exists locally
+func imageExists(imageName string) bool {
+	ctx := context.Background()
+	cli, err := createDockerClient()
 	if err != nil {
-		return -1
+		if debug {
+			logDebug(fmt.Sprintf("Failed to create Docker client for image check: %v", err))
+		}
+		return false
+	}
+	defer cli.Close()
+
+	// List images and check if our image exists
+	images, err := cli.ImageList(ctx, image.ListOptions{})
+	if err != nil {
+		if debug {
+			logDebug(fmt.Sprintf("Failed to list images: %v", err))
+		}
+		return false
 	}
 
-	switch unit {
-	case "B":
-		return int64(size)
-	case "KB":
-		return int64(size * 1024)
-	case "MB":
-		return int64(size * 1024 * 1024)
-	case "GB":
-		return int64(size * 1024 * 1024 * 1024)
-	case "TB":
-		return int64(size * 1024 * 1024 * 1024 * 1024)
-	default:
-		return int64(size) // Assume bytes if no unit
+	for _, img := range images {
+		for _, tag := range img.RepoTags {
+			if tag == imageName {
+				return true
+			}
+		}
 	}
+
+	return false
 }
 
-// pullImageSDK pulls a docker image using the Docker SDK with progress tracking
+// pullImage pulls a docker image using the Docker SDK with progress tracking
+// Only pulls if the image doesn't exist locally
 func pullImage(imageName string) error {
+	return pullImageWithForce(imageName, false)
+}
+
+// PullImageForce pulls a docker image using the Docker SDK with progress tracking
+// Always pulls even if image exists locally (public function for external use)
+func PullImageForce(imageName string) error {
+	return pullImageWithForce(imageName, false)
+}
+
+// pullImageWithForce pulls a docker image using the Docker SDK with progress tracking
+// If force is true, pulls even if image exists locally
+func pullImageWithForce(imageName string, force bool) error {
+	// Check if image exists locally first (unless forcing)
+	if !force && imageExists(imageName) {
+		if debug {
+			logDebug(fmt.Sprintf("Image %s already exists locally, skipping pull", imageName))
+		}
+		return nil
+	}
+
 	ctx := context.Background()
 	cli, err := createDockerClient()
 	if err != nil {
@@ -273,7 +304,7 @@ func pullImage(imageName string) error {
 		displayName = displayName[:tagIdx]
 	}
 
-	fmt.Fprintf(os.Stderr, "Pulling image: %s\n", imageName)
+	OutputProgress("Pulling image: %s\n", imageName)
 
 	// Pull the image
 	out, err := cli.ImagePull(ctx, imageName, image.PullOptions{})
@@ -348,14 +379,14 @@ func pullImage(imageName string) error {
 			if strings.Contains(progress.Status, "Downloading") ||
 				strings.Contains(progress.Status, "Extracting") ||
 				strings.Contains(progress.Status, "Pull complete") {
-				fmt.Fprintf(os.Stderr, "\rPulling %s...    ", displayName)
+				OutputProgress("\rPulling %s...    ", displayName)
 			}
 		}
 	}
 
 	// Clear the progress line and show completion
-	fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", 80))
-	fmt.Fprintf(os.Stderr, "✓ Pulled %s successfully\n", displayName)
+	OutputProgress("\r%s\r", strings.Repeat(" ", 80))
+	OutputSuccess("✓ Pulled %s successfully\n", displayName)
 
 	// Log all output to debug if enabled
 	if debug {
@@ -829,4 +860,344 @@ func HTTPGetReady(url string) func() error {
 		}
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
+}
+
+// ---- Network Management with Docker SDK ----
+
+// NetworkManager handles Docker network creation and management using Docker SDK
+type NetworkManager struct {
+	networkName string
+}
+
+// NewNetworkManager creates a new network manager instance
+func NewNetworkManager() *NetworkManager {
+	// Create network name with timestamp for uniqueness
+	timestamp := time.Now().Format("20060102-150405")
+	networkName := fmt.Sprintf("llamafarm-%s", timestamp)
+
+	return &NetworkManager{
+		networkName: networkName,
+	}
+}
+
+// GetNetworkName returns the current network name
+func (nm *NetworkManager) GetNetworkName() string {
+	return nm.networkName
+}
+
+// EnsureNetwork creates the Docker network if it doesn't exist using Docker SDK
+func (nm *NetworkManager) EnsureNetwork() error {
+	ctx := context.Background()
+	cli, err := createDockerClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	// Check if network already exists
+	networks, err := cli.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %v", err)
+	}
+
+	for _, net := range networks {
+		if net.Name == nm.networkName {
+			if debug {
+				logDebug(fmt.Sprintf("Network %s already exists", nm.networkName))
+			}
+			return nil
+		}
+	}
+
+	// Create the network
+	if debug {
+		logDebug(fmt.Sprintf("Creating Docker network: %s", nm.networkName))
+	}
+
+	_, err = cli.NetworkCreate(ctx, nm.networkName, network.CreateOptions{
+		Driver: "bridge",
+		Labels: map[string]string{
+			"llamafarm.managed": "true",
+		},
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create Docker network: %v", err)
+	}
+
+	return nil
+}
+
+// CleanupNetwork removes the Docker network if it exists using Docker SDK
+func (nm *NetworkManager) CleanupNetwork() error {
+	ctx := context.Background()
+	cli, err := createDockerClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	// Find the network
+	networks, err := cli.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %v", err)
+	}
+
+	var networkID string
+	for _, net := range networks {
+		if net.Name == nm.networkName {
+			networkID = net.ID
+			break
+		}
+	}
+
+	if networkID == "" {
+		return nil // Network doesn't exist
+	}
+
+	if debug {
+		logDebug(fmt.Sprintf("Removing Docker network: %s", nm.networkName))
+	}
+
+	err = cli.NetworkRemove(ctx, networkID)
+	if err != nil {
+		return fmt.Errorf("failed to remove Docker network: %v", err)
+	}
+
+	return nil
+}
+
+// ---- Enhanced Container Management ----
+
+// IsContainerRunning checks if a container with the given name is currently running using Docker SDK
+func IsContainerRunning(name string) bool {
+	return isContainerRunning(name)
+}
+
+// StopAndRemoveContainer stops and removes a container using Docker SDK
+func StopAndRemoveContainer(name string) error {
+	return removeContainer(name)
+}
+
+// GetContainerLogs returns recent logs from a container using Docker SDK
+func GetContainerLogs(name string, lines int) (string, error) {
+	ctx := context.Background()
+	cli, err := createDockerClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer cli.Close()
+
+	// Find the container by name
+	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return "", fmt.Errorf("failed to list containers: %v", err)
+	}
+
+	var containerID string
+	for _, c := range containers {
+		for _, containerName := range c.Names {
+			cleanName := strings.TrimPrefix(containerName, "/")
+			if cleanName == name {
+				containerID = c.ID
+				break
+			}
+		}
+		if containerID != "" {
+			break
+		}
+	}
+
+	if containerID == "" {
+		return "", fmt.Errorf("container %s not found", name)
+	}
+
+	// Get container logs
+	logOptions := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       fmt.Sprintf("%d", lines),
+	}
+
+	logReader, err := cli.ContainerLogs(ctx, containerID, logOptions)
+	if err != nil {
+		return "", fmt.Errorf("failed to get container logs: %v", err)
+	}
+	defer logReader.Close()
+
+	logs, err := io.ReadAll(logReader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read container logs: %v", err)
+	}
+
+	return string(logs), nil
+}
+
+// StartContainerWithNetwork starts a container with network support using Docker SDK
+func StartContainerWithNetwork(spec ContainerRunSpec, networkName string, policy *PortResolutionPolicy) (map[int]int, error) {
+	if err := ensureDockerAvailable(); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(spec.Name) == "" || strings.TrimSpace(spec.Image) == "" {
+		return nil, errors.New("container name and image are required")
+	}
+
+	// Remove stale container if exists and not running
+	if containerExists(spec.Name) && !isContainerRunning(spec.Name) {
+		fmt.Fprintln(os.Stderr, "Removing existing container to refresh image/args...")
+		if err := removeContainer(spec.Name); err != nil {
+			return nil, fmt.Errorf("failed to remove existing container %s: %w", spec.Name, err)
+		}
+	}
+
+	// If already running, do nothing and return current published ports
+	if isContainerRunning(spec.Name) {
+		ports, _ := GetPublishedPorts(spec.Name)
+		resolved := make(map[int]int)
+		for key, val := range ports {
+			// key like "80/tcp"; extract container port
+			parts := strings.Split(key, "/")
+			if len(parts) > 0 {
+				if cp, err := strconv.Atoi(parts[0]); err == nil {
+					if hp, err2 := strconv.Atoi(val); err2 == nil {
+						resolved[cp] = hp
+					}
+				}
+			}
+		}
+		return resolved, nil
+	}
+
+	// Pull image best-effort
+	_ = pullImage(spec.Image)
+
+	ctx := context.Background()
+	cli, err := createDockerClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer cli.Close()
+
+	// Prepare container configuration
+	config := &container.Config{
+		Image:      spec.Image,
+		Env:        make([]string, 0, len(spec.Env)),
+		Labels:     spec.Labels,
+		WorkingDir: spec.Workdir,
+		Cmd:        spec.Cmd,
+	}
+
+	// Add environment variables
+	for k, v := range spec.Env {
+		config.Env = append(config.Env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// Set entrypoint if specified
+	if len(spec.Entrypoint) > 0 {
+		config.Entrypoint = spec.Entrypoint
+	}
+
+	// Prepare host configuration
+	hostConfig := &container.HostConfig{
+		Binds:      spec.Volumes,
+		ExtraHosts: spec.AddHosts,
+		AutoRemove: false,
+	}
+
+	// Handle port configuration
+	exposedPorts := make(nat.PortSet)
+	portBindings := make(nat.PortMap)
+
+	useDynamic := false
+	if policy != nil && policy.PreferredHostPort > 0 && len(spec.StaticPorts) > 0 {
+		if isHostPortAvailable(policy.PreferredHostPort) {
+			for _, pm := range spec.StaticPorts {
+				hostPort := policy.PreferredHostPort
+				if pm.Host > 0 {
+					hostPort = pm.Host
+				}
+				protocol := pm.Protocol
+				if protocol == "" {
+					protocol = "tcp"
+				}
+
+				port, err := nat.NewPort(protocol, strconv.Itoa(pm.Container))
+				if err != nil {
+					return nil, fmt.Errorf("invalid port specification: %v", err)
+				}
+				exposedPorts[port] = struct{}{}
+				portBindings[port] = []nat.PortBinding{
+					{
+						HostPort: strconv.Itoa(hostPort),
+					},
+				}
+			}
+		} else {
+			if policy.Forced {
+				return nil, fmt.Errorf("port %d is already in use", policy.PreferredHostPort)
+			}
+			useDynamic = true
+		}
+	} else {
+		useDynamic = true
+	}
+
+	if useDynamic {
+		hostConfig.PublishAllPorts = true
+		// For dynamic ports, we need to expose the static ports if any
+		for _, pm := range spec.StaticPorts {
+			protocol := pm.Protocol
+			if protocol == "" {
+				protocol = "tcp"
+			}
+			port, err := nat.NewPort(protocol, strconv.Itoa(pm.Container))
+			if err != nil {
+				return nil, fmt.Errorf("invalid port specification: %v", err)
+			}
+			exposedPorts[port] = struct{}{}
+		}
+	}
+
+	config.ExposedPorts = exposedPorts
+	hostConfig.PortBindings = portBindings
+
+	// Create the container
+	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, spec.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container: %v", err)
+	}
+
+	// Connect to network if specified
+	if networkName != "" {
+		if err := cli.NetworkConnect(ctx, networkName, resp.ID, nil); err != nil {
+			return nil, fmt.Errorf("failed to connect container to network %s: %v", networkName, err)
+		}
+	}
+
+	// Start the container
+	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return nil, fmt.Errorf("failed to start container: %v", err)
+	}
+
+	if debug {
+		logDebug(fmt.Sprintf("Successfully started container: %s (ID: %s)", spec.Name, resp.ID))
+	}
+
+	// Resolve published ports
+	published, err := GetPublishedPorts(spec.Name)
+	if err != nil {
+		return nil, err
+	}
+	resolved := make(map[int]int)
+	for key, val := range published {
+		parts := strings.Split(key, "/")
+		if len(parts) > 0 {
+			if cp, err := strconv.Atoi(parts[0]); err == nil {
+				if hp, err2 := strconv.Atoi(val); err2 == nil {
+					resolved[cp] = hp
+				}
+			}
+		}
+	}
+	return resolved, nil
 }

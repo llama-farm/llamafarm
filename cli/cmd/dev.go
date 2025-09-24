@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -34,22 +33,22 @@ var devCmd = &cobra.Command{
 		cwd := getEffectiveCWD()
 		cfg, err := config.LoadConfig(cwd)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\nRun `lf init` to create a new project if none exists.\n", err)
+			OutputError("Error loading config: %v\nRun `lf init` to create a new project if none exists.\n", err)
 			os.Exit(1)
 		}
 
 		projectInfo, err := cfg.GetProjectInfo()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Could not extract project info for watcher: %v\n", err)
+			OutputWarning("Warning: Could not extract project info for watcher: %v\n", err)
 		} else {
 			// Start the config file watcher in background
 			if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to start config watcher: %v\n", err)
+				OutputWarning("Warning: Failed to start config watcher: %v\n", err)
 			}
 		}
 
-		// Use multi-container orchestrator for development
-		orchestrator := NewMultiContainerOrchestrator()
+		// Use container orchestrator for development
+		orchestrator := NewContainerOrchestrator()
 		serverHealth := orchestrator.EnsureMultiContainerStack(serverURL, false)
 		runChatSessionTUI(projectInfo, serverHealth)
 	},

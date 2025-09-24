@@ -53,8 +53,14 @@ func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayl
 	m := newChatModel(projectInfo, serverHealth)
 	p := tea.NewProgram(m)
 	m.program = p
+
+	// Enable TUI mode for output routing
+	SetTUIMode(p)
+	defer ClearTUIMode()
+
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
+		// Use the output API instead of direct stderr write
+		OutputError("Error running TUI: %v\n", err)
 	}
 }
 
@@ -426,6 +432,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return updateServerHealthCmd(m)()
 			}))
 		}
+
+	case TUIMessageMsg:
+		// Handle output messages routed through the messaging API
+		formattedContent := FormatMessage(msg.Message)
+		m.messages = append(m.messages, ChatMessage{Role: "client", Content: formattedContent})
 	}
 
 	m.transcript = computeTranscript(m)

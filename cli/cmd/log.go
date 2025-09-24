@@ -68,12 +68,15 @@ func logDebug(msg string) {
 	}
 	if debugLogger == nil {
 		if err := InitDebugLogger("debug.log"); err != nil {
-			fmt.Fprintln(os.Stderr, "failed to initialize debug logger:", err)
+			// Use OutputError if available, otherwise fallback to stderr
+			OutputError("failed to initialize debug logger: %v\n", err)
 		}
 	}
 	if debugLogger != nil {
 		// Write to both stderr and the file to meet the project's requirement
 		// that debug messages go to stderr while also persisting to disk.
 		debugLogger.Println(msg)
+		// Also route through the output system for TUI compatibility
+		OutputDebug("%s\n", msg)
 	}
 }
