@@ -28,7 +28,7 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   KeywordExtractor: {
     title: 'Keyword Extractor Configuration',
     description:
-      'Extract keywords using algorithms like RAKE/YAKE/TF-IDF/TextRank',
+      "Finds the most important keywords and phrases that represent the document's topics",
     properties: {
       extractor_type: {
         type: 'string',
@@ -62,7 +62,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   EntityExtractor: {
     title: 'Entity Extractor Configuration',
-    description: 'Named entity extraction with model settings',
+    description:
+      'Identifies and extracts people, places, organizations, and other named entities',
     properties: {
       model: { type: 'string', default: 'en_core_web_sm' },
       entity_types: {
@@ -85,7 +86,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   DateTimeExtractor: {
     title: 'DateTime Extractor Configuration',
-    description: 'Extract absolute/relative dates, times and durations',
+    description:
+      'Identifies and extracts dates, times, and temporal expressions from text',
     properties: {
       fuzzy_parsing: { type: 'boolean', default: true },
       extract_relative: { type: 'boolean', default: true },
@@ -102,7 +104,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   HeadingExtractor: {
     title: 'Heading Extractor Configuration',
-    description: 'Extract document headings with optional outline',
+    description:
+      'Extracts document headings and creates a hierarchical structure outline',
     properties: {
       max_level: { type: 'integer', default: 6, minimum: 1, maximum: 6 },
       include_hierarchy: { type: 'boolean', default: true },
@@ -113,7 +116,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   LinkExtractor: {
     title: 'Link Extractor Configuration',
-    description: 'Extract URLs, emails and domains',
+    description:
+      'Finds and extracts URLs, hyperlinks, and web references from documents',
     properties: {
       extract_urls: { type: 'boolean', default: true },
       extract_emails: { type: 'boolean', default: true },
@@ -137,7 +141,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   PatternExtractor: {
     title: 'Pattern Extractor Configuration',
-    description: 'Extract predefined and custom regex patterns',
+    description:
+      'Finds specific text patterns like phone numbers, emails, or custom regex patterns',
     properties: {
       predefined_patterns: {
         type: 'array',
@@ -164,7 +169,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   StatisticsExtractor: {
     title: 'Statistics Extractor Configuration',
-    description: 'Readability, vocabulary, structure, sentiment indicators',
+    description:
+      'Provides detailed statistical analysis of text characteristics and complexity',
     properties: {
       include_readability: { type: 'boolean', default: true },
       include_vocabulary: { type: 'boolean', default: true },
@@ -176,7 +182,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   SummaryExtractor: {
     title: 'Summary Extractor Configuration',
-    description: 'Unsupervised extractive summarization with options',
+    description:
+      'Generates concise summaries of document content automatically',
     properties: {
       summary_sentences: {
         type: 'integer',
@@ -206,7 +213,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   YAKEExtractor: {
     title: 'YAKE Extractor Configuration',
-    description: 'Keyword extraction (YAKE) settings',
+    description:
+      'Advanced keyword extraction using YAKE algorithm for better accuracy',
     properties: {
       extractor_type: { type: 'string', default: 'yake' },
       max_keywords: { type: 'integer', default: 10, minimum: 1, maximum: 100 },
@@ -222,7 +230,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   ContentStatisticsExtractor: {
     title: 'Content Statistics Extractor Configuration',
-    description: 'Text content statistic indicators',
+    description:
+      'Analyzes text metrics like word count, sentence length, and readability scores',
     properties: {
       include_readability: { type: 'boolean', default: true },
       include_vocabulary: { type: 'boolean', default: true },
@@ -232,7 +241,8 @@ export const EXTRACTOR_SCHEMAS: Record<string, ExtractorSchema> = {
   },
   TableExtractor: {
     title: 'Table Extractor Configuration',
-    description: 'Extract tabular data from documents',
+    description:
+      'Locates and extracts structured data from tables within documents',
     properties: {
       output_format: {
         type: 'string',

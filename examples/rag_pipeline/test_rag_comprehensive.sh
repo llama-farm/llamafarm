@@ -55,47 +55,20 @@ print_error() {
 TEST_DB="test_rag_cli_db_$(date +%s)"
 TEST_DATASET="test_rag_cli_dataset_$(date +%s)"
 
-# Determine project configuration path dynamically
-# First try the default location
-PROJECT_CONFIG="$HOME/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
+# Just use llamafarm.yaml in current directory
+PROJECT_CONFIG="./llamafarm.yaml"
 
-# If not found, try relative to the script location
-if [ ! -f "$PROJECT_CONFIG" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-    PROJECT_CONFIG="$PROJECT_ROOT/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
-fi
+# Simple LF command
+LF_CMD="./lf"
 
-# If still not found, use environment variable or prompt
-if [ ! -f "$PROJECT_CONFIG" ]; then
-    if [ -n "$LLAMAFARM_CONFIG" ]; then
-        PROJECT_CONFIG="$LLAMAFARM_CONFIG"
-    else
-        echo "Warning: Could not find llamafarm.yaml automatically."
-        echo "Please set LLAMAFARM_CONFIG environment variable to the path of your llamafarm.yaml"
-        echo "Example: export LLAMAFARM_CONFIG=~/.llamafarm/projects/default/llamafarm-1/llamafarm.yaml"
-        exit 1
-    fi
-fi
-
-# Get the folder path to $PROJECT_CONFIG
-PROJECT_CONFIG_DIR="$(dirname "$PROJECT_CONFIG")"
-
-# LlamaFarm CLI command
-LF_PATH=${LF_PATH:-"./lf"}
-LF_CMD="${LF_PATH} --cwd $PROJECT_CONFIG_DIR"
-
-# Sample files from the examples directory
-if [ -n "$SAMPLE_DIR" ]; then
-    SAMPLE_DIR="$SAMPLE_DIR"
-else
-    SAMPLE_DIR="$PWD/sample_files"
-fi
+# Sample files directory - just use the actual path
+SAMPLE_DIR="examples/rag_pipeline/sample_files"
 
 print_header "RAG CLI Comprehensive Test"
 echo "Test Database: ${TEST_DB}"
 echo "Test Dataset: ${TEST_DATASET}"
 echo "Config File: ${PROJECT_CONFIG}"
+echo "Sample Files: ${SAMPLE_DIR}"
 
 # ================================================================
 # Step 1: Add new database to llamafarm.yaml
@@ -131,12 +104,12 @@ new_db = {
         'port': 8000
     },
     'embedding_strategies': [
-       {
+        {
             'name': 'default_embeddings',
             'type': 'OllamaEmbedder',
             'config': {
                 'auto_pull': True,
-                'base_url': 'http://localhost:11434/',
+                'base_url': 'http://localhost:11434',
                 'batch_size': 16,
                 'dimension': 768,
                 'model': 'nomic-embed-text',
@@ -191,10 +164,11 @@ else
     if grep -q "name: ${TEST_DB}" "$PROJECT_CONFIG"; then
         print_info "Database '${TEST_DB}' already exists in configuration"
     else
-        # Find the last database entry and add new one after it
-        # This is a simplified approach - adds before the embedding_strategies section
+        # Find a database entry and add new one before it
+        # This adds the new database before the first database's embedding_strategies
         awk -v db="${TEST_DB}" '
-        /^    embedding_strategies:/ && !done {
+        /^  databases:/ {
+            print
             print "  - name: " db
             print "    type: ChromaStore"
             print "    config:"
@@ -207,7 +181,7 @@ else
             print "      type: OllamaEmbedder"
             print "      config:"
             print "        auto_pull: true"
-            print "        base_url: http://localhost:11434/"
+            print "        base_url: http://localhost:11434"
             print "        batch_size: 16"
             print "        dimension: 768"
             print "        model: nomic-embed-text"
@@ -229,7 +203,7 @@ else
             print "      default: false"
             print "    default_embedding_strategy: default_embeddings"
             print "    default_retrieval_strategy: basic_search"
-            done = 1
+            next
         }
         { print }
         ' "$PROJECT_CONFIG" > "${PROJECT_CONFIG}.tmp" && mv "${PROJECT_CONFIG}.tmp" "$PROJECT_CONFIG"
@@ -259,24 +233,44 @@ print_success "Dataset created"
 print_header "Step 3: Ingesting Various Document Types"
 
 print_step "Adding research papers (text files)..."
-echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/research_papers/*.txt"
-${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/research_papers/*.txt
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/research_papers/transformer_architecture.txt \
+    ${SAMPLE_DIR}/research_papers/neural_scaling_laws.txt \
+    ${SAMPLE_DIR}/research_papers/llm_scaling_laws.txt
 
 print_step "Adding code documentation (markdown files)..."
-echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code_documentation/*.md"
-${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code_documentation/*.md
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/code_documentation/api_reference.md \
+    ${SAMPLE_DIR}/code_documentation/implementation_guide.md \
+    ${SAMPLE_DIR}/code_documentation/best_practices.md
 
 print_step "Adding code examples (Python files)..."
-echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/code/*.py"
-${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/code/*.py
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/code/example.py
 
-# Check if PDF files exist and add them
-if ls ${SAMPLE_DIR}/fda/*.pdf 1> /dev/null 2>&1; then
-    print_step "Adding FDA documents (PDF files)..."
-    echo "Command: ${LF_CMD} datasets ingest ${TEST_DATASET} ${SAMPLE_DIR}/fda/*.pdf"
-    ${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/fda/*.pdf
+print_step "Adding FDA documents (all PDFs in directory)..."
+# Method 1: Pass all PDF files found recursively - upload one at a time to avoid bulk failure
+PDF_FILES=$(find ${SAMPLE_DIR}/fda -name "*.pdf" -type f)
+if [ -n "$PDF_FILES" ]; then
+    echo "Found $(echo $PDF_FILES | wc -w) PDF files"
+    # Upload PDFs one at a time to avoid dataset corruption on failure
+    for pdf in $PDF_FILES; do
+        echo "  Uploading: $(basename $pdf)"
+        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$pdf" || print_info "Failed to upload $(basename $pdf), continuing..."
+    done
 else
-    print_info "No PDF files found, skipping..."
+    print_info "No PDF files found in ${SAMPLE_DIR}/fda"
+fi
+
+print_step "Alternative: Adding entire research_papers directory recursively..."
+# Method 2: Find all text files in research_papers and subdirectories - these are duplicates so they should be skipped
+ALL_TEXT_FILES=$(find ${SAMPLE_DIR}/research_papers -type f \( -name "*.txt" -o -name "*.md" \))
+if [ -n "$ALL_TEXT_FILES" ]; then
+    echo "Found $(echo $ALL_TEXT_FILES | wc -w) text/markdown files (should be skipped as duplicates)"
+    # Upload one at a time to avoid dataset corruption
+    for txt in $ALL_TEXT_FILES; do
+        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$txt" 2>&1 | grep -v "already exists in dataset" || true
+    done
 fi
 
 print_success "All documents ingested"

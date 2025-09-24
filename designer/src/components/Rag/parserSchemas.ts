@@ -32,8 +32,7 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   // Excel (LlamaIndex)
   ExcelParser_LlamaIndex: {
     title: 'Excel Parser (LlamaIndex) Configuration',
-    description:
-      'Excel parser using LlamaIndex with Pandas backend for advanced processing',
+    description: 'Parses Excel spreadsheets into text and chunks',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -178,7 +177,7 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   MarkdownParser_LlamaIndex: {
     title: 'Markdown Parser (LlamaIndex) Configuration',
     description:
-      'Advanced markdown parser using LlamaIndex with semantic chunking',
+      'Advanced markdown processing with enhanced metadata extraction',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -231,7 +230,8 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   // Docx (python-docx)
   DocxParser_PythonDocx: {
     title: 'DOCX Parser (python-docx) Configuration',
-    description: 'Word document parser using python-docx library',
+    description:
+      'Secondary Word parser with different handling for complex documents',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -320,7 +320,7 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   ExcelParser_OpenPyXL: {
     title: 'Excel Parser (OpenPyXL) Configuration',
     description:
-      'Excel parser using OpenPyXL for XLSX files with formula support',
+      'Reads Excel files (.xlsx) with support for formulas and formatting',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -392,7 +392,7 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   CSVParser_Pandas: {
     title: 'CSV Parser (Pandas) Configuration',
     description:
-      'Advanced CSV parser using Pandas with data analysis capabilities',
+      'Processes CSV files with Pandas backend for advanced data handling',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -463,7 +463,7 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   PDFParser_LlamaIndex: {
     title: 'PDF Parser (LlamaIndex) Configuration',
     description:
-      'Advanced PDF parser using LlamaIndex with multiple fallback strategies',
+      'Extracts text and basic formatting from PDF files using LlamaIndex',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -507,7 +507,7 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   PDFParser_PyPDF2: {
     title: 'PDF Parser (PyPDF2) Configuration',
     description:
-      'Enhanced PDF parser using PyPDF2 with comprehensive capabilities',
+      'Alternative PDF parser optimized for complex layouts and special formatting',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -555,7 +555,8 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   // Docx (LlamaIndex)
   DocxParser_LlamaIndex: {
     title: 'DOCX Parser (LlamaIndex) Configuration',
-    description: 'Advanced DOCX parser using LlamaIndex with enhanced chunking',
+    description:
+      'Processes .docx files to extract text, tables, and document structure',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -603,7 +604,7 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   // Markdown (Python)
   MarkdownParser_Python: {
     title: 'Markdown Parser (Python) Configuration',
-    description: 'Markdown parser using native Python with regex parsing',
+    description: 'Converts markdown files (.md) to structured text',
     properties: {
       chunk_size: {
         type: 'integer',
@@ -638,7 +639,8 @@ export const PARSER_SCHEMAS: Record<string, ParserSchema> = {
   // Text (Python)
   TextParser_Python: {
     title: 'Text Parser (Python) Configuration',
-    description: 'Text parser using native Python with encoding detection',
+    description:
+      'Processes plain text files (.txt) with basic structure detection',
     properties: {
       chunk_size: {
         type: 'integer',

@@ -31,27 +31,36 @@ export default function ParserSettingsForm({
     onChange(next)
   }
 
+  const toSentenceCase = (s: string) => {
+    const spaced = s
+      .replace(/_/g, ' ')
+      .replace(/\b([A-Z])/g, ' $1')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+  }
+
   const renderField = (key: string, field: SchemaField) => {
     const current = value[key]
-    const label = key.replace(/_/g, ' ')
+    const label = toSentenceCase(key)
 
     if (field.type === 'boolean') {
       const checked = Boolean(current ?? field.default ?? false)
       return (
-        <div key={key} className="flex items-center justify-between py-2">
-          <div className="flex flex-col">
-            <Label className="text-xs text-muted-foreground">{label}</Label>
-            {field.description ? (
-              <div className="text-xs text-muted-foreground">
-                {field.description}
-              </div>
-            ) : null}
-          </div>
+        <div key={key} className="flex items-center gap-4 py-1">
           <Switch
             checked={checked}
             onCheckedChange={v => setField(key, v)}
             disabled={disabled}
           />
+          <div className="flex flex-col">
+            <Label className="text-xs text-foreground">{label}</Label>
+            {field.description ? (
+              <div className="text-xs text-muted-foreground -mt-0.5">
+                {field.description}
+              </div>
+            ) : null}
+          </div>
         </div>
       )
     }
@@ -60,7 +69,7 @@ export default function ParserSettingsForm({
       const currentVal = (current as string) ?? (field.default as string) ?? ''
       return (
         <div key={key} className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">{label}</Label>
+          <Label className="text-xs text-foreground">{label}</Label>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -96,7 +105,7 @@ export default function ParserSettingsForm({
       const max = typeof field.maximum === 'number' ? field.maximum : undefined
       return (
         <div key={key} className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">{label}</Label>
+          <Label className="text-xs text-foreground">{label}</Label>
           <Input
             type="number"
             className="bg-background"
@@ -136,7 +145,7 @@ export default function ParserSettingsForm({
       const text = arr.join(', ')
       return (
         <div key={key} className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">{label}</Label>
+          <Label className="text-xs text-foreground">{label}</Label>
           <Input
             className="bg-background"
             value={text}
@@ -198,7 +207,41 @@ export default function ParserSettingsForm({
 
   return (
     <div className="flex flex-col gap-3">
-      {entries.map(([k, f]) => renderField(k, f))}
+      {(() => {
+        const preferredOrder = ['chunk_size', 'chunk_overlap', 'chunk_strategy']
+        const present = preferredOrder.filter(k => schema.properties[k])
+        if (present.length === 0) return null
+        const gridColsClass =
+          present.length === 3 ? 'grid-cols-3' : 'grid-cols-2'
+        return (
+          <div className={`grid ${gridColsClass} gap-3`}>
+            {present.map(key => renderField(key, schema.properties[key]))}
+          </div>
+        )
+      })()}
+      {(() => {
+        const excluded = new Set([
+          'chunk_size',
+          'chunk_overlap',
+          'chunk_strategy',
+        ])
+        const bools = entries.filter(
+          ([k, f]) => !excluded.has(k) && f.type === 'boolean'
+        )
+        const others = entries.filter(
+          ([k, f]) => !excluded.has(k) && f.type !== 'boolean'
+        )
+        return (
+          <>
+            {bools.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {bools.map(([k, f]) => renderField(k, f))}
+              </div>
+            ) : null}
+            {others.map(([k, f]) => renderField(k, f))}
+          </>
+        )
+      })()}
     </div>
   )
 }

@@ -8,6 +8,8 @@ import { Mode } from '../ModeToggle'
 import { Badge } from '../ui/badge'
 import { defaultStrategies } from './strategies'
 import { useToast } from '../ui/toast'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useListDatasets } from '../../hooks/useDatasets'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +37,12 @@ function Rag() {
   // const [query, setQuery] = useState('') // removed search for strategies
   const { toast } = useToast()
   const [mode, setMode] = useState<Mode>('designer')
+  const activeProject = useActiveProject()
+  const { data: datasetsResp } = useListDatasets(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject }
+  )
 
   const [metaTick, setMetaTick] = useState(0)
   // Strategy (Processing) modal state
@@ -244,6 +252,47 @@ function Rag() {
 
   // Note: processing strategies are derived from `display`
 
+  // Build mapping of strategy display name -> dataset names
+  const datasetsByStrategyName = useMemo(() => {
+    const map = new Map<string, string[]>()
+    if (datasetsResp?.datasets && datasetsResp.datasets.length > 0) {
+      for (const d of datasetsResp.datasets as any[]) {
+        const strategyName = d?.rag_strategy
+        const datasetName = d?.name
+        if (
+          typeof strategyName === 'string' &&
+          typeof datasetName === 'string'
+        ) {
+          const arr = map.get(strategyName) || []
+          arr.push(datasetName)
+          map.set(strategyName, arr)
+        }
+      }
+      return map
+    }
+    // Fallback to localStorage: use lf_datasets and per-dataset name override keys
+    try {
+      const raw = localStorage.getItem('lf_datasets')
+      if (!raw) return map
+      const arr = JSON.parse(raw)
+      if (!Array.isArray(arr)) return map
+      for (const item of arr) {
+        const datasetName =
+          typeof item?.name === 'string' ? item.name : item?.id
+        if (!datasetName) continue
+        const strategyName = localStorage.getItem(
+          `lf_dataset_strategy_name_${datasetName}`
+        )
+        if (strategyName && strategyName.trim().length > 0) {
+          const list = map.get(strategyName) || []
+          list.push(datasetName)
+          map.set(strategyName, list)
+        }
+      }
+    } catch {}
+    return map
+  }, [datasetsResp, activeProject?.namespace, activeProject?.project, metaTick])
+
   const getEmbeddingSummary = (id: string): string => {
     try {
       const storedCfg = localStorage.getItem(
@@ -354,19 +403,7 @@ function Rag() {
   }
 
   // Processing strategy helpers ----------------------------------------------
-  const getStrategyDatasets = (sid: string): string[] => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_datasets_using_${sid}`)
-      if (!raw) return []
-      const arr = JSON.parse(raw)
-      if (!Array.isArray(arr)) return []
-      return arr
-        .filter((d: any) => typeof d === 'string' && d.trim().length > 0)
-        .map((d: string) => d.trim())
-    } catch {
-      return []
-    }
-  }
+  // Deprecated: old usage metric helper replaced by per-strategy dataset badges
 
   const getParsersCount = (sid: string): number => {
     try {
@@ -518,19 +555,7 @@ function Rag() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {display.map(s => {
-                const datasets = getStrategyDatasets(s.id)
-                const usageLabel = (() => {
-                  if (datasets.length === 1) return datasets[0]
-                  if (datasets.length > 1)
-                    return `${datasets.length} datasets using`
-                  if (
-                    typeof s.datasetsUsing === 'number' &&
-                    s.datasetsUsing > 1
-                  )
-                    return `${s.datasetsUsing} datasets using`
-                  if (s.datasetsUsing === 1) return '1 dataset using'
-                  return ''
-                })()
+                const assigned = datasetsByStrategyName.get(s.name) || []
                 return (
                   <div
                     key={s.id}
@@ -611,22 +636,34 @@ function Rag() {
                         'Unified processor for PDFs, Word docs, CSVs, Markdown, and text files.'}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                      {usageLabel ? (
+                      {assigned.slice(0, 4).map(name => (
+                        <Badge
+                          key={name}
+                          variant="default"
+                          size="sm"
+                          className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                        >
+                          {name}
+                        </Badge>
+                      ))}
+                      {assigned.length > 4 ? (
                         <Badge
                           variant="secondary"
                           size="sm"
-                          className="rounded-xl bg-teal-700 text-white dark:bg-teal-400 dark:text-gray-900"
+                          className="rounded-xl"
                         >
-                          {usageLabel}
+                          +{assigned.length - 4}
                         </Badge>
                       ) : null}
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-xl"
-                      >
-                        Active
-                      </Badge>
+                      {assigned.length === 0 ? (
+                        <Badge
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-xl"
+                        >
+                          No datasets yet
+                        </Badge>
+                      ) : null}
                     </div>
                     <div className="flex items-center justify-between mt-1">
                       <div className="text-xs text-muted-foreground">

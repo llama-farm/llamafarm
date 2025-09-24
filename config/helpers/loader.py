@@ -4,6 +4,7 @@ with JSON schema validation and write capabilities.
 """
 
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -256,21 +257,35 @@ def load_config(
 # ============================================================================
 
 
-def _save_yaml_file(config: dict, file_path: Path) -> None:
-    """Save configuration to a YAML file."""
+def _save_yaml_file(config: dict, file_path: Path, force_sync: bool = False) -> None:
+    """Save configuration to a YAML file.
+    
+    Args:
+        config: Configuration dictionary to save
+        file_path: Path to save the YAML file
+        force_sync: If True, forces immediate write to disk (slower but safer)
+    """
     if yaml is None:
         raise ConfigError("PyYAML is required to save YAML files.")
 
     try:
+        # First dump to string to ensure complete serialization
+        yaml_content = yaml.dump(
+            config,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+            indent=2,
+        )
+        
+        # Then write the complete string to file atomically
         with open(file_path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                config,
-                f,
-                default_flow_style=False,
-                allow_unicode=True,
-                sort_keys=False,
-                indent=2,
-            )
+            f.write(yaml_content)
+            f.flush()  # Explicitly flush to ensure all data is written
+            
+            # Only force sync for critical files when explicitly requested
+            if force_sync:
+                os.fsync(f.fileno())  # Force write to disk (slower but safer)
     except Exception as e:
         raise ConfigError(f"Error saving YAML file {file_path}: {e}") from e
 
@@ -316,6 +331,7 @@ def save_config(
     config_path: str | Path | None,
     format: str | None = None,
     create_backup: bool = True,
+    force_sync: bool = False,
 ) -> tuple[Path, LlamaFarmConfig]:
     """
     Save a configuration to disk.
@@ -328,6 +344,8 @@ def save_config(
         format: File format to use ('yaml', 'toml', 'json').
                If None, infers from file extension.
         create_backup: Whether to create a backup of existing file.
+        force_sync: If True, forces immediate write to disk for YAML files (slower but safer).
+                   Use for critical configurations.
 
     Returns:
         Path to the saved configuration file.
@@ -390,7 +408,7 @@ def save_config(
     # Save file based on format
     try:
         if format.lower() == "yaml":
-            _save_yaml_file(config_dict, config_file)
+            _save_yaml_file(config_dict, config_file, force_sync=force_sync)
         elif format.lower() == "toml":
             _save_toml_file(config_dict, config_file)
         elif format.lower() == "json":
@@ -415,6 +433,7 @@ def update_config(
     config_path: str | Path,
     updates: dict,
     create_backup: bool = True,
+    force_sync: bool = False,
 ) -> tuple[Path, LlamaFarmConfig]:
     """
     Update an existing configuration file with new values.
@@ -424,6 +443,7 @@ def update_config(
                     If it's a directory, looks for existing config file.
         updates: Dictionary of updates to apply to the configuration.
         create_backup: Whether to create a backup before updating.
+        force_sync: If True, forces immediate write to disk for YAML files (slower but safer).
 
     Returns:
         Path to the updated configuration file.
@@ -472,5 +492,6 @@ def update_config(
         LlamaFarmConfig(**updated_config_dict),
         config_file,
         create_backup=create_backup,
+        force_sync=force_sync,
     )
     return saved_path, cfg

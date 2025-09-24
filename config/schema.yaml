@@ -86,14 +86,14 @@ properties:
         type: string
         description: Model name or ID
       base_url:
-        type: string
+        type: ["string", "null"]
         description: Base URL for the provider
       api_key:
-        type: string
-        description: API key for the provider
+        type: ["string", "null"]
+        description: API key for the provider (optional, not required for Ollama)
       instructor_mode:
-        type: string
-        description: Instructor mode to use for the provider
+        type: ["string", "null"]
+        description: Instructor mode to use for structured output (e.g., tools, json, md_json, anthropic_tools, gemini_json, etc.)
       model_api_parameters:
         description: Additional parameters passed to the API provider
         additionalProperties: true

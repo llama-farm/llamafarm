@@ -15,9 +15,11 @@ export const DEFAULT_DATASET_LIST_STALE_TIME = 600_000 // 10 minutes
 export const datasetKeys = {
   all: ['datasets'] as const,
   lists: () => [...datasetKeys.all, 'list'] as const,
-  list: (namespace: string, project: string) => [...datasetKeys.lists(), namespace, project] as const,
+  list: (namespace: string, project: string) =>
+    [...datasetKeys.lists(), namespace, project] as const,
   details: () => [...datasetKeys.all, 'detail'] as const,
-  detail: (namespace: string, project: string, dataset: string) => [...datasetKeys.details(), namespace, project, dataset] as const,
+  detail: (namespace: string, project: string, dataset: string) =>
+    [...datasetKeys.details(), namespace, project, dataset] as const,
 }
 
 /**
@@ -51,10 +53,13 @@ export function useCreateDataset() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { namespace: string; project: string } & CreateDatasetRequest) =>
+    mutationFn: (
+      data: { namespace: string; project: string } & CreateDatasetRequest
+    ) =>
       datasetService.createDataset(data.namespace, data.project, {
         name: data.name,
-        rag_strategy: data.rag_strategy,
+        data_processing_strategy: data.data_processing_strategy,
+        database: data.database,
       }),
     onSuccess: (_, variables) => {
       // Invalidate and refetch the datasets list
@@ -73,7 +78,11 @@ export function useDeleteDataset() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { namespace: string; project: string; dataset: string }) =>
+    mutationFn: (data: {
+      namespace: string
+      project: string
+      dataset: string
+    }) =>
       datasetService.deleteDataset(data.namespace, data.project, data.dataset),
     onSuccess: (_, variables) => {
       // Invalidate and refetch the datasets list
@@ -121,7 +130,11 @@ export function useIngestDataset() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { namespace: string; project: string; dataset: string }) =>
+    mutationFn: (data: {
+      namespace: string
+      project: string
+      dataset: string
+    }) =>
       datasetService.ingestDataset(data.namespace, data.project, data.dataset),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh any status changes
@@ -247,7 +260,7 @@ export function useTaskStatus(
   return useQuery({
     queryKey: ['task-status', namespace, project, taskId],
     queryFn: () => datasetService.getTaskStatus(namespace, project, taskId!),
-    enabled: !!taskId && !!namespace && !!project && (options?.enabled !== false),
+    enabled: !!taskId && !!namespace && !!project && options?.enabled !== false,
     refetchInterval: options?.refetchInterval || 2000, // Poll every 2 seconds by default
     staleTime: 0, // Always consider stale to ensure fresh polling
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes after unmount
@@ -309,7 +322,7 @@ export function useDeleteDatasetFile() {
       queryClient.invalidateQueries({
         queryKey: datasetKeys.list(variables.namespace, variables.project),
       })
-      
+
       // Result contains the deleted file details which can be accessed
       // by the component for more specific user feedback
       if (result?.file_hash) {

@@ -8,16 +8,29 @@ namespace: advanced
 runtime:
   provider: ollama
   model: llama3.1:8b
-  base_url: http://localhost:11434
+  base_url: http://localhost:11434/v1  # Note: /v1 for OpenAI compatibility
   temperature: 0.5
+  # instructor_mode: json  
   # api_key: optional, not needed for ollama
-  # instructor_mode: optional
   # model_api_parameters: optional additional parameters
 
 # =============================================================================
 # PROMPTS CONFIGURATION
 # =============================================================================
-prompts: []
+prompts:
+  - role: system
+    content: |
+      You are a helpful AI assistant. 
+      
+      CRITICAL RULES:
+      1. NEVER repeat the user's question as your answer
+      2. ALWAYS provide a substantive, helpful response
+      3. If you don't know something, say so clearly rather than repeating the question
+      
+      When RAG context is provided, use it to enhance your answers.
+      When no context is available, use your general knowledge.
+      
+      Remember: Your response must be different from the user's input.
 
 # =============================================================================
 # DATASETS CONFIGURATION

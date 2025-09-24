@@ -90,7 +90,7 @@ var datasetsListCmd = &cobra.Command{
 		// Ensure server is up (auto-start locally if needed)
 		ensureServerAvailable(serverCfg.URL, true)
 
-		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_file_details=false", serverCfg.Namespace, serverCfg.Project))
+		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=false", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)

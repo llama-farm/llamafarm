@@ -10,16 +10,12 @@ models:
 runtime:
   provider: "ollama"
   model: "qwen3:8b"
-  api_key: "ollama"
-  instructor_mode: "json"
+  base_url: "http://localhost:11434/v1"
+  api_key: null
+  instructor_mode: "md_json"
 
 prompts:
-  # - name: "baseline"
-  #   role: "system"
-  #   content: |
-  #     You are a helpful assistant that can answer questions and help with tasks.
-  - name: "baseline"
-    role: "system"
+  - role: "system"
     content: |
       # LlamaFarm Prompt Assistant — Operating Instructions (v1) for Qwen3:8B
 
