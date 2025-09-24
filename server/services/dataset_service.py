@@ -1,11 +1,22 @@
+from typing import Any
+
 from config.datamodel import Dataset
+from pydantic import BaseModel
 
 from api.errors import DatasetNotFoundError, NotFoundError
 from core.logging import FastAPIStructLogger
-from services.data_service import MetadataFileContent
+from services.data_service import DataService, MetadataFileContent
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
+
+
+class DatasetDetails(BaseModel):
+    files_metadata: list[MetadataFileContent]
+
+
+class DatasetWithFileDetails(Dataset):
+    details: DatasetDetails
 
 
 class DatasetService:
@@ -18,6 +29,50 @@ class DatasetService:
         """
         project_config = ProjectService.load_config(namespace, project)
         return project_config.datasets or []
+
+    @classmethod
+    def list_datasets_with_file_details(
+        cls, namespace: str, project: str
+    ) -> list[DatasetWithFileDetails]:
+        """
+        List all datasets for a given project with file details including original filenames
+        """
+        datasets = cls.list_datasets(namespace, project)
+        datasets_with_details: list[DatasetWithFileDetails] = []
+
+        for dataset in datasets:
+            files_with_details: list[MetadataFileContent] = []
+            for file_hash in dataset.files:
+                try:
+                    metadata = DataService.get_data_file_metadata_by_hash(
+                        namespace=namespace,
+                        project_id=project,
+                        file_content_hash=file_hash,
+                    )
+                    file_detail = MetadataFileContent(
+                        hash=metadata.hash,
+                        original_file_name=metadata.original_file_name,
+                        resolved_file_name=metadata.resolved_file_name,
+                        size=metadata.size,
+                        mime_type=metadata.mime_type,
+                        timestamp=metadata.timestamp,
+                    )
+                    files_with_details.append(file_detail)
+                except FileNotFoundError:
+                    # Skip files that no longer exist on disk
+                    logger.warning(f"File metadata not found for hash: {file_hash}")
+                    continue
+
+            dataset_with_details = DatasetWithFileDetails(
+                name=dataset.name,
+                data_processing_strategy=dataset.data_processing_strategy,
+                database=dataset.database,
+                files=dataset.files,
+                details=DatasetDetails(files_metadata=files_with_details),
+            )
+            datasets_with_details.append(dataset_with_details)
+
+        return datasets_with_details
 
     @classmethod
     def create_dataset(

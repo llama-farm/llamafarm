@@ -486,7 +486,16 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
           <sub><b>Matt Hamann</b></sub>
         </a>
         <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=mhamann" title="Code">💻</a>
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=mhamann" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
+      </td>
+      <td align="center" valign="top" width="14.28%">
+        <a href="https://github.com/rachradulo">
+          <img src="https://avatars.githubusercontent.com/u/128095403?v=4?v=4&s=100" width="100px;" alt="Rachel Orrino"/>
+          <br />
+          <sub><b>Rachel Orrino</b></sub>
+        </a>
+        <br />
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=rachradulo" title="Code">💻</a>
       </td>
       <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/rgthelen">
@@ -524,14 +533,16 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         <br />
         <a href="https://github.com/llama-farm/llamafarm/commits?author=davon-davis" title="Code">💻</a>
       </td>
+    </tr>
+    <tr>
       <td align="center" valign="top" width="14.28%">
-        <a href="https://github.com/rachel-orrino">
-          <img src="https://avatars.githubusercontent.com/u/231560446?v=4?v=4&s=100" width="100px;" alt="rachel-orrino"/>
+        <a href="https://github.com/naaa760">
+          <img src="https://avatars.githubusercontent.com/u/182316592?v=4?v=4&s=100" width="100px;" alt="Neha Prasad"/>
           <br />
-          <sub><b>rachel-orrino</b></sub>
+          <sub><b>Neha Prasad</b></sub>
         </a>
         <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=rachel-orrino" title="Code">💻</a>
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=naaa760" title="Code">💻</a>
       </td>
     </tr>
   </tbody>

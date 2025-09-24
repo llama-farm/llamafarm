@@ -74,8 +74,10 @@ const Data = () => {
       return apiDatasets.datasets.map(dataset => ({
         id: dataset.name,
         name: dataset.name,
-        rag_strategy: dataset.rag_strategy,
+        data_processing_strategy: dataset.data_processing_strategy,
+        database: dataset.database,
         files: dataset.files,
+        details: dataset.details,
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
         // Estimate chunk count numerically for display
@@ -101,8 +103,12 @@ const Data = () => {
       {
         id: 'demo-arxiv',
         name: 'arxiv-papers',
-        rag_strategy: 'PDF Simple',
+        data_processing_strategy: 'PDF Simple',
+        database: 'default_db',
         files: [],
+        details: {
+          files_metadata: [],
+        },
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
         numChunks: 12800,
@@ -113,8 +119,12 @@ const Data = () => {
       {
         id: 'demo-handbook',
         name: 'company-handbook',
-        rag_strategy: 'Markdown',
+        data_processing_strategy: 'Markdown',
+        database: 'default_db',
         files: [],
+        details: {
+          files_metadata: [],
+        },
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
         numChunks: 4200,
@@ -163,6 +173,11 @@ const Data = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newDatasetName, setNewDatasetName] = useState('')
   const [newDatasetDescription, setNewDatasetDescription] = useState('')
+  const [newDatasetDatabase, setNewDatasetDatabase] = useState('')
+  const [
+    newDatasetDataProcessingStrategy,
+    setNewDatasetDataProcessingStrategy,
+  ] = useState('')
 
   // Simple edit modal state
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -187,12 +202,15 @@ const Data = () => {
         namespace: activeProject.namespace,
         project: activeProject.project,
         name,
-        rag_strategy: 'default', // Default strategy
+        data_processing_strategy: newDatasetDataProcessingStrategy,
+        database: newDatasetDatabase,
       })
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
       setNewDatasetDescription('')
+      setNewDatasetDatabase('')
+      setNewDatasetDataProcessingStrategy('')
     } catch (error) {
       console.error('Failed to create dataset:', error)
       toast({
@@ -341,6 +359,28 @@ const Data = () => {
                         rows={3}
                       />
                     </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">
+                        Data Processing Strategy
+                      </label>
+                      <Input
+                        value={newDatasetDataProcessingStrategy}
+                        onChange={e =>
+                          setNewDatasetDataProcessingStrategy(e.target.value)
+                        }
+                        placeholder="e.g., PDF Simple, Markdown"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">
+                        Database
+                      </label>
+                      <Input
+                        value={newDatasetDatabase}
+                        onChange={e => setNewDatasetDatabase(e.target.value)}
+                        placeholder="e.g., default_db"
+                      />
+                    </div>
                   </div>
                   <DialogFooter>
                     <DialogClose
@@ -353,6 +393,8 @@ const Data = () => {
                       onClick={handleCreateDataset}
                       disabled={
                         !newDatasetName.trim() ||
+                        !newDatasetDataProcessingStrategy.trim() ||
+                        !newDatasetDatabase.trim() ||
                         createDatasetMutation.isPending
                       }
                     >
@@ -389,132 +431,135 @@ const Data = () => {
                 </div>
                 <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
                   You can upload PDFs, explore various list formats, or draw
-                  inspiration from other data sources to enhance your project with
-                  LlaMaFarm.
+                  inspiration from other data sources to enhance your project
+                  with LlaMaFarm.
                 </p>
               </div>
             ) : (
               <div>
-            {mode === 'designer' && isDatasetsLoading ? (
-              <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                <Loader size={32} className="mr-2" />
-                Loading datasets...
-              </div>
-            ) : mode === 'designer' && datasets.length <= 0 ? (
-              <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                {datasetsError
-                  ? 'Unable to load datasets. Using local storage.'
-                  : 'No datasets found. Create one to get started.'}
-              </div>
-            ) : (
-              mode === 'designer' && (
-                <div className="grid grid-cols-2 gap-2 mb-6">
-                  {datasets.map(ds => (
-                    <div
-                      key={ds.id}
-                      className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/chat/data/${ds.id}`)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          navigate(`/chat/data/${ds.id}`)
-                        }
-                      }}
-                    >
-                      <div className="absolute right-3 top-3">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                              onClick={e => e.stopPropagation()}
-                              aria-label="Dataset actions"
-                            >
-                              <FontIcon type="overflow" className="w-4 h-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="min-w-[10rem] w-[10rem]"
-                          >
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                // open simple edit modal
-                                setEditDatasetId(ds.id)
-                                setEditName(ds.name)
-                                setEditDescription(ds.description || '')
-                                setIsEditOpen(true)
-                              }}
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                navigate(`/chat/data/${ds.id}`)
-                              }}
-                            >
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={async e => {
-                                e.stopPropagation()
-                                if (
-                                  !activeProject?.namespace ||
-                                  !activeProject?.project
-                                )
-                                  return
-                                try {
-                                  await deleteDatasetMutation.mutateAsync({
-                                    namespace: activeProject.namespace,
-                                    project: activeProject.project,
-                                    dataset: ds.id,
-                                  })
-                                  toast({
-                                    message: 'Dataset deleted',
-                                    variant: 'default',
-                                  })
-                                } catch (err) {
-                                  console.error('Delete failed', err)
-                                  toast({
-                                    message: 'Failed to delete dataset',
-                                    variant: 'destructive',
-                                  })
-                                }
-                              }}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <div className="text-sm font-medium">{ds.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Last run on {formatLastRun(ds.lastRun)}
-                      </div>
-                      <div className="flex flex-row gap-2 items-center">
-                        <Badge
-                          variant="default"
-                          size="sm"
-                          className="rounded-xl"
+                {mode === 'designer' && isDatasetsLoading ? (
+                  <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                    <Loader size={32} className="mr-2" />
+                    Loading datasets...
+                  </div>
+                ) : mode === 'designer' && datasets.length <= 0 ? (
+                  <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                    {datasetsError
+                      ? 'Unable to load datasets. Using local storage.'
+                      : 'No datasets found. Create one to get started.'}
+                  </div>
+                ) : (
+                  mode === 'designer' && (
+                    <div className="grid grid-cols-2 gap-2 mb-6">
+                      {datasets.map(ds => (
+                        <div
+                          key={ds.id}
+                          className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
+                          onClick={() => navigate(`/chat/data/${ds.id}`)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              navigate(`/chat/data/${ds.id}`)
+                            }
+                          }}
                         >
-                          {ds.embedModel}
-                        </Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {ds.numChunks.toLocaleString()} chunks •{' '}
-                        {ds.processedPercent}% processed • {ds.version}
-                      </div>
+                          <div className="absolute right-3 top-3">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                                  onClick={e => e.stopPropagation()}
+                                  aria-label="Dataset actions"
+                                >
+                                  <FontIcon
+                                    type="overflow"
+                                    className="w-4 h-4"
+                                  />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                className="min-w-[10rem] w-[10rem]"
+                              >
+                                <DropdownMenuItem
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    // open simple edit modal
+                                    setEditDatasetId(ds.id)
+                                    setEditName(ds.name)
+                                    setEditDescription(ds.description || '')
+                                    setIsEditOpen(true)
+                                  }}
+                                >
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    navigate(`/chat/data/${ds.id}`)
+                                  }}
+                                >
+                                  View
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={async e => {
+                                    e.stopPropagation()
+                                    if (
+                                      !activeProject?.namespace ||
+                                      !activeProject?.project
+                                    )
+                                      return
+                                    try {
+                                      await deleteDatasetMutation.mutateAsync({
+                                        namespace: activeProject.namespace,
+                                        project: activeProject.project,
+                                        dataset: ds.id,
+                                      })
+                                      toast({
+                                        message: 'Dataset deleted',
+                                        variant: 'default',
+                                      })
+                                    } catch (err) {
+                                      console.error('Delete failed', err)
+                                      toast({
+                                        message: 'Failed to delete dataset',
+                                        variant: 'destructive',
+                                      })
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          <div className="text-sm font-medium">{ds.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Last run on {formatLastRun(ds.lastRun)}
+                          </div>
+                          <div className="flex flex-row gap-2 items-center">
+                            <Badge
+                              variant="default"
+                              size="sm"
+                              className="rounded-xl"
+                            >
+                              {ds.embedModel}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {ds.numChunks.toLocaleString()} chunks •{' '}
+                            {ds.processedPercent}% processed • {ds.version}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )
-            )}
+                  )
+                )}
 
-            {/* Project-level raw files UI removed: files now only exist within datasets. */}
+                {/* Project-level raw files UI removed: files now only exist within datasets. */}
               </div>
             )}
           </div>

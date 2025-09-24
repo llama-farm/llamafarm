@@ -17,10 +17,12 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
     inputValue,
     error,
     isSending,
+    isStreaming,
     isClearing,
     sendMessage,
     clearChat,
     updateInput,
+    cancelStreaming,
     hasMessages,
     canSend,
   } = useChatbox()
@@ -183,12 +185,31 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
             onKeyDown={handleKeyDown}
             disabled={isSending}
             className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
-            placeholder={isSending ? 'Waiting for response...' : 'Type here...'}
+            placeholder={
+              isStreaming 
+                ? 'Streaming response...' 
+                : isSending 
+                  ? 'Waiting for response...' 
+                  : 'Type here...'
+            }
           />
           <div className="flex justify-between items-center">
-            {isSending && (
-              <span className="text-xs text-muted-foreground">
-                Sending message...
+            {(isSending || isStreaming) && (
+              <span className="text-xs text-muted-foreground flex items-center gap-2">
+                {isStreaming ? (
+                  <>
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-teal-500" />
+                    Streaming response...
+                    <button
+                      onClick={cancelStreaming}
+                      className="ml-2 text-xs px-2 py-1 rounded bg-red-500 hover:bg-red-600 text-white"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  'Sending message...'
+                )}
               </span>
             )}
             <FontIcon

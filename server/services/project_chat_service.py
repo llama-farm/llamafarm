@@ -17,7 +17,7 @@ from context_providers.project_chat_context_provider import (
     ProjectChatContextProvider,
 )
 from core.logging import FastAPIStructLogger
-from services.rag_subprocess import search_with_rag, search_with_rag_database
+from services.rag_subprocess import search_with_rag
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -98,14 +98,14 @@ class ProjectChatService:
         if not database:
             # Use the first database as default
             if project_config.rag.databases:
-                database = project_config.rag.databases[0].name
+                database = str(project_config.rag.databases[0].name)
                 logger.info(f"Using default database: {database}")
             else:
                 logger.error("No databases found in project config")
                 return []
 
         # Use shared helper to run RAG search on database
-        results = search_with_rag_database(project_dir, database, message, top_k=top_k)
+        results = search_with_rag(project_dir, database, message, top_k=top_k)
         if results is None:
             results = []
 
@@ -124,11 +124,16 @@ class ProjectChatService:
         logger.info(f"RAG search returned {len(normalized)} results")
         return normalized
 
-    def _clear_rag_context_provider(self, chat_agent: ProjectChatOrchestratorAgent) -> None:
+    def _clear_rag_context_provider(
+        self, chat_agent: ProjectChatOrchestratorAgent
+    ) -> None:
         try:
-            if hasattr(chat_agent, 'context_providers') and chat_agent.context_providers:
+            if (
+                hasattr(chat_agent, "context_providers")
+                and chat_agent.context_providers
+            ):
                 chat_agent.context_providers.pop("project_chat_context", None)
-        except Exception as e:
+        except Exception:
             logger.warning("Failed to clear RAG context provider", exc_info=True)
 
     async def chat(
@@ -152,14 +157,14 @@ class ProjectChatService:
             rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
                 logger.info("RAG enabled by default based on project configuration")
-        
+
         # Use config defaults for other parameters if not provided
         if rag_enabled and project_config.rag:
             # If no database specified, use the first database
             if database is None and project_config.rag.databases:
                 database = project_config.rag.databases[0].name
                 logger.info(f"Using default database from config: {database}")
-            
+
             # If no top_k specified, check if there's a default in retrieval strategies
             if rag_top_k is None:
                 # Look for default retrieval strategy's top_k
@@ -168,17 +173,28 @@ class ProjectChatService:
                         if db.name == database:
                             for strategy in db.retrieval_strategies or []:
                                 if strategy.default:
-                                    rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
+                                    rag_top_k = (
+                                        strategy.config.top_k
+                                        if (
+                                            strategy.config
+                                            and hasattr(strategy.config, "top_k")
+                                        )
+                                        else 5
+                                    )
                                     break
                             break
                 if rag_top_k is None:
                     rag_top_k = 5  # Fallback default
-        
+
         # Use the RAG subsystem to perform RAG based on the project config
         rag_results = []
         if rag_enabled:
             rag_results = self._perform_rag_search(
-                project_dir, project_config, message, top_k=rag_top_k or 5, database=database
+                project_dir,
+                project_config,
+                message,
+                top_k=rag_top_k or 5,
+                database=database,
             )
 
         for idx, result in enumerate(rag_results):
@@ -237,22 +253,29 @@ class ProjectChatService:
 
         # Use config defaults if not explicitly provided (same logic as chat method)
         if rag_enabled is None:
-            rag_enabled = bool(project_config.rag and project_config.datasets)
+            rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
                 logger.info("RAG enabled by default based on project configuration")
-        
+
         if rag_enabled and project_config.rag:
-            if database is None and project_config.datasets:
-                database = project_config.datasets[0].database
+            if database is None and project_config.rag.databases:
+                database = project_config.rag.databases[0].name
                 logger.info(f"Using default database from config: {database}")
-            
+
             if rag_top_k is None:
                 if project_config.rag.databases:
                     for db in project_config.rag.databases:
                         if db.name == database:
                             for strategy in db.retrieval_strategies or []:
                                 if strategy.default:
-                                    rag_top_k = strategy.config.top_k if hasattr(strategy.config, 'top_k') else 5
+                                    rag_top_k = (
+                                        strategy.config.top_k
+                                        if (
+                                            strategy.config
+                                            and hasattr(strategy.config, "top_k")
+                                        )
+                                        else 5
+                                    )
                                     break
                             break
                 if rag_top_k is None:
@@ -261,7 +284,11 @@ class ProjectChatService:
         rag_results = []
         if rag_enabled:
             rag_results = self._perform_rag_search(
-                project_dir, project_config, message, top_k=rag_top_k or 5, database=database
+                project_dir,
+                project_config,
+                message,
+                top_k=rag_top_k or 5,
+                database=database,
             )
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(
