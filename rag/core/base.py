@@ -119,7 +119,9 @@ class VectorStore(Component):
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
-        self.persist_directory = f"{project_dir}/lf_data/stores/{name}"
+        if project_dir is None:
+            raise ValueError("project_dir is required")
+        self.persist_directory = str(Path(project_dir) / "lf_data" / "stores" / name)
 
     @abstractmethod
     def add_documents(self, documents: List[Document]) -> bool:
