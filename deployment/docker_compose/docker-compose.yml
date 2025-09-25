@@ -78,5 +78,9 @@ networks:
 volumes:
   llamafarm_data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/.llamafarm
     labels:
       - "llamafarm.managed=true"

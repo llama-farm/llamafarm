@@ -2,12 +2,12 @@
 
 import json
 import logging
-import math
-from typing import List, Dict, Any, Optional
-import chromadb
-from chromadb.config import Settings
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from core.base import VectorStore, Document
+import chromadb
+
+from core.base import Document, VectorStore
 from utils.hash_utils import DeduplicationTracker
 
 logger = logging.getLogger(__name__)
@@ -17,12 +17,14 @@ class ChromaStore(VectorStore):
     """ChromaDB vector store implementation."""
 
     def __init__(
-        self, name: str = "ChromaStore", config: Optional[Dict[str, Any]] = None
+        self,
+        name: str = "ChromaStore",
+        config: Optional[dict[str, Any]] = None,
+        project_dir: Optional[Path] = None,
     ):
-        super().__init__(name, config)
+        super().__init__(name, config, project_dir)  # type: ignore
         config = config or {}
         self.collection_name = config.get("collection_name", "documents")
-        self.persist_directory = config.get("persist_directory", "./chroma_db")
         self.host = config.get("host")
         self.port = config.get("port")
         self.embedding_dimension = max(
@@ -46,6 +48,9 @@ class ChromaStore(VectorStore):
             self.client = chromadb.HttpClient(host=self.host, port=self.port)
         else:
             # Persistent client
+            logger.info(
+                f"Using ChromaDB persistent client with persist_directory: {self.persist_directory}"
+            )
             self.client = chromadb.PersistentClient(path=self.persist_directory)
 
         self.collection = None

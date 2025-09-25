@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import importlib
 from core.blob_processor import BlobProcessor
+from core.settings import settings
 from core.strategies.handler import SchemaHandler
 from core.processing_logger import ProcessingLogger
 
@@ -57,7 +58,9 @@ class IngestHandler:
         # Initialize components
         self.blob_processor = BlobProcessor(self.processing_config)
         self.embedder = self._initialize_embedder(self.database_config)
-        self.vector_store = self._initialize_vector_store(self.database_config)
+        self.vector_store = self._initialize_vector_store(
+            project_dir, self.database_config
+        )
 
     def _get_processing_config(self) -> Dict[str, Any]:
         """
@@ -119,11 +122,12 @@ class IngestHandler:
             )
             raise ValueError(f"Cannot initialize embedder {embedder_type}: {e}")
 
-    def _initialize_vector_store(self, db_config: Dict[str, Any]):
+    def _initialize_vector_store(self, project_dir: Path, db_config: Dict[str, Any]):
         """
         Initialize the vector store from database configuration.
 
         Args:
+            project_dir: Project directory
             db_config: Database configuration
 
         Returns:
@@ -136,22 +140,7 @@ class IngestHandler:
         if not vector_store_type:
             raise ValueError("No vector store type specified in configuration")
 
-        # Resolve persist_directory if it's relative and we have ChromaStore
         config_dict = vector_store_config.get("config", {}).copy()
-        if vector_store_type == "ChromaStore" and "persist_directory" in config_dict:
-            persist_dir = config_dict["persist_directory"]
-            if not persist_dir.startswith("/"):
-                # Make it relative to the config file's directory (project directory)
-                import os
-
-                config_dir = os.path.dirname(self.config_path)
-                config_dict["persist_directory"] = os.path.join(config_dir, persist_dir)
-                print(
-                    f"[IngestHandler] Resolved persist_directory from '{persist_dir}' to: {config_dict['persist_directory']}"
-                )
-                logger.info(
-                    f"Resolved persist_directory to: {config_dict['persist_directory']}"
-                )
 
         logger.info(
             f"Initializing vector store: {vector_store_type} with config: {config_dict}"
@@ -171,7 +160,7 @@ class IngestHandler:
             # Use the already resolved config_dict from above
 
             # Pass config as a dictionary, not as kwargs
-            return store_class(config=config_dict)
+            return store_class(config=config_dict, project_dir=project_dir)
         except (ImportError, AttributeError) as e:
             logger.error(
                 f"Failed to load vector store {vector_store_type} from {module_path}: {e}"

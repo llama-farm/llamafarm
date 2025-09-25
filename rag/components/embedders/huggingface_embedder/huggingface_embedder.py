@@ -13,6 +13,7 @@ Planned Features:
 Status: Implementation in progress
 """
 
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from core.base import Embedder, Document
 
@@ -27,9 +28,12 @@ class HuggingFaceEmbedder(Embedder):
     """
 
     def __init__(
-        self, name: str = "HuggingFaceEmbedder", config: Dict[str, Any] = None
+        self,
+        name: str = "HuggingFaceEmbedder",
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
     ):
-        super().__init__(name, config)
+        super().__init__(name, config, project_dir)
 
         # Configuration will include:
         # - model_name: HuggingFace model identifier

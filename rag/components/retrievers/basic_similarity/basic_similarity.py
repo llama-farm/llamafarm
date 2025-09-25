@@ -1,6 +1,7 @@
 """Basic similarity retrieval strategy using cosine similarity."""
 
 import logging
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from components.retrievers.base import RetrievalStrategy, RetrievalResult
@@ -21,8 +22,9 @@ class BasicSimilarityStrategy(RetrievalStrategy):
         self,
         name: str = "BasicSimilarityStrategy",
         config: Optional[Dict[str, Any]] = None,
+        project_dir: Path | None = None,
     ):
-        super().__init__(name, config)
+        super().__init__(name, config, project_dir)
         config = config or {}
 
         # Configuration options

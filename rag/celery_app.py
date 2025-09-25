@@ -7,9 +7,10 @@ It sets up the broker connection, task routing, and imports all RAG tasks.
 
 import logging
 import os
-from pathlib import Path
 
-from celery import Celery, signals
+from celery import Celery, signals  # type: ignore
+
+from core.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 app = Celery("LlamaFarm-RAG-Worker")
 
 # Get data directory from environment - use same default as server
-lf_data_dir = os.environ.get("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
+lf_data_dir = settings.LF_DATA_DIR
 
 # Create necessary broker directories
 _folders = [
@@ -30,8 +31,8 @@ for folder in _folders:
     os.makedirs(folder, exist_ok=True)
 
 # Configure broker based on environment variables
-celery_broker_url = os.environ.get("CELERY_BROKER_URL", "")
-celery_result_backend = os.environ.get("CELERY_RESULT_BACKEND", "")
+celery_broker_url = settings.CELERY_BROKER_URL
+celery_result_backend = settings.CELERY_RESULT_BACKEND
 
 if celery_broker_url and celery_result_backend:
     # Use external broker (Redis, RabbitMQ, etc.)
@@ -107,10 +108,10 @@ def run_worker():
 # This fixes the issue where Celery's auto-import doesn't work reliably
 try:
     # Import all task modules to register them with the Celery app
-    import tasks.search_tasks  # noqa: F401
+    import tasks.health_tasks  # noqa: F401
     import tasks.ingest_tasks  # noqa: F401
     import tasks.query_tasks  # noqa: F401
-    import tasks.health_tasks  # noqa: F401
+    import tasks.search_tasks  # noqa: F401
 
     logger.info("RAG task modules imported successfully")
 except Exception as e:

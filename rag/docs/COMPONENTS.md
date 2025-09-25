@@ -458,7 +458,6 @@ vector_store:
   type: "ChromaStore"
   config:
     collection_name: "my_documents"
-    persist_directory: "./chromadb"
     distance_metric: "cosine"     # cosine, l2, ip
     embedding_function: null       # Use default
     metadata_config:              # Metadata handling

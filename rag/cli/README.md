@@ -396,7 +396,6 @@ strategy_name:
     type: ChromaStore
     config:
       collection_name: my_collection
-      persist_directory: ./vectordb
   
   # Retrieval configuration
   retrieval:

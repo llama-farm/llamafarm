@@ -194,7 +194,6 @@ def resolve_paths_in_config(config: dict, resolver: PathResolver) -> dict:
     """
     # Keys that typically contain file/directory paths
     path_keys = {
-        "persist_directory",
         "data_directory",
         "cache_directory",
         "log_directory",

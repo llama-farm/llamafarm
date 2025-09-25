@@ -1,6 +1,7 @@
 """Factory classes for creating RAG system components."""
 
 import logging
+from pathlib import Path
 from typing import Dict, Any, Type
 from core.base import Parser, Embedder, VectorStore
 
@@ -131,13 +132,18 @@ class ComponentFactory:
         cls._registry[name] = component_class
 
     @classmethod
-    def create(cls, component_type: str, config: Dict[str, Any] = None):
+    def create(
+        cls,
+        component_type: str,
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
+    ):
         """Create a component instance by type name."""
         if component_type not in cls._registry:
             raise ValueError(f"Unknown component type: {component_type}")
 
         component_class = cls._registry[component_type]
-        return component_class(config=config)
+        return component_class(config=config, project_dir=project_dir)
 
     @classmethod
     def list_available(cls):
@@ -149,8 +155,16 @@ class ParserFactoryWrapper(ComponentFactory):
     """Factory for creating parser instances using the new modular system."""
 
     @classmethod
-    def create(cls, component_type: str, config: Dict[str, Any] = None):
-        """Create a parser instance using the new ParserFactory."""
+    def create(
+        cls,
+        component_type: str,
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
+    ):
+        """Create a parser instance using the new ParserFactory.
+
+        Note: project_dir is accepted for API compatibility but not used by parsers.
+        """
         # Use the new ParserFactory from components.parsers
         return NewParserFactory.create_parser(component_type, config)
 
@@ -247,7 +261,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_component_from_config(
-    component_config: Dict[str, Any], factory_class: Type[ComponentFactory]
+    component_config: Dict[str, Any],
+    factory_class: Type[ComponentFactory],
+    project_dir: Path | None = None,
 ):
     """Create a component from configuration using the appropriate factory."""
     logger.info(f"Creating component from config: {component_config}")
@@ -256,7 +272,7 @@ def create_component_from_config(
         raise ValueError("Component configuration must specify a 'type'")
 
     config = component_config.get("config", {})
-    return factory_class.create(component_type, config)
+    return factory_class.create(component_type, config, project_dir)
 
 
 def create_embedder_from_config(embedder_config: Dict[str, Any]) -> Embedder:
@@ -269,9 +285,11 @@ def create_parser_from_config(parser_config: Dict[str, Any]) -> Parser:
     return create_component_from_config(parser_config, ParserFactory)
 
 
-def create_vector_store_from_config(store_config: Dict[str, Any]) -> VectorStore:
+def create_vector_store_from_config(
+    store_config: Dict[str, Any], project_dir: Path
+) -> VectorStore:
     """Create a vector store from configuration."""
-    return create_component_from_config(store_config, VectorStoreFactory)
+    return create_component_from_config(store_config, VectorStoreFactory, project_dir)
 
 
 def create_extractor_from_config(extractor_config: Dict[str, Any]):

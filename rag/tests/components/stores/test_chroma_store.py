@@ -58,25 +58,24 @@ class TestChromaStore:
         """Create test ChromaStore instance."""
         config = {
             "collection_name": "test_collection",
-            "persist_directory": temp_directory,
             "embedding_dimension": 500,
         }
-        return ChromaStore("test_store", config)
+        # Pass a project_dir so internal persist path is deterministic
+        return ChromaStore("test_store", config, project_dir=Path(temp_directory))
 
     def test_store_initialization(self, temp_directory):
         """Test store initialization with different configs."""
         # Default config
-        store = ChromaStore("default", {"persist_directory": temp_directory})
+        store = ChromaStore("default", {}, project_dir=Path(temp_directory))
         assert store is not None
         assert store.collection_name == "documents"
 
         # Custom config
         custom_config = {
             "collection_name": "custom_collection",
-            "persist_directory": temp_directory,
             "embedding_dimension": 384,
         }
-        store = ChromaStore("custom", custom_config)
+        store = ChromaStore("custom", custom_config, project_dir=Path(temp_directory))
         assert store.collection_name == "custom_collection"
         assert store.embedding_dimension == 384
 
@@ -272,31 +271,30 @@ class TestChromaStore:
     def test_configuration_validation(self, temp_directory):
         """Test configuration validation."""
         # Missing required config should use defaults
-        minimal_config = {"persist_directory": temp_directory}
-        store = ChromaStore("minimal", minimal_config)
+        minimal_config = {}
+        store = ChromaStore("minimal", minimal_config, project_dir=Path(temp_directory))
         assert store.collection_name == "documents"
 
         # Invalid embedding dimension should use default
-        invalid_config = {
-            "persist_directory": temp_directory,
-            "embedding_dimension": -1,
-        }
-        store = ChromaStore("invalid", invalid_config)
+        invalid_config = {"embedding_dimension": -1}
+        store = ChromaStore("invalid", invalid_config, project_dir=Path(temp_directory))
         assert store.embedding_dimension > 0
 
     def test_persistence(self, temp_directory, sample_documents):
         """Test data persistence across store instances."""
         # Create first store instance and add data
         store1 = ChromaStore(
-            "persist1",
-            {"collection_name": "persist_test", "persist_directory": temp_directory},
+            "persist_shared",
+            {"collection_name": "persist_test"},
+            project_dir=Path(temp_directory),
         )
         store1.add_documents(sample_documents)
 
         # Create second store instance with same config
         store2 = ChromaStore(
-            "persist2",
-            {"collection_name": "persist_test", "persist_directory": temp_directory},
+            "persist_shared",
+            {"collection_name": "persist_test"},
+            project_dir=Path(temp_directory),
         )
 
         # Should be able to access same data

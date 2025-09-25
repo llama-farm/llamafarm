@@ -1,5 +1,7 @@
 """Ollama-based embedding generator."""
 
+from pathlib import Path
+from core.settings import settings
 import requests
 import json
 import logging
@@ -14,16 +16,19 @@ class OllamaEmbedder(Embedder):
     """Embedder using Ollama API for local embeddings."""
 
     def __init__(
-        self, name: str = "OllamaEmbedder", config: Optional[Dict[str, Any]] = None
+        self,
+        name: str = "OllamaEmbedder",
+        config: Optional[Dict[str, Any]] = None,
+        project_dir: Path | None = None,
     ):
         # Ensure name is always a string
         if not isinstance(name, str):
             name = "OllamaEmbedder"
-        super().__init__(name, config)
+        super().__init__(name, config, project_dir)
         config = config or {}
         self.model = config.get("model", "nomic-embed-text")
         self.api_base = config.get("api_base") or config.get(
-            "base_url", "http://localhost:11434"
+            "base_url", settings.OLLAMA_HOST
         )
         self.base_url = self.api_base  # Alias for compatibility
         self.batch_size = max(

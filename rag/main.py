@@ -7,13 +7,12 @@ as a Celery worker service. It connects to the Celery broker and handles
 RAG-related tasks from the server.
 """
 
-import os
 import sys
-from pathlib import Path
 
-from celery_app import app
+from celery_app import app, run_worker
 from core.logging import FastAPIStructLogger, setup_logging
-from celery_app import run_worker
+from core.settings import settings
+
 # import tasks
 
 logger = FastAPIStructLogger()
@@ -34,7 +33,7 @@ def main():
     logger.info(
         "RAG worker configuration",
         extra={
-            "data_dir": os.environ.get("LF_DATA_DIR", str(Path.home() / ".llamafarm")),
+            "data_dir": settings.LF_DATA_DIR,
             "python_path": sys.path[:3],  # First few paths for debugging
         },
     )

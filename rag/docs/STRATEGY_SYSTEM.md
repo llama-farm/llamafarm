@@ -49,7 +49,6 @@ rag:
     - name: "main_database"
       type: "ChromaStore" 
       config:
-        persist_directory: "./data/chroma_db"
         distance_function: "cosine"
         collection_name: "documents"
       default_embedding_strategy: "default_embeddings"
@@ -319,7 +318,6 @@ vector_store:
   type: "ChromaStore"
   config:
     collection_name: "my_collection"
-    persist_directory: "./chromadb"
     distance_metric: "cosine"  # or "l2", "ip"
 ```
 
@@ -441,7 +439,6 @@ rag:
     - name: "custom_db"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/custom_db"
         collection_name: "custom_documents"
       default_embedding_strategy: "custom_embeddings"
       default_retrieval_strategy: "custom_search"
@@ -518,8 +515,7 @@ rag:
   databases:
     - name: "simple_db"
       type: "ChromaStore"
-      config:
-        persist_directory: "./data/simple_db"
+      config: {}
       embedding_strategies:
         - name: "simple_embeddings"
           type: "OllamaEmbedder"
@@ -591,7 +587,6 @@ rag:
     - name: "legal_db"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/legal_db"
         collection_name: "legal_documents"
       embedding_strategies:
         - name: "legal_embeddings"
@@ -644,7 +639,6 @@ rag:
     - name: "research_db"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/research_db"
         collection_name: "papers"
       embedding_strategies:
         - name: "research_embeddings"
@@ -697,8 +691,7 @@ rag:
   databases:
     - name: "shared_db"
       type: "ChromaStore"
-      config:
-        persist_directory: "./data/shared_db"
+      config: {}
       embedding_strategies:
         - name: "standard_embeddings"
           type: "OllamaEmbedder"

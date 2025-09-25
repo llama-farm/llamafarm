@@ -1,5 +1,6 @@
 """Reranked strategy - sophisticated multi-factor relevance scoring."""
 
+from pathlib import Path
 from typing import List, Dict, Any
 from components.retrievers.base import RetrievalStrategy, RetrievalResult
 from core.base import Document
@@ -23,8 +24,13 @@ class RerankedStrategy(RetrievalStrategy):
     Complexity: High
     """
 
-    def __init__(self, name: str = "RerankedStrategy", config: Dict[str, Any] = None):
-        super().__init__(name, config)
+    def __init__(
+        self,
+        name: str = "RerankedStrategy",
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
+    ):
+        super().__init__(name, config, project_dir)
         config = config or {}
         self.initial_k = config.get("initial_k", 20)  # Retrieve more, then re-rank
         self.rerank_factors = config.get(

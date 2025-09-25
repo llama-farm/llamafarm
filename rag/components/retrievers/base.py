@@ -1,6 +1,7 @@
 """Base classes for retrieval strategies."""
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -23,8 +24,10 @@ class RetrievalStrategy(Component, ABC):
     from a vector store given a query embedding.
     """
 
-    def __init__(self, name: str, config: Dict[str, Any] = None):
-        super().__init__(name, config)
+    def __init__(
+        self, name: str, config: Dict[str, Any] = None, project_dir: Path | None = None
+    ):
+        super().__init__(name, config, project_dir)
         self.config = config or {}
 
     def process(self, data: Any) -> Any:
@@ -68,8 +71,10 @@ class RetrievalStrategy(Component, ABC):
 class HybridRetrievalStrategy(RetrievalStrategy):
     """Base class for hybrid retrieval strategies that combine multiple approaches."""
 
-    def __init__(self, name: str, config: Dict[str, Any] = None):
-        super().__init__(name, config)
+    def __init__(
+        self, name: str, config: Dict[str, Any] = None, project_dir: Path | None = None
+    ):
+        super().__init__(name, config, project_dir)
         config = config or {}
         self.strategies = []
         self.weights = config.get("weights", [])

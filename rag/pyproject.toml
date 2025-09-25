@@ -69,6 +69,7 @@ dependencies = [
     "celery>=5.5.3",
     "structlog>=25.4.0",
     "psutil>=7.0.0",
+    "pydantic-settings>=2.11.0",
 ]
 
 [project.optional-dependencies]

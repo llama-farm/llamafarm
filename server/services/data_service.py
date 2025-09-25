@@ -61,6 +61,7 @@ class DataService:
         os.makedirs(os.path.join(project_dir, DATA_DIR_NAME), exist_ok=True)
         os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "meta"), exist_ok=True)
         os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "raw"), exist_ok=True)
+        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "stores"), exist_ok=True)
         os.makedirs(
             os.path.join(project_dir, DATA_DIR_NAME, "index", "by_name"), exist_ok=True
         )

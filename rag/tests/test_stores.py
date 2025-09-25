@@ -18,17 +18,18 @@ class TestVectorStores:
                 "collection_name": "test_collection",
                 "persist_directory": temp_dir,
             }
-            store = ChromaStore(config=config)
+            store = ChromaStore(config=config, project_dir=temp_dir)
 
             assert store.collection_name == "test_collection"
-            assert store.persist_directory == temp_dir
+            # Persist directory is derived from project_dir now
+            assert store.persist_directory.startswith(str(temp_dir))
 
     @pytest.mark.integration
     def test_document_operations(self):
         """Test adding and searching documents."""
         with tempfile.TemporaryDirectory() as temp_dir:
             store = ChromaStore(
-                config={"collection_name": "test", "persist_directory": temp_dir}
+                config={"collection_name": "test"}, project_dir=temp_dir
             )
 
             # Create test documents
@@ -65,7 +66,7 @@ class TestVectorStores:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             store = ChromaStore(
-                config={"collection_name": "test", "persist_directory": temp_dir}
+                config={"collection_name": "test"}, project_dir=temp_dir
             )
 
             # Test with invalid document (no embeddings)

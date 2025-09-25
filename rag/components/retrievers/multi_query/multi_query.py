@@ -1,5 +1,6 @@
 """Multi-query strategy - enhanced recall through query variations."""
 
+from pathlib import Path
 import numpy as np
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
@@ -24,8 +25,13 @@ class MultiQueryStrategy(RetrievalStrategy):
     Complexity: Medium
     """
 
-    def __init__(self, name: str = "MultiQueryStrategy", config: Dict[str, Any] = None):
-        super().__init__(name, config)
+    def __init__(
+        self,
+        name: str = "MultiQueryStrategy",
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
+    ):
+        super().__init__(name, config, project_dir)
         config = config or {}
         self.num_queries = config.get("num_queries", 3)
         self.aggregation_method = config.get(

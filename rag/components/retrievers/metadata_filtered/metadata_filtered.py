@@ -1,5 +1,6 @@
 """Metadata filtered strategy - vector search with intelligent filtering."""
 
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from components.retrievers.base import RetrievalStrategy, RetrievalResult
 from core.base import Document
@@ -23,9 +24,12 @@ class MetadataFilteredStrategy(RetrievalStrategy):
     """
 
     def __init__(
-        self, name: str = "MetadataFilteredStrategy", config: Dict[str, Any] = None
+        self,
+        name: str = "MetadataFilteredStrategy",
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
     ):
-        super().__init__(name, config)
+        super().__init__(name, config, project_dir)
         config = config or {}
         self.default_filters = config.get("default_filters", {})
         self.distance_metric = config.get("distance_metric", "cosine")

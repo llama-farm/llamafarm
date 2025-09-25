@@ -14,6 +14,7 @@ Planned Features:
 Status: Implementation in progress
 """
 
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from core.base import VectorStore, Document
 
@@ -27,8 +28,13 @@ class QdrantStore(VectorStore):
     Status: Coming Soon
     """
 
-    def __init__(self, name: str = "QdrantStore", config: Dict[str, Any] = None):
-        super().__init__(name, config)
+    def __init__(
+        self,
+        name: str = "QdrantStore",
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
+    ):
+        super().__init__(name, config, project_dir)
 
         # Configuration will include:
         # - url: Qdrant server URL

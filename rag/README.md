@@ -104,7 +104,6 @@ databases:
   - name: "main_database"
     type: "ChromaStore"
     config:
-      persist_directory: "./data/chroma_db"
       collection_name: "documents"
     embedding_strategies:
       - name: "default_embeddings"

@@ -74,6 +74,7 @@ class DatabaseSearchAPI:
 
         try:
             resolved_config_path = resolver.resolve_config_path(self.config_path)
+            self.project_dir = resolved_config_path.parent
 
             # Load llamafarm.yaml
             if yaml is None:
@@ -88,11 +89,11 @@ class DatabaseSearchAPI:
             # Find the database configuration directly from rag section
             rag_config = llamafarm_config.get("rag", {})
             databases = rag_config.get("databases", [])
-            
+
             # If no database specified, use the first one
             if not self.database and databases:
                 self.database = databases[0].get("name")
-            
+
             database_config = None
             for db in databases:
                 if db.get("name") == self.database:
@@ -100,7 +101,9 @@ class DatabaseSearchAPI:
                     break
 
             if not database_config:
-                raise ValueError(f"Database '{self.database}' not found in rag configuration")
+                raise ValueError(
+                    f"Database '{self.database}' not found in rag configuration"
+                )
 
             # Store database config for later use
             self._database_config = database_config
@@ -111,19 +114,14 @@ class DatabaseSearchAPI:
             # Vector store configuration
             db_type = database_config.get("type")
             db_config = database_config.get("config", {})
-            
-            # Resolve persist_directory if relative
-            if "persist_directory" in db_config and not db_config["persist_directory"].startswith("/"):
-                import os
-                base_path = os.path.dirname(resolved_config_path)
-                db_config["persist_directory"] = os.path.join(base_path, db_config["persist_directory"])
-                print(f"[DatabaseSearchAPI] Resolved persist_directory to: {db_config['persist_directory']}")
-            
+
             traditional_config["vector_store"] = {"type": db_type, "config": db_config}
 
             # Embedding configuration - use default embedding strategy
             embedding_strategies = database_config.get("embedding_strategies", [])
-            default_embedding_strategy = database_config.get("default_embedding_strategy")
+            default_embedding_strategy = database_config.get(
+                "default_embedding_strategy"
+            )
 
             embedder_config = None
             if default_embedding_strategy:
@@ -148,7 +146,9 @@ class DatabaseSearchAPI:
 
             # Retrieval strategy configuration - use default retrieval strategy
             retrieval_strategies = database_config.get("retrieval_strategies", [])
-            default_retrieval_strategy = database_config.get("default_retrieval_strategy")
+            default_retrieval_strategy = database_config.get(
+                "default_retrieval_strategy"
+            )
 
             retrieval_config = None
             if default_retrieval_strategy:
@@ -169,7 +169,7 @@ class DatabaseSearchAPI:
                             "config": strategy.get("config", {}),
                         }
                         break
-                
+
                 if not retrieval_config and retrieval_strategies:
                     # Use first available strategy as fallback
                     first_strategy = retrieval_strategies[0]
@@ -185,13 +185,13 @@ class DatabaseSearchAPI:
 
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Config file not found: {e}")
-        except (yaml.YAMLError) as e:
+        except yaml.YAMLError as e:
             raise ValueError(f"Invalid config file format: {e}")
 
     def _get_retrieval_strategy_by_name(self, strategy_name: str):
         """Get a retrieval strategy by name from the database config."""
         retrieval_strategies = self._database_config.get("retrieval_strategies", [])
-        
+
         for strategy in retrieval_strategies:
             if strategy.get("name") == strategy_name:
                 # Create strategy from config
@@ -200,7 +200,7 @@ class DatabaseSearchAPI:
                     "config": strategy.get("config", {}),
                 }
                 return create_retrieval_strategy_from_config(strategy_config)
-        
+
         # If not found, return the default strategy
         return self.retrieval_strategy
 
@@ -216,7 +216,7 @@ class DatabaseSearchAPI:
             # Initialize vector store
             if "vector_store" in self.config:
                 self.vector_store = create_vector_store_from_config(
-                    self.config["vector_store"]
+                    self.config["vector_store"], self.project_dir
                 )
             else:
                 raise ValueError("No vector store configuration found")
@@ -434,14 +434,7 @@ class SearchAPI:
         # Vector store configuration
         db_type = database_config.get("type")
         db_config = database_config.get("config", {})
-        
-        # Resolve persist_directory if relative (for ChromaDB)
-        if "persist_directory" in db_config and not db_config["persist_directory"].startswith("/"):
-            import os
-            base_path = os.path.dirname(config_path)
-            db_config["persist_directory"] = os.path.join(base_path, db_config["persist_directory"])
-            print(f"[SearchAPI] Resolved persist_directory to: {db_config['persist_directory']}")
-        
+
         traditional_config["vector_store"] = {"type": db_type, "config": db_config}
 
         # Embedding configuration - use default embedding strategy

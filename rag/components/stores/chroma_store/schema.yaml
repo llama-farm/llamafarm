@@ -12,10 +12,6 @@ properties:
     default: documents
     pattern: ^[a-zA-Z0-9_-]+$
     description: Collection name
-  persist_directory:
-    type: string
-    default: ./data/chroma_db
-    description: Persistence directory
   host:
     type:
     - string

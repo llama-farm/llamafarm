@@ -67,7 +67,8 @@ class TestOllamaEmbedder:
         embedder = OllamaEmbedder("default")
         assert embedder is not None
         assert embedder.model == "nomic-embed-text"
-        assert embedder.api_base == "http://localhost:11434"
+        # Default now sourced from settings.OLLAMA_HOST; allow either full URL or host string
+        assert embedder.api_base in ("http://localhost:11434", "localhost")
 
         # Custom config
         custom_config = {

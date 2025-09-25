@@ -47,7 +47,6 @@ databases:
   - name: "main_database"  # Unique identifier (lowercase, underscores)
     type: "ChromaStore"     # ChromaStore or QdrantStore
     config:
-      persist_directory: "./data/chroma_db"
       distance_function: "cosine"  # cosine, l2, ip
       collection_name: "documents"
       port: 8000  # Optional, for client-server mode
@@ -82,7 +81,7 @@ databases:
 
 | Type | Description | Key Config Options |
 |------|-------------|-------------------|
-| `ChromaStore` | ChromaDB vector database | `persist_directory`, `collection_name`, `distance_function` |
+| `ChromaStore` | ChromaDB vector database | `collection_name`, `distance_function` |
 | `QdrantStore` | Qdrant vector database | `host`, `port`, `collection_name`, `vector_size` |
 
 ### Embedding Strategy Types
@@ -247,7 +246,6 @@ rag:
     - name: "main_database"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/chroma_db"
         distance_function: "cosine"
         collection_name: "documents"
       default_embedding_strategy: "default_embeddings"

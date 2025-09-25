@@ -2,8 +2,11 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import logging
+
+from core.settings import settings
 
 
 @dataclass
@@ -39,10 +42,16 @@ class ProcessingResult:
 class Component(ABC):
     """Base class for all pipeline components."""
 
-    def __init__(self, name: str = None, config: Dict[str, Any] = None):
+    def __init__(
+        self,
+        name: str = None,
+        config: Dict[str, Any] = None,
+        project_dir: Path | None = None,
+    ):
         self.name = name or self.__class__.__name__
         self.config = config or {}
         self.logger = logging.getLogger(self.name)
+        self.project_dir = project_dir
 
     @abstractmethod
     def process(self, documents: List[Document]) -> ProcessingResult:
@@ -84,20 +93,33 @@ class Embedder(Component):
             doc.embeddings = embedding
 
         # Calculate chunk metrics
-        chunked_docs = [doc for doc in documents if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
-        
+        chunked_docs = [
+            doc
+            for doc in documents
+            if "chunk_num" in doc.metadata or "chunk_index" in doc.metadata
+        ]
+
         return ProcessingResult(
-            documents=documents, 
+            documents=documents,
             metrics={
                 "embedded_count": len(documents),
                 "chunk_count": len(chunked_docs),
-                "non_chunked_count": len(documents) - len(chunked_docs)
-            }
+                "non_chunked_count": len(documents) - len(chunked_docs),
+            },
         )
 
 
 class VectorStore(Component):
     """Base class for vector databases."""
+
+    def __init__(
+        self,
+        name: str,
+        config: dict[str, Any],
+        project_dir: Path | None = None,
+    ):
+        super().__init__(name, config, project_dir)
+        self.persist_directory = f"{project_dir}/lf_data/stores/{name}"
 
     @abstractmethod
     def add_documents(self, documents: List[Document]) -> bool:
@@ -117,16 +139,20 @@ class VectorStore(Component):
     def process(self, documents: List[Document]) -> ProcessingResult:
         """Add documents to vector store."""
         success = self.add_documents(documents)
-        
+
         # Calculate chunk metrics
-        chunked_docs = [doc for doc in documents if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
-        
+        chunked_docs = [
+            doc
+            for doc in documents
+            if "chunk_num" in doc.metadata or "chunk_index" in doc.metadata
+        ]
+
         return ProcessingResult(
             documents=documents,
             metrics={
                 "stored_count": len(documents) if success else 0,
                 "stored_chunks": len(chunked_docs) if success else 0,
-                "stored_docs": (len(documents) - len(chunked_docs)) if success else 0
+                "stored_docs": (len(documents) - len(chunked_docs)) if success else 0,
             },
         )
 
@@ -182,12 +208,14 @@ class Pipeline:
                 all_errors.append({"component": component.name, "error": str(e)})
 
         # Calculate final chunk metrics
-        chunked_docs = [doc for doc in current_docs if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
-        aggregated_metrics['total_chunks'] = len(chunked_docs)
-        aggregated_metrics['total_documents'] = len(current_docs)
-        
+        chunked_docs = [
+            doc
+            for doc in current_docs
+            if "chunk_num" in doc.metadata or "chunk_index" in doc.metadata
+        ]
+        aggregated_metrics["total_chunks"] = len(chunked_docs)
+        aggregated_metrics["total_documents"] = len(current_docs)
+
         return ProcessingResult(
-            documents=current_docs, 
-            errors=all_errors,
-            metrics=aggregated_metrics
+            documents=current_docs, errors=all_errors, metrics=aggregated_metrics
         )
