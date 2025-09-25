@@ -292,7 +292,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := fields[0]
 				switch cmd {
 				case "/help":
-					m.messages = append(m.messages, ChatMessage{Role: "client", Content: "Commands: /help, /launch designer, clear, exit"})
+					m.messages = append(m.messages, ChatMessage{Role: "client", Content: "Commands: /help, /launch designer, /clear, /exit"})
 					m.textarea.SetValue("")
 				case "/launch":
 					if len(fields) < 2 {
@@ -313,25 +313,20 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					cmds = append(cmds, openURL(m.designerURL))
 					m.textarea.SetValue("")
+				case "/exit", "/quit":
+					m.status = "👋 You have left the pasture. Safe travels, little llama!"
+					return m, tea.Quit
+				case "/clear":
+					m.transcript = ""
+					m.messages = nil
+					m.textarea.SetValue("")
+					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+					m.thinking = false
+					m.printing = false
 				default:
-					m.messages = append(m.messages, ChatMessage{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. Type '/help' for available commands.", cmd)})
+					m.messages = append(m.messages, ChatMessage{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. All commands must start with '/'. Type '/help' for available commands.", cmd)})
 					m.textarea.SetValue("")
 				}
-				break
-			}
-
-			if lower == "exit" || lower == "quit" {
-				m.status = "👋 You have left the pasture. Safe travels, little llama!"
-				return m, tea.Quit
-			}
-
-			if lower == "clear" {
-				m.transcript = ""
-				m.messages = nil
-				m.textarea.SetValue("")
-				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
-				m.thinking = false
-				m.printing = false
 				break
 			}
 
