@@ -98,6 +98,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Ensure data dir exists for bind mount
+        run: |
+          mkdir -p "$HOME/.llamafarm"
+          chmod 777 "$HOME/.llamafarm"
+
       - name: Build services with docker compose
         working-directory: deployment/docker_compose
         run: |
