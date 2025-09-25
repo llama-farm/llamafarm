@@ -517,124 +517,41 @@ async def delete_data(
 # ============================================================================
 
 @router.post("/{dataset}/ingest", response_model=BatchIngestResponse)
-async def smart_ingest(
+async def ingest_files(
     namespace: str,
     project: str,
     dataset: str,
-    # Accept either files OR JSON request body
-    files: Optional[List[UploadFile]] = File(None),
-    request_body: Optional[str] = Form(None),  # JSON string with paths/patterns
-    # Direct parameters for simple cases
-    paths: Optional[str] = Form(None),  # Comma-separated paths
-    recursive: bool = Form(False),
-    pattern: Optional[str] = Form(None),
-    parallel: bool = Form(True)
+    files: List[UploadFile] = File(...)
 ):
     """
-    Smart unified endpoint that automatically detects and handles:
-    - Direct file uploads (multipart/form-data)
-    - File paths (local files on server)
-    - Directories (with optional recursion and filtering)
-    - Glob patterns (*.pdf, **/*.md, etc.)
-    - Mixed inputs (combination of above)
-    - URLs (future: for remote file ingestion)
+    Ingest uploaded files into the dataset.
     
-    This endpoint processes files in two steps:
-    1. Upload/identify files to process
-    2. Automatically process them into the vector database
+    All path expansion, glob matching, and directory walking
+    happens client-side. The server only receives and processes
+    actual file content.
+    
+    This ensures compatibility with Docker deployments where the
+    server cannot access the client's filesystem.
     """
     start_time = time.time()
     
     logger.bind(namespace=namespace, project=project, dataset=dataset)
     logger.info(f"Smart ingest started for dataset '{dataset}'")
     
-    # Parse input based on what was provided
-    items_to_process = []
-    detected_types = {"files": 0, "directories": 0, "patterns": 0, "urls": 0}
-    paths_to_analyze = []
-    
-    # Collect all inputs - handle mixed inputs explicitly
-    has_files = bool(files)
-    has_request_body = bool(request_body)
-    has_paths = bool(paths)
-    
-    # Case 1: Direct file uploads from UI/CLI
-    if files:
-        detected_types["files"] = len(files)
-        items_to_process.extend([
-            IngestItem(type="upload", value=f, options={})
-            for f in files
-        ])
-        logger.info(f"Detected {len(files)} file uploads")
-    
-    # Case 2: JSON request with paths/patterns (can be combined with files)
-    if request_body:
-        try:
-            data = json.loads(request_body)
-            if isinstance(data, dict):
-                # Structured request
-                request = SmartIngestRequest(**data)
-                paths_to_analyze.extend(request.paths or [])
-                recursive = request.recursive or recursive
-                pattern = request.pattern or pattern
-            else:
-                # Simple array of paths
-                paths_to_analyze.extend(data)
-        except json.JSONDecodeError:
-            # Fallback to treating as comma-separated paths
-            paths_to_analyze.extend([p.strip() for p in request_body.split(',')])
-        except Exception as e:
-            logger.warning(f"Error parsing request_body: {e}")
-    
-    # Case 3: Form data with paths (comma-separated) - can be combined
-    if paths:
-        paths_to_analyze.extend([p.strip() for p in paths.split(',')])
-    
-    # If mixed inputs detected, log a warning but process all
-    input_count = sum([has_files, has_request_body, has_paths])
-    if input_count > 1:
-        logger.warning(f"Mixed input detected: files={has_files}, request_body={has_request_body}, paths={has_paths}. Processing all inputs.")
-    
-    # If no input provided at all
-    if not items_to_process and not paths_to_analyze:
+    # Simple processing - just handle uploaded files
+    if not files:
         return BatchIngestResponse(
             total=0, successful=0, failed=0, skipped=0,
-            results=[], processing_time=0, detected_types={}
+            results=[], processing_time=0, detected_types={"files": 0}
         )
     
-    # Analyze each path to determine its type
-    if paths_to_analyze:
-        for path_str in paths_to_analyze:
-            item_type, expanded = await detect_and_expand_path(
-                path_str, recursive, pattern
-            )
-            detected_types[item_type] += len(expanded) if isinstance(expanded, list) else 1
-            
-            if item_type == "pattern":
-                # Glob pattern - expand on server
-                items_to_process.extend([
-                    IngestItem(type="file", value=f, options={"source": "pattern"})
-                    for f in expanded
-                ])
-            elif item_type == "directory":
-                # Directory - expand with filters
-                items_to_process.extend([
-                    IngestItem(type="file", value=f, options={"source": "directory"})
-                    for f in expanded
-                ])
-            elif item_type == "url":
-                # URL for remote ingestion (future feature)
-                items_to_process.append(
-                    IngestItem(type="url", value=path_str, options={})
-                )
-            else:
-                # Regular file
-                items_to_process.append(
-                    IngestItem(type="file", value=path_str, options={})
-                )
+    items_to_process = [
+        IngestItem(type="upload", value=f, options={})
+        for f in files
+    ]
+    logger.info(f"Processing {len(files)} uploaded files")
     
-    logger.info(f"Total items to process: {len(items_to_process)}")
-    logger.info(f"Detected types: {detected_types}")
+    logger.info(f"Total files to process: {len(items_to_process)}")
     
     # Get dataset configuration
     project_obj = ProjectService.get_project(namespace, project)
@@ -657,10 +574,11 @@ async def smart_ingest(
             detail="Dataset missing data_processing_strategy or database configuration"
         )
     
-    # Process all items
+    # Process all uploaded files
     results = []
     
-    if parallel and len(items_to_process) > 1:
+    # For simplicity, process files sequentially (can add parallel later if needed)
+    if False:  # Disabled parallel processing for now
         # Parallel processing for multiple items
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
@@ -707,48 +625,11 @@ async def smart_ingest(
         skipped=skipped,
         results=results,
         processing_time=processing_time,
-        detected_types=detected_types
+        detected_types={"files": len(items_to_process)}
     )
 
 
-# Helper functions for smart ingest
-
-async def detect_and_expand_path(
-    path_str: str,
-    recursive: bool = False,
-    filter_pattern: Optional[str] = None
-) -> Tuple[str, List[str]]:
-    """
-    Detect the type of path and expand it to actual files.
-    Returns: (type, list_of_files)
-    """
-    # Check if URL
-    if path_str.startswith(('http://', 'https://', 'ftp://')):
-        return ("urls", [path_str])
-    
-    # Check for glob patterns
-    if any(char in path_str for char in ['*', '?', '[', ']']):
-        # It's a glob pattern
-        matches = glob.glob(path_str, recursive=recursive)
-        files = [f for f in matches if Path(f).is_file()]
-        return ("patterns", files)
-    
-    # Check if path exists
-    path = Path(path_str)
-    if path.exists():
-        if path.is_file():
-            return ("files", [str(path)])
-        elif path.is_dir():
-            # Directory - expand based on options
-            pattern = f"**/{filter_pattern or '*'}" if recursive else (filter_pattern or "*")
-            
-            matches = list(path.glob(pattern))
-            files = [str(f) for f in matches if f.is_file()]
-            return ("directories", files)
-    
-    # Path doesn't exist - might be a pattern without wildcards
-    # or a file that will be created
-    return ("files", [path_str])
+# Helper functions for file processing
 
 
 def _save_file_to_data_store(
@@ -866,34 +747,7 @@ def process_single_item(
                 file.filename
             )
             
-        elif item.type == "file":
-            # Local file path - need to upload first
-            path = Path(item.value)
-            if not path.exists():
-                return {
-                    "status": "error",
-                    "filename": path.name,
-                    "error": "File not found"
-                }
-            
-            with open(path, 'rb') as f:
-                content = f.read()
-            
-            # Save to data store
-            metadata_file_content = _save_file_to_data_store(
-                namespace, project, dataset, content, path.name
-            )
-            
-            # Process into vector database
-            return _process_into_vector_db(
-                namespace, project, dataset,
-                metadata_file_content,
-                project_dir, project_config,
-                data_processing_strategy_name,
-                database_name,
-                path.name
-            )
-            
+        # Remove file path handling - server only handles uploads now
         elif item.type == "url":
             # URL ingestion is not supported yet
             return {

@@ -329,23 +329,23 @@ Examples:
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/ingest",
 			serverCfg.Namespace, serverCfg.Project, datasetName))
 
-		// Determine the best method based on input
-		method := determineIngestMethod(inPaths)
-		
-		fmt.Printf("Starting smart ingest to dataset '%s'...\n", datasetName)
-		fmt.Printf("Method: %s, Paths: %v\n", method, inPaths)
-
-		switch method {
-		case "files":
-			// Upload actual files
-			uploadFilesViaSmartEndpoint(url, inPaths)
-		case "paths":
-			// Send paths to server for processing
-			sendPathsToSmartEndpoint(url, inPaths)
-		case "mixed":
-			// Handle mixed input
-			handleMixedInputViaSmartEndpoint(url, inPaths)
+		// Expand all paths locally (CLI-side)
+		fmt.Printf("Expanding paths to find files...\n")
+		allFiles, err := expandPathsLocally(inPaths, recursive, pattern)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error expanding paths: %v\n", err)
+			os.Exit(1)
 		}
+
+		if len(allFiles) == 0 {
+			fmt.Println("No files found matching the specified paths/patterns")
+			os.Exit(0)
+		}
+
+		fmt.Printf("Found %d files to upload\n", len(allFiles))
+		
+		// Upload all files in batches
+		uploadFilesInBatches(url, allFiles, batchSize)
 	},
 }
 
@@ -720,59 +720,160 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 	return nil
 }
 
-// determineIngestMethod analyzes the input paths to determine the best ingestion method
-func determineIngestMethod(paths []string) string {
-	hasFiles := false
-	hasDirs := false
-	hasPatterns := false
+// expandPathsLocally expands all paths, globs, and directories locally
+func expandPathsLocally(paths []string, recursive bool, pattern string) ([]string, error) {
+	var allFiles []string
+	seen := make(map[string]bool) // Avoid duplicates
 
 	for _, path := range paths {
 		// Check if it contains glob patterns
-		if strings.Contains(path, "*") || strings.Contains(path, "?") || strings.Contains(path, "[") {
-			hasPatterns = true
+		if strings.ContainsAny(path, "*?[") {
+			// Expand glob pattern
+			matches, err := filepath.Glob(path)
+			if err != nil {
+				fmt.Printf("  ⚠️ Invalid pattern %s: %v\n", path, err)
+				continue
+			}
+			for _, match := range matches {
+				info, err := os.Stat(match)
+				if err != nil {
+					continue
+				}
+				if !info.IsDir() {
+					if !seen[match] {
+						allFiles = append(allFiles, match)
+						seen[match] = true
+					}
+				} else if recursive {
+					// If glob matches a directory and recursive is true, walk it
+					files := walkDirectory(match, recursive, pattern)
+					for _, f := range files {
+						if !seen[f] {
+							allFiles = append(allFiles, f)
+							seen[f] = true
+						}
+					}
+				}
+			}
 		} else {
 			// Check if it's a file or directory
 			info, err := os.Stat(path)
-			if err == nil {
-				if info.IsDir() {
-					hasDirs = true
-				} else {
-					hasFiles = true
+			if err != nil {
+				fmt.Printf("  ⚠️ Cannot access %s: %v\n", path, err)
+				continue
+			}
+
+			if info.IsDir() {
+				// Walk directory
+				files := walkDirectory(path, recursive, pattern)
+				for _, f := range files {
+					if !seen[f] {
+						allFiles = append(allFiles, f)
+						seen[f] = true
+					}
 				}
 			} else {
-				// If file doesn't exist, check if parent directory exists
-				// (could be a pattern in a valid directory)
-				dir := filepath.Dir(path)
-				if _, err := os.Stat(dir); err == nil {
-					hasPatterns = true
+				// Regular file
+				if !seen[path] {
+					allFiles = append(allFiles, path)
+					seen[path] = true
 				}
 			}
 		}
 	}
 
-	// Determine method based on what we found
-	if hasFiles && !hasDirs && !hasPatterns {
-		return "files"
-	} else if (hasDirs || hasPatterns) && !hasFiles {
-		return "paths"
+	return allFiles, nil
+}
+
+// walkDirectory walks a directory and returns all files matching the pattern
+func walkDirectory(dir string, recursive bool, pattern string) []string {
+	var files []string
+
+	if recursive {
+		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil // Skip files we can't access
+			}
+			if !info.IsDir() {
+				// Apply pattern filter if specified
+				if pattern == "" || matchesPattern(filepath.Base(path), pattern) {
+					files = append(files, path)
+				}
+			}
+			return nil
+		})
 	} else {
-		return "mixed"
+		// Non-recursive - just immediate children
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			fmt.Printf("  ⚠️ Cannot read directory %s: %v\n", dir, err)
+			return files
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				fullPath := filepath.Join(dir, entry.Name())
+				if pattern == "" || matchesPattern(entry.Name(), pattern) {
+					files = append(files, fullPath)
+				}
+			}
+		}
+	}
+
+	return files
+}
+
+// matchesPattern checks if a filename matches a pattern
+func matchesPattern(filename, pattern string) bool {
+	matched, _ := filepath.Match(pattern, filename)
+	return matched
+}
+
+// uploadFilesInBatches uploads files in batches to avoid overwhelming the server
+func uploadFilesInBatches(url string, filePaths []string, batchSize int) {
+	total := len(filePaths)
+	successful := 0
+	failed := 0
+	
+	for i := 0; i < total; i += batchSize {
+		end := i + batchSize
+		if end > total {
+			end = total
+		}
+		
+		batch := filePaths[i:end]
+		batchNum := (i / batchSize) + 1
+		totalBatches := (total + batchSize - 1) / batchSize
+		
+		fmt.Printf("\n📦 Uploading batch %d/%d (%d files)\n", batchNum, totalBatches, len(batch))
+		
+		// Upload this batch
+		batchSuccess, batchFailed := uploadBatch(url, batch)
+		successful += batchSuccess
+		failed += batchFailed
+	}
+	
+	// Final summary
+	fmt.Printf("\n📊 Final Summary:\n")
+	fmt.Printf("   Total files: %d\n", total)
+	fmt.Printf("   ✅ Successful: %d\n", successful)
+	if failed > 0 {
+		fmt.Printf("   ❌ Failed: %d\n", failed)
+		os.Exit(1)
 	}
 }
 
-// uploadFilesViaSmartEndpoint uploads actual files through the smart endpoint
-func uploadFilesViaSmartEndpoint(url string, paths []string) {
+// uploadBatch uploads a batch of files and returns success/failure counts
+func uploadBatch(url string, filePaths []string) (successful int, failed int) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
 	// Add each file to the multipart form
-	successCount := 0
-	failCount := 0
-	for _, path := range paths {
+	uploadedFiles := 0
+	for _, path := range filePaths {
 		file, err := os.Open(path)
 		if err != nil {
 			fmt.Printf("  ❌ Failed to open file %s: %v\n", path, err)
-			failCount++
+			failed++
 			continue
 		}
 
@@ -780,31 +881,21 @@ func uploadFilesViaSmartEndpoint(url string, paths []string) {
 		if err != nil {
 			fmt.Printf("  ❌ Failed to create form for %s: %v\n", path, err)
 			file.Close()
-			failCount++
+			failed++
 			continue
 		}
 
 		if _, err := io.Copy(part, file); err != nil {
 			fmt.Printf("  ❌ Failed to read file %s: %v\n", path, err)
 			file.Close()
-			failCount++
+			failed++
 			continue
 		}
 		file.Close()
-		successCount++
+		uploadedFiles++
 	}
 
-	// Add flags
-	if recursive {
-		writer.WriteField("recursive", "true")
-	}
-	if pattern != "" {
-		writer.WriteField("pattern", pattern)
-	}
-	if parallel {
-		writer.WriteField("parallel", "true")
-	}
-	writer.WriteField("batch_size", fmt.Sprintf("%d", batchSize))
+	// Don't send flags - server doesn't need them anymore since all expansion is client-side
 
 	if err := writer.Close(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
@@ -834,13 +925,29 @@ func uploadFilesViaSmartEndpoint(url string, paths []string) {
 
 	if resp.StatusCode != http.StatusOK {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
-		os.Exit(1)
+		return 0, len(filePaths)
 	}
 
-	// Parse and display response
-	displayIngestResponse(body)
+	// Parse response to get counts
+	var result struct {
+		Total       int `json:"total"`
+		Successful  int `json:"successful"`
+		Failed      int `json:"failed"`
+		Skipped     int `json:"skipped"`
+	}
+	
+	if err := json.Unmarshal(body, &result); err != nil {
+		// If we can't parse, assume all uploaded files were successful
+		return uploadedFiles, 0
+	}
+	
+	return result.Successful, result.Failed
 }
 
+// The following functions are no longer needed since all expansion is client-side
+// Keeping them commented for reference in case needed later
+
+/*
 // sendPathsToSmartEndpoint sends paths for server-side processing
 func sendPathsToSmartEndpoint(url string, paths []string) {
 	var buf bytes.Buffer
@@ -1021,8 +1128,9 @@ func handleMixedInputViaSmartEndpoint(url string, paths []string) {
 	// Parse and display response
 	displayIngestResponse(body)
 }
+*/
 
-// displayIngestResponse parses and displays the batch ingest response
+// displayIngestResponse parses and displays the batch ingest response (kept for compatibility)
 func displayIngestResponse(body []byte) {
 	var result struct {
 		Total       int `json:"total"`
