@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # FastAPI Backend Server (Development - Lightweight)
@@ -12,11 +12,23 @@ services:
       - PYTHONUNBUFFERED=1
       - RELOAD=true
       - LF_DATA_DIR=/var/lib/llamafarm
+      - OLLAMA_HOST=http://host.docker.internal:11434
     volumes:
       - ../../server:/app/server
       - ../../config:/app/config
       - llamafarm_dev_data:/var/lib/llamafarm
-    command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command:
+      [
+        "uv",
+        "run",
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s
@@ -43,7 +55,8 @@ services:
       server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import celery; print('RAG worker running')"]
+      test:
+        ["CMD", "python", "-c", "import celery; print('RAG worker running')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -58,7 +71,7 @@ services:
       dockerfile: Dockerfile
       target: builder
     ports:
-      - "5173:5173"  # Vite dev server port
+      - "5173:5173" # Vite dev server port
     environment:
       - VITE_APP_API_URL=http://server:8000
       - VITE_APP_ENV=development
@@ -68,23 +81,6 @@ services:
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     depends_on:
       - server
-    networks:
-      - llamafarm-dev
-
-  # Python Runtime Service (Development)
-  runtime:
-    build:
-      context: ../../
-      dockerfile: runtime/Dockerfile
-    environment:
-      - PYTHONUNBUFFERED=1
-      - LF_DATA_DIR=/var/lib/llamafarm
-    volumes:
-      - ../../runtime:/app
-      - llamafarm_dev_data:/var/lib/llamafarm
-    depends_on:
-      - server
-      - rag
     networks:
       - llamafarm-dev
 

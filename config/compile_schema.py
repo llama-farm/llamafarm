@@ -62,6 +62,10 @@ def load_and_deref_schema(path: Path):
 
 def get_dereferenced_schema() -> dict:
     """Get the fully dereferenced schema (for use by other modules)."""
+    derefed_schema = Path(__file__).parent / "schema.deref.yaml"
+    if derefed_schema.exists():
+        return load_and_deref_schema(derefed_schema)
+
     schema_path = Path(__file__).parent / "schema.yaml"
     return load_and_deref_schema(schema_path)
 

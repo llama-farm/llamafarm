@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build (e.g., v1.0.0)'
+        description: "Version to build (e.g., v1.0.0)"
         required: true
-        default: 'v1.0.0'
+        default: "v1.0.0"
 
 permissions:
   contents: read
@@ -54,7 +54,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
 
           # Services to retag
-          SERVICES=(designer server runtime)
+          SERVICES=(designer server rag)
 
           # Try main-<fullsha> first, then main-<shortsha>
           for SERVICE in "${SERVICES[@]}"; do
