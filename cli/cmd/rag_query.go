@@ -76,6 +76,8 @@ Examples:
 			os.Exit(1)
 		}
 
+		StartConfigWatcherForCommand()
+
 		// Ensure server is available
 		ensureServerAvailable(serverCfg.URL, true)
 

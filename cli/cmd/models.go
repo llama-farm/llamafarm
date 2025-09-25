@@ -13,6 +13,7 @@ var modelsCmd = &cobra.Command{
 	Long: `Manage models, providers, and backends configured in LlamaFarm.
 
 Available commands will include listing models, testing inference, and syncing configs.`,
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("LlamaFarm Models Management")
 		cmd.Help()

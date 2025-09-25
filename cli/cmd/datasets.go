@@ -37,8 +37,8 @@ Each dataset must specify:
 
 Available commands:
   list    - List all datasets on the server for a project
-  add     - Create a dataset on the server (optionally then upload files)
-  remove  - Delete a dataset from the server
+  create     - Create a dataset on the server (optionally then upload files)
+  delete  - Delete a dataset from the server
   ingest  - Upload files to a dataset on the server
   process - Process uploaded files into the vector database`,
 	Run: func(cmd *cobra.Command, args []string) {

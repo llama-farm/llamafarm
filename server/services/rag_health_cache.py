@@ -7,6 +7,7 @@ health checks while still providing up-to-date information.
 
 import logging
 import time
+from datetime import UTC, datetime, timedelta
 from threading import Lock, Thread
 from typing import Any
 
@@ -124,7 +125,9 @@ class RAGHealthCache:
 
             # Try comprehensive health check first
             health_task = signature("rag.health_check", app=celery_app)
-            result = health_task.apply_async()
+            result = health_task.apply_async(
+                expires=datetime.now(UTC) + timedelta(seconds=10)
+            )
 
             try:
                 health_data = self._safe_get_result(
@@ -135,7 +138,9 @@ class RAGHealthCache:
             except Exception:
                 # Comprehensive check failed, try simple ping
                 ping_task = signature("rag.ping", app=celery_app)
-                ping_result = ping_task.apply_async()
+                ping_result = ping_task.apply_async(
+                    expires=datetime.now(UTC) + timedelta(seconds=10)
+                )
 
                 try:
                     ping_data = self._safe_get_result(

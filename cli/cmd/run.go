@@ -121,23 +121,7 @@ Examples:
 
 		cwd := getEffectiveCWD()
 
-		if ns == "" || proj == "" {
-			cfg, err := config.LoadConfig(cwd)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-				os.Exit(1)
-			}
-
-			projectInfo, err := cfg.GetProjectInfo()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Could not extract project info for watcher: %v\n", err)
-			} else {
-				// Start the config file watcher in background
-				if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: Failed to start config watcher: %v\n", err)
-				}
-			}
-		}
+		StartConfigWatcherForCommand()
 
 		// Resolve server configuration (strict): if ns/proj are absent, require from llamafarm.yaml
 		serverCfg, err := config.GetServerConfig(cwd, serverURL, ns, proj)

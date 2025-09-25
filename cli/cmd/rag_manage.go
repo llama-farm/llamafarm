@@ -45,6 +45,8 @@ Examples:
 			os.Exit(1)
 		}
 
+		StartConfigWatcherForCommand()
+
 		ensureServerAvailable(serverCfg.URL, true)
 
 		// Confirm operation unless force flag is set
@@ -109,6 +111,8 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		StartConfigWatcherForCommand()
 
 		ensureServerAvailable(serverCfg.URL, true)
 
