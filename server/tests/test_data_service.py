@@ -148,9 +148,10 @@ class TestDataService:
             (("/project/dir/lf_data",), {"exist_ok": True}),
             (("/project/dir/lf_data/meta",), {"exist_ok": True}),
             (("/project/dir/lf_data/raw",), {"exist_ok": True}),
+            (("/project/dir/lf_data/stores",), {"exist_ok": True}),
             (("/project/dir/lf_data/index/by_name",), {"exist_ok": True}),
         ]
-        assert mock_makedirs.call_count == 4
+        assert mock_makedirs.call_count == len(expected_calls)
         for call in expected_calls:
             assert call in [
                 (args, kwargs) for args, kwargs in mock_makedirs.call_args_list
