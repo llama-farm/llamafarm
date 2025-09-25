@@ -18,7 +18,6 @@ WORKDIR /app
 # Note: This Dockerfile should be run from the repo root: docker build -f server/Dockerfile .
 COPY config/ ./config/
 COPY rag/ ./rag/
-COPY models/ ./models/
 
 # Install each package with its own dependencies
 RUN ls -la config
