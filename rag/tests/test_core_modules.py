@@ -83,9 +83,10 @@ class TestCoreModules:
             from core.factories import ChromaStore
 
             with tempfile.TemporaryDirectory() as temp_dir:
+                project_dir = Path(temp_dir)
                 # Test creating ChromaDB store directly
                 store = ChromaStore(
-                    config={"collection_name": "test", "persist_directory": temp_dir}
+                    config={"collection_name": "test"}, project_dir=project_dir
                 )
                 assert store is not None
                 assert hasattr(store, "add_documents")
