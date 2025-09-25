@@ -775,20 +775,22 @@ func uploadFilesViaSmartEndpoint(url string, paths []string) {
 			failCount++
 			continue
 		}
-		defer file.Close()
 
 		part, err := writer.CreateFormFile("files", filepath.Base(path))
 		if err != nil {
 			fmt.Printf("  ❌ Failed to create form for %s: %v\n", path, err)
+			file.Close()
 			failCount++
 			continue
 		}
 
 		if _, err := io.Copy(part, file); err != nil {
 			fmt.Printf("  ❌ Failed to read file %s: %v\n", path, err)
+			file.Close()
 			failCount++
 			continue
 		}
+		file.Close()
 		successCount++
 	}
 
@@ -844,13 +846,18 @@ func sendPathsToSmartEndpoint(url string, paths []string) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
-	// Add paths as a JSON array
-	pathsJSON, err := json.Marshal(paths)
+	// Create JSON request body with paths
+	requestBody := map[string]interface{}{
+		"paths":     paths,
+		"recursive": recursive,
+		"pattern":   pattern,
+	}
+	requestJSON, err := json.Marshal(requestBody)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error marshaling paths: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error marshaling request: %v\n", err)
 		os.Exit(1)
 	}
-	writer.WriteField("paths", string(pathsJSON))
+	writer.WriteField("request_body", string(requestJSON))
 
 	// Add flags
 	if recursive {
@@ -937,28 +944,35 @@ func handleMixedInputViaSmartEndpoint(url string, paths []string) {
 			fmt.Printf("  ⚠️ Skipping file %s: %v\n", path, err)
 			continue
 		}
-		defer file.Close()
 
 		part, err := writer.CreateFormFile("files", filepath.Base(path))
 		if err != nil {
 			fmt.Printf("  ⚠️ Failed to create form for %s: %v\n", path, err)
+			file.Close()
 			continue
 		}
 
 		if _, err := io.Copy(part, file); err != nil {
 			fmt.Printf("  ⚠️ Failed to read file %s: %v\n", path, err)
+			file.Close()
 			continue
 		}
+		file.Close()
 	}
 
-	// Add server paths
+	// Add server paths as request_body
 	if len(serverPaths) > 0 {
-		pathsJSON, err := json.Marshal(serverPaths)
+		requestBody := map[string]interface{}{
+			"paths":     serverPaths,
+			"recursive": recursive,
+			"pattern":   pattern,
+		}
+		requestJSON, err := json.Marshal(requestBody)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error marshaling paths: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error marshaling request: %v\n", err)
 			os.Exit(1)
 		}
-		writer.WriteField("paths", string(pathsJSON))
+		writer.WriteField("request_body", string(requestJSON))
 	}
 
 	// Add flags
@@ -1011,15 +1025,17 @@ func handleMixedInputViaSmartEndpoint(url string, paths []string) {
 // displayIngestResponse parses and displays the batch ingest response
 func displayIngestResponse(body []byte) {
 	var result struct {
-		Total   int `json:"total"`
-		Success int `json:"success"`
-		Failed  int `json:"failed"`
-		Items   []struct {
-			Path    string `json:"path"`
-			Status  string `json:"status"`
-			Message string `json:"message,omitempty"`
-			Hash    string `json:"hash,omitempty"`
-		} `json:"items"`
+		Total       int `json:"total"`
+		Successful  int `json:"successful"`
+		Failed      int `json:"failed"`
+		Skipped     int `json:"skipped"`
+		Results     []struct {
+			Status   string `json:"status"`
+			Filename string `json:"filename"`
+			Hash     string `json:"hash,omitempty"`
+			Error    string `json:"error,omitempty"`
+			Message  string `json:"message,omitempty"`
+		} `json:"results"`
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -1030,25 +1046,30 @@ func displayIngestResponse(body []byte) {
 	// Display summary
 	fmt.Printf("\n📊 Ingestion Summary:\n")
 	fmt.Printf("   Total: %d files\n", result.Total)
-	fmt.Printf("   ✅ Success: %d\n", result.Success)
+	fmt.Printf("   ✅ Success: %d\n", result.Successful)
+	if result.Skipped > 0 {
+		fmt.Printf("   ⏭️  Skipped: %d\n", result.Skipped)
+	}
 	if result.Failed > 0 {
 		fmt.Printf("   ❌ Failed: %d\n", result.Failed)
 	}
 
 	// Display details if available
-	if len(result.Items) > 0 {
+	if len(result.Results) > 0 {
 		fmt.Printf("\n📁 File Details:\n")
 		fmt.Printf("────────────────────────────────────────────────────────────────────────\n")
-		for _, item := range result.Items {
+		for _, item := range result.Results {
 			statusBadge := "✅"
-			if item.Status == "failed" {
+			if item.Status == "error" {
 				statusBadge = "❌"
-			} else if item.Status == "duplicate" {
+			} else if item.Status == "skipped" {
 				statusBadge = "⏭️"
 			}
 
-			fmt.Printf("   %s %s\n", statusBadge, item.Path)
-			if item.Message != "" {
+			fmt.Printf("   %s %s\n", statusBadge, item.Filename)
+			if item.Error != "" {
+				fmt.Printf("      └─ Error: %s\n", item.Error)
+			} else if item.Message != "" {
 				fmt.Printf("      └─ %s\n", item.Message)
 			}
 			if item.Hash != "" && len(item.Hash) > 12 {

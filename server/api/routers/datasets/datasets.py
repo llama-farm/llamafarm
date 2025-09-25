@@ -551,6 +551,12 @@ async def smart_ingest(
     # Parse input based on what was provided
     items_to_process = []
     detected_types = {"files": 0, "directories": 0, "patterns": 0, "urls": 0}
+    paths_to_analyze = []
+    
+    # Collect all inputs - handle mixed inputs explicitly
+    has_files = bool(files)
+    has_request_body = bool(request_body)
+    has_paths = bool(paths)
     
     # Case 1: Direct file uploads from UI/CLI
     if files:
@@ -561,35 +567,43 @@ async def smart_ingest(
         ])
         logger.info(f"Detected {len(files)} file uploads")
     
-    # Case 2: JSON request with paths/patterns
-    elif request_body:
+    # Case 2: JSON request with paths/patterns (can be combined with files)
+    if request_body:
         try:
             data = json.loads(request_body)
             if isinstance(data, dict):
                 # Structured request
                 request = SmartIngestRequest(**data)
-                paths_to_analyze = request.paths or []
-                recursive = request.recursive
-                pattern = request.pattern
+                paths_to_analyze.extend(request.paths or [])
+                recursive = request.recursive or recursive
+                pattern = request.pattern or pattern
             else:
                 # Simple array of paths
-                paths_to_analyze = data
-        except:
+                paths_to_analyze.extend(data)
+        except json.JSONDecodeError:
             # Fallback to treating as comma-separated paths
-            paths_to_analyze = request_body.split(',')
+            paths_to_analyze.extend([p.strip() for p in request_body.split(',')])
+        except Exception as e:
+            logger.warning(f"Error parsing request_body: {e}")
     
-    # Case 3: Form data with paths (comma-separated)
-    elif paths:
-        paths_to_analyze = [p.strip() for p in paths.split(',')]
-    else:
-        # No input provided
+    # Case 3: Form data with paths (comma-separated) - can be combined
+    if paths:
+        paths_to_analyze.extend([p.strip() for p in paths.split(',')])
+    
+    # If mixed inputs detected, log a warning but process all
+    input_count = sum([has_files, has_request_body, has_paths])
+    if input_count > 1:
+        logger.warning(f"Mixed input detected: files={has_files}, request_body={has_request_body}, paths={has_paths}. Processing all inputs.")
+    
+    # If no input provided at all
+    if not items_to_process and not paths_to_analyze:
         return BatchIngestResponse(
             total=0, successful=0, failed=0, skipped=0,
             results=[], processing_time=0, detected_types={}
         )
     
     # Analyze each path to determine its type
-    if 'paths_to_analyze' in locals():
+    if paths_to_analyze:
         for path_str in paths_to_analyze:
             item_type, expanded = await detect_and_expand_path(
                 path_str, recursive, pattern
@@ -674,9 +688,9 @@ async def smart_ingest(
             results.append(result)
     
     # Aggregate results
-    successful = sum(1 for r in results if r.get("status") == "success")
-    failed = sum(1 for r in results if r.get("status") == "error")
-    skipped = sum(1 for r in results if r.get("status") == "skipped")
+    successful = sum(r.get("status") == "success" for r in results)
+    failed = sum(r.get("status") == "error" for r in results)
+    skipped = sum(r.get("status") == "skipped" for r in results)
     
     processing_time = time.time() - start_time
     
@@ -726,10 +740,7 @@ async def detect_and_expand_path(
             return ("files", [str(path)])
         elif path.is_dir():
             # Directory - expand based on options
-            if recursive:
-                pattern = f"**/{filter_pattern or '*'}"
-            else:
-                pattern = filter_pattern or "*"
+            pattern = f"**/{filter_pattern or '*'}" if recursive else (filter_pattern or "*")
             
             matches = list(path.glob(pattern))
             files = [str(f) for f in matches if f.is_file()]
@@ -738,6 +749,92 @@ async def detect_and_expand_path(
     # Path doesn't exist - might be a pattern without wildcards
     # or a file that will be created
     return ("files", [path_str])
+
+
+def _save_file_to_data_store(
+    namespace: str, project: str, dataset: str,
+    content: bytes, filename: str
+) -> Any:
+    """Helper to save file content to data store"""
+    import io
+    import asyncio
+    from fastapi import UploadFile
+    
+    # Create in-memory file
+    file_like = io.BytesIO(content)
+    temp_file = UploadFile(filename=filename, file=file_like)
+    
+    # Use the existing add_data_file method
+    metadata_file_content = asyncio.run(DataService.add_data_file(
+        namespace=namespace,
+        project_id=project,
+        file=temp_file
+    ))
+    
+    # Add to dataset
+    DatasetService.add_file_to_dataset(
+        namespace=namespace,
+        project=project,
+        dataset=dataset,
+        file=metadata_file_content
+    )
+    
+    return metadata_file_content
+
+
+def _process_into_vector_db(
+    namespace: str, project: str, dataset: str,
+    metadata_file_content: Any,
+    project_dir: str, project_config,
+    data_processing_strategy_name: str,
+    database_name: str,
+    filename: str
+) -> Dict[str, Any]:
+    """Helper to process file into vector database"""
+    import os
+    project_dir_path = ProjectService.get_project_dir(namespace, project)
+    data_path = os.path.join(project_dir_path, "lf_data", "raw", metadata_file_content.hash)
+    
+    ok, file_details = ingest_file_with_rag(
+        project_dir=project_dir,
+        project_config=project_config,
+        data_processing_strategy_name=data_processing_strategy_name,
+        database_name=database_name,
+        source_path=data_path,
+        filename=filename,
+        dataset_name=dataset
+    )
+    
+    status = "success" if ok else "error"
+    if file_details.get("reason") == "duplicate":
+        status = "skipped"
+    
+    return {
+        "status": status,
+        "filename": filename,
+        "hash": metadata_file_content.hash,
+        **file_details
+    }
+
+
+def _read_upload_file_content(file) -> bytes:
+    """Helper to read content from upload file handling async contexts"""
+    import asyncio
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # We're in an async context, create a task
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                content = pool.submit(lambda: asyncio.run(file.read())).result()
+        else:
+            # We can run directly
+            content = asyncio.run(file.read())
+    except RuntimeError:
+        # No event loop, we can run directly
+        content = asyncio.run(file.read())
+    return content
 
 
 def process_single_item(
@@ -752,74 +849,22 @@ def process_single_item(
         if item.type == "upload":
             # Direct upload - need to save file first
             file = item.value
-            # Read file content - handle both sync and async contexts
-            import asyncio
-            try:
-                # Try to get the current event loop
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # We're in an async context, create a task
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        content = pool.submit(lambda: asyncio.run(file.read())).result()
-                else:
-                    # We can run directly
-                    content = asyncio.run(file.read())
-            except RuntimeError:
-                # No event loop, we can run directly
-                content = asyncio.run(file.read())
+            content = _read_upload_file_content(file)
             
-            # Save to data directory using the existing synchronous method
-            # Create a temporary UploadFile-like object with the content
-            import io
-            from fastapi import UploadFile
-            
-            # Create in-memory file
-            file_like = io.BytesIO(content)
-            temp_file = UploadFile(
-                filename=file.filename,
-                file=file_like
-            )
-            
-            # Use the existing synchronous add_data_file method
-            metadata_file_content = asyncio.run(DataService.add_data_file(
-                namespace=namespace,
-                project_id=project,
-                file=temp_file
-            ))
-            
-            # Add to dataset
-            DatasetService.add_file_to_dataset(
-                namespace=namespace,
-                project=project,
-                dataset=dataset,
-                file=metadata_file_content
+            # Save to data store
+            metadata_file_content = _save_file_to_data_store(
+                namespace, project, dataset, content, file.filename
             )
             
             # Process into vector database
-            import os
-            project_dir_path = ProjectService.get_project_dir(namespace, project)
-            data_path = os.path.join(project_dir_path, "lf_data", "raw", metadata_file_content.hash)
-            ok, file_details = ingest_file_with_rag(
-                project_dir=project_dir,
-                project_config=project_config,
-                data_processing_strategy_name=data_processing_strategy_name,
-                database_name=database_name,
-                source_path=data_path,
-                filename=file.filename,
-                dataset_name=dataset
+            return _process_into_vector_db(
+                namespace, project, dataset,
+                metadata_file_content,
+                project_dir, project_config,
+                data_processing_strategy_name,
+                database_name,
+                file.filename
             )
-            
-            status = "success" if ok else "error"
-            if file_details.get("reason") == "duplicate":
-                status = "skipped"
-            
-            return {
-                "status": status,
-                "filename": file.filename,
-                "hash": metadata_file_content.hash,
-                **file_details
-            }
             
         elif item.type == "file":
             # Local file path - need to upload first
@@ -834,61 +879,29 @@ def process_single_item(
             with open(path, 'rb') as f:
                 content = f.read()
             
-            # Save to data directory using the existing method
-            import io
-            import asyncio
-            from fastapi import UploadFile
-            
-            # Create in-memory file
-            file_like = io.BytesIO(content)
-            temp_file = UploadFile(
-                filename=path.name,
-                file=file_like
-            )
-            
-            # Use the existing add_data_file method
-            metadata_file_content = asyncio.run(DataService.add_data_file(
-                namespace=namespace,
-                project_id=project,
-                file=temp_file
-            ))
-            
-            # Add to dataset
-            DatasetService.add_file_to_dataset(
-                namespace=namespace,
-                project=project,
-                dataset=dataset,
-                file=metadata_file_content
+            # Save to data store
+            metadata_file_content = _save_file_to_data_store(
+                namespace, project, dataset, content, path.name
             )
             
             # Process into vector database
-            import os
-            project_dir_path = ProjectService.get_project_dir(namespace, project)
-            data_path = os.path.join(project_dir_path, "lf_data", "raw", metadata_file_content.hash)
-            ok, file_details = ingest_file_with_rag(
-                project_dir=project_dir,
-                project_config=project_config,
-                data_processing_strategy_name=data_processing_strategy_name,
-                database_name=database_name,
-                source_path=data_path,
-                filename=path.name,
-                dataset_name=dataset
+            return _process_into_vector_db(
+                namespace, project, dataset,
+                metadata_file_content,
+                project_dir, project_config,
+                data_processing_strategy_name,
+                database_name,
+                path.name
             )
             
-            status = "success" if ok else "error"
-            if file_details.get("reason") == "duplicate":
-                status = "skipped"
-            
-            return {
-                "status": status,
-                "filename": path.name,
-                "hash": metadata_file_content.hash,
-                **file_details
-            }
-            
         elif item.type == "url":
-            # Future: Download from URL
-            return {"status": "error", "error": "URL ingestion not yet implemented"}
+            # URL ingestion is not supported yet
+            return {
+                "status": "error",
+                "filename": item.value,
+                "error": "URL ingestion is not supported yet. Please download the file and upload it directly.",
+                "error_code": "URL_NOT_SUPPORTED"
+            }
             
         else:
             return {"status": "error", "error": f"Unknown item type: {item.type}"}

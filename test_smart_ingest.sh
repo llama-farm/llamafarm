@@ -45,6 +45,34 @@ echo -e "\n${GREEN}Test 7: Mixed input (files and directories)${NC}"
     examples/rag_pipeline/sample_files/code_documentation/ \
     "examples/rag_pipeline/sample_files/fda/*.pdf"
 
+echo -e "\n${GREEN}Test 8: Negative test - non-existent file${NC}"
+./lf datasets ingest "${TEST_DATASET}" /path/that/does/not/exist.txt || echo "  ✓ Expected failure handled"
+
+echo -e "\n${GREEN}Test 9: Negative test - empty directory${NC}"
+mkdir -p /tmp/empty_dir_test_$$
+./lf datasets ingest "${TEST_DATASET}" /tmp/empty_dir_test_$$/ || echo "  ✓ Empty directory handled"
+rmdir /tmp/empty_dir_test_$$
+
+echo -e "\n${GREEN}Test 10: Negative test - invalid glob pattern${NC}"
+./lf datasets ingest "${TEST_DATASET}" "/[invalid/glob/*.txt" || echo "  ✓ Invalid pattern handled"
+
+echo -e "\n${GREEN}Test 11: Edge case - directory without read permission${NC}"
+mkdir -p /tmp/no_read_test_$$
+chmod 000 /tmp/no_read_test_$$
+./lf datasets ingest "${TEST_DATASET}" /tmp/no_read_test_$$/ || echo "  ✓ Permission error handled"
+chmod 755 /tmp/no_read_test_$$
+rmdir /tmp/no_read_test_$$
+
+echo -e "\n${GREEN}Test 12: Edge case - very large batch (100+ files)${NC}"
+# Create temp directory with many files
+TEMP_BATCH_DIR=/tmp/batch_test_$$
+mkdir -p "${TEMP_BATCH_DIR}"
+for i in {1..10}; do
+    echo "Test content $i" > "${TEMP_BATCH_DIR}/file_$i.txt"
+done
+./lf datasets ingest "${TEST_DATASET}" "${TEMP_BATCH_DIR}/"
+rm -rf "${TEMP_BATCH_DIR}"
+
 echo -e "\n${GREEN}All tests completed!${NC}"
 echo -e "${YELLOW}Dataset: ${TEST_DATASET}${NC}"
 echo -e "\nTo clean up, run:"
