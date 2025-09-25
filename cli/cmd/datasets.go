@@ -22,6 +22,10 @@ var (
 	dataProcessingStrategy string
 	database               string
 	verbose                bool
+	recursive              bool
+	pattern                string
+	parallel               bool
+	batchSize              int
 )
 
 // datasetsCmd represents the datasets command
@@ -284,13 +288,26 @@ var datasetsRemoveCmd = &cobra.Command{
 
 // datasetsIngestCmd represents the datasets ingest command
 var datasetsIngestCmd = &cobra.Command{
-	Use:   "ingest [dataset-name] [file1] [file2] ...",
-	Short: "Upload files to a dataset on the server",
-	Long: `Uploads one or more files to the specified dataset on the LlamaFarm server.
+	Use:   "ingest [dataset-name] [paths...]",
+	Short: "Upload files, directories, or glob patterns to a dataset",
+	Long: `Upload files to a dataset using various methods:
+  - Single files: lf datasets ingest my-dataset file.pdf
+  - Multiple files: lf datasets ingest my-dataset file1.pdf file2.txt
+  - Glob patterns: lf datasets ingest my-dataset "*.pdf" "docs/*.md"
+  - Directories: lf datasets ingest my-dataset /path/to/docs/
+  - Mixed: lf datasets ingest my-dataset file.pdf /docs/ "*.txt"
+
+Flags:
+  --recursive/-r: Recursively process directories
+  --pattern/-p: Filter pattern for directory contents
+  --parallel: Process files in parallel (default: true)
+  --batch-size: Number of files per batch (default: 10)
 
 Examples:
   lf datasets ingest my-docs ./docs/file1.pdf ./docs/file2.txt
-  lf datasets ingest my-docs ./pdfs/*.pdf`,
+  lf datasets ingest my-docs ./pdfs/*.pdf
+  lf datasets ingest my-docs /path/to/docs/ --recursive
+  lf datasets ingest my-docs /path/to/docs/ --pattern "*.pdf" --recursive`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Start config watcher for this command
@@ -304,33 +321,31 @@ Examples:
 
 		datasetName := args[0]
 		inPaths := args[1:]
-		var files []string
-		for _, p := range inPaths {
-			matches, err := filepath.Glob(p)
-			if err != nil || len(matches) == 0 {
-				files = append(files, p)
-				continue
-			}
-			files = append(files, matches...)
-		}
-		if len(files) == 0 {
-			fmt.Fprintf(os.Stderr, "No files to upload.\n")
-			os.Exit(1)
-		}
 
 		// Ensure server is up
 		ensureServerAvailable(serverCfg.URL, true)
-		fmt.Printf("Starting upload to dataset '%s' (%d file(s))...\n", datasetName, len(files))
-		uploaded := 0
-		for _, f := range files {
-			if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f); err != nil {
-				fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", f, err)
-				continue
-			}
-			fmt.Printf("   📤 Uploaded: %s\n", f)
-			uploaded++
+
+		// Use the new smart ingest endpoint
+		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/ingest",
+			serverCfg.Namespace, serverCfg.Project, datasetName))
+
+		// Determine the best method based on input
+		method := determineIngestMethod(inPaths)
+		
+		fmt.Printf("Starting smart ingest to dataset '%s'...\n", datasetName)
+		fmt.Printf("Method: %s, Paths: %v\n", method, inPaths)
+
+		switch method {
+		case "files":
+			// Upload actual files
+			uploadFilesViaSmartEndpoint(url, inPaths)
+		case "paths":
+			// Send paths to server for processing
+			sendPathsToSmartEndpoint(url, inPaths)
+		case "mixed":
+			// Handle mixed input
+			handleMixedInputViaSmartEndpoint(url, inPaths)
 		}
-		fmt.Printf("Done. Uploaded %d/%d file(s).\n", uploaded, len(files))
 	},
 }
 
@@ -561,6 +576,12 @@ func init() {
 	datasetsAddCmd.MarkFlagRequired("data-processing-strategy")
 	datasetsAddCmd.MarkFlagRequired("database")
 
+	// Add flags specific to ingest command
+	datasetsIngestCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Recursively process directories")
+	datasetsIngestCmd.Flags().StringVarP(&pattern, "pattern", "p", "", "Filter pattern for directory contents (e.g., '*.pdf')")
+	datasetsIngestCmd.Flags().BoolVar(&parallel, "parallel", true, "Process files in parallel")
+	datasetsIngestCmd.Flags().IntVar(&batchSize, "batch-size", 10, "Number of files to upload in each batch")
+
 	// Add subcommands to datasets
 	datasetsCmd.AddCommand(datasetsListCmd)
 	datasetsCmd.AddCommand(datasetsAddCmd)
@@ -697,4 +718,346 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 		return fmt.Errorf("%s", prettyServerError(resp, body))
 	}
 	return nil
+}
+
+// determineIngestMethod analyzes the input paths to determine the best ingestion method
+func determineIngestMethod(paths []string) string {
+	hasFiles := false
+	hasDirs := false
+	hasPatterns := false
+
+	for _, path := range paths {
+		// Check if it contains glob patterns
+		if strings.Contains(path, "*") || strings.Contains(path, "?") || strings.Contains(path, "[") {
+			hasPatterns = true
+		} else {
+			// Check if it's a file or directory
+			info, err := os.Stat(path)
+			if err == nil {
+				if info.IsDir() {
+					hasDirs = true
+				} else {
+					hasFiles = true
+				}
+			} else {
+				// If file doesn't exist, check if parent directory exists
+				// (could be a pattern in a valid directory)
+				dir := filepath.Dir(path)
+				if _, err := os.Stat(dir); err == nil {
+					hasPatterns = true
+				}
+			}
+		}
+	}
+
+	// Determine method based on what we found
+	if hasFiles && !hasDirs && !hasPatterns {
+		return "files"
+	} else if (hasDirs || hasPatterns) && !hasFiles {
+		return "paths"
+	} else {
+		return "mixed"
+	}
+}
+
+// uploadFilesViaSmartEndpoint uploads actual files through the smart endpoint
+func uploadFilesViaSmartEndpoint(url string, paths []string) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// Add each file to the multipart form
+	successCount := 0
+	failCount := 0
+	for _, path := range paths {
+		file, err := os.Open(path)
+		if err != nil {
+			fmt.Printf("  ❌ Failed to open file %s: %v\n", path, err)
+			failCount++
+			continue
+		}
+		defer file.Close()
+
+		part, err := writer.CreateFormFile("files", filepath.Base(path))
+		if err != nil {
+			fmt.Printf("  ❌ Failed to create form for %s: %v\n", path, err)
+			failCount++
+			continue
+		}
+
+		if _, err := io.Copy(part, file); err != nil {
+			fmt.Printf("  ❌ Failed to read file %s: %v\n", path, err)
+			failCount++
+			continue
+		}
+		successCount++
+	}
+
+	// Add flags
+	if recursive {
+		writer.WriteField("recursive", "true")
+	}
+	if pattern != "" {
+		writer.WriteField("pattern", pattern)
+	}
+	if parallel {
+		writer.WriteField("parallel", "true")
+	}
+	writer.WriteField("batch_size", fmt.Sprintf("%d", batchSize))
+
+	if err := writer.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Send request
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+		os.Exit(1)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error uploading files: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading response: %v\n", err)
+		os.Exit(1)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
+		os.Exit(1)
+	}
+
+	// Parse and display response
+	displayIngestResponse(body)
+}
+
+// sendPathsToSmartEndpoint sends paths for server-side processing
+func sendPathsToSmartEndpoint(url string, paths []string) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// Add paths as a JSON array
+	pathsJSON, err := json.Marshal(paths)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error marshaling paths: %v\n", err)
+		os.Exit(1)
+	}
+	writer.WriteField("paths", string(pathsJSON))
+
+	// Add flags
+	if recursive {
+		writer.WriteField("recursive", "true")
+	}
+	if pattern != "" {
+		writer.WriteField("pattern", pattern)
+	}
+	if parallel {
+		writer.WriteField("parallel", "true")
+	}
+	writer.WriteField("batch_size", fmt.Sprintf("%d", batchSize))
+
+	if err := writer.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Send request
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+		os.Exit(1)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error sending paths: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading response: %v\n", err)
+		os.Exit(1)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
+		os.Exit(1)
+	}
+
+	// Parse and display response
+	displayIngestResponse(body)
+}
+
+// handleMixedInputViaSmartEndpoint handles mixed files and paths
+func handleMixedInputViaSmartEndpoint(url string, paths []string) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	var filePaths []string
+	var serverPaths []string
+
+	// Separate files and paths
+	for _, path := range paths {
+		// Check if it's a glob pattern
+		if strings.Contains(path, "*") || strings.Contains(path, "?") || strings.Contains(path, "[") {
+			serverPaths = append(serverPaths, path)
+			continue
+		}
+
+		// Check if it exists
+		info, err := os.Stat(path)
+		if err != nil {
+			// If doesn't exist, treat as pattern
+			serverPaths = append(serverPaths, path)
+			continue
+		}
+
+		if info.IsDir() {
+			serverPaths = append(serverPaths, path)
+		} else {
+			filePaths = append(filePaths, path)
+		}
+	}
+
+	// Add files to multipart
+	for _, path := range filePaths {
+		file, err := os.Open(path)
+		if err != nil {
+			fmt.Printf("  ⚠️ Skipping file %s: %v\n", path, err)
+			continue
+		}
+		defer file.Close()
+
+		part, err := writer.CreateFormFile("files", filepath.Base(path))
+		if err != nil {
+			fmt.Printf("  ⚠️ Failed to create form for %s: %v\n", path, err)
+			continue
+		}
+
+		if _, err := io.Copy(part, file); err != nil {
+			fmt.Printf("  ⚠️ Failed to read file %s: %v\n", path, err)
+			continue
+		}
+	}
+
+	// Add server paths
+	if len(serverPaths) > 0 {
+		pathsJSON, err := json.Marshal(serverPaths)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error marshaling paths: %v\n", err)
+			os.Exit(1)
+		}
+		writer.WriteField("paths", string(pathsJSON))
+	}
+
+	// Add flags
+	if recursive {
+		writer.WriteField("recursive", "true")
+	}
+	if pattern != "" {
+		writer.WriteField("pattern", pattern)
+	}
+	if parallel {
+		writer.WriteField("parallel", "true")
+	}
+	writer.WriteField("batch_size", fmt.Sprintf("%d", batchSize))
+
+	if err := writer.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Send request
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+		os.Exit(1)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading response: %v\n", err)
+		os.Exit(1)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
+		os.Exit(1)
+	}
+
+	// Parse and display response
+	displayIngestResponse(body)
+}
+
+// displayIngestResponse parses and displays the batch ingest response
+func displayIngestResponse(body []byte) {
+	var result struct {
+		Total   int `json:"total"`
+		Success int `json:"success"`
+		Failed  int `json:"failed"`
+		Items   []struct {
+			Path    string `json:"path"`
+			Status  string `json:"status"`
+			Message string `json:"message,omitempty"`
+			Hash    string `json:"hash,omitempty"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing response: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Display summary
+	fmt.Printf("\n📊 Ingestion Summary:\n")
+	fmt.Printf("   Total: %d files\n", result.Total)
+	fmt.Printf("   ✅ Success: %d\n", result.Success)
+	if result.Failed > 0 {
+		fmt.Printf("   ❌ Failed: %d\n", result.Failed)
+	}
+
+	// Display details if available
+	if len(result.Items) > 0 {
+		fmt.Printf("\n📁 File Details:\n")
+		fmt.Printf("────────────────────────────────────────────────────────────────────────\n")
+		for _, item := range result.Items {
+			statusBadge := "✅"
+			if item.Status == "failed" {
+				statusBadge = "❌"
+			} else if item.Status == "duplicate" {
+				statusBadge = "⏭️"
+			}
+
+			fmt.Printf("   %s %s\n", statusBadge, item.Path)
+			if item.Message != "" {
+				fmt.Printf("      └─ %s\n", item.Message)
+			}
+			if item.Hash != "" && len(item.Hash) > 12 {
+				fmt.Printf("      └─ Hash: %s...\n", item.Hash[:12])
+			}
+		}
+	}
+
+	if result.Failed > 0 {
+		os.Exit(1)
+	}
 }
