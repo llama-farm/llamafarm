@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   # Test Go CLI component
@@ -21,7 +21,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.4'
+          go-version: "1.24.4"
           cache-dependency-path: cli/go.sum
 
       - name: Cache Go modules
@@ -93,14 +93,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11', '3.12']
-        component: ['config', 'rag', 'server', 'runtime']
+        python-version: ["3.11", "3.12"]
+        component: ["config", "rag", "server"]
         exclude:
-          # Server and runtime require Python 3.12+
+          # Server requires Python 3.12+
           - component: server
-            python-version: '3.11'
-          - component: runtime
-            python-version: '3.11'
+            python-version: "3.11"
 
     steps:
       - name: Checkout code
@@ -183,14 +181,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
       - name: Verify all Python components can be built
         run: |
-          for component in config rag server runtime; do
+          for component in config rag server; do
             echo "Building $component..."
             cd $component
             if [ -f "uv.lock" ]; then

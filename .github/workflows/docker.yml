@@ -119,7 +119,7 @@ jobs:
           # Basic health checks
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
-          docker compose -f docker-compose.yml logs runtime
+          docker compose -f docker-compose.yml logs rag
 
       - name: Cleanup
         if: always()
