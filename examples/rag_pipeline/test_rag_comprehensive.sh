@@ -246,15 +246,27 @@ print_step "Adding code examples (Python files)..."
 ${LF_CMD} datasets ingest "${TEST_DATASET}" \
     ${SAMPLE_DIR}/code/example.py
 
-print_step "Adding FDA documents (using directory upload with recursive option)..."
-echo "Uploading all files in fda directory recursively..."
-${LF_CMD} datasets ingest "${TEST_DATASET}" --recursive \
-    ${SAMPLE_DIR}/fda/ || print_info "Note: Some PDF files may require additional dependencies"
+print_step "Adding FDA documents..."
+echo "Uploading all PDF files in fda directory..."
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/fda/*.pdf || print_info "Note: Some PDF files may require additional dependencies"
+
+print_step "Demonstrating recursive upload with /**/* pattern (all files in all subdirs)..."
+echo "Command that would be used for recursive upload:"
+echo -e "${MAGENTA}${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/**/*\"${NC}"
+echo ""
+echo "This pattern would recursively upload ALL files:"
+find ${SAMPLE_DIR} -type f | head -5 | while read f; do echo "  • $(basename $(dirname $f))/$(basename $f)"; done
+echo "  ... and $(( $(find ${SAMPLE_DIR} -type f | wc -l) - 5 )) more files"
+echo ""
+print_info "Skipping actual upload to avoid duplicates (uncomment in script to run)"
 
 print_step "Testing duplicate detection - Re-uploading research papers..."
-echo "These files should be skipped as duplicates..."
+echo "Command: ${LF_CMD} datasets ingest \"${TEST_DATASET}\" ${SAMPLE_DIR}/research_papers/transformer_architecture.txt"
+echo "Expected: File should be skipped as duplicate"
 ${LF_CMD} datasets ingest "${TEST_DATASET}" \
-    ${SAMPLE_DIR}/research_papers/transformer_architecture.txt 2>&1 | grep -E "(already exists|SKIPPED)" || true
+    ${SAMPLE_DIR}/research_papers/transformer_architecture.txt 2>&1 | grep -E "(already exists|SKIPPED|Uploaded)" || \
+    ${LF_CMD} datasets ingest "${TEST_DATASET}" ${SAMPLE_DIR}/research_papers/transformer_architecture.txt
 
 print_success "All documents ingested"
 

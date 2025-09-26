@@ -131,7 +131,6 @@ python cli.py ingest [options] <path>
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--strategy` | Strategy to use for ingestion | Required |
-| `--recursive` | Recursively process directories | False |
 | `--file-pattern` | File pattern to match (glob) | `*` |
 | `--batch-size` | Number of files to process at once | 10 |
 | `--continue-on-error` | Continue if individual files fail | False |
@@ -142,8 +141,8 @@ python cli.py ingest [options] <path>
 # Ingest single file
 python cli.py ingest document.pdf --strategy research_papers_demo
 
-# Ingest directory recursively
-python cli.py ingest docs/ --strategy code_documentation_demo --recursive
+# Ingest directory recursively using glob pattern
+python cli.py ingest "docs/**/*" --strategy code_documentation_demo
 
 # Ingest specific file types
 python cli.py ingest data/ --strategy news_analysis_demo --file-pattern "*.html"
@@ -448,8 +447,8 @@ python cli.py info --strategy my_strategy --format json > backup_info.json
 # Clean collection
 python cli.py manage delete --all --strategy my_strategy
 
-# Reingest with new configuration
-python cli.py ingest /data/documents --strategy my_strategy --recursive
+# Reingest with new configuration (recursive)
+python cli.py ingest "/data/documents/**/*" --strategy my_strategy
 
 # Verify
 python cli.py info --strategy my_strategy
@@ -513,8 +512,8 @@ if code == 0:
 # 1. Setup collection
 python cli.py manage delete --all --strategy research_papers_demo
 
-# 2. Ingest papers
-python cli.py ingest papers/ --strategy research_papers_demo --recursive
+# 2. Ingest papers (recursively)
+python cli.py ingest "papers/**/*" --strategy research_papers_demo
 
 # 3. Verify ingestion
 python cli.py info --strategy research_papers_demo
@@ -547,9 +546,8 @@ python cli.py manage delete --older-than 90 --strategy customer_support_demo
 ### Documentation Management
 
 ```bash
-# 1. Index documentation
-python cli.py ingest docs/ --strategy code_documentation_demo \
-    --recursive --file-pattern "*.md"
+# 1. Index documentation (all .md files recursively)
+python cli.py ingest "docs/**/*.md" --strategy code_documentation_demo
 
 # 2. Search API docs
 python cli.py search "authentication API" --strategy code_documentation_demo \
@@ -676,7 +674,7 @@ python cli.py extractors list                         # List extractors
 
 # Ingestion
 python cli.py ingest <path> --strategy <name>         # Basic ingest
-python cli.py ingest <dir> --strategy <name> --recursive  # Recursive
+python cli.py ingest "<dir>/**/*" --strategy <name>   # Recursive with glob
 
 # Search
 python cli.py search "query" --strategy <name>        # Basic search

@@ -109,15 +109,15 @@ lf datasets ingest my-knowledge-base /path/to/docs/*.pdf
 lf datasets ingest my-knowledge-base /path/to/docs/*.txt
 lf datasets ingest my-knowledge-base /path/to/docs/**/*.md  # All markdown files
 
-# Recursive directory upload (includes all subdirectories)
-lf datasets ingest my-knowledge-base --recursive /path/to/project/
+# Recursive directory upload using /**/* pattern (includes all subdirectories)
+lf datasets ingest my-knowledge-base "/path/to/project/**/*"
 
 # Mix different sources in one command
 lf datasets ingest my-knowledge-base \
   ./docs/ \
   ./research/*.pdf \
   ./notes/important.txt \
-  --recursive ./archive/
+  "./archive/**/*"
 
 # Process documents into vector database
 lf datasets process my-knowledge-base

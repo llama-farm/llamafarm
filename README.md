@@ -236,8 +236,8 @@ cd cli && go build -o lf . && cd ..
 ./lf datasets ingest my-docs examples/rag_pipeline/sample_files/research_papers/*.txt
 ./lf datasets ingest my-docs examples/rag_pipeline/sample_files/fda/*.pdf
 
-# Method 3: Upload directory recursively (includes all subdirectories)
-./lf datasets ingest my-docs --recursive examples/rag_pipeline/sample_files/
+# Method 3: Upload directory recursively using /**/* pattern (includes all subdirectories)
+./lf datasets ingest my-docs "examples/rag_pipeline/sample_files/**/*"
 
 # Method 4: Mix directories, globs, and individual files
 ./lf datasets ingest my-docs \
