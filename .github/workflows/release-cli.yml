@@ -101,6 +101,14 @@ jobs:
             goarch: arm64
 
     steps:
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+          fi
       - name: Set binary name
         id: set-binary-name
         run: |
@@ -130,7 +138,7 @@ jobs:
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ steps.version.outputs.version }}
           files: |
             cli/${{ steps.set-binary-name.outputs.binary_name }}
             cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256
@@ -146,6 +154,15 @@ jobs:
         os: [ubuntu-latest, macos-latest]
 
     steps:
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -156,7 +173,7 @@ jobs:
 
           # Test the install script
           chmod +x install.sh
-          VERSION=${{ github.event.release.tag_name }} INSTALL_DIR=$HOME/.local/bin ./install.sh
+          VERSION=${{ steps.version.outputs.version }} INSTALL_DIR=$HOME/.local/bin ./install.sh
 
           # Test the installed binary
           export PATH="$HOME/.local/bin:$PATH"
