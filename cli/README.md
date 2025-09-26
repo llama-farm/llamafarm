@@ -161,7 +161,7 @@ lf rag query --database main_database --top-k 5 "Explain the process"
 lf rag query --database main_database --score-threshold 0.8 "Best practices"
 
 # Query with specific strategy
-lf rag query --database main_database --strategy filtered_search "Recent updates"
+lf rag query --database main_database --retrieval-strategy filtered_search "Recent updates"
 ```
 
 ### Chat Examples
