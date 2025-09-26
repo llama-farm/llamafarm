@@ -16,12 +16,12 @@ echo "Starting RAG worker..."
 nx start rag &
 RAG_PID=$!
 
+# Setup cleanup trap before starting foreground process
+trap "kill $RAG_PID 2>/dev/null; pkill -f 'celery.*LlamaFarm' 2>/dev/null" EXIT INT TERM
+
 # Give RAG worker time to start
 sleep 3
 
 # Start server (foreground)
 echo "Starting server..."
 nx start server
-
-# Cleanup on exit
-trap "kill $RAG_PID 2>/dev/null; pkill -f 'celery.*LlamaFarm' 2>/dev/null" EXIT

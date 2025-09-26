@@ -10,8 +10,11 @@
             }
         },
         "build": {
-            "cwd": "..",
-            "command": "docker build -t llamafarm-rag -f rag/Dockerfile ."
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "..",
+                "command": "docker build -t llamafarm-rag -f rag/Dockerfile ."
+            }
         },
         "test": {
             "executor": "nx:run-commands",
