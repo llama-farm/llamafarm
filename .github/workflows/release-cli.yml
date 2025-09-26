@@ -61,7 +61,7 @@ jobs:
           # Set binary name with .exe extension for Windows
           BINARY_NAME="${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [[ "${{ matrix.goos }}" == "windows" ]]; then
-            BINARY_NAME="${BINARY_NAME}-windows-${{ matrix.goarch }}.exe"
+            BINARY_NAME="${BINARY_NAME}.exe"
           fi
 
           # Build the binary
@@ -83,8 +83,7 @@ jobs:
   upload-cli-release:
     name: Upload CLI Release Asset
     needs: build-cli
-    runs-on: ${{ matrix.goos == 'darwin' && 'macos-latest' || matrix.goos == 'windows' && 'windows-latest' || 'ubuntu-latest' }}
-    # if: github.event_name == 'release'
+    runs-on: 'ubuntu-latest'
     strategy:
       matrix:
         include:
@@ -102,33 +101,31 @@ jobs:
             goarch: arm64
 
     steps:
-      - name: Download built binary artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: "${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          path: cli/
-
       - name: Set binary name
         id: set-binary-name
         run: |
           BINARY_NAME="${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [[ "${{ matrix.goos }}" == "windows" ]]; then
-            BINARY_NAME="${BINARY_NAME}-windows-${{ matrix.goarch }}.exe"
+            BINARY_NAME="${BINARY_NAME}.exe"
           fi
           echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
 
+      - name: Download built binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ steps.set-binary-name.outputs.binary_name }}"
+          path: cli/
+
       - name: Sign and Notarize macOS binary
         if: matrix.goos == 'darwin'
-        uses: lando/code-sign-action@v2
-        with:
-          file: cli/${{ steps.set-binary-name.outputs.binary_name }}
-          certificate-data: ${{ secrets.APPLE_CERT_DATA }}
-          certificate-password: ${{ secrets.APPLE_CERT_PASSWORD }}
-          apple-notary-user: ${{ secrets.APPLE_ID }}
-          apple-notary-password: ${{ secrets.APPLE_ID_PASSWORD }}
-          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
-          apple-product-id: dev.llamafarm.cli
-          options: --options runtime
+        run: |
+          curl -sSfL https://get.anchore.io/quill | sudo sh -s -- -b /usr/local/bin
+          QUILL_SIGN_PASSWORD=${{ secrets.APPLE_CERT_PASSWORD }} quill sign-and-notarize cli/${{ steps.set-binary-name.outputs.binary_name }} \
+            --p12 ${{ secrets.APPLE_CERT_DATA }} \
+            --notary-key-id ${{ secrets.APPLE_NOTARY_KEY_ID }} \
+            --notary-key ${{ secrets.APPLE_NOTARY_KEY }} \
+            --notary-issuer ${{ secrets.APPLE_NOTARY_ISSUER }} \
+            --verbose
 
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
@@ -144,7 +141,6 @@ jobs:
     name: Test Installation Script
     needs: build-cli
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'release'
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
