@@ -176,7 +176,9 @@ func (co *ContainerOrchestrator) startServerContainer(serverURL string) error {
 	}
 
 	// Mount effective working directory into the container at the same path
-	setupWorkdirVolumeMount(&spec)
+	if err := setupWorkdirVolumeMount(&spec); err != nil {
+		return fmt.Errorf("failed to configure working directory volume: %v", err)
+	}
 
 	// Pass through or configure Ollama access inside the container
 	if isLocalhost(ollamaHost) {

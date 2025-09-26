@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -224,7 +223,9 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	// Mount effective working directory into the container at the same path
-	setupWorkdirVolumeMount(&spec)
+	if err := setupWorkdirVolumeMount(&spec); err != nil {
+		return fmt.Errorf("failed to configure working directory volume: %v", err)
+	}
 
 	// Pass through or configure Ollama access inside the container
 	if isLocalhost(ollamaHostVar) {
@@ -414,16 +415,9 @@ func isUnhealthyOnlyDueToRAG(hr *HealthPayload) bool {
 	return hasUnhealthyRAG && !hasUnhealthyNonRAG
 }
 
-// convertToDockerPath converts Windows paths to Docker-compatible format
+// convertToDockerPath normalizes a host path to use forward slashes which Docker accepts across platforms.
 func convertToDockerPath(hostPath string) string {
-	if runtime.GOOS == "windows" {
-		hostPath = strings.ReplaceAll(hostPath, `\`, `/`)
-		if len(hostPath) >= 2 && hostPath[1] == ':' {
-			drive := strings.ToLower(string(hostPath[0]))
-			hostPath = "/" + drive + hostPath[2:]
-		}
-	}
-	return hostPath
+	return filepath.ToSlash(hostPath)
 }
 
 // validateDockerVolumePath checks if a path can be safely mounted as a Docker volume
@@ -441,17 +435,16 @@ func validateDockerVolumePath(hostPath string) error {
 }
 
 // setupWorkdirVolumeMount safely sets up the working directory volume mount
-func setupWorkdirVolumeMount(spec *ContainerRunSpec) {
+// Returns an error if the working directory cannot be determined or validated
+func setupWorkdirVolumeMount(spec *ContainerRunSpec) error {
 	cwd := getEffectiveCWD()
 	if strings.TrimSpace(cwd) == "" {
-		fmt.Fprintln(os.Stderr, "Warning: could not determine current directory; continuing without volume mount")
-		return
+		return fmt.Errorf("could not determine current directory")
 	}
 
 	// Simple validation - check if path is accessible
 	if err := validateDockerVolumePath(cwd); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: working directory not accessible (%s): %v; continuing without volume mount\n", cwd, err)
-		return
+		return fmt.Errorf("working directory not accessible (%s): %v", cwd, err)
 	}
 
 	// Convert to Docker-compatible path
@@ -462,4 +455,6 @@ func setupWorkdirVolumeMount(spec *ContainerRunSpec) {
 	if debug {
 		fmt.Fprintf(os.Stderr, "Debug: Mounting volume: %s\n", volumeMount)
 	}
+
+	return nil
 }
