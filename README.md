@@ -227,8 +227,25 @@ cd cli && go build -o lf . && cd ..
 
 # Create and populate a dataset
 ./lf datasets add my-docs -s universal_processor -b main_database
+
+# Ingest files - multiple methods supported:
+# Method 1: Upload entire directory
+./lf datasets ingest my-docs examples/rag_pipeline/sample_files/research_papers/
+
+# Method 2: Use glob patterns for specific file types
 ./lf datasets ingest my-docs examples/rag_pipeline/sample_files/research_papers/*.txt
 ./lf datasets ingest my-docs examples/rag_pipeline/sample_files/fda/*.pdf
+
+# Method 3: Upload directory recursively (includes all subdirectories)
+./lf datasets ingest my-docs --recursive examples/rag_pipeline/sample_files/
+
+# Method 4: Mix directories, globs, and individual files
+./lf datasets ingest my-docs \
+  examples/rag_pipeline/sample_files/research_papers/ \
+  examples/rag_pipeline/sample_files/fda/*.pdf \
+  examples/rag_pipeline/sample_files/code/example.py
+
+# Process the ingested documents
 ./lf datasets process my-docs
 
 # Query your documents
