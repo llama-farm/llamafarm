@@ -1,17 +1,19 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import Message from './Message'
 import FontIcon from '../../common/FontIcon'
-import useChatbox from '../../hooks/useChatbox'
+import useChatboxWithProjectSession from '../../hooks/useChatboxWithProjectSession'
 
 interface ChatboxProps {
   isPanelOpen: boolean
   setIsPanelOpen: (isOpen: boolean) => void
+  initialMessage?: string | null
 }
 
-function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
+function Chatbox({ isPanelOpen, setIsPanelOpen, initialMessage }: ChatboxProps) {
   const [isDiagnosing, setIsDiagnosing] = useState<boolean>(false)
+  const [hasProcessedInitialMessage, setHasProcessedInitialMessage] = useState(false)
   const diagnosingInFlightRef = useRef<boolean>(false)
-  // Use the custom chatbox hook for all chat logic
+  // Use the enhanced chatbox hook with project session management for Designer Chat
   const {
     messages,
     inputValue,
@@ -25,7 +27,8 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
     cancelStreaming,
     hasMessages,
     canSend,
-  } = useChatbox()
+    sessionId,
+  } = useChatboxWithProjectSession()
 
   // Refs for auto-scroll
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -39,6 +42,20 @@ function Chatbox({ isPanelOpen, setIsPanelOpen }: ChatboxProps) {
       listRef.current.scrollTop = listRef.current.scrollHeight
     }
   }, [messages])
+
+  // Handle initial message from home page project creation
+  useEffect(() => {
+    if (initialMessage && 
+        !hasProcessedInitialMessage && 
+        !hasMessages && // Only if no existing messages
+        sessionId === null // Only if no existing session
+    ) {
+      
+      // Use the existing sendMessage function - this will trigger normal session creation
+      sendMessage(initialMessage)
+      setHasProcessedInitialMessage(true)
+    }
+  }, [initialMessage, hasProcessedInitialMessage, hasMessages, sessionId, sendMessage])
 
   // Handle sending message
   const handleSendClick = useCallback(async () => {

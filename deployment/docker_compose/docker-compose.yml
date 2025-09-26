@@ -5,10 +5,11 @@ services:
       context: ../../
       dockerfile: server/Dockerfile
     ports:
-      - "7744:8000"
+      - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
       - LF_DATA_DIR=/var/lib/llamafarm
+      - OLLAMA_HOST=http://host.docker.internal:11434
     volumes:
       - llamafarm_data:/var/lib/llamafarm
     healthcheck:
@@ -35,7 +36,8 @@ services:
       server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import celery; print('RAG worker running')"]
+      test:
+        ["CMD", "python", "-c", "import celery; print('RAG worker running')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -63,20 +65,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    restart: unless-stopped
-    networks:
-      - llamafarm
-
-  # Python Runtime Service
-  runtime:
-    build:
-      context: ../../
-      dockerfile: runtime/Dockerfile
-    environment:
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      - server
-      - rag
     restart: unless-stopped
     networks:
       - llamafarm

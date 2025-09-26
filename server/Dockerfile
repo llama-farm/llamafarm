@@ -17,10 +17,16 @@ WORKDIR /app
 # Copy the required packages from the monorepo (lightweight server only)
 # Note: This Dockerfile should be run from the repo root: docker build -f server/Dockerfile .
 COPY config/ ./config/
+COPY rag/schema.yaml ./rag/schema.yaml
 
 # Install config dependencies only (server no longer needs RAG/models)
 RUN ls -la config
 RUN cd config && uv sync --locked  --verbose
+
+# Compile the config schema
+RUN cd config && uv run python compile_schema.py
+RUN rm -rf rag
+
 
 # Copy server dependency files and README
 COPY server/pyproject.toml server/uv.lock server/README.md ./server/

@@ -3,15 +3,9 @@ version: v1
 name: project_seed
 namespace: llamafarm
 
-models:
-  - provider: "ollama"
-    model: "qwen3:8b"
-
 runtime:
   provider: "ollama"
   model: "qwen3:8b"
-  base_url: "http://localhost:11434/v1"
-  api_key: null
   instructor_mode: "md_json"
 
 prompts:

@@ -18,13 +18,14 @@ WORKDIR /app
 # Note: This Dockerfile should be run from the repo root: docker build -f server/Dockerfile .
 COPY config/ ./config/
 COPY rag/ ./rag/
-COPY models/ ./models/
 
 # Install each package with its own dependencies
 RUN ls -la config
 RUN cd config && uv sync --locked  --verbose
 RUN cd rag && uv sync --locked  --verbose
-RUN cd models && uv sync --locked  --verbose
+
+# Compile the config schema
+RUN cd config && uv run python compile_schema.py
 
 WORKDIR /app/rag
 

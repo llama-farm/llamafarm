@@ -1,0 +1,427 @@
+# LlamaFarm Prompts Schema - Atomic Agents Pattern
+# JSON-Schema compliant prompt configuration with Background/Steps/Output structure
+
+$schema: http://json-schema.org/draft-07/schema#
+title: LlamaFarm Prompts Configuration - Atomic Pattern
+description: Schema for defining prompts using the Atomic Agents pattern with reusable components
+type: object
+required:
+  - prompts
+
+properties:
+  version:
+    type: string
+    description: Schema version for compatibility
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    example: "2.0.0"
+
+  metadata:
+    type: object
+    description: Optional metadata about this prompt configuration
+    properties:
+      name:
+        type: string
+        description: Name of this prompt collection
+      description:
+        type: string
+        description: Description of what these prompts are for
+      author:
+        type: string
+        description: Author of the prompts
+      tags:
+        type: array
+        items:
+          type: string
+        description: Tags for categorization
+
+  prompts:
+    type: array
+    description: Array of prompt definitions following the Atomic Agents pattern
+    minItems: 1
+    items:
+      $ref: '#/definitions/promptDefinition'
+
+  components:
+    type: object
+    description: Reusable prompt components organized by type
+    properties:
+      backgrounds:
+        type: array
+        description: Array of background components
+        items:
+          $ref: '#/definitions/backgroundComponent'
+      
+      steps:
+        type: array
+        description: Array of step sequences
+        items:
+          $ref: '#/definitions/stepComponent'
+      
+      output_instructions:
+        type: array
+        description: Array of output instruction sets
+        items:
+          $ref: '#/definitions/outputInstructionComponent'
+
+definitions:
+  promptDefinition:
+    type: object
+    title: Prompt Definition
+    description: Complete prompt following the Atomic Agents pattern
+    required:
+      - id
+      - name
+      - type
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        description: Unique identifier for this prompt
+        pattern: "^[a-z0-9_]+$"
+        minLength: 1
+        maxLength: 50
+      
+      name:
+        type: string
+        description: Human-readable name
+        minLength: 1
+        maxLength: 100
+      
+      type:
+        type: string
+        enum: [agent, assistant, analyzer, generator, validator, coordinator, specialist]
+        description: The type of agent/prompt
+      
+      description:
+        type: string
+        description: What this prompt/agent does
+        maxLength: 500
+      
+      background:
+        oneOf:
+          - type: array
+            items:
+              type: string
+            description: Direct background statements
+          - type: string
+            pattern: "^@components\\.backgrounds\\.[a-z0-9_]+$"
+            description: Reference to a reusable background component
+          - type: object
+            properties:
+              combine:
+                type: array
+                items:
+                  type: string
+                description: Combine multiple background components
+      
+      steps:
+        oneOf:
+          - type: array
+            items:
+              type: string
+            description: Direct step instructions
+          - type: string
+            pattern: "^@components\\.steps\\.[a-z0-9_]+$"
+            description: Reference to reusable steps
+          - type: object
+            properties:
+              combine:
+                type: array
+                items:
+                  type: string
+                description: Combine multiple step components
+      
+      output_instructions:
+        oneOf:
+          - type: array
+            items:
+              type: string
+            description: Direct output instructions
+          - type: string
+            pattern: "^@components\\.output_instructions\\.[a-z0-9_]+$"
+            description: Reference to reusable output instructions
+          - type: object
+            properties:
+              combine:
+                type: array
+                items:
+                  type: string
+                description: Combine multiple output instruction components
+      
+      variables:
+        type: array
+        description: Variables used in this prompt
+        items:
+          $ref: '#/definitions/variable'
+      
+      examples:
+        type: array
+        description: Example usage of this prompt
+        items:
+          type: object
+          properties:
+            input:
+              type: string
+              description: Example input
+            expected_output:
+              type: string
+              description: Expected output
+            variables:
+              type: object
+              description: Variable values for this example
+      
+      tags:
+        type: array
+        items:
+          type: string
+        description: Tags for categorization
+      
+      metadata:
+        type: object
+        description: Additional metadata
+        properties:
+          version:
+            type: string
+            description: Version of this specific prompt
+          model_preferences:
+            type: object
+            description: Preferred model settings
+            properties:
+              temperature:
+                type: number
+                minimum: 0
+                maximum: 2
+              max_tokens:
+                type: integer
+                minimum: 1
+              top_p:
+                type: number
+                minimum: 0
+                maximum: 1
+
+  backgroundComponent:
+    type: object
+    title: Background Component
+    description: Reusable background definition
+    required:
+      - id
+      - content
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z0-9_]+$"
+        description: Component identifier
+        minLength: 1
+        maxLength: 50
+      
+      name:
+        type: string
+        description: Human-readable name
+        maxLength: 100
+      
+      description:
+        type: string
+        description: Description of this background
+        maxLength: 500
+      
+      content:
+        type: array
+        items:
+          type: string
+        description: Background statements defining role and expertise
+      
+      variables:
+        type: array
+        description: Variables used in this component
+        items:
+          $ref: '#/definitions/variable'
+      
+      tags:
+        type: array
+        items:
+          type: string
+        description: Tags for categorization
+
+  stepComponent:
+    type: object
+    title: Step Component
+    description: Reusable step sequence
+    required:
+      - id
+      - content
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z0-9_]+$"
+        description: Component identifier
+        minLength: 1
+        maxLength: 50
+      
+      name:
+        type: string
+        description: Human-readable name
+        maxLength: 100
+      
+      description:
+        type: string
+        description: Description of these steps
+        maxLength: 500
+      
+      content:
+        type: array
+        items:
+          type: string
+        description: Ordered list of steps to follow
+      
+      variables:
+        type: array
+        description: Variables used in this component
+        items:
+          $ref: '#/definitions/variable'
+      
+      tags:
+        type: array
+        items:
+          type: string
+        description: Tags for categorization
+
+  outputInstructionComponent:
+    type: object
+    title: Output Instruction Component
+    description: Reusable output instruction set
+    required:
+      - id
+      - content
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z0-9_]+$"
+        description: Component identifier
+        minLength: 1
+        maxLength: 50
+      
+      name:
+        type: string
+        description: Human-readable name
+        maxLength: 100
+      
+      description:
+        type: string
+        description: Description of these instructions
+        maxLength: 500
+      
+      content:
+        type: array
+        items:
+          type: string
+        description: Instructions for formatting and structuring output
+      
+      variables:
+        type: array
+        description: Variables used in this component
+        items:
+          $ref: '#/definitions/variable'
+      
+      tags:
+        type: array
+        items:
+          type: string
+        description: Tags for categorization
+
+  variable:
+    type: object
+    title: Variable Definition
+    description: Variable that can be used in prompt content
+    required:
+      - name
+      - type
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: Variable name (used in content as {{variable_name}})
+        pattern: "^[a-z][a-z0-9_]*$"
+        minLength: 1
+        maxLength: 50
+      
+      type:
+        type: string
+        enum: [string, number, boolean, array, object]
+        description: Data type of the variable
+      
+      required:
+        type: boolean
+        default: false
+        description: Whether this variable is required
+      
+      default:
+        description: Default value if not provided
+      
+      description:
+        type: string
+        description: What this variable is for
+        maxLength: 200
+      
+      validation:
+        type: object
+        description: Optional validation rules
+        properties:
+          min_length:
+            type: integer
+            minimum: 0
+          max_length:
+            type: integer
+            minimum: 1
+          pattern:
+            type: string
+            description: Regex pattern for validation
+          enum:
+            type: array
+            description: Allowed values
+          min:
+            type: number
+            description: Minimum value (for numbers)
+          max:
+            type: number
+            description: Maximum value (for numbers)
+
+# Example of a minimal valid configuration
+examples:
+  - version: "2.0.0"
+    prompts:
+      - id: simple_assistant
+        name: Simple Assistant
+        type: assistant
+        background:
+          - "You are a helpful AI assistant."
+          - "You provide accurate and thoughtful responses."
+        steps:
+          - "1. Understand the user's request"
+          - "2. Formulate a comprehensive response"
+          - "3. Verify the response is helpful"
+        output_instructions:
+          - "Be clear and concise"
+          - "Use examples when helpful"
+    
+    components:
+      backgrounds:
+        - id: expert_analyst
+          content:
+            - "You are an expert analyst with deep domain knowledge."
+            - "You approach problems systematically."
+      
+      steps:
+        - id: basic_analysis
+          content:
+            - "1. Parse the user's request"
+            - "2. Analyze the information"
+            - "3. Formulate a response"
+      
+      output_instructions:
+        - id: clear_format
+          content:
+            - "Structure responses clearly"
+            - "Use bullet points for lists"

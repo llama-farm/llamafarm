@@ -2,10 +2,10 @@ name: Build and Push Docker Images
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
+    branches: [main]
+    tags: ["v*"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
@@ -20,7 +20,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, runtime]
+        service: [designer, server, rag]
         include:
           - service: designer
             context: ./designer
@@ -30,10 +30,10 @@ jobs:
             context: ./
             dockerfile: ./server/Dockerfile
             description: "LlamaFarm Server - FastAPI backend"
-          - service: runtime
+          - service: rag
             context: ./
-            dockerfile: ./runtime/Dockerfile
-            description: "LlamaFarm Runtime"
+            dockerfile: ./rag/Dockerfile
+            description: "LlamaFarm RAG"
 
     steps:
       - name: Checkout repository
@@ -119,7 +119,7 @@ jobs:
           # Basic health checks
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
-          docker compose -f docker-compose.yml logs runtime
+          docker compose -f docker-compose.yml logs rag
 
       - name: Cleanup
         if: always()
@@ -140,7 +140,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [designer, server, runtime]
+        service: [designer, server, rag]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -148,11 +148,11 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:latest
-          format: 'sarif'
-          output: 'trivy-results-${{ matrix.service }}.sarif'
+          format: "sarif"
+          output: "trivy-results-${{ matrix.service }}.sarif"
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+          sarif_file: "trivy-results-${{ matrix.service }}.sarif"

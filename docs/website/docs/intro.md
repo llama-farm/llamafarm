@@ -3,16 +3,14 @@ sidebar_position: 1
 sidebar_label: Overview
 ---
 
-# 🦙 LlamaFarm - Build Powerful AI Locally, Deploy Anywhere
+# LlamaFarm - Build Powerful AI Locally, Deploy Anywhere
 
-<div align="center">
-  <img src="/img/rocket-llama.png" alt="Llama Building a Rocket" width="400"/>
-  
+<div align="left">
   **Empowering developers to build production-ready AI applications with complete local control**
-  
+
   <br/>
-  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"/></a>
-  <a href="https://www.python.org/downloads/"><img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8+-blue.svg"/></a>
+  <a href="https://opensource.org/licenses/apache-2-0"><img alt="License: Apache 2.0" src="https://img.shields.io/github/license/llama-farm/llamafarm"/></a>&nbsp;
+  <a href="https://www.python.org/downloads/"><img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.10+-blue.svg"/></a>&nbsp;
   <a href="https://github.com/llama-farm/llamafarm/blob/main/CONTRIBUTING.md"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"/></a>
 </div>
 

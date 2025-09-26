@@ -130,6 +130,15 @@ cd llamafarm
 
 npm install -g nx
 nx init --useDotNxInstallation --interactive=false
+
+# Start both server and RAG worker (required for full functionality)
+# Option 1: Use the convenience script
+nx dev
+
+# Option 2: Run in separate terminals
+# Terminal 1:
+nx start rag
+# Terminal 2:
 nx start server
 ```
 
