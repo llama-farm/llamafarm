@@ -1,27 +1,28 @@
 {
-    "root": "rag/",
-    "targets": {
-        "start": {
-            "executor": "nx:run-commands",
-            "options": {
-                "cwd": "{workspaceRoot}/rag",
-                "command": "uv run python main.py",
-                "output": "inherit"
-            }
-        },
-        "build": {
-            "executor": "nx:run-commands",
-            "options": {
-                "cwd": "..",
-                "command": "docker build -t llamafarm-rag -f rag/Dockerfile ."
-            }
-        },
-        "test": {
-            "executor": "nx:run-commands",
-            "options": {
-                "cwd": "{workspaceRoot}/rag",
-                "command": "uv run pytest -v --cov=. --cov-report=term-missing"
-            }
-        }
+  "root": "rag/",
+  "targets": {
+    "start": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "cwd": "{workspaceRoot}/rag",
+        "command": "uv run python main.py",
+        "output": "inherit"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "..",
+        "command": "docker build -t llamafarm-rag -f rag/Dockerfile ."
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}/rag",
+        "command": "uv run pytest -v --cov=. --cov-report=term-missing"
+      }
     }
+  }
 }

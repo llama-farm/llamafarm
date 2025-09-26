@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/nx-project",
+  "name": "llamafarm",
+  "projectType": "application",
+  "targets": {
+    "dev": {
+      "continuous": true,
+      "dependsOn": [
+        "server:start",
+        "rag:start",
+        "designer:dev"
+      ],
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tail -f /dev/null"
+      }
+    }
+  }
+}
