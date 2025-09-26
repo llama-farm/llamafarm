@@ -87,8 +87,8 @@ build_test_binaries() {
 
         info "Building test binary for $goos/$goarch..."
 
-        # The installer expects a flat binary named "llamafarm-<os>-<arch>"
-        local out_name="llamafarm-${goos}-${goarch}"
+        # The installer expects a flat binary named "lf-<os>-<arch>"
+        local out_name="lf-${goos}-${goarch}"
 
         GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
             -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=${TEST_VERSION}'" \
