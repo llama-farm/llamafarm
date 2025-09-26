@@ -344,8 +344,8 @@ func TestExpandPathsToFiles_ErrorCases(t *testing.T) {
 	}{
 		{
 			name:    "invalid permission on directory",
-			paths:   []string{"/root"}, // Assuming /root is not accessible
-			wantErr: false,             // Should not error, just skip inaccessible directories
+			paths:   []string{filepath.Join(os.TempDir(), "some-random-nonexistent-folder-xyz12345")},
+			wantErr: false, // Should not error, just skip inaccessible or nonexistent directories
 		},
 		{
 			name:    "invalid glob pattern with multiple **",
