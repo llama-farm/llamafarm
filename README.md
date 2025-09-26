@@ -133,7 +133,7 @@ nx init --useDotNxInstallation --interactive=false
 
 # Start both server and RAG worker (required for full functionality)
 # Option 1: Use the convenience script
-./start-local.sh
+nx dev
 
 # Option 2: Run in separate terminals
 # Terminal 1:

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/nx-project",
+  "name": "designer",
+  "root": "designer",
+  "projectType": "application",
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "command": "npm run dev",
+        "cwd": "designer"
+      }
+    }
+  }
+}
