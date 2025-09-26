@@ -452,9 +452,7 @@ func setupWorkdirVolumeMount(spec *ContainerRunSpec) error {
 	volumeMount := fmt.Sprintf("%s:%s", dockerPath, dockerPath)
 	spec.Volumes = append(spec.Volumes, volumeMount)
 
-	if debug {
-		fmt.Fprintf(os.Stderr, "Debug: Mounting volume: %s\n", volumeMount)
-	}
+	OutputDebug("Mounting volume: %s\n", volumeMount)
 
 	return nil
 }
