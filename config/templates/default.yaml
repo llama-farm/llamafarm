@@ -8,7 +8,6 @@ namespace: default
 runtime:
   provider: ollama
   model: llama3.1:8b
-  base_url: http://localhost:11434/v1  # Note: /v1 for OpenAI compatibility
   temperature: 0.7
   # instructor_mode: json  
   # api_key: optional, not needed for ollama
@@ -35,7 +34,11 @@ prompts:
 # =============================================================================
 # DATASETS CONFIGURATION
 # =============================================================================
-datasets: []
+datasets:
+- name: default
+  database: main_database
+  data_processing_strategy: universal_processor
+  files: []
 
 # =============================================================================
 # RAG CONFIGURATION
@@ -49,7 +52,6 @@ rag:
     - name: "main_database"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/chroma_db"
         distance_function: "cosine"
         collection_name: "documents"
         port: 8000
@@ -63,7 +65,6 @@ rag:
           priority: 0
           config:
             model: "nomic-embed-text"
-            base_url: "http://localhost:11434/"
             dimension: 768
             batch_size: 16
             timeout: 60
