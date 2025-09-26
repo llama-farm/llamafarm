@@ -1,8 +1,7 @@
 from config.datamodel import Dataset
 from fastapi import APIRouter, HTTPException, Query, UploadFile, Form, File
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any, Tuple
-import glob
+from typing import List, Optional, Dict, Any
 import json
 import time
 import asyncio
@@ -383,26 +382,32 @@ async def process_dataset(
         )
 
         # Determine actual status based on file_details
-        # Check multiple indicators for duplicates
+        # Debug logging to find the issue
+        logger.info(f"File {filename} - file_details: status={file_details.get('status')}, "
+                    f"reason={file_details.get('reason')}, stored_count={file_details.get('stored_count')}, "
+                    f"skipped_count={file_details.get('skipped_count')}")
+        
+        # Only mark as duplicate if NO chunks were stored
         is_duplicate = (
-            file_details.get("reason") == "duplicate"
-            or file_details.get("status") == "skipped"
+            file_details.get("status") == "skipped"
             or (
-                file_details.get("stored_count", 0) == 0
-                and file_details.get("skipped_count", 0) > 0
+                file_details.get("reason") == "duplicate"
+                and file_details.get("stored_count", 0) == 0
             )
         )
 
         if is_duplicate:
             status = "skipped"
             skipped += 1
-            logger.info(f"File {filename} marked as SKIPPED (duplicate)")
+            logger.info(f"File {filename} marked as SKIPPED (duplicate) - is_duplicate={is_duplicate}")
         elif ok:
             status = "processed"
             processed += 1
+            logger.info(f"File {filename} marked as PROCESSED")
         else:
             status = "failed"
             failed += 1
+            logger.info(f"File {filename} marked as FAILED")
 
         # Create detailed response
         detail = FileProcessingDetail(
@@ -632,25 +637,24 @@ async def ingest_files(
 # Helper functions for file processing
 
 
-def _save_file_to_data_store(
+async def _save_file_to_data_store(
     namespace: str, project: str, dataset: str,
     content: bytes, filename: str
 ) -> Any:
     """Helper to save file content to data store"""
     import io
-    import asyncio
     from fastapi import UploadFile
     
     # Create in-memory file
     file_like = io.BytesIO(content)
     temp_file = UploadFile(filename=filename, file=file_like)
     
-    # Use the existing add_data_file method
-    metadata_file_content = asyncio.run(DataService.add_data_file(
+    # Use the existing add_data_file method - use await since we're in async function
+    metadata_file_content = await DataService.add_data_file(
         namespace=namespace,
         project_id=project,
         file=temp_file
-    ))
+    )
     
     # Add to dataset
     DatasetService.add_file_to_dataset(
@@ -698,27 +702,13 @@ def _process_into_vector_db(
     }
 
 
-def _read_upload_file_content(file) -> bytes:
-    """Helper to read content from upload file handling async contexts"""
-    import asyncio
-    try:
-        # Try to get the current event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # We're in an async context, create a task
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                content = pool.submit(lambda: asyncio.run(file.read())).result()
-        else:
-            # We can run directly
-            content = asyncio.run(file.read())
-    except RuntimeError:
-        # No event loop, we can run directly
-        content = asyncio.run(file.read())
+async def _read_upload_file_content(file) -> bytes:
+    """Helper to read content from upload file"""
+    content = await file.read()
     return content
 
 
-def process_single_item(
+async def process_single_item(
     namespace: str, project: str, dataset: str,
     item: IngestItem,
     project_dir: str, project_config,
@@ -730,10 +720,10 @@ def process_single_item(
         if item.type == "upload":
             # Direct upload - need to save file first
             file = item.value
-            content = _read_upload_file_content(file)
+            content = await _read_upload_file_content(file)
             
             # Save to data store
-            metadata_file_content = _save_file_to_data_store(
+            metadata_file_content = await _save_file_to_data_store(
                 namespace, project, dataset, content, file.filename
             )
             
@@ -761,11 +751,9 @@ def process_single_item(
             return {"status": "error", "error": f"Unknown item type: {item.type}"}
             
     except Exception as e:
-        logger.error(f"Error processing item {item.value}: {e}")
+        logger.error(f"Error processing item: {e}")
         filename = "unknown"
-        if item.type == "file":
-            filename = Path(item.value).name
-        elif item.type == "upload":
+        if item.type == "upload":
             filename = item.value.filename
         return {
             "status": "error",
@@ -782,9 +770,8 @@ async def process_single_item_async(
     database_name: str
 ) -> Dict[str, Any]:
     """Process a single item (async version)"""
-    # For now, just wrap the sync version
-    # In future, this could be optimized with async I/O
-    return process_single_item(
+    # Now both functions are async, so we await
+    return await process_single_item(
         namespace, project, dataset,
         item,
         project_dir, project_config,

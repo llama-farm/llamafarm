@@ -141,13 +141,14 @@ class ChromaStore(VectorStore):
                         skipped_duplicates += 1
                         continue
                     
-                    # Check if document already exists in ChromaDB by ID
-                    if self._document_exists(doc.id):
-                        logger.debug(f"Document {doc.id} already exists in collection, skipping")
-                        skipped_duplicates += 1
-                        continue
+                # Check if document already exists in ChromaDB by ID
+                if self._document_exists(doc.id):
+                    logger.debug(f"Document {doc.id} already exists in collection, skipping")
+                    skipped_duplicates += 1
+                    continue
                     
-                    # Register in dedup tracker
+                # Register in dedup tracker if not a duplicate
+                if self.deduplication_enabled and self.dedup_tracker and doc.metadata:
                     if document_hash:
                         self.dedup_tracker.register_document(document_hash, doc.id, source_hash or "")
                     if chunk_hash:

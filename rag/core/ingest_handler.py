@@ -175,13 +175,18 @@ class IngestHandler:
         file_size = len(file_data)
         logger.info(f"Ingesting file: {filename}")
         
-        # Log file processing start
+        # Generate file hash early for logging
+        import hashlib
+        file_hash = hashlib.sha256(file_data).hexdigest()
+        
+        # Log file processing start with hash
         self.process_logger.log_file_processing(
             filename, 
             "started",
             {
                 "size_bytes": file_size,
-                "content_type": metadata.get('content_type', 'unknown')
+                "content_type": metadata.get('content_type', 'unknown'),
+                "file_hash": file_hash
             }
         )
         
@@ -204,9 +209,7 @@ class IngestHandler:
                     "document_count": 0
                 }
             
-            # Generate file hash for deduplication
-            import hashlib
-            file_hash = hashlib.sha256(file_data).hexdigest()
+            # File hash was already generated earlier for logging
             
             # Generate embeddings for each document
             embedded_documents = []
@@ -350,11 +353,12 @@ class IngestHandler:
                 status = "success"
                 reason = None
             
-            # Log final file processing status
+            # Log final file processing status with hash
             self.process_logger.log_file_processing(
                 filename,
                 status,
                 {
+                    "file_hash": file_hash,
                     "total_chunks": len(documents),
                     "stored_chunks": stored_count,
                     "skipped_chunks": skipped_count,

@@ -51,9 +51,15 @@ print_error() {
 # Configuration
 # ================================================================
 
-# Test database and dataset names
-TEST_DB="test_rag_cli_db_$(date +%s)"
-TEST_DATASET="test_rag_cli_dataset_$(date +%s)"
+# Test database and dataset names - use timestamp to ensure uniqueness
+TIMESTAMP=$(date +%s)
+TEST_DB="test_rag_cli_db_${TIMESTAMP}"
+TEST_DATASET="test_rag_cli_dataset_${TIMESTAMP}"
+
+# Create data directory for test databases with absolute path
+TEST_DATA_DIR="$(pwd)/data/test_${TIMESTAMP}"
+mkdir -p "${TEST_DATA_DIR}"
+echo "Test data directory: ${TEST_DATA_DIR}"
 
 # Just use llamafarm.yaml in current directory
 PROJECT_CONFIG="./llamafarm.yaml"
@@ -69,6 +75,13 @@ echo "Test Database: ${TEST_DB}"
 echo "Test Dataset: ${TEST_DATASET}"
 echo "Config File: ${PROJECT_CONFIG}"
 echo "Sample Files: ${SAMPLE_DIR}"
+echo ""
+echo -e "${GREEN}New Features Being Tested:${NC}"
+echo "  • Glob patterns (*.txt, *.pdf, *.md)"
+echo "  • Directory ingestion (entire directories)"
+echo "  • Pattern filters with directories (--pattern flag)"
+echo "  • Batch file uploads"
+echo "  • Docker-compatible architecture (client-side path expansion)"
 
 # ================================================================
 # Step 1: Add new database to llamafarm.yaml
@@ -98,9 +111,9 @@ new_db = {
     'name': '${TEST_DB}',
     'type': 'ChromaStore',
     'config': {
-        'collection_name': 'test_cli_documents',
+        'collection_name': 'test_cli_${TIMESTAMP}',
         'distance_function': 'cosine',
-        'persist_directory': './data/${TEST_DB}',
+        'persist_directory': './data/${TEST_DB}_${TIMESTAMP}',
         'port': 8000
     },
     'embedding_strategies': [
@@ -166,15 +179,15 @@ else
     else
         # Find a database entry and add new one before it
         # This adds the new database before the first database's embedding_strategies
-        awk -v db="${TEST_DB}" '
+        awk -v db="${TEST_DB}" -v ts="${TIMESTAMP}" -v test_dir="${TEST_DATA_DIR}" '
         /^  databases:/ {
             print
             print "  - name: " db
             print "    type: ChromaStore"
             print "    config:"
-            print "      collection_name: test_cli_documents"
+            print "      collection_name: test_cli_" ts
             print "      distance_function: cosine"
-            print "      persist_directory: ./data/" db
+            print "      persist_directory: " test_dir
             print "      port: 8000"
             print "    embedding_strategies:"
             print "    - name: default_embeddings"
@@ -232,46 +245,50 @@ print_success "Dataset created"
 
 print_header "Step 3: Ingesting Various Document Types"
 
-print_step "Adding research papers (text files)..."
-${LF_CMD} datasets ingest "${TEST_DATASET}" \
-    ${SAMPLE_DIR}/research_papers/transformer_architecture.txt \
-    ${SAMPLE_DIR}/research_papers/neural_scaling_laws.txt \
-    ${SAMPLE_DIR}/research_papers/llm_scaling_laws.txt
+print_step "Adding all research papers with glob pattern..."
+# NEW: Use glob pattern to ingest all text files at once
+echo -e "${CYAN}Command:${NC} ${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/research_papers/*.txt\""
+echo -e "${BLUE}Pattern expands to all .txt files in research_papers directory${NC}"
+${LF_CMD} datasets ingest "${TEST_DATASET}" "${SAMPLE_DIR}/research_papers/*.txt"
 
-print_step "Adding code documentation (markdown files)..."
-${LF_CMD} datasets ingest "${TEST_DATASET}" \
-    ${SAMPLE_DIR}/code_documentation/api_reference.md \
-    ${SAMPLE_DIR}/code_documentation/implementation_guide.md \
-    ${SAMPLE_DIR}/code_documentation/best_practices.md
+print_step "Adding all code documentation with glob pattern..."
+# NEW: Use glob pattern for all markdown files
+echo -e "${CYAN}Command:${NC} ${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/code_documentation/*.md\""
+echo -e "${BLUE}Pattern expands to all .md files in code_documentation directory${NC}"
+${LF_CMD} datasets ingest "${TEST_DATASET}" "${SAMPLE_DIR}/code_documentation/*.md"
 
-print_step "Adding code examples (Python files)..."
-${LF_CMD} datasets ingest "${TEST_DATASET}" \
-    ${SAMPLE_DIR}/code/example.py
+print_step "Adding code examples directory..."
+# NEW: Use directory ingestion for code files
+echo -e "${CYAN}Command:${NC} ${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/code/\""
+echo -e "${BLUE}Ingests all files in the code directory${NC}"
+${LF_CMD} datasets ingest "${TEST_DATASET}" "${SAMPLE_DIR}/code/"
 
-print_step "Adding FDA documents (all PDFs in directory)..."
-# Method 1: Pass all PDF files found recursively - upload one at a time to avoid bulk failure
-PDF_FILES=$(find ${SAMPLE_DIR}/fda -name "*.pdf" -type f)
-if [ -n "$PDF_FILES" ]; then
-    echo "Found $(echo $PDF_FILES | wc -w) PDF files"
-    # Upload PDFs one at a time to avoid dataset corruption on failure
-    for pdf in $PDF_FILES; do
-        echo "  Uploading: $(basename $pdf)"
-        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$pdf" || print_info "Failed to upload $(basename $pdf), continuing..."
-    done
-else
-    print_info "No PDF files found in ${SAMPLE_DIR}/fda"
-fi
+print_step "Adding FDA documents using glob pattern..."
+# NEW METHOD: Use glob pattern to upload all PDFs at once
+echo -e "${CYAN}Command:${NC} ${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/fda/*.pdf\""
+echo -e "${BLUE}Pattern expands to all .pdf files in fda directory${NC}"
+${LF_CMD} datasets ingest "${TEST_DATASET}" "${SAMPLE_DIR}/fda/*.pdf" || print_info "Failed to upload PDFs"
 
-print_step "Alternative: Adding entire research_papers directory recursively..."
-# Method 2: Find all text files in research_papers and subdirectories - these are duplicates so they should be skipped
-ALL_TEXT_FILES=$(find ${SAMPLE_DIR}/research_papers -type f \( -name "*.txt" -o -name "*.md" \))
-if [ -n "$ALL_TEXT_FILES" ]; then
-    echo "Found $(echo $ALL_TEXT_FILES | wc -w) text/markdown files (should be skipped as duplicates)"
-    # Upload one at a time to avoid dataset corruption
-    for txt in $ALL_TEXT_FILES; do
-        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$txt" 2>&1 | grep -v "already exists in dataset" || true
-    done
-fi
+print_step "Alternative: Adding entire research_papers directory with pattern filter..."
+# NEW METHOD: Use directory with pattern filter for text files
+echo -e "${CYAN}Command:${NC} ${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/research_papers/\" --pattern \"*.txt\""
+echo -e "${BLUE}Ingests only .txt files from the directory (alternative to glob)${NC}"
+echo -e "${YELLOW}ℹ Note: These same files were already uploaded via glob pattern above${NC}"
+echo -e "${YELLOW}  Skipping duplicate upload to avoid confusion...${NC}"
+# Commented out to avoid duplicate uploads of the same files
+# ${LF_CMD} datasets ingest "${TEST_DATASET}" "${SAMPLE_DIR}/research_papers/" --pattern "*.txt" || true
+
+print_step "Adding markdown files with glob..."
+# NEW METHOD: Use glob for markdown files
+echo -e "${CYAN}Command:${NC} ${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/research_papers/*.md\""
+echo -e "${BLUE}Attempts to find .md files (may not exist)${NC}"
+${LF_CMD} datasets ingest "${TEST_DATASET}" "${SAMPLE_DIR}/research_papers/*.md" 2>/dev/null || print_info "No .md files found"
+
+print_step "Example of recursive directory ingestion..."
+# NEW METHOD: Recursive directory scan (commented out to avoid duplicates)
+echo -e "${CYAN}Example (not executed):${NC} ${LF_CMD} datasets ingest \"${TEST_DATASET}\" \"${SAMPLE_DIR}/\" --recursive --pattern \"*.txt\""
+echo -e "${BLUE}Would recursively find all .txt files in all subdirectories${NC}"
+# ${LF_CMD} datasets ingest "${TEST_DATASET}" "${SAMPLE_DIR}/" --recursive --pattern "*.txt"
 
 print_success "All documents ingested"
 

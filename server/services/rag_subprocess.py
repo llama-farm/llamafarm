@@ -324,18 +324,20 @@ def ingest_file_with_rag(
                         details["skipped_count"] = result["skipped_count"]
 
                     # Set reason if it's a duplicate
-                    if (
-                        result.get("status") == "skipped"
-                        or result.get("reason") == "duplicate"
-                    ):
+                    # Only mark as skipped if the result explicitly says so
+                    # or if ALL chunks were skipped (stored_count == 0)
+                    if result.get("status") == "skipped":
                         details["reason"] = "duplicate"
                         details["status"] = "skipped"
-                    elif (
-                        result.get("stored_count", 0) == 0
-                        and result.get("skipped_count", 0) > 0
-                    ):
-                        details["reason"] = "duplicate"
-                        details["status"] = "skipped"
+                    elif result.get("reason") == "duplicate":
+                        # Only mark as skipped if NO chunks were stored
+                        if result.get("stored_count", 0) == 0:
+                            details["reason"] = "duplicate"
+                            details["status"] = "skipped"
+                        else:
+                            # Some chunks were stored, so it's a partial success
+                            details["reason"] = "partial_duplicate"
+                            # Keep the original status (likely "success")
 
                 except json.JSONDecodeError:
                     logger.warning("Could not parse result JSON from stdout")
