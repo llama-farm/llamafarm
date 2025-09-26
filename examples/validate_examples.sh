@@ -78,17 +78,17 @@ else
 fi
 
 # Test 5: RAG query
-if ./lf run "test query" >/dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} lf run (basic)"
+if ./lf chat "test query" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} lf chat (basic)"
 else
-    echo -e "${YELLOW}⚠${NC} lf run failed (server may be down)"
+    echo -e "${YELLOW}⚠${NC} lf chat failed (server may be down)"
 fi
 
 # Test 6: RAG with database
-if ./lf run --rag --database main_database "test" >/dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} lf run --rag"
+if ./lf chat --rag --database main_database "test" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} lf chat --rag"
 else
-    echo -e "${YELLOW}⚠${NC} lf run --rag failed (RAG may not be configured)"
+    echo -e "${YELLOW}⚠${NC} lf chat --rag failed (RAG may not be configured)"
 fi
 
 echo ""

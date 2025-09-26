@@ -630,11 +630,11 @@ func maxInt(a, b int) int {
 
 func init() {
 	// Add commands to rag
-	ragCmd.AddCommand(ragStatsCmd)
+	// ragCmd.AddCommand(ragStatsCmd)
 	ragCmd.AddCommand(ragHealthCmd)
-	ragCmd.AddCommand(ragListCmd)
-	ragCmd.AddCommand(ragCompactCmd)
-	ragCmd.AddCommand(ragReindexCmd)
+	// ragCmd.AddCommand(ragListCmd)
+	// ragCmd.AddCommand(ragCompactCmd)
+	// ragCmd.AddCommand(ragReindexCmd)
 
 	// Stats command flags
 	ragStatsCmd.Flags().StringVar(&statsDatabase, "database", "", "Database to get stats for")

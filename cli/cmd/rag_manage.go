@@ -763,11 +763,11 @@ func displayImportResult(result *ImportResult) {
 
 func init() {
 	// Add commands to rag
-	ragCmd.AddCommand(ragClearCmd)
-	ragCmd.AddCommand(ragDeleteCmd)
-	ragCmd.AddCommand(ragPruneCmd)
-	ragCmd.AddCommand(ragExportCmd)
-	ragCmd.AddCommand(ragImportCmd)
+	// ragCmd.AddCommand(ragClearCmd)
+	// ragCmd.AddCommand(ragDeleteCmd)
+	// ragCmd.AddCommand(ragPruneCmd)
+	// ragCmd.AddCommand(ragExportCmd)
+	// ragCmd.AddCommand(ragImportCmd)
 
 	// Clear command flags
 	ragClearCmd.Flags().StringVar(&manageDatabase, "database", "", "Database to clear")

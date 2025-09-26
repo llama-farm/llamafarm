@@ -56,23 +56,23 @@ echo "------------------"
 
 # Query without RAG
 run_test "Basic query (no RAG)" \
-    "./lf run 'What is 2+2?'"
+    "./lf chat 'What is 2+2?'"
 
 # Query with RAG enabled
 run_test "RAG query" \
-    "./lf run --rag 'What is transformer architecture?'"
+    "./lf chat --rag 'What is transformer architecture?'"
 
 # Query specific database
 run_test "RAG with database" \
-    "./lf run --rag --database main_database 'Explain attention mechanism'"
+    "./lf chat --rag --database main_database 'Explain attention mechanism'"
 
 # Customize retrieval parameters
 run_test "RAG with top-k" \
-    "./lf run --rag --database main_database --rag-top-k 10 'How do neural networks work?'"
+    "./lf chat --rag --database main_database --rag-top-k 10 'How do neural networks work?'"
 
 # Use score threshold
 run_test "RAG with threshold" \
-    "./lf run --rag --database main_database --rag-score-threshold 0.7 'Best practices for API design'"
+    "./lf chat --rag --database main_database --rag-score-threshold 0.7 'Best practices for API design'"
 
 echo ""
 echo "3. Working with Real Documents"
@@ -92,13 +92,13 @@ run_test "Ingest documentation" \
 
 # Query documents with RAG
 run_test "Query transformer components" \
-    "./lf run --rag --database main_database 'What are the key components of transformer architecture?'"
+    "./lf chat --rag --database main_database 'What are the key components of transformer architecture?'"
 
 run_test "Query API methods" \
-    "./lf run --rag --database main_database 'What are the API authentication methods?'"
+    "./lf chat --rag --database main_database 'What are the API authentication methods?'"
 
 run_test "Query scaling laws" \
-    "./lf run --rag --database main_database 'Explain neural scaling laws'"
+    "./lf chat --rag --database main_database 'Explain neural scaling laws'"
 
 echo ""
 echo "4. File Input Tests"
@@ -107,7 +107,7 @@ echo "-------------------"
 # Test file input
 echo "What is attention mechanism?" > /tmp/test_query.txt
 run_test "File input with -f" \
-    "./lf run -f /tmp/test_query.txt"
+    "./lf chat -f /tmp/test_query.txt"
 rm -f /tmp/test_query.txt
 
 echo ""
@@ -132,20 +132,20 @@ run_test "Verify dataset exists" \
 
 # Test various RAG queries
 run_test "Query transformer arch" \
-    "./lf run --rag --database main_database 'What is transformer architecture?'"
+    "./lf chat --rag --database main_database 'What is transformer architecture?'"
 
 run_test "Query attention in detail" \
-    "./lf run --rag --database main_database 'Explain attention mechanism in transformers'"
+    "./lf chat --rag --database main_database 'Explain attention mechanism in transformers'"
 
 run_test "Query API best practices" \
-    "./lf run --rag --database main_database 'What are best practices for API development?'"
+    "./lf chat --rag --database main_database 'What are best practices for API development?'"
 
 # Test with different parameters
 run_test "Query with limited results" \
-    "./lf run --rag --database main_database --rag-top-k 5 'Neural network scaling'"
+    "./lf chat --rag --database main_database --rag-top-k 5 'Neural network scaling'"
 
 run_test "Query with high threshold" \
-    "./lf run --rag --database main_database --rag-score-threshold 0.8 'implementation details'"
+    "./lf chat --rag --database main_database --rag-score-threshold 0.8 'implementation details'"
 
 echo ""
 echo "6. Cleanup"

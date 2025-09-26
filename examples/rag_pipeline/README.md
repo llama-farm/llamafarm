@@ -400,52 +400,52 @@ lf rag import --database main_database ./backups/my-docs-backup.json --merge
 
 ## Using RAG with LLM
 
-### Complete Examples of `lf run` Commands
+### Complete Examples of `lf chat` Commands
 
 ```bash
 # === BASIC USAGE ===
 
 # Simple query WITHOUT RAG (uses only LLM general knowledge)
-lf run "What is 2+2?"
+lf chat "What is 2+2?"
 
 # Simple query WITH automatic RAG (if configured in llamafarm.yaml)
-lf run "What is transformer architecture?"
+lf chat "What is transformer architecture?"
 # Note: RAG is auto-enabled if datasets exist and RAG is configured
 
 # === EXPLICIT RAG CONTROL ===
 
 # Explicitly enable RAG
-lf run --rag "What is transformer architecture?"
+lf chat --rag "What is transformer architecture?"
 
 # Disable RAG even if configured (use --no-rag flag if implemented)
-lf run --no-rag "What is transformer architecture?"
+lf chat --no-rag "What is transformer architecture?"
 
 # === RAG WITH SPECIFIC DATABASE ===
 
 # Use a specific database
-lf run --rag --database main_database "Explain attention mechanism"
+lf chat --rag --database main_database "Explain attention mechanism"
 
 # Use alternative database
-lf run --rag --database technical_docs "API authentication methods"
+lf chat --rag --database technical_docs "API authentication methods"
 
 # === CONTROLLING RETRIEVAL PARAMETERS ===
 
 # Control number of retrieved documents
-lf run --rag --rag-top-k 5 "How do neural networks work?"
+lf chat --rag --rag-top-k 5 "How do neural networks work?"
 
 # Retrieve more context for complex queries
-lf run --rag --rag-top-k 20 "Summarize all security features"
+lf chat --rag --rag-top-k 20 "Summarize all security features"
 
 # Set minimum relevance threshold
-lf run --rag --rag-score-threshold 0.8 "What is BERT?"
+lf chat --rag --rag-score-threshold 0.8 "What is BERT?"
 
 # Only get highly relevant results
-lf run --rag --rag-score-threshold 0.9 "Specific API endpoint details"
+lf chat --rag --rag-score-threshold 0.9 "Specific API endpoint details"
 
 # === COMBINING ALL PARAMETERS ===
 
 # Full control over RAG parameters
-lf run --rag \
+lf chat --rag \
   --database main_database \
   --rag-top-k 10 \
   --rag-score-threshold 0.7 \
@@ -453,7 +453,7 @@ lf run --rag \
   "Explain the complete authentication flow"
 
 # Complex query with specific requirements
-lf run --rag \
+lf chat --rag \
   --database research_papers \
   --rag-top-k 15 \
   --rag-score-threshold 0.6 \
@@ -462,13 +462,13 @@ lf run --rag \
 # === DEBUGGING AND TESTING ===
 
 # Run with debug output
-lf run --debug --rag "test query"
+lf chat --debug --rag "test query"
 
 # Run with verbose output
-lf run --verbose --rag "What are the main features?"
+lf chat --verbose --rag "What are the main features?"
 
 # Test RAG without streaming
-lf run --no-stream --rag "Quick test"
+lf chat --no-stream --rag "Quick test"
 ```
 
 ### Comparing RAG vs Non-RAG Responses
@@ -476,20 +476,20 @@ lf run --no-stream --rag "Quick test"
 ```bash
 # Example 1: Generic question
 echo "=== Without RAG ==="
-lf run "What is machine learning?"
+lf chat "What is machine learning?"
 # Output: Generic textbook definition
 
 echo "=== With RAG (your documents) ==="
-lf run --rag "What is machine learning?"
+lf chat --rag "What is machine learning?"
 # Output: Definition enriched with specifics from your documents
 
 # Example 2: Specific to your content
 echo "=== Without RAG ==="
-lf run "What are our API rate limits?"
+lf chat "What are our API rate limits?"
 # Output: "I don't have specific information about your API rate limits..."
 
 echo "=== With RAG ==="
-lf run --rag "What are our API rate limits?"
+lf chat --rag "What are our API rate limits?"
 # Output: "Based on the documentation, the API rate limits are:
 #         - Standard tier: 1000 requests/hour
 #         - Premium tier: 10000 requests/hour..."
@@ -555,9 +555,9 @@ lf rag stats
 
 # 7. Test queries
 echo "Testing RAG queries..."
-lf run --rag "How do I authenticate with the API?"
-lf run --rag "What are the system requirements?"
-lf run --rag "How do I troubleshoot connection errors?"
+lf chat --rag "How do I authenticate with the API?"
+lf chat --rag "What are the system requirements?"
+lf chat --rag "How do I troubleshoot connection errors?"
 ```
 
 ### Example 2: Research Paper Analysis
@@ -590,7 +590,7 @@ queries=(
 
 for query in "${queries[@]}"; do
   echo "Query: $query"
-  lf run --rag --rag-top-k 10 "$query"
+  lf chat --rag --rag-top-k 10 "$query"
   echo "---"
   sleep 2
 done
@@ -619,10 +619,10 @@ lf datasets add-file codebase ~/project/docs/**/*.md
 lf rag process codebase
 
 # 4. Code-specific queries
-lf run --rag "Find all authentication functions"
-lf run --rag "What database models are defined?"
-lf run --rag "Show me the API endpoint implementations"
-lf run --rag --rag-top-k 20 "List all error handling patterns"
+lf chat --rag "Find all authentication functions"
+lf chat --rag "What database models are defined?"
+lf chat --rag "Show me the API endpoint implementations"
+lf chat --rag --rag-top-k 20 "List all error handling patterns"
 ```
 
 ## Advanced Configuration
@@ -717,13 +717,13 @@ data_processing_strategies:
 
 ### Common Issues and Solutions
 
-#### "No response received" from `lf run`
+#### "No response received" from `lf chat`
 ```bash
 # Clear session context
 rm -f ~/.llamafarm/session_context.yaml
 
 # Try again
-lf run "test query"
+lf chat "test query"
 ```
 
 #### RAG not finding relevant content
@@ -735,7 +735,7 @@ lf rag stats my-dataset
 lf rag process my-dataset --force
 
 # Try with lower threshold
-lf run --rag --rag-score-threshold 0.5 "your query"
+lf chat --rag --rag-score-threshold 0.5 "your query"
 ```
 
 #### Slow processing
@@ -761,7 +761,7 @@ nx start server
 
 ```bash
 # Enable debug output
-lf run --debug --rag "test query"
+lf chat --debug --rag "test query"
 
 # Check debug log
 tail -f ~/.llamafarm/projects/default/my-project/debug.log
@@ -787,7 +787,7 @@ tail -f ~/logs/llamafarm-server.log
 
 4. **Metadata Filtering**: Use metadata to narrow search scope
    ```bash
-   lf run --rag --rag-filter "type:api" "authentication methods"
+   lf chat --rag --rag-filter "type:api" "authentication methods"
    ```
 
 ## What's Included in This Example
@@ -952,10 +952,10 @@ chmod +x ./lf
 ### 8. Chat with RAG Context (Future Feature)
 ```bash
 # Chat using specific dataset
-./lf run --rag --dataset my-documents "What papers discuss neural scaling?"
+./lf chat --rag --dataset my-documents "What papers discuss neural scaling?"
 
 # Chat with retrieval settings
-./lf run --rag --dataset research-papers \
+./lf chat --rag --dataset research-papers \
   --rag-top-k 10 \
   --rag-score-threshold 0.5 \
   "Summarize the documentation"

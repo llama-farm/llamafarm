@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Comprehensive test for all lf run command variations
+# Comprehensive test for all lf chat command variations
 # Tests basic queries, RAG queries, and all parameter combinations
 
 set -e  # Exit on error
@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo "============================================"
-echo "TESTING ALL LF RUN COMMAND VARIATIONS"
+echo "TESTING ALL LF CHAT COMMAND VARIATIONS"
 echo "============================================"
 echo ""
 
@@ -74,17 +74,17 @@ echo "============================================"
 
 run_test \
     "Simple math query (no RAG)" \
-    "./lf run --no-rag 'What is 2+2?'" \
+    "./lf chat --no-rag 'What is 2+2?'" \
     "4"
 
 run_test \
     "General knowledge query (no RAG)" \
-    "./lf run --no-rag 'What is the capital of France?'" \
+    "./lf chat --no-rag 'What is the capital of France?'" \
     "Paris"
 
 run_test \
     "Short response query (no RAG)" \
-    "./lf run --no-rag 'Say hello'" \
+    "./lf chat --no-rag 'Say hello'" \
     ""
 
 echo ""
@@ -94,27 +94,27 @@ echo "============================================"
 
 run_test \
     "RAG query with --rag flag" \
-    "./lf run 'What is transformer architecture?'" \
+    "./lf chat 'What is transformer architecture?'" \
     ""
 
 run_test \
     "RAG with specific database" \
-    "./lf run --database main_database 'What is self-attention?'" \
+    "./lf chat --database main_database 'What is self-attention?'" \
     ""
 
 run_test \
     "RAG with custom top-k" \
-    "./lf run --database main_database --rag-top-k 3 'Explain neural networks'" \
+    "./lf chat --database main_database --rag-top-k 3 'Explain neural networks'" \
     ""
 
 run_test \
     "RAG with high top-k for more context" \
-    "./lf run --database main_database --rag-top-k 10 'What are the key ML concepts?'" \
+    "./lf chat --database main_database --rag-top-k 10 'What are the key ML concepts?'" \
     ""
 
 run_test \
     "RAG with score threshold" \
-    "./lf run --database main_database --rag-score-threshold 0.5 'Machine learning basics'" \
+    "./lf chat --database main_database --rag-score-threshold 0.5 'Machine learning basics'" \
     ""
 
 echo ""
@@ -124,12 +124,12 @@ echo "============================================"
 
 run_test \
     "RAG with all parameters" \
-    "./lf run --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Explain attention mechanism in detail'" \
+    "./lf chat --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Explain attention mechanism in detail'" \
     ""
 
 run_test \
     "Complex technical query with RAG" \
-    "./lf run --database main_database --rag-top-k 8 'Compare transformer architecture with RNN models'" \
+    "./lf chat --database main_database --rag-top-k 8 'Compare transformer architecture with RNN models'" \
     ""
 
 echo ""
@@ -142,12 +142,12 @@ echo "What are neural scaling laws and their implications?" > /tmp/test_query.tx
 
 run_test \
     "Query from file" \
-    "./lf run -f /tmp/test_query.txt" \
+    "./lf chat -f /tmp/test_query.txt" \
     ""
 
 run_test \
     "Query from file with RAG" \
-    "./lf run --database main_database -f /tmp/test_query.txt" \
+    "./lf chat --database main_database -f /tmp/test_query.txt" \
     ""
 
 # Cleanup
@@ -160,22 +160,22 @@ echo "============================================"
 
 run_test \
     "Empty query handling" \
-    "./lf run ''" \
+    "./lf chat ''" \
     ""
 
 run_test \
     "Very long query" \
-    "./lf run 'Please provide a comprehensive explanation of machine learning, including supervised learning, unsupervised learning, reinforcement learning, neural networks, deep learning, and their applications in modern technology'" \
+    "./lf chat 'Please provide a comprehensive explanation of machine learning, including supervised learning, unsupervised learning, reinforcement learning, neural networks, deep learning, and their applications in modern technology'" \
     ""
 
 run_test \
     "Query with special characters" \
-    "./lf run 'What is 10% of 100?'" \
+    "./lf chat 'What is 10% of 100?'" \
     ""
 
 run_test \
     "Non-existent database (should use default or fail gracefully)" \
-    "./lf run --database nonexistent_db 'test query' 2>&1 || true" \
+    "./lf chat --database nonexistent_db 'test query' 2>&1 || true" \
     ""
 
 echo ""
@@ -187,7 +187,7 @@ echo "============================================"
 start_time=$(date +%s)
 run_test \
     "Quick query performance" \
-    "./lf run 'Hi'" \
+    "./lf chat 'Hi'" \
     ""
 end_time=$(date +%s)
 elapsed=$((end_time - start_time))

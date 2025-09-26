@@ -12,9 +12,7 @@ var ragCmd = &cobra.Command{
 
 The RAG system allows you to:
 • Query documents using semantic search
-• View database statistics and health
-• Manage database content (clear, delete, prune)
-• Export and import data for backup/migration`,
+• View database statistics and health`,
 }
 
 func init() {

@@ -120,16 +120,16 @@ The LlamaFarm CLI (`lf`) provides all functionality. Here are examples using rea
 ### Chat with RAG Integration
 ```bash
 # Chat WITH RAG (default - augments responses with your documents)
-./lf run "What is transformer architecture?"
+./lf chat "What is transformer architecture?"
 
 # Chat with specific database
-./lf run --database main_database "Explain attention mechanism"
+./lf chat --database main_database "Explain attention mechanism"
 
 # Debug mode to see retrieval details
-./lf run --database main_database --debug "Explain neural scaling laws"
+./lf chat --database main_database --debug "Explain neural scaling laws"
 
 # Chat WITHOUT RAG (LLM only, no document retrieval)
-./lf run --no-rag "What is machine learning?"
+./lf chat --no-rag "What is machine learning?"
 ```
 
 ### Working with Real Documents
@@ -164,15 +164,15 @@ The project includes comprehensive sample documents you can use immediately:
 ./lf rag query --database main_database "What are the API authentication methods?"
 
 # 7. Chat with RAG-augmented responses (default behavior)
-./lf run --database main_database "Explain neural scaling laws"
-./lf run --database main_database "What is BLA 761248?"
+./lf chat --database main_database "Explain neural scaling laws"
+./lf chat --database main_database "What is BLA 761248?"
 
 # 8. Compare RAG vs no-RAG responses
 echo "=== With RAG (default - from your documents) ==="
-./lf run --database main_database "What is the DataProcessor class?"
+./lf chat --database main_database "What is the DataProcessor class?"
 
 echo "=== Without RAG (LLM general knowledge only) ==="
-./lf run --no-rag "What is the DataProcessor class?"
+./lf chat --no-rag "What is the DataProcessor class?"
 ```
 
 ## Complete Example Workflow
@@ -215,9 +215,9 @@ nx start server  # Or the CLI will auto-start it
 ./lf rag query --database main_database --top-k 10 "API authentication methods"
 
 # Step 10: Chat with RAG augmentation (default behavior)
-./lf run --database main_database "Explain the self-attention mechanism"
-./lf run --database main_database "What is BLA 761248 about?"
-./lf run --database main_database "How does the DataProcessor class work?"
+./lf chat --database main_database "Explain the self-attention mechanism"
+./lf chat --database main_database "What is BLA 761248 about?"
+./lf chat --database main_database "How does the DataProcessor class work?"
 
 # Step 11: Test different retrieval strategies
 ./lf rag query --database main_database --score-threshold 0.8 "neural scaling laws"
@@ -270,7 +270,7 @@ The `test_rag_comprehensive.sh` script provides a complete test of the RAG pipel
 # Test RAG integration
 ./test/test_rag_integration.sh
 
-# Verify lf run commands
+# Verify lf chat commands
 ./test/verify_lf_run.sh
 
 # Complete CLI flow test

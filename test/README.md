@@ -26,7 +26,7 @@ test/
 # Test basic CLI functionality
 ./test/cli/test_lf_run_quick.sh
 
-# Verify lf run commands
+# Verify lf chat commands
 ./test/cli/verify_lf_run.sh
 ```
 
@@ -47,7 +47,7 @@ python test/integration/verify_cli_rag_integration.py
 # Run all CLI tests
 ./test/cli/test_complete_cli_flow.py
 
-# Test all lf run command variations
+# Test all lf chat command variations
 ./test/cli/test_lf_run_commands.sh
 
 # Validate README examples work

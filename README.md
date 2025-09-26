@@ -253,11 +253,11 @@ cd cli && go build -o lf . && cd ..
 ./lf rag query --database main_database --top-k 10 "What FDA submissions are discussed?"
 
 # Chat with RAG augmentation (default behavior)
-./lf run --database main_database "Explain neural scaling laws"
-./lf run --database main_database --debug "What is BLA 761248?"
+./lf chat --database main_database "Explain neural scaling laws"
+./lf chat --database main_database --debug "What is BLA 761248?"
 
 # Chat without RAG (LLM only)
-./lf run --no-rag "What is machine learning?"
+./lf chat --no-rag "What is machine learning?"
 ```
 
 #### Component-Specific Examples
