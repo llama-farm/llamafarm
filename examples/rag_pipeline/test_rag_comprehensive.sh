@@ -232,46 +232,29 @@ print_success "Dataset created"
 
 print_header "Step 3: Ingesting Various Document Types"
 
-print_step "Adding research papers (text files)..."
+print_step "Adding research papers directory (using directory upload)..."
+echo "Uploading entire research_papers directory at once..."
 ${LF_CMD} datasets ingest "${TEST_DATASET}" \
-    ${SAMPLE_DIR}/research_papers/transformer_architecture.txt \
-    ${SAMPLE_DIR}/research_papers/neural_scaling_laws.txt \
-    ${SAMPLE_DIR}/research_papers/llm_scaling_laws.txt
+    ${SAMPLE_DIR}/research_papers/
 
-print_step "Adding code documentation (markdown files)..."
+print_step "Adding code documentation (using glob pattern for markdown files)..."
+echo "Uploading all *.md files in code_documentation directory..."
 ${LF_CMD} datasets ingest "${TEST_DATASET}" \
-    ${SAMPLE_DIR}/code_documentation/api_reference.md \
-    ${SAMPLE_DIR}/code_documentation/implementation_guide.md \
-    ${SAMPLE_DIR}/code_documentation/best_practices.md
+    ${SAMPLE_DIR}/code_documentation/*.md
 
 print_step "Adding code examples (Python files)..."
 ${LF_CMD} datasets ingest "${TEST_DATASET}" \
     ${SAMPLE_DIR}/code/example.py
 
-print_step "Adding FDA documents (all PDFs in directory)..."
-# Method 1: Pass all PDF files found recursively - upload one at a time to avoid bulk failure
-PDF_FILES=$(find ${SAMPLE_DIR}/fda -name "*.pdf" -type f)
-if [ -n "$PDF_FILES" ]; then
-    echo "Found $(echo $PDF_FILES | wc -w) PDF files"
-    # Upload PDFs one at a time to avoid dataset corruption on failure
-    for pdf in $PDF_FILES; do
-        echo "  Uploading: $(basename $pdf)"
-        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$pdf" || print_info "Failed to upload $(basename $pdf), continuing..."
-    done
-else
-    print_info "No PDF files found in ${SAMPLE_DIR}/fda"
-fi
+print_step "Adding FDA documents (using directory upload with recursive option)..."
+echo "Uploading all files in fda directory recursively..."
+${LF_CMD} datasets ingest "${TEST_DATASET}" --recursive \
+    ${SAMPLE_DIR}/fda/ || print_info "Note: Some PDF files may require additional dependencies"
 
-print_step "Alternative: Adding entire research_papers directory recursively..."
-# Method 2: Find all text files in research_papers and subdirectories - these are duplicates so they should be skipped
-ALL_TEXT_FILES=$(find ${SAMPLE_DIR}/research_papers -type f \( -name "*.txt" -o -name "*.md" \))
-if [ -n "$ALL_TEXT_FILES" ]; then
-    echo "Found $(echo $ALL_TEXT_FILES | wc -w) text/markdown files (should be skipped as duplicates)"
-    # Upload one at a time to avoid dataset corruption
-    for txt in $ALL_TEXT_FILES; do
-        ${LF_CMD} datasets ingest "${TEST_DATASET}" "$txt" 2>&1 | grep -v "already exists in dataset" || true
-    done
-fi
+print_step "Testing duplicate detection - Re-uploading research papers..."
+echo "These files should be skipped as duplicates..."
+${LF_CMD} datasets ingest "${TEST_DATASET}" \
+    ${SAMPLE_DIR}/research_papers/transformer_architecture.txt 2>&1 | grep -E "(already exists|SKIPPED)" || true
 
 print_success "All documents ingested"
 

@@ -282,15 +282,28 @@ var datasetsRemoveCmd = &cobra.Command{
 	},
 }
 
+// Flag for recursive directory traversal
+var ingestRecursive bool
+
 // datasetsIngestCmd represents the datasets ingest command
 var datasetsIngestCmd = &cobra.Command{
-	Use:   "ingest [dataset-name] [file1] [file2] ...",
-	Short: "Upload files to a dataset on the server",
-	Long: `Uploads one or more files to the specified dataset on the LlamaFarm server.
+	Use:   "ingest [dataset-name] [file1] [file2] [dir/] ...",
+	Short: "Upload files or directories to a dataset on the server",
+	Long: `Uploads one or more files or directories to the specified dataset on the LlamaFarm server.
+
+Supports:
+  - Single files: ./file.pdf
+  - Multiple files: file1.txt file2.md
+  - Glob patterns: *.pdf, docs/*.txt
+  - Directories: ./docs/ (use --recursive for subdirectories)
+  - Mixed: ./docs/ *.pdf specific.txt
 
 Examples:
   lf datasets ingest my-docs ./docs/file1.pdf ./docs/file2.txt
-  lf datasets ingest my-docs ./pdfs/*.pdf`,
+  lf datasets ingest my-docs ./pdfs/*.pdf
+  lf datasets ingest my-docs ./documents/              # All files in directory
+  lf datasets ingest my-docs ./documents/ --recursive  # Include subdirectories
+  lf datasets ingest my-docs ./docs/ *.pdf README.md   # Mixed sources`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Start config watcher for this command
@@ -304,33 +317,66 @@ Examples:
 
 		datasetName := args[0]
 		inPaths := args[1:]
-		var files []string
-		for _, p := range inPaths {
-			matches, err := filepath.Glob(p)
-			if err != nil || len(matches) == 0 {
-				files = append(files, p)
-				continue
-			}
-			files = append(files, matches...)
+		
+		// Expand all paths to get actual files
+		fmt.Println("Expanding paths to find files...")
+		files, err := expandPathsToFiles(inPaths, ingestRecursive)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error expanding paths: %v\n", err)
+			os.Exit(1)
 		}
+		
 		if len(files) == 0 {
-			fmt.Fprintf(os.Stderr, "No files to upload.\n")
+			fmt.Fprintf(os.Stderr, "No files found to upload.\n")
 			os.Exit(1)
 		}
 
+		fmt.Printf("Found %d files to upload\n", len(files))
+
 		// Ensure server is up
 		ensureServerAvailable(serverCfg.URL, true)
-		fmt.Printf("Starting upload to dataset '%s' (%d file(s))...\n", datasetName, len(files))
+		
+		// Upload in batches with progress display
+		const batchSize = 10
+		totalBatches := (len(files) + batchSize - 1) / batchSize
+		
 		uploaded := 0
-		for _, f := range files {
-			if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f); err != nil {
-				fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", f, err)
-				continue
+		failed := 0
+		
+		for batchNum := 0; batchNum < totalBatches; batchNum++ {
+			start := batchNum * batchSize
+			end := start + batchSize
+			if end > len(files) {
+				end = len(files)
 			}
-			fmt.Printf("   📤 Uploaded: %s\n", f)
-			uploaded++
+			
+			batchFiles := files[start:end]
+			fmt.Printf("\n📦 Uploading batch %d/%d (%d files)\n", batchNum+1, totalBatches, len(batchFiles))
+			
+			for _, f := range batchFiles {
+				relPath := f
+				// Try to show relative path for cleaner output
+				if cwd, err := os.Getwd(); err == nil {
+					if rel, err := filepath.Rel(cwd, f); err == nil && !strings.HasPrefix(rel, "..") {
+						relPath = rel
+					}
+				}
+				
+				if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f); err != nil {
+					fmt.Fprintf(os.Stderr, "   ❌ Failed: %s (%v)\n", relPath, err)
+					failed++
+					continue
+				}
+				fmt.Printf("   ✅ Uploaded: %s\n", relPath)
+				uploaded++
+			}
 		}
-		fmt.Printf("Done. Uploaded %d/%d file(s).\n", uploaded, len(files))
+		
+		// Final summary
+		fmt.Printf("\n📊 Final Summary:\n")
+		fmt.Printf("   Total files: %d\n", len(files))
+		fmt.Printf("   ✅ Successful: %d\n", uploaded)
+		fmt.Printf("   ❌ Failed: %d\n", failed)
 	},
 }
 
@@ -561,6 +607,9 @@ func init() {
 	datasetsAddCmd.MarkFlagRequired("data-processing-strategy")
 	datasetsAddCmd.MarkFlagRequired("database")
 
+	// Add flags for ingest command
+	datasetsIngestCmd.Flags().BoolVarP(&ingestRecursive, "recursive", "r", false, "Recursively search directories for files")
+	
 	// Add subcommands to datasets
 	datasetsCmd.AddCommand(datasetsListCmd)
 	datasetsCmd.AddCommand(datasetsAddCmd)
@@ -652,6 +701,96 @@ func validateStrategiesAndDatabases(serverURL, namespace, project, dataProcessin
 	}
 
 	return nil
+}
+
+// expandPathsToFiles expands paths (files, directories, globs) to a list of actual files
+func expandPathsToFiles(paths []string, recursive bool) ([]string, error) {
+	var allFiles []string
+	seen := make(map[string]bool) // Track files to avoid duplicates
+	
+	for _, p := range paths {
+		// First check if it's a glob pattern
+		if strings.Contains(p, "*") {
+			matches, err := filepath.Glob(p)
+			if err != nil {
+				return nil, fmt.Errorf("error processing glob pattern '%s': %v", p, err)
+			}
+			for _, match := range matches {
+				info, err := os.Stat(match)
+				if err != nil {
+					continue // Skip files we can't stat
+				}
+				if !info.IsDir() {
+					absPath, _ := filepath.Abs(match)
+					if !seen[absPath] {
+						seen[absPath] = true
+						allFiles = append(allFiles, match)
+					}
+				}
+			}
+			continue
+		}
+		
+		// Check if path exists
+		info, err := os.Stat(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Printf("⚠️  Warning: Path does not exist: %s\n", p)
+				continue
+			}
+			return nil, fmt.Errorf("error accessing path '%s': %v", p, err)
+		}
+		
+		// If it's a file, add it
+		if !info.IsDir() {
+			absPath, _ := filepath.Abs(p)
+			if !seen[absPath] {
+				seen[absPath] = true
+				allFiles = append(allFiles, p)
+			}
+			continue
+		}
+		
+		// It's a directory - walk it
+		if recursive {
+			// Recursive walk
+			err = filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					fmt.Printf("⚠️  Warning: Error accessing %s: %v\n", path, err)
+					return nil // Continue walking
+				}
+				if !info.IsDir() {
+					absPath, _ := filepath.Abs(path)
+					if !seen[absPath] {
+						seen[absPath] = true
+						allFiles = append(allFiles, path)
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, fmt.Errorf("error walking directory '%s': %v", p, err)
+			}
+		} else {
+			// Non-recursive - just read the directory
+			entries, err := os.ReadDir(p)
+			if err != nil {
+				return nil, fmt.Errorf("error reading directory '%s': %v", p, err)
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					fullPath := filepath.Join(p, entry.Name())
+					absPath, _ := filepath.Abs(fullPath)
+					if !seen[absPath] {
+						seen[absPath] = true
+						allFiles = append(allFiles, fullPath)
+					}
+				}
+			}
+		}
+	}
+	
+	return allFiles, nil
 }
 
 func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) error {
