@@ -497,15 +497,6 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%">
-        <a href="https://github.com/BobbyRadford">
-          <img src="https://avatars.githubusercontent.com/u/6943982?v=4?v=4&s=100" width="100px;" alt="Bobby Radford"/>
-          <br />
-          <sub><b>Bobby Radford</b></sub>
-        </a>
-        <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
-      </td>
-      <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/mhamann">
           <img src="https://avatars.githubusercontent.com/u/130131?v=4?v=4&s=100" width="100px;" alt="Matt Hamann"/>
           <br />
@@ -513,6 +504,15 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         </a>
         <br />
         <a href="https://github.com/llama-farm/llamafarm/commits?author=mhamann" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
+      </td>
+      <td align="center" valign="top" width="14.28%">
+        <a href="https://github.com/BobbyRadford">
+          <img src="https://avatars.githubusercontent.com/u/6943982?v=4?v=4&s=100" width="100px;" alt="Bobby Radford"/>
+          <br />
+          <sub><b>Bobby Radford</b></sub>
+        </a>
+        <br />
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
       </td>
       <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/rachradulo">
