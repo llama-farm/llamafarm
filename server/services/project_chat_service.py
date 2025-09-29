@@ -18,6 +18,7 @@ from context_providers.project_chat_context_provider import (
 )
 from core.logging import FastAPIStructLogger
 from services.rag_service import search_with_rag
+import re
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -25,6 +26,13 @@ sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 logger = FastAPIStructLogger()
+
+
+FALLBACK_ECHO_RESPONSE = (
+    "I apologize, but I'm having trouble processing your question properly. "
+    "Could you please try rephrasing it or asking something else? "
+    "If this continues, you may want to start a new session."
+)
 
 
 class ProjectChatService:
@@ -216,25 +224,18 @@ class ProjectChatService:
         logger.info(f"Agent response: {agent_response}")
 
         response_message = agent_response.chat_message
-        
+
         # Check if response is echoing input
-        if response_message == message:
+        if _is_echo(message, response_message):
             logger.warning(f"Response is echoing input! Input: {message}, Response: {response_message}")
             
             # Clear the corrupted history to prevent learning from bad responses
             if hasattr(chat_agent, 'history'):
                 logger.warning("Clearing agent history due to echo response")
-                # Remove the last exchange if it was an echo
-                if len(chat_agent.history) >= 2:
-                    # Remove the last assistant response (the echo)
-                    chat_agent.history = chat_agent.history[:-1]
+                _drop_last_history_entry(chat_agent)
             
             # Generate a fallback response
-            response_message = (
-                "I apologize, but I'm having trouble processing your question properly. "
-                "Could you please try rephrasing it or asking something else? "
-                "If this continues, you may want to start a new session."
-            )
+            response_message = FALLBACK_ECHO_RESPONSE
             logger.info(f"Using fallback response instead of echo")
 
         completion = ChatCompletion(
@@ -327,30 +328,50 @@ class ProjectChatService:
         try:
             logger.info("Running async stream")
             previous_response = ""
+            emitted = False
+            echo_detected = False
+            normalized_input = _normalize_text(message)
             async for chunk in chat_agent.run_async_stream(input_schema):
-                if hasattr(chunk, "chat_message") and chunk.chat_message:
-                    logger.info("Processing partial response", message=chunk)
-                    current_response = chunk.chat_message
+                if not hasattr(chunk, "chat_message") or not chunk.chat_message:
+                    continue
+                logger.info("Processing partial response", message=chunk)
+                current_response = chunk.chat_message
+                logger.info(
+                    "Streaming chunk received",
+                    current=current_response,
+                    normalized=_normalize_text(current_response),
+                )
 
-                    # Skip duplicates
-                    if current_response == previous_response:
-                        continue
-                    
-                    # Skip if response is just echoing the input
-                    if current_response == message:
-                        logger.warning(f"Skipping echoed input in stream: {current_response}")
-                        continue
+                normalized_current = _normalize_text(current_response)
+                if normalized_input.startswith(normalized_current):
+                    echo_detected = True
+                    logger.info(
+                        "Streaming matches user input prefix; waiting for divergence",
+                        chunk=current_response,
+                    )
+                    continue
 
-                    # If this is the first chunk, yield it entirely
-                    if not previous_response:
-                        yield current_response
-                    # Otherwise, yield only the incremental part
-                    elif len(current_response) > len(previous_response):
+                incremental = current_response
+                if previous_response:
+                    if len(current_response) > len(previous_response):
                         incremental = current_response[len(previous_response) :]
-                        yield incremental
+                    else:
+                        incremental = ""
 
-                    previous_response = current_response
-            return
+                if incremental:
+                    emitted = True
+                    yield incremental
+
+                previous_response = current_response
+
+            if not emitted:
+                if echo_detected or not previous_response:
+                    logger.info("Streaming produced no usable content; using fallback")
+                    _drop_last_history_entry(chat_agent)
+                    yield FALLBACK_ECHO_RESPONSE
+                else:
+                    yield previous_response
+                return
         except Exception:
             logger.error(
                 "Model call failed",
@@ -359,3 +380,26 @@ class ProjectChatService:
 
 
 project_chat_service = ProjectChatService()
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\W+", "", text).lower()
+
+
+def _is_echo(user_input: str, candidate: str) -> bool:
+    return _normalize_text(candidate) == _normalize_text(user_input)
+
+
+def _drop_last_history_entry(chat_agent: ProjectChatOrchestratorAgent) -> None:
+    history = getattr(chat_agent, "history", None)
+    if not history:
+        return
+
+    try:
+        if isinstance(history, list):
+            if history:
+                history.pop()
+        elif hasattr(history, "history"):
+            internal = getattr(history, "history", None)
+            if internal and isinstance(internal, list):
+                internal.pop()
+    except Exception:  # pragma: no cover - defensive
+        logger.warning("Failed to trim chat history", exc_info=True)

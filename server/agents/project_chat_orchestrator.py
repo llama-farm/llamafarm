@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import instructor
 from atomic_agents import AgentConfig, AtomicAgent, BaseIOSchema  # type: ignore
@@ -13,7 +15,13 @@ from core.settings import settings  # type: ignore
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
-from config.datamodel import LlamaFarmConfig, Prompt, Provider  # noqa: E402
+from config.datamodel import (  # noqa: E402
+    AgentHandler,
+    LlamaFarmConfig,
+    Prompt,
+    Provider,
+    Runtime,
+)
 
 from core.logging import FastAPIStructLogger  # noqa: E402
 
@@ -173,4 +181,153 @@ def _get_client(project_config: LlamaFarmConfig) -> instructor.client.Instructor
 class ProjectChatOrchestratorAgentFactory:
     @staticmethod
     def create_agent(project_config: LlamaFarmConfig) -> ProjectChatOrchestratorAgent:
-        return ProjectChatOrchestratorAgent(project_config)
+        runtime = project_config.runtime
+        _validate_runtime(runtime)
+
+        handler = runtime.agent_handler
+        logger.info("Creating chat agent", handler=handler.value, model=runtime.model)
+
+        if handler == AgentHandler.structured_rag:
+            if not _model_supports_structured_output(runtime.model):
+                logger.warning(
+                    "Model lacks structured-output support; falling back to simple_rag",
+                    model=runtime.model,
+                )
+                handler = AgentHandler.simple_rag
+            else:
+                return ProjectChatOrchestratorAgent(project_config)
+
+        if handler == AgentHandler.simple_rag:
+            return SimpleChatAgent(project_config)
+
+        if handler == AgentHandler.simple_chat:
+            return SimpleChatAgent(project_config)
+
+        if handler == AgentHandler.classifier:
+            # Placeholder: classifier behaviour to be implemented.
+            return SimpleChatAgent(project_config)
+
+        raise ValueError(f"Unsupported agent handler: {handler}")
+
+
+class SimpleChatAgent:
+    def __init__(self, project_config: LlamaFarmConfig):
+        self.project_config = project_config
+        self.client = _build_async_client(project_config)
+        self.history: list[dict[str, str]] = []
+        self.context_providers: dict[str, Any] = {}
+
+    def register_context_provider(self, name: str, provider: Any) -> None:
+        self.context_providers[name] = provider
+
+    def reset_history(self) -> None:
+        self.history = []
+
+    async def run_async(self, input_schema: ProjectChatOrchestratorAgentInputSchema):
+        user_message = input_schema.chat_message
+        messages = self._build_messages(user_message)
+        response = await self.client.chat.completions.create(
+            model=self.project_config.runtime.model,
+            messages=messages,
+            stream=False,
+            **(self.project_config.runtime.model_api_parameters or {}),
+        )
+        content = response.choices[0].message.content or ""
+        self._append_history("user", user_message)
+        self._append_history("assistant", content)
+        return SimpleNamespace(chat_message=content)
+
+    async def run_async_stream(self, input_schema: ProjectChatOrchestratorAgentInputSchema):
+        user_message = input_schema.chat_message
+        messages = self._build_messages(user_message)
+        stream = await self.client.chat.completions.create(
+            model=self.project_config.runtime.model,
+            messages=messages,
+            stream=True,
+            **(self.project_config.runtime.model_api_parameters or {}),
+        )
+
+        assembled = ""
+        async for chunk in stream:
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            delta = choices[0].delta
+            content = getattr(delta, "content", None)
+            if not content:
+                continue
+            assembled += content
+            yield SimpleNamespace(chat_message=assembled)
+
+        self._append_history("user", user_message)
+        self._append_history("assistant", assembled)
+
+    def _build_messages(self, user_message: str) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = []
+        for prompt in self.project_config.prompts or []:
+            if prompt.role == "system" and prompt.content:
+                messages.append({"role": "system", "content": prompt.content})
+
+        if self.context_providers:
+            context_parts: list[str] = []
+            for provider in self.context_providers.values():
+                info = provider.get_info()
+                if info:
+                    context_parts.append(f"## {provider.title}\n{info}")
+            if context_parts:
+                context_block = "# EXTRA INFORMATION AND CONTEXT\n" + "\n\n".join(
+                    context_parts
+                )
+                messages.append({"role": "system", "content": context_block})
+
+        messages.extend(self.history)
+        messages.append({"role": "user", "content": user_message})
+        return messages
+
+    def _append_history(self, role: str, content: str) -> None:
+        if not content:
+            return
+        if role == "assistant" and self.history and self.history[-1]["role"] == "assistant":
+            self.history[-1]["content"] = content
+        else:
+            self.history.append({"role": role, "content": content})
+
+
+def _build_async_client(project_config: LlamaFarmConfig) -> AsyncOpenAI:
+    if project_config.runtime.provider == Provider.openai:
+        return AsyncOpenAI(
+            api_key=project_config.runtime.api_key,
+            base_url=project_config.runtime.base_url,
+        )
+    if project_config.runtime.provider == Provider.ollama:
+        return AsyncOpenAI(
+            api_key=project_config.runtime.api_key or settings.ollama_api_key,
+            base_url=project_config.runtime.base_url or f"{settings.ollama_host}/v1",
+        )
+    raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")
+
+
+def _model_supports_structured_output(model: str) -> bool:
+    lowered = model.lower()
+    unsupported_tokens = (
+        "tinyllama",
+        "tiny-stories",
+        "tinystories",
+    )
+    return not any(token in lowered for token in unsupported_tokens)
+
+
+def _validate_runtime(runtime: Runtime) -> None:
+    if runtime.provider == Provider.openai and runtime.base_url:
+        lowered = runtime.base_url.lower()
+        if "11434" in lowered or "ollama" in lowered:
+            raise ValueError(
+                "runtime.provider is set to 'openai' but base_url points to an Ollama host. Set provider to 'ollama'."
+            )
+    if runtime.provider == Provider.ollama and runtime.base_url:
+        lowered = runtime.base_url.lower()
+        if "openai" in lowered:
+            logger.warning(
+                "runtime.provider is 'ollama' but base_url references OpenAI; continuing",
+                base_url=runtime.base_url,
+            )

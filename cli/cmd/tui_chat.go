@@ -40,16 +40,25 @@ var designerForced bool
 var lastTranscriptKey string
 
 var chatCtx = &ChatSessionContext{
-	ServerURL:   serverURL,
-	Namespace:   "llamafarm",
-	ProjectID:   "project-seed",
-	Temperature: temperature,
-	MaxTokens:   maxTokens,
-	HTTPClient:  getHTTPClient(),
+	ServerURL:        serverURL,
+	Namespace:        "llamafarm",
+	ProjectID:        "project-seed",
+	SessionMode:      SessionModeDev,
+	SessionNamespace: namespace,
+	SessionProject:   projectID,
+	Temperature:      temperature,
+	MaxTokens:        maxTokens,
+	HTTPClient:       getHTTPClient(),
 }
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
 func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
+	if projectInfo != nil {
+		chatCtx.SessionNamespace = projectInfo.Namespace
+		chatCtx.SessionProject = projectInfo.Project
+	}
+	chatCtx.ServerURL = serverURL
+	chatCtx.HTTPClient = getHTTPClient()
 	m := newChatModel(projectInfo, serverHealth)
 	p := tea.NewProgram(m)
 	m.program = p

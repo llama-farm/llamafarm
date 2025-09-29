@@ -138,12 +138,15 @@ Examples:
 
 		// Construct context and call the project-scoped chat completions via shared helpers
 		ctx := &ChatSessionContext{
-			ServerURL:   serverURL,
-			Namespace:   ns,
-			ProjectID:   proj,
-			Temperature: temperature,
-			MaxTokens:   maxTokens,
-			HTTPClient:  getHTTPClient(),
+			ServerURL:        serverURL,
+			Namespace:        ns,
+			ProjectID:        proj,
+			SessionMode:      SessionModeStateless,
+			SessionNamespace: ns,
+			SessionProject:   proj,
+			Temperature:      temperature,
+			MaxTokens:        maxTokens,
+			HTTPClient:       getHTTPClient(),
 			// RAG settings - RAG is enabled by default unless --no-rag is used
 			RAGEnabled:           !runNoRAG,
 			RAGDatabase:          runRAGDatabase,
