@@ -12,7 +12,7 @@ import (
 // startCmd launches the chat quickly for development at the top level.
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start your project locally",
+	Short: "Start working with your project locally",
 	Long:  "Start your LlamaFarm project locally and open an interactive chat session for development and testing.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if strings.TrimSpace(serverURL) == "" {
