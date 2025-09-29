@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,7 +10,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -216,11 +219,129 @@ func createDockerClient() (*client.Client, error) {
 	return cli, nil
 }
 
+// promptUserConfirmation prompts the user for a yes/no confirmation
+func promptUserConfirmation(message string) bool {
+	fmt.Fprintf(os.Stderr, "%s (y/N): ", message)
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		response := strings.ToLower(strings.TrimSpace(scanner.Text()))
+		return response == "y" || response == "yes"
+	}
+	return false
+}
+
+// checkWindowsVirtualization checks if virtualization is supported and enabled on Windows
+func checkWindowsVirtualization() error {
+	// Check hardware virtualization support using systeminfo
+	cmd := exec.Command("systeminfo")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to run systeminfo command: %v", err)
+	}
+
+	outputStr := string(output)
+
+	// Check for Hyper-V requirements section
+	if !strings.Contains(outputStr, "Hyper-V Requirements") {
+		return fmt.Errorf("unable to determine virtualization support. Your system may not support Hyper-V")
+	}
+
+	// Check if virtualization is enabled in firmware
+	if !strings.Contains(outputStr, "Virtualization Enabled in Firmware: Yes") {
+		return fmt.Errorf("hardware virtualization is not enabled in BIOS/UEFI. Please enable Intel VT-x or AMD-V in your system settings")
+	}
+
+	// Check if SLAT is supported (required for Hyper-V)
+	if !strings.Contains(outputStr, "Second Level Address Translation: Yes") {
+		return fmt.Errorf("Second Level Address Translation (SLAT) is not supported. This is required for Docker Desktop")
+	}
+
+	// Check if Data Execution Prevention is available
+	if !strings.Contains(outputStr, "Data Execution Prevention Available: Yes") {
+		return fmt.Errorf("Data Execution Prevention (DEP) is not available. This is required for Docker Desktop")
+	}
+
+	return nil
+}
+
+// checkWindowsContainerSupport checks if Windows has the necessary features for Docker
+func checkWindowsContainerSupport() error {
+	// Check if WSL2 is available (preferred backend for Docker Desktop)
+	cmd := exec.Command("wsl", "--status")
+	if err := cmd.Run(); err == nil {
+		fmt.Fprintln(os.Stderr, "WSL2 is available and will be used as Docker backend.")
+		return nil
+	}
+
+	// If WSL2 is not available, check Hyper-V
+	cmd = exec.Command("powershell", "-Command", "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All | Select-Object State")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("unable to check Windows features. please ensure you have administrator privileges")
+	}
+
+	if strings.Contains(string(output), "Enabled") {
+		fmt.Fprintln(os.Stderr, "Hyper-V is enabled and will be used as Docker backend.")
+		return nil
+	}
+
+	return fmt.Errorf("neither WSL2 nor Hyper-V is properly configured. Docker Desktop requires one of these to be enabled")
+}
+
+// installDockerOnWindows attempts to install Docker Desktop using winget
+func installDockerOnWindows() error {
+	fmt.Fprintln(os.Stderr, "Installing Docker Desktop using winget...")
+	cmd := exec.Command("winget", "install", "docker.dockerdesktop")
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to install Docker Desktop: %v", err)
+	}
+
+	fmt.Fprintln(os.Stderr, "Docker Desktop installation completed. You may need to restart your terminal or log out/in for changes to take effect.")
+	return nil
+}
+
 // ensureDockerAvailable checks whether docker is available by creating a client
 func ensureDockerAvailable() error {
 	cli, err := createDockerClient()
 	if err != nil {
-		return fmt.Errorf("docker is not available. Please install Docker and try again: %v", err)
+		// On Windows, offer to install Docker automatically
+		if runtime.GOOS == "windows" {
+			fmt.Fprintln(os.Stderr, "Docker is not available.")
+
+			// First check if the system supports virtualization
+			fmt.Fprintln(os.Stderr, "Checking virtualization support...")
+			if virtErr := checkWindowsVirtualization(); virtErr != nil {
+				return fmt.Errorf("Docker Desktop requires virtualization support: %v", virtErr)
+			}
+
+			// Check if container support (WSL2 or Hyper-V) is available
+			fmt.Fprintln(os.Stderr, "Checking container backend support...")
+			if containerErr := checkWindowsContainerSupport(); containerErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: %v\n", containerErr)
+				fmt.Fprintln(os.Stderr, "Docker Desktop may prompt you to enable WSL2 or Hyper-V during installation.")
+			}
+
+			if promptUserConfirmation("Would you like me to install Docker Desktop using winget?") {
+				if installErr := installDockerOnWindows(); installErr != nil {
+					return fmt.Errorf("failed to install Docker: %v", installErr)
+				}
+
+				// Wait a moment for installation to complete
+				fmt.Fprintln(os.Stderr, "Waiting for Docker installation to complete...")
+				time.Sleep(3 * time.Second)
+
+				// Retry Docker availability check
+				fmt.Fprintln(os.Stderr, "Retrying Docker connection...")
+				return ensureDockerAvailableRetry()
+			} else {
+				return fmt.Errorf("Docker is not available. You can install Docker Desktop using:\n  winget install docker.dockerdesktop\n\nOr download from https://docker.com/get-started: %v", err)
+			}
+		} else {
+			return fmt.Errorf("Docker is not available. Please install Docker and try again: %v", err)
+		}
 	}
 	defer cli.Close()
 
@@ -232,6 +353,27 @@ func ensureDockerAvailable() error {
 	if err != nil {
 		return fmt.Errorf("docker daemon is not running: %v", err)
 	}
+	return nil
+}
+
+// ensureDockerAvailableRetry is a helper function for retrying Docker availability without prompting for installation
+func ensureDockerAvailableRetry() error {
+	cli, err := createDockerClient()
+	if err != nil {
+		return fmt.Errorf("Docker is still not available after installation. You may need to restart your terminal or start Docker Desktop manually: %v", err)
+	}
+	defer cli.Close()
+
+	// Try to ping the Docker daemon
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err = cli.Ping(ctx)
+	if err != nil {
+		return fmt.Errorf("Docker is installed but the daemon is not running. Please start Docker Desktop and try again: %v", err)
+	}
+
+	fmt.Fprintln(os.Stderr, "Docker is now available!")
 	return nil
 }
 
@@ -521,6 +663,32 @@ func getKnownComponentsList() string {
 
 // ---- Generic container utilities ----
 
+// ensureHostDockerInternal adds host.docker.internal:host-gateway mapping for Linux containers
+// This provides the equivalent of --add-host=host.docker.internal:host-gateway
+func ensureHostDockerInternal(addHosts []string) []string {
+	// On Linux, Docker doesn't automatically provide host.docker.internal
+	// so we need to add it manually using host-gateway
+	if runtime.GOOS == "linux" {
+		// Check if host.docker.internal mapping already exists
+		hasHostDockerInternal := false
+		for _, host := range addHosts {
+			if strings.Contains(host, "host.docker.internal") {
+				hasHostDockerInternal = true
+				break
+			}
+		}
+
+		// Add the mapping if it doesn't exist
+		if !hasHostDockerInternal {
+			if addHosts == nil {
+				addHosts = make([]string, 0, 1)
+			}
+			addHosts = append(addHosts, "host.docker.internal:host-gateway")
+		}
+	}
+	return addHosts
+}
+
 type PortSpec struct {
 	Container int
 	Protocol  string
@@ -680,7 +848,7 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 	// Prepare host configuration
 	hostConfig := &container.HostConfig{
 		Binds:      spec.Volumes,
-		ExtraHosts: spec.AddHosts,
+		ExtraHosts: ensureHostDockerInternal(spec.AddHosts),
 		AutoRemove: false,
 	}
 
@@ -1100,7 +1268,7 @@ func StartContainerWithNetwork(spec ContainerRunSpec, networkName string, policy
 	// Prepare host configuration
 	hostConfig := &container.HostConfig{
 		Binds:      spec.Volumes,
-		ExtraHosts: spec.AddHosts,
+		ExtraHosts: ensureHostDockerInternal(spec.AddHosts),
 		AutoRemove: false,
 	}
 
