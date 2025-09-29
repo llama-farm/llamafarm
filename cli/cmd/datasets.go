@@ -37,7 +37,7 @@ Each dataset must specify:
 
 Available commands:
   list    - List all datasets for a project
-  create  - Create a dataset (optionally then upload files)
+  create  - Create a dataset (optionally, specify files to upload)
   delete  - Delete a dataset
   upload  - Upload files to a dataset
   process - Process uploaded files using the data processing strategy and database embeddings`,
