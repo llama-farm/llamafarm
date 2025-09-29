@@ -227,13 +227,15 @@ class ProjectChatService:
 
         # Check if response is echoing input
         if _is_echo(message, response_message):
-            logger.warning(f"Response is echoing input! Input: {message}, Response: {response_message}")
-            
+            logger.warning(
+                f"Response is echoing input! Input: {message}, Response: {response_message}"
+            )
+
             # Clear the corrupted history to prevent learning from bad responses
-            if hasattr(chat_agent, 'history'):
+            if hasattr(chat_agent, "history"):
                 logger.warning("Clearing agent history due to echo response")
                 _drop_last_history_entry(chat_agent)
-            
+
             # Generate a fallback response
             response_message = FALLBACK_ECHO_RESPONSE
             logger.info(f"Using fallback response instead of echo")
@@ -334,13 +336,7 @@ class ProjectChatService:
             async for chunk in chat_agent.run_async_stream(input_schema):
                 if not hasattr(chunk, "chat_message") or not chunk.chat_message:
                     continue
-                logger.info("Processing partial response", message=chunk)
                 current_response = chunk.chat_message
-                logger.info(
-                    "Streaming chunk received",
-                    current=current_response,
-                    normalized=_normalize_text(current_response),
-                )
 
                 normalized_current = _normalize_text(current_response)
                 if normalized_input.startswith(normalized_current):
@@ -380,6 +376,8 @@ class ProjectChatService:
 
 
 project_chat_service = ProjectChatService()
+
+
 def _normalize_text(text: str) -> str:
     return re.sub(r"\W+", "", text).lower()
 
