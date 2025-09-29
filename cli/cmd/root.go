@@ -21,7 +21,7 @@ var rootCmd = &cobra.Command{
 	Short: "LlamaFarm CLI - Grow AI projects from seed to scale",
 	Long: `LlamaFarm CLI is a command line interface for managing and interacting
 with your LlamaFarm projects. It provides various commands to help you
-manage your data, configurations, models,and operations.
+manage your data, configurations, models, and operations.
 
 Getting started:
   # Create a new project
