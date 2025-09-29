@@ -134,7 +134,7 @@ var datasetsListCmd = &cobra.Command{
 	},
 }
 
-// datasetsCreateCmd represents the datasets add command
+// datasetsCreateCmd represents the datasets create command
 var datasetsCreateCmd = &cobra.Command{
 	Use:     "create [name] [file1] [file2] ...",
 	Aliases: []string{"add"},
