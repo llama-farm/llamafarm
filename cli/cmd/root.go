@@ -27,7 +27,7 @@ Getting started:
   # Create a new project
   lf init my-project
 
-  # Start LlamaFarm locally
+  # Start working with your project locally
   lf start
 
   # Send a one-time chat prompt to your project
