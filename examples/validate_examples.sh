@@ -61,20 +61,20 @@ fi
 
 # Test 3: Create test dataset
 TEST_DATASET="validation-test-$$"
-if ./lf datasets add "$TEST_DATASET" -s universal_processor -b main_database >/dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} lf datasets add"
+if ./lf datasets create -s universal_processor -b main_database "$TEST_DATASET" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} lf datasets create"
     
-    # Test 4: Ingest files
-    if ./lf datasets ingest "$TEST_DATASET" examples/rag_pipeline/sample_files/research_papers/transformer_architecture.txt >/dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} lf datasets ingest"
+    # Test 4: Upload files
+    if ./lf datasets upload "$TEST_DATASET" examples/rag_pipeline/sample_files/research_papers/transformer_architecture.txt >/dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} lf datasets upload"
     else
-        echo -e "${YELLOW}⚠${NC} lf datasets ingest failed (non-critical)"
+        echo -e "${YELLOW}⚠${NC} lf datasets upload failed (non-critical)"
     fi
     
     # Cleanup
-    ./lf datasets remove "$TEST_DATASET" >/dev/null 2>&1 || true
+    ./lf datasets delete "$TEST_DATASET" >/dev/null 2>&1 || true
 else
-    echo -e "${YELLOW}⚠${NC} lf datasets add failed (may already exist)"
+    echo -e "${YELLOW}⚠${NC} lf datasets create failed (may already exist)"
 fi
 
 # Test 5: RAG query
@@ -85,10 +85,10 @@ else
 fi
 
 # Test 6: RAG with database
-if ./lf chat --rag --database main_database "test" >/dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} lf chat --rag"
+if ./lf chat --database main_database "test" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} lf chat --database"
 else
-    echo -e "${YELLOW}⚠${NC} lf chat --rag failed (RAG may not be configured)"
+    echo -e "${YELLOW}⚠${NC} lf chat --database failed (RAG may not be configured)"
 fi
 
 echo ""

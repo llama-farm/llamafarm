@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PROJECT_ROOT="${1:-${PROJECT_ROOT_DEFAULT}}"
 TARGET_CONFIG="${PROJECT_ROOT}/llamafarm.yaml"
-EXAMPLE_CONFIG="${SCRIPT_DIR}/llamafarm-example-gov.yaml"
+EXAMPLE_CONFIG="${SCRIPT_DIR}/llamafarm-example-many-small.yaml"
 BACKUP_SUFFIX="backup_$(date +%s)"
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
@@ -33,4 +33,4 @@ fi
 cp "$EXAMPLE_CONFIG" "$TARGET_CONFIG"
 success "Copied Raleigh UDO example config to ${TARGET_CONFIG}."
 
-info "Next: run './examples/gov_rag/run_example.sh' (optionally pass the project root)."
+info "Next: run './examples/many-small-file-rag/run_example.sh' (optionally pass the project root)."
