@@ -23,8 +23,9 @@ var (
 
 // ragStatsCmd represents the rag stats command
 var ragStatsCmd = &cobra.Command{
-	Use:   "stats",
-	Short: "Show RAG database statistics",
+	Hidden: true,
+	Use:    "stats",
+	Short:  "Show RAG database statistics",
 	Long: `Display comprehensive statistics about the RAG database including vector count,
 document count, and storage usage.
 
@@ -97,8 +98,9 @@ Examples:
 
 // ragListCmd represents the rag list documents command
 var ragListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List documents in RAG database",
+	Hidden: true,
+	Use:    "list",
+	Short:  "List documents in RAG database",
 	Long: `List all documents stored in the RAG database with their metadata.
 
 Examples:
@@ -134,8 +136,9 @@ Examples:
 
 // ragCompactCmd represents the rag compact command
 var ragCompactCmd = &cobra.Command{
-	Use:   "compact",
-	Short: "Compact and optimize RAG database",
+	Hidden: true,
+	Use:    "compact",
+	Short:  "Compact and optimize RAG database",
 	Long: `Compact the vector database to optimize storage and query performance.
 This removes deleted vectors and reorganizes the index.
 
@@ -167,8 +170,9 @@ Examples:
 
 // ragReindexCmd represents the rag reindex command
 var ragReindexCmd = &cobra.Command{
-	Use:   "reindex",
-	Short: "Reindex documents in RAG database",
+	Hidden: true,
+	Use:    "reindex",
+	Short:  "Reindex documents in RAG database",
 	Long: `Reindex all documents in the RAG database. This can be useful after
 configuration changes or to fix index corruption.
 

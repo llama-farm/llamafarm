@@ -36,11 +36,11 @@ Each dataset must specify:
   - A database (from rag.databases in your config)
 
 Available commands:
-  list    - List all datasets on the server for a project
-  create     - Create a dataset on the server (optionally then upload files)
-  delete  - Delete a dataset from the server
-  ingest  - Upload files to a dataset on the server
-  process - Process uploaded files into the vector database`,
+  list    - List all datasets for a project
+  create  - Create a dataset (optionally, specify files to upload)
+  delete  - Delete a dataset
+  upload  - Upload files to a dataset
+  process - Process uploaded files using the data processing strategy and database embeddings`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("LlamaFarm Datasets Management")
 		cmd.Help()
@@ -134,16 +134,16 @@ var datasetsListCmd = &cobra.Command{
 	},
 }
 
-// datasetsAddCmd represents the datasets add command
-var datasetsAddCmd = &cobra.Command{
+// datasetsCreateCmd represents the datasets create command
+var datasetsCreateCmd = &cobra.Command{
 	Use:     "create [name] [file1] [file2] ...",
 	Aliases: []string{"add"},
 	Short:   "Create a new dataset on the server (optionally upload files)",
 	Long: `Create a new dataset on the server for the current project.
 
 Examples:
-  lf datasets add --data-processing-strategy pdf_processing --database main_database my-docs
-  lf datasets add -s text_processing -b main_database my-pdfs ./pdfs/*.pdf`,
+  lf datasets create --data-processing-strategy pdf_processing --database main_database my-docs
+  lf datasets create -s text_processing -b main_database my-pdfs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Start config watcher for this command
@@ -238,8 +238,8 @@ Examples:
 	},
 }
 
-// datasetsRemoveCmd represents the datasets remove command
-var datasetsRemoveCmd = &cobra.Command{
+// datasetsDeleteCommand represents the datasets remove command
+var datasetsDeleteCommand = &cobra.Command{
 	Use:     "delete [name]",
 	Aliases: []string{"rm", "remove", "del"},
 	Short:   "Delete a dataset from the server",
@@ -282,11 +282,11 @@ var datasetsRemoveCmd = &cobra.Command{
 	},
 }
 
-
-// datasetsIngestCmd represents the datasets ingest command
-var datasetsIngestCmd = &cobra.Command{
-	Use:   "ingest [dataset-name] [file1] [file2] [dir/] ...",
-	Short: "Upload files or directories to a dataset on the server",
+// datasetsUploadCmd represents the datasets ingest command
+var datasetsUploadCmd = &cobra.Command{
+	Use:     "upload [dataset-name] [file1] [file2] [dir/] ...",
+	Aliases: []string{"ingest"},
+	Short:   "Upload files or directories to a dataset on the server",
 	Long: `Uploads one or more files or directories to the specified dataset on the LlamaFarm server.
 
 Supports:
@@ -298,12 +298,12 @@ Supports:
   - Mixed: ./docs/ *.pdf specific.txt
 
 Examples:
-  lf datasets ingest my-docs ./docs/file1.pdf ./docs/file2.txt
-  lf datasets ingest my-docs ./pdfs/*.pdf
-  lf datasets ingest my-docs ./documents/              # All files in directory only
-  lf datasets ingest my-docs ./documents/**/*          # Include all files in subdirectories
-  lf datasets ingest my-docs ./docs/**/*.pdf           # All PDFs in docs and subdirectories
-  lf datasets ingest my-docs ./docs/ *.pdf README.md   # Mixed sources`,
+  lf datasets upload my-docs ./docs/file1.pdf ./docs/file2.txt
+  lf datasets upload my-docs ./pdfs/*.pdf
+  lf datasets upload my-docs ./documents/              # All files in directory only
+  lf datasets upload my-docs ./documents/**/*          # Include all files in subdirectories
+  lf datasets upload my-docs ./docs/**/*.pdf           # All PDFs in docs and subdirectories
+  lf datasets upload my-docs ./docs/ *.pdf README.md   # Mixed sources`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Start config watcher for this command
@@ -600,19 +600,18 @@ func init() {
 	datasetsCmd.PersistentFlags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
 
 	// Add flags specific to add command
-	datasetsAddCmd.Flags().StringVarP(&dataProcessingStrategy, "data-processing-strategy", "s", "", "Data processing strategy to use for this dataset (required)")
-	datasetsAddCmd.Flags().StringVarP(&database, "database", "b", "", "Database to use for this dataset (required)")
+	datasetsCreateCmd.Flags().StringVarP(&dataProcessingStrategy, "data-processing-strategy", "s", "", "Data processing strategy to use for this dataset (required)")
+	datasetsCreateCmd.Flags().StringVarP(&database, "database", "b", "", "Database to use for this dataset (required)")
 
 	// Mark flags as required
-	datasetsAddCmd.MarkFlagRequired("data-processing-strategy")
-	datasetsAddCmd.MarkFlagRequired("database")
-
+	datasetsCreateCmd.MarkFlagRequired("data-processing-strategy")
+	datasetsCreateCmd.MarkFlagRequired("database")
 
 	// Add subcommands to datasets
 	datasetsCmd.AddCommand(datasetsListCmd)
-	datasetsCmd.AddCommand(datasetsAddCmd)
-	datasetsCmd.AddCommand(datasetsRemoveCmd)
-	datasetsCmd.AddCommand(datasetsIngestCmd)
+	datasetsCmd.AddCommand(datasetsCreateCmd)
+	datasetsCmd.AddCommand(datasetsDeleteCommand)
+	datasetsCmd.AddCommand(datasetsUploadCmd)
 	datasetsCmd.AddCommand(datasetsProcessCmd)
 
 	// Add the datasets command to root

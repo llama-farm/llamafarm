@@ -9,7 +9,7 @@
 # 3. Adds various types of documents
 # 4. Processes them
 # 5. Tests queries
-# 6. Tests lf run with and without RAG
+# 6. Tests lf chat with and without RAG
 # 7. Shows ALL output without truncation
 # ================================================================
 
@@ -319,12 +319,12 @@ print_success "RAG queries completed"
 print_header "Step 7: Testing Chat with RAG Integration"
 
 print_step "Test 1: Chat WITH RAG (default behavior)"
-echo "Command: timeout 10 ${LF_CMD} run --database ${TEST_DB} \"What are the key components of transformer architecture?\""
-timeout 10 ${LF_CMD} run --database "${TEST_DB}" "What are the key components of transformer architecture?" || true
+echo "Command: timeout 10 ${LF_CMD} chat --database ${TEST_DB} \"What are the key components of transformer architecture?\""
+timeout 10 ${LF_CMD} chat --database "${TEST_DB}" "What are the key components of transformer architecture?" || true
 
 print_step "Test 2: Chat WITHOUT RAG (LLM only)"
-echo "Command: timeout 10 ${LF_CMD} run --no-rag \"What are the key components of transformer architecture?\""
-timeout 10 ${LF_CMD} run --no-rag "What are the key components of transformer architecture?" || true
+echo "Command: timeout 10 ${LF_CMD} chat --no-rag \"What are the key components of transformer architecture?\""
+timeout 10 ${LF_CMD} chat --no-rag "What are the key components of transformer architecture?" || true
 
 print_success "Chat tests completed"
 
@@ -337,16 +337,16 @@ print_header "Step 8: Direct Comparison - RAG vs No-RAG"
 QUERY="What is the DataProcessor class mentioned in our documentation?"
 
 print_step "Asking about DataProcessor WITH RAG context:"
-echo "Command: timeout 10 ${LF_CMD} run --database ${TEST_DB} \"${QUERY}\""
+echo "Command: timeout 10 ${LF_CMD} chat --database ${TEST_DB} \"${QUERY}\""
 echo -e "${GREEN}Response with RAG:${NC}"
-timeout 10 ${LF_CMD} run --database "${TEST_DB}" "${QUERY}" || true
+timeout 10 ${LF_CMD} chat --database "${TEST_DB}" "${QUERY}" || true
 
 echo -e "\n${CYAN}────────────────────────────────────────────────────────────────────────${NC}\n"
 
 print_step "Asking about DataProcessor WITHOUT RAG context:"
-echo "Command: timeout 10 ${LF_CMD} run --no-rag \"${QUERY}\""
+echo "Command: timeout 10 ${LF_CMD} chat --no-rag \"${QUERY}\""
 echo -e "${RED}Response without RAG:${NC}"
-timeout 10 ${LF_CMD} run --no-rag "${QUERY}" || true
+timeout 10 ${LF_CMD} chat --no-rag "${QUERY}" || true
 
 # ================================================================
 # Step 9: Test Duplicate Detection

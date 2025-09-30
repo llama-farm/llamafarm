@@ -9,11 +9,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// devCmd launches the chat quickly for development at the top level.
-var devCmd = &cobra.Command{
-	Use:   "dev",
-	Short: "Developer mode: launch your project locally",
-	Long:  "Start an interactive chat session quickly for development and testing.",
+// startCmd launches the chat quickly for development at the top level.
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start working with your project locally",
+	Long:  "Start your LlamaFarm project locally and open an interactive chat session for development and testing.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if strings.TrimSpace(serverURL) == "" {
 			serverURL = "http://localhost:8000"
@@ -56,8 +56,8 @@ var devCmd = &cobra.Command{
 
 func init() {
 	// Attach to root
-	rootCmd.AddCommand(devCmd)
+	rootCmd.AddCommand(startCmd)
 
-	// Add dev-only flags
-	devCmd.Flags().StringVar(&ollamaHost, "ollama-host", ollamaHost, "Ollama host URL")
+	// Add start-only flags
+	startCmd.Flags().StringVar(&ollamaHost, "ollama-host", ollamaHost, "Ollama host URL")
 }

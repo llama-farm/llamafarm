@@ -9,6 +9,10 @@ RUN apk add --no-cache python3 make g++
 # Set working directory
 WORKDIR /app
 
+# Cache-busting build arg (populated by CI)
+ARG GIT_SHA
+RUN echo "GIT_SHA=$GIT_SHA" >/dev/null
+
 # Copy package files
 COPY package*.json ./
 
@@ -28,6 +32,9 @@ RUN npm cache clean --force \
     && npm install --legacy-peer-deps
 
 # Build
+# Temporary debug: show SampleCard.tsx header and check for FontIcon import
+RUN sed -n '1,20p' src/components/Samples/SampleCard.tsx && \
+    grep -n 'FontIcon' src/components/Samples/SampleCard.tsx || true
 RUN npm run build
 
 # Production stage (target platform)

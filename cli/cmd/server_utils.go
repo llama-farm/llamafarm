@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -204,6 +205,7 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	// Prepare container specification
+	homeDir, _ := os.UserHomeDir()
 	spec := ContainerRunSpec{
 		Name:  containerName,
 		Image: image,
@@ -212,7 +214,7 @@ func startLocalServerViaDocker(serverURL string) error {
 		},
 		Env: make(map[string]string),
 		Volumes: []string{
-			fmt.Sprintf("%s:%s", os.ExpandEnv("$HOME/.llamafarm"), "/var/lib/llamafarm"),
+			fmt.Sprintf("%s:%s", convertToDockerPath(filepath.Join(homeDir, ".llamafarm")), "/var/lib/llamafarm"),
 		},
 		Labels: map[string]string{
 			"llamafarm.component": "server",
@@ -221,10 +223,8 @@ func startLocalServerViaDocker(serverURL string) error {
 	}
 
 	// Mount effective working directory into the container at the same path
-	if cwd := getEffectiveCWD(); strings.TrimSpace(cwd) != "" {
-		spec.Volumes = append(spec.Volumes, fmt.Sprintf("%s:%s", cwd, cwd))
-	} else {
-		fmt.Fprintln(os.Stderr, "Warning: could not determine current directory; continuing without volume mount")
+	if err := setupWorkdirVolumeMount(&spec); err != nil {
+		return fmt.Errorf("failed to configure working directory volume: %v", err)
 	}
 
 	// Pass through or configure Ollama access inside the container
@@ -413,4 +413,46 @@ func isUnhealthyOnlyDueToRAG(hr *HealthPayload) bool {
 	// 1. There are unhealthy RAG components, AND
 	// 2. There are NO unhealthy non-RAG components
 	return hasUnhealthyRAG && !hasUnhealthyNonRAG
+}
+
+// convertToDockerPath normalizes a host path to use forward slashes which Docker accepts across platforms.
+func convertToDockerPath(hostPath string) string {
+	return filepath.ToSlash(hostPath)
+}
+
+// validateDockerVolumePath checks if a path can be safely mounted as a Docker volume
+func validateDockerVolumePath(hostPath string) error {
+	if strings.TrimSpace(hostPath) == "" {
+		return fmt.Errorf("empty path")
+	}
+
+	// Check if the path is accessible
+	if _, err := os.Stat(hostPath); err != nil {
+		return fmt.Errorf("path not accessible: %v", err)
+	}
+
+	return nil
+}
+
+// setupWorkdirVolumeMount safely sets up the working directory volume mount
+// Returns an error if the working directory cannot be determined or validated
+func setupWorkdirVolumeMount(spec *ContainerRunSpec) error {
+	cwd := getEffectiveCWD()
+	if strings.TrimSpace(cwd) == "" {
+		return fmt.Errorf("could not determine current directory")
+	}
+
+	// Simple validation - check if path is accessible
+	if err := validateDockerVolumePath(cwd); err != nil {
+		return fmt.Errorf("working directory not accessible (%s): %v", cwd, err)
+	}
+
+	// Convert to Docker-compatible path
+	dockerPath := convertToDockerPath(cwd)
+	volumeMount := fmt.Sprintf("%s:%s", dockerPath, dockerPath)
+	spec.Volumes = append(spec.Volumes, volumeMount)
+
+	OutputDebug("Mounting volume: %s\n", volumeMount)
+
+	return nil
 }

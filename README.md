@@ -265,11 +265,11 @@ cd cli && go build -o lf . && cd ..
 ./lf rag query --database main_database --top-k 10 "What FDA submissions are discussed?"
 
 # Chat with RAG augmentation (default behavior)
-./lf run --database main_database "Explain neural scaling laws"
-./lf run --database main_database --debug "What is BLA 761248?"
+./lf chat --database main_database "Explain neural scaling laws"
+./lf chat --database main_database --debug "What is BLA 761248?"
 
 # Chat without RAG (LLM only)
-./lf run --no-rag "What is machine learning?"
+./lf chat --no-rag "What is machine learning?"
 ```
 
 #### Component-Specific Examples
@@ -509,15 +509,6 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%">
-        <a href="https://github.com/BobbyRadford">
-          <img src="https://avatars.githubusercontent.com/u/6943982?v=4?v=4&s=100" width="100px;" alt="Bobby Radford"/>
-          <br />
-          <sub><b>Bobby Radford</b></sub>
-        </a>
-        <br />
-        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
-      </td>
-      <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/mhamann">
           <img src="https://avatars.githubusercontent.com/u/130131?v=4?v=4&s=100" width="100px;" alt="Matt Hamann"/>
           <br />
@@ -525,6 +516,15 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
         </a>
         <br />
         <a href="https://github.com/llama-farm/llamafarm/commits?author=mhamann" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
+      </td>
+      <td align="center" valign="top" width="14.28%">
+        <a href="https://github.com/BobbyRadford">
+          <img src="https://avatars.githubusercontent.com/u/6943982?v=4?v=4&s=100" width="100px;" alt="Bobby Radford"/>
+          <br />
+          <sub><b>Bobby Radford</b></sub>
+        </a>
+        <br />
+        <a href="https://github.com/llama-farm/llamafarm/commits?author=BobbyRadford" title="Code">💻</a> <a href="#maintenance" title="Maintenance">🚧</a>
       </td>
       <td align="center" valign="top" width="14.28%">
         <a href="https://github.com/rachradulo">

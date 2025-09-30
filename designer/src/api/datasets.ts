@@ -40,9 +40,53 @@ export async function createDataset(
   project: string,
   request: CreateDatasetRequest
 ): Promise<CreateDatasetResponse> {
+  // The server expects { name, data_processing_strategy, database }
+  // Use the provided request values directly (no rag_strategy translation).
+  let data_processing_strategy: string = request.data_processing_strategy
+  let database: string = request.database
+
+  try {
+    const strategiesResp = await apiClient.get(
+      `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/strategies`
+    )
+    const strategies: string[] =
+      strategiesResp.data?.data_processing_strategies || []
+    const databases: string[] = strategiesResp.data?.databases || []
+
+    if (strategies.length > 0) {
+      if (!strategies.includes(data_processing_strategy)) {
+        throw new Error(
+          `Invalid data_processing_strategy: ${data_processing_strategy}. Allowed: ${strategies.join(', ')}`
+        )
+      }
+    }
+    if (databases.length > 0) {
+      if (!databases.includes(database)) {
+        throw new Error(
+          `Invalid database: ${database}. Allowed: ${databases.join(', ')}`
+        )
+      }
+    }
+  } catch (err) {
+    // If the strategies endpoint is unavailable, proceed with provided defaults.
+    // But if it was available and we threw due to invalid strategy, rethrow.
+    if (
+      err instanceof Error &&
+      err.message.startsWith('Invalid data_processing_strategy')
+    ) {
+      throw err
+    }
+  }
+
+  const serverPayload = {
+    name: request.name,
+    data_processing_strategy,
+    database,
+  }
+
   const response = await apiClient.post<CreateDatasetResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/`,
-    request
+    serverPayload
   )
   return response.data
 }
@@ -137,7 +181,9 @@ export async function deleteFileFromDataset(
   }
 
   const url = `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/${encodeURIComponent(fileHash)}`
-  const fullUrl = queryParams.toString() ? `${url}?${queryParams.toString()}` : url
+  const fullUrl = queryParams.toString()
+    ? `${url}?${queryParams.toString()}`
+    : url
 
   const response = await apiClient.delete<FileDeleteResponse>(fullUrl)
   return response.data
@@ -200,7 +246,9 @@ export async function deleteDatasetFile(
   }
 
   const url = `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/${encodeURIComponent(fileHash)}`
-  const fullUrl = queryParams.toString() ? `${url}?${queryParams.toString()}` : url
+  const fullUrl = queryParams.toString()
+    ? `${url}?${queryParams.toString()}`
+    : url
 
   const response = await apiClient.delete<FileDeleteResponse>(fullUrl)
   return response.data

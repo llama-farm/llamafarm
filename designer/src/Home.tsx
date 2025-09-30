@@ -238,8 +238,11 @@ function Home() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl text-primary text-left">Your projects</h3>
           <div className="hidden md:flex items-center gap-2 shrink-0">
-            <button className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20">
-              Explore public projects
+            <button
+              className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
+              onClick={() => navigate('/samples')}
+            >
+              Explore sample projects
             </button>
             <button
               className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
@@ -251,8 +254,11 @@ function Home() {
         </div>
         {/* Controls for small screens */}
         <div className="md:hidden mb-4 flex items-center justify-between gap-3">
-          <button className="flex-1 px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20">
-            Explore public projects
+          <button
+            className="flex-1 px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
+            onClick={() => navigate('/samples')}
+          >
+            Explore sample projects
           </button>
           <button
             className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
@@ -316,7 +322,7 @@ function Home() {
         id="resources"
         className="w-full max-w-6xl mx-auto px-6 mt-20 lg:mt-28"
       >
-        <h3 className="text-xl text-white mb-4">Resources</h3>
+        <h3 className="text-xl text-primary mb-4">Resources</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <a
             href="https://github.com/llama-farm/llamafarm"

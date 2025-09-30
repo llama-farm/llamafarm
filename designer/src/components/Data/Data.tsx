@@ -19,12 +19,13 @@ import {
   DialogClose,
 } from '../ui/dialog'
 import { Button } from '../ui/button'
+import ImportSampleDatasetModal from './ImportSampleDatasetModal'
 import PageActions from '../common/PageActions'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import {
   useListDatasets,
@@ -50,6 +51,7 @@ const Data = () => {
   const [mode, setMode] = useState<Mode>('designer')
 
   const navigate = useNavigate()
+  const location = useLocation()
   const { toast } = useToast()
 
   // Get current active project for API calls
@@ -68,26 +70,57 @@ const Data = () => {
   const createDatasetMutation = useCreateDataset()
   const deleteDatasetMutation = useDeleteDataset()
 
+  // Local demo datasets change counter (forces recompute when we mutate localStorage)
+  const [localDatasetsVersion, setLocalDatasetsVersion] = useState(0)
+
   // Convert API datasets to UI format; provide demo fallback if none
   const datasets = useMemo(() => {
     if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
-      return apiDatasets.datasets.map(dataset => ({
+      const apiList = apiDatasets.datasets.map(dataset => ({
         id: dataset.name,
         name: dataset.name,
-        data_processing_strategy: dataset.data_processing_strategy,
-        database: dataset.database,
-        files: dataset.files,
-        details: dataset.details,
+        // No rag_strategy on datasets; server provides data_processing_strategy/database
+        files: (dataset as any).files,
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
         // Estimate chunk count numerically for display
-        numChunks: Array.isArray(dataset.files)
-          ? Math.max(0, dataset.files.length * 100)
+        numChunks: Array.isArray((dataset as any).files)
+          ? Math.max(
+              0,
+              (Array.isArray((dataset as any).files)
+                ? (dataset as any).files.length
+                : 0) * 100
+            )
           : 0,
         processedPercent: 100,
         version: 'v1',
         description: '',
       }))
+
+      // Merge any locally created demo datasets (e.g., offline imports) without duplicating API items
+      try {
+        const stored = localStorage.getItem('lf_demo_datasets')
+        const localArr: any[] = stored ? JSON.parse(stored) : []
+        const apiIds = new Set(apiList.map(d => d.id))
+        const localAsUi = Array.isArray(localArr)
+          ? localArr
+              .filter(d => !apiIds.has(d.id))
+              .map(d => ({
+                id: d.id,
+                name: d.name,
+                files: d.files || [],
+                lastRun: new Date(d.lastRun || Date.now()),
+                embedModel: d.embedModel || 'text-embedding-3-large',
+                numChunks: d.numChunks ?? 0,
+                processedPercent: d.processedPercent ?? 0,
+                version: d.version || 'v1',
+                description: d.description || 'Local dataset',
+              }))
+          : []
+        return [...apiList, ...localAsUi]
+      } catch {
+        return apiList
+      }
     }
 
     // Demo fallback datasets to populate the grid when API has none
@@ -103,12 +136,7 @@ const Data = () => {
       {
         id: 'demo-arxiv',
         name: 'arxiv-papers',
-        data_processing_strategy: 'PDF Simple',
-        database: 'default_db',
         files: [],
-        details: {
-          files_metadata: [],
-        },
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
         numChunks: 12800,
@@ -119,12 +147,7 @@ const Data = () => {
       {
         id: 'demo-handbook',
         name: 'company-handbook',
-        data_processing_strategy: 'Markdown',
-        database: 'default_db',
         files: [],
-        details: {
-          files_metadata: [],
-        },
         lastRun: new Date(),
         embedModel: 'text-embedding-3-large',
         numChunks: 4200,
@@ -137,8 +160,21 @@ const Data = () => {
       localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
     } catch {}
     return demo
-  }, [apiDatasets])
+  }, [apiDatasets, localDatasetsVersion])
 
+  // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
+  const hasRedirectedFromQuery = useRef(false)
+  useEffect(() => {
+    if (hasRedirectedFromQuery.current) return
+    const params = new URLSearchParams(location.search)
+    const datasetParam = params.get('dataset')
+    if (!datasetParam) return
+    const found = datasets.find(d => d.id === datasetParam)
+    if (found) {
+      hasRedirectedFromQuery.current = true
+      navigate(`/chat/data/${found.id}`, { replace: true })
+    }
+  }, [location.search, datasets, navigate])
 
   // Map of fileKey -> array of dataset ids
   const [fileAssignments] = useState<Record<string, string[]>>(() => {
@@ -172,6 +208,7 @@ const Data = () => {
 
   // Create dataset dialog state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [newDatasetName, setNewDatasetName] = useState('')
   const [newDatasetDescription, setNewDatasetDescription] = useState('')
   const [newDatasetDatabase, setNewDatasetDatabase] = useState('')
@@ -185,6 +222,14 @@ const Data = () => {
   const [editDatasetId, setEditDatasetId] = useState<string>('')
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
+  const [confirmDeleteName, setConfirmDeleteName] = useState<string>('')
+
+  // Ensure setters are considered used even in builds that elide menu handlers
+  useEffect(() => {
+    // no-op referencing setters to satisfy strict noUnusedLocals in some CI builds
+  }, [setConfirmDeleteId, setConfirmDeleteName])
 
   const handleCreateDataset = async () => {
     const name = newDatasetName.trim()
@@ -203,8 +248,8 @@ const Data = () => {
         namespace: activeProject.namespace,
         project: activeProject.project,
         name,
-        data_processing_strategy: newDatasetDataProcessingStrategy,
-        database: newDatasetDatabase,
+        data_processing_strategy: newDatasetDataProcessingStrategy || 'default',
+        database: newDatasetDatabase || 'default',
       })
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
@@ -319,6 +364,13 @@ const Data = () => {
           <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
             <div>Datasets</div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsImportOpen(true)}
+              >
+                Import sample dataset
+              </Button>
               <Dialog
                 open={isCreateOpen}
                 onOpenChange={open => {
@@ -329,7 +381,7 @@ const Data = () => {
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button variant="secondary" size="sm">
+                  <Button variant="default" size="sm">
                     Create new
                   </Button>
                 </DialogTrigger>
@@ -506,30 +558,11 @@ const Data = () => {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
-                                  onClick={async e => {
+                                  onClick={e => {
                                     e.stopPropagation()
-                                    if (
-                                      !activeProject?.namespace ||
-                                      !activeProject?.project
-                                    )
-                                      return
-                                    try {
-                                      await deleteDatasetMutation.mutateAsync({
-                                        namespace: activeProject.namespace,
-                                        project: activeProject.project,
-                                        dataset: ds.id,
-                                      })
-                                      toast({
-                                        message: 'Dataset deleted',
-                                        variant: 'default',
-                                      })
-                                    } catch (err) {
-                                      console.error('Delete failed', err)
-                                      toast({
-                                        message: 'Failed to delete dataset',
-                                        variant: 'destructive',
-                                      })
-                                    }
+                                    setConfirmDeleteId(ds.id)
+                                    setConfirmDeleteName(ds.name)
+                                    setIsConfirmDeleteOpen(true)
                                   }}
                                 >
                                   Delete
@@ -566,6 +599,152 @@ const Data = () => {
           </div>
         )}
       </div>
+
+      {/* Edit dataset dialog */}
+      <ImportSampleDatasetModal
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        onImport={async ({ name, rag_strategy }) => {
+          try {
+            if (!activeProject?.namespace || !activeProject?.project) {
+              toast({
+                message: 'No active project selected',
+                variant: 'destructive',
+              })
+              return
+            }
+            await createDatasetMutation.mutateAsync({
+              namespace: activeProject.namespace,
+              project: activeProject.project,
+              name,
+              data_processing_strategy: rag_strategy || 'default',
+              database: 'default',
+            })
+            toast({ message: `Dataset "${name}" imported`, variant: 'default' })
+            setIsImportOpen(false)
+            navigate(`/chat/data/${name}`)
+          } catch (error) {
+            console.error('Import failed', error)
+            // Local fallback to make import work without server: persist into demo datasets
+            try {
+              const raw = localStorage.getItem('lf_demo_datasets')
+              const arr = raw ? JSON.parse(raw) : []
+              const newEntry = {
+                id: name,
+                name,
+                files: [],
+                lastRun: new Date(),
+                embedModel: 'text-embedding-3-large',
+                numChunks: 0,
+                processedPercent: 0,
+                version: 'v1',
+                description: 'Imported sample dataset (local)',
+              }
+              const exists =
+                Array.isArray(arr) && arr.some((d: any) => d.id === name)
+              const updated = exists ? arr : [...arr, newEntry]
+              localStorage.setItem('lf_demo_datasets', JSON.stringify(updated))
+              setLocalDatasetsVersion(v => v + 1)
+              setIsImportOpen(false)
+              toast({
+                message: `Dataset "${name}" imported (local)`,
+                variant: 'default',
+              })
+              navigate(`/chat/data?dataset=${encodeURIComponent(name)}`)
+            } catch {
+              toast({
+                message: 'Failed to import dataset',
+                variant: 'destructive',
+              })
+            }
+          }
+        }}
+      />
+
+      {/* Edit dataset dialog */}
+      <Dialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete dataset</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            Are you sure you want to delete this{' '}
+            {confirmDeleteName ? `"${confirmDeleteName}"` : 'dataset'}?
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                const id = confirmDeleteId
+                setIsConfirmDeleteOpen(false)
+                if (!id) return
+                if (!activeProject?.namespace || !activeProject?.project) {
+                  // No active project: perform local deletion fallback
+                  try {
+                    const raw = localStorage.getItem('lf_demo_datasets')
+                    const arr = raw ? JSON.parse(raw) : []
+                    const updated = Array.isArray(arr)
+                      ? arr.filter((d: any) => d.id !== id)
+                      : []
+                    localStorage.setItem(
+                      'lf_demo_datasets',
+                      JSON.stringify(updated)
+                    )
+                    setLocalDatasetsVersion(v => v + 1)
+                    toast({
+                      message: 'Dataset deleted (local)',
+                      variant: 'default',
+                    })
+                  } catch {
+                    toast({
+                      message: 'Failed to delete dataset',
+                      variant: 'destructive',
+                    })
+                  }
+                  return
+                }
+                try {
+                  await deleteDatasetMutation.mutateAsync({
+                    namespace: activeProject.namespace,
+                    project: activeProject.project,
+                    dataset: id,
+                  })
+                  toast({ message: 'Dataset deleted', variant: 'default' })
+                } catch (err) {
+                  console.error('Delete failed', err)
+                  // Local fallback removal
+                  try {
+                    const raw = localStorage.getItem('lf_demo_datasets')
+                    const arr = raw ? JSON.parse(raw) : []
+                    const updated = Array.isArray(arr)
+                      ? arr.filter((d: any) => d.id !== id)
+                      : []
+                    localStorage.setItem(
+                      'lf_demo_datasets',
+                      JSON.stringify(updated)
+                    )
+                    setLocalDatasetsVersion(v => v + 1)
+                    toast({
+                      message: 'Dataset deleted (local)',
+                      variant: 'default',
+                    })
+                  } catch {
+                    toast({
+                      message: 'Failed to delete dataset',
+                      variant: 'destructive',
+                    })
+                  }
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit dataset dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

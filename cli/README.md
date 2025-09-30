@@ -88,10 +88,9 @@ lf designer start
 
 - `help` - Show help information for any command
 - `version` - Print the version number
-- `designer start` - Start the AI designer
 - `datasets` - Manage datasets for RAG
 - `rag` - RAG operations (query, search)
-- `run` - Chat with LLM (with or without RAG)
+- `chat` - Chat with LLM (with or without RAG)
 
 ### Dataset Management Examples
 
@@ -168,16 +167,16 @@ lf rag query --database main_database --retrieval-strategy filtered_search "Rece
 
 ```bash
 # Chat with RAG augmentation (default)
-lf run --database main_database "What does our documentation say about X?"
+lf chat --database main_database "What does our documentation say about X?"
 
 # Chat without RAG (LLM only)
-lf run --no-rag "Explain quantum computing"
+lf chat --no-rag "Explain quantum computing"
 
 # Chat with debug information
-lf run --database main_database --debug "How does the system work?"
+lf chat --database main_database --debug "How does the system work?"
 
 # Use specific model
-lf run --model gpt-4 "Write a haiku about coding"
+lf chat --model gpt-4 "Write a haiku about coding"
 ```
 
 ### Command Structure

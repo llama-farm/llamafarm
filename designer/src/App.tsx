@@ -18,6 +18,7 @@ import Models from './components/Models/Models'
 import Rag from './components/Rag/Rag'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
+import SampleProjects from './components/Samples/SampleProjects'
 // @ts-ignore - component is TSX local file
 import AddEmbeddingStrategy from './components/Rag/AddEmbeddingStrategy'
 // Removed legacy per-strategy pages in favor of unified StrategyView
@@ -53,6 +54,7 @@ function App() {
               <Route path="/" element={<Home />} />
               {/* Redirect '/projects' to Home; Home will scroll to projects */}
               <Route path="/projects" element={<Home />} />
+              <Route path="/samples" element={<SampleProjects />} />
               <Route path="/chat" element={<Chat />}>
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="versions" element={<Versions />} />

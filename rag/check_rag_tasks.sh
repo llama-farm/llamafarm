@@ -7,7 +7,7 @@ echo
 # Check if RAG container is running
 if ! docker ps --format "table {{.Names}}" | grep -q "llamafarm-rag"; then
     echo "❌ RAG container (llamafarm-rag) is not running"
-    echo "Start it with: lf dev"
+    echo "Start it with: lf start"
     exit 1
 fi
 

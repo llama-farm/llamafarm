@@ -17,6 +17,12 @@ DirectoryParser is **ALWAYS ACTIVE** at the strategy level and handles:
 - File filtering based on strategy rules
 - Routing files to appropriate parsers
 
+> **Note:** Parser selection in configuration now relies on file
+> extensions (`file_extensions`) or glob patterns
+> (`file_include_patterns`). MIME type hints remain part of the
+> runtime's internal detection but are no longer specified in
+> project configurations.
+
 ### How DirectoryParser Works
 
 ```yaml
@@ -34,7 +40,6 @@ data_processing_strategies:
 DirectoryParser automatically:
 1. Scans the input path (file or directory)
 2. Filters files based on `supported_files` glob patterns in `directory_config`
-3. Routes each file to the appropriate parser based on mime_types/file_extensions
 4. Handles both single files and directories seamlessly
 
 ## 📋 Parser Naming Convention
@@ -59,7 +64,6 @@ Advanced PDF parsing using LlamaIndex's capabilities.
 
 ```yaml
 - type: "PDFParser_LlamaIndex"
-  mime_types: ["application/pdf"]
   file_extensions: [".pdf", ".PDF"]
   config:
     chunk_size: 1500
@@ -83,7 +87,6 @@ Robust PDF parsing using PyPDF2 library.
 
 ```yaml
 - type: "PDFParser_PyPDF2"
-  mime_types: ["application/pdf"]
   file_extensions: [".pdf"]
   config:
     chunk_size: 1000
@@ -108,7 +111,6 @@ LlamaIndex-based text parsing with advanced features.
 
 ```yaml
 - type: "TextParser_LlamaIndex"
-  mime_types: ["text/plain"]
   file_extensions: [".txt", ".text", ".log"]
   config:
     chunk_size: 1000
@@ -121,7 +123,6 @@ Pure Python text parser with full control.
 
 ```yaml
 - type: "TextParser_Python"
-  mime_types: ["text/plain"]
   file_extensions: [".txt", ".log", ".text"]
   config:
     encoding: "utf-8"
@@ -150,7 +151,6 @@ LlamaIndex CSV parser for structured data.
 
 ```yaml
 - type: "CSVParser_LlamaIndex"
-  mime_types: ["text/csv", "text/tab-separated-values"]
   file_extensions: [".csv", ".tsv"]
   config:
     chunk_size: 500
@@ -163,7 +163,6 @@ Pandas-based CSV parser with advanced features.
 
 ```yaml
 - type: "CSVParser_Pandas"
-  mime_types: ["text/csv"]
   file_extensions: [".csv", ".CSV"]
   config:
     content_fields: ["description", "content", "text"]
@@ -189,7 +188,6 @@ Lightweight Python CSV parser.
 
 ```yaml
 - type: "CSVParser_Python"
-  mime_types: ["text/csv"]
   file_extensions: [".csv"]
   config:
     delimiter: ","
@@ -205,7 +203,6 @@ Word document parser using LlamaIndex.
 
 ```yaml
 - type: "DocxParser_LlamaIndex"
-  mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
   file_extensions: [".docx", ".DOCX"]
   config:
     chunk_size: 1500
@@ -220,7 +217,6 @@ Python-docx based Word parser.
 
 ```yaml
 - type: "DocxParser_PythonDocx"
-  mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
   file_extensions: [".docx"]
   config:
     chunk_size: 1600
@@ -238,7 +234,6 @@ Excel parser using LlamaIndex.
 
 ```yaml
 - type: "ExcelParser_LlamaIndex"
-  mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
   file_extensions: [".xlsx", ".XLSX"]
   config:
     chunk_size: 500
@@ -250,7 +245,6 @@ Pandas-based Excel parser.
 
 ```yaml
 - type: "ExcelParser_Pandas"
-  mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
   file_extensions: [".xlsx", ".xls"]
   config:
     sheet_name: null  # null for all sheets
@@ -264,7 +258,6 @@ OpenPyXL-based Excel parser.
 
 ```yaml
 - type: "ExcelParser_OpenPyXL"
-  mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
   file_extensions: [".xlsx"]
   config:
     data_only: true  # Get values, not formulas
@@ -279,7 +272,6 @@ Markdown parser with structure preservation.
 
 ```yaml
 - type: "MarkdownParser_LlamaIndex"
-  mime_types: ["text/markdown", "text/x-markdown"]
   file_extensions: [".md", ".markdown", ".mdown"]
   config:
     chunk_size: 1200
@@ -292,7 +284,6 @@ Python markdown parser with advanced features.
 
 ```yaml
 - type: "MarkdownParser_Python"
-  mime_types: ["text/markdown"]
   file_extensions: [".md", ".markdown"]
   config:
     chunk_size: 1000
@@ -320,17 +311,14 @@ data_processing_strategies:
       exclude_patterns: ["*.tmp", ".*"]
     parsers:
       - type: "PDFParser_LlamaIndex"
-        mime_types: ["application/pdf"]
         file_extensions: [".pdf"]
         config:
           chunk_size: 1500
       - type: "DocxParser_LlamaIndex"
-        mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
         file_extensions: [".docx"]
         config:
           chunk_size: 1500
       - type: "TextParser_Python"
-        mime_types: ["text/plain"]
         file_extensions: [".txt", ".log"]
         config:
           chunk_size: 1200
@@ -348,7 +336,6 @@ data_processing_strategies:
       exclude_patterns: ["*.tmp"]
     parsers:
       - type: "PDFParser_LlamaIndex"
-        mime_types: ["application/pdf"]
         file_extensions: [".pdf"]
         config:
           chunk_strategy: "semantic"
@@ -360,7 +347,6 @@ data_processing_strategies:
 
 1. **DirectoryParser** filters files based on `supported_files` glob patterns in `directory_config`
 2. For each accepted file:
-   - Check MIME type against parser `mime_types`
    - Check extension against parser `file_extensions`
    - Select first matching parser
 3. If no parser matches, file is skipped
@@ -409,7 +395,6 @@ class JSONParser_Custom:
 Check:
 1. File matches a pattern in `supported_files` glob patterns
 2. File doesn't match any `exclude_patterns`
-3. A parser exists with matching `mime_types` or `file_extensions`
 
 ### Wrong Parser Selected
 

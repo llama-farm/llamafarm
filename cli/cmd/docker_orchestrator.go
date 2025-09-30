@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -157,6 +158,7 @@ func (co *ContainerOrchestrator) startServerContainer(serverURL string) error {
 	}
 
 	// Prepare container specification
+	homeDir, _ := os.UserHomeDir()
 	spec := ContainerRunSpec{
 		Name:  co.serverContainerName,
 		Image: image,
@@ -165,7 +167,7 @@ func (co *ContainerOrchestrator) startServerContainer(serverURL string) error {
 		},
 		Env: make(map[string]string),
 		Volumes: []string{
-			fmt.Sprintf("%s:%s", os.ExpandEnv("$HOME/.llamafarm"), "/var/lib/llamafarm"),
+			fmt.Sprintf("%s:%s", convertToDockerPath(filepath.Join(homeDir, ".llamafarm")), "/var/lib/llamafarm"),
 		},
 		Labels: map[string]string{
 			"llamafarm.component": "server",
@@ -174,10 +176,8 @@ func (co *ContainerOrchestrator) startServerContainer(serverURL string) error {
 	}
 
 	// Mount effective working directory into the container at the same path
-	if cwd := getEffectiveCWD(); strings.TrimSpace(cwd) != "" {
-		spec.Volumes = append(spec.Volumes, fmt.Sprintf("%s:%s", cwd, cwd))
-	} else {
-		fmt.Fprintln(os.Stderr, "Warning: could not determine current directory; continuing without volume mount")
+	if err := setupWorkdirVolumeMount(&spec); err != nil {
+		return fmt.Errorf("failed to configure working directory volume: %v", err)
 	}
 
 	// Pass through or configure Ollama access inside the container

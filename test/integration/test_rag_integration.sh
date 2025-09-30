@@ -54,7 +54,7 @@ echo "--------------------------------"
 
 # Test 1: Run without RAG (explicitly disable it)
 echo -n "Test 1.1: Query without RAG... "
-OUTPUT=$(timeout 15 lf run --no-rag "What is 2+2?" 2>&1)
+OUTPUT=$(timeout 15 lf chat --no-rag "What is 2+2?" 2>&1)
 # Allow time for processing
 sleep 2
 # Check for good mathematical response
@@ -73,7 +73,7 @@ fi
 
 # Test 2: Run with RAG enabled (default behavior)
 echo -n "Test 1.2: Query with RAG... "
-OUTPUT=$(timeout 20 lf run "What is transformer architecture?" 2>&1)
+OUTPUT=$(timeout 20 lf chat "What is transformer architecture?" 2>&1)
 # Allow time for RAG processing
 sleep 2
 # Check for substantive response about transformers
@@ -105,7 +105,7 @@ echo -e "${BLUE}Using database: ${DEFAULT_DB}${NC}"
 
 # Test 3: RAG with specific database
 echo -n "Test 2.1: RAG with --database flag... "
-OUTPUT=$(lf run --database "${DEFAULT_DB}" "What is self-attention?" 2>&1)
+OUTPUT=$(lf chat --database "${DEFAULT_DB}" "What is self-attention?" 2>&1)
 if [[ "$OUTPUT" == *"attention"* ]] || [[ "$OUTPUT" == *"query"* ]] || [[ "$OUTPUT" == *"key"* ]] || [[ "$OUTPUT" == *"Self-attention"* ]]; then
     print_test "Database selection works"
 else
@@ -115,7 +115,7 @@ fi
 
 # Test 4: RAG with custom top-k
 echo -n "Test 2.2: RAG with --rag-top-k flag... "
-OUTPUT=$(lf run --database "${DEFAULT_DB}" --rag-top-k 3 "Explain neural networks" 2>&1)
+OUTPUT=$(lf chat --database "${DEFAULT_DB}" --rag-top-k 3 "Explain neural networks" 2>&1)
 if [[ "$OUTPUT" != *"Error"* ]] && [[ "$OUTPUT" == *"neural"* || "$OUTPUT" == *"network"* ]]; then
     print_test "Custom top-k works"
 else
@@ -170,7 +170,7 @@ echo "-----------------------"
 
 # Test 7: Empty query
 echo -n "Test 4.1: Empty query handling... "
-OUTPUT=$(lf run "" 2>&1 || true)
+OUTPUT=$(lf chat "" 2>&1 || true)
 if [[ "$OUTPUT" == *"Error"* ]] || [[ "$OUTPUT" == *"provide"* ]] || [[ "$OUTPUT" == *"input"* ]]; then
     print_test "Empty query properly rejected"
 else
@@ -179,7 +179,7 @@ fi
 
 # Test 8: Non-existent database
 echo -n "Test 4.2: Non-existent database... "
-OUTPUT=$(lf run --database nonexistent_db "test query" 2>&1 || true)
+OUTPUT=$(lf chat --database nonexistent_db "test query" 2>&1 || true)
 # This might succeed if it falls back to default, or fail - either is acceptable
 if [[ "$OUTPUT" != "" ]]; then
     print_test "Non-existent database handled"
@@ -193,7 +193,7 @@ echo "----------------------------"
 
 # Test 9: Multi-part question with RAG
 echo -n "Test 5.1: Complex RAG query... "
-OUTPUT=$(lf run --database "${DEFAULT_DB}" "Compare transformer architecture with traditional RNNs. What are the main advantages?" 2>&1)
+OUTPUT=$(lf chat --database "${DEFAULT_DB}" "Compare transformer architecture with traditional RNNs. What are the main advantages?" 2>&1)
 if [[ "$OUTPUT" == *"transformer"* ]] || [[ "$OUTPUT" == *"attention"* ]] || [[ "$OUTPUT" == *"parallel"* ]] || [[ "$OUTPUT" == *"RNN"* ]]; then
     print_test "Complex query works"
 else

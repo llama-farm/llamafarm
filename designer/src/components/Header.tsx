@@ -108,6 +108,10 @@ function Header() {
   }
 
   const isHomePage = location.pathname === '/'
+  const isHomeLike =
+    isHomePage ||
+    location.pathname === '/samples' ||
+    location.pathname.startsWith('/samples/')
 
   return (
     <header className="fixed top-0 left-0 z-50 w-full border-b transition-colors bg-background border-border">
@@ -116,9 +120,9 @@ function Header() {
         <div className="fixed z-40 top-12 left-0 right-0 bottom-0 bg-background/60 backdrop-blur-[2px] page-fade-overlay"></div>
       )}
 
-      <div className="w-full flex items-center h-12">
-        <div className="w-1/4 pl-4 flex items-center gap-2">
-          {isHomePage ? (
+      <div className="w-full flex items-center h-12 relative">
+        <div className="w-auto sm:w-1/4 pl-4 flex items-center gap-2">
+          {isHomeLike ? (
             <button
               className="font-serif text-base text-foreground"
               onClick={() => navigate('/')}
@@ -218,109 +222,103 @@ function Header() {
           )}
         </div>
 
-        <div
-          className={`flex items-center w-3/4 justify-end pr-4 ${
-            isBuilding ? 'justify-between' : 'justify-end'
-          }`}
-        >
-          {isBuilding && (
-            <div className="flex items-center gap-4 w-2/3">
-              <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'dashboard'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => navigate('/chat/dashboard')}
-              >
-                <FontIcon type="dashboard" className="w-6 h-6" />
-                <span>Dashboard</span>
-              </button>
-              <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'prompt'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => navigate('/chat/prompt')}
-              >
-                <FontIcon type="prompt" className="w-6 h-6" />
-                <span>Prompts</span>
-              </button>
-              <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'data'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => navigate('/chat/data')}
-              >
-                <FontIcon type="data" className="w-6 h-6" />
-                <span>Data</span>
-              </button>
-              <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'rag'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => navigate('/chat/rag')}
-              >
-                <FontIcon type="rag" className="w-6 h-6" />
-                <span>RAG</span>
-              </button>
-              <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'models'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => navigate('/chat/models')}
-              >
-                <FontIcon type="model" className="w-6 h-6" />
-                <span>Models</span>
-              </button>
-              <button
-                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                  isSelected === 'test'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => navigate('/chat/test')}
-              >
-                <FontIcon type="test" className="w-6 h-6" />
-                <span>Test</span>
-              </button>
-            </div>
-          )}
+        {isBuilding && (
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-4">
+            <button
+              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                isSelected === 'dashboard'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => navigate('/chat/dashboard')}
+            >
+              <FontIcon type="dashboard" className="w-6 h-6 shrink-0" />
+              <span className="hidden lg:inline">Dashboard</span>
+            </button>
+            <button
+              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                isSelected === 'prompt'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => navigate('/chat/prompt')}
+            >
+              <FontIcon type="prompt" className="w-6 h-6 shrink-0" />
+              <span className="hidden lg:inline">Prompts</span>
+            </button>
+            <button
+              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                isSelected === 'data'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => navigate('/chat/data')}
+            >
+              <FontIcon type="data" className="w-6 h-6 shrink-0" />
+              <span className="hidden lg:inline">Data</span>
+            </button>
+            <button
+              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                isSelected === 'rag'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => navigate('/chat/rag')}
+            >
+              <FontIcon type="rag" className="w-6 h-6 shrink-0" />
+              <span className="hidden lg:inline">RAG</span>
+            </button>
+            <button
+              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                isSelected === 'models'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => navigate('/chat/models')}
+            >
+              <FontIcon type="model" className="w-6 h-6 shrink-0" />
+              <span className="hidden lg:inline">Models</span>
+            </button>
+            <button
+              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
+                isSelected === 'test'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => navigate('/chat/test')}
+            >
+              <FontIcon type="test" className="w-6 h-6 shrink-0" />
+              <span className="hidden lg:inline">Test</span>
+            </button>
+          </div>
+        )}
 
-          <div className="flex items-center gap-3 justify-end">
-            <div className="flex rounded-lg overflow-hidden border border-border">
-              <button
-                className={`w-8 h-7 flex items-center justify-center transition-colors ${
-                  theme === 'light'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => setTheme('light')}
-                aria-pressed={theme === 'light'}
-                title="Light mode"
-              >
-                <FontIcon type="sun" className="w-4 h-4" />
-              </button>
-              <button
-                className={`w-8 h-7 flex items-center justify-center transition-colors ${
-                  theme === 'dark'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => setTheme('dark')}
-                aria-pressed={theme === 'dark'}
-                title="Dark mode"
-              >
-                <FontIcon type="moon-filled" className="w-4 h-4" />
-              </button>
-            </div>
+        <div className="flex items-center gap-3 justify-end absolute right-4 top-1/2 -translate-y-1/2">
+          <div className="flex rounded-lg overflow-hidden border border-border">
+            <button
+              className={`w-8 h-7 flex items-center justify-center transition-colors ${
+                theme === 'light'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => setTheme('light')}
+              aria-pressed={theme === 'light'}
+              title="Light mode"
+            >
+              <FontIcon type="sun" className="w-4 h-4" />
+            </button>
+            <button
+              className={`w-8 h-7 flex items-center justify-center transition-colors ${
+                theme === 'dark'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+              }`}
+              onClick={() => setTheme('dark')}
+              aria-pressed={theme === 'dark'}
+              title="Dark mode"
+            >
+              <FontIcon type="moon-filled" className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>

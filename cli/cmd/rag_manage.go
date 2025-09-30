@@ -24,8 +24,9 @@ var (
 
 // ragClearCmd represents the rag clear command
 var ragClearCmd = &cobra.Command{
-	Use:   "clear",
-	Short: "Clear all documents from RAG database",
+	Hidden: true,
+	Use:    "clear",
+	Short:  "Clear all documents from RAG database",
 	Long: `Clear all documents and vectors from the specified RAG database.
 This operation cannot be undone!
 
@@ -79,8 +80,9 @@ Examples:
 
 // ragDeleteCmd represents the rag delete command
 var ragDeleteCmd = &cobra.Command{
-	Use:   "delete",
-	Short: "Delete specific documents from RAG database",
+	Hidden: true,
+	Use:    "delete",
+	Short:  "Delete specific documents from RAG database",
 	Long: `Delete specific documents from the RAG database by ID, filename, or metadata.
 
 Examples:
@@ -157,8 +159,9 @@ Examples:
 
 // ragPruneCmd represents the rag prune command
 var ragPruneCmd = &cobra.Command{
-	Use:   "prune",
-	Short: "Remove duplicate or orphaned vectors",
+	Hidden: true,
+	Use:    "prune",
+	Short:  "Remove duplicate or orphaned vectors",
 	Long: `Prune the RAG database by removing duplicate vectors and orphaned chunks.
 
 This command helps maintain database health by:
@@ -224,8 +227,9 @@ Examples:
 
 // ragExportCmd represents the rag export command
 var ragExportCmd = &cobra.Command{
-	Use:   "export [output-file]",
-	Short: "Export RAG database contents",
+	Hidden: true,
+	Use:    "export [output-file]",
+	Short:  "Export RAG database contents",
 	Long: `Export the contents of the RAG database to a file for backup or migration.
 
 Examples:
@@ -269,8 +273,9 @@ Examples:
 
 // ragImportCmd represents the rag import command
 var ragImportCmd = &cobra.Command{
-	Use:   "import [input-file]",
-	Short: "Import documents into RAG database",
+	Hidden: true,
+	Use:    "import [input-file]",
+	Short:  "Import documents into RAG database",
 	Long: `Import documents from a previously exported file into the RAG database.
 
 Examples:

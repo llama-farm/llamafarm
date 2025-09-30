@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Quick test for lf run commands
+# Quick test for lf chat commands
 set -e
 
 # Colors
@@ -11,7 +11,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo "================================"
-echo "QUICK LF RUN TEST"
+echo "QUICK LF CHAT TEST"
 echo "================================"
 echo ""
 
@@ -44,23 +44,23 @@ test_command() {
 }
 
 # Basic queries without RAG
-test_command "Simple math (no RAG)" "./lf run --no-rag 'What is 2+2?'"
-test_command "Hello query (no RAG)" "./lf run --no-rag 'Say hello'"
-test_command "General knowledge (no RAG)" "./lf run --no-rag 'What is the capital of France?'"
+test_command "Simple math (no RAG)" "./lf chat --no-rag 'What is 2+2?'"
+test_command "Hello query (no RAG)" "./lf chat --no-rag 'Say hello'"
+test_command "General knowledge (no RAG)" "./lf chat --no-rag 'What is the capital of France?'"
 
 # RAG queries (default behavior)
-test_command "RAG basic (default)" "./lf run 'What is transformer architecture?'"
-test_command "RAG with database" "./lf run --database main_database 'What is attention?'"
-test_command "RAG with top-k" "./lf run --database main_database --rag-top-k 3 'Neural networks'"
-test_command "RAG with threshold" "./lf run --database main_database --rag-score-threshold 0.5 'Machine learning'"
+test_command "RAG basic (default)" "./lf chat 'What is transformer architecture?'"
+test_command "RAG with database" "./lf chat --database main_database 'What is attention?'"
+test_command "RAG with top-k" "./lf chat --database main_database --rag-top-k 3 'Neural networks'"
+test_command "RAG with threshold" "./lf chat --database main_database --rag-score-threshold 0.5 'Machine learning'"
 
 # Combined parameters
-test_command "RAG all params" "./lf run --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Deep learning'"
+test_command "RAG all params" "./lf chat --database main_database --rag-top-k 5 --rag-score-threshold 0.3 'Deep learning'"
 
 # File input
 echo "Test query from file" > /tmp/test_query.txt
-test_command "File input (no RAG)" "./lf run --no-rag -f /tmp/test_query.txt"
-test_command "File with RAG (default)" "./lf run --database main_database -f /tmp/test_query.txt"
+test_command "File input (no RAG)" "./lf chat --no-rag -f /tmp/test_query.txt"
+test_command "File with RAG (default)" "./lf chat --database main_database -f /tmp/test_query.txt"
 rm -f /tmp/test_query.txt
 
 echo ""
