@@ -125,8 +125,8 @@ def _replace_urls_in_config(config: Any) -> Any:
     if isinstance(config, dict):
         result = {}
         for key, value in config.items():
-            if isinstance(value, str) and ("url" in key.lower() or "base_url" in key.lower()):
-                # This is likely a URL field, try to replace it
+            if isinstance(value, str):
+                # Try to replace URLs in string values
                 result[key] = _replace_localhost_url(value)
             elif isinstance(value, (dict, list)):
                 # Recursively process nested structures
@@ -136,6 +136,9 @@ def _replace_urls_in_config(config: Any) -> Any:
         return result
     elif isinstance(config, list):
         return [_replace_urls_in_config(item) for item in config]
+    elif isinstance(config, str):
+        # Handle string values in lists or other contexts
+        return _replace_localhost_url(config)
     else:
         return config
 
