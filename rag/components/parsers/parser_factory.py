@@ -273,8 +273,6 @@ class ToolAwareParserFactory:
         """
         if isinstance(file_path, str):
             file_path = Path(file_path)
-        else:
-            file_path = file_path
 
         extension = file_path.suffix.lower()
 
