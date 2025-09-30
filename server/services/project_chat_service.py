@@ -1,3 +1,4 @@
+import re
 import sys
 import time
 import uuid
@@ -18,7 +19,6 @@ from context_providers.project_chat_context_provider import (
 )
 from core.logging import FastAPIStructLogger
 from services.rag_service import search_with_rag
-import re
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -36,9 +36,6 @@ FALLBACK_ECHO_RESPONSE = (
 
 
 class ProjectChatService:
-    def __init__(self):
-        self.rag_api_cache: dict[str, Any] = {}
-
     def _create_rag_config_from_strategy(self, strategy) -> dict[str, Any]:
         """Convert LlamaFarm strategy config to RAG API compatible config."""
         components = strategy.components
@@ -238,7 +235,7 @@ class ProjectChatService:
 
             # Generate a fallback response
             response_message = FALLBACK_ECHO_RESPONSE
-            logger.info(f"Using fallback response instead of echo")
+            logger.info("Using fallback response instead of echo")
 
         completion = ChatCompletion(
             id=f"chat-{uuid.uuid4()}",

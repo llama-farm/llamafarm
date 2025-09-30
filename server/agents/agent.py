@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import Any, override
+from typing import Any
 
 import instructor
-from atomic_agents import (
+from atomic_agents import (  # type: ignore
     AgentConfig,
     AtomicAgent,
     BasicChatInputSchema,
     BasicChatOutputSchema,
 )
-from atomic_agents.base.base_io_schema import BaseIOSchema
-from atomic_agents.context.chat_history import ChatHistory
-from atomic_agents.context.system_prompt_generator import SystemPromptGenerator
+from atomic_agents.base.base_io_schema import BaseIOSchema  # type: ignore
+from atomic_agents.context.chat_history import ChatHistory  # type: ignore
+from atomic_agents.context.system_prompt_generator import (  # type: ignore
+    SystemPromptGenerator,  # type: ignore
+)
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
@@ -96,8 +98,7 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
                 yield partial_response
 
             if last_response:
-                full_response_content = self.output_schema(chat_message="hello")
-                # full_response_content = self.output_schema(**last_response.model_dump())
+                full_response_content = self.output_schema(**last_response.model_dump())
                 self.history.add_message("assistant", full_response_content)
         else:
             response_stream = await self.client.chat.completions.create(

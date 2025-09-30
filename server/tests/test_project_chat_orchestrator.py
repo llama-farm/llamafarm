@@ -1,15 +1,21 @@
-import asyncio
-from types import SimpleNamespace
+import tempfile
 
 import pytest
+from config.datamodel import (
+    AgentHandler,
+    LlamaFarmConfig,
+    Prompt,
+    Provider,
+    Rag,
+    Runtime,
+    Version,
+)
 
 from agents.project_chat_orchestrator import (
     ProjectChatOrchestratorAgent,
-    ProjectChatOrchestratorAgentInputSchema,
     ProjectChatOrchestratorAgentFactory,
-    SimpleChatAgent,
+    ProjectChatOrchestratorAgentInputSchema,
 )
-from config.datamodel import AgentHandler, LlamaFarmConfig, Prompt, Provider, Runtime
 from context_providers.project_chat_context_provider import (
     ChunkItem,
     ProjectChatContextProvider,
@@ -19,7 +25,9 @@ from context_providers.project_chat_context_provider import (
 @pytest.fixture()
 def dummy_client():
     class DummyCompletions:
-        async def create(self, *args, **kwargs):  # pragma: no cover - unused in factory test
+        async def create(
+            self, *args, **kwargs
+        ):  # pragma: no cover - unused in factory test
             return None
 
     class DummyChat:
@@ -31,9 +39,11 @@ def dummy_client():
     return DummyClient()
 
 
-def make_config(handler: AgentHandler, model: str = "tinyllama:latest") -> LlamaFarmConfig:
+def make_config(
+    handler: AgentHandler, model: str = "tinyllama:latest"
+) -> LlamaFarmConfig:
     return LlamaFarmConfig(
-        version="v1",
+        version=Version.v1,
         name="demo",
         namespace="default",
         runtime=Runtime(
@@ -41,23 +51,23 @@ def make_config(handler: AgentHandler, model: str = "tinyllama:latest") -> Llama
             model=model,
             base_url="http://localhost:11434/v1",
             agent_handler=handler,
+            api_key="ollama",
+            instructor_mode="tools",
+            model_api_parameters={},
         ),
         prompts=[Prompt(role="system", content="You are a helpful assistant.")],
+        rag=None,  # Don't set RAG if not needed, avoids validation errors
+        datasets=[],
     )
 
 
 def test_factory_returns_simple_chat_agent(monkeypatch, dummy_client):
     config = make_config(AgentHandler.simple_chat)
 
-    monkeypatch.setattr(
-        "agents.project_chat_orchestrator._build_async_client",
-        lambda _cfg: dummy_client,
-    )
-
-    agent = ProjectChatOrchestratorAgentFactory.create_agent(config)
-
-    assert isinstance(agent, SimpleChatAgent)
-    assert agent.client is dummy_client
+    with tempfile.TemporaryDirectory() as project_dir:
+        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
+    assert isinstance(agent, ProjectChatOrchestratorAgent)
+    assert hasattr(agent, "client")
 
 
 def test_factory_returns_structured_rag_agent(monkeypatch, dummy_client):
@@ -72,50 +82,44 @@ def test_factory_returns_structured_rag_agent(monkeypatch, dummy_client):
         DummyAgent,
     )
 
-    agent = ProjectChatOrchestratorAgentFactory.create_agent(config)
-
+    with tempfile.TemporaryDirectory() as project_dir:
+        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
     assert isinstance(agent, DummyAgent)
 
 
 def test_rag_agent_falls_back_for_unsupported_model(monkeypatch, dummy_client):
     config = make_config(AgentHandler.structured_rag, model="tinyllama:latest")
 
-    monkeypatch.setattr(
-        "agents.project_chat_orchestrator._build_async_client",
-        lambda _cfg: dummy_client,
-    )
-
-    agent = ProjectChatOrchestratorAgentFactory.create_agent(config)
-
-    assert isinstance(agent, SimpleChatAgent)
+    with tempfile.TemporaryDirectory() as project_dir:
+        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
+    assert isinstance(agent, ProjectChatOrchestratorAgent)
 
 
 @pytest.mark.asyncio
 async def test_simple_rag_agent_injects_context(monkeypatch):
+    import json
+
     captured = {}
-
-    class DummyCompletions:
-        async def create(self, *_, **kwargs):  # pragma: no cover - networking stub
-            captured.update(kwargs)
-            return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
-            )
-
-    class DummyChat:
-        completions = DummyCompletions()
-
-    class DummyClient:
-        chat = DummyChat()
 
     config = make_config(AgentHandler.simple_rag, model="tinyllama:latest")
 
-    monkeypatch.setattr(
-        "agents.project_chat_orchestrator._build_async_client",
-        lambda _cfg: DummyClient(),
-    )
+    # Intercept LFAgent.run_async to capture the generated messages without network calls
+    from agents.agent import LFAgent
 
-    agent = ProjectChatOrchestratorAgentFactory.create_agent(config)
-    assert isinstance(agent, SimpleChatAgent)
+    async def fake_run_async(self, user_input=None):
+        if user_input:
+            self.history.initialize_turn()
+            self.current_user_input = user_input
+            self.history.add_message("user", user_input)
+        self._prepare_messages()
+        captured["messages"] = self.messages
+        return self.output_schema(chat_message="ok")
+
+    monkeypatch.setattr(LFAgent, "run_async", fake_run_async)
+
+    with tempfile.TemporaryDirectory() as project_dir:
+        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
+    assert isinstance(agent, ProjectChatOrchestratorAgent)
 
     provider = ProjectChatContextProvider(title="Context")
     provider.chunks.append(
@@ -129,7 +133,29 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
 
     messages = captured.get("messages", [])
     assert messages
+
+    def norm_content(val):
+        if hasattr(val, "chat_message"):
+            return val.chat_message
+        if isinstance(val, dict) and "chat_message" in val:
+            return val.get("chat_message")
+        if isinstance(val, str):
+            try:
+                parsed = json.loads(val)
+                if isinstance(parsed, dict) and "chat_message" in parsed:
+                    return parsed.get("chat_message")
+            except Exception:
+                pass
+        return val
+
     assert messages[0]["role"] == "system"
-    assert "You are a helpful assistant." in messages[0]["content"]
-    assert any("Important note" in msg["content"] for msg in messages if msg["role"] == "system")
-    assert messages[-1]["role"] == "user" and messages[-1]["content"] == "Hello there"
+    assert "You are a helpful assistant." in norm_content(messages[0]["content"])
+    assert any(
+        "Important note" in norm_content(msg["content"])
+        for msg in messages
+        if msg["role"] == "system"
+    )
+    assert (
+        messages[-1]["role"] == "user"
+        and norm_content(messages[-1]["content"]) == "Hello there"
+    )

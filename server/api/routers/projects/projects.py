@@ -1,4 +1,6 @@
 import builtins
+import contextlib
+import shutil
 import sys
 import threading
 import time
@@ -6,8 +8,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-import celery.result
-from atomic_agents import AtomicAgent
+import celery.result  # type: ignore
+from atomic_agents import AtomicAgent  # type: ignore
 from fastapi import APIRouter, Header, HTTPException, Response
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel
@@ -192,7 +194,6 @@ async def delete_project(namespace: str, project_id: str):
 
 
 SESSION_TTL_SECONDS = 30 * 60
-SESSION_MAX_REQUESTS = 100
 
 
 @dataclass
@@ -219,8 +220,6 @@ def _cleanup_expired_sessions(now: float | None = None) -> None:
     for key, record in agent_sessions.items():
         if timestamp - record.last_used > SESSION_TTL_SECONDS:
             to_delete.append(key)
-        elif record.request_count >= SESSION_MAX_REQUESTS:
-            to_delete.append(key)
     for key in to_delete:
         agent_sessions.pop(key, None)
 
@@ -231,22 +230,22 @@ def _delete_session(namespace: str, project_id: str, session_id: str) -> bool:
     if record is None:
         return False
     if hasattr(record.agent, "reset_history"):
-        try:
+        with contextlib.suppress(Exception):
             record.agent.reset_history()
-        except Exception:  # pragma: no cover - defensive
-            pass
     return True
 
 
 def _delete_all_sessions(namespace: str, project_id: str) -> int:
-    to_delete = [key for key, record in agent_sessions.items() if record.namespace == namespace and record.project_id == project_id]
+    to_delete = [
+        key
+        for key, record in agent_sessions.items()
+        if record.namespace == namespace and record.project_id == project_id
+    ]
     for key in to_delete:
         record = agent_sessions.pop(key, None)
         if record and hasattr(record.agent, "reset_history"):
-            try:
+            with contextlib.suppress(Exception):
                 record.agent.reset_history()
-            except Exception:  # pragma: no cover - defensive
-                pass
     return len(to_delete)
 
 
@@ -259,43 +258,62 @@ async def chat(
     project_id: str,
     response: Response,
     session_id: str | None = Header(None, alias="X-Session-ID"),
+    x_no_session: str | None = Header(None, alias="X-No-Session"),
 ):
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
 
     now = time.time()
-    with _agent_sessions_lock:
-        _cleanup_expired_sessions(now)
-        record: SessionRecord | None = None
-        key: str | None = None
+    stateless = x_no_session is not None
 
-        if session_id:
-            key = _session_key(namespace, project_id, session_id)
+    if stateless:
+        # Stateless mode: create throwaway agent without session or persistence
+        agent = ProjectChatOrchestratorAgentFactory.create_agent(
+            project_config, project_dir=project_dir
+        )
+    else:
+        # Stateful mode: use or create cached agent with disk-persisted history
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        key = _session_key(namespace, project_id, session_id)
+        with _agent_sessions_lock:
+            # Clean up expired sessions before checking cache
+            _cleanup_expired_sessions(now)
+
             record = agent_sessions.get(key)
-            if record is not None:
-                if now - record.last_used > SESSION_TTL_SECONDS or record.request_count >= SESSION_MAX_REQUESTS:
-                    agent_sessions.pop(key, None)
-                    record = None
+            if record is not None and (now - record.last_used > SESSION_TTL_SECONDS):
+                # Session expired, remove it and create fresh
+                agent_sessions.pop(key, None)
+                record = None
 
-        if record is None:
-            if not session_id:
-                session_id = str(uuid.uuid4())
-            key = _session_key(namespace, project_id, session_id)
-            agent = ProjectChatOrchestratorAgentFactory.create_agent(project_config)
-            record = SessionRecord(
-                namespace=namespace,
-                project_id=project_id,
-                agent=agent,
-                created_at=now,
-                last_used=now,
-                request_count=1,
-            )
-            agent_sessions[key] = record
-        else:
-            agent = record.agent
-            record.last_used = now
-            record.request_count += 1
+            if record is None:
+                # Create new agent and enable persistence
+                agent = ProjectChatOrchestratorAgentFactory.create_agent(project_config)
+                if hasattr(agent, "enable_persistence"):
+                    agent.enable_persistence(  # type: ignore[attr-defined]
+                        namespace=namespace,
+                        project_id=project_id,
+                        session_id=session_id,
+                        project_dir=project_dir,
+                    )
+                # Cache the agent in memory
+                agent_sessions[key] = SessionRecord(
+                    namespace=namespace,
+                    project_id=project_id,
+                    agent=agent,
+                    created_at=now,
+                    last_used=now,
+                    request_count=1,
+                )
+            else:
+                # Reuse cached agent and update stats
+                record.last_used = now
+                record.request_count += 1
+                agent = record.agent
+
+        set_session_header(response, session_id)
 
     # Extract the latest user message
     latest_user_message = None
@@ -319,7 +337,7 @@ async def chat(
                 rag_top_k=request.rag_top_k,
                 rag_score_threshold=request.rag_score_threshold,
             ),
-            session_id,
+            session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
         )
 
@@ -340,7 +358,8 @@ async def chat(
             detail=f"Chat service failed to generate a response: {e}",
         ) from e
 
-    set_session_header(response, session_id)
+    if not stateless:
+        set_session_header(response, session_id)
     return completion
 
 
@@ -358,7 +377,7 @@ async def rag_query(
 ):
     """Perform a RAG query on the project's configured databases."""
     # Import here to avoid circular import
-    from api.routers.rag.rag_query import QueryRequest, QueryResponse, handle_rag_query
+    from api.routers.rag.rag_query import QueryRequest, handle_rag_query
 
     # Validate request
     request = QueryRequest(**request)
@@ -410,18 +429,51 @@ async def get_task(namespace: str, project_id: str, task_id: str):
     return payload
 
 
+@router.get(
+    "/{namespace}/{project_id}/chat/sessions/{session_id}/history",
+    responses={
+        200: {"model": dict},
+        404: {"model": ErrorResponse},
+    },
+)
+async def get_chat_session_history(namespace: str, project_id: str, session_id: str):
+    """Retrieve the chat history for a specific session."""
+    try:
+        project_dir = ProjectService.get_project_dir(namespace, project_id)
+        history_file = Path(project_dir) / "sessions" / session_id / "history.json"
+
+        if not history_file.exists():
+            return {"messages": []}
+
+        import json
+
+        with open(history_file, encoding="utf-8") as f:
+            data = json.load(f)
+
+        return {"messages": data if isinstance(data, list) else []}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load session history: {e}"
+        ) from e
+
+
 @router.delete(
-    "/{namespace}/{project_id}/chat/session/{session_id}",
+    "/{namespace}/{project_id}/chat/sessions/{session_id}",
     responses={
         200: {"model": dict},
         404: {"model": ErrorResponse},
     },
 )
 async def delete_chat_session(namespace: str, project_id: str, session_id: str):
+    # Delete in-memory record if present
     with _agent_sessions_lock:
-        deleted = _delete_session(namespace, project_id, session_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Session not found")
+        _delete_session(namespace, project_id, session_id)
+    # Delete on-disk history directory
+    with contextlib.suppress(Exception):
+        project_dir = ProjectService.get_project_dir(namespace, project_id)
+        sessions_dir = Path(project_dir) / "sessions" / session_id
+        if sessions_dir.exists():
+            shutil.rmtree(sessions_dir, ignore_errors=True)
     return {"message": f"Session {session_id} deleted"}
 
 

@@ -27,7 +27,9 @@ def app_client(mocker):
         version="v1",
         name="llamafarm-1",
         namespace="default",
-        prompts=[Prompt(role="system", content="You are the default project assistant.")],
+        prompts=[
+            Prompt(role="system", content="You are the default project assistant.")
+        ],
         runtime=Runtime(provider=Provider.ollama, model="dummy-model"),
     )
     seed_config = LlamaFarmConfig(
@@ -45,8 +47,14 @@ def app_client(mocker):
             return default_config
         raise AssertionError(f"Unexpected project request: {namespace}/{project_id}")
 
-    mocker.patch("api.routers.projects.projects.ProjectService.load_config", side_effect=load_config)
-    mocker.patch("api.routers.projects.projects.ProjectService.get_project_dir", return_value="/tmp")
+    mocker.patch(
+        "api.routers.projects.projects.ProjectService.load_config",
+        side_effect=load_config,
+    )
+    mocker.patch(
+        "api.routers.projects.projects.ProjectService.get_project_dir",
+        return_value="/tmp",
+    )
 
     class StubAgent:
         def __init__(self, tag: str):
@@ -59,7 +67,9 @@ def app_client(mocker):
 
         async def run_async(self, input_schema):
             self.history.append(input_schema.chat_message)
-            return SimpleNamespace(chat_message=f"{self.tag}:{input_schema.chat_message}")
+            return SimpleNamespace(
+                chat_message=f"{self.tag}:{input_schema.chat_message}"
+            )
 
         async def run_async_stream(self, input_schema):
             self.history.append(input_schema.chat_message)
@@ -82,27 +92,48 @@ def app_client(mocker):
     return TestClient(llama_farm_api())
 
 
-def _post_chat(client: TestClient, namespace: str, project: str, payload: dict, session: str | None = None):
+def _post_chat(
+    client: TestClient,
+    namespace: str,
+    project: str,
+    payload: dict,
+    session: str | None = None,
+):
     headers = {"Content-Type": "application/json"}
     if session:
         headers["X-Session-ID"] = session
-    return client.post(f"/v1/projects/{namespace}/{project}/chat/completions", json=payload, headers=headers)
+    return client.post(
+        f"/v1/projects/{namespace}/{project}/chat/completions",
+        json=payload,
+        headers=headers,
+    )
 
 
 def _delete_session(client: TestClient, namespace: str, project: str, session: str):
-    return client.delete(f"/v1/projects/{namespace}/{project}/chat/session/{session}")
+    return client.delete(f"/v1/projects/{namespace}/{project}/chat/sessions/{session}")
 
 
 def _delete_all_sessions(client: TestClient, namespace: str, project: str):
     return client.delete(f"/v1/projects/{namespace}/{project}/chat/sessions")
 
 
-def _stream_chat(client: TestClient, namespace: str, project: str, payload: dict, session: str | None = None) -> str:
+def _stream_chat(
+    client: TestClient,
+    namespace: str,
+    project: str,
+    payload: dict,
+    session: str | None = None,
+) -> str:
     headers = {"Content-Type": "application/json"}
     if session:
         headers["X-Session-ID"] = session
     chunks: list[str] = []
-    with client.stream("POST", f"/v1/projects/{namespace}/{project}/chat/completions", json=payload, headers=headers) as resp:
+    with client.stream(
+        "POST",
+        f"/v1/projects/{namespace}/{project}/chat/completions",
+        json=payload,
+        headers=headers,
+    ) as resp:
         assert resp.status_code == 200, resp.text
         for line in resp.iter_lines():
             if isinstance(line, bytes):
@@ -132,14 +163,22 @@ def test_default_project_chat_should_not_use_seed_session(app_client):
     payload = {"messages": [{"role": "user", "content": "hello"}]}
     shared_session = "sess-123"
 
-    seed_resp = _post_chat(app_client, "llamafarm", "project_seed", payload, session=shared_session)
+    seed_resp = _post_chat(
+        app_client, "llamafarm", "project_seed", payload, session=shared_session
+    )
     assert seed_resp.status_code == 200
-    assert seed_resp.json()["choices"][0]["message"]["content"].startswith("llamafarm/project_seed:")
+    assert seed_resp.json()["choices"][0]["message"]["content"].startswith(
+        "llamafarm/project_seed:"
+    )
 
-    default_resp = _post_chat(app_client, "default", "llamafarm-1", payload, session=shared_session)
+    default_resp = _post_chat(
+        app_client, "default", "llamafarm-1", payload, session=shared_session
+    )
     assert default_resp.status_code == 200
     content = default_resp.json()["choices"][0]["message"]["content"]
-    assert content.startswith("default/llamafarm-1:"), "Default project reuses seed agent session"
+    assert content.startswith("default/llamafarm-1:"), (
+        "Default project reuses seed agent session"
+    )
 
 
 def test_seed_project_chat_creates_session(app_client):
@@ -147,7 +186,9 @@ def test_seed_project_chat_creates_session(app_client):
     resp = _post_chat(app_client, "llamafarm", "project_seed", payload)
     assert resp.status_code == 200
     assert resp.headers.get("X-Session-ID")
-    assert resp.json()["choices"][0]["message"]["content"].startswith("llamafarm/project_seed:")
+    assert resp.json()["choices"][0]["message"]["content"].startswith(
+        "llamafarm/project_seed:"
+    )
 
 
 def test_delete_specific_session(app_client):
@@ -161,7 +202,9 @@ def test_delete_specific_session(app_client):
     assert delete_resp.status_code == 200
     assert delete_resp.json()["message"].startswith("Session")
 
-    resp_again = _post_chat(app_client, "default", "llamafarm-1", payload, session=session)
+    resp_again = _post_chat(
+        app_client, "default", "llamafarm-1", payload, session=session
+    )
     assert resp_again.status_code == 200
     assert resp_again.headers.get("X-Session-ID") == session
 

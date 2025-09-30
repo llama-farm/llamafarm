@@ -448,7 +448,7 @@ func deleteChatSession() error {
 	if sessionID == "" {
 		return nil
 	}
-	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/session/%s", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
+	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
@@ -462,4 +462,70 @@ func deleteChatSession() error {
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	return nil
+}
+
+// fetchSessionHistory retrieves the chat history for a session from the server.
+// Returns a slice of user messages suitable for CLI history (up/down arrow).
+func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) []string {
+	if sessionID == "" {
+		return nil
+	}
+	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s/history", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var result struct {
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	var history []string
+	for _, msg := range result.Messages {
+		// Only include user messages for CLI history
+		if msg.Role == "user" {
+			// First, try to parse content as a string (it may be JSON-encoded string)
+			var contentStr string
+			if err := json.Unmarshal(msg.Content, &contentStr); err == nil {
+				// Now try to parse the string as JSON object with chat_message field
+				var chatMsg struct {
+					ChatMessage string `json:"chat_message"`
+				}
+				if err := json.Unmarshal([]byte(contentStr), &chatMsg); err == nil && chatMsg.ChatMessage != "" {
+					history = append(history, chatMsg.ChatMessage)
+				} else {
+					// If it's not a chat_message object, use the string as-is
+					history = append(history, contentStr)
+				}
+			} else {
+				// Fallback: try to parse as direct chat_message object
+				var chatMsg struct {
+					ChatMessage string `json:"chat_message"`
+				}
+				if err := json.Unmarshal(msg.Content, &chatMsg); err == nil && chatMsg.ChatMessage != "" {
+					history = append(history, chatMsg.ChatMessage)
+				}
+			}
+		}
+	}
+
+	return history
 }
