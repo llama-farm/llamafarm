@@ -10,21 +10,16 @@ Simulates analysing a project knowledge base that mixes PDFs, Markdown guides, H
 
 ## Contents
 - `files/` – sample documents (FDA letter, research note, Markdown API guide, HTML article, Python source).
-- `llamafarm-example-mixed-format.yaml` – example configuration with mixed parsers/extractors.
-- `update_config.sh` – copies the config into your project (backs up existing config).
+- `llamafarm.yaml` – example configuration with mixed parsers/extractors, consumed automatically via `lf --cwd`.
 - `run_example.sh` – interactive workflow using the latest CLI commands.
 
 ## Quickstart
 ```bash
-# Optional: initialize or select a project directory
-mkdir -p ~/projects/mixed-demo && cd ~/projects/mixed-demo
-lf init
+# From the repo root (expects ./lf or export LF_BIN=/full/path/to/lf)
+./examples/mixed-format-rag/run_example.sh
 
-# Apply the example configuration (backs up existing llamafarm.yaml)
-/path/to/llamafarm/examples/mixed-format-rag/update_config.sh /path/to/your/project
-
-# Run the interactive workflow (press Enter between steps)
-/path/to/llamafarm/examples/mixed-format-rag/run_example.sh /path/to/your/project
+# Optional: pass the directory containing the lf binary if you keep it elsewhere
+./examples/mixed-format-rag/run_example.sh /path/to/your/project
 ```
 
 Set `NO_PAUSE=1` to skip prompts (useful for CI or batch runs).
@@ -32,29 +27,27 @@ Set `NO_PAUSE=1` to skip prompts (useful for CI or batch runs).
 ## Manual Workflow
 ```bash
 # Create dataset pointing at the mixed-format processing strategy and new database
-lf datasets create -s mixed_content_processor -b mixed_format_db mixed_format_dataset
+lf --cwd examples/mixed-format-rag datasets create -s mixed_content_processor -b mixed_format_db mixed_format_dataset
 
 # Upload documents (PDF, Markdown, HTML, text, code)
-lf datasets upload mixed_format_dataset examples/mixed-format-rag/files/*
+lf --cwd examples/mixed-format-rag datasets upload mixed_format_dataset examples/mixed-format-rag/files/*
 
 # Process and inspect
-lf datasets process mixed_format_dataset
-lf datasets list
-lf rag query --database mixed_format_db --top-k 4 --include-metadata --include-score \
+lf --cwd examples/mixed-format-rag datasets process mixed_format_dataset
+lf --cwd examples/mixed-format-rag datasets list
+lf --cwd examples/mixed-format-rag rag query --database mixed_format_db --top-k 4 --include-metadata --include-score \
   "Summarize transformer architecture mentions across documents."
 
 # Ask questions with RAG context
-lf chat --database mixed_format_db "Provide an overview of transformer architecture with citations."
-lf chat --database mixed_format_db "List documented API endpoints with file references."
+lf --cwd examples/mixed-format-rag chat --database mixed_format_db "Provide an overview of transformer architecture with citations."
+lf --cwd examples/mixed-format-rag chat --database mixed_format_db "List documented API endpoints with file references."
 
 # Compare baseline
-lf chat --no-rag "What is transformer architecture?"
+lf --cwd examples/mixed-format-rag chat --no-rag "What is transformer architecture?"
 ```
 
 ## Cleanup
 ```bash
-lf datasets delete mixed_format_dataset
-rm -rf data/mixed_format_db
+lf --cwd examples/mixed-format-rag datasets delete mixed_format_dataset
+rm -rf examples/mixed-format-rag/data/mixed_format_db
 ```
-
-Remember to restore your config from the backup created by `update_config.sh` if you no longer want the example settings.

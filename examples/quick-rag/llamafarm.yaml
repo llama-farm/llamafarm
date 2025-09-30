@@ -1,0 +1,95 @@
+version: v1
+name: quick-rag-demo
+namespace: default
+prompts:
+- role: system
+  content: 'You are a concise engineering assistant. Answer in short paragraphs and
+    cite file names when possible.
+
+    '
+rag:
+  databases:
+  - name: quick_rag_db
+    type: ChromaStore
+    config:
+      collection_name: quick_rag_documents
+      distance_function: cosine
+      persist_directory: ./data/quick_rag_db
+      port: 8000
+    embedding_strategies:
+    - name: default_embeddings
+      type: OllamaEmbedder
+      config:
+        auto_pull: true
+        base_url: http://localhost:11434
+        batch_size: 8
+        dimension: 768
+        model: nomic-embed-text
+        timeout: 60
+      priority: 0
+    retrieval_strategies:
+    - name: quick_search
+      type: BasicSimilarityStrategy
+      config:
+        distance_metric: cosine
+        top_k: 5
+      default: true
+  - name: quick_db_20250930122320
+    type: ChromaStore
+    config:
+      collection_name: quick_rag_documents
+      distance_function: cosine
+      persist_directory: ./data/quick_db_20250930122320
+      port: 8000
+    embedding_strategies:
+    - name: default_embeddings
+      type: OllamaEmbedder
+      config:
+        auto_pull: true
+        base_url: http://localhost:11434
+        batch_size: 8
+        dimension: 768
+        model: nomic-embed-text
+        timeout: 60
+      priority: 0
+    retrieval_strategies:
+    - name: quick_search
+      type: BasicSimilarityStrategy
+      config:
+        distance_metric: cosine
+        top_k: 5
+      default: true
+  data_processing_strategies:
+  - name: quick_note_processor
+    description: Lightweight processor for short engineering notes.
+    parsers:
+    - type: MarkdownParser_LlamaIndex
+      config:
+        chunk_size: 400
+        chunk_overlap: 40
+      file_include_patterns:
+      - '*.md'
+      priority: 100
+    - type: TextParser_LlamaIndex
+      config:
+        chunk_size: 400
+        chunk_overlap: 40
+      file_include_patterns:
+      - '*.txt'
+      priority: 90
+    extractors:
+    - type: ContentStatisticsExtractor
+      config:
+        include_readability: true
+      priority: 80
+datasets:
+- name: quick_dataset_20250930122320
+  data_processing_strategy: quick_note_processor
+  database: quick_db_20250930122320
+  files:
+  - 26960d62ae7145be1109ad78136de858c7a6be8ad140fb5307948518b17270a7
+  - 41b3de4d5258cae9805eb881088cc61f8f099a93552716ab9a157e822c00bb4b
+runtime:
+  provider: ollama
+  model: llama3.1:8b
+  base_url: http://localhost:11434/v1
