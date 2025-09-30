@@ -158,7 +158,7 @@ For the best experience getting started with LlamaFarm, we recommend exploring o
   # Interactive setup wizard - guides you through configuration
   uv run python setup_demo.py
 
-  # Or try specific demos with the real CLI:
+# Or try specific demos with the real CLI:
   uv run python cli.py demo research_papers    # Academic paper analysis
   uv run python cli.py demo customer_support   # Support ticket processing
   uv run python cli.py demo code_analysis      # Source code understanding
@@ -188,6 +188,13 @@ For the best experience getting started with LlamaFarm, we recommend exploring o
   uv run python cli.py setup your-strategy.yaml --verify
   uv run python cli.py demo your-strategy
   ```
+
+Need to inspect the raw HTTP call a prompt will make? Use the new curl preview:
+
+```bash
+# Print (but do not execute) the underlying chat request
+./lf run --curl "What is LlamaFarm?"
+```
 
 #### 📝 Prompts (Coming Soon)
 The prompts system is under active development. For now, explore the template system:
@@ -247,6 +254,7 @@ cd cli && go build -o lf . && cd ..
 
 # Process the ingested documents
 ./lf datasets process my-docs
+# (For larger datasets the CLI will print periodic dots while the server works.)
 
 # Query your documents
 ./lf rag query --database main_database "What is transformer architecture?"
