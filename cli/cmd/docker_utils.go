@@ -647,6 +647,12 @@ func getImageURL(component string) (string, error) {
 			component, getKnownComponentsList())
 	}
 
+	// If LF_CONTAINER_{component} is set, return that directly
+	containerEnvVar := fmt.Sprintf("LF_CONTAINER_%s", strings.ToUpper(component))
+	if val := strings.TrimSpace(os.Getenv(containerEnvVar)); val != "" {
+		return val, nil
+	}
+
 	baseURL := "ghcr.io/llama-farm/llamafarm"
 	tag := resolveImageTag(component, "latest")
 	return fmt.Sprintf("%s/%s:%s", baseURL, component, tag), nil

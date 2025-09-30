@@ -1,0 +1,238 @@
+"""
+Tests for URL replacement functionality in config loader.
+"""
+
+import socket
+from unittest.mock import patch
+
+from config.helpers import loader
+from config.helpers.loader import (
+    _is_host_docker_internal_resolvable,
+    _replace_localhost_url,
+    _replace_urls_in_config,
+    _reset_host_docker_internal_cache,
+    load_config_dict,
+)
+
+
+class TestURLReplacement:
+    """Test URL replacement functionality."""
+
+    def setup_method(self):
+        """Reset cache before each test."""
+        _reset_host_docker_internal_cache()
+
+    def test_is_host_docker_internal_resolvable_success(self):
+        """Test successful DNS resolution of host.docker.internal."""
+        with patch("socket.gethostbyname") as mock_gethostbyname:
+            mock_gethostbyname.return_value = "192.168.65.254"
+            assert _is_host_docker_internal_resolvable() is True
+            mock_gethostbyname.assert_called_once_with("host.docker.internal")
+
+    def test_is_host_docker_internal_resolvable_failure(self):
+        """Test failed DNS resolution of host.docker.internal."""
+        with patch("socket.gethostbyname") as mock_gethostbyname:
+            mock_gethostbyname.side_effect = socket.gaierror("Name resolution failed")
+            assert _is_host_docker_internal_resolvable() is False
+            mock_gethostbyname.assert_called_once_with("host.docker.internal")
+
+    def test_is_host_docker_internal_resolvable_caching(self):
+        """Test that DNS resolution result is cached."""
+        with patch("socket.gethostbyname") as mock_gethostbyname:
+            mock_gethostbyname.return_value = "192.168.65.254"
+
+            # First call should hit the DNS
+            result1 = _is_host_docker_internal_resolvable()
+            assert result1 is True
+            assert mock_gethostbyname.call_count == 1
+
+            # Second call should use cache, no additional DNS call
+            result2 = _is_host_docker_internal_resolvable()
+            assert result2 is True
+            assert mock_gethostbyname.call_count == 1  # Still only 1 call
+
+            # Third call should also use cache
+            result3 = _is_host_docker_internal_resolvable()
+            assert result3 is True
+            assert mock_gethostbyname.call_count == 1  # Still only 1 call
+
+    def test_reset_host_docker_internal_cache(self):
+        """Test that cache reset works correctly."""
+        with patch("socket.gethostbyname") as mock_gethostbyname:
+            mock_gethostbyname.return_value = "192.168.65.254"
+
+            # First call should hit DNS
+            result1 = _is_host_docker_internal_resolvable()
+            assert result1 is True
+            assert mock_gethostbyname.call_count == 1
+
+            # Reset cache
+            _reset_host_docker_internal_cache()
+
+            # Next call should hit DNS again
+            result2 = _is_host_docker_internal_resolvable()
+            assert result2 is True
+            assert mock_gethostbyname.call_count == 2
+
+    def test_replace_localhost_url_http(self):
+        """Test replacing HTTP localhost URL."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("http://localhost:8080/api")
+            assert result == "http://host.docker.internal:8080/api"
+
+    def test_replace_localhost_url_https(self):
+        """Test replacing HTTPS localhost URL."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("https://localhost:443/secure")
+            assert result == "https://host.docker.internal:443/secure"
+
+    def test_replace_localhost_url_no_port(self):
+        """Test replacing localhost URL without port."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("http://localhost/api")
+            assert result == "http://host.docker.internal/api"
+
+    def test_replace_localhost_url_no_path(self):
+        """Test replacing localhost URL without path."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("http://localhost:8080")
+            assert result == "http://host.docker.internal:8080"
+
+    def test_replace_localhost_url_not_resolvable(self):
+        """Test that URL is not replaced when host.docker.internal is not resolvable."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=False):
+            result = _replace_localhost_url("http://localhost:8080/api")
+            assert result == "http://localhost:8080/api"
+
+    def test_replace_localhost_url_non_localhost(self):
+        """Test that non-localhost URLs are not modified."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("http://example.com:8080/api")
+            assert result == "http://example.com:8080/api"
+
+    def test_replace_localhost_url_non_string(self):
+        """Test that non-string values are returned unchanged."""
+        result = _replace_localhost_url(123)
+        assert result == 123
+
+    def test_replace_urls_in_config_simple_dict(self):
+        """Test URL replacement in a simple dictionary."""
+        config = {
+            "base_url": "http://localhost:8080",
+            "api_url": "https://localhost:9000/api",
+            "other_field": "not a url",
+        }
+
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_urls_in_config(config)
+
+        expected = {
+            "base_url": "http://host.docker.internal:8080",
+            "api_url": "https://host.docker.internal:9000/api",
+            "other_field": "not a url",
+        }
+        assert result == expected
+
+    def test_replace_urls_in_config_nested_dict(self):
+        """Test URL replacement in nested dictionaries."""
+        config = {
+            "runtime": {"base_url": "http://localhost:11434"},
+            "rag": {
+                "databases": [
+                    {"embedding_strategies": [{"config": {"base_url": "http://localhost:8080"}}]}
+                ]
+            },
+        }
+
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_urls_in_config(config)
+
+        expected = {
+            "runtime": {"base_url": "http://host.docker.internal:11434"},
+            "rag": {
+                "databases": [
+                    {
+                        "embedding_strategies": [
+                            {"config": {"base_url": "http://host.docker.internal:8080"}}
+                        ]
+                    }
+                ]
+            },
+        }
+        assert result == expected
+
+    def test_replace_urls_in_config_list(self):
+        """Test URL replacement in lists."""
+        config = [{"base_url": "http://localhost:8080"}, {"api_url": "https://localhost:9000"}]
+
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_urls_in_config(config)
+
+        expected = [
+            {"base_url": "http://host.docker.internal:8080"},
+            {"api_url": "https://host.docker.internal:9000"},
+        ]
+        assert result == expected
+
+    def test_replace_urls_in_config_primitive_values(self):
+        """Test that primitive values are returned unchanged."""
+        assert _replace_urls_in_config("string") == "string"
+        assert _replace_urls_in_config(123) == 123
+        assert _replace_urls_in_config(True) is True
+
+    def test_load_config_dict_with_url_replacement(self, temp_config_file):
+        """Test that load_config_dict applies URL replacement."""
+        config_content = """
+version: v1
+name: test_config
+namespace: test
+
+runtime:
+  provider: ollama
+  model: test-model
+  base_url: http://localhost:11434
+
+rag:
+  databases:
+    - name: test_db
+      type: ChromaStore
+      embedding_strategies:
+        - name: test_embedding
+          type: OllamaEmbedder
+          config:
+            model: test-model
+            base_url: http://localhost:8080
+"""
+
+        config_file = temp_config_file(config_content)
+
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = load_config_dict(config_file, validate=False)
+
+        # Check that URLs were replaced
+        assert result["runtime"]["base_url"] == "http://host.docker.internal:11434"
+        assert (
+            result["rag"]["databases"][0]["embedding_strategies"][0]["config"]["base_url"]
+            == "http://host.docker.internal:8080"
+        )
+
+    def test_load_config_dict_no_replacement_when_not_resolvable(self, temp_config_file):
+        """Test that URLs are not replaced when host.docker.internal is not resolvable."""
+        config_content = """
+version: v1
+name: test_config
+namespace: test
+
+runtime:
+  provider: ollama
+  model: test-model
+  base_url: http://localhost:11434
+"""
+
+        config_file = temp_config_file(config_content)
+
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=False):
+            result = load_config_dict(config_file, validate=False)
+
+        # Check that URLs were NOT replaced
+        assert result["runtime"]["base_url"] == "http://localhost:11434"

@@ -76,14 +76,8 @@ def handle_rag_query_task(
     )
 
     try:
-        # Build config path
-        cfg_path = Path(project_dir) / "llamafarm.yaml"
-
-        if not cfg_path.exists():
-            raise FileNotFoundError(f"Config file not found: {cfg_path}")
-
         # Initialize search API
-        api = DatabaseSearchAPI(config_path=str(cfg_path), database=database)
+        api = DatabaseSearchAPI(project_dir=project_dir, database=database)
 
         # Perform search
         results = api.search(
@@ -162,14 +156,8 @@ def batch_search_task(
     )
 
     try:
-        # Build config path
-        cfg_path = Path(project_dir) / "llamafarm.yaml"
-
-        if not cfg_path.exists():
-            raise FileNotFoundError(f"Config file not found: {cfg_path}")
-
         # Initialize search API
-        api = DatabaseSearchAPI(config_path=str(cfg_path), database=database)
+        api = DatabaseSearchAPI(project_dir=project_dir, database=database)
 
         # Process each query
         all_results = []

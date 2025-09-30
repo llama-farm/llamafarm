@@ -1,9 +1,24 @@
 """Direct handler for new RAG schema - NO LEGACY CONVERSION."""
 
 import logging
+import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
-import yaml
+from typing import Any, Dict, List, Optional, Tuple
+
+# Use the common config module instead of direct YAML loading
+
+# Add the repo root to the path to find the config module
+repo_root = Path(__file__).parent.parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+try:
+    from config import load_config
+    from config.datamodel import LlamaFarmConfig
+except ImportError as e:
+    raise ImportError(
+        f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
+    ) from e
 
 logger = logging.getLogger(__name__)
 
@@ -17,19 +32,21 @@ class SchemaHandler:
         self.global_config = None
         self.rag_config = None
 
-        if self.config_source.exists():
-            # Load global config directly with YAML
-            with open(self.config_source, "r") as f:
-                config = yaml.safe_load(f)
-                # Check if this is a global config (has 'rag' section) or direct RAG config
-                if "rag" in config:
-                    self.global_config = config
-                    self.rag_config = config["rag"]
-                else:
-                    # Direct RAG config format
-                    self.rag_config = config
-        else:
-            raise ValueError(f"Global config file not found: {config_source}")
+        try:
+            # Use the common config loader instead of direct YAML loading
+            config = load_config(config_path=self.config_source, validate=False)
+
+            # Check if this is a global config (has 'rag' section) or direct RAG config
+            if config.rag:
+                self.global_config = config
+                self.rag_config = config.rag
+            else:
+                # Direct RAG config format
+                raise ValueError("Global config file does not have a rag section")
+        except Exception as e:
+            raise ValueError(
+                f"Global config file not found or invalid: {config_source}. Error: {e}"
+            ) from e
 
     def get_available_strategies(self) -> List[str]:
         """Get list of available combined strategy names."""
@@ -37,8 +54,10 @@ class SchemaHandler:
             return []
 
         strategies = []
-        databases = self.rag_config.get("databases", [])
-        processing_strategies = self.rag_config.get("data_processing_strategies", [])
+        databases = getattr(self.rag_config, "databases", []) or []
+        processing_strategies = (
+            getattr(self.rag_config, "data_processing_strategies", []) or []
+        )
 
         for proc_strategy in processing_strategies:
             for db in databases:
@@ -47,35 +66,38 @@ class SchemaHandler:
 
         return strategies
 
-    def get_database_names(self) -> List[str]:
+    def get_database_names(self) -> list[str]:
         """Get list of available database names."""
-        return [db["name"] for db in self.rag_config.get("databases", [])]
+        return [db["name"] for db in getattr(self.rag_config, "databases", []) or []]
 
-    def get_data_processing_strategy_names(self) -> List[str]:
+    def get_data_processing_strategy_names(self) -> list[str]:
         """Get list of available data processing strategy names."""
         return [
             strategy["name"]
-            for strategy in self.rag_config.get("data_processing_strategies", [])
+            for strategy in getattr(self.rag_config, "data_processing_strategies", [])
+            or []
         ]
 
-    def get_database_retrieval_strategies(self, database_name: str) -> List[str]:
+    def get_database_retrieval_strategies(self, database_name: str) -> list[str]:
         """Get available retrieval strategies for a database."""
-        for db in self.rag_config.get("databases", []):
+        for db in getattr(self.rag_config, "databases", []) or []:
             if db["name"] == database_name:
                 return [rs["name"] for rs in db.get("retrieval_strategies", [])]
         return []
 
-    def create_database_config(self, database_name: str) -> Dict[str, Any]:
+    def create_database_config(self, database_name: str) -> dict[str, Any]:
         """Create database configuration for factories."""
-        for db in self.rag_config.get("databases", []):
+        for db in getattr(self.rag_config, "databases", []) or []:
             if db["name"] == database_name:
                 # Return the database config as-is from the YAML
                 return db
         raise ValueError(f"Database '{database_name}' not found")
 
-    def create_processing_config(self, strategy_name: str) -> Dict[str, Any]:
+    def create_processing_config(self, strategy_name: str) -> dict[str, Any]:
         """Create data processing strategy configuration."""
-        for strategy in self.rag_config.get("data_processing_strategies", []):
+        for strategy in (
+            getattr(self.rag_config, "data_processing_strategies", []) or []
+        ):
             if strategy["name"] == strategy_name:
                 return {
                     "parsers": strategy.get("parsers", []),
@@ -85,7 +107,7 @@ class SchemaHandler:
 
     def parse_strategy_name(
         self, strategy_name: str
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> tuple[Optional[str], Optional[str]]:
         """Parse combined strategy name into processing and database parts.
 
         Strategy names are in format: {processing_strategy}_{database_name}
@@ -93,9 +115,12 @@ class SchemaHandler:
         """
         # Get known strategies and databases
         processing_strategies = [
-            s["name"] for s in self.rag_config.get("data_processing_strategies", [])
+            s["name"]
+            for s in getattr(self.rag_config, "data_processing_strategies", []) or []
         ]
-        databases = [db["name"] for db in self.rag_config.get("databases", [])]
+        databases = [
+            db["name"] for db in getattr(self.rag_config, "databases", []) or []
+        ]
 
         # Try to find the best match
         for proc in processing_strategies:
@@ -103,7 +128,7 @@ class SchemaHandler:
                 # Found processing strategy prefix
                 db_part = strategy_name[len(proc) + 1 :]
                 if db_part in [
-                    db["name"] for db in self.rag_config.get("databases", [])
+                    db["name"] for db in getattr(self.rag_config, "databases", []) or []
                 ]:
                     return proc, db_part
 
@@ -113,31 +138,33 @@ class SchemaHandler:
             return parts[0], parts[1]
         return None, None
 
-    def get_database_config(self, db_name: str) -> Optional[Dict[str, Any]]:
+    def get_database_config(self, db_name: str) -> Optional[dict[str, Any]]:
         """Get database configuration by name."""
         if not self.rag_config:
             return None
 
-        for db in self.rag_config.get("databases", []):
+        for db in getattr(self.rag_config, "databases", []) or []:
             if db.get("name") == db_name:
                 return db
         return None
 
     def get_processing_strategy_config(
         self, proc_name: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Get processing strategy configuration by name."""
         if not self.rag_config:
             return None
 
-        for strategy in self.rag_config.get("data_processing_strategies", []):
+        for strategy in (
+            getattr(self.rag_config, "data_processing_strategies", []) or []
+        ):
             if strategy.get("name") == proc_name:
                 return strategy
         return None
 
     def get_combined_config(
         self, strategy_name: str, source_path: Optional[Path] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get combined configuration for a strategy (processing + database).
 
         Returns the actual new schema config without any conversion.
@@ -147,8 +174,11 @@ class SchemaHandler:
         if not proc_name or not db_name:
             # Try using the name directly as processing strategy with first database
             proc_name = strategy_name
-            databases = self.rag_config.get("databases", []) if self.rag_config else []
+            databases = getattr(self.rag_config, "databases", []) or []
             db_name = databases[0]["name"] if databases else None
+
+        if not proc_name or not db_name:
+            raise ValueError(f"Strategy name {strategy_name} not found")
 
         proc_config = self.get_processing_strategy_config(proc_name)
         db_config = self.get_database_config(db_name)
@@ -223,20 +253,18 @@ class SchemaHandler:
 
         return {"type": "BasicSimilarityStrategy", "config": {}}
 
-    def get_parsers_config(
-        self, proc_config: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+    def get_parsers_config(self, proc_config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get all parser configurations from processing strategy.
-        
+
         Returns all parsers configured for the strategy.
         """
         return proc_config.get("parsers", [])
-    
+
     def get_parser_config(
         self, proc_config: Dict[str, Any], source_path: Optional[Path] = None
     ) -> Dict[str, Any]:
         """Get first parser configuration (for backward compatibility).
-        
+
         DEPRECATED: Use get_parsers_config to get all parsers.
         """
         parsers = self.get_parsers_config(proc_config)

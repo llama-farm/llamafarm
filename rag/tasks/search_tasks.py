@@ -74,14 +74,8 @@ def search_with_rag_database_task(
     )
 
     try:
-        # Build config path
-        cfg_path = Path(project_dir) / "llamafarm.yaml"
-
-        if not cfg_path.exists():
-            raise FileNotFoundError(f"Config file not found: {cfg_path}")
-
         # Initialize search API
-        api = DatabaseSearchAPI(config_path=str(cfg_path), database=database)
+        api = DatabaseSearchAPI(project_dir=project_dir, database=database)
 
         # Perform search
         results = api.search(

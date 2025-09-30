@@ -5,12 +5,23 @@ Celery tasks for RAG service health monitoring and diagnostics.
 """
 
 import logging
+import os
+import sys
 import time
+from pathlib import Path
 from typing import Any
 
+import psutil
 from celery import Task
 
+from api import DatabaseSearchAPI
 from celery_app import app
+
+# Add the repo root to the path to find the config module
+repo_root = Path(__file__).parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+from config import load_config  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -81,31 +92,8 @@ def rag_health_check_task(self) -> dict[str, Any]:
             }
             health_data["errors"].append(f"Import error: {e}")
 
-        # Check 3: Configuration system - verify we can load config templates
-        try:
-            import yaml
-
-            # Try to load a basic YAML to test the system
-            test_yaml = "test: value"
-            yaml.safe_load(test_yaml)
-
-            health_data["checks"]["config_system"] = {
-                "status": "healthy",
-                "message": "Configuration system functional",
-            }
-        except Exception as e:
-            health_data["checks"]["config_system"] = {
-                "status": "degraded",
-                "message": f"Config system issues: {str(e)}",
-            }
-            health_data["errors"].append(f"Config error: {e}")
-
         # Check 4: Memory and performance metrics
         try:
-            import os
-
-            import psutil
-
             process = psutil.Process(os.getpid())
             memory_mb = process.memory_info().rss / 1024 / 1024
             cpu_percent = process.cpu_percent()
@@ -225,20 +213,15 @@ def rag_health_check_database_task(
         # Check 1: Database configuration - verify database exists in project config
         database_config = None
         try:
-            from pathlib import Path
+            config = load_config(config_path=project_dir, validate=True)
 
-            import yaml
-
-            cfg_path = Path(project_dir) / "llamafarm.yaml"
-            if cfg_path.exists():
-                with open(cfg_path) as f:
-                    config = yaml.safe_load(f)
-                    # Find the specific database configuration
-                    if config and "rag" in config and "databases" in config["rag"]:
-                        for db_cfg in config["rag"]["databases"]:
-                            if db_cfg.get("name") == database:
-                                database_config = db_cfg
-                                break
+            # Find the specific database configuration
+            if config:
+                if config.rag and config.rag.databases:
+                    for db_cfg in config.rag.databases:
+                        if db_cfg.name == database:
+                            database_config = db_cfg
+                            break
 
                         if database_config:
                             health_data["checks"]["database_config"] = {
@@ -247,11 +230,11 @@ def rag_health_check_database_task(
                             }
                             # Store database type and other config info
                             health_data["metrics"]["database_type"] = (
-                                database_config.get("type", "unknown")
+                                database_config.type or "unknown"
                             )
                             health_data["metrics"]["database_config"] = {
                                 k: v
-                                for k, v in database_config.items()
+                                for k, v in database_config
                                 if k
                                 not in [
                                     "credentials",
@@ -278,7 +261,7 @@ def rag_health_check_database_task(
                     "status": "unhealthy",
                     "message": "Project configuration file not found",
                 }
-                health_data["errors"].append("llamafarm.yaml not found")
+                health_data["errors"].append("project config not found")
 
         except Exception as e:
             health_data["checks"]["database_config"] = {
@@ -290,13 +273,9 @@ def rag_health_check_database_task(
         # Check 2: Database connectivity and basic operations
         if database_config:
             try:
-                from pathlib import Path
-                from api import DatabaseSearchAPI
-
-                cfg_path = Path(project_dir) / "llamafarm.yaml"
                 # Initialize the search API to test database connectivity
                 search_api = DatabaseSearchAPI(
-                    config_path=str(cfg_path), database=database
+                    config_path=project_dir, database=database
                 )
 
                 # Try to get database stats/info
