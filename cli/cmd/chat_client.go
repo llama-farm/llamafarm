@@ -39,11 +39,11 @@ type ChatRequest struct {
 	PresencePenalty  *float64           `json:"presence_penalty,omitempty"`
 	LogitBias        map[string]float64 `json:"logit_bias,omitempty"`
 	// RAG fields
-	RAGEnabled          *bool              `json:"rag_enabled,omitempty"`
-	RAGDatabase         *string            `json:"database,omitempty"`
-	RAGRetrievalStrategy *string           `json:"rag_retrieval_strategy,omitempty"`
-	RAGTopK             *int               `json:"rag_top_k,omitempty"`
-	RAGScoreThreshold   *float64           `json:"rag_score_threshold,omitempty"`
+	RAGEnabled           *bool    `json:"rag_enabled,omitempty"`
+	RAGDatabase          *string  `json:"database,omitempty"`
+	RAGRetrievalStrategy *string  `json:"rag_retrieval_strategy,omitempty"`
+	RAGTopK              *int     `json:"rag_top_k,omitempty"`
+	RAGScoreThreshold    *float64 `json:"rag_score_threshold,omitempty"`
 }
 
 // ChatChoice represents a choice in the chat response
@@ -73,11 +73,11 @@ type ChatSessionContext struct {
 	Streaming   bool
 	HTTPClient  HTTPClient
 	// RAG fields
-	RAGEnabled          bool
-	RAGDatabase         string
+	RAGEnabled           bool
+	RAGDatabase          string
 	RAGRetrievalStrategy string
-	RAGTopK             int
-	RAGScoreThreshold   float64
+	RAGTopK              int
+	RAGScoreThreshold    float64
 }
 
 func newDefaultContextFromGlobals() *ChatSessionContext {
@@ -91,6 +91,75 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
 		Streaming:   streaming,
 		HTTPClient:  getHTTPClient(),
 	}
+}
+
+func buildChatCurl(messages []ChatMessage, ctx *ChatSessionContext) (string, error) {
+	if ctx == nil {
+		ctx = newDefaultContextFromGlobals()
+	}
+
+	url, err := buildChatAPIURL(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to build chat API URL: %w", err)
+	}
+
+	streamTrue := true
+	var filteredMessages []ChatMessage
+	for _, msg := range messages {
+		if msg.Role != "client" && msg.Role != "error" {
+			filteredMessages = append(filteredMessages, msg)
+		}
+	}
+
+	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
+	if ctx.RAGEnabled {
+		request.RAGEnabled = &ctx.RAGEnabled
+		if ctx.RAGDatabase != "" {
+			request.RAGDatabase = &ctx.RAGDatabase
+		}
+		if ctx.RAGRetrievalStrategy != "" {
+			request.RAGRetrievalStrategy = &ctx.RAGRetrievalStrategy
+		}
+		if ctx.RAGTopK > 0 {
+			request.RAGTopK = &ctx.RAGTopK
+		}
+		if ctx.RAGScoreThreshold > 0 {
+			request.RAGScoreThreshold = &ctx.RAGScoreThreshold
+		}
+	}
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Accept", "text/event-stream")
+
+	return buildChatCurlCommand(url, jsonData, headers), nil
+}
+
+func buildChatCurlCommand(url string, body []byte, headers http.Header) string {
+	var b strings.Builder
+	b.WriteString("curl -X POST ")
+	for key, values := range headers {
+		if strings.ToLower(key) == "authorization" {
+			continue
+		}
+		for _, v := range values {
+			b.WriteString(fmt.Sprintf("-H '%s: %s' ", key, v))
+		}
+	}
+	if _, ok := headers["Authorization"]; ok {
+		b.WriteString("-H 'Authorization: Bearer <redacted>' ")
+	}
+	if len(body) > 0 {
+		escaped := strings.ReplaceAll(string(body), "'", "'\\''")
+		b.WriteString(fmt.Sprintf("-d '%s' ", escaped))
+	}
+	b.WriteString(fmt.Sprintf("'%s'", url))
+	return b.String()
 }
 
 // buildChatAPIURL chooses the appropriate endpoint based on whether
@@ -163,7 +232,7 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 			}
 		}
 		request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
-		
+
 		// Add RAG parameters if enabled
 		if ctx.RAGEnabled {
 			request.RAGEnabled = &ctx.RAGEnabled

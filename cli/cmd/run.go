@@ -17,38 +17,40 @@ var (
 	runRAGTopK           int
 	runNoRAG             bool
 	runRAGScoreThreshold float64
+	runCurl              bool
 )
 
-// chatCmd represents the `lf chat` command
-var chatCmd = &cobra.Command{
-	Use:   "chat [namespace/project] \"input\"",
-	Short: "Chat with a LlamaFarm project (RAG by default)",
-	Long: `Chat with a LlamaFarm project.
+// runCmd represents the `lf run` command (with chat alias for backwards compatibility)
+var runCmd = &cobra.Command{
+	Use:     "run [namespace/project] \"input\"",
+	Aliases: []string{"chat"},
+	Short:   "Run a one-off prompt against a LlamaFarm project (RAG by default)",
+	Long: `Run a one-off prompt against a LlamaFarm project.
 
 Examples:
   # Explicit project and inline input
-  lf chat my-org/my-project "What models are configured?"
+  lf run my-org/my-project "What models are configured?"
 
   # Explicit project and input file
-  lf chat my-org/my-project -f ./prompt.txt
+  lf run my-org/my-project -f ./prompt.txt
 
   # Project inferred from llamafarm.yaml, inline input
-  lf chat "What models are configured?"
+  lf run "What models are configured?"
 
   # Project inferred from llamafarm.yaml, input file
-  lf chat -f ./prompt.txt
+  lf run -f ./prompt.txt
 
   # Chat with RAG (default behavior)
-  lf chat "What is transformer architecture?"
+  lf run "What is transformer architecture?"
 
   # Run with specific database
-  lf chat --database main_database "Explain attention mechanism"
+  lf run --database main_database "Explain attention mechanism"
 
   # Run with custom retrieval strategy and top-k
-  lf chat --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"
+  lf run --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"
 
   # Run WITHOUT RAG (LLM only)
-  lf chat --no-rag "What is machine learning?"`,
+  lf run --no-rag "What is machine learning?"`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		// Valid forms:
 		// 1) chat <ns>/<proj> <input>
@@ -133,10 +135,7 @@ Examples:
 		ns = serverCfg.Namespace
 		proj = serverCfg.Project
 
-		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverURL, true)
-
-		// Construct context and call the project-scoped chat completions via shared helpers
+		// Construct context for request (without contacting server yet)
 		ctx := &ChatSessionContext{
 			ServerURL:   serverURL,
 			Namespace:   ns,
@@ -153,6 +152,17 @@ Examples:
 		}
 
 		messages := []ChatMessage{{Role: "user", Content: input}}
+
+		if runCurl {
+			if err := printRunCurlCommand(messages, ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "Error generating curl command: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		// Ensure server is up (auto-start locally if needed)
+		ensureServerAvailable(serverURL, true)
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -167,13 +177,23 @@ Examples:
 }
 
 func init() {
-	chatCmd.Flags().StringVarP(&runInputFile, "file", "f", "", "path to file containing input text")
+	runCmd.Flags().StringVarP(&runInputFile, "file", "f", "", "path to file containing input text")
 
-	chatCmd.Flags().BoolVar(&runNoRAG, "no-rag", false, "Disable RAG (use LLM only without document retrieval)")
-	chatCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use for RAG (default: from config)")
-	chatCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
-	chatCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
-	chatCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")
+	runCmd.Flags().BoolVar(&runNoRAG, "no-rag", false, "Disable RAG (use LLM only without document retrieval)")
+	runCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use for RAG (default: from config)")
+	runCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
+	runCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
+	runCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")
+	runCmd.Flags().BoolVar(&runCurl, "curl", false, "Print the equivalent curl command instead of executing the request")
 
-	rootCmd.AddCommand(chatCmd)
+	rootCmd.AddCommand(runCmd)
+}
+
+func printRunCurlCommand(messages []ChatMessage, ctx *ChatSessionContext) error {
+	curlCmd, err := buildChatCurl(messages, ctx)
+	if err != nil {
+		return err
+	}
+	fmt.Println(curlCmd)
+	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"llamafarm-cli/cmd/config"
 
@@ -401,7 +402,7 @@ var datasetsProcessCmd = &cobra.Command{
 		// Ensure server is up
 		ensureServerAvailable(serverCfg.URL, true)
 
-		fmt.Printf("Processing dataset '%s'...\n", datasetName)
+		fmt.Printf("Processing dataset '%s' (this may take several minutes)\n", datasetName)
 
 		// Call the process endpoint
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process",
@@ -413,7 +414,9 @@ var datasetsProcessCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		stopProgress := startProgressDots(2 * time.Second)
 		resp, err := getHTTPClient().Do(req)
+		stopProgress()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error processing dataset: %v\n", err)
 			os.Exit(1)
@@ -624,6 +627,29 @@ func emptyDefault(s string, d string) string {
 		return d
 	}
 	return s
+}
+
+func startProgressDots(interval time.Duration) func() {
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Print(".")
+			case <-done:
+				return
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		fmt.Println()
+	}
 }
 
 // ==== Validation helpers ====
