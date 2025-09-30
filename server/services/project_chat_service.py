@@ -257,6 +257,7 @@ class ProjectChatService:
 
     async def stream_chat(
         self,
+        *,
         project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,

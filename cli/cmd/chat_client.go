@@ -214,9 +214,10 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 		}
 		request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
 
-		// Add RAG parameters if enabled
+		// Always include rag_enabled to let the server know the explicit intent
+		request.RAGEnabled = &ctx.RAGEnabled
+		// Include additional RAG params only when enabled
 		if ctx.RAGEnabled {
-			request.RAGEnabled = &ctx.RAGEnabled
 			if ctx.RAGDatabase != "" {
 				request.RAGDatabase = &ctx.RAGDatabase
 			}
