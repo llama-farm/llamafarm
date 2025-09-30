@@ -120,17 +120,15 @@ databases:
 ### Data Processing Strategies
 ```yaml
 data_processing_strategies:
-  - name: "pdf_processing"
+ - name: "pdf_processing"
     description: "Standard PDF document processing"
     # DirectoryParser configuration (ALWAYS ACTIVE)
     directory_config:
       recursive: true
       include_patterns: ["*.pdf"]
-      allowed_mime_types: ["application/pdf"]
       allowed_extensions: [".pdf"]
     parsers:
       - type: "PDFParser_LlamaIndex"
-        mime_types: ["application/pdf"]
         file_extensions: [".pdf"]
         config:
           chunk_size: 1000
@@ -167,6 +165,10 @@ Examples:
 
 1. **DirectoryParser** (always active) scans files/directories based on `directory_config`
 2. Files are filtered by MIME type and extension at strategy level
+
+   > You no longer specify `mime_types` in project configs; DirectoryParser
+   > handles MIME detection internally. Use `file_extensions` or
+   > `file_include_patterns` on parsers to describe the files they accept.
 3. Each file is routed to the appropriate parser based on its type
 4. Parsers process documents into chunks
 5. Extractors enrich chunks with metadata
