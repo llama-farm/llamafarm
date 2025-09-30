@@ -112,8 +112,18 @@ class TestURLReplacement:
 
     def test_replace_localhost_url_non_string(self):
         """Test that non-string values are returned unchanged."""
+        # Integer
         result = _replace_localhost_url(123)
         assert result == 123
+        # None
+        result_none = _replace_localhost_url(None)
+        assert result_none is None
+        # Bytes
+        result_bytes = _replace_localhost_url(b"http://localhost:8080/api")
+        assert result_bytes == b"http://localhost:8080/api"
+        # List
+        result_list = _replace_localhost_url(["http://localhost:8080/api"])
+        assert result_list == ["http://localhost:8080/api"]
 
     def test_replace_urls_in_config_simple_dict(self):
         """Test URL replacement in a simple dictionary."""
