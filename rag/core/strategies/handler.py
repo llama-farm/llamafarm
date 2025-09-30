@@ -61,19 +61,19 @@ class SchemaHandler:
 
         for proc_strategy in processing_strategies:
             for db in databases:
-                strategy_name = f"{proc_strategy['name']}_{db['name']}"
+                strategy_name = f"{proc_strategy.name}_{db.name}"
                 strategies.append(strategy_name)
 
         return strategies
 
     def get_database_names(self) -> list[str]:
         """Get list of available database names."""
-        return [db["name"] for db in getattr(self.rag_config, "databases", []) or []]
+        return [db.name for db in getattr(self.rag_config, "databases", []) or []]
 
     def get_data_processing_strategy_names(self) -> list[str]:
         """Get list of available data processing strategy names."""
         return [
-            strategy["name"]
+            strategy.name
             for strategy in getattr(self.rag_config, "data_processing_strategies", [])
             or []
         ]
@@ -81,14 +81,14 @@ class SchemaHandler:
     def get_database_retrieval_strategies(self, database_name: str) -> list[str]:
         """Get available retrieval strategies for a database."""
         for db in getattr(self.rag_config, "databases", []) or []:
-            if db["name"] == database_name:
+            if db.name == database_name:
                 return [rs["name"] for rs in db.get("retrieval_strategies", [])]
         return []
 
     def create_database_config(self, database_name: str) -> dict[str, Any]:
         """Create database configuration for factories."""
         for db in getattr(self.rag_config, "databases", []) or []:
-            if db["name"] == database_name:
+            if db.name == database_name:
                 # Return the database config as-is from the YAML
                 return db
         raise ValueError(f"Database '{database_name}' not found")
@@ -98,7 +98,7 @@ class SchemaHandler:
         for strategy in (
             getattr(self.rag_config, "data_processing_strategies", []) or []
         ):
-            if strategy["name"] == strategy_name:
+            if strategy.name == strategy_name:
                 return {
                     "parsers": strategy.get("parsers", []),
                     "extractors": strategy.get("extractors", []),
@@ -115,21 +115,17 @@ class SchemaHandler:
         """
         # Get known strategies and databases
         processing_strategies = [
-            s["name"]
+            s.name
             for s in getattr(self.rag_config, "data_processing_strategies", []) or []
         ]
-        databases = [
-            db["name"] for db in getattr(self.rag_config, "databases", []) or []
-        ]
+        databases = [db.name for db in getattr(self.rag_config, "databases", []) or []]
 
         # Try to find the best match
         for proc in processing_strategies:
             if strategy_name.startswith(proc + "_"):
                 # Found processing strategy prefix
                 db_part = strategy_name[len(proc) + 1 :]
-                if db_part in [
-                    db["name"] for db in getattr(self.rag_config, "databases", []) or []
-                ]:
+                if db_part in databases:
                     return proc, db_part
 
         # Fallback to simple split at last underscore
@@ -144,7 +140,7 @@ class SchemaHandler:
             return None
 
         for db in getattr(self.rag_config, "databases", []) or []:
-            if db.get("name") == db_name:
+            if db.name == db_name:
                 return db
         return None
 
@@ -158,7 +154,7 @@ class SchemaHandler:
         for strategy in (
             getattr(self.rag_config, "data_processing_strategies", []) or []
         ):
-            if strategy.get("name") == proc_name:
+            if strategy.name == proc_name:
                 return strategy
         return None
 
@@ -175,7 +171,7 @@ class SchemaHandler:
             # Try using the name directly as processing strategy with first database
             proc_name = strategy_name
             databases = getattr(self.rag_config, "databases", []) or []
-            db_name = databases[0]["name"] if databases else None
+            db_name = databases[0].name if databases else None
 
         if not proc_name or not db_name:
             raise ValueError(f"Strategy name {strategy_name} not found")
@@ -206,7 +202,7 @@ class SchemaHandler:
 
         # Find the default strategy
         for strategy in strategies:
-            if strategy.get("name") == default_name or strategy.get("default"):
+            if strategy.name == default_name or strategy.get("default"):
                 return {
                     "type": strategy.get("type", "OllamaEmbedder"),
                     "config": strategy.get("config", {}),
@@ -238,7 +234,7 @@ class SchemaHandler:
 
         # Find the default strategy
         for strategy in strategies:
-            if strategy.get("name") == default_name or strategy.get("default"):
+            if strategy.name == default_name or strategy.get("default"):
                 return {
                     "type": strategy.get("type", "BasicSimilarityStrategy"),
                     "config": strategy.get("config", {}),
@@ -330,7 +326,7 @@ class SchemaHandler:
             },
             "metadata": {
                 "strategy_name": strategy_name,
-                "database_name": db_config.get("name"),
+                "database_name": db_config.name,
                 "processing_strategy_name": proc_config.get("name"),
             },
         }
