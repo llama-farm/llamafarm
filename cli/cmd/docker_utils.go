@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,6 +25,16 @@ import (
 // versionPattern matches semantic versions with or without leading "v"
 // Examples: v1.0.0, v1.0.0-rc1, v2.0.0-beta.1+build.123, 1.0.0, 1.0.0-alpha
 var versionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+.*`)
+
+// getCurrentUserGroup returns the current user:group string for Docker user mapping
+func getCurrentUserGroup() string {
+	currentUser, err := user.Current()
+	if err != nil {
+		logDebug(fmt.Sprintf("Failed to get current user, using default: %v", err))
+		return ""
+	}
+	return fmt.Sprintf("%s:%s", currentUser.Uid, currentUser.Gid)
+}
 
 // knownComponents lists the valid component names for image URLs
 var knownComponents = map[string]bool{
@@ -544,6 +555,7 @@ type ContainerRunSpec struct {
 	Workdir        string
 	Entrypoint     []string
 	Cmd            []string
+	User           string // Docker user specification (e.g., "1000:1000")
 }
 
 type PortResolutionPolicy struct {
@@ -665,6 +677,7 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 		Labels:     spec.Labels,
 		WorkingDir: spec.Workdir,
 		Cmd:        spec.Cmd,
+		User:       spec.User,
 	}
 
 	// Add environment variables
@@ -1085,6 +1098,7 @@ func StartContainerWithNetwork(spec ContainerRunSpec, networkName string, policy
 		Labels:     spec.Labels,
 		WorkingDir: spec.Workdir,
 		Cmd:        spec.Cmd,
+		User:       spec.User,
 	}
 
 	// Add environment variables

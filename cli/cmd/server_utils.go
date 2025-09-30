@@ -220,6 +220,7 @@ func startLocalServerViaDocker(serverURL string) error {
 			"llamafarm.component": "server",
 			"llamafarm.managed":   "true",
 		},
+		User: getCurrentUserGroup(),
 	}
 
 	// Mount effective working directory into the container at the same path

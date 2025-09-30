@@ -173,6 +173,7 @@ func (co *ContainerOrchestrator) startServerContainer(serverURL string) error {
 			"llamafarm.component": "server",
 			"llamafarm.managed":   "true",
 		},
+		User: getCurrentUserGroup(),
 	}
 
 	// Mount effective working directory into the container at the same path
@@ -248,6 +249,7 @@ func (co *ContainerOrchestrator) startRAGContainer() error {
 			"llamafarm.component": "rag",
 			"llamafarm.managed":   "true",
 		},
+		User: getCurrentUserGroup(),
 	}
 
 	logDebug(fmt.Sprintf("Starting RAG container with network: %s", networkName))
