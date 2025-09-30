@@ -61,9 +61,15 @@ def app_client(mocker):
             self.tag = tag
             self.context_providers = {}
             self.history = []
+            self._persist_enabled = False
+            self._session_id = None
 
         def register_context_provider(self, name: str, provider):
             self.context_providers[name] = provider
+
+        def enable_persistence(self, *, session_id: str):
+            self._persist_enabled = True
+            self._session_id = session_id
 
         async def run_async(self, input_schema):
             self.history.append(input_schema.chat_message)
@@ -80,7 +86,7 @@ def app_client(mocker):
                 # Mirror current bug: stream yields exactly the user input
                 yield SimpleNamespace(chat_message=input_schema.chat_message)
 
-    def make_agent(project_config: LlamaFarmConfig):
+    def make_agent(project_config: LlamaFarmConfig, project_dir: str):
         tag = f"{project_config.namespace}/{project_config.name}"
         return StubAgent(tag)
 
