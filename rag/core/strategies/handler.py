@@ -3,7 +3,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 # Use the common config module instead of direct YAML loading
 
@@ -14,7 +14,6 @@ if str(repo_root) not in sys.path:
 
 try:
     from config import load_config
-    from config.datamodel import LlamaFarmConfig
 except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
@@ -48,7 +47,7 @@ class SchemaHandler:
                 f"Global config file not found or invalid: {config_source}. Error: {e}"
             ) from e
 
-    def get_available_strategies(self) -> List[str]:
+    def get_available_strategies(self) -> list[str]:
         """Get list of available combined strategy names."""
         if not self.rag_config:
             return []
@@ -80,10 +79,14 @@ class SchemaHandler:
 
     def get_database_retrieval_strategies(self, database_name: str) -> list[str]:
         """Get available retrieval strategies for a database."""
-        for db in getattr(self.rag_config, "databases", []) or []:
-            if db.name == database_name:
-                return [rs["name"] for rs in db.get("retrieval_strategies", [])]
-        return []
+        return next(
+            (
+                [rs["name"] for rs in db.get("retrieval_strategies", [])]
+                for db in getattr(self.rag_config, "databases", []) or []
+                if db.name == database_name
+            ),
+            [],
+        )
 
     def create_database_config(self, database_name: str) -> dict[str, Any]:
         """Create database configuration for factories."""
@@ -139,10 +142,14 @@ class SchemaHandler:
         if not self.rag_config:
             return None
 
-        for db in getattr(self.rag_config, "databases", []) or []:
-            if db.name == db_name:
-                return db
-        return None
+        return next(
+            (
+                db
+                for db in getattr(self.rag_config, "databases", []) or []
+                if db.name == db_name
+            ),
+            None,
+        )
 
     def get_processing_strategy_config(
         self, proc_name: str
@@ -151,12 +158,16 @@ class SchemaHandler:
         if not self.rag_config:
             return None
 
-        for strategy in (
-            getattr(self.rag_config, "data_processing_strategies", []) or []
-        ):
-            if strategy.name == proc_name:
-                return strategy
-        return None
+        return next(
+            (
+                strategy
+                for strategy in (
+                    getattr(self.rag_config, "data_processing_strategies", []) or []
+                )
+                if strategy.name == proc_name
+            ),
+            None,
+        )
 
     def get_combined_config(
         self, strategy_name: str, source_path: Optional[Path] = None
@@ -195,7 +206,7 @@ class SchemaHandler:
             "source_path": str(source_path) if source_path else None,
         }
 
-    def get_embedder_config(self, db_config: Dict[str, Any]) -> Dict[str, Any]:
+    def get_embedder_config(self, db_config: dict[str, Any]) -> dict[str, Any]:
         """Get embedder configuration from database config."""
         default_name = db_config.get("default_embedding_strategy")
         strategies = db_config.get("embedding_strategies", [])
@@ -217,7 +228,7 @@ class SchemaHandler:
 
         return {"type": "OllamaEmbedder", "config": {}}
 
-    def get_vector_store_config(self, db_config: Dict[str, Any]) -> Dict[str, Any]:
+    def get_vector_store_config(self, db_config: dict[str, Any]) -> dict[str, Any]:
         """Get vector store configuration from database config."""
         # Database config has 'type' and 'config' at the top level
         return {
@@ -226,8 +237,8 @@ class SchemaHandler:
         }
 
     def get_retrieval_strategy_config(
-        self, db_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, db_config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Get retrieval strategy configuration from database config."""
         default_name = db_config.get("default_retrieval_strategy")
         strategies = db_config.get("retrieval_strategies", [])
@@ -249,7 +260,7 @@ class SchemaHandler:
 
         return {"type": "BasicSimilarityStrategy", "config": {}}
 
-    def get_parsers_config(self, proc_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def get_parsers_config(self, proc_config: dict[str, Any]) -> list[dict[str, Any]]:
         """Get all parser configurations from processing strategy.
 
         Returns all parsers configured for the strategy.
@@ -257,8 +268,8 @@ class SchemaHandler:
         return proc_config.get("parsers", [])
 
     def get_parser_config(
-        self, proc_config: Dict[str, Any], source_path: Optional[Path] = None
-    ) -> Dict[str, Any]:
+        self, proc_config: dict[str, Any], source_path: Optional[Path] = None
+    ) -> dict[str, Any]:
         """Get first parser configuration (for backward compatibility).
 
         DEPRECATED: Use get_parsers_config to get all parsers.
@@ -269,8 +280,8 @@ class SchemaHandler:
         return {"type": "TextParser_Python", "config": {}}
 
     def get_extractors_config(
-        self, proc_config: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, proc_config: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Get extractors configuration from processing strategy."""
         extractors = []
         for ext in proc_config.get("extractors", []):
@@ -281,7 +292,7 @@ class SchemaHandler:
 
     def create_component_config(
         self, strategy_name: str, source_path: Optional[Path] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a component configuration that can be used by CLI.
 
         This creates a structure that matches what the CLI expects,

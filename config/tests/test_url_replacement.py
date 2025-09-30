@@ -36,25 +36,33 @@ class TestURLReplacement:
             assert _is_host_docker_internal_resolvable() is False
             mock_gethostbyname.assert_called_once_with("host.docker.internal")
 
+    def _assert_dns_call_and_result(
+        self, mock_gethostbyname, expected_result=True, expected_call_count=1
+    ):
+        """Helper method to assert DNS call result and count."""
+        result = _is_host_docker_internal_resolvable()
+        assert result is expected_result
+        assert mock_gethostbyname.call_count == expected_call_count
+
     def test_is_host_docker_internal_resolvable_caching(self):
         """Test that DNS resolution result is cached."""
         with patch("socket.gethostbyname") as mock_gethostbyname:
             mock_gethostbyname.return_value = "192.168.65.254"
 
             # First call should hit the DNS
-            result1 = _is_host_docker_internal_resolvable()
-            assert result1 is True
-            assert mock_gethostbyname.call_count == 1
+            self._assert_dns_call_and_result(
+                mock_gethostbyname, expected_result=True, expected_call_count=1
+            )
 
             # Second call should use cache, no additional DNS call
-            result2 = _is_host_docker_internal_resolvable()
-            assert result2 is True
-            assert mock_gethostbyname.call_count == 1  # Still only 1 call
+            self._assert_dns_call_and_result(
+                mock_gethostbyname, expected_result=True, expected_call_count=1
+            )
 
             # Third call should also use cache
-            result3 = _is_host_docker_internal_resolvable()
-            assert result3 is True
-            assert mock_gethostbyname.call_count == 1  # Still only 1 call
+            self._assert_dns_call_and_result(
+                mock_gethostbyname, expected_result=True, expected_call_count=1
+            )
 
     def test_reset_host_docker_internal_cache(self):
         """Test that cache reset works correctly."""
@@ -62,17 +70,17 @@ class TestURLReplacement:
             mock_gethostbyname.return_value = "192.168.65.254"
 
             # First call should hit DNS
-            result1 = _is_host_docker_internal_resolvable()
-            assert result1 is True
-            assert mock_gethostbyname.call_count == 1
+            self._assert_dns_call_and_result(
+                mock_gethostbyname, expected_result=True, expected_call_count=1
+            )
 
             # Reset cache
             _reset_host_docker_internal_cache()
 
             # Next call should hit DNS again
-            result2 = _is_host_docker_internal_resolvable()
-            assert result2 is True
-            assert mock_gethostbyname.call_count == 2
+            self._assert_dns_call_and_result(
+                mock_gethostbyname, expected_result=True, expected_call_count=2
+            )
 
     def test_replace_localhost_url_http(self):
         """Test replacing HTTP localhost URL."""
@@ -189,6 +197,53 @@ class TestURLReplacement:
         assert _replace_urls_in_config("string") == "string"
         assert _replace_urls_in_config(123) == 123
         assert _replace_urls_in_config(True) is True
+        assert _replace_urls_in_config(None) is None
+
+    def test_replace_urls_in_config_deeply_nested(self):
+        """Test that deeply nested structures with mixed types are handled recursively."""
+        config = {
+            "level1": [
+                {
+                    "level2": {
+                        "url": "http://localhost:8000",
+                        "value": 42,
+                        "none_value": None,
+                        "list": [
+                            "http://localhost:9000",
+                            False,
+                            None,
+                            {"deep_url": "http://localhost:7000"},
+                        ],
+                    }
+                },
+                "string_value",
+                None,
+            ],
+            "simple_url": "http://localhost:5000",
+        }
+        expected = {
+            "level1": [
+                {
+                    "level2": {
+                        "url": "http://host.docker.internal:8000",
+                        "value": 42,
+                        "none_value": None,
+                        "list": [
+                            "http://host.docker.internal:9000",
+                            False,
+                            None,
+                            {"deep_url": "http://host.docker.internal:7000"},
+                        ],
+                    }
+                },
+                "string_value",
+                None,
+            ],
+            "simple_url": "http://host.docker.internal:5000",
+        }
+        with patch("config.loader._is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_urls_in_config(config)
+        assert result == expected
 
     def test_load_config_dict_with_url_replacement(self, temp_config_file):
         """Test that load_config_dict applies URL replacement."""

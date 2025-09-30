@@ -450,13 +450,13 @@ func TestEnsureHostDockerInternal(t *testing.T) {
 		{
 			name:        "nil input on Linux should add mapping",
 			inputHosts:  nil,
-			expectedLen: 0, // Will be 1 on Linux, 0 on others
+			expectedLen: 1, // Will be 1 on Linux, 0 on others
 			shouldHave:  runtime.GOOS == "linux",
 		},
 		{
 			name:        "empty slice on Linux should add mapping",
 			inputHosts:  []string{},
-			expectedLen: 0, // Will be 1 on Linux, 0 on others
+			expectedLen: 1, // Will be 1 on Linux, 0 on others
 			shouldHave:  runtime.GOOS == "linux",
 		},
 		{

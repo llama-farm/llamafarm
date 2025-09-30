@@ -221,12 +221,41 @@ func createDockerClient() (*client.Client, error) {
 
 // promptUserConfirmation prompts the user for a yes/no confirmation
 func promptUserConfirmation(message string) bool {
+	// Check if running in CI or non-interactive environment
+	if isNonInteractiveEnvironment() {
+		fmt.Fprintf(os.Stderr, "%s (skipping in non-interactive environment)\n", message)
+		return false
+	}
+
 	fmt.Fprintf(os.Stderr, "%s (y/N): ", message)
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		response := strings.ToLower(strings.TrimSpace(scanner.Text()))
 		return response == "y" || response == "yes"
 	}
+	return false
+}
+
+// isNonInteractiveEnvironment checks if we're running in a CI or non-interactive environment
+func isNonInteractiveEnvironment() bool {
+	// Check common CI environment variables
+	ciEnvVars := []string{
+		"CI", "CONTINUOUS_INTEGRATION", "BUILD_NUMBER", "JENKINS_URL",
+		"GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "TRAVIS", "BUILDKITE",
+		"AZURE_PIPELINES", "TEAMCITY_VERSION", "BAMBOO_BUILD_NUMBER",
+	}
+
+	for _, envVar := range ciEnvVars {
+		if os.Getenv(envVar) != "" {
+			return true
+		}
+	}
+
+	// Check if stdin is not a terminal (piped input)
+	if fileInfo, err := os.Stdin.Stat(); err == nil {
+		return (fileInfo.Mode() & os.ModeCharDevice) == 0
+	}
+
 	return false
 }
 

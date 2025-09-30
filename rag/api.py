@@ -82,137 +82,150 @@ class BaseAPI:
 
     def _load_database_config(self) -> None:
         """Load configuration for database from project config."""
-
         try:
-            # Find the database configuration directly from rag section
-            rag_config = self.config.rag
-
-            if not rag_config:
-                raise ValueError("RAG configuration not found in project config")
-
-            if not rag_config.databases or len(rag_config.databases) == 0:
-                raise ValueError("No databases found in RAG configuration")
-
+            rag_config = self._validate_and_get_rag_config()
             databases = rag_config.databases
 
-            if self.dataset:
-                # Find the dataset configuration
-                datasets = self.config.datasets or []
-                dataset_config = None
-                for dataset in datasets:
-                    if dataset.name == self.dataset:
-                        dataset_config = dataset
-                        break
-
-                if not dataset_config:
-                    raise ValueError(f"Dataset '{self.dataset}' not found in config")
-
-                self.database = dataset_config.database
-
-            # If no database specified, use the first one
-            if not self.database and databases:
-                self.database = databases[0].name
-
-            database_config = None
-            for db in databases:
-                if db.name == self.database:
-                    database_config = db
-                    break
-
-            if not database_config:
-                raise ValueError(
-                    f"Database '{self.database}' not found in rag configuration"
-                )
+            self._resolve_database_name(databases)
+            database_config = self._find_database_config(databases)
 
             # Store database config for later use
             self._database_config = database_config
 
             # Build traditional rag config format
-            traditional_config: dict[str, Any] = {}
-
-            # Vector store configuration
-            db_type = database_config.type
-            db_config = database_config.config
-
-            traditional_config["vector_store"] = {
-                "type": db_type.value if hasattr(db_type, "value") else str(db_type),
-                "config": db_config,
-            }
-
-            # Embedding configuration - use default embedding strategy
-            embedding_strategies = database_config.embedding_strategies or []
-            default_embedding_strategy = database_config.default_embedding_strategy
-
-            embedder_config = None
-            if default_embedding_strategy:
-                # Find the named strategy
-                for strategy in embedding_strategies:
-                    if strategy.name == default_embedding_strategy:
-                        embedder_config = {
-                            "type": strategy.type.value
-                            if hasattr(strategy.type, "value")
-                            else str(strategy.type),
-                            "config": strategy.config,
-                        }
-                        break
-            elif embedding_strategies:
-                # Use first available strategy
-                first_strategy = embedding_strategies[0]
-                embedder_config = {
-                    "type": first_strategy.type.value
-                    if hasattr(first_strategy.type, "value")
-                    else str(first_strategy.type),
-                    "config": first_strategy.config,
-                }
-
-            if embedder_config:
-                traditional_config["embedder"] = embedder_config
-
-            # Retrieval strategy configuration - use default retrieval strategy
-            retrieval_strategies = database_config.retrieval_strategies or []
-            default_retrieval_strategy = database_config.default_retrieval_strategy
-
-            retrieval_config = None
-            if default_retrieval_strategy:
-                # Find the named strategy
-                for r_strategy in retrieval_strategies:
-                    if strategy.name == default_retrieval_strategy:
-                        retrieval_config = {
-                            "type": r_strategy.type.value
-                            if hasattr(r_strategy.type, "value")
-                            else str(r_strategy.type),
-                            "config": r_strategy.config,
-                        }
-                        break
-            elif retrieval_strategies:
-                # Use first strategy or one marked as default
-                for r_strategy in retrieval_strategies:
-                    if r_strategy.default:
-                        retrieval_config = {
-                            "type": r_strategy.type.value
-                            if hasattr(r_strategy.type, "value")
-                            else str(r_strategy.type),
-                            "config": r_strategy.config,
-                        }
-                        break
-
-                if not retrieval_config and retrieval_strategies:
-                    # Use first available strategy as fallback
-                    r_first_strategy = retrieval_strategies[0]
-                    retrieval_config = {
-                        "type": r_first_strategy.type.value
-                        if hasattr(r_first_strategy.type, "value")
-                        else str(r_first_strategy.type),
-                        "config": r_first_strategy.config,
-                    }
-
-            if retrieval_config:
-                traditional_config["retrieval_strategy"] = retrieval_config
-
+            traditional_config = self._build_traditional_config(database_config)
             self.rag_config = traditional_config
 
         except Exception as e:
             raise ValueError(f"Invalid config file format: {e}") from e
+
+    def _validate_and_get_rag_config(self):
+        """Validate and return RAG configuration."""
+        rag_config = self.config.rag
+        if not rag_config:
+            raise ValueError("RAG configuration not found in project config")
+        if not rag_config.databases:
+            raise ValueError("No databases found in RAG configuration")
+        return rag_config
+
+    def _resolve_database_name(self, databases) -> None:
+        """Resolve database name from dataset or use first available."""
+        if self.dataset:
+            dataset_config = next(
+                (
+                    dataset
+                    for dataset in (self.config.datasets or [])
+                    if dataset.name == self.dataset
+                ),
+                None,
+            )
+            if not dataset_config:
+                raise ValueError(f"Dataset '{self.dataset}' not found in config")
+            self.database = dataset_config.database
+
+        # If no database specified, use the first one
+        if not self.database and databases:
+            self.database = databases[0].name
+
+    def _find_database_config(self, databases):
+        """Find database configuration by name."""
+        database_config = next(
+            (db for db in databases if db.name == self.database), None
+        )
+        if not database_config:
+            raise ValueError(
+                f"Database '{self.database}' not found in rag configuration"
+            )
+        return database_config
+
+    def _build_traditional_config(self, database_config) -> dict[str, Any]:
+        """Build traditional RAG config format from database config."""
+        traditional_config: dict[str, Any] = {}
+
+        # Vector store configuration
+        traditional_config["vector_store"] = self._build_vector_store_config(
+            database_config
+        )
+
+        # Embedding configuration
+        embedder_config = self._build_embedder_config(database_config)
+        if embedder_config:
+            traditional_config["embedder"] = embedder_config
+
+        # Retrieval strategy configuration
+        retrieval_config = self._build_retrieval_config(database_config)
+        if retrieval_config:
+            traditional_config["retrieval_strategy"] = retrieval_config
+
+        return traditional_config
+
+    def _build_vector_store_config(self, database_config) -> dict[str, Any]:
+        """Build vector store configuration."""
+        db_type = database_config.type
+        return {
+            "type": db_type.value if hasattr(db_type, "value") else str(db_type),
+            "config": database_config.config,
+        }
+
+    def _build_embedder_config(self, database_config) -> Optional[dict[str, Any]]:
+        """Build embedder configuration from embedding strategies."""
+        embedding_strategies = database_config.embedding_strategies or []
+        default_embedding_strategy = database_config.default_embedding_strategy
+
+        if default_embedding_strategy:
+            # Find the named strategy
+            strategy = next(
+                (
+                    s
+                    for s in embedding_strategies
+                    if s.name == default_embedding_strategy
+                ),
+                None,
+            )
+            if strategy:
+                return self._strategy_to_config(strategy)
+        elif embedding_strategies:
+            # Use first available strategy
+            return self._strategy_to_config(embedding_strategies[0])
+
+        return None
+
+    def _build_retrieval_config(self, database_config) -> Optional[dict[str, Any]]:
+        """Build retrieval configuration from retrieval strategies."""
+        retrieval_strategies = database_config.retrieval_strategies or []
+        default_retrieval_strategy = database_config.default_retrieval_strategy
+
+        if default_retrieval_strategy:
+            # Find the named strategy
+            strategy = next(
+                (
+                    s
+                    for s in retrieval_strategies
+                    if s.name == default_retrieval_strategy
+                ),
+                None,
+            )
+            if strategy:
+                return self._strategy_to_config(strategy)
+        elif retrieval_strategies:
+            # Use first strategy marked as default, or first available
+            strategy = next(
+                (s for s in retrieval_strategies if getattr(s, "default", False)),
+                retrieval_strategies[0] if retrieval_strategies else None,
+            )
+            if strategy:
+                return self._strategy_to_config(strategy)
+
+        return None
+
+    def _strategy_to_config(self, strategy) -> dict[str, Any]:
+        """Convert strategy object to config dictionary."""
+        return {
+            "type": strategy.type.value
+            if hasattr(strategy.type, "value")
+            else str(strategy.type),
+            "config": strategy.config,
+        }
 
     def _get_retrieval_strategy_by_name(self, strategy_name: str):
         """Get a retrieval strategy by name from the database config."""

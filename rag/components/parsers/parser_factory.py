@@ -1,11 +1,11 @@
 """Enhanced Parser Factory with tool-specific parser selection."""
 
-import os
-import yaml
-import logging
 import importlib.util
+import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Type
+from typing import Any, Optional
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class ToolAwareParserFactory:
     # Cache for loaded parser configurations
     _parser_configs: dict[str, list[dict[str, Any]]] = {}
     # Cache for loaded parser classes
-    _parser_classes: dict[str, Type] = {}
+    _parser_classes: dict[str, type] = {}
 
     @classmethod
     def discover_parsers(cls) -> dict[str, list[dict[str, Any]]]:
@@ -69,8 +69,7 @@ class ToolAwareParserFactory:
         for ptype, configs in parsers.items():
             if parser_type and ptype != parser_type:
                 continue
-            for config in configs:
-                parser_names.append(config["name"])
+            parser_names.extend(config["name"] for config in configs)
 
         return parser_names
 
@@ -95,7 +94,7 @@ class ToolAwareParserFactory:
         return None
 
     @classmethod
-    def load_parser_class(cls, parser_name: str) -> Optional[Type]:
+    def load_parser_class(cls, parser_name: str) -> Optional[type]:
         """Load a parser class dynamically.
 
         Args:
@@ -303,7 +302,7 @@ class ToolAwareParserFactory:
         )
 
     @classmethod
-    def check_dependencies(cls, parser_name: str) -> Dict[str, bool]:
+    def check_dependencies(cls, parser_name: str) -> dict[str, bool]:
         """Check if a parser's dependencies are installed.
 
         Args:
