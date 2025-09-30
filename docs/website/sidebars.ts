@@ -16,64 +16,26 @@ const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     {
       type: 'category',
-      label: 'Overview',
+      label: 'Start Here',
       link: { type: 'doc', id: 'intro' },
       items: [
-        {
-          type: 'doc',
-          id: 'overview/getting-started',
-          label: 'Getting started',
-        },
-        { type: 'doc', id: 'overview/features', label: 'Features' },
-        { type: 'doc', id: 'overview/architecture', label: 'Architecture' },
-        { type: 'doc', id: 'overview/why-llamafarm', label: 'Why LlamaFarm' },
-        { type: 'doc', id: 'overview/contributing', label: 'Contributing' },
-        { type: 'doc', id: 'overview/community', label: 'Community' },
-        { type: 'doc', id: 'overview/license', label: 'License' },
-        { type: 'doc', id: 'overview/credits', label: 'Credits' },
+        { type: 'doc', id: 'quickstart/index', label: 'Quickstart' },
+        { type: 'doc', id: 'concepts/index', label: 'Core Concepts' },
+        { type: 'doc', id: 'troubleshooting/index', label: 'Troubleshooting & FAQ' },
       ],
     },
     {
       type: 'category',
-      label: 'RAG system',
-      link: { type: 'doc', id: 'rag/index' },
+      label: 'CLI Reference',
+      link: { type: 'doc', id: 'cli/index' },
       items: [
-        { type: 'doc', id: 'rag/quick-start', label: 'Quick start' },
-        {
-          type: 'doc',
-          id: 'rag/local-only-extractors',
-          label: 'Local only extractors',
-        },
-        { type: 'doc', id: 'rag/architecture', label: 'Architecture' },
-        { type: 'doc', id: 'rag/data-sources', label: 'Data sources' },
-        {
-          type: 'doc',
-          id: 'rag/stores-and-indexing',
-          label: 'Stores & indexing',
-        },
-        {
-          type: 'doc',
-          id: 'rag/retrieval-strategies',
-          label: 'Retrieval strategies',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Prompts',
-      link: { type: 'doc', id: 'prompts/index' },
-      items: [
-        { type: 'doc', id: 'prompts/templates', label: 'Templates' },
-        { type: 'doc', id: 'prompts/evaluation', label: 'Evaluation' },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Models',
-      link: { type: 'doc', id: 'models/index' },
-      items: [
-        { type: 'doc', id: 'models/providers', label: 'Providers' },
-        { type: 'doc', id: 'models/adapters', label: 'Adapters' },
+        { type: 'doc', id: 'cli/lf-init', label: 'lf init' },
+        { type: 'doc', id: 'cli/lf-start', label: 'lf start' },
+        { type: 'doc', id: 'cli/lf-chat', label: 'lf chat' },
+        { type: 'doc', id: 'cli/lf-datasets', label: 'lf datasets' },
+        { type: 'doc', id: 'cli/lf-rag', label: 'lf rag' },
+        { type: 'doc', id: 'cli/lf-projects', label: 'lf projects' },
+        { type: 'doc', id: 'cli/lf-version', label: 'lf version' },
       ],
     },
     {
@@ -81,21 +43,50 @@ const sidebars: SidebarsConfig = {
       label: 'Configuration',
       link: { type: 'doc', id: 'configuration/index' },
       items: [
-        { type: 'doc', id: 'configuration/example-configs', label: 'Examples' },
+        { type: 'doc', id: 'configuration/example-configs', label: 'Example configs' },
       ],
+    },
+    {
+      type: 'category',
+      label: 'RAG',
+      link: { type: 'doc', id: 'rag/index' },
+      items: [],
+    },
+    {
+      type: 'category',
+      label: 'Models & Runtime',
+      link: { type: 'doc', id: 'models/index' },
+      items: [],
+    },
+    {
+      type: 'category',
+      label: 'Prompts',
+      link: { type: 'doc', id: 'prompts/index' },
+      items: [],
     },
     {
       type: 'category',
       label: 'Deployment',
       link: { type: 'doc', id: 'deployment/index' },
-      items: [
-        {
-          type: 'doc',
-          id: 'deployment/docker-compose',
-          label: 'Docker Compose',
-        },
-        { type: 'doc', id: 'deployment/kubernetes', label: 'Kubernetes' },
-      ],
+      items: [],
+    },
+    {
+      type: 'category',
+      label: 'Examples',
+      link: { type: 'doc', id: 'examples/index' },
+      items: [],
+    },
+    {
+      type: 'category',
+      label: 'Extending',
+      link: { type: 'doc', id: 'extending/index' },
+      items: [],
+    },
+    {
+      type: 'category',
+      label: 'Contributing',
+      link: { type: 'doc', id: 'contributing/index' },
+      items: [],
     },
   ],
 }
