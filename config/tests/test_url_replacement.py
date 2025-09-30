@@ -112,6 +112,36 @@ class TestURLReplacement:
             result = _replace_localhost_url("http://localhost:8080/api")
             assert result == "http://localhost:8080/api"
 
+    def test_replace_localhost_url_127_0_0_1_http(self):
+        """Test replacing HTTP 127.0.0.1 URL."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("http://127.0.0.1:8080/api")
+            assert result == "http://host.docker.internal:8080/api"
+
+    def test_replace_localhost_url_127_0_0_1_https(self):
+        """Test replacing HTTPS 127.0.0.1 URL."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("https://127.0.0.1:443/secure")
+            assert result == "https://host.docker.internal:443/secure"
+
+    def test_replace_localhost_url_127_0_0_1_no_port(self):
+        """Test replacing 127.0.0.1 URL without port."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("http://127.0.0.1/api")
+            assert result == "http://host.docker.internal/api"
+
+    def test_replace_localhost_url_127_0_0_1_no_path(self):
+        """Test replacing 127.0.0.1 URL without path."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_localhost_url("http://127.0.0.1:8080")
+            assert result == "http://host.docker.internal:8080"
+
+    def test_replace_localhost_url_127_0_0_1_not_resolvable(self):
+        """Test that 127.0.0.1 URL is not replaced when host.docker.internal is not resolvable."""
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=False):
+            result = _replace_localhost_url("http://127.0.0.1:8080/api")
+            assert result == "http://127.0.0.1:8080/api"
+
     def test_replace_localhost_url_non_localhost(self):
         """Test that non-localhost URLs are not modified."""
         with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
@@ -147,6 +177,30 @@ class TestURLReplacement:
         expected = {
             "base_url": "http://host.docker.internal:8080",
             "api_url": "https://host.docker.internal:9000/api",
+            "other_field": "not a url",
+        }
+        assert result == expected
+
+    def test_replace_urls_in_config_with_127_0_0_1(self):
+        """Test URL replacement with 127.0.0.1 addresses."""
+        config = {
+            "localhost_url": "http://localhost:8080",
+            "ip_url": "https://127.0.0.1:9000/api",
+            "mixed_list": ["http://localhost:3000", "https://127.0.0.1:4000/path", "not a url"],
+            "other_field": "not a url",
+        }
+
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = _replace_urls_in_config(config)
+
+        expected = {
+            "localhost_url": "http://host.docker.internal:8080",
+            "ip_url": "https://host.docker.internal:9000/api",
+            "mixed_list": [
+                "http://host.docker.internal:3000",
+                "https://host.docker.internal:4000/path",
+                "not a url",
+            ],
             "other_field": "not a url",
         }
         assert result == expected
@@ -301,3 +355,39 @@ runtime:
 
         # Check that URLs were NOT replaced
         assert result["runtime"]["base_url"] == "http://localhost:11434"
+
+    def test_load_config_dict_with_127_0_0_1_replacement(self, temp_config_file):
+        """Test that load_config_dict applies URL replacement for 127.0.0.1."""
+        config_content = """
+version: v1
+name: test_config
+namespace: test
+
+runtime:
+  provider: ollama
+  model: test-model
+  base_url: http://127.0.0.1:11434
+
+rag:
+  databases:
+    - name: test_db
+      type: ChromaStore
+      embedding_strategies:
+        - name: test_embedding
+          type: OllamaEmbedder
+          config:
+            model: test-model
+            base_url: https://127.0.0.1:8080/v1
+"""
+
+        config_file = temp_config_file(config_content)
+
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
+            result = load_config_dict(config_file, validate=False)
+
+        # Check that 127.0.0.1 URLs were replaced
+        assert result["runtime"]["base_url"] == "http://host.docker.internal:11434"
+        assert (
+            result["rag"]["databases"][0]["embedding_strategies"][0]["config"]["base_url"]
+            == "https://host.docker.internal:8080/v1"
+        )
