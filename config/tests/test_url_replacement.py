@@ -241,7 +241,7 @@ class TestURLReplacement:
             ],
             "simple_url": "http://host.docker.internal:5000",
         }
-        with patch("config.loader._is_host_docker_internal_resolvable", return_value=True):
+        with patch.object(loader, "_is_host_docker_internal_resolvable", return_value=True):
             result = _replace_urls_in_config(config)
         assert result == expected
 
