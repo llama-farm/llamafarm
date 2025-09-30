@@ -122,6 +122,18 @@ data_processing_strategies:
     # Parsers now rely on file extensions or include patterns.
     # MIME type hints are handled internally and should not be
     # specified in project configs.
+    - name: "pdf_processing"  # Unique identifier (lowercase, underscores)
+      description: "Standard PDF document processing"
+      
+      # DirectoryParser configuration (ALWAYS ACTIVE)
+    directory_config:
+      recursive: true  # Scan subdirectories
+      supported_files: ["*.pdf", "*.PDF"]  # Glob patterns for accepted files
+      max_files: 1000  # Maximum files to process
+
+    # Parsers now rely on file extensions or include patterns.
+    # MIME type hints are handled internally and should not be
+    # specified in project configs.
       follow_symlinks: false  # Whether to follow symbolic links
     
     # Parser configurations
@@ -326,3 +338,4 @@ If migrating from the old format:
 - [config/templates/advanced.yaml](../config/templates/advanced.yaml) - Advanced examples
 - [Strategy System](STRATEGY_SYSTEM.md) - How strategies work
 - [Parser Guide](PARSERS.md) - Detailed parser documentation
+

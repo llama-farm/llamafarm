@@ -321,10 +321,6 @@ rag:
         recursive: true
         include_patterns: ["*.pdf", "*.docx", "*.xlsx"]
         exclude_patterns: ["*.tmp", "~$*"]
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ]
         allowed_extensions: [".pdf", ".docx", ".xlsx"]
         max_files: 500
         follow_symlinks: false
