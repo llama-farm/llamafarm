@@ -74,7 +74,6 @@ rag:
         supported_files: ["*.pdf", "*.PDF"]
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf"]
           config:
             chunk_size: 1000
@@ -106,6 +105,11 @@ DirectoryParser is **ALWAYS ACTIVE** at the strategy level and handles:
 - File filtering based on patterns and extensions
 - Routing files to appropriate parsers
 
+Even though DirectoryParser still inspects MIME types internally, the
+project schema no longer exposes a `mime_types` field. Use
+`file_extensions` or `file_include_patterns` on individual parsers to
+describe compatibility.
+
 The `directory_config` section controls how files are discovered and filtered:
 
 ```yaml
@@ -128,7 +132,6 @@ All parsers follow the naming convention: `{ParserType}_{Implementation}`
 **PDFParser_LlamaIndex**
 ```yaml
 - type: "PDFParser_LlamaIndex"
-  mime_types: ["application/pdf"]
   file_extensions: [".pdf", ".PDF"]
   config:
     chunk_size: 1500
@@ -142,7 +145,6 @@ All parsers follow the naming convention: `{ParserType}_{Implementation}`
 **PDFParser_PyPDF2**
 ```yaml
 - type: "PDFParser_PyPDF2"
-  mime_types: ["application/pdf"]
   file_extensions: [".pdf"]
   config:
     chunk_size: 1000
@@ -156,7 +158,6 @@ All parsers follow the naming convention: `{ParserType}_{Implementation}`
 **TextParser_LlamaIndex**
 ```yaml
 - type: "TextParser_LlamaIndex"
-  mime_types: ["text/plain"]
   file_extensions: [".txt", ".text", ".log"]
   config:
     chunk_size: 1000
@@ -167,7 +168,6 @@ All parsers follow the naming convention: `{ParserType}_{Implementation}`
 **TextParser_Python**
 ```yaml
 - type: "TextParser_Python"
-  mime_types: ["text/plain"]
   file_extensions: [".txt", ".log"]
   config:
     encoding: "utf-8"
@@ -181,7 +181,6 @@ All parsers follow the naming convention: `{ParserType}_{Implementation}`
 **CSVParser_Pandas**
 ```yaml
 - type: "CSVParser_Pandas"
-  mime_types: ["text/csv"]
   file_extensions: [".csv", ".CSV"]
   config:
     content_fields: ["description", "content"]
@@ -194,7 +193,6 @@ All parsers follow the naming convention: `{ParserType}_{Implementation}`
 **DocxParser_LlamaIndex**
 ```yaml
 - type: "DocxParser_LlamaIndex"
-  mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
   file_extensions: [".docx", ".DOCX"]
   config:
     chunk_size: 1500
@@ -207,7 +205,6 @@ All parsers follow the naming convention: `{ParserType}_{Implementation}`
 **MarkdownParser_LlamaIndex**
 ```yaml
 - type: "MarkdownParser_LlamaIndex"
-  mime_types: ["text/markdown", "text/x-markdown"]
   file_extensions: [".md", ".markdown"]
   config:
     chunk_size: 1200
@@ -461,12 +458,10 @@ rag:
         supported_files: ["*.pdf", "*.txt"]  # Accept PDF and text files
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf"]
           config:
             chunk_size: 1500
         - type: "TextParser_Python"
-          mime_types: ["text/plain"]
           file_extensions: [".txt"]
           config:
             chunk_size: 1200
@@ -534,7 +529,6 @@ rag:
         include_patterns: ["*.txt"]
       parsers:
         - type: "TextParser_Python"
-          mime_types: ["text/plain"]
           file_extensions: [".txt"]
 ```
 
@@ -611,7 +605,6 @@ rag:
         supported_files: ["*.pdf", "*.docx"]  # Legal documents
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf"]
           config:
             chunk_size: 256
@@ -662,7 +655,6 @@ rag:
         supported_files: ["*.pdf"]  # Research papers
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf"]
           config:
             chunk_size: 1500
@@ -712,22 +704,18 @@ rag:
         exclude_patterns: ["*.tmp", ".*"]
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf"]
           config:
             chunk_size: 1000
         - type: "TextParser_Python"
-          mime_types: ["text/plain"]
           file_extensions: [".txt", ".log"]
           config:
             chunk_size: 1200
         - type: "MarkdownParser_LlamaIndex"
-          mime_types: ["text/markdown"]
           file_extensions: [".md"]
           config:
             chunk_size: 1000
         - type: "CSVParser_Pandas"
-          mime_types: ["text/csv"]
           file_extensions: [".csv"]
           config:
             chunk_size: 500

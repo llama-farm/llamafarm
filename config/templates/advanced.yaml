@@ -158,13 +158,11 @@ rag:
         recursive: true
         include_patterns: ["*.pdf", "*.txt", "*.md"]
         exclude_patterns: ["*.tmp", ".*", "__pycache__/*"]
-        allowed_mime_types: ["application/pdf", "text/plain", "text/markdown", "text/x-markdown"]
         allowed_extensions: [".pdf", ".txt", ".md", ".markdown"]
         max_files: 1000
         follow_symlinks: false
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf", ".PDF"]
           config:
             chunk_size: 1500
@@ -174,7 +172,6 @@ rag:
             extract_images: false
             extract_metadata: true
         - type: "TextParser_Python"
-          mime_types: ["text/plain"]
           file_extensions: [".txt", ".text"]
           config:
             chunk_size: 1500
@@ -187,7 +184,6 @@ rag:
             strip_empty_lines: true
             detect_structure: true
         - type: "MarkdownParser_Python"
-          mime_types: ["text/markdown", "text/x-markdown"]
           file_extensions: [".md", ".markdown", ".mdown"]
           config:
             chunk_size: 2000
@@ -223,13 +219,11 @@ rag:
         recursive: false
         include_patterns: ["*.csv", "*.txt"]
         exclude_patterns: ["*.tmp", ".*"]
-        allowed_mime_types: ["text/csv", "text/plain"]
         allowed_extensions: [".csv", ".txt"]
         max_files: 500
         follow_symlinks: false
       parsers:
         - type: "CSVParser_Pandas"
-          mime_types: ["text/csv"]
           file_extensions: [".csv", ".CSV"]
           config:
             content_fields: ["description"]
@@ -240,7 +234,6 @@ rag:
               "Medium": 3
               "Low": 4
         - type: "TextParser_Python"
-          mime_types: ["text/plain"]
           file_extensions: [".txt", ".text"]
           config:
             chunk_size: 800
@@ -277,13 +270,11 @@ rag:
         recursive: true
         include_patterns: ["*.md", "*.py", "*.txt", "*.js", "*.ts"]
         exclude_patterns: ["__pycache__", "*.pyc", "node_modules/*", ".git/*"]
-        allowed_mime_types: ["text/markdown", "text/x-markdown", "text/plain", "text/x-python", "application/javascript", "text/javascript"]
         allowed_extensions: [".md", ".py", ".txt", ".js", ".ts", ".jsx", ".tsx"]
         max_files: 2000
         follow_symlinks: false
       parsers:
         - type: "MarkdownParser_LlamaIndex"
-          mime_types: ["text/markdown", "text/x-markdown"]
           file_extensions: [".md", ".markdown"]
           config:
             chunk_size: 1200
@@ -296,7 +287,6 @@ rag:
             extract_code_blocks: true
             preserve_formatting: false
         - type: "TextParser_Python"
-          mime_types: ["text/plain", "text/x-python", "application/javascript", "text/javascript"]
           file_extensions: [".py", ".txt", ".js", ".ts", ".jsx", ".tsx"]
           config:
             chunk_size: 1000
@@ -331,17 +321,11 @@ rag:
         recursive: true
         include_patterns: ["*.pdf", "*.docx", "*.xlsx"]
         exclude_patterns: ["*.tmp", "~$*"]
-        allowed_mime_types: [
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ]
         allowed_extensions: [".pdf", ".docx", ".xlsx"]
         max_files: 500
         follow_symlinks: false
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf", ".PDF"]
           config:
             chunk_size: 1800
@@ -354,7 +338,6 @@ rag:
             combine_pages: true
             extract_outline: true
         - type: "DocxParser_LlamaIndex"
-          mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
           file_extensions: [".docx", ".DOCX"]
           config:
             chunk_size: 1600
@@ -366,7 +349,6 @@ rag:
             extract_metadata: true
             extract_tables: true
         - type: "ExcelParser_LlamaIndex"
-          mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
           file_extensions: [".xlsx", ".XLSX"]
           config:
             chunk_size: 500
@@ -399,13 +381,11 @@ rag:
         recursive: true
         include_patterns: ["*.pdf"]
         exclude_patterns: ["*.tmp", ".*"]
-        allowed_mime_types: ["application/pdf"]
         allowed_extensions: [".pdf", ".PDF"]
         max_files: 100
         follow_symlinks: false
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf", ".PDF"]
           config:
             chunk_size: 2000
@@ -462,14 +442,12 @@ rag:
         recursive: true
         include_patterns: ["*.html", "*.htm", "*.txt"]
         exclude_patterns: ["*.tmp", ".*"]
-        allowed_mime_types: ["text/html", "text/plain"]
         allowed_extensions: [".html", ".htm", ".txt"]
         max_files: 1000
         follow_symlinks: false
       parsers:
         # HTML files processed as text (HTMLParser not available)
         - type: "TextParser_Python"
-          mime_types: ["text/html"]
           file_extensions: [".html", ".htm"]
           config:
             chunk_size: 1400
@@ -480,7 +458,6 @@ rag:
             min_chunk_size: 100
             extract_metadata: true
         - type: "TextParser_Python"
-          mime_types: ["text/plain"]
           file_extensions: [".txt"]
           config:
             chunk_size: 1400
@@ -511,14 +488,12 @@ rag:
         recursive: true
         include_patterns: ["*"]
         exclude_patterns: ["*.tmp", ".*", "__pycache__/*", "node_modules/*", ".git/*"]
-        allowed_mime_types: []  # Accept all mime types
         allowed_extensions: []  # Accept all extensions
         max_files: 10000
         follow_symlinks: false
       parsers:
         # PDF parser
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf", ".PDF"]
           config:
             chunk_strategy: "semantic"
@@ -527,7 +502,6 @@ rag:
             extract_metadata: true
         # Word documents
         - type: "DocxParser_LlamaIndex"
-          mime_types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
           file_extensions: [".docx", ".DOCX"]
           config:
             chunk_size: 1500
@@ -535,14 +509,12 @@ rag:
             extract_metadata: true
         # Excel spreadsheets
         - type: "ExcelParser_LlamaIndex"
-          mime_types: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
           file_extensions: [".xlsx", ".XLSX", ".xls", ".XLS"]
           config:
             chunk_size: 500
             extract_metadata: true
         # CSV files
         - type: "CSVParser_LlamaIndex"
-          mime_types: ["text/csv", "text/tab-separated-values"]
           file_extensions: [".csv", ".tsv", ".CSV", ".TSV"]
           config:
             chunk_size: 500
@@ -550,7 +522,6 @@ rag:
             extract_metadata: true
         # Markdown files
         - type: "MarkdownParser_LlamaIndex"
-          mime_types: ["text/markdown", "text/x-markdown"]
           file_extensions: [".md", ".markdown", ".mdown", ".mkd"]
           config:
             chunk_size: 1200
@@ -558,7 +529,6 @@ rag:
             extract_metadata: true
         # HTML, JSON, XML files processed as text (specialized parsers not available)
         - type: "TextParser_Python"
-          mime_types: ["text/html", "application/xhtml+xml", "application/json", "application/xml", "text/xml"]
           file_extensions: [".html", ".htm", ".xhtml", ".json", ".jsonl", ".xml", ".XML"]
           config:
             chunk_size: 1200
@@ -566,7 +536,6 @@ rag:
             extract_metadata: true
         # Plain text as fallback (catches everything else)
         - type: "TextParser_LlamaIndex"
-          mime_types: ["text/plain"]
           file_extensions: [".txt", ".text", ".log", ".py", ".js", ".ts", ".java", ".cpp", ".c", ".h", ".hpp", ".cs", ".rb", ".go", ".rs", ".swift", ".kt", ".scala", ".r", ".m", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd"]
           config:
             chunk_size: 1000

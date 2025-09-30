@@ -56,7 +56,6 @@ type ParserConfig struct {
 	Type           string                 `yaml:"type" toml:"type"`
 	Config         map[string]interface{} `yaml:"config,omitempty" toml:"config,omitempty"`
 	FileExtensions []string               `yaml:"file_extensions,omitempty" toml:"file_extensions,omitempty"`
-	MimeTypes      []string               `yaml:"mime_types,omitempty" toml:"mime_types,omitempty"`
 	Priority       int                    `yaml:"priority,omitempty" toml:"priority,omitempty"`
 }
 

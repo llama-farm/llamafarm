@@ -1,118 +1,148 @@
 ---
-title: Configuration
-sidebar_label: Configuration
-slug: /configuration
+title: Configuration Guide
+sidebar_position: 4
 ---
 
-Declarative YAML configuration for models, pipelines, deployment, and settings.
+# Configuration Guide
 
-## Philosophy
+Every LlamaFarm project is defined by a single file: `llamafarm.yaml`. The server validates it against JSON Schema, so missing fields surface as errors instead of hidden defaults. This guide explains each section and shows how to extend the schema responsibly.
 
-1. Configuration over code
-2. Sensible defaults
-3. Progressive complexity
-4. Environment aware
-
-## Basic configuration
-
-```yaml title="llamafarm.yaml"
-models:
-  - name: assistant
-    type: llama2-7b
-
-deploy:
-  local: true
-```
-
-## Structure
+## File Layout
 
 ```yaml
-models: [] # Model definitions
-pipeline: [] # Dataflow through components
-deploy: {} # Deployment targets
-settings: {} # Observability, security, etc.
+version: v1
+name: my-project
+namespace: default
+runtime: { ... }
+prompts: [...]
+rag: { ... }
+datasets: [...]
 ```
 
-## Models section
+### Metadata
+
+| Field       | Type   | Required  | Notes                                              |
+| ----------- | ------ | --------- | -------------------------------------------------- |
+| `version`   | string | ✅ (`v1`) | Schema version.                                    |
+| `name`      | string | ✅        | Project identifier.                                |
+| `namespace` | string | ✅        | Grouping for isolation (matches server namespace). |
+
+### Runtime
+
+Controls how chat completions are executed.
 
 ```yaml
-models:
-  - name: local-llama
-    type: llama2-13b
-    device: cuda
-    quantization: int8
-    cache_dir: ./models
-
-  - name: cloud-gpt
-    type: openai
-    model: gpt-4
-    api_key: ${OPENAI_API_KEY}
+runtime:
+  provider: openai
+  model: qwen2.5:7b
+  base_url: http://localhost:8000/v1
+  api_key: sk-local-placeholder
+  instructor_mode: tools
+  model_api_parameters:
+    temperature: 0.2
 ```
 
-## Pipeline section
+| Field                  | Type                      | Required                                                                         | Description                                                                                                       |
+| ---------------------- | ------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `provider`             | enum (`openai`, `ollama`) | ✅                                                                               | `openai` works with any OpenAI-compatible API (OpenAI, vLLM, Together, LM Studio). `ollama` targets local Ollama. |
+| `model`                | string                    | ✅                                                                               | Model identifier understood by the provider.                                                                      |
+| `base_url`             | string or null            | ⚠️ Required when pointing at a non-default host (vLLM, Together).                |
+| `api_key`              | string or null            | ⚠️ Required for most hosted providers. Use `.env` + environment variables.       |
+| `instructor_mode`      | string or null            | Optional (e.g., `json`, `md_json`, `tools`) to activate structured output modes. |
+| `model_api_parameters` | object                    | Optional passthrough to provider (temperature, top_p, etc.).                     |
+
+> **Extending providers:** To add a new provider enum, update `config/schema.yaml`, regenerate types via `config/generate-types.sh`, and implement routing in the server/CLI. See [Extending runtimes](../extending/index.md#extend-runtimes).
+
+### Prompts
+
+Prompts seed system/content instructions for each session.
 
 ```yaml
-pipeline:
-  - input: user_query
-  - generate:
-      model: local-llama
-      max_tokens: 500
-      temperature: 0.7
-  - output: response
+prompts:
+  - role: system
+    content: >-
+      You are a supportive assistant. Cite documents when relevant.
 ```
 
-## Deploy section
+- Roles can be `system`, `user`, or `assistant` (anything supported by the runtime).
+- Prompts are appended before user input; combine with RAG context via the RAG guide.
+
+### RAG Configuration
+
+The `rag` section mirrors [`rag/schema.yaml`](/rag/schema.yaml). It defines databases and data-processing strategies.
 
 ```yaml
-deploy:
-  local:
-    enable: true
-    port: 8080
-    workers: 4
-  kubernetes:
-    namespace: llamafarm
-    replicas: 3
+rag:
+  databases:
+    - name: main_db
+      type: ChromaStore
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: semantic_search
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text:latest
+      retrieval_strategies:
+        - name: semantic_search
+          type: VectorRetriever
+          config:
+            top_k: 5
+  data_processing_strategies:
+    - name: pdf_ingest
+      parsers:
+        - type: PDFParser_LlamaIndex
+          config:
+            chunk_size: 1500
+            chunk_overlap: 200
+      extractors:
+        - type: HeadingExtractor
+        - type: ContentStatisticsExtractor
 ```
 
-## Environment variables
+Key points:
+
+- `databases` map to vector stores; choose from `ChromaStore` or `QdrantStore` by default.
+- `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
+- `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
+- For a complete field reference, see the [RAG Guide](../rag/index.md).
+
+### Datasets
+
+`datasets` keep metadata about datasets you manage via the CLI.
 
 ```yaml
-settings:
-  database:
-    url: ${DATABASE_URL}
-    password: ${DB_PASSWORD}
+datasets:
+  - name: research-notes
+    data_processing_strategy: pdf_ingest
+    database: main_db
+    files:
+      - 2d5fd8424e62c56cad39864fac9ecff7af9639cf211deb936a16dc05aca5b3ea
 ```
 
-## Profiles
+- `files` are SHA256 hashes tracked by the server.
+- Not required, but useful for syncing dataset metadata across environments.
 
-```yaml title="llamafarm.dev.yaml"
-extends: llamafarm.yaml
-models:
-  - name: assistant
-    type: llama2-7b
-    quantization: int4
+## Validation & Errors
 
-deploy:
-  local:
-    debug: true
-    hot_reload: true
-```
+- The CLI enforces schema validation when loading configs. Missing runtime fields raise `Error: runtime.provider is required`.
+- Use `lf chat --curl` to inspect the raw request if responses look wrong (verify prompts and RAG toggles).
+- The server logs include full validation errors if API calls fail due to config mismatches.
 
-## Validation
+## Extending the Schema
 
-```bash
-llamafarm validate
-llamafarm validate -f llamafarm.prod.yaml
-llamafarm config show --resolved
-```
+1. Edit `config/schema.yaml` or `rag/schema.yaml` to add new enums/properties.
+2. Run `config/generate-types.sh` to regenerate Pydantic/Go datamodels.
+3. Update server/CLI logic to accept the new fields.
+4. Document the addition in this guide and the Extending section.
 
-## Best practices
+Example: To support a new provider `together`, add it to the `provider` enum, regenerate types, and update runtime selection to issue HTTP requests to Together’s API.
 
-- Start simple, add features incrementally
-- Use version control for config
-- Separate dev/staging/prod
-- Secure secrets with env vars
-- Enable logging and metrics
-- Document non-obvious choices
+## Best Practices
 
-See: Example configs for complete scenarios.
+- Keep secrets out of YAML; use environment variables and reference them at runtime.
+- Version control your config; treat `llamafarm.yaml` like application code.
+- Use separate namespaces or configs for dev/staging/prod to avoid cross-talk.
+- Document uncommon parser/extractor choices for future maintainers.
+
+Need concrete samples? Check the [Example configs](./example-configs.md) and the examples in the repo (`examples/fda_rag/llamafarm-example.yaml`).

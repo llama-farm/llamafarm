@@ -1,45 +1,31 @@
 ---
 sidebar_position: 1
-sidebar_label: Overview
+sidebar_label: Start Here
 ---
 
-# LlamaFarm - Build Powerful AI Locally, Deploy Anywhere
+# Welcome to LlamaFarm
 
-<div align="left">
-  **Empowering developers to build production-ready AI applications with complete local control**
+LlamaFarm helps you ship retrieval-augmented and agentic AI apps from your laptop to production. It is fully open-source and intentionally extendable—swap model providers, vector stores, parsers, and CLI workflows without rewriting your project.
 
-  <br/>
-  <a href="https://opensource.org/licenses/apache-2-0"><img alt="License: Apache 2.0" src="https://img.shields.io/github/license/llama-farm/llamafarm"/></a>&nbsp;
-  <a href="https://www.python.org/downloads/"><img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.10+-blue.svg"/></a>&nbsp;
-  <a href="https://github.com/llama-farm/llamafarm/blob/main/CONTRIBUTING.md"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"/></a>
-</div>
+## What You Can Do Today
 
----
+- **Prototype locally** with Ollama or any OpenAI-compatible runtime (vLLM, Together, custom gateways).
+- **Ingest and query documents** using configurable RAG pipelines defined entirely in YAML.
+- **Automate workflows** with a single CLI (`lf`) that manages projects, datasets, and chat interactions.
+- **Extend everything** from model handlers to data processors by updating schemas and wiring your own implementations.
 
-## What is LlamaFarm?
+## Choose Your Own Adventure
 
-LlamaFarm is a modular framework for local-first AI: RAG, model management, prompt engineering, and soon fine‑tuning.
+| Get Started | Go Deeper | Build Your Own |
+| ----------- | --------- | -------------- |
+| [Quickstart](./quickstart/index.md) – install, init, chat, ingest your first dataset. | [Core Concepts](./concepts/index.md) – architecture, sessions, and components. | [Extending LlamaFarm](./extending/index.md) – add runtimes, stores, parsers, and CLI commands. |
+| [CLI Reference](./cli/index.md) – command matrix and examples. | [Configuration Guide](./configuration/index.md) – schema-driven project settings. | [RAG Guide](./rag/index.md) – strategies, processing pipelines, and monitoring. |
 
-### Our mission
+## Philosophy
 
-- Local first
-- Production ready
-- Developer friendly
-- Modular and vendor‑neutral
+- **Local-first, cloud-aware** – everything works offline, yet you can point at remote runtimes when needed.
+- **Configuration over code** – projects are reproducible because behaviour lives in `llamafarm.yaml`.
+- **Composable modules** – RAG, prompts, and runtime selection work independently but integrate cleanly.
+- **Open for extension** – documentation includes patterns for registering new providers, stores, and utilities.
 
----
-
-## Highlights
-
-- ⚡ Local-first workflows with cloud-on-demand
-- 🔌 Plug-and-play components (RAG, Models, Prompts)
-- 🧪 Built‑in evaluation and A/B testing
-- 🛠️ CLI-first, config‑driven
-- 🌈 Accessible theming with light/dark modes
-
----
-
-## Quick links
-
-- Overview: [Getting started](/docs/overview/getting-started) • [Features](/docs/overview/features) • [Architecture](/docs/overview/architecture) • [Why LlamaFarm](/docs/overview/why-llamafarm) • [Contributing](/docs/overview/contributing) • [Community](/docs/overview/community) • [License](/docs/overview/license) • [Credits](/docs/overview/credits)
-- Product: [RAG](/docs/rag) • [Prompts](/docs/prompts) • [Models](/docs/models) • [Configuration](/docs/configuration) • [Deployment](/docs/deployment)
+Ready to build? Start with the [Quickstart](./quickstart/index.md) and keep the CLI open in another terminal.

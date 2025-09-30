@@ -137,7 +137,6 @@ rag:
         # PDF Parsers (with fallback)
         - type: PDFParser_LlamaIndex
           file_include_patterns: ["*.pdf", "*.PDF"]
-          file_exclude_patterns: ["*_draft.pdf", "*.tmp.pdf", "~$*.pdf"]
           priority: 100
           config:
             chunk_strategy: semantic
@@ -149,7 +148,6 @@ rag:
 
         - type: PDFParser_PyPDF2
           file_include_patterns: ["*.pdf", "*.PDF"]
-          file_exclude_patterns: ["*_draft.pdf", "*.tmp.pdf", "~$*.pdf"]
           priority: 50
           config:
             chunk_strategy: paragraphs
@@ -160,7 +158,6 @@ rag:
         # Word Document Parser
         - type: DocxParser_LlamaIndex
           file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
-          file_exclude_patterns: ["~$*", "*.tmp", "*_backup.*"]
           priority: 100
           config:
             chunk_size: 1000
@@ -170,7 +167,6 @@ rag:
         # CSV/TSV Parser
         - type: CSVParser_Pandas
           file_include_patterns: ["*.csv", "*.CSV", "*.tsv", "*.TSV", "*.dat"]
-          file_exclude_patterns: ["*_backup.csv", "*.tmp.csv", "~$*.csv"]
           priority: 100
           config:
             chunk_size: 500
@@ -180,7 +176,6 @@ rag:
         # Excel Parser
         - type: ExcelParser_LlamaIndex
           file_include_patterns: ["*.xlsx", "*.XLSX", "*.xls", "*.XLS"]
-          file_exclude_patterns: ["~$*", "*.tmp.xlsx", "*_backup.xlsx"]
           priority: 100
           config:
             chunk_size: 500
@@ -189,7 +184,6 @@ rag:
         # Markdown Parser
         - type: MarkdownParser_Python
           file_include_patterns: ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*", "CHANGELOG*"]
-          file_exclude_patterns: ["*.tmp.md", "_draft*.md", ".*.md"]
           priority: 100
           config:
             chunk_size: 1000
@@ -209,12 +203,6 @@ rag:
             "LICENSE*", "AUTHORS*", "NOTICE*", "COPYRIGHT*",
             "*.sql", "*.css", "*.html", "*.htm"
           ]
-          file_exclude_patterns: [
-            "*.pyc", "*.pyo", "*.class", "*.o", "*.so", "*.dll", "*.exe",
-            "*.jpg", "*.png", "*.gif", "*.bmp", "*.ico", "*.svg",
-            "*.mp3", "*.mp4", "*.avi", "*.mov", "*.wav",
-            "*.zip", "*.tar", "*.gz", "*.rar", "*.7z"
-          ]
           priority: 10  # Lowest priority - catch-all
           config:
             chunk_size: 1000
@@ -229,7 +217,6 @@ rag:
         # Universal extractors (apply to all files)
         - type: ContentStatisticsExtractor
           file_include_patterns: ["*"]
-          file_exclude_patterns: []
           priority: 100
           config:
             include_readability: true
@@ -238,7 +225,6 @@ rag:
 
         - type: EntityExtractor
           file_include_patterns: ["*"]
-          file_exclude_patterns: []
           priority: 90
           config:
             entity_types: [PERSON, ORG, GPE, DATE, PRODUCT, MONEY, PERCENT]
@@ -247,7 +233,6 @@ rag:
 
         - type: KeywordExtractor
           file_include_patterns: ["*"]
-          file_exclude_patterns: []
           priority: 80
           config:
             algorithm: yake

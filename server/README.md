@@ -1,32 +1,45 @@
 # LlamaFarm Server
 
-The FastAPI-based server component of LlamaFarm that provides REST APIs for project management, model inference, and data services.
+FastAPI application that powers project chat, dataset APIs, and health checks.
 
-## Features
-
-- **Project Management**: Create, manage, and deploy AI projects
-- **Model Integration**: Interface with various AI models and providers
-- **Dataset Management**: Handle and process datasets for AI workflows
-- **Configuration**: Type-safe configuration management with validation
-- **Extensible**: Modular architecture for easy extension
-
-## Development
-
-To run the server in development mode:
+## Running Locally
+The CLI (`lf start`) will launch the server and RAG worker for you, but you can run it manually while developing inside `server/`.
 
 ```bash
-cd server
 uv sync
-uv run uvicorn main:app --reload
+uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## API Documentation
+To execute Celery ingestion jobs alongside it, start the worker from `rag/` (see that README) or run `lf datasets process …` which will auto-start the worker via Docker.
 
-Once running, visit `http://localhost:8000/docs` for interactive API documentation.
+Interactive API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-## Requirements
+### Running via Nx from the Repository Root
+If you prefer to use the same orchestration as the CLI without Docker auto-start:
 
-- Python 3.12+
-- FastAPI
-- Pydantic
-- Additional dependencies listed in `pyproject.toml`
+```bash
+git clone https://github.com/llama-farm/llamafarm.git
+cd llamafarm
+
+npm install -g nx
+nx init --useDotNxInstallation --interactive=false
+
+# Option A: single command
+nx dev
+
+# Option B: separate terminals
+nx start rag    # Terminal 1
+nx start server # Terminal 2
+```
+
+## Tests
+```bash
+uv run --group test python -m pytest
+```
+
+## Configuration
+The server reads `llamafarm.yaml` via the config package. Ensure your project config includes:
+- `runtime` with provider/model/base_url/api_key as required.
+- `rag` strategies/databases that match datasets you plan to ingest.
+
+For a complete schema reference and instructions on extending endpoints, see the main documentation at `docs/website/docs`.

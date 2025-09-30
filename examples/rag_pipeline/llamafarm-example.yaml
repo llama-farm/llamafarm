@@ -63,10 +63,6 @@ rag:
       file_include_patterns:
       - '*.pdf'
       - '*.PDF'
-      file_exclude_patterns:
-      - '*_draft.pdf'
-      - '*.tmp.pdf'
-      - ~$*.pdf
       priority: 100
     - type: PDFParser_PyPDF2
       config:
@@ -77,10 +73,6 @@ rag:
       file_include_patterns:
       - '*.pdf'
       - '*.PDF'
-      file_exclude_patterns:
-      - '*_draft.pdf'
-      - '*.tmp.pdf'
-      - ~$*.pdf
       priority: 50
     - type: DocxParser_LlamaIndex
       config:
@@ -92,10 +84,6 @@ rag:
       - '*.DOCX'
       - '*.doc'
       - '*.DOC'
-      file_exclude_patterns:
-      - ~$*
-      - '*.tmp'
-      - '*_backup.*'
       priority: 100
     - type: CSVParser_Pandas
       config:
@@ -108,10 +96,6 @@ rag:
       - '*.tsv'
       - '*.TSV'
       - '*.dat'
-      file_exclude_patterns:
-      - '*_backup.csv'
-      - '*.tmp.csv'
-      - ~$*.csv
       priority: 100
     - type: ExcelParser_LlamaIndex
       config:
@@ -122,10 +106,6 @@ rag:
       - '*.XLSX'
       - '*.xls'
       - '*.XLS'
-      file_exclude_patterns:
-      - ~$*
-      - '*.tmp.xlsx'
-      - '*_backup.xlsx'
       priority: 100
     - type: MarkdownParser_Python
       config:
@@ -141,10 +121,6 @@ rag:
       - '*.mkd'
       - README*
       - CHANGELOG*
-      file_exclude_patterns:
-      - '*.tmp.md'
-      - _draft*.md
-      - .*.md
       priority: 100
     - type: TextParser_Python
       config:
@@ -188,30 +164,6 @@ rag:
       - '*.css'
       - '*.html'
       - '*.htm'
-      file_exclude_patterns:
-      - '*.pyc'
-      - '*.pyo'
-      - '*.class'
-      - '*.o'
-      - '*.so'
-      - '*.dll'
-      - '*.exe'
-      - '*.jpg'
-      - '*.png'
-      - '*.gif'
-      - '*.bmp'
-      - '*.ico'
-      - '*.svg'
-      - '*.mp3'
-      - '*.mp4'
-      - '*.avi'
-      - '*.mov'
-      - '*.wav'
-      - '*.zip'
-      - '*.tar'
-      - '*.gz'
-      - '*.rar'
-      - '*.7z'
       priority: 10
     extractors:
     - type: ContentStatisticsExtractor
@@ -221,7 +173,6 @@ rag:
         include_vocabulary: true
       file_include_patterns:
       - '*'
-      file_exclude_patterns: []
       priority: 100
     - type: EntityExtractor
       config:
@@ -237,7 +188,6 @@ rag:
         use_fallback: true
       file_include_patterns:
       - '*'
-      file_exclude_patterns: []
       priority: 90
     - type: KeywordExtractor
       config:
@@ -246,7 +196,6 @@ rag:
         min_keyword_length: 3
       file_include_patterns:
       - '*'
-      file_exclude_patterns: []
       priority: 80
     - type: TableExtractor
       config:
@@ -257,7 +206,6 @@ rag:
       file_include_patterns:
       - '*.pdf'
       - '*.PDF'
-      file_exclude_patterns: []
       priority: 100
     - type: DateTimeExtractor
       config:
@@ -273,7 +221,6 @@ rag:
       - '*.tsv'
       - '*.xlsx'
       - '*.xls'
-      file_exclude_patterns: []
       priority: 100
     - type: HeadingExtractor
       config:
@@ -286,7 +233,6 @@ rag:
       - '*.html'
       - '*.htm'
       - README*
-      file_exclude_patterns: []
       priority: 100
     - type: LinkExtractor
       config:
@@ -300,7 +246,6 @@ rag:
       - '*.html'
       - '*.htm'
       - '*.rst'
-      file_exclude_patterns: []
       priority: 90
     - type: PatternExtractor
       config:
@@ -331,7 +276,6 @@ rag:
       - '*.swift'
       - '*.kt'
       - '*.scala'
-      file_exclude_patterns: []
       priority: 100
 datasets:
 - name: rag-test-dataset

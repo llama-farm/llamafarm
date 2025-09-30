@@ -183,40 +183,6 @@ def _check_seed_project() -> dict:
         }
 
 
-def _check_celery() -> dict:
-    start = _now_ms()
-    try:
-        from core.celery.celery import app as celery_app  # type: ignore
-
-        try:
-            if replies := celery_app.control.ping(timeout=0.5):
-                return {
-                    "name": "celery",
-                    "status": "healthy",
-                    "message": f"{len(replies)} worker(s) responding",
-                    "latency_ms": _now_ms() - start,
-                }
-            return {
-                "name": "celery",
-                "status": "degraded",
-                "message": "No workers replied to ping",
-                "latency_ms": _now_ms() - start,
-            }
-        except Exception as e:
-            return {
-                "name": "celery",
-                "status": "degraded",
-                "message": f"Celery ping failed: {e}",
-                "latency_ms": _now_ms() - start,
-            }
-    except Exception:
-        # Celery not configured/importable
-        return {
-            "name": "celery",
-            "status": "healthy",
-            "message": "Celery not configured",
-            "latency_ms": _now_ms() - start,
-        }
 
 
 def _check_rag_service() -> dict:
@@ -291,7 +257,6 @@ def health_summary() -> dict[str, Any]:
     components.append(_check_server())
     components.append(_check_storage())
     components.append(_check_ollama())
-    components.append(_check_celery())
     components.append(_check_rag_service())
 
     seeds.append(_check_seed_project())

@@ -109,21 +109,23 @@ Each strategy defines how documents are processed, including file filtering, par
 
 ```yaml
 data_processing_strategies:
-  - name: "pdf_processing"  # Unique identifier (lowercase, underscores)
-    description: "Standard PDF document processing"
-    
-    # DirectoryParser configuration (ALWAYS ACTIVE)
+    - name: "pdf_processing"  # Unique identifier (lowercase, underscores)
+      description: "Standard PDF document processing"
+      
+      # DirectoryParser configuration (ALWAYS ACTIVE)
     directory_config:
       recursive: true  # Scan subdirectories
       supported_files: ["*.pdf", "*.PDF"]  # Glob patterns for accepted files
-      exclude_patterns: ["*.tmp", ".*"]  # Patterns to exclude
       max_files: 1000  # Maximum files to process
+
+    # Parsers now rely on file extensions or include patterns.
+    # MIME type hints are handled internally and should not be
+    # specified in project configs.
       follow_symlinks: false  # Whether to follow symbolic links
     
     # Parser configurations
     parsers:
       - type: "PDFParser_LlamaIndex"
-        mime_types: ["application/pdf"]  # MIME types this parser handles
         file_extensions: [".pdf", ".PDF"]  # Extensions this parser handles
         config:
           chunk_size: 1000
@@ -283,19 +285,16 @@ rag:
         max_files: 5000
       parsers:
         - type: "PDFParser_LlamaIndex"
-          mime_types: ["application/pdf"]
           file_extensions: [".pdf"]
           config:
             chunk_size: 1500
             chunk_overlap: 200
         - type: "TextParser_Python"
-          mime_types: ["text/plain"]
           file_extensions: [".txt", ".log"]
           config:
             chunk_size: 1200
             chunk_overlap: 150
         - type: "CSVParser_Pandas"
-          mime_types: ["text/csv"]
           file_extensions: [".csv"]
           config:
             chunk_size: 500

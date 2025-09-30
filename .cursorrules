@@ -1,0 +1,342 @@
+# LlamaFarm Repository Guidelines for Cursor & Automated Coding Agents
+
+This repository powers the LlamaFarm CLI + server for retrieval-augmented AI workflows. Automated tools that reason about or modify the codebase should follow the guidance below. Think of this file as the “living handbook” for LLM coding agents.
+
+---
+
+## 1. High-Level Overview
+- **Primary goal:** Provide a CLI (`lf`) and API server for configuring projects, ingesting datasets, and running RAG-enhanced chat sessions.
+- **Stack:**
+  - **CLI:** Go (Cobra) under `cli/`
+  - **Server:** Python (FastAPI) under `server/`
+  - **RAG worker:** Python/Celery under `rag/`
+  - **Docs site:** Docusaurus (Node/Nx) under `docs/website/`
+- **Configuration:** Driven by `llamafarm.yaml`, defined via JSON Schema in `config/schema.yaml` and `rag/schema.yaml`.
+- **Extensibility:** Designed to allow new runtime providers, vector stores, parsers, extractors, and CLI commands.
+
+Agents must keep documentation and code aligned—any change to workflows or schema requires updates across README + docs.
+
+---
+
+## 2. Prerequisites & Installation
+### Required Software
+1. **Docker** – `lf start` spins up the API and Celery worker automatically via Docker.
+2. **Ollama** – current default runtime (download from https://ollama.com/download). Additional providers will follow the OpenAI-compatible API pattern.
+3. **CLI (lf)** – install first; sources are at the repo root, but the standard install is via script.
+
+### CLI Installation (macOS/Linux)
+```bash
+curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
+```
+- Script auto-detects platform, downloads latest binary, and installs to `/usr/local/bin` by default. Accepts `--install-dir` and `--version` flags if customization is needed.
+
+### CLI Installation (Windows)
+- Download `lf.exe` from https://github.com/llama-farm/llamafarm/releases/latest and add it to your PATH.
+
+### Optional Development Stack Installations
+If you need to run components manually (instead of through the CLI):
+- **Python 3.10+**
+- **uv** package manager (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- **Go 1.24+** (for building CLI from source or in forks)
+- **Node.js + pnpm** (for doc site maintenance)
+
+---
+
+## 3. Quickstart Commands
+1. **Install CLI** (see above).
+2. **Increase Ollama context window** – open the Ollama app → Settings → Advanced → set context window to match production (e.g., 100k tokens). Larger context windows improve RAG results on long documents.
+3. **Create a project & launch services**
+   ```bash
+   lf init my-project
+   lf start
+   ```
+   - `lf start` launches the FastAPI app and Celery worker via Docker, and opens an interactive chat TUI. Exit with `Ctrl+C`.
+4. **Ingest and query**
+   ```bash
+   lf datasets create -s pdf_ingest -b main_db research
+   lf datasets upload research ./examples/fda_rag/files/*.pdf
+   lf datasets process research
+   lf rag query --database main_db "Which letters mention clinical trial data?"
+   lf chat "Summarize the 2024 FDA letters"
+   ```
+
+---
+
+## 4. Repository Layout (top-level)
+| Path | Purpose |
+|------|---------|
+| `README.md` | Developer quickstart and extensibility overview.
+| `config/` | JSON Schema (`schema.yaml`), generated Pydantic/Go types (`datamodel.py`, `config_types.go`).
+| `server/` | FastAPI application and services; entrypoint `server/main.py`.
+| `rag/` | Celery worker, ingestion pipeline, parser implementations.
+| `cli/` | Go CLI; commands under `cli/cmd/`, entry `main.go`.
+| `docs/website/` | Docusaurus docs (run via Nx).
+| `examples/` | Ready-made example configs (FDA, Raleigh UDO).
+| `.claude/` | LLM assistant instructions (this document).
+| `.agents/` | Research/plan workflow guidelines for coding agents.
+
+---
+
+## 5. Running Components Locally
+### Using the CLI (Recommended)
+- `lf start` – orchestrates Docker containers and starts the dev chat UI.
+- `lf datasets create|upload|process` – manage ingestion.
+- `lf rag query`, `lf rag health`, `lf rag stats` – retrieval & diagnostics.
+- `lf chat` – send single prompts (supports RAG toggles and curl preview).
+
+### Manual Server & Worker (when needed)
+```bash
+# API server
+cd server
+uv sync
+uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
+
+# RAG worker
+cd ../rag
+uv sync
+uv run python cli.py worker
+```
+- Normally not required because `lf start` handles this in Docker. Manual control is useful for debugging without Docker.
+
+---
+
+## 6. Building the CLI from Source (including forks)
+```bash
+# clone the repo (fork or upstream)
+git clone https://github.com/llama-farm/llamafarm.git
+cd llamafarm/cli
+
+# install dependencies if needed
+go mod tidy
+
+# build the binary
+go build -o lf main.go
+
+# optional: place in PATH
+sudo mv lf /usr/local/bin/
+```
+- Dev mode: `go run main.go [command]`.
+- Tests: `go test ./...`.
+- After schema changes (local or forked), regenerate Go types via `config/generate-types.sh` to keep `config_types.go` aligned.
+
+---
+
+## 7. Configuration (`llamafarm.yaml`)
+- Schema: `config/schema.yaml`
+- RAG specifics: `rag/schema.yaml`
+
+### Required Fields
+| Field | Notes |
+|-------|-------|
+| `version` | `v1`.
+| `name` | Project identifier.
+| `namespace` | Tenant/group identifier.
+| `runtime` | Provider, model, optional `base_url`/`api_key`, optional `instructor_mode`, optional `model_api_parameters`.
+| `prompts` | Array of system/user message scaffolding.
+| `rag` | Databases + data processing strategies.
+| `datasets` | Optional dataset metadata.
+
+### Documentation Links
+- Config guide: `docs/website/docs/configuration/index.md`
+- Example configs: `docs/website/docs/configuration/example-configs.md`
+- RAG guide: `docs/website/docs/rag/index.md`
+
+---
+
+## 8. Schema & Type Generation
+Whenever `config/schema.yaml` or `rag/schema.yaml` changes (in upstream or your fork), regenerate types:
+```bash
+cd config
+./generate-types.sh
+```
+- Updates Pydantic models (`datamodel.py`) and Go types (`config_types.go`).
+- After regenerating, adjust server/CLI logic and documentation to use new fields.
+
+---
+
+## 9. Extending the System
+### Runtime Providers (adding new provider)
+1. Add enum value in `config/schema.yaml` (`runtime.provider`).
+2. Regenerate types via `config/generate-types.sh`.
+3. Update runtime selection code:
+   - Server side: relevant runtime service (e.g., `server/services/runtime_service.py`).
+   - CLI side: resolver mapping config to runtime parameters.
+4. Document usage in `docs/website/docs/models/index.md` (include sample config).
+
+### RAG Stores / Embedders / Parsers / Extractors (adding new components)
+1. Implement new component in `rag/` (e.g., new store class under `rag/components/` or new parser in `rag/parsers/`).
+2. Register it with the ingestion pipeline.
+3. Update `rag/schema.yaml` to include the new type in the appropriate definitions.
+4. Regenerate types, update docs (`docs/website/docs/rag/index.md`), and add tests.
+
+### CLI Commands
+- Commands live in `cli/cmd/*.go`.
+- Add Cobra command, register in `init()`, follow patterns for config resolution (`config.GetServerConfig`), auto-start (`ensureServerAvailable`), output formatting.
+- Write corresponding tests (`*_test.go`).
+- Document in CLI docs (`docs/website/docs/cli/index.md`).
+
+---
+
+## 10. Testing & Validation Commands
+- Server tests: `cd server && uv run --group test python -m pytest`
+- RAG tests: `cd rag && uv run pytest tests/`
+- CLI tests: `cd cli && go test ./...`
+- Docs build: `nx build docs` (clear `.nx` cache if sqlite errors occur)
+- Smoke tests for RAG strategies: `cd rag && uv run python cli.py test`
+
+Always run relevant tests before opening PRs or finalizing changes.
+
+---
+
+## 11. Documentation Maintenance
+- All user-facing instructions live in `docs/website/docs/`.
+- When modifying workflows, update both README and the corresponding doc page.
+- Sidebar configuration: `docs/website/sidebars.ts`.
+- Build docs with `nx build docs`; dev server via `nx serve docs` if needed.
+
+---
+
+## 12. Examples
+- Ready-made demos in `examples/` (e.g., `examples/fda_rag/`, `examples/gov_rag/`).
+- Each contains an example `llamafarm-example.yaml`, scripts, and documents.
+- Documentation references: `docs/website/docs/examples/index.md`.
+
+Typical usage:
+```bash
+lf init demo
+cp examples/fda_rag/llamafarm-example.yaml llamafarm.yaml
+lf start
+lf datasets create -s pdf_ingest -b main_db fda_letters
+lf datasets upload fda_letters examples/fda_rag/files/*.pdf
+lf datasets process fda_letters
+lf rag query --database main_db "Which letters mention clinical trials?"
+```
+
+---
+
+## 13. Troubleshooting
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| `Server is degraded` banner | One of Celery/rag-service/Ollama slow or offline | Check `lf rag health`, ensure services running, inspect logs. |
+| `No response received` | Runtime returned empty stream (e.g., model lacks tool support) | Try `--no-rag`, switch models, adjust agent handler. |
+| `Task timed out or failed: PENDING` during `lf datasets process` | Large document still processing in Celery | Wait and rerun command; check worker logs. |
+| `InstructorRetryException: ... does not support tools` | Using structured output on a model without tool support | Set `instructor_mode: null` or choose another model. |
+| `nx build docs` sqlite I/O error | Nx cache database lock/permission issue | Remove `.nx/` or run with `NX_SKIP_NX_CACHE=1`. |
+| `lf` not found after install | Binary not in PATH | Ensure `/usr/local/bin` (or custom install dir) is on PATH. |
+
+---
+
+## 14. Contribution Workflow (for agents)
+1. **Research** – Create/update a note in `thoughts/shared/research/` summarizing findings.
+2. **Plan** – Outline steps in `thoughts/shared/plans/` (_always_ before coding).
+3. **Implement** – Follow style guides:
+   - Python: 4 spaces, run `uv run ruff check --fix .`.
+   - Go: `go fmt ./...`, `go vet ./...`.
+   - Keep changes focused; do not revert unrelated modifications.
+4. **Test** – Run targeted tests and record commands in final summary.
+5. **Update Docs** – If behaviour or schema changes, update README + Docusaurus pages.
+6. **Summarize** – Provide concise final message with changes + next steps.
+
+---
+
+## 15. Style & Best Practices
+- Follow Conventional Commits when adding commit messages (`type(scope): summary`).
+- Avoid committing secrets; store them in `.env` and update `.env.example` with placeholders when adding new variables.
+- Ensure new CLI flags or config fields are documented and validated.
+- Shared logic should live in reusable modules; avoid duplication between CLI and server.
+- Keep responses from LLM agents precise—no fictional features.
+
+---
+
+## 16. Important Files & Directories
+- `.agents/commands/research.md` & `plan.md` – required workflow steps for automated agents.
+- `.cursorrules` (this file) – stay in sync with repository conventions.
+- `.claude/CLAUDE.md` – high-level summary for Claude-based agents.
+- `AGENTS.md` – general repository guidelines.
+- `CONTRIBUTING.md` – community contribution policy.
+- `docs/website/docs/*` – canonical user documentation.
+
+---
+
+## 17. Advanced Topics
+### Adjusting Ollama or Alternative Runtimes
+- Default runtime is Ollama (local). To use vLLM or another OpenAI-compatible host:
+  ```yaml
+  runtime:
+    provider: openai
+    model: mistral-small
+    base_url: http://localhost:8000/v1
+    api_key: sk-...
+  ```
+- Ensure the host supports the required instructor/tool modes if structured outputs are enabled.
+
+### Long Document RAG Considerations
+- Increase Ollama context window (as mentioned earlier).
+- Choose retrieval strategies that match your document scale (e.g., `HybridUniversalStrategy` or `MetadataFilteredStrategy`).
+- Adjust `rag.data_processing_strategies[].parsers[].config.chunk_size` and `chunk_overlap` for best chunking.
+
+### Session Management
+- `lf chat` is stateless unless `LLAMAFARM_SESSION_ID` env var or `--session-id` flag is used.
+- `lf start` creates dev session history under `.llamafarm/projects/<namespace>/<project>/dev/context`—delete to reset.
+
+---
+
+## 18. Useful Commands (Cheat Sheet)
+```bash
+# List datasets
+lf datasets list
+
+# Inspect dataset processing details
+lf datasets process my-dataset --debug
+
+# Show RAG health metrics
+lf rag health
+
+# Export dataset (future feature placeholder)
+lf rag export --help  # may be hidden/advanced
+
+# Build CLI from source (fork or upstream)
+cd cli && go build -o lf main.go
+
+# Regenerate config & RAG types after schema edits
+cd config && ./generate-types.sh
+
+# Run server tests
+cd server && uv run --group test python -m pytest
+
+# Build docs site
+nx build docs
+```
+
+---
+
+## 19. Common Files to Update Together
+When modifying:
+- **Configuration schema** – update `config/schema.yaml`, `rag/schema.yaml`, regenerate types, modify server/CLI usage, update docs.
+- **CLI behaviour** – adjust Go code, add tests, update docs + README.
+- **RAG pipeline** – update Python code, schema, tests, docs.
+- **Examples** – ensure example YAMLs and scripts reflect the new behaviour.
+
+---
+
+## 20. Reporting/Logging
+- The CLI prints health summaries (server/storage/ollama/celery) whenever it contacts the API.
+- Server logs (FastAPI + Celery) provide detailed ingestion metrics—check when debugging.
+- Use `--debug` flag on CLI commands for verbose output.
+
+---
+
+## 21. Troubleshooting Nx / Docs Builds
+- `nx build docs` uses a Sqlite cache in `.nx/`. If you see `SqliteFailure(Error { code: SystemIoFailure, extended_code: 522 })`, remove `.nx/` or run with `NX_SKIP_NX_CACHE=1`.
+- Node dependencies live under `docs/website/`. Install with `pnpm install` or `npm install` if needed.
+
+---
+
+## 22. Final Reminders for Automated Agents
+- Always create research & plan notes in `thoughts/shared/` before editing.
+- Verify commands locally where possible; do not assume success.
+- Keep doc references accurate—link to the new Docusaurus pages rather than deprecated markdown.
+- Respect security guidelines (no secrets, no private data in logs/commits).
+- Close with concise summaries and clearly state if additional manual validation is required.
+
+Following this playbook ensures consistent, accurate contributions by automated tools. If anything here becomes outdated, update `.cursorrules` and cross-reference the relevant docs.
