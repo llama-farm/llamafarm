@@ -13,19 +13,19 @@ Every LlamaFarm project is defined by a single file: `llamafarm.yaml`. The serve
 version: v1
 name: my-project
 namespace: default
-runtime: {...}
+runtime: { ... }
 prompts: [...]
-rag: {...}
+rag: { ... }
 datasets: [...]
 ```
 
 ### Metadata
 
-| Field | Type | Required | Notes |
-| ----- | ---- | -------- | ----- |
-| `version` | string | ✅ (`v1`) | Schema version. |
-| `name` | string | ✅ | Project identifier. |
-| `namespace` | string | ✅ | Grouping for isolation (matches server namespace). |
+| Field       | Type   | Required  | Notes                                              |
+| ----------- | ------ | --------- | -------------------------------------------------- |
+| `version`   | string | ✅ (`v1`) | Schema version.                                    |
+| `name`      | string | ✅        | Project identifier.                                |
+| `namespace` | string | ✅        | Grouping for isolation (matches server namespace). |
 
 ### Runtime
 
@@ -42,14 +42,14 @@ runtime:
     temperature: 0.2
 ```
 
-| Field | Type | Required | Description |
-| ----- | ---- | -------- | ----------- |
-| `provider` | enum (`openai`, `ollama`) | ✅ | `openai` works with any OpenAI-compatible API (OpenAI, vLLM, Together, LM Studio). `ollama` targets local Ollama. |
-| `model` | string | ✅ | Model identifier understood by the provider. |
-| `base_url` | string or null | ⚠️ Required when pointing at a non-default host (vLLM, Together). |
-| `api_key` | string or null | ⚠️ Required for most hosted providers. Use `.env` + environment variables. |
-| `instructor_mode` | string or null | Optional (e.g., `json`, `md_json`, `tools`) to activate structured output modes. |
-| `model_api_parameters` | object | Optional passthrough to provider (temperature, top_p, etc.). |
+| Field                  | Type                      | Required                                                                         | Description                                                                                                       |
+| ---------------------- | ------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `provider`             | enum (`openai`, `ollama`) | ✅                                                                               | `openai` works with any OpenAI-compatible API (OpenAI, vLLM, Together, LM Studio). `ollama` targets local Ollama. |
+| `model`                | string                    | ✅                                                                               | Model identifier understood by the provider.                                                                      |
+| `base_url`             | string or null            | ⚠️ Required when pointing at a non-default host (vLLM, Together).                |
+| `api_key`              | string or null            | ⚠️ Required for most hosted providers. Use `.env` + environment variables.       |
+| `instructor_mode`      | string or null            | Optional (e.g., `json`, `md_json`, `tools`) to activate structured output modes. |
+| `model_api_parameters` | object                    | Optional passthrough to provider (temperature, top_p, etc.).                     |
 
 > **Extending providers:** To add a new provider enum, update `config/schema.yaml`, regenerate types via `config/generate-types.sh`, and implement routing in the server/CLI. See [Extending runtimes](../extending/index.md#extend-runtimes).
 
@@ -69,7 +69,7 @@ prompts:
 
 ### RAG Configuration
 
-The `rag` section mirrors [`rag/schema.yaml`](../../../rag/schema.yaml). It defines databases and data-processing strategies.
+The `rag` section mirrors [`rag/schema.yaml`](/rag/schema.yaml). It defines databases and data-processing strategies.
 
 ```yaml
 rag:
@@ -101,6 +101,7 @@ rag:
 ```
 
 Key points:
+
 - `databases` map to vector stores; choose from `ChromaStore` or `QdrantStore` by default.
 - `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
 - `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
