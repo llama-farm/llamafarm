@@ -10,12 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
 	"llamafarm-cli/cmd/config"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -414,7 +416,10 @@ var datasetsProcessCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		stopProgress := startProgressDots(2 * time.Second)
+		stopProgress := func() {}
+		if term.IsTerminal(int(os.Stdout.Fd())) {
+			stopProgress = startProgressDots(2 * time.Second)
+		}
 		resp, err := getHTTPClient().Do(req)
 		stopProgress()
 		if err != nil {
@@ -634,6 +639,7 @@ func startProgressDots(interval time.Duration) func() {
 		interval = 2 * time.Second
 	}
 	done := make(chan struct{})
+	var once sync.Once
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -647,8 +653,10 @@ func startProgressDots(interval time.Duration) func() {
 		}
 	}()
 	return func() {
-		close(done)
-		fmt.Println()
+		once.Do(func() {
+			close(done)
+			fmt.Println()
+		})
 	}
 }
 

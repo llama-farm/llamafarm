@@ -140,25 +140,38 @@ func buildChatCurl(messages []ChatMessage, ctx *ChatSessionContext) (string, err
 	return buildChatCurlCommand(url, jsonData, headers), nil
 }
 
+// shellEscapeSingleQuotes safely wraps a string for POSIX shells using single
+// quotes. It follows the standard pattern of ending the string, escaping the
+// single quote, and resuming the quoted string.
+func shellEscapeSingleQuotes(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
 func buildChatCurlCommand(url string, body []byte, headers http.Header) string {
 	var b strings.Builder
 	b.WriteString("curl -X POST ")
 	for key, values := range headers {
-		if strings.ToLower(key) == "authorization" {
+		if strings.EqualFold(key, "authorization") {
 			continue
 		}
 		for _, v := range values {
-			b.WriteString(fmt.Sprintf("-H '%s: %s' ", key, v))
+			header := fmt.Sprintf("%s: %s", key, v)
+			b.WriteString("-H ")
+			b.WriteString(shellEscapeSingleQuotes(header))
+			b.WriteByte(' ')
 		}
 	}
-	if _, ok := headers["Authorization"]; ok {
-		b.WriteString("-H 'Authorization: Bearer <redacted>' ")
+	if auth := headers.Get("Authorization"); auth != "" {
+		b.WriteString("-H ")
+		b.WriteString(shellEscapeSingleQuotes("Authorization: Bearer <redacted>"))
+		b.WriteByte(' ')
 	}
 	if len(body) > 0 {
-		escaped := strings.ReplaceAll(string(body), "'", "'\\''")
-		b.WriteString(fmt.Sprintf("-d '%s' ", escaped))
+		b.WriteString("-d ")
+		b.WriteString(shellEscapeSingleQuotes(string(body)))
+		b.WriteByte(' ')
 	}
-	b.WriteString(fmt.Sprintf("'%s'", url))
+	b.WriteString(shellEscapeSingleQuotes(url))
 	return b.String()
 }
 
