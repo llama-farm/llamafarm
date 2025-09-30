@@ -290,14 +290,10 @@ async def chat(
 
             if record is None:
                 # Create new agent and enable persistence
-                agent = ProjectChatOrchestratorAgentFactory.create_agent(project_config)
-                if hasattr(agent, "enable_persistence"):
-                    agent.enable_persistence(  # type: ignore[attr-defined]
-                        namespace=namespace,
-                        project_id=project_id,
-                        session_id=session_id,
-                        project_dir=project_dir,
-                    )
+                agent = ProjectChatOrchestratorAgentFactory.create_agent(
+                    project_config, project_dir=project_dir
+                )
+                agent.enable_persistence(session_id=session_id)
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(
                     namespace=namespace,
