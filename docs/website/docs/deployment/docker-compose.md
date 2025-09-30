@@ -1,44 +1,67 @@
 ---
 title: Docker Compose
-sidebar_label: Docker Compose
 slug: /deployment/docker-compose
-toc_min_heading_level: 2
-toc_max_heading_level: 3
 ---
 
-Run LlamaFarm quickly with Docker or Compose.
+# Docker Compose
+
+Run the server and RAG worker with Docker Compose for reproducible environments.
 
 ## Prerequisites
 
-- Docker Engine
-- Docker Compose plugin
+- Docker Engine + Compose plugin
+- Built artifacts or Dockerfiles in `server/` and `rag/`
+- A project config mounted into the containers (e.g., `llamafarm.yaml`)
 
-## Build and run
+## Example Compose File
 
-```bash
-# Build image
-llamafarm build --docker
+```yaml
+version: "3.8"
+services:
+  server:
+    build: ./server
+    environment:
+      - LLAMAFARM_CONFIG=/app/llamafarm.yaml
+      - RUNTIME_API_KEY=${RUNTIME_API_KEY}
+    volumes:
+      - ../llamafarm.yaml:/app/llamafarm.yaml:ro
+    ports:
+      - "8000:8000"
 
-# Run container
-docker run -p 8080:8080 llamafarm:latest
-
-# With GPU support
-docker run --gpus all -p 8080:8080 llamafarm:latest
+  rag-worker:
+    build: ./rag
+    environment:
+      - LLAMAFARM_CONFIG=/app/llamafarm.yaml
+    volumes:
+      - ../llamafarm.yaml:/app/llamafarm.yaml:ro
+    depends_on:
+      - server
 ```
 
-## Compose file (layout)
+Adjust paths according to your directory layout. Mount datasets or persistent volumes if you need durable storage for vector databases.
 
-Use the provided `docker-compose.yml` in the repo for a multi-service setup (API, workers, vector DB). Adjust ports, volumes, and GPU settings as needed.
-
-## Start/stop and logs
+## Usage
 
 ```bash
+# Build images
+docker compose build
+
 # Start services
 docker compose up -d
 
-# View logs
-docker compose logs -f
+# Tail logs
+docker compose logs -f server
 
 # Stop services
 docker compose down
 ```
+
+If you rely on Ollama or another runtime, run it on the host or add a service to the Compose file and set `runtime.base_url` accordingly.
+
+## Tips
+
+- Inject secrets via `.env` files or Docker secrets; never bake API keys into images.
+- Use healthchecks in Compose to ensure workers wait for the server to become ready.
+- Scale workers with `docker compose up --scale rag-worker=3` when ingestion throughput matters.
+
+For Kubernetes and other orchestrators, see [Deployment](./index.md).
