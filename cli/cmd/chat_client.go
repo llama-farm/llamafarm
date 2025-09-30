@@ -39,11 +39,11 @@ type ChatRequest struct {
 	PresencePenalty  *float64           `json:"presence_penalty,omitempty"`
 	LogitBias        map[string]float64 `json:"logit_bias,omitempty"`
 	// RAG fields
-	RAGEnabled          *bool              `json:"rag_enabled,omitempty"`
-	RAGDatabase         *string            `json:"database,omitempty"`
-	RAGRetrievalStrategy *string           `json:"rag_retrieval_strategy,omitempty"`
-	RAGTopK             *int               `json:"rag_top_k,omitempty"`
-	RAGScoreThreshold   *float64           `json:"rag_score_threshold,omitempty"`
+	RAGEnabled           *bool    `json:"rag_enabled,omitempty"`
+	RAGDatabase          *string  `json:"database,omitempty"`
+	RAGRetrievalStrategy *string  `json:"rag_retrieval_strategy,omitempty"`
+	RAGTopK              *int     `json:"rag_top_k,omitempty"`
+	RAGScoreThreshold    *float64 `json:"rag_score_threshold,omitempty"`
 }
 
 // ChatChoice represents a choice in the chat response
@@ -62,34 +62,81 @@ type ChatResponse struct {
 	Choices []ChatChoice `json:"choices"`
 }
 
+// SessionMode controls how the CLI manages chat session state.
+type SessionMode int
+
+const (
+	SessionModeProject SessionMode = iota
+	SessionModeStateless
+	SessionModeDev
+)
+
 // ChatSessionContext encapsulates CLI session and connection state.
 type ChatSessionContext struct {
 	ServerURL   string
 	Namespace   string
 	ProjectID   string
 	SessionID   string
-	Temperature float64
-	MaxTokens   int
-	Streaming   bool
-	HTTPClient  HTTPClient
+	SessionMode SessionMode
+	// SessionNamespace and SessionProject determine where client-side session
+	// context is persisted; for dev sessions they map to the user's project.
+	SessionNamespace string
+	SessionProject   string
+	Temperature      float64
+	MaxTokens        int
+	Streaming        bool
+	HTTPClient       HTTPClient
 	// RAG fields
-	RAGEnabled          bool
-	RAGDatabase         string
+	RAGEnabled           bool
+	RAGDatabase          string
 	RAGRetrievalStrategy string
-	RAGTopK             int
-	RAGScoreThreshold   float64
+	RAGTopK              int
+	RAGScoreThreshold    float64
 }
 
 func newDefaultContextFromGlobals() *ChatSessionContext {
 	return &ChatSessionContext{
-		ServerURL:   serverURL,
-		Namespace:   namespace,
-		ProjectID:   projectID,
-		SessionID:   sessionID,
-		Temperature: temperature,
-		MaxTokens:   maxTokens,
-		Streaming:   streaming,
-		HTTPClient:  getHTTPClient(),
+		ServerURL:        serverURL,
+		Namespace:        namespace,
+		ProjectID:        projectID,
+		SessionID:        sessionID,
+		SessionMode:      SessionModeProject,
+		SessionNamespace: namespace,
+		SessionProject:   projectID,
+		Temperature:      temperature,
+		MaxTokens:        maxTokens,
+		Streaming:        streaming,
+		HTTPClient:       getHTTPClient(),
+	}
+}
+
+func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
+	if ctx == nil {
+		cwd := getEffectiveCWD()
+		return filepath.Join(cwd, ".llamafarm", "context.yaml"), nil
+	}
+
+	switch ctx.SessionMode {
+	case SessionModeStateless:
+		return "", nil
+	case SessionModeDev:
+		ns := ctx.SessionNamespace
+		if strings.TrimSpace(ns) == "" {
+			ns = ctx.Namespace
+		}
+		proj := ctx.SessionProject
+		if strings.TrimSpace(proj) == "" {
+			proj = ctx.ProjectID
+		}
+		if strings.TrimSpace(ns) == "" || strings.TrimSpace(proj) == "" {
+			return "", fmt.Errorf("dev session requires namespace and project")
+		}
+		cwd := getEffectiveCWD()
+		base := filepath.Join(cwd, ".llamafarm", "projects", ns, proj, "dev")
+		return filepath.Join(base, "context.yaml"), nil
+	default:
+		cwd := getEffectiveCWD()
+		return filepath.Join(cwd, ".llamafarm", "context.yaml"), nil
 	}
 }
 
@@ -139,14 +186,17 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 			ctx = newDefaultContextFromGlobals()
 		}
 
-		// Read existing session context if available
-		if existingContext, err := readSessionContext(); err != nil {
-			logDebug(fmt.Sprintf("Failed to read session context: %v", err))
-		} else if existingContext != nil && existingContext.SessionID != "" {
-			// Use existing session ID if found
-			ctx.SessionID = existingContext.SessionID
-			sessionID = existingContext.SessionID
-			logDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
+		if ctx.SessionMode == SessionModeStateless {
+			ctx.SessionID = ""
+			sessionID = ""
+		} else {
+			if existingContext, err := readSessionContext(ctx); err != nil {
+				logDebug(fmt.Sprintf("Failed to read session context: %v", err))
+			} else if existingContext != nil && existingContext.SessionID != "" {
+				ctx.SessionID = existingContext.SessionID
+				sessionID = existingContext.SessionID
+				logDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
+			}
 		}
 
 		url, err := buildChatAPIURL(ctx)
@@ -163,10 +213,11 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 			}
 		}
 		request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
-		
-		// Add RAG parameters if enabled
+
+		// Always include rag_enabled to let the server know the explicit intent
+		request.RAGEnabled = &ctx.RAGEnabled
+		// Include additional RAG params only when enabled
 		if ctx.RAGEnabled {
-			request.RAGEnabled = &ctx.RAGEnabled
 			if ctx.RAGDatabase != "" {
 				request.RAGDatabase = &ctx.RAGDatabase
 			}
@@ -202,6 +253,8 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 		req.Header.Set("Connection", "keep-alive")
 		if ctx.SessionID != "" {
 			req.Header.Set("X-Session-ID", ctx.SessionID)
+		} else if ctx.SessionMode == SessionModeStateless {
+			req.Header.Set("X-No-Session", "true")
 		}
 		logDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
 		logHeaders("request", req.Header)
@@ -227,11 +280,15 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 		logDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
 		logHeaders("response", resp.Header)
 		if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
-			ctx.SessionID = sessionIDHeader
-			sessionID = sessionIDHeader
-			// Write session context to YAML file
-			if err := writeSessionContext(sessionIDHeader); err != nil {
-				logDebug(fmt.Sprintf("Failed to write session context: %v", err))
+			if ctx.SessionMode == SessionModeStateless {
+				ctx.SessionID = ""
+				sessionID = ""
+			} else {
+				ctx.SessionID = sessionIDHeader
+				sessionID = sessionIDHeader
+				if err := writeSessionContext(ctx, sessionIDHeader); err != nil {
+					logDebug(fmt.Sprintf("Failed to write session context: %v", err))
+				}
 			}
 		}
 
@@ -289,72 +346,85 @@ type SessionContext struct {
 }
 
 // readSessionContext reads the session context from the YAML file if it exists
-func readSessionContext() (*SessionContext, error) {
-	// Get effective working directory from config
-	cwd := getEffectiveCWD()
-	if cwd == "" {
-		return nil, fmt.Errorf("failed to determine effective working directory")
+func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
+	var contextFile string
+	if ctx == nil {
+		cwd := getEffectiveCWD()
+		if cwd == "" {
+			return nil, fmt.Errorf("failed to determine effective working directory")
+		}
+		contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
+	} else {
+		path, err := ctx.sessionFilePath()
+		if err != nil {
+			return nil, err
+		}
+		if path == "" {
+			return nil, nil
+		}
+		contextFile = path
 	}
 
-	// Check if context file exists
-	contextFile := filepath.Join(cwd, ".llamafarm", "context.yaml")
 	if _, err := os.Stat(contextFile); os.IsNotExist(err) {
-		// File doesn't exist, return nil (no existing session)
 		return nil, nil
 	}
 
-	// Read the context file
 	data, err := os.ReadFile(contextFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read context file: %w", err)
 	}
 
-	// Parse the YAML
 	var context SessionContext
 	if err := yaml.Unmarshal(data, &context); err != nil {
 		return nil, fmt.Errorf("failed to parse context YAML: %w", err)
 	}
 
-	// Validate the session ID
 	if context.SessionID == "" {
-		return nil, nil // Invalid context, treat as no session
+		return nil, nil
 	}
 
 	return &context, nil
 }
 
 // writeSessionContext writes the current session ID to a YAML file in the .llamafarm directory
-func writeSessionContext(sessionID string) error {
+func writeSessionContext(ctx *ChatSessionContext, sessionID string) error {
 	if sessionID == "" {
 		return nil
 	}
 
-	// Get effective working directory from config
-	cwd := getEffectiveCWD()
-	if cwd == "" {
-		return fmt.Errorf("failed to determine effective working directory")
+	var contextFile string
+	if ctx == nil {
+		cwd := getEffectiveCWD()
+		if cwd == "" {
+			return fmt.Errorf("failed to determine effective working directory")
+		}
+		contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
+	} else {
+		path, err := ctx.sessionFilePath()
+		if err != nil {
+			return err
+		}
+		if path == "" {
+			return nil
+		}
+		contextFile = path
 	}
 
-	// Create .llamafarm directory if it doesn't exist
-	llamafarmDir := filepath.Join(cwd, ".llamafarm")
-	if err := os.MkdirAll(llamafarmDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .llamafarm directory: %w", err)
+	dir := filepath.Dir(contextFile)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create context directory: %w", err)
 	}
 
-	// Create context data structure
 	contextData := map[string]interface{}{
 		"session_id": sessionID,
 		"timestamp":  time.Now().Format(time.RFC3339),
 	}
 
-	// Convert to YAML
 	yamlData, err := yaml.Marshal(contextData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal context data to YAML: %w", err)
 	}
 
-	// Write to context.yaml file
-	contextFile := filepath.Join(llamafarmDir, "context.yaml")
 	if err := os.WriteFile(contextFile, yamlData, 0644); err != nil {
 		return fmt.Errorf("failed to write context file: %w", err)
 	}
@@ -366,7 +436,7 @@ func writeSessionContext(sessionID string) error {
 func deleteChatSession() error {
 	// If we don't have a session ID, try to read it from context file
 	if sessionID == "" {
-		if existingContext, err := readSessionContext(); err != nil {
+		if existingContext, err := readSessionContext(nil); err != nil {
 			logDebug(fmt.Sprintf("Failed to read session context for deletion: %v", err))
 		} else if existingContext != nil && existingContext.SessionID != "" {
 			sessionID = existingContext.SessionID
@@ -379,7 +449,7 @@ func deleteChatSession() error {
 	if sessionID == "" {
 		return nil
 	}
-	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/session/%s", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
+	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
@@ -393,4 +463,70 @@ func deleteChatSession() error {
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	return nil
+}
+
+// fetchSessionHistory retrieves the chat history for a session from the server.
+// Returns a slice of user messages suitable for CLI history (up/down arrow).
+func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) []string {
+	if sessionID == "" {
+		return nil
+	}
+	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s/history", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var result struct {
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	var history []string
+	for _, msg := range result.Messages {
+		// Only include user messages for CLI history
+		if msg.Role == "user" {
+			// First, try to parse content as a string (it may be JSON-encoded string)
+			var contentStr string
+			if err := json.Unmarshal(msg.Content, &contentStr); err == nil {
+				// Now try to parse the string as JSON object with chat_message field
+				var chatMsg struct {
+					ChatMessage string `json:"chat_message"`
+				}
+				if err := json.Unmarshal([]byte(contentStr), &chatMsg); err == nil && chatMsg.ChatMessage != "" {
+					history = append(history, chatMsg.ChatMessage)
+				} else {
+					// If it's not a chat_message object, use the string as-is
+					history = append(history, contentStr)
+				}
+			} else {
+				// Fallback: try to parse as direct chat_message object
+				var chatMsg struct {
+					ChatMessage string `json:"chat_message"`
+				}
+				if err := json.Unmarshal(msg.Content, &chatMsg); err == nil && chatMsg.ChatMessage != "" {
+					history = append(history, chatMsg.ChatMessage)
+				}
+			}
+		}
+	}
+
+	return history
 }

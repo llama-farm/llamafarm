@@ -7,7 +7,7 @@ namespace: default
 # =============================================================================
 runtime:
   provider: ollama
-  model: llama3.1:8b
+  model: gemma3:1b
   temperature: 0.7
   # instructor_mode: json  
   # api_key: optional, not needed for ollama

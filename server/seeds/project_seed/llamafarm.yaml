@@ -7,6 +7,7 @@ runtime:
   provider: "ollama"
   model: "qwen3:8b"
   instructor_mode: "md_json"
+  prompt_format: structured
 
 prompts:
   - role: "system"

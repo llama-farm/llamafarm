@@ -48,6 +48,12 @@ func TestNewDefaultContextFromGlobals(t *testing.T) {
 	if ctx.HTTPClient == nil {
 		t.Fatalf("expected HTTPClient set")
 	}
+	if ctx.SessionMode != SessionModeProject {
+		t.Fatalf("expected session mode SessionModeProject, got %v", ctx.SessionMode)
+	}
+	if ctx.SessionNamespace != namespace || ctx.SessionProject != projectID {
+		t.Fatalf("expected session namespace/project to mirror globals")
+	}
 }
 
 func TestWriteSessionContext(t *testing.T) {
@@ -65,7 +71,8 @@ func TestWriteSessionContext(t *testing.T) {
 
 	// Test writing session context
 	testSessionID := "test-session-123"
-	err = writeSessionContext(testSessionID)
+	ctx := &ChatSessionContext{SessionMode: SessionModeProject}
+	err = writeSessionContext(ctx, testSessionID)
 	if err != nil {
 		t.Fatalf("failed to write session context: %v", err)
 	}
@@ -124,7 +131,8 @@ func TestReadSessionContext(t *testing.T) {
 	os.Chdir(tempDir)
 
 	// Test reading non-existent context file
-	context, err := readSessionContext()
+	ctx := &ChatSessionContext{SessionMode: SessionModeProject}
+	context, err := readSessionContext(ctx)
 	if err != nil {
 		t.Fatalf("expected no error for non-existent file, got: %v", err)
 	}
@@ -148,7 +156,7 @@ func TestReadSessionContext(t *testing.T) {
 	}
 
 	// Test reading valid context file
-	context, err = readSessionContext()
+	context, err = readSessionContext(ctx)
 	if err != nil {
 		t.Fatalf("expected no error for valid file, got: %v", err)
 	}
@@ -168,7 +176,7 @@ func TestReadSessionContext(t *testing.T) {
 		t.Fatalf("failed to write invalid test context file: %v", err)
 	}
 
-	context, err = readSessionContext()
+	context, err = readSessionContext(ctx)
 	if err == nil {
 		t.Fatalf("expected error for invalid YAML, got nil")
 	}
@@ -182,7 +190,7 @@ func TestReadSessionContext(t *testing.T) {
 		t.Fatalf("failed to write empty session test file: %v", err)
 	}
 
-	context, err = readSessionContext()
+	context, err = readSessionContext(ctx)
 	if err != nil {
 		t.Fatalf("expected no error for empty session ID, got: %v", err)
 	}

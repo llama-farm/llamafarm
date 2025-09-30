@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"hash/fnv"
@@ -9,7 +8,6 @@ import (
 	"llamafarm-cli/cmd/config"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -40,16 +38,37 @@ var designerForced bool
 var lastTranscriptKey string
 
 var chatCtx = &ChatSessionContext{
-	ServerURL:   serverURL,
-	Namespace:   "llamafarm",
-	ProjectID:   "project-seed",
-	Temperature: temperature,
-	MaxTokens:   maxTokens,
-	HTTPClient:  getHTTPClient(),
+	ServerURL:        serverURL,
+	Namespace:        "llamafarm",
+	ProjectID:        "project_seed",
+	SessionMode:      SessionModeDev,
+	SessionNamespace: namespace,
+	SessionProject:   projectID,
+	Temperature:      temperature,
+	MaxTokens:        maxTokens,
+	HTTPClient:       getHTTPClient(),
 }
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
 func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
+	// Update session context with project info first
+	if projectInfo != nil {
+		chatCtx.SessionNamespace = projectInfo.Namespace
+		chatCtx.SessionProject = projectInfo.Project
+	}
+	chatCtx.ServerURL = serverURL
+	chatCtx.HTTPClient = getHTTPClient()
+
+	// Load existing session context to restore session ID if available
+	// This needs to happen AFTER we set SessionNamespace/SessionProject
+	// so we read from the correct location
+	if chatCtx.SessionMode == SessionModeDev {
+		if existingContext, err := readSessionContext(chatCtx); err == nil && existingContext != nil {
+			chatCtx.SessionID = existingContext.SessionID
+			logDebug(fmt.Sprintf("Restored session ID: %s", chatCtx.SessionID))
+		}
+	}
+
 	m := newChatModel(projectInfo, serverHealth)
 	p := tea.NewProgram(m)
 	m.program = p
@@ -75,7 +94,6 @@ type chatModel struct {
 	thinkFrame     int
 	history        []string
 	histIndex      int
-	historyPath    string
 	width          int
 	height         int
 	status         string
@@ -125,8 +143,14 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	hPath := getHistoryPath()
-	h := loadHistory(hPath)
+
+	// Load history from server session if available, otherwise from local file
+	var h []string
+	if chatCtx.SessionID != "" && chatCtx.SessionMode == SessionModeDev {
+		// Fetch history from the actual project being chatted with (Namespace/ProjectID)
+		// not the session context storage location (SessionNamespace/SessionProject)
+		h = fetchSessionHistory(chatCtx.ServerURL, chatCtx.Namespace, chatCtx.ProjectID, chatCtx.SessionID)
+	}
 
 	width, _, _ := term.GetSize(uintptr(os.Stdout.Fd()))
 
@@ -142,42 +166,11 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		printing:       false,
 		history:        h,
 		histIndex:      len(h),
-		historyPath:    hPath,
 		designerStatus: "starting…",
 		textarea:       ta,
 		viewport:       vp,
 		width:          width,
 	}
-}
-
-func getHistoryPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	dir := filepath.Join(home, ".llamafarm")
-	_ = os.MkdirAll(dir, 0700)
-	return filepath.Join(dir, "history")
-}
-
-func loadHistory(path string) []string {
-	if path == "" {
-		return nil
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-	var out []string
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		if line != "" {
-			out = append(out, line)
-		}
-	}
-	return out
 }
 
 func (m chatModel) Init() tea.Cmd {
@@ -328,15 +321,6 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.textarea.SetValue("")
 				}
 				break
-			}
-
-			// persist history
-			if m.historyPath != "" {
-				f, err := os.OpenFile(m.historyPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
-				if err == nil {
-					fmt.Fprintln(f, msg)
-					f.Close()
-				}
 			}
 
 			m.history = append(m.history, msg)

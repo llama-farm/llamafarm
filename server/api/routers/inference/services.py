@@ -20,16 +20,19 @@ logger = FastAPIStructLogger()
 agent_sessions: dict[str, Any] = {}
 _agent_sessions_lock = threading.RLock()
 
+
 class ToolExecutor:
     """Handles tool execution (both native and manual)"""
 
     @staticmethod
     def execute_manual(
-        message: str, request_context: dict[str, Any] | None = None) -> ToolResult:
+        message: str, request_context: dict[str, Any] | None = None
+    ) -> ToolResult:
         """Manually execute tool based on enhanced message analysis"""
         try:
             # Ensure tools are initialized before manual execution
             from .tool_service import ensure_tools_initialized
+
             if not ensure_tools_initialized():
                 logger.error("Failed to initialize tool registry for manual execution")
                 return ToolResult(
@@ -37,11 +40,12 @@ class ToolExecutor:
                     action="unknown",
                     namespace="unknown",
                     message="Tool system not available",
-                    integration_type=IntegrationType.MANUAL_FAILED
+                    integration_type=IntegrationType.MANUAL_FAILED,
                 )
 
             # Route using the LLM-first executor (classifier with heuristic fallback)
             from .tool_service import AtomicToolExecutor
+
             result = AtomicToolExecutor.execute_with_llm(message, request_context or {})
             return result
 
@@ -52,8 +56,9 @@ class ToolExecutor:
                 action="unknown",
                 namespace="unknown",
                 message=f"Tool execution failed: {str(e)}",
-                integration_type=IntegrationType.MANUAL_FAILED
+                integration_type=IntegrationType.MANUAL_FAILED,
             )
+
 
 class ResponseFormatter:
     """Handles response formatting"""
@@ -73,14 +78,13 @@ class ResponseFormatter:
                 return f"I found no projects in the '{namespace}' namespace."
 
             response = (
-                f"I found {result.total} project(s) in the '{namespace}' "
-                "namespace:\n\n"
-                )
+                f"I found {result.total} project(s) in the '{namespace}' namespace:\n\n"
+            )
             if result.projects:
                 for project in result.projects:
                     response += f"• **{project['project_id']}**\n"
                     response += f"  Path: `{project['path']}`\n"
-                    if project.get('description'):
+                    if project.get("description"):
                         response += f"  Description: {project['description']}\n"
                     response += "\n"
 
@@ -91,7 +95,7 @@ class ResponseFormatter:
                 return (
                     f"✅ Successfully created project '{result.project_id}' "
                     f"in namespace '{namespace}'"
-                    )
+                )
             else:
                 return f"❌ Failed to create project: {result.message}"
 
@@ -100,41 +104,52 @@ class ResponseFormatter:
     @staticmethod
     def create_tool_info(tool_result: ToolResult) -> list[dict]:
         """Create tool result information for response"""
-        return [{
-            "tool_used": "projects",
-            "integration_type": tool_result.integration_type.value,
-            "action": tool_result.action,
-            "namespace": tool_result.namespace,
-            "message": (
-                f"{tool_result.integration_type.value.replace('_', ' ').title()} "
-                f"{'successful' if tool_result.success else 'failed'}"
-                )
-        }]
+        return [
+            {
+                "tool_used": "projects",
+                "integration_type": tool_result.integration_type.value,
+                "action": tool_result.action,
+                "namespace": tool_result.namespace,
+                "message": (
+                    f"{tool_result.integration_type.value.replace('_', ' ').title()} "
+                    f"{'successful' if tool_result.success else 'failed'}"
+                ),
+            }
+        ]
+
 
 class ChatProcessor:
     """Main chat processing logic"""
 
     @staticmethod
-    async def process_chat(request: ChatRequest, session_id: str):
+    async def process_chat(request: ChatRequest, session_id: str | None):
         """Return an iterator/async-iterator of assistant content chunks.
 
         Uses AtomicAgent streaming if available; otherwise falls back to chunking the full response.
         """
         logger.info("Starting chat streaming", session_id=session_id)
 
-        with _agent_sessions_lock:
-            if session_id not in agent_sessions:
-                agent = AgentFactory.create_agent()
-                agent_sessions[session_id] = agent
-                logger.info("Created new agent session", session_id=session_id)
-            else:
-                agent = agent_sessions[session_id]
+        if session_id is None:
+            # Stateless: create a throwaway agent
+            agent = AgentFactory.create_agent()
+        else:
+            with _agent_sessions_lock:
+                if session_id not in agent_sessions:
+                    agent = AgentFactory.create_agent()
+                    agent_sessions[session_id] = agent
+                    logger.info("Created new agent session", session_id=session_id)
+                else:
+                    agent = agent_sessions[session_id]
 
         logger.info("Incoming chat message", messages=request.messages)
 
         latest_user_message: str | None = None
         for message in reversed(request.messages):
-            if isinstance(message, ChatMessage) and message.role == "user" and message.content:
+            if (
+                isinstance(message, ChatMessage)
+                and message.role == "user"
+                and message.content
+            ):
                 latest_user_message = message.content
                 break
         if latest_user_message is None:
@@ -150,12 +165,18 @@ class ChatProcessor:
             # Stream narrated response directly from OpenAI-compatible API for fine-grained deltas
             async for partial_response in agent.run_async_stream(input_schema):
                 logger.info("Processing partial response", message=partial_response)
-                if hasattr(partial_response, "chat_message") and partial_response.chat_message:
+                if (
+                    hasattr(partial_response, "chat_message")
+                    and partial_response.chat_message
+                ):
                     yield partial_response.chat_message
             return
         except Exception:
-            logger.error("Agent streaming failed; falling back to single response", exc_info=True)
+            logger.error(
+                "Agent streaming failed; falling back to single response", exc_info=True
+            )
             yield "I encountered an error while processing your request"
+
 
 class AgentSessionManager:
     """Manages agent sessions"""
