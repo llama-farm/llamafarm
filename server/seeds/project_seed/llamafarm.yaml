@@ -7,7 +7,7 @@ runtime:
   provider: "ollama"
   model: "qwen3:8b"
   instructor_mode: "md_json"
-  agent_handler: "structured_rag"
+  prompt_format: unstructured
 
 prompts:
   - role: "system"

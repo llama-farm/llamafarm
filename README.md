@@ -91,17 +91,17 @@ Unified interface for all LLM operations with enterprise-grade features.
 - **Response Caching**: Intelligent caching to reduce API costs
 - **Model Configuration**: Per-model temperature, token limits, and parameters
 
-| Model (Ollama tag) | Size | Structured Output Support | Recommended `agent_handler` | Notes |
+| Model (Ollama tag) | Size | Structured Output Support | Recommended `prompt_format` | Notes |
 |--------------------|------|---------------------------|------------------------------|-------|
-| `tinyllama:latest` | ~1.1B | No (echoes/strict JSON fails) | `simple_rag` / `simple_chat` | Great for quick tests; inject RAG context directly in the prompt. |
-| `qwen3:1.7b`       | 1.7B | Partial (often echoes)       | `simple_rag`                 | Handles plain chat well; avoid Instructor/tool mode. |
-| `qwen3:8b`         | 8B   | Yes                          | `structured_rag`             | Preferred for RAG workflows; works with Instructor + context providers. |
-| `llama3.2:3b`      | 3B   | Partial                      | `simple_rag`                 | Add RAG context manually; structured output is hit-or-miss. |
-| `llama3.2:8b`      | 8B   | Yes                          | `structured_rag`             | Solid structured-output model for higher quality responses. |
-| `mistral:7b`       | 7B   | Partial                      | `simple_rag`                 | Works well with context injected into the prompt; tools may fail occasionally. |
-| `gpt-oss:20b`      | 20B  | Yes                          | `structured_rag`             | Larger footprint; supports Instructor modes similar to OpenAI GPT. |
+| `tinyllama:latest` | ~1.1B | No (echoes/strict JSON fails) | `unstructured`               | Great for quick tests; inject RAG context directly in the prompt. |
+| `qwen3:1.7b`       | 1.7B | Partial (often echoes)       | `unstructured`               | Handles plain chat well; avoid Instructor/tool mode. |
+| `qwen3:8b`         | 8B   | Yes                          | `structured`                 | Preferred for RAG workflows; works with Instructor + context providers. |
+| `llama3.2:3b`      | 3B   | Partial                      | `unstructured`               | Add RAG context manually; structured output is hit-or-miss. |
+| `llama3.2:8b`      | 8B   | Yes                          | `structured`                 | Solid structured-output model for higher quality responses. |
+| `mistral:7b`       | 7B   | Partial                      | `unstructured`               | Works well with context injected into the prompt; tools may fail occasionally. |
+| `gpt-oss:20b`      | 20B  | Yes                          | `structured`                 | Larger footprint; supports Instructor modes similar to OpenAI GPT. |
 
-> **Tip:** Pick `structured_rag` when the model advertises tool/JSON support. If a model streams back your prompt or fails validation, switch to `simple_rag` so the RAG context is still delivered without strict formatting requirements.
+> **Tip:** Pick `prompt_format: structured` when the model advertises tool/JSON support. If a model streams back your prompt or fails validation, switch to `prompt_format: unstructured` so the RAG context is still delivered without strict formatting requirements.
 
 #### **📝 Prompts**
 Enterprise prompt management system with version control and A/B testing.

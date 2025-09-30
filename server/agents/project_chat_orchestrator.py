@@ -17,7 +17,7 @@ from core.settings import settings
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 from config.datamodel import (  # noqa: E402
-    AgentHandler,
+    PromptFormat,
     LlamaFarmConfig,
     Prompt,
     Provider,
@@ -286,7 +286,7 @@ def _get_client(
             api_key=project_config.runtime.api_key,
             base_url=project_config.runtime.base_url,
         )
-        if project_config.runtime.agent_handler == AgentHandler.structured_rag:
+        if project_config.runtime.prompt_format == PromptFormat.structured:
             return instructor.from_openai(openaiClient, mode=mode)
         else:
             return openaiClient
@@ -296,7 +296,7 @@ def _get_client(
             api_key=project_config.runtime.api_key or settings.ollama_api_key,
             base_url=project_config.runtime.base_url or f"{settings.ollama_host}/v1",
         )
-        if project_config.runtime.agent_handler == AgentHandler.structured_rag:
+        if project_config.runtime.prompt_format == PromptFormat.structured:
             return instructor.from_openai(openaiClient, mode=mode)
         else:
             return openaiClient
@@ -340,6 +340,6 @@ class ProjectChatOrchestratorAgentFactory:
         project_config: LlamaFarmConfig, project_dir: str
     ) -> ProjectChatOrchestratorAgent:
         runtime = project_config.runtime
-        handler = runtime.agent_handler or AgentHandler.simple_chat
-        logger.info("Creating chat agent", handler=handler.value, model=runtime.model)
+        pf = runtime.prompt_format or PromptFormat.unstructured
+        logger.info("Creating chat agent", prompt_format=pf.value, model=runtime.model)
         return ProjectChatOrchestratorAgent(project_config, project_dir=project_dir)

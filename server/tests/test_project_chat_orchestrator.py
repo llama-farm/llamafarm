@@ -2,11 +2,10 @@ import tempfile
 
 import pytest
 from config.datamodel import (
-    AgentHandler,
+    PromptFormat,
     LlamaFarmConfig,
     Prompt,
     Provider,
-    Rag,
     Runtime,
     Version,
 )
@@ -40,7 +39,7 @@ def dummy_client():
 
 
 def make_config(
-    handler: AgentHandler, model: str = "tinyllama:latest"
+    prompt_format: PromptFormat, model: str = "tinyllama:latest"
 ) -> LlamaFarmConfig:
     return LlamaFarmConfig(
         version=Version.v1,
@@ -50,7 +49,7 @@ def make_config(
             provider=Provider.ollama,
             model=model,
             base_url="http://localhost:11434/v1",
-            agent_handler=handler,
+            prompt_format=prompt_format,
             api_key="ollama",
             instructor_mode="tools",
             model_api_parameters={},
@@ -61,8 +60,8 @@ def make_config(
     )
 
 
-def test_factory_returns_simple_chat_agent(monkeypatch, dummy_client):
-    config = make_config(AgentHandler.simple_chat)
+def test_factory_returns_unstructured_agent(monkeypatch, dummy_client):
+    config = make_config(PromptFormat.unstructured)
 
     with tempfile.TemporaryDirectory() as project_dir:
         agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
@@ -70,8 +69,8 @@ def test_factory_returns_simple_chat_agent(monkeypatch, dummy_client):
     assert hasattr(agent, "client")
 
 
-def test_factory_returns_structured_rag_agent(monkeypatch, dummy_client):
-    config = make_config(AgentHandler.structured_rag, model="qwen3:8b")
+def test_factory_returns_structured_agent(monkeypatch, dummy_client):
+    config = make_config(PromptFormat.structured, model="qwen3:8b")
 
     class DummyAgent(ProjectChatOrchestratorAgent):
         def __init__(self, *_args, **_kwargs):
@@ -87,8 +86,8 @@ def test_factory_returns_structured_rag_agent(monkeypatch, dummy_client):
     assert isinstance(agent, DummyAgent)
 
 
-def test_rag_agent_falls_back_for_unsupported_model(monkeypatch, dummy_client):
-    config = make_config(AgentHandler.structured_rag, model="tinyllama:latest")
+def test_structured_agent_falls_back_for_unsupported_model(monkeypatch, dummy_client):
+    config = make_config(PromptFormat.structured, model="tinyllama:latest")
 
     with tempfile.TemporaryDirectory() as project_dir:
         agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
@@ -101,9 +100,9 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
 
     captured = {}
 
-    config = make_config(AgentHandler.simple_rag, model="tinyllama:latest")
+    config = make_config(PromptFormat.unstructured, model="tinyllama:latest")
 
-    # Intercept LFAgent.run_async to capture the generated messages without network calls
+    # Intercept LFAgent.run_async to capture messages (no network calls)
     from agents.agent import LFAgent
 
     async def fake_run_async(self, user_input=None):
