@@ -136,7 +136,6 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(30, 5)
-	vp.SetContent(renderChatContent(chatModel{messages: messages}))
 
 	ta.KeyMap.InsertNewline.SetEnabled(false)
 
@@ -160,6 +159,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	width, _, _ := term.GetSize(uintptr(os.Stdout.Fd()))
 
 	messages = append(messages, ChatMessage{Role: "client", Content: renderServerStatusProblems(serverHealth)})
+
+	// Set viewport content AFTER all messages are added
+	vp.SetContent(renderChatContent(chatModel{messages: messages}))
 	// transcript = append(transcript, problems)
 
 	return chatModel{

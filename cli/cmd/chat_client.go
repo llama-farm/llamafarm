@@ -177,18 +177,22 @@ func sendChatRequest(messages []ChatMessage, ctx *ChatSessionContext) (string, e
 // if no greeting is available or if an error occurs.
 func fetchInitialGreeting(ctx *ChatSessionContext) string {
 	if ctx == nil {
+		logDebug("fetchInitialGreeting: ctx is nil")
 		return ""
 	}
 
 	// Only fetch greeting for project_seed (dev mode)
 	if ctx.ProjectID != "project_seed" {
+		logDebug(fmt.Sprintf("fetchInitialGreeting: skipping, project is %s not project_seed", ctx.ProjectID))
 		return ""
 	}
 
 	apiURL, err := buildChatAPIURL(ctx)
 	if err != nil {
+		logDebug(fmt.Sprintf("fetchInitialGreeting: buildChatAPIURL failed: %v", err))
 		return ""
 	}
+	logDebug(fmt.Sprintf("fetchInitialGreeting: requesting greeting from %s", apiURL))
 
 	// Create request with empty messages array
 	req := ChatRequest{
@@ -198,39 +202,47 @@ func fetchInitialGreeting(ctx *ChatSessionContext) string {
 
 	body, err := json.Marshal(req)
 	if err != nil {
+		logDebug(fmt.Sprintf("fetchInitialGreeting: marshal failed: %v", err))
 		return ""
 	}
 
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(body))
 	if err != nil {
+		logDebug(fmt.Sprintf("fetchInitialGreeting: NewRequest failed: %v", err))
 		return ""
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	if ctx.SessionID != "" {
 		httpReq.Header.Set("X-Session-ID", ctx.SessionID)
+		logDebug(fmt.Sprintf("fetchInitialGreeting: using session ID %s", ctx.SessionID))
 	}
 
 	resp, err := ctx.HTTPClient.Do(httpReq)
 	if err != nil {
+		logDebug(fmt.Sprintf("fetchInitialGreeting: HTTP request failed: %v", err))
 		return ""
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logDebug(fmt.Sprintf("fetchInitialGreeting: bad status %d", resp.StatusCode))
 		return ""
 	}
 
 	var chatResp ChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		logDebug(fmt.Sprintf("fetchInitialGreeting: decode failed: %v", err))
 		return ""
 	}
 
 	if len(chatResp.Choices) == 0 {
+		logDebug("fetchInitialGreeting: no choices in response")
 		return ""
 	}
 
 	content := chatResp.Choices[0].Message.Content
+	logDebug(fmt.Sprintf("fetchInitialGreeting: got content: %s", content[:min(len(content), 50)]))
 
 	// Unwrap JSON if needed
 	if strings.HasPrefix(strings.TrimSpace(content), "{\"chat_message\"") {
@@ -239,10 +251,19 @@ func fetchInitialGreeting(ctx *ChatSessionContext) string {
 		}
 		if err := json.Unmarshal([]byte(content), &wrapper); err == nil {
 			content = wrapper.ChatMessage
+			logDebug(fmt.Sprintf("fetchInitialGreeting: unwrapped to: %s", content[:min(len(content), 50)]))
 		}
 	}
 
+	logDebug(fmt.Sprintf("fetchInitialGreeting: returning greeting (%d chars)", len(content)))
 	return content
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func boolPtr(b bool) *bool {
