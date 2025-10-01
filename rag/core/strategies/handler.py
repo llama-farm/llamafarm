@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+from _pytest._code import source
+
 from rag.core.base import Parser
 
 # Use the common config module instead of direct YAML loading
@@ -43,7 +45,7 @@ class DbProcessingConfig:
         self.processing_strategy = processing_strategy
         self.database = database
         self.strategy_name = f"{processing_strategy.name}_{database.name}"
-        self.source_path = None
+        self.source_path = source_path
 
 
 class SchemaHandler:
