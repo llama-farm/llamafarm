@@ -79,23 +79,20 @@ class SchemaHandler:
 
     def get_database_retrieval_strategies(self, database_name: str) -> list[str]:
         """Get available retrieval strategies for a database."""
-        for db in getattr(self.rag_config, "databases", []) or []:
-            if db.name == database_name:
-                # Convert to dict if Pydantic model
-                if hasattr(db, "model_dump"):
-                    db_dict = db.model_dump()
-                    return [rs["name"] for rs in db_dict.get("retrieval_strategies", [])]
-                else:
-                    return [rs["name"] for rs in db.get("retrieval_strategies", [])]
-        return []
+        return next(
+            (
+                [rs["name"] for rs in db.get("retrieval_strategies", [])]
+                for db in getattr(self.rag_config, "databases", []) or []
+                if db.name == database_name
+            ),
+            [],
+        )
 
     def create_database_config(self, database_name: str) -> dict[str, Any]:
         """Create database configuration for factories."""
         for db in getattr(self.rag_config, "databases", []) or []:
             if db.name == database_name:
-                # Convert Pydantic model to dict
-                if hasattr(db, "model_dump"):
-                    return db.model_dump()
+                # Return the database config as-is from the YAML
                 return db
         raise ValueError(f"Database '{database_name}' not found")
 
@@ -105,13 +102,6 @@ class SchemaHandler:
             getattr(self.rag_config, "data_processing_strategies", []) or []
         ):
             if strategy.name == strategy_name:
-                # Convert Pydantic model to dict
-                if hasattr(strategy, "model_dump"):
-                    strategy_dict = strategy.model_dump()
-                    return {
-                        "parsers": strategy_dict.get("parsers", []),
-                        "extractors": strategy_dict.get("extractors", []),
-                    }
                 return {
                     "parsers": strategy.get("parsers", []),
                     "extractors": strategy.get("extractors", []),
@@ -152,7 +142,7 @@ class SchemaHandler:
         if not self.rag_config:
             return None
 
-        db = next(
+        return next(
             (
                 db
                 for db in getattr(self.rag_config, "databases", []) or []
@@ -161,11 +151,6 @@ class SchemaHandler:
             None,
         )
 
-        # Convert Pydantic model to dict
-        if db and hasattr(db, "model_dump"):
-            return db.model_dump()
-        return db
-
     def get_processing_strategy_config(
         self, proc_name: str
     ) -> Optional[dict[str, Any]]:
@@ -173,7 +158,7 @@ class SchemaHandler:
         if not self.rag_config:
             return None
 
-        strategy = next(
+        return next(
             (
                 strategy
                 for strategy in (
@@ -183,11 +168,6 @@ class SchemaHandler:
             ),
             None,
         )
-
-        # Convert Pydantic model to dict
-        if strategy and hasattr(strategy, "model_dump"):
-            return strategy.model_dump()
-        return strategy
 
     def get_combined_config(
         self, strategy_name: str, source_path: Optional[Path] = None
@@ -233,37 +213,18 @@ class SchemaHandler:
 
         # Find the default strategy
         for strategy in strategies:
-            # Handle both Pydantic models and dicts
-            strategy_name = getattr(strategy, "name", None) if hasattr(strategy, "name") else strategy.get("name")
-            is_default = getattr(strategy, "default", False) if hasattr(strategy, "default") else strategy.get("default", False)
-
-            if strategy_name == default_name or is_default:
-                if hasattr(strategy, "get"):
-                    # Dict
-                    return {
-                        "type": strategy.get("type", "OllamaEmbedder"),
-                        "config": strategy.get("config", {}),
-                    }
-                else:
-                    # Pydantic model
-                    return {
-                        "type": getattr(strategy, "type", "OllamaEmbedder"),
-                        "config": getattr(strategy, "config", {}),
-                    }
+            if strategy.name == default_name or strategy.get("default"):
+                return {
+                    "type": strategy.get("type", "OllamaEmbedder"),
+                    "config": strategy.get("config", {}),
+                }
 
         # Fallback to first strategy
         if strategies:
-            first = strategies[0]
-            if hasattr(first, "get"):
-                return {
-                    "type": first.get("type", "OllamaEmbedder"),
-                    "config": first.get("config", {}),
-                }
-            else:
-                return {
-                    "type": getattr(first, "type", "OllamaEmbedder"),
-                    "config": getattr(first, "config", {}),
-                }
+            return {
+                "type": strategies[0].get("type", "OllamaEmbedder"),
+                "config": strategies[0].get("config", {}),
+            }
 
         return {"type": "OllamaEmbedder", "config": {}}
 
@@ -284,37 +245,18 @@ class SchemaHandler:
 
         # Find the default strategy
         for strategy in strategies:
-            # Handle both Pydantic models and dicts
-            strategy_name = getattr(strategy, "name", None) if hasattr(strategy, "name") else strategy.get("name")
-            is_default = getattr(strategy, "default", False) if hasattr(strategy, "default") else strategy.get("default", False)
-
-            if strategy_name == default_name or is_default:
-                if hasattr(strategy, "get"):
-                    # Dict
-                    return {
-                        "type": strategy.get("type", "BasicSimilarityStrategy"),
-                        "config": strategy.get("config", {}),
-                    }
-                else:
-                    # Pydantic model
-                    return {
-                        "type": getattr(strategy, "type", "BasicSimilarityStrategy"),
-                        "config": getattr(strategy, "config", {}),
-                    }
+            if strategy.name == default_name or strategy.get("default"):
+                return {
+                    "type": strategy.get("type", "BasicSimilarityStrategy"),
+                    "config": strategy.get("config", {}),
+                }
 
         # Fallback to first strategy
         if strategies:
-            first = strategies[0]
-            if hasattr(first, "get"):
-                return {
-                    "type": first.get("type", "BasicSimilarityStrategy"),
-                    "config": first.get("config", {}),
-                }
-            else:
-                return {
-                    "type": getattr(first, "type", "BasicSimilarityStrategy"),
-                    "config": getattr(first, "config", {}),
-                }
+            return {
+                "type": strategies[0].get("type", "BasicSimilarityStrategy"),
+                "config": strategies[0].get("config", {}),
+            }
 
         return {"type": "BasicSimilarityStrategy", "config": {}}
 
@@ -343,17 +285,9 @@ class SchemaHandler:
         """Get extractors configuration from processing strategy."""
         extractors = []
         for ext in proc_config.get("extractors", []):
-            # Handle both Pydantic models and dicts
-            if hasattr(ext, "get"):
-                # Dict
-                extractors.append(
-                    {"type": ext.get("type"), "config": ext.get("config", {})}
-                )
-            else:
-                # Pydantic model
-                extractors.append(
-                    {"type": getattr(ext, "type"), "config": getattr(ext, "config", {})}
-                )
+            extractors.append(
+                {"type": ext.get("type"), "config": ext.get("config", {})}
+            )
         return extractors
 
     def create_component_config(
@@ -403,7 +337,7 @@ class SchemaHandler:
             },
             "metadata": {
                 "strategy_name": strategy_name,
-                "database_name": db_config.get("name"),
+                "database_name": db_config.name,
                 "processing_strategy_name": proc_config.get("name"),
             },
         }
