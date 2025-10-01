@@ -134,7 +134,12 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverURL, true)
+		// Use full health check if RAG is enabled, liveness check if RAG is disabled
+		if runNoRAG {
+			ensureServerLive(serverURL)
+		} else {
+			ensureServerAvailable(serverURL, true)
+		}
 
 		// Construct context and call the project-scoped chat completions via shared helpers
 		ctx := &ChatSessionContext{

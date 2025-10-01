@@ -88,7 +88,7 @@ var datasetsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerLive(serverCfg.URL)
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=false", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
@@ -167,7 +167,7 @@ Examples:
 		}
 
 		// 2) Validate strategies and databases exist in project config
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerLive(serverCfg.URL)
 		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -256,7 +256,7 @@ var datasetsDeleteCommand = &cobra.Command{
 		}
 		datasetName := args[0]
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerLive(serverCfg.URL)
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
@@ -334,7 +334,7 @@ Examples:
 		fmt.Printf("Found %d files to upload\n", len(files))
 
 		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerLive(serverCfg.URL)
 
 		// Upload in batches with progress display
 		const batchSize = 10

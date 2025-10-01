@@ -42,10 +42,57 @@ func (e *HealthError) Error() string {
 	return fmt.Sprintf("server unhealthy: %s", e.Status)
 }
 
-// ensureServerAvailable verifies the server at serverURL is reachable.
+// ensureServerLive verifies the server at serverURL is alive (basic functionality).
+// This is faster than ensureServerAvailable as it only checks liveness, not full health.
+// Use this for commands that don't require RAG or other dependencies.
+func ensureServerLive(serverURL string) {
+	if serverURL == "" {
+		serverURL = "http://localhost:8000"
+	}
+
+	if err := checkServerLiveness(serverURL); err == nil {
+		// Server is alive, we're good
+		return
+	}
+
+	// Only attempt auto-start when pointing to localhost
+	if !isLocalhost(serverURL) {
+		OutputError("Could not contact server %s", serverURL)
+		os.Exit(1)
+	}
+
+	if err := startLocalServerViaDocker(serverURL); err != nil {
+		OutputError("Could not start local server: %v", err)
+		os.Exit(1)
+	}
+
+	// Poll for liveness (faster than full health)
+	timeout := serverStartTimeout
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+
+	OutputProgress("Waiting for server to become live...\n")
+	for {
+		if err := checkServerLiveness(serverURL); err == nil {
+			OutputSuccess("Server is live\n")
+			return
+		} else {
+			if time.Now().After(deadline) {
+				OutputError("Server did not become live at %s within timeout: %v", serverURL, err)
+				os.Exit(1)
+			}
+			duration := 1 * time.Second
+			time.Sleep(duration)
+		}
+	}
+}
+
+// ensureServerAvailable verifies the server at serverURL is reachable and fully healthy.
 // If not reachable and the host is localhost, it attempts to start the
 // server via Docker, then waits for readiness. Returns an error if it
-// ultimately cannot ensure availability.
+// ultimately cannot ensure availability. Use ensureServerLive() for faster startup when RAG is not required.
 func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
 	if serverURL == "" {
 		serverURL = "http://localhost:8000"
@@ -132,7 +179,32 @@ func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
 	return nil
 }
 
-// checkServerHealth requires /health to be healthy.
+// checkServerLiveness checks if the server is alive (basic functionality).
+// This is faster than checkServerHealth as it doesn't wait for all dependencies.
+func checkServerLiveness(serverURL string) error {
+	base := strings.TrimRight(serverURL, "/")
+	livenessURL := base + "/health/liveness"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, livenessURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return fmt.Errorf("liveness check failed with status %d", resp.StatusCode)
+}
+
+// checkServerHealth requires /health to be healthy (includes all dependencies like RAG).
 func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	base := strings.TrimRight(serverURL, "/")
 	healthURL := base + "/health"
