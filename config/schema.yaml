@@ -80,7 +80,7 @@ properties:
     properties:
       provider:
         type: string
-        enum: [openai, ollama]
+        enum: [openai, ollama, lemonade]
         default: openai
       model:
         type: string
@@ -101,3 +101,19 @@ properties:
       model_api_parameters:
         description: Additional parameters passed to the API provider
         additionalProperties: true
+      lemonade:
+        type: ["object", "null"]
+        description: Lemonade-specific configuration
+        properties:
+          backend:
+            type: string
+            enum: [onnx, llamacpp, transformers]
+            default: onnx
+            description: "Inference backend for Lemonade. onnx (default, works on all systems), llamacpp (CPU/GGUF optimized), or transformers (PyTorch/HuggingFace)"
+          port:
+            type: integer
+            default: 11534
+            description: Port for Lemonade server
+          model_path:
+            type: ["string", "null"]
+            description: Custom model storage location for Lemonade

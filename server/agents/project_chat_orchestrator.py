@@ -376,6 +376,20 @@ def _get_client(
         else:
             return openaiClient
 
+    if project_config.runtime.provider == Provider.lemonade:
+        # Get Lemonade configuration with defaults
+        lemonade_config = project_config.runtime.lemonade or {}
+        lemonade_port = lemonade_config.get("port", 11534)
+
+        openaiClient = AsyncOpenAI(
+            api_key=project_config.runtime.api_key or "not-needed",  # Lemonade doesn't require API key
+            base_url=project_config.runtime.base_url or f"http://127.0.0.1:{lemonade_port}/v1",
+        )
+        if project_config.runtime.prompt_format == PromptFormat.structured:
+            return instructor.from_openai(openaiClient, mode=mode)
+        else:
+            return openaiClient
+
     else:
         raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")
 
@@ -401,9 +415,13 @@ def _determine_instructor_mode(project_config: LlamaFarmConfig) -> instructor.Mo
         # Default to MD_JSON for Ollama as it's most compatible
         mode = instructor.Mode.MD_JSON
         logger.debug("Using MD_JSON mode for Ollama provider (default)")
+    elif project_config.runtime.provider == Provider.lemonade:
+        # Default to MD_JSON for Lemonade as it's most compatible with local models
+        mode = instructor.Mode.MD_JSON
+        logger.debug("Using MD_JSON mode for Lemonade provider (default)")
     else:
         mode = instructor.Mode.TOOLS
-        logger.debug("Using TOOLS mode (default for non-Ollama)")
+        logger.debug("Using TOOLS mode (default for non-Ollama/Lemonade)")
 
     logger.debug(f"Instructor mode: {mode}")
     return mode
