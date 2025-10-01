@@ -153,10 +153,8 @@ class IngestHandler:
         if not vector_store_type:
             raise ValueError("No vector store type specified in configuration")
 
-        config_dict = vector_store_config.get("config", {}).copy()
-
         logger.info(
-            f"Initializing vector store: {vector_store_type} with config: {config_dict}"
+            f"Initializing vector store: {vector_store_type} with config: {vector_store_config}"
         )
 
         # Dynamically import the store based on type from config
@@ -173,7 +171,7 @@ class IngestHandler:
             # Use the already resolved config_dict from above
 
             # Pass config as a dictionary, not as kwargs
-            return store_class(config=config_dict, project_dir=project_dir)
+            return store_class(config=vector_store_config, project_dir=project_dir)
         except (ImportError, AttributeError) as e:
             logger.error(
                 f"Failed to load vector store {vector_store_type} from {module_path}: {e}"

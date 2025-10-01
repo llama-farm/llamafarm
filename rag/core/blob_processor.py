@@ -29,6 +29,7 @@ except ImportError as e:
     ) from e
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class ExtractorOutput(TypedDict):
@@ -400,7 +401,7 @@ class BlobProcessor:
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
         logger.debug(
-            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type for p in matching_parsers]}"
+            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type.value if p[0].type else None for p in matching_parsers]}"
         )
 
         if not matching_parsers:

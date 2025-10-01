@@ -310,20 +310,20 @@ class SchemaHandler:
         return {
             "version": "v1",  # Indicate this is from new schema
             "rag": {
-                "parsers": {parser.type: parser} if parser else {},
-                "embedders": {embedder.type: embedder} if embedder else {},
-                "vector_stores": {vector_store.type: vector_store}
+                "parsers": {parser.type.value: parser} if parser else {},
+                "embedders": {embedder.type.value: embedder} if embedder else {},
+                "vector_stores": {vector_store.type.value: vector_store}
                 if vector_store
                 else {},
-                "retrieval_strategies": {retrieval.type: retrieval}
+                "retrieval_strategies": {retrieval.type.value: retrieval}
                 if retrieval
                 else {},
                 "extractors": extractors if extractors else [],
                 "defaults": {
-                    "parser": parser.type if parser else None,
-                    "embedder": embedder.type if embedder else None,
-                    "vector_store": vector_store.type if vector_store else None,
-                    "retrieval_strategy": retrieval.type if retrieval else None,
+                    "parser": parser.type.value if parser else None,
+                    "embedder": embedder.type.value if embedder else None,
+                    "vector_store": vector_store.type.value if vector_store else None,
+                    "retrieval_strategy": retrieval.type.value if retrieval else None,
                 },
             },
             "metadata": {
