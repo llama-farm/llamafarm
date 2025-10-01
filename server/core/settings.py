@@ -35,5 +35,9 @@ class Settings(BaseSettings, env_file=".env"):
     )
     celery_result_backend: str = ""  # e.g., "redis://localhost:6379/0"
 
+    # Dev mode settings
+    lf_dev_mode_docs_enabled: bool = True
+    lf_dev_mode_greeting_enabled: bool = True
+
 
 settings = Settings()

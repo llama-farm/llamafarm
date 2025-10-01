@@ -162,15 +162,18 @@ class TestGreetingLogic:
         assert "Welcome back" in content
         assert "message" in content.lower()  # Should mention message count
 
+    @patch("agents.project_chat_orchestrator.settings")
     @patch("agents.project_chat_orchestrator._get_client")
     def test_greeting_disabled_via_env(
-        self, mock_get_client, mock_project_config, temp_project_dir, monkeypatch
+        self, mock_get_client, mock_settings, mock_project_config, temp_project_dir
     ):
-        """Test that greetings can be disabled via environment variable."""
+        """Test that greetings can be disabled via settings."""
         # Create a proper AsyncOpenAI mock
         mock_client = MagicMock(spec=AsyncOpenAI)
         mock_get_client.return_value = mock_client
-        monkeypatch.setenv("LF_DEV_MODE_GREETING_ENABLED", "false")
+
+        # Mock settings to disable greetings
+        mock_settings.lf_dev_mode_greeting_enabled = False
 
         agent = ProjectChatOrchestratorAgent(
             project_config=mock_project_config,

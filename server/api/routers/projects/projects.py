@@ -24,6 +24,7 @@ from api.routers.shared.response_utils import (
     set_session_header,
 )
 from core.celery import app
+from core.settings import settings
 from services.project_chat_service import (
     FALLBACK_ECHO_RESPONSE,
     project_chat_service,
@@ -362,10 +363,7 @@ async def chat(
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
 
     # Inject relevant documentation based on user query (dev mode only)
-    docs_enabled = sys.modules.get("os", __import__("os")).environ.get(
-        "LF_DEV_MODE_DOCS_ENABLED", "true"
-    ).lower() == "true"
-    if docs_enabled and project_id == "project_seed" and hasattr(agent, "docs_context_provider"):
+    if settings.lf_dev_mode_docs_enabled and project_id == "project_seed" and hasattr(agent, "docs_context_provider"):
         docs_service = get_docs_service()
         matched_docs = docs_service.match_docs_for_query(latest_user_message)
         agent.docs_context_provider.set_docs(matched_docs)

@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	farmerPrompt     = "🌾 Farmer:"
+	farmerPrompt     = "📁 Project:"
 	serverPrompt     = "📡 Server:"
 	ollamaHostPrompt = "🐏 Ollama:"
 	projectPrompt    = "📁 Project:"
