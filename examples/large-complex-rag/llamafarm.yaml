@@ -1,0 +1,92 @@
+version: v1
+name: raleigh-udo-demo
+namespace: default
+
+runtime:
+  provider: ollama
+  model: llama3.1:8b
+  base_url: http://localhost:11434/v1
+  temperature: 0.2
+  agent_handler: simple_rag
+
+prompts:
+  - role: system
+    content: |
+      You are a municipal planning specialist assisting with Raleigh's Unified Development Ordinance.
+      Use the retrieved ordinance text only and answer in plain language.
+      Cite relevant ordinance section identifiers (e.g., "UDO Sec. X.X.X") and PDF page numbers when available.
+      If the answer cannot be derived from the context, respond with "Unable to locate in UDO".
+
+rag:
+  databases:
+    - name: raleigh_udo_db
+      type: ChromaStore
+      config:
+        collection_name: raleigh_udo
+        distance_function: cosine
+        persist_directory: ./data/raleigh_udo_db
+        port: 8000
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            auto_pull: true
+            base_url: http://localhost:11434
+            batch_size: 12
+            dimension: 768
+            model: nomic-embed-text
+            timeout: 60
+          priority: 0
+      retrieval_strategies:
+        - name: ordinance_focus
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 6
+          default: true
+  data_processing_strategies:
+    - name: udo_pdf_processor
+      description: Parser tuned for municipal ordinance PDFs with heading extraction.
+      parsers:
+        - type: PDFParser_LlamaIndex
+          file_include_patterns: ['*.pdf', '*.PDF']
+          priority: 100
+          config:
+            chunk_size: 1100
+            chunk_overlap: 160
+            chunk_strategy: semantic
+            extract_metadata: true
+            extract_outline: true
+            extract_tables: true
+        - type: PDFParser_PyPDF2
+          file_include_patterns: ['*.pdf', '*.PDF']
+          priority: 50
+          config:
+            chunk_size: 900
+            chunk_overlap: 140
+            chunk_strategy: paragraphs
+            extract_metadata: true
+      extractors:
+        - type: HeadingExtractor
+          priority: 100
+          config:
+            max_level: 4
+            include_hierarchy: true
+            extract_outline: true
+        - type: ContentStatisticsExtractor
+          priority: 90
+          config:
+            include_structure: true
+            include_readability: true
+        - type: EntityExtractor
+          priority: 80
+          config:
+            entity_types: [ORG, DATE, LOCATION, FAC, GPE]
+            use_fallback: true
+            min_entity_length: 2
+
+datasets:
+  - name: raleigh_udo_dataset
+    database: raleigh_udo_db
+    data_processing_strategy: udo_pdf_processor
+    files: []
