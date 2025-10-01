@@ -6,6 +6,9 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
+import requests  # type: ignore
+
+from openai import NotFoundError, APIError
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
@@ -18,6 +21,7 @@ from context_providers.project_chat_context_provider import (
     ProjectChatContextProvider,
 )
 from core.logging import FastAPIStructLogger
+from core.settings import settings
 from services.rag_service import search_with_rag
 
 repo_root = Path(__file__).parent.parent.parent
@@ -35,12 +39,50 @@ FALLBACK_ECHO_RESPONSE = (
 )
 
 
+def _check_model_availability(project_config: LlamaFarmConfig) -> tuple[bool, str]:
+    """Check if the configured model is available.
+
+    Returns:
+        (is_available, error_message)
+    """
+    if project_config.runtime.provider == "openai":
+        return True, ""
+
+    if project_config.runtime.provider == "ollama":
+        try:
+            base = settings.ollama_host.rstrip("/")
+            url = f"{base}/api/tags"
+            resp = requests.get(url, timeout=2.0)
+
+            if resp.status_code != 200:
+                return False, f"Ollama service returned {resp.status_code}"
+
+            data = resp.json() if resp.content else {}
+            tags = {item.get("name") for item in (data.get("models") or [])}
+
+            if project_config.runtime.model not in tags:
+                return False, f"Model '{project_config.runtime.model}' not found in Ollama. Run: ollama pull {project_config.runtime.model}"
+
+            return True, ""
+
+        except Exception as e:
+            return False, f"Failed to check model availability: {e}"
+
+    return True, ""
+
+
+MODEL_NOT_FOUND_RESPONSE = (
+    "The configured model '{model}' is not available. "
+    "Please ensure the model is installed and try again. "
+    "For Ollama models, run: ollama pull {model}"
+)
+
+
 class ProjectChatService:
     def _create_rag_config_from_strategy(self, strategy) -> dict[str, Any]:
         """Convert LlamaFarm strategy config to RAG API compatible config."""
         components = strategy.components
 
-        # Ensure JSON-serializable content: use enum .value and json-mode dumps
         def enum_value(value: Any) -> Any:
             return getattr(value, "value", value)
 
@@ -52,7 +94,6 @@ class ProjectChatService:
 
         retrieval_type_raw = components.retrieval_strategy.type
         retrieval_type = enum_value(retrieval_type_raw)
-        # Some Literal types are already plain strings; keep as-is
         if not isinstance(retrieval_type, str | int | float | bool | type(None)):
             retrieval_type = str(retrieval_type)
         retrieval_config = components.retrieval_strategy.config.model_dump(mode="json")
@@ -92,16 +133,13 @@ class ProjectChatService:
         This implementation searches the database directly, not through datasets.
         """
 
-        # First, make sure rag is enabled
         if not project_config.rag:
             logger.warning("RAG is not enabled in project config. Skipping.")
             return []
 
         logger.info(f"Performing RAG search for message: {message}")
 
-        # Find the database configuration
         if not database:
-            # Use the first database as default
             if project_config.rag.databases:
                 database = str(project_config.rag.databases[0].name)
                 logger.info(f"Using default database: {database}")
@@ -109,7 +147,6 @@ class ProjectChatService:
                 logger.error("No databases found in project config")
                 return []
 
-        # Use shared helper to run RAG search on database
         results = search_with_rag(project_dir, database, message, top_k=top_k)
         if results is None:
             results = []
@@ -152,27 +189,44 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> ChatCompletion:
+        model_available, model_error = _check_model_availability(project_config)
+        if not model_available:
+            error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+            logger.warning(f"Model not available: {model_error}")
+
+            completion = ChatCompletion(
+                id=f"chat-{uuid.uuid4()}",
+                object="chat.completion",
+                created=int(time.time()),
+                model=project_config.runtime.model,
+                choices=[
+                    Choice(
+                        index=0,
+                        message=ChatCompletionMessage(
+                            role="assistant",
+                            content=error_message,
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+            )
+            return completion
+
         self._clear_rag_context_provider(chat_agent)
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        # Use config defaults if not explicitly provided
-        # If rag_enabled is None, check if RAG is configured
         if rag_enabled is None:
             rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
                 logger.info("RAG enabled by default based on project configuration")
 
-        # Use config defaults for other parameters if not provided
         if rag_enabled and project_config.rag:
-            # If no database specified, use the first database
             if database is None and project_config.rag.databases:
                 database = project_config.rag.databases[0].name
                 logger.info(f"Using default database from config: {database}")
 
-            # If no top_k specified, check if there's a default in retrieval strategies
             if rag_top_k is None:
-                # Look for default retrieval strategy's top_k
                 if project_config.rag.databases:
                     for db in project_config.rag.databases:
                         if db.name == database:
@@ -189,9 +243,183 @@ class ProjectChatService:
                                     break
                             break
                 if rag_top_k is None:
-                    rag_top_k = 5  # Fallback default
+                    rag_top_k = 5
 
-        # Use the RAG subsystem to perform RAG based on the project config
+        rag_results = []
+        if rag_enabled:
+            rag_results = self._perform_rag_search(
+                project_dir,
+                project_config,
+                message,
+                top_k=rag_top_k or 5,
+                database=database,
+            )
+
+        for idx, result in enumerate(rag_results):
+            chunk_item = ChunkItem(
+                content=result.content,
+                metadata={
+                    "source": result.metadata.get("source", "unknown"),
+                    "score": getattr(result, "score", 0.0),
+                    "chunk_index": idx,
+                    "retrieval_method": "rag_search",
+                    **result.metadata,
+                },
+            )
+            context_provider.chunks.append(chunk_item)
+
+        try:
+            input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
+            logger.info(f"Input schema: {input_schema}")
+            agent_response = await chat_agent.run_async(input_schema)
+            logger.info(f"Agent response: {agent_response}")
+
+            response_message = agent_response.chat_message
+
+            if _is_echo(message, response_message):
+                logger.warning(
+                    f"Response is echoing input! Input: {message}, Response: {response_message}"
+                )
+
+                if hasattr(chat_agent, "history"):
+                    logger.warning("Clearing agent history due to echo response")
+                    _drop_last_history_entry(chat_agent)
+
+                model_available, model_error = _check_model_availability(project_config)
+                if not model_available:
+                    response_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+                    logger.warning(f"Model not available during echo handling: {model_error}")
+                else:
+                    response_message = FALLBACK_ECHO_RESPONSE
+                    logger.info("Using fallback response instead of echo")
+
+            completion = ChatCompletion(
+                id=f"chat-{uuid.uuid4()}",
+                object="chat.completion",
+                created=int(time.time()),
+                model=project_config.runtime.model,
+                choices=[
+                    Choice(
+                        index=0,
+                        message=ChatCompletionMessage(
+                            role="assistant",
+                            content=response_message,
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+            )
+            return completion
+
+        except NotFoundError as e:
+            logger.error(f"Model not found: {e}")
+            error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+            completion = ChatCompletion(
+                id=f"chat-{uuid.uuid4()}",
+                object="chat.completion",
+                created=int(time.time()),
+                model=project_config.runtime.model,
+                choices=[
+                    Choice(
+                        index=0,
+                        message=ChatCompletionMessage(
+                            role="assistant",
+                            content=error_message,
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+            )
+            return completion
+
+        except APIError as e:
+            logger.error(f"API error: {e}")
+            model_available, model_error = _check_model_availability(project_config)
+            if not model_available:
+                error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+            else:
+                error_message = f"API error: {e}"
+
+            completion = ChatCompletion(
+                id=f"chat-{uuid.uuid4()}",
+                object="chat.completion",
+                created=int(time.time()),
+                model=project_config.runtime.model,
+                choices=[
+                    Choice(
+                        index=0,
+                        message=ChatCompletionMessage(
+                            role="assistant",
+                            content=error_message,
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+            )
+            return completion
+
+        except Exception as e:
+            logger.error(
+                "Model call failed",
+                exc_info=True,
+            )
+            model_available, model_error = _check_model_availability(project_config)
+            if not model_available:
+                error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+            else:
+                error_message = FALLBACK_ECHO_RESPONSE
+
+            completion = ChatCompletion(
+                id=f"chat-{uuid.uuid4()}",
+                object="chat.completion",
+                created=int(time.time()),
+                model=project_config.runtime.model,
+                choices=[
+                    Choice(
+                        index=0,
+                        message=ChatCompletionMessage(
+                            role="assistant",
+                            content=error_message,
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+            )
+            return completion
+
+        self._clear_rag_context_provider(chat_agent)
+        context_provider = ProjectChatContextProvider(title="Project Chat Context")
+        chat_agent.register_context_provider("project_chat_context", context_provider)
+
+        if rag_enabled is None:
+            rag_enabled = bool(project_config.rag and project_config.rag.databases)
+            if rag_enabled:
+                logger.info("RAG enabled by default based on project configuration")
+
+        if rag_enabled and project_config.rag:
+            if database is None and project_config.rag.databases:
+                database = project_config.rag.databases[0].name
+                logger.info(f"Using default database from config: {database}")
+
+            if rag_top_k is None:
+                if project_config.rag.databases:
+                    for db in project_config.rag.databases:
+                        if db.name == database:
+                            for strategy in db.retrieval_strategies or []:
+                                if strategy.default:
+                                    rag_top_k = (
+                                        strategy.config.top_k
+                                        if (
+                                            strategy.config
+                                            and hasattr(strategy.config, "top_k")
+                                        )
+                                        else 5
+                                    )
+                                    break
+                            break
+                if rag_top_k is None:
+                    rag_top_k = 5
+
         rag_results = []
         if rag_enabled:
             rag_results = self._perform_rag_search(
@@ -222,20 +450,22 @@ class ProjectChatService:
 
         response_message = agent_response.chat_message
 
-        # Check if response is echoing input
         if _is_echo(message, response_message):
             logger.warning(
                 f"Response is echoing input! Input: {message}, Response: {response_message}"
             )
 
-            # Clear the corrupted history to prevent learning from bad responses
             if hasattr(chat_agent, "history"):
                 logger.warning("Clearing agent history due to echo response")
                 _drop_last_history_entry(chat_agent)
 
-            # Generate a fallback response
-            response_message = FALLBACK_ECHO_RESPONSE
-            logger.info("Using fallback response instead of echo")
+            model_available, model_error = _check_model_availability(project_config)
+            if not model_available:
+                response_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+                logger.warning(f"Model not available during echo handling: {model_error}")
+            else:
+                response_message = FALLBACK_ECHO_RESPONSE
+                logger.info("Using fallback response instead of echo")
 
         completion = ChatCompletion(
             id=f"chat-{uuid.uuid4()}",
@@ -267,12 +497,17 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Yield assistant content chunks, using agent-native streaming if available."""
+        model_available, model_error = _check_model_availability(project_config)
+        if not model_available:
+            error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+            logger.warning(f"Model not available: {model_error}")
+            yield error_message
+            return
+
         self._clear_rag_context_provider(chat_agent)
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        # Use config defaults if not explicitly provided (same logic as chat method)
         if rag_enabled is None:
             rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
@@ -366,11 +601,33 @@ class ProjectChatService:
                 else:
                     yield previous_response
                 return
-        except Exception:
+        except NotFoundError as e:
+            logger.error(f"Model not found: {e}")
+            model_available, _ = _check_model_availability(project_config)
+            if not model_available:
+                error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+                yield error_message
+            else:
+                yield f"Model not found error: {e}"
+        except APIError as e:
+            logger.error(f"API error: {e}")
+            model_available, model_error = _check_model_availability(project_config)
+            if not model_available:
+                error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+                yield error_message
+            else:
+                yield f"API error: {e}"
+        except Exception as e:
             logger.error(
                 "Model call failed",
                 exc_info=True,
             )
+            model_available, model_error = _check_model_availability(project_config)
+            if not model_available:
+                error_message = MODEL_NOT_FOUND_RESPONSE.format(model=project_config.runtime.model)
+                yield error_message
+            else:
+                yield FALLBACK_ECHO_RESPONSE
 
 
 project_chat_service = ProjectChatService()
@@ -397,5 +654,5 @@ def _drop_last_history_entry(chat_agent: ProjectChatOrchestratorAgent) -> None:
             internal = getattr(history, "history", None)
             if internal and isinstance(internal, list):
                 internal.pop()
-    except Exception:  # pragma: no cover - defensive
+    except Exception:
         logger.warning("Failed to trim chat history", exc_info=True)
