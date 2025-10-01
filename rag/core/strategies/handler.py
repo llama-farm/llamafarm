@@ -40,11 +40,13 @@ class DbProcessingConfig:
         processing_strategy: DataProcessingStrategy,
         database: Database,
         strategy_name: str,
-        source_path: Optional[Path],
+        source_path: Path | None,
     ):
         self.processing_strategy = processing_strategy
         self.database = database
-        self.strategy_name = f"{processing_strategy.name}_{database.name}"
+        self.strategy_name = (
+            strategy_name or f"{processing_strategy.name}_{database.name}"
+        )
         self.source_path = source_path
 
 
