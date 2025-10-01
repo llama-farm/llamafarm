@@ -24,12 +24,28 @@ import (
 )
 
 var (
-	farmerPrompt     = "📁 Project:"
+	farmerPrompt     = "🌾 Farmer:"
 	serverPrompt     = "📡 Server:"
 	ollamaHostPrompt = "🐏 Ollama:"
 	projectPrompt    = "📁 Project:"
 	sessionPrompt    = "🆔"
 )
+
+// getAssistantLabel returns the appropriate label based on the current chat mode
+func (m chatModel) getAssistantLabel() string {
+	if m.currentMode == ModeProject {
+		return projectPrompt
+	}
+	return farmerPrompt
+}
+
+// renderMarkdown is disabled for now - Glamour doesn't work well in TUI environments
+// It detects we're not in a TTY and falls back to ASCII-only mode regardless of config
+func renderMarkdown(content string, width int) string {
+	// TODO: Implement proper markdown rendering for TUI
+	// For now, just return the content as-is
+	return content
+}
 
 const gap = "\n\n"
 
@@ -713,7 +729,11 @@ func computeTranscript(m chatModel) string {
 			var line string
 			switch message.Role {
 			case "assistant":
-				line = baseStyle.Foreground(lipgloss.Color("11")).Render(farmerPrompt) + " " + message.Content + "\n"
+				// Render Markdown content with ANSI styling
+				renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
+				// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
+				labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
+				line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
 			case "user":
 				style := baseStyle.Foreground(lipgloss.Color("#ccc"))
 				line = style.Bold(true).Render("> ") + style.Render(message.Content)
@@ -749,7 +769,7 @@ func renderChatContent(m chatModel) string {
 
 	if m.thinking {
 		dots := m.thinkFrame + 1
-		thinkingText := farmerPrompt + " " + m.spin.View() + "Thinking" + strings.Repeat(".", dots)
+		thinkingText := m.getAssistantLabel() + " " + m.spin.View() + "Thinking" + strings.Repeat(".", dots)
 		wrappedThinking := lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Width(m.width - 2).Render(thinkingText)
 		b.WriteString(wrappedThinking + gap)
 	}
