@@ -313,6 +313,15 @@ func startLocalServerViaDocker(serverURL string) error {
 		spec.Env["OLLAMA_PORT"] = v
 	}
 
+	// Set UV cache directory to writable location
+	spec.Env["UV_CACHE_DIR"] = "/var/lib/llamafarm/.uv-cache"
+
+	// Set UV virtual environment to writable location
+	spec.Env["UV_PROJECT_ENVIRONMENT"] = "/var/lib/llamafarm/.venv"
+
+	// Set Celery broker directory to writable location
+	spec.Env["CELERY_BROKER_URL"] = "filesystem:///var/lib/llamafarm/broker"
+
 	// Use the Docker SDK-based container starter
 	_, err = StartContainerDetachedWithPolicy(spec, &PortResolutionPolicy{
 		PreferredHostPort: port,

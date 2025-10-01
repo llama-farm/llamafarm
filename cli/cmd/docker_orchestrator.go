@@ -190,6 +190,13 @@ func (co *ContainerOrchestrator) startServerContainer(serverURL string) error {
 		spec.Env["OLLAMA_HOST"] = ollamaHost
 	}
 
+	// Set UV cache directory to a writable location to avoid permission issues
+	spec.Env["UV_CACHE_DIR"] = "/var/lib/llamafarm/.uv-cache"
+	// Set UV project environment to a writable location
+	spec.Env["UV_PROJECT_ENVIRONMENT"] = "/var/lib/llamafarm/.venv"
+	// Set Celery broker directory to a writable location
+	spec.Env["CELERY_BROKER_URL"] = "filesystem:///var/lib/llamafarm/broker"
+
 	if v, ok := os.LookupEnv("OLLAMA_PORT"); ok && strings.TrimSpace(v) != "" {
 		spec.Env["OLLAMA_PORT"] = v
 	}
