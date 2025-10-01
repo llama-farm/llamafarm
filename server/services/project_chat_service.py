@@ -221,6 +221,7 @@ class ProjectChatService:
         logger.info(f"Agent response: {agent_response}")
 
         response_message = agent_response.chat_message
+        logger.info(f"Response message (first 200 chars): {response_message[:200]}")
 
         # Check if response is echoing input
         if _is_echo(message, response_message):
@@ -335,7 +336,6 @@ class ProjectChatService:
                 if not hasattr(chunk, "chat_message") or not chunk.chat_message:
                     continue
                 current_response = chunk.chat_message
-
                 normalized_current = _normalize_text(current_response)
                 if normalized_input.startswith(normalized_current):
                     echo_detected = True

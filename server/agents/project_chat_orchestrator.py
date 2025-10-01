@@ -13,6 +13,7 @@ from openai import AsyncOpenAI
 
 from agents.agent import LFAgent, LFAgentConfig
 from core.settings import settings
+from context_providers.docs_context_provider import DocsContextProvider
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -72,6 +73,11 @@ class ProjectChatOrchestratorAgent(LFAgent):
         self._project_id = project_config.name
         self._project_dir = project_dir
         self._persist_enabled = False
+        self._is_new_session = True  # Track if this is a new session for greeting logic
+
+        # Register docs context provider
+        self.docs_context_provider = DocsContextProvider(title="Relevant Documentation")
+        self.register_context_provider("docs", self.docs_context_provider)
 
     def enable_persistence(
         self,
@@ -86,9 +92,78 @@ class ProjectChatOrchestratorAgent(LFAgent):
         try:
             self._persist_enabled = True
             self._session_id = session_id
+
+            # Check if history exists before restoration
+            history_path = self._history_file_path()
+            has_existing_history = history_path and history_path.exists() and history_path.stat().st_size > 2
+
             self._restore_persisted_history()
+
+            # Determine if this is a new session based on whether we restored any history
+            self._is_new_session = not has_existing_history
+
+            # Inject greeting if enabled
+            self._inject_greeting_if_needed()
+
         except Exception:
             logger.warning("Failed to enable persistence", exc_info=True)
+
+    def _inject_greeting_if_needed(self) -> None:
+        """Inject appropriate greeting based on session status."""
+        # Check if greetings are disabled via env var
+        greeting_enabled = os.environ.get("LF_DEV_MODE_GREETING_ENABLED", "true").lower() == "true"
+        if not greeting_enabled:
+            return
+
+        # Only inject greeting for project_seed (dev mode)
+        if self._project_id != "project_seed":
+            return
+
+        try:
+            if self._is_new_session:
+                # New user greeting
+                greeting_content = (
+                    "Welcome to LlamaFarm dev mode! 🦙\n\n"
+                    "I can help you with:\n"
+                    "- Getting started: `lf init`, `lf start`\n"
+                    "- Dataset management: `lf datasets create/upload/process`\n"
+                    "- RAG queries: `lf rag query`\n"
+                    "- Configuration: editing `llamafarm.yaml`\n\n"
+                    "Ask me anything about LlamaFarm, or type `/help` for chat commands!"
+                )
+            else:
+                # Returning user greeting
+                # Count previous turns (user messages only)
+                turn_count = sum(1 for msg in self.history.get_history()
+                               if getattr(msg, "role", None) == "user" or
+                               (isinstance(msg, dict) and msg.get("role") == "user"))
+
+                greeting_content = (
+                    f"Welcome back! 👋\n\n"
+                    f"Last session: {turn_count} message{'s' if turn_count != 1 else ''}.\n"
+                    f"How can I help you with LlamaFarm today?"
+                )
+
+            # Check if we've already injected a greeting (look for welcome keywords in recent messages)
+            recent_messages = list(self.history.get_history())[-3:]  # Check last 3 messages
+            has_greeting = any(
+                ("Welcome" in str(getattr(msg, "content", "")) or
+                 "Welcome" in str(msg.get("content", "") if isinstance(msg, dict) else ""))
+                for msg in recent_messages
+                if getattr(msg, "role", None) == "assistant" or
+                (isinstance(msg, dict) and msg.get("role") == "assistant")
+            )
+
+            if not has_greeting:
+                # Use the output schema directly
+                greeting_schema = ProjectChatOrchestratorAgentOutputSchema(
+                    chat_message=greeting_content
+                )
+                self.history.add_message("assistant", greeting_schema)
+                logger.info("Injected greeting", is_new_session=self._is_new_session)
+
+        except Exception:
+            logger.warning("Failed to inject greeting", exc_info=True)
 
     def reset_history(self):
         super().reset_history()

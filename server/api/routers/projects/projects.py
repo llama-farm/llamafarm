@@ -29,6 +29,7 @@ from services.project_chat_service import (
     project_chat_service,
 )
 from services.project_service import ProjectService
+from services.docs_context_service import get_docs_service
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -319,6 +320,15 @@ async def chat(
             break
     if latest_user_message is None:
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
+
+    # Inject relevant documentation based on user query (dev mode only)
+    docs_enabled = sys.modules.get("os", __import__("os")).environ.get(
+        "LF_DEV_MODE_DOCS_ENABLED", "true"
+    ).lower() == "true"
+    if docs_enabled and project_id == "project_seed" and hasattr(agent, "docs_context_provider"):
+        docs_service = get_docs_service()
+        matched_docs = docs_service.match_docs_for_query(latest_user_message)
+        agent.docs_context_provider.set_docs(matched_docs)
 
     if request.stream:
         return create_streaming_response_from_iterator(
