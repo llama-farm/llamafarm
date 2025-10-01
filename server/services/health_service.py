@@ -244,8 +244,15 @@ def _check_rag_service() -> dict:
 def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
+    
+    # Only consider non-RAG components for overall status
+    # RAG service status is included in response but doesn't affect overall health
     for c in components + seeds:
+        # Skip RAG service when computing overall status
+        if c.get("name") == "rag-service":
+            continue
         worst = max(worst, order.get(c.get("status", "unhealthy"), 2))
+    
     return next((k for k, v in order.items() if v == worst), "unhealthy")
 
 
