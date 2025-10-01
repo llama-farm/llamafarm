@@ -172,6 +172,83 @@ func sendChatRequest(messages []ChatMessage, ctx *ChatSessionContext) (string, e
 	}
 }
 
+// fetchInitialGreeting retrieves the greeting message for a new session
+// by sending an empty messages array to the chat API. Returns empty string
+// if no greeting is available or if an error occurs.
+func fetchInitialGreeting(ctx *ChatSessionContext) string {
+	if ctx == nil {
+		return ""
+	}
+
+	// Only fetch greeting for project_seed (dev mode)
+	if ctx.ProjectID != "project_seed" {
+		return ""
+	}
+
+	apiURL, err := buildChatAPIURL(ctx)
+	if err != nil {
+		return ""
+	}
+
+	// Create request with empty messages array
+	req := ChatRequest{
+		Messages: []ChatMessage{},
+		Stream:   boolPtr(false),
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return ""
+	}
+
+	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(body))
+	if err != nil {
+		return ""
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	if ctx.SessionID != "" {
+		httpReq.Header.Set("X-Session-ID", ctx.SessionID)
+	}
+
+	resp, err := ctx.HTTPClient.Do(httpReq)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return ""
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return ""
+	}
+
+	content := chatResp.Choices[0].Message.Content
+
+	// Unwrap JSON if needed
+	if strings.HasPrefix(strings.TrimSpace(content), "{\"chat_message\"") {
+		var wrapper struct {
+			ChatMessage string `json:"chat_message"`
+		}
+		if err := json.Unmarshal([]byte(content), &wrapper); err == nil {
+			content = wrapper.ChatMessage
+		}
+	}
+
+	return content
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 // startChatStream opens a streaming chat request and returns a channel of
 // content chunks and an error channel. The caller should read until the
 // chunks channel is closed. The returned cancel function aborts the stream.

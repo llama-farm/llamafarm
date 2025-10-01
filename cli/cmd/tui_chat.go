@@ -152,6 +152,11 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		h = fetchSessionHistory(chatCtx.ServerURL, chatCtx.Namespace, chatCtx.ProjectID, chatCtx.SessionID)
 	}
 
+	// Fetch initial greeting for project_seed
+	if greeting := fetchInitialGreeting(chatCtx); greeting != "" {
+		messages = append(messages, ChatMessage{Role: "assistant", Content: greeting})
+	}
+
 	width, _, _ := term.GetSize(uintptr(os.Stdout.Fd()))
 
 	messages = append(messages, ChatMessage{Role: "client", Content: renderServerStatusProblems(serverHealth)})
