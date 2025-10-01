@@ -77,22 +77,8 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         self._use_structured_output = is_instructor_client
 
     def _prepare_messages(self):
-        """Prepare messages and unwrap JSON for unstructured mode."""
+        """Prepare messages for unstructured mode - no JSON wrapping."""
         super()._prepare_messages()
-
-        # For unstructured mode, strip JSON wrappers from message content
-        if not self._use_structured_output and hasattr(self, 'messages'):
-            import json
-            for msg in self.messages:
-                if isinstance(msg, dict) and 'content' in msg:
-                    content = msg['content']
-                    if isinstance(content, str) and content.strip().startswith('{"chat_message"'):
-                        try:
-                            parsed = json.loads(content)
-                            if isinstance(parsed, dict) and 'chat_message' in parsed:
-                                msg['content'] = parsed['chat_message']
-                        except (json.JSONDecodeError, ValueError):
-                            pass
 
     async def run_async_stream(
         self, user_input: InputSchema | None = None

@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"io"
 	"llamafarm-cli/cmd/config"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -19,6 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
+	"github.com/google/uuid"
 )
 
 var (
@@ -317,8 +319,30 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.status = "👋 You have left the pasture. Safe travels, little llama!"
 					return m, tea.Quit
 				case "/clear":
+					// Delete server-side session
+					if chatCtx.SessionID != "" {
+						deleteURL := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s",
+							strings.TrimSuffix(chatCtx.ServerURL, "/"),
+							chatCtx.Namespace,
+							chatCtx.ProjectID,
+							chatCtx.SessionID)
+						req, err := http.NewRequest("DELETE", deleteURL, nil)
+						if err == nil {
+							resp, err := chatCtx.HTTPClient.Do(req)
+							if err == nil {
+								resp.Body.Close()
+								logDebug(fmt.Sprintf("Deleted server session %s", chatCtx.SessionID))
+							}
+						}
+						// Generate new session ID
+						chatCtx.SessionID = uuid.New().String()
+						// Save new session context
+						_ = writeSessionContext(chatCtx, chatCtx.SessionID)
+						logDebug(fmt.Sprintf("Created new session %s", chatCtx.SessionID))
+					}
+					// Clear local state
 					m.transcript = ""
-					m.messages = nil
+					m.messages = []ChatMessage{{Role: "client", Content: "Session cleared. New session started."}}
 					m.textarea.SetValue("")
 					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 					m.thinking = false
