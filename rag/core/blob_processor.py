@@ -416,6 +416,7 @@ class BlobProcessor:
         documents = []
         for config, parser in matching_parsers:
             if not config.type:
+                logger.warning(f"Parser config missing 'type': {config}. This may indicate a misconfiguration.")
                 continue
 
             parser_type = config.type.value
