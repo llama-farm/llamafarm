@@ -2035,7 +2035,7 @@ definitions:
                 - ["*.tmp", "*.bak"] # Skip temp/backup files
             priority:
               type: integer
-              description: Extractor priority (higher = apply first)
+              description: Extractor priority (lower = apply first)
               default: 50
               minimum: 0
               maximum: 1000
