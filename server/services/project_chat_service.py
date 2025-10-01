@@ -35,6 +35,12 @@ FALLBACK_ECHO_RESPONSE = (
     "please let me know and I'll do my best to assist you properly."
 )
 
+# Echo detection constants for better code clarity
+MIN_LENGTH_RATIO = 0.3  # Minimum length ratio (candidate/input) to avoid echo detection
+LENGTH_EXTENSION_FACTOR = 1.2  # Factor by which candidate must exceed input length
+SIMILARITY_THRESHOLD = 0.8  # Minimum word similarity ratio to trigger echo detection
+SIMILARITY_LENGTH_FACTOR = 1.5  # Maximum length multiplier for similarity-based echo detection
+
 
 class ProjectChatService:
     def _create_rag_config_from_strategy(self, strategy) -> dict[str, Any]:
@@ -391,18 +397,18 @@ def _is_echo(user_input: str, candidate: str) -> bool:
     if _normalize_text(candidate) == _normalize_text(user_input):
         return True
 
-    if len(candidate.strip()) < len(user_input.strip()) * 0.3:
+    if len(candidate.strip()) < len(user_input.strip()) * MIN_LENGTH_RATIO:
         return False
 
     normalized_input = _normalize_text(user_input)
     normalized_candidate = _normalize_text(candidate)
 
-    if normalized_candidate.startswith(normalized_input) and len(candidate) > len(user_input) * 1.2:
+    if normalized_candidate.startswith(normalized_input) and len(candidate) > len(user_input) * LENGTH_EXTENSION_FACTOR:
         return False
 
     similarity_ratio = len(set(normalized_candidate.split()) & set(normalized_input.split())) / len(set(normalized_input.split())) if normalized_input.split() else 0
 
-    if similarity_ratio >= 0.8 and len(candidate) <= len(user_input) * 1.5:
+    if similarity_ratio >= SIMILARITY_THRESHOLD and len(candidate) <= len(user_input) * SIMILARITY_LENGTH_FACTOR:
         return True
 
     return False
