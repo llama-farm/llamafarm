@@ -12,4 +12,13 @@ uv run datamodel-codegen \
     --use-standard-collections \
     --formatters=ruff-format \
     --class-name=LlamaFarmConfig
+
+echo "Post-processing generated types..."
+# Add use_enum_values=True to all ConfigDict instances
+sed -i '' 's/model_config = ConfigDict(/model_config = ConfigDict(\
+        use_enum_values=True,/g' datamodel.py
+
+echo "Formatting with ruff..."
+uv run ruff format datamodel.py
+
 echo "Done!"
