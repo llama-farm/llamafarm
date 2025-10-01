@@ -53,15 +53,17 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
     AtomicAgent[BasicChatInputSchema, OutputSchema]
 ):
     def __init__(self, config: LFAgentConfig):
-        # The client passed into the atomic agent config must always be an instructor
-        # client, even if we intend to use an unstructured chat through AsyncOpenAI
-        client_for_atomic_agent = (
-            instructor.from_openai(config.client)
-            if isinstance(config.client, AsyncOpenAI)
-            else config.client
-        )
+        # Check if client is already wrapped with instructor (structured mode)
+        is_instructor_client = isinstance(config.client, instructor.client.AsyncInstructor)
+
+        # AtomicAgent requires instructor client, so wrap plain AsyncOpenAI
+        if not is_instructor_client:
+            client_for_parent = instructor.from_openai(config.client, mode=instructor.Mode.MD_JSON)
+        else:
+            client_for_parent = config.client
+
         atomic_agent_config = AgentConfig(
-            client=client_for_atomic_agent,
+            client=client_for_parent,
             model=config.model,
             history=config.history,
             system_prompt_generator=config.system_prompt_generator,
@@ -70,8 +72,27 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         )
         super().__init__(config=atomic_agent_config)
 
-        # Set the client back to the original client (AsyncOpenAI or AsyncInstructor)
-        self.client = config.client
+        # Store original client and mode
+        self.client = config.client  # Original unwrapped client for API calls
+        self._use_structured_output = is_instructor_client
+
+    def _prepare_messages(self):
+        """Prepare messages and unwrap JSON for unstructured mode."""
+        super()._prepare_messages()
+
+        # For unstructured mode, strip JSON wrappers from message content
+        if not self._use_structured_output and hasattr(self, 'messages'):
+            import json
+            for msg in self.messages:
+                if isinstance(msg, dict) and 'content' in msg:
+                    content = msg['content']
+                    if isinstance(content, str) and content.strip().startswith('{"chat_message"'):
+                        try:
+                            parsed = json.loads(content)
+                            if isinstance(parsed, dict) and 'chat_message' in parsed:
+                                msg['content'] = parsed['chat_message']
+                        except (json.JSONDecodeError, ValueError):
+                            pass
 
     async def run_async_stream(
         self, user_input: InputSchema | None = None
@@ -79,11 +100,13 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         if user_input:
             self.history.initialize_turn()
             self.current_user_input = user_input
+
             self.history.add_message("user", user_input)
 
         self._prepare_messages()
 
         if isinstance(self.client, instructor.client.AsyncInstructor):
+            logger.debug(f"Using STRUCTURED output with instructor client, response_model={self.output_schema}")
             response_stream = self.client.chat.completions.create_partial(
                 model=self.model,
                 messages=self.messages,
@@ -153,6 +176,7 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         if user_input:
             self.history.initialize_turn()
             self.current_user_input = user_input
+
             self.history.add_message("user", user_input)
 
         self._prepare_messages()
