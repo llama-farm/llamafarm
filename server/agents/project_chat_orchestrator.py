@@ -155,11 +155,9 @@ class ProjectChatOrchestratorAgent(LFAgent):
             )
 
             if not has_greeting:
-                # Use the output schema directly
-                greeting_schema = ProjectChatOrchestratorAgentOutputSchema(
-                    chat_message=greeting_content
-                )
-                self.history.add_message("assistant", greeting_schema)
+                # Add greeting as plain text content (not as schema object)
+                # This ensures it's stored correctly and doesn't show {"chat_message": "..."} on reload
+                self.history.add_message("assistant", greeting_content)
                 logger.info("Injected greeting", is_new_session=self._is_new_session)
 
         except Exception:
