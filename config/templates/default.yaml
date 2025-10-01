@@ -9,7 +9,7 @@ runtime:
   provider: ollama
   model: gemma3:1b
   temperature: 0.7
-  # instructor_mode: json  
+  # instructor_mode: json
   # api_key: optional, not needed for ollama
   # model_api_parameters: optional additional parameters
 
@@ -19,16 +19,16 @@ runtime:
 prompts:
   - role: system
     content: |
-      You are a helpful AI assistant. 
-      
+      You are a helpful AI assistant.
+
       CRITICAL RULES:
       1. NEVER repeat the user's question as your answer
       2. ALWAYS provide a substantive, helpful response
       3. If you don't know something, say so clearly rather than repeating the question
-      
+
       When RAG context is provided, use it to enhance your answers.
       When no context is available, use your general knowledge.
-      
+
       Remember: Your response must be different from the user's input.
 
 # =============================================================================
@@ -94,14 +94,14 @@ rag:
         # PDF Parser with robust fallback
         - type: "PDFParser_LlamaIndex"
           file_include_patterns: ["*.pdf", "*.PDF"]
-          priority: 100  # Primary PDF parser
+          priority: 10  # Primary PDF parser
           config:
             chunk_strategy: "semantic"
             chunk_size: 1000
             chunk_overlap: 200
             extract_metadata: true
             extract_tables: true
-        
+
         - type: "PDFParser_PyPDF2"
           file_include_patterns: ["*.pdf", "*.PDF"]
           priority: 50  # Fallback PDF parser
@@ -110,51 +110,51 @@ rag:
             chunk_overlap: 150
             chunk_strategy: "paragraphs"
             extract_metadata: true
-        
+
         # Word Document Parser
         - type: "DocxParser_LlamaIndex"
           file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
-          priority: 100
+          priority: 10
           config:
             chunk_size: 1000
             chunk_overlap: 150
             extract_metadata: true
             extract_tables: true
-        
+
         # Markdown Parser
         - type: "MarkdownParser_Python"
           file_include_patterns: ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*"]
-          priority: 100
+          priority: 10
           config:
             chunk_size: 1000
             chunk_strategy: "sections"
             extract_metadata: true
             extract_code_blocks: true
             extract_links: true
-        
+
         # CSV/TSV Parser
         - type: "CSVParser_Pandas"
           file_include_patterns: ["*.csv", "*.CSV", "*.tsv", "*.TSV", "*.dat"]
-          priority: 100
+          priority: 10
           config:
             chunk_size: 500
             chunk_strategy: "rows"
             extract_metadata: true
             encoding: "utf-8"
-        
+
         # Excel Parser
         - type: "ExcelParser_Pandas"
           file_include_patterns: ["*.xlsx", "*.XLSX", "*.xls", "*.XLS"]
-          priority: 100
+          priority: 10
           config:
             chunk_size: 500
             sheets: null  # Process all sheets
             extract_metadata: true
-        
+
         # Plain Text Parser (catch-all for text files)
         - type: "TextParser_Python"
           file_include_patterns: [
-            "*.txt", "*.text", "*.log", 
+            "*.txt", "*.text", "*.log",
             "*.json", "*.xml", "*.yaml", "*.yml", "*.toml",
             "*.cfg", "*.conf", "*.ini",
             "*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h",
@@ -169,56 +169,56 @@ rag:
             chunk_strategy: "sentences"
             clean_text: true
             extract_metadata: true
-      
+
       # Extractors with file pattern matching
       extractors:
         # Universal extractors - work on all file types
         - type: "ContentStatisticsExtractor"
           file_include_patterns: ["*"]  # Apply to all files
-          priority: 100
+          priority: 10
           config:
             include_readability: true
             include_vocabulary: true
             include_structure: true
-        
+
         - type: "EntityExtractor"
           file_include_patterns: ["*"]  # Apply to all files
-          priority: 90
+          priority: 20
           config:
             entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT", "MONEY", "PERCENT"]
             use_fallback: true
             min_entity_length: 2
-        
+
         - type: "KeywordExtractor"
           file_include_patterns: ["*"]  # Apply to all files
-          priority: 80
+          priority: 30
           config:
             algorithm: "yake"
             max_keywords: 10
             min_keyword_length: 3
-        
+
         # PDF-specific extractors
         - type: "TableExtractor"
           file_include_patterns: ["*.pdf", "*.PDF"]
-          priority: 100
+          priority: 5
           config:
             output_format: "dict"
             extract_headers: true
             merge_cells: true
-        
+
         # CSV/Excel-specific extractors
         - type: "DateTimeExtractor"
           file_include_patterns: ["*.csv", "*.xlsx", "*.xls", "*.tsv"]
-          priority: 100
+          priority: 5
           config:
             formats: ["ISO8601", "US", "EU"]
             extract_relative: true
             extract_times: true
-        
+
         # Code file extractors
         - type: "PatternExtractor"
           file_include_patterns: ["*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h"]
-          priority: 100
+          priority: 5
           config:
             predefined_patterns: ["email", "url", "ip_address", "version"]
             custom_patterns:
@@ -228,19 +228,19 @@ rag:
               - name: "class_def"
                 pattern: "class\\s+\\w+[\\(\\:]"
                 description: "Class definitions"
-        
+
         # Markdown-specific extractors
         - type: "HeadingExtractor"
           file_include_patterns: ["*.md", "*.markdown", "README*"]
-          priority: 100
+          priority: 5
           config:
             max_level: 6
             include_hierarchy: true
             extract_outline: true
-        
+
         - type: "LinkExtractor"
           file_include_patterns: ["*.md", "*.markdown", "*.html", "*.htm"]
-          priority: 90
+          priority: 10
           config:
             extract_urls: true
             extract_emails: true
