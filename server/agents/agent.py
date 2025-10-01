@@ -38,7 +38,9 @@ class LFAgentConfig(BaseModel):
     )
     system_role: str | None = Field(
         default="system",
-        description="The role of the system in the conversation. None means no system prompt.",
+        description=(
+            "The role of the system in the conversation. None means no system prompt."
+        ),
     )
     model_api_parameters: dict[str, Any] | None = Field(
         None,
@@ -50,23 +52,21 @@ class LFAgentConfig(BaseModel):
 
 
 class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSchema](
-    AtomicAgent[BasicChatInputSchema, OutputSchema]
+    AtomicAgent[BasicChatInputSchema, BasicChatOutputSchema]
 ):
     def __init__(self, config: LFAgentConfig):
-        # Check if client is already wrapped with instructor (structured mode)
-        is_instructor_client = isinstance(config.client, instructor.client.AsyncInstructor)
-
         # For structured mode: AtomicAgent needs instructor client
         # For unstructured mode: we'll bypass AtomicAgent's message preparation entirely
-        if is_instructor_client:
-            client_for_parent = config.client
+        if isinstance(config.client, AsyncOpenAI):
+            client_for_atomic_agent = instructor.from_openai(config.client)
+            self._use_structured_output = False
+            self._unstructured_client = config.client
         else:
-            # Still need to give AtomicAgent a client, but we'll override all methods
-            # to use the plain client directly
-            client_for_parent = instructor.from_openai(config.client, mode=instructor.Mode.MD_JSON)
+            client_for_atomic_agent = config.client
+            self._use_structured_output = True
 
         atomic_agent_config = AgentConfig(
-            client=client_for_parent,
+            client=client_for_atomic_agent,
             model=config.model,
             history=config.history,
             system_prompt_generator=config.system_prompt_generator,
@@ -74,10 +74,6 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
             model_api_parameters=config.model_api_parameters,
         )
         super().__init__(config=atomic_agent_config)
-
-        # Store original client and mode
-        self.original_client = config.client  # Original unwrapped client
-        self._use_structured_output = is_instructor_client
 
     def _prepare_messages(self):
         """Prepare messages for the model.
@@ -87,140 +83,127 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         """
         if self._use_structured_output:
             # Structured mode: use parent's schema-based message preparation
-            super()._prepare_messages()
-        else:
-            # Unstructured mode: build plain messages manually, no schema wrapping
-            self.messages = []
+            return super()._prepare_messages()
 
-            # Add system prompt if configured
-            if self.system_prompt_generator and self.system_role:
-                system_prompt = self.system_prompt_generator.generate_prompt()
-                if system_prompt:
-                    self.messages.append({
-                        "role": self.system_role,
-                        "content": system_prompt
-                    })
+        # Unstructured mode: build plain messages manually, no schema wrapping
+        self.messages = []
 
-            # Add history messages as plain text
-            for msg in self.history.get_history():
-                role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
-                content_obj = getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else None)
+        # Add system prompt if configured
+        if self.system_prompt_generator and self.system_role:
+            system_prompt = self.system_prompt_generator.generate_prompt()
+            if system_prompt:
+                self.messages.append(
+                    {"role": self.system_role, "content": system_prompt}
+                )
 
-                # Extract plain text from content
-                if isinstance(content_obj, str):
-                    content = content_obj
-                elif isinstance(content_obj, dict) and "chat_message" in content_obj:
-                    content = content_obj["chat_message"]
-                elif hasattr(content_obj, "chat_message"):
-                    content = getattr(content_obj, "chat_message")
-                else:
-                    # Fallback: convert to string
-                    content = str(content_obj) if content_obj else ""
+        # Add history messages as plain text
+        for msg in self.history.get_history():
+            role = getattr(msg, "role", None) or (
+                msg.get("role") if isinstance(msg, dict) else None
+            )
+            content_str = getattr(msg, "content", None) or (
+                msg.get("content") if isinstance(msg, dict) else None
+            )
 
-                if role and content:
-                    self.messages.append({"role": role, "content": content})
+            # Extract plain text from content
+            if role == "user":
+                content_instance = self.input_schema.model_validate_json(content_str)
+            elif role == "assistant":
+                content_instance = self.output_schema.model_validate_json(content_str)
+
+            if role and content_instance:
+                self.messages.append(
+                    {"role": role, "content": content_instance.chat_message}
+                )
+
+    async def run_async(self, user_input: InputSchema | None = None) -> OutputSchema:
+        if self._use_structured_output:
+            # Structured mode: use instructor client (defer to parent)
+            return await super().run_async(user_input)
+
+        return await self._run_async_unstructured(user_input)
 
     async def run_async_stream(
+        self, user_input: InputSchema | None = None
+    ) -> AsyncGenerator[OutputSchema, None]:
+        if self._use_structured_output:
+            async for chunk in super().run_async_stream(user_input):
+                yield chunk
+            return
+
+        async for chunk in self._run_async_stream_unstructured(user_input):
+            yield chunk
+
+    async def _run_async_unstructured(
+        self, user_input: InputSchema | None = None
+    ) -> OutputSchema:
+        if user_input:
+            self.history.initialize_turn()
+            self.current_user_input = user_input
+            self.history.add_message("user", user_input)
+
+        self._prepare_messages()
+
+        # Unstructured mode: use plain OpenAI client
+        completion = await self._unstructured_client.chat.completions.create(
+            model=self.model,
+            messages=self.messages,
+            **(self.model_api_parameters or {}),
+        )
+
+        content = ""
+        try:
+            if completion.choices and completion.choices[0].message:
+                content = completion.choices[0].message.content or ""
+        except Exception:
+            content = ""
+
+        response = self.output_schema(chat_message=content)
+        self.history.add_message("assistant", response)
+        return response
+
+    async def _run_async_stream_unstructured(
         self, user_input: InputSchema | None = None
     ) -> AsyncGenerator[OutputSchema, None]:
         if user_input:
             self.history.initialize_turn()
             self.current_user_input = user_input
-
             self.history.add_message("user", user_input)
 
         self._prepare_messages()
 
-        if self._use_structured_output:
-            # Structured mode: use instructor client with response model
-            logger.debug(f"Using STRUCTURED output with instructor client, response_model={self.output_schema}")
-            response_stream = self.client.chat.completions.create_partial(
-                model=self.model,
-                messages=self.messages,
-                response_model=self.output_schema,
-                **self.model_api_parameters,
-                stream=True,
-            )
+        # Unstructured mode: use plain OpenAI client, plain text messages
+        response_stream = await self._unstructured_client.chat.completions.create(
+            model=self.model,
+            messages=self.messages,
+            **(self.model_api_parameters or {}),
+            stream=True,
+        )
 
-            last_response = None
-            async for partial_response in response_stream:
-                last_response = partial_response
-                yield partial_response
+        content = ""
+        async for partial_response in response_stream:
+            # Try to extract content from the streamed message
+            if hasattr(partial_response, "choices") and partial_response.choices:
+                choice = partial_response.choices[0]
+                if (
+                    hasattr(choice, "delta")
+                    and choice.delta
+                    and hasattr(choice.delta, "content")
+                ):
+                    delta_content = choice.delta.content or ""
+                    content += delta_content
+                elif (
+                    hasattr(choice, "message")
+                    and choice.message
+                    and hasattr(choice.message, "content")
+                ):
+                    # Some APIs may use message.content in streaming
+                    content += choice.message.content or ""
 
-            if last_response:
-                full_response_content = self.output_schema(**last_response.model_dump())
-                self.history.add_message("assistant", full_response_content)
-        else:
-            # Unstructured mode: use plain OpenAI client, plain text messages
-            response_stream = await self.original_client.chat.completions.create(
-                model=self.model,
-                messages=self.messages,
-                **(self.model_api_parameters or {}),
-                stream=True,
-            )
+            # Yield the current accumulated content as output schema
+            output = self.output_schema(chat_message=content)
+            yield output
 
-            content = ""
-            last_response = None
-            async for partial_response in response_stream:
-                last_response = partial_response
-                try:
-                    # Try to extract content from the streamed message
-                    if (
-                        hasattr(partial_response, "choices")
-                        and partial_response.choices
-                    ):
-                        choice = partial_response.choices[0]
-                        if (
-                            hasattr(choice, "delta")
-                            and choice.delta
-                            and hasattr(choice.delta, "content")
-                        ):
-                            delta_content = choice.delta.content or ""
-                            content += delta_content
-                        elif (
-                            hasattr(choice, "message")
-                            and choice.message
-                            and hasattr(choice.message, "content")
-                        ):
-                            # Some APIs may use message.content in streaming
-                            content += choice.message.content or ""
-                except Exception:
-                    pass  # If structure is unexpected, just skip
-
-                # Yield the current accumulated content as output schema
-                output = self.output_schema(chat_message=content)
-                yield output
-
-            if content:
-                full_response_content = self.output_schema(chat_message=content)
-                self.history.add_message("assistant", full_response_content)
-
-    async def run_async(self, user_input: BaseIOSchema | None = None) -> BaseIOSchema:
-        if user_input:
-            self.history.initialize_turn()
-            self.current_user_input = user_input
-            self.history.add_message("user", user_input)
-
-        self._prepare_messages()
-
-        if self._use_structured_output:
-            # Structured mode: use instructor client (defer to parent)
-            return await super().run_async(user_input)
-        else:
-            # Unstructured mode: use plain OpenAI client
-            completion = await self.original_client.chat.completions.create(
-                model=self.model,
-                messages=self.messages,
-                **(self.model_api_parameters or {}),
-            )
-
-            content = ""
-            try:
-                if completion.choices and completion.choices[0].message:
-                    content = completion.choices[0].message.content or ""
-            except Exception:
-                content = ""
-
-            response = self.output_schema(chat_message=content)
-            self.history.add_message("assistant", response)
-            return response
+        if content:
+            full_response_content = self.output_schema(chat_message=content)
+            self.history.add_message("assistant", full_response_content)
