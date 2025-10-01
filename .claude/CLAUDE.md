@@ -96,34 +96,70 @@ Update the CLI/server code to handle new fields, then adjust docs accordingly.
 ## 7. Common CLI Commands
 ```bash
 # Dataset lifecycle
-lf datasets create -s pdf_ingest -b main_db research
-lf datasets upload research ./examples/fda_rag/files/*.pdf
-lf datasets process research
+lf datasets add research -s universal_processor -b main_db  # Create dataset
+lf datasets ingest research ./examples/fda_rag/files/*.pdf  # Add files (supports glob patterns)
+lf datasets ingest research ./examples/fda_rag/files/       # Add entire directory
+lf datasets process research                                 # Process into vector database
+lf datasets list                                             # List all datasets
+lf datasets remove research                                  # Delete a dataset
 
 # Retrieval & health
 lf rag query --database main_db "Which letters mention clinical trials?"
+lf rag query --database main_db --top-k 5 --score-threshold 0.7 "Your query"
 lf rag health
 lf rag stats
 
 # Chat
-lf chat "Summarize neural scaling laws"
-lf chat --no-rag "Explain attention mechanisms"
-lf chat --curl "What models are configured?"
+lf start                                      # Opens interactive TUI chat
+lf chat "Summarize neural scaling laws"      # One-off chat with RAG (if configured)
+lf chat --database main_db "Query with specific DB"
+lf chat --no-rag "Explain attention mechanisms"  # LLM only, no RAG
+lf chat --curl "What models are configured?"     # Show curl equivalent
 ```
 
 ## 8. Testing & Validation
 - Server & RAG Python tests: `uv run --group test python -m pytest`
 - RAG-specific tests: `uv run pytest tests/`
+- Specific test file: `uv run pytest tests/test_greeting_logic.py -v`
 - CLI: `go test ./...`
 - Docs build: `nx build docs` *(clear `.nx` cache if you hit sqlite disk I/O errors)*
 
-## 9. Upgrade / Development Notes
+**Test Best Practices:**
+- When testing settings/environment variables, use `@patch` to mock the settings object directly
+- Never use `monkeypatch.setenv()` for settings that are loaded at import time
+- Example: `@patch("agents.project_chat_orchestrator.settings")` then set `mock_settings.lf_dev_mode_greeting_enabled = False`
+
+## 9. Environment Variables & Settings
+
+**Settings Management:**
+- All environment variables should be managed through `server/core/settings.py` using `pydantic_settings.BaseSettings`
+- **NEVER** access `os.environ` directly in application code
+- Settings are loaded from `.env` file at import time
+- The `settings` singleton is available via `from core.settings import settings`
+
+**Available Settings:**
+- `lf_dev_mode_docs_enabled: bool = True` - Enable/disable dev mode documentation context injection
+- `lf_dev_mode_greeting_enabled: bool = True` - Enable/disable greeting messages in project_seed
+- See `server/core/settings.py` for complete list of available settings
+
+**Adding New Settings:**
+1. Add the setting to the `Settings` class in `server/core/settings.py`
+2. Provide a default value
+3. Use type hints for proper validation
+4. Import and use via `from core.settings import settings`
+5. Update tests to mock the settings object if needed
+
+## 10. Upgrade / Development Notes
 - Always run research/plan steps from `.agents/commands/` before making changes.
 - Keep docs in sync with behaviour—update Docusaurus pages when workflows/schema change.
 - Never commit secrets; use local `.env` and update `.env.example` for new variables.
 - When adding user-facing features, ensure README + docs + sample configs all reflect the changes.
+- **Code Review Standards:**
+  - Use `settings` from `core.settings` instead of `os.environ` directly
+  - Avoid dynamic imports or module lookup hacks (e.g., `sys.modules.get("os", __import__("os"))`)
+  - Follow centralized configuration management patterns
 
-## 10. Additional Resources
+## 11. Additional Resources
 - Project structure overview: `AGENTS.md`
 - Contribution process: `CONTRIBUTING.md`
 - Credits: `docs/CREDITS.md`
