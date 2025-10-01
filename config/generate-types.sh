@@ -14,9 +14,16 @@ uv run datamodel-codegen \
     --class-name=LlamaFarmConfig
 
 echo "Post-processing generated types..."
-# Add use_enum_values=True to all ConfigDict instances
-sed -i '' 's/model_config = ConfigDict(/model_config = ConfigDict(\
+# Add use_enum_values=True to all ConfigDict instances (cross-platform)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS requires empty string after -i
+    sed -i '' 's/model_config = ConfigDict(/model_config = ConfigDict(\
         use_enum_values=True,/g' datamodel.py
+else
+    # Linux doesn't require empty string
+    sed -i 's/model_config = ConfigDict(/model_config = ConfigDict(\
+        use_enum_values=True,/g' datamodel.py
+fi
 
 echo "Formatting with ruff..."
 uv run ruff format datamodel.py

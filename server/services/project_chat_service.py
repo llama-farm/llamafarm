@@ -221,7 +221,7 @@ class ProjectChatService:
         logger.info(f"Agent response: {agent_response}")
 
         response_message = agent_response.chat_message
-        logger.info(f"Response message (first 200 chars): {response_message[:200]}")
+        logger.debug(f"Response received (length: {len(response_message)} chars)")
 
         # Check if response is echoing input
         if _is_echo(message, response_message):

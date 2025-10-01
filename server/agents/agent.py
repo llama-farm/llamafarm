@@ -76,10 +76,6 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         self.client = config.client  # Original unwrapped client for API calls
         self._use_structured_output = is_instructor_client
 
-    def _prepare_messages(self):
-        """Prepare messages for unstructured mode - no JSON wrapping."""
-        super()._prepare_messages()
-
     async def run_async_stream(
         self, user_input: InputSchema | None = None
     ) -> AsyncGenerator[OutputSchema, None]:

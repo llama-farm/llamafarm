@@ -222,6 +222,37 @@ class TestGreetingLogic:
         assert len(assistant_messages) == 0, "Should have no greetings for non-project_seed projects"
 
     @patch("agents.project_chat_orchestrator._get_client")
+    def test_greeting_not_for_similar_project_names(
+        self, mock_get_client, mock_project_config, temp_project_dir
+    ):
+        """Test that greetings are NOT injected for project names similar to project_seed."""
+        # Create a proper AsyncOpenAI mock
+        mock_client = MagicMock(spec=AsyncOpenAI)
+        mock_get_client.return_value = mock_client
+
+        # Test with project_seed_2 (should NOT get greeting)
+        config = mock_project_config.model_copy()
+        config.name = "project_seed_2"
+
+        agent = ProjectChatOrchestratorAgent(
+            project_config=config,
+            project_dir=temp_project_dir,
+        )
+
+        session_id = "test-session-similar"
+        agent.enable_persistence(session_id=session_id)
+
+        # Check that no greeting was injected for similar project name
+        history = agent.history.get_history()
+        assistant_messages = [
+            msg for msg in history
+            if getattr(msg, "role", None) == "assistant"
+            or (isinstance(msg, dict) and msg.get("role") == "assistant")
+        ]
+
+        assert len(assistant_messages) == 0, "Should have no greetings for project_seed_2 (only exact match 'project_seed' gets greeting)"
+
+    @patch("agents.project_chat_orchestrator._get_client")
     def test_greeting_not_duplicated(
         self, mock_get_client, mock_project_config, temp_project_dir
     ):
