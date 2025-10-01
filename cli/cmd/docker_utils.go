@@ -30,7 +30,16 @@ import (
 var versionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+.*`)
 
 // getCurrentUserGroup returns the current user:group string for Docker user mapping
+// Returns empty string on Windows/macOS to let Docker handle user mapping
 func getCurrentUserGroup() string {
+	// On Windows, user mapping doesn't work the same way due to different permission model
+	// On macOS, Docker Desktop handles user mapping in the VM layer
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		logDebug(fmt.Sprintf("Skipping user mapping on %s, letting Docker handle it", runtime.GOOS))
+		return ""
+	}
+
+	// Linux: Use actual user mapping
 	currentUser, err := user.Current()
 	if err != nil {
 		logDebug(fmt.Sprintf("Failed to get current user, using default: %v", err))
