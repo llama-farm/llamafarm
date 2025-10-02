@@ -8,50 +8,47 @@ import Loader from '../../common/Loader'
 import FontIcon from '../../common/FontIcon'
 
 // Lazy load the CodeMirror editor
-const CodeMirrorEditor = lazy(() => import('../CodeMirrorEditor/CodeMirrorEditor'))
+const CodeMirrorEditor = lazy(
+  () => import('../CodeMirrorEditor/CodeMirrorEditor')
+)
 
 interface ConfigEditorProps {
   className?: string
 }
 
-const ConfigEditor: React.FC<ConfigEditorProps> = ({ 
-  className = '' 
-}) => {
+const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
   // Get current project info using reactive hook
   const activeProject = useActiveProject()
   const { theme } = useTheme()
-  
+
   // Use the extracted hook for all data fetching and formatting
-  const { 
-    formattedConfig, 
-    isLoading, 
-    error, 
-    refetch,
-    projectData 
-  } = useFormattedConfig()
+  const { formattedConfig, isLoading, error, refetch, projectData } =
+    useFormattedConfig()
 
   // Only show loading on initial load, not for subsequent fetches
   const isActuallyLoading = isLoading && !projectData
-  
+
   if (isActuallyLoading) {
     return <ConfigLoading activeProject={activeProject} className={className} />
   }
 
   if (error) {
     return (
-      <ConfigError 
-        error={error} 
-        activeProject={activeProject} 
+      <ConfigError
+        error={error}
+        activeProject={activeProject}
         onRetry={refetch}
-        className={className} 
+        className={className}
       />
     )
   }
 
   return (
-    <Suspense 
+    <Suspense
       fallback={
-        <div className={`config-editor w-full h-full max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col ${className}`}>
+        <div
+          className={`config-editor w-full h-full min-h-0 max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col ${className}`}
+        >
           {/* Header */}
           <div className="px-4 py-3 border-b border-border bg-card flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -65,7 +62,9 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Loading editor...</span>
+                <span className="text-xs text-muted-foreground">
+                  Loading editor...
+                </span>
               </div>
             </div>
           </div>
@@ -74,15 +73,17 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
           <div className="flex-1 flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
               <Loader className="w-8 h-8" />
-              <span className="text-sm text-muted-foreground">Loading code editor...</span>
+              <span className="text-sm text-muted-foreground">
+                Loading code editor...
+              </span>
             </div>
           </div>
         </div>
       }
     >
-      <CodeMirrorEditor 
-        content={formattedConfig} 
-        className={className}
+      <CodeMirrorEditor
+        content={formattedConfig}
+        className={`w-full h-full min-h-0 ${className}`}
         theme={theme}
       />
     </Suspense>
