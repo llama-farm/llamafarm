@@ -52,45 +52,38 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 }
 
-// performUpgrade handles the automatic upgrade process
-func performUpgrade(cmd *cobra.Command, args []string) error {
-	// Get flags
+// upgradeFlags contains parsed command-line flags for the upgrade command
+type upgradeFlags struct {
+	dryRun     bool
+	force      bool
+	noVerify   bool
+	installDir string
+}
+
+// parseUpgradeFlags extracts and returns the upgrade command flags
+func parseUpgradeFlags(cmd *cobra.Command) upgradeFlags {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	force, _ := cmd.Flags().GetBool("force")
 	noVerify, _ := cmd.Flags().GetBool("no-verify")
 	installDir, _ := cmd.Flags().GetString("install-dir")
 
-	// Determine target version
+	return upgradeFlags{
+		dryRun:     dryRun,
+		force:      force,
+		noVerify:   noVerify,
+		installDir: installDir,
+	}
+}
+
+// determineTargetVersion resolves the target version from args or fetches the latest
+func determineTargetVersion(args []string) (string, *UpgradeInfo, error) {
 	var targetVersion string
+	var info *UpgradeInfo
+
 	if len(args) > 0 {
 		targetVersion = args[0]
-		if !isValidVersion(targetVersion) {
-			return fmt.Errorf("invalid version format: %s", targetVersion)
-		}
 		targetVersion = normalizeVersion(targetVersion)
-	}
 
-	// Get current binary path
-	currentBinary, err := getCurrentBinaryPath()
-	if err != nil {
-		return fmt.Errorf("failed to determine current binary location: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "🔍 Current binary: %s\n", currentBinary)
-
-	// Get version information
-	var info *UpgradeInfo
-	if targetVersion == "" {
-		// Get latest version
-		info, err = maybeCheckForUpgrade(true)
-		if err != nil {
-			return fmt.Errorf("failed to check for updates: %w", err)
-		}
-		if info == nil {
-			return fmt.Errorf("no release information available")
-		}
-		targetVersion = info.LatestVersionNormalized
-	} else {
 		// For specific version, create minimal info
 		info = &UpgradeInfo{
 			CurrentVersion:          Version,
@@ -98,36 +91,31 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 			LatestVersionNormalized: targetVersion,
 			UpdateAvailable:         true,
 		}
-	}
-
-	// Check if upgrade is necessary
-	if !force && !info.UpdateAvailable && targetVersion == info.CurrentVersionNormalized {
-		fmt.Printf("✅ Already running version %s\n", info.CurrentVersion)
-		return nil
-	}
-
-	// Determine installation directory
-	var finalInstallDir string
-	if installDir != "" {
-		finalInstallDir = installDir
 	} else {
-		finalInstallDir = filepath.Dir(currentBinary)
+		// Get latest version
+		var err error
+		info, err = maybeCheckForUpgrade(true)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to check for updates: %w", err)
+		}
+		if info == nil {
+			return "", nil, fmt.Errorf("no release information available")
+		}
+		targetVersion = info.LatestVersionNormalized
 	}
 
-	// Get upgrade strategy
-	strategy := GetUpgradeStrategy()
+	return targetVersion, info, nil
+}
 
-	// Check if we can upgrade to the current location
-	canUpgradeInPlace := strategy.CanUpgrade(currentBinary) && canWriteToLocation(currentBinary)
-	requiresElevation := strategy.RequiresElevation(currentBinary)
-
-	// Show upgrade plan
+// showUpgradePlan displays the upgrade plan to the user
+func showUpgradePlan(info *UpgradeInfo, targetVersion, finalInstallDir string, strategy UpgradeStrategy, canUpgradeInPlace bool, installDir string) {
 	fmt.Printf("📋 Upgrade Plan:\n")
 	fmt.Printf("   Current version: %s\n", info.CurrentVersion)
 	fmt.Printf("   Target version:  %s\n", targetVersion)
 	fmt.Printf("   Install location: %s\n", finalInstallDir)
 	fmt.Printf("   Platform: %s\n", detectPlatform())
 
+	requiresElevation := strategy.RequiresElevation(finalInstallDir)
 	if requiresElevation {
 		fmt.Printf("   ⚠️  Requires elevation (sudo/Administrator)\n")
 	}
@@ -139,69 +127,143 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 			fmt.Printf("   💡 Suggested fallback: %s\n", fallbackDir)
 		}
 	}
+}
 
-	if dryRun {
-		fmt.Printf("\n🔍 Dry run mode - no changes will be made\n")
+// checkPermissions validates that we have permissions to perform the upgrade
+func checkPermissions(canUpgradeInPlace bool, installDir, finalInstallDir string, strategy UpgradeStrategy) error {
+	if canUpgradeInPlace || installDir != "" {
 		return nil
 	}
 
-	// Handle permission issues
-	if !canUpgradeInPlace && installDir == "" {
-		if requiresElevation {
-			fmt.Printf("\n❌ Cannot write to %s without elevation\n", finalInstallDir)
-			fmt.Printf("\nOptions:\n")
-			fmt.Printf("1. Run with elevation: sudo lf version upgrade\n")
-
-			fallbackDir, err := strategy.GetFallbackDir()
-			if err == nil {
-				fmt.Printf("2. Install to user directory: lf version upgrade --install-dir %s\n", fallbackDir)
-			}
-
-			fmt.Printf("3. Manual installation: curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash\n")
-			return fmt.Errorf("insufficient permissions for upgrade")
-		}
+	requiresElevation := strategy.RequiresElevation(finalInstallDir)
+	if !requiresElevation {
+		return nil
 	}
 
-	// Confirm upgrade
-	fmt.Printf("\n🚀 Starting upgrade to %s...\n", targetVersion)
+	fmt.Printf("\n❌ Cannot write to %s without elevation\n", finalInstallDir)
+	fmt.Printf("\nOptions:\n")
+	fmt.Printf("1. Run with elevation: sudo lf version upgrade\n")
 
-	// Download binary
+	fallbackDir, err := strategy.GetFallbackDir()
+	if err == nil {
+		fmt.Printf("2. Install to user directory: lf version upgrade --install-dir %s\n", fallbackDir)
+	}
+
+	fmt.Printf("3. Manual installation: curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash\n")
+	return fmt.Errorf("insufficient permissions for upgrade")
+}
+
+// downloadAndVerifyBinary downloads the binary and optionally verifies its checksum
+func downloadAndVerifyBinary(targetVersion, platform string, noVerify bool) (string, error) {
 	fmt.Fprintf(os.Stderr, "🔄 Downloading binary...\n")
-	platform := detectPlatform()
 	tempBinary, err := downloadBinary(targetVersion, platform)
 	if err != nil {
-		return fmt.Errorf("failed to download binary: %w", err)
+		return "", fmt.Errorf("failed to download binary: %w", err)
 	}
-	defer cleanupTempFiles([]string{tempBinary})
 
-	// Verify checksum unless disabled
 	if !noVerify {
 		fmt.Fprintf(os.Stderr, "🔄 Verifying checksum...\n")
 		err = verifyChecksum(tempBinary, targetVersion, platform)
 		if err != nil {
-			return fmt.Errorf("checksum verification failed: %w", err)
+			cleanupTempFiles([]string{tempBinary})
+			return "", fmt.Errorf("checksum verification failed: %w", err)
 		}
 	} else {
 		fmt.Fprintf(os.Stderr, "⚠️  Skipping checksum verification\n")
 	}
 
-	// Determine final binary path
-	var finalBinaryPath string
+	return tempBinary, nil
+}
+
+// determineFinalBinaryPath resolves the final installation path for the binary
+func determineFinalBinaryPath(installDir, currentBinary, platform string) (string, error) {
 	if installDir != "" {
 		// Custom install directory
 		binaryName := "lf"
 		if strings.Contains(platform, "windows") {
 			binaryName += ".exe"
 		}
-		finalBinaryPath = filepath.Join(installDir, binaryName)
+		finalBinaryPath := filepath.Join(installDir, binaryName)
 
 		// Ensure directory exists
 		if err := os.MkdirAll(installDir, 0755); err != nil {
-			return fmt.Errorf("failed to create install directory: %w", err)
+			return "", fmt.Errorf("failed to create install directory: %w", err)
 		}
+
+		return finalBinaryPath, nil
+	}
+
+	// Use current binary location
+	return currentBinary, nil
+}
+
+// performUpgrade handles the automatic upgrade process
+func performUpgrade(cmd *cobra.Command, args []string) error {
+	flags := parseUpgradeFlags(cmd)
+
+	// Get current binary path
+	currentBinary, err := getCurrentBinaryPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine current binary location: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "🔍 Current binary: %s\n", currentBinary)
+
+	// Determine target version
+	targetVersion, info, err := determineTargetVersion(args)
+	if err != nil {
+		return err
+	}
+
+	// Check if upgrade is necessary
+	if !flags.force && !info.UpdateAvailable && targetVersion == info.CurrentVersionNormalized {
+		fmt.Printf("✅ Already running version %s\n", info.CurrentVersion)
+		return nil
+	}
+
+	// Determine installation directory
+	var finalInstallDir string
+	if flags.installDir != "" {
+		finalInstallDir = flags.installDir
 	} else {
-		// Use current binary location
-		finalBinaryPath = currentBinary
+		finalInstallDir = filepath.Dir(currentBinary)
+	}
+
+	// Get upgrade strategy
+	strategy := GetUpgradeStrategy()
+
+	// Check if we can upgrade to the current location
+	canUpgradeInPlace := strategy.CanUpgrade(currentBinary) && canWriteToLocation(currentBinary)
+
+	// Show upgrade plan
+	showUpgradePlan(info, targetVersion, finalInstallDir, strategy, canUpgradeInPlace, flags.installDir)
+
+	if flags.dryRun {
+		fmt.Printf("\n🔍 Dry run mode - no changes will be made\n")
+		return nil
+	}
+
+	// Check permissions
+	if err := checkPermissions(canUpgradeInPlace, flags.installDir, finalInstallDir, strategy); err != nil {
+		return err
+	}
+
+	// Confirm upgrade
+	fmt.Printf("\n🚀 Starting upgrade to %s...\n", targetVersion)
+
+	platform := detectPlatform()
+
+	// Download and verify binary
+	tempBinary, err := downloadAndVerifyBinary(targetVersion, platform, flags.noVerify)
+	if err != nil {
+		return err
+	}
+	defer cleanupTempFiles([]string{tempBinary})
+
+	// Determine final binary path
+	finalBinaryPath, err := determineFinalBinaryPath(flags.installDir, currentBinary, platform)
+	if err != nil {
+		return err
 	}
 
 	// Perform upgrade
@@ -221,7 +283,7 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\nRun 'lf version' to confirm the new version.\n")
 
 	// Show PATH warning if needed
-	if installDir != "" && installDir != filepath.Dir(currentBinary) {
+	if flags.installDir != "" && flags.installDir != filepath.Dir(currentBinary) {
 		fmt.Printf("\n💡 Binary installed to: %s\n", finalBinaryPath)
 		fmt.Printf("Make sure this directory is in your PATH.\n")
 	}

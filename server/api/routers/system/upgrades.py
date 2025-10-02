@@ -25,11 +25,16 @@ async def cli_upgrade():
 
     return {
         "latest_version": release.tag_name,
+        "name": release.name,
+        "release_notes": release.body,
         "release_url": release.html_url,
         "published_at": published_at,
         "from_cache": release.from_cache,
         "install": {
-            "mac_linux": "curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash",
+            "mac_linux": (
+                "curl -fsSL https://raw.githubusercontent.com/"
+                "llama-farm/llamafarm/main/install.sh | bash"
+            ),
             "windows": "winget install LlamaFarm.CLI",
         },
     }

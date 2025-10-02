@@ -181,6 +181,14 @@ func fetchLatestRelease() (*releaseInfo, error) {
 		return nil, fmt.Errorf("failed to decode GitHub release payload: %w", err)
 	}
 
+	// Validate required fields
+	if payload.TagName == "" {
+		return nil, errors.New("missing or invalid tag_name in release info")
+	}
+	if payload.HTMLURL == "" {
+		return nil, errors.New("missing or invalid html_url in release info")
+	}
+
 	if payload.Draft || payload.Prerelease {
 		return nil, errors.New("latest release is marked as draft or prerelease")
 	}

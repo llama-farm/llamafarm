@@ -49,29 +49,6 @@ func TestGetBinaryNameForPlatform(t *testing.T) {
 	}
 }
 
-func TestIsValidVersion(t *testing.T) {
-	tests := []struct {
-		version string
-		valid   bool
-	}{
-		{"v1.0.0", true},
-		{"1.0.0", true},
-		{"v1.2.3-beta", true},
-		{"2.0.0-rc.1", true},
-		{"", false},
-		{"invalid", false},
-		{"v", false},
-		{"1", false},
-	}
-
-	for _, test := range tests {
-		result := isValidVersion(test.version)
-		if result != test.valid {
-			t.Errorf("For version %s, expected %v, got %v", test.version, test.valid, result)
-		}
-	}
-}
-
 func TestNormalizeVersion(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -79,7 +56,9 @@ func TestNormalizeVersion(t *testing.T) {
 	}{
 		{"1.0.0", "v1.0.0"},
 		{"v1.0.0", "v1.0.0"},
-		{"V1.0.0", "V1.0.0"},
+		{"V1.0.0", "v1.0.0"},
+		{"v1.2.3-beta", "v1.2.3-beta"},
+		{"2.0.0-rc.1", "v2.0.0-rc.1"},
 		{"", ""},
 	}
 
@@ -211,6 +190,31 @@ func TestIsExecutable(t *testing.T) {
 
 		if isExecutable(nonExecFile, info.Mode()) {
 			t.Error("Expected file without executable bit to not be detected as executable on Unix")
+		}
+	}
+}
+
+func TestIsExecutable_UncommonWindowsExtensions(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-specific test")
+	}
+
+	extensions := []string{".bat", ".cmd", ".com"}
+	for _, ext := range extensions {
+		filePath := filepath.Join(t.TempDir(), "test"+ext)
+		f, err := os.Create(filePath)
+		if err != nil {
+			t.Fatalf("Failed to create file %s: %v", filePath, err)
+		}
+		f.Close()
+
+		info, err := os.Stat(filePath)
+		if err != nil {
+			t.Fatalf("Failed to stat file %s: %v", filePath, err)
+		}
+
+		if !isExecutable(filePath, info.Mode()) {
+			t.Errorf("Expected %s to be detected as executable", filePath)
 		}
 	}
 }

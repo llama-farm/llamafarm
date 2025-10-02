@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	semver "github.com/Masterminds/semver/v3"
 )
 
 // getCurrentBinaryPath returns the absolute path to the currently running binary
@@ -122,7 +124,7 @@ func needsElevationUnix(path string) bool {
 		return false
 	}
 
-	// Check if the path is in common system directories
+	// Check if the path is in common system directories using absolute path comparison
 	systemDirs := []string{
 		"/usr/local/bin",
 		"/usr/bin",
@@ -130,8 +132,22 @@ func needsElevationUnix(path string) bool {
 		"/opt",
 	}
 
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		// If we can't resolve the absolute path, assume elevation is needed
+		return true
+	}
+
+	// Get the directory containing the binary
+	pathDir := filepath.Dir(absPath)
+
 	for _, sysDir := range systemDirs {
-		if strings.HasPrefix(path, sysDir) {
+		absSysDir, err := filepath.Abs(sysDir)
+		if err != nil {
+			continue
+		}
+		// Check if the binary's directory is within the system directory
+		if pathDir == absSysDir || strings.HasPrefix(pathDir+string(filepath.Separator), absSysDir+string(filepath.Separator)) {
 			return true
 		}
 	}
@@ -250,30 +266,26 @@ func getBinaryNameForPlatform(platform string) string {
 	return binaryName
 }
 
-// isValidVersion checks if the version string is valid
-func isValidVersion(version string) bool {
-	if version == "" {
-		return false
-	}
-
-	// Allow versions with or without 'v' prefix
-	if strings.HasPrefix(version, "v") || strings.HasPrefix(version, "V") {
-		version = version[1:]
-	}
-
-	// Basic validation - should contain at least one dot and be non-empty
-	return strings.Contains(version, ".") && len(version) > 0
-}
-
-// normalizeVersion ensures version has 'v' prefix for consistency with GitHub releases
+// normalizeVersion ensures version has 'v' prefix and validates it using semver
 func normalizeVersion(version string) string {
 	if version == "" {
 		return ""
 	}
 
-	if !strings.HasPrefix(version, "v") && !strings.HasPrefix(version, "V") {
-		return "v" + version
+	// Strip any existing prefix for validation
+	normalized := strings.TrimPrefix(strings.TrimPrefix(version, "v"), "V")
+
+	// Validate using semver library
+	_, err := semver.NewVersion(normalized)
+	if err != nil {
+		// Return original if not valid semver (could be a tag name)
+		// but still ensure it has 'v' prefix
+		if !strings.HasPrefix(version, "v") && !strings.HasPrefix(version, "V") {
+			return "v" + version
+		}
+		return version
 	}
 
-	return version
+	// Add 'v' prefix to the normalized version
+	return "v" + normalized
 }

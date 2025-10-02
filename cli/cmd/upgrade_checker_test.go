@@ -134,3 +134,53 @@ func TestMaybeCheckForUpgrade_ForceErrorPropagates(t *testing.T) {
 		t.Fatalf("expected error when HTTP call fails during forced upgrade check")
 	}
 }
+
+func TestMaybeCheckForUpgrade_IgnoresDraftAndPrerelease(t *testing.T) {
+	t.Setenv(upgradeStateEnvVar, filepath.Join(t.TempDir(), "state.json"))
+
+	originalHTTPClient := httpClient
+	originalVersion := Version
+	defer func() {
+		httpClient = originalHTTPClient
+		Version = originalVersion
+	}()
+
+	Version = "v1.2.2"
+
+	// Simulate a GitHub API response with a draft release
+	draftRelease := `{
+		"tag_name": "v1.2.3",
+		"draft": true,
+		"prerelease": false,
+		"html_url": "https://github.com/example/repo/releases/tag/v1.2.3",
+		"published_at": "2025-01-01T00:00:00Z",
+		"body": "Draft release"
+	}`
+	prerelease := `{
+		"tag_name": "v1.2.4-beta",
+		"draft": false,
+		"prerelease": true,
+		"html_url": "https://github.com/example/repo/releases/tag/v1.2.4-beta",
+		"published_at": "2025-01-01T00:00:00Z",
+		"body": "Beta release"
+	}`
+
+	for _, body := range []string{draftRelease, prerelease} {
+		httpClient = &fakeHTTPClient{
+			resp: &http.Response{
+				StatusCode: 200,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Header:     make(http.Header),
+			},
+		}
+		// Use a version lower than the release to trigger upgrade logic
+		_, err := maybeCheckForUpgrade(true)
+		if err == nil {
+			t.Fatalf("expected error for draft/prerelease, got nil")
+		}
+		if !strings.Contains(err.Error(), "draft or prerelease") {
+			t.Fatalf("expected error about draft/prerelease, got: %v", err)
+		}
+	}
+}

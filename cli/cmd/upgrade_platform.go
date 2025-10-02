@@ -147,6 +147,10 @@ func (u *UnixUpgradeStrategy) restoreBackup(backupPath, current string) error {
 }
 
 func (u *UnixUpgradeStrategy) verifyBinary(binaryPath string) error {
+	// Validate the binary path before execution to prevent command injection
+	if err := validateBinaryPath(binaryPath); err != nil {
+		return fmt.Errorf("binary validation failed: %w", err)
+	}
 	cmd := exec.Command(binaryPath, "version")
 	return cmd.Run()
 }
@@ -259,6 +263,10 @@ func (w *WindowsUpgradeStrategy) restoreBackup(backupPath, current string) error
 }
 
 func (w *WindowsUpgradeStrategy) verifyBinary(binaryPath string) error {
+	// Validate the binary path before execution to prevent command injection
+	if err := validateBinaryPath(binaryPath); err != nil {
+		return fmt.Errorf("binary validation failed: %w", err)
+	}
 	cmd := exec.Command(binaryPath, "version")
 	return cmd.Run()
 }

@@ -141,3 +141,24 @@ func TestCopyFile(t *testing.T) {
 		t.Errorf("Expected mode %v, got %v", srcInfo.Mode(), dstInfo.Mode())
 	}
 }
+
+func TestCopyFileToNonExistentDir(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a source file
+	srcFile := filepath.Join(tempDir, "source.txt")
+	content := []byte("test content")
+	if err := os.WriteFile(srcFile, content, 0644); err != nil {
+		t.Fatalf("Failed to create source file: %v", err)
+	}
+
+	// Destination directory does not exist
+	nonExistentDir := filepath.Join(tempDir, "does_not_exist")
+	dstFile := filepath.Join(nonExistentDir, "dest.txt")
+
+	// Attempt to copy
+	err := copyFile(srcFile, dstFile)
+	if err == nil {
+		t.Error("Expected error when copying to non-existent directory, got nil")
+	}
+}
