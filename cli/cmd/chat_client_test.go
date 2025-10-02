@@ -64,6 +64,13 @@ func TestWriteSessionContext(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
+	// Mock getLFDataDir to return our temp directory
+	origGetLFDataDir := getLFDataDir
+	getLFDataDir = func() (string, error) {
+		return filepath.Join(tempDir, ".llamafarm"), nil
+	}
+	defer func() { getLFDataDir = origGetLFDataDir }()
+
 	// Change to temp directory
 	originalCwd, _ := os.Getwd()
 	defer os.Chdir(originalCwd)
@@ -71,22 +78,21 @@ func TestWriteSessionContext(t *testing.T) {
 
 	// Test writing session context
 	testSessionID := "test-session-123"
-	ctx := &ChatSessionContext{SessionMode: SessionModeProject}
+	ctx := &ChatSessionContext{SessionMode: SessionModeProject, Namespace: "test", ProjectID: "test"}
 	err = writeSessionContext(ctx, testSessionID)
 	if err != nil {
 		t.Fatalf("failed to write session context: %v", err)
 	}
 
-	// Verify .llamafarm directory was created
-	llamafarmDir := filepath.Join(tempDir, ".llamafarm")
-	if _, err := os.Stat(llamafarmDir); os.IsNotExist(err) {
-		t.Fatalf(".llamafarm directory was not created")
+	// Verify projects directory and context file were created at the expected path
+	lfDir, _ := getLFDataDir()
+	base := filepath.Join(lfDir, "projects", "test", "test", "cli", "context")
+	if _, err := os.Stat(base); os.IsNotExist(err) {
+		t.Fatalf("projects/test/test/cli/context directory was not created")
 	}
-
-	// Verify context.yaml file was created
-	contextFile := filepath.Join(llamafarmDir, "context.yaml")
+	contextFile := filepath.Join(base, "context.yaml")
 	if _, err := os.Stat(contextFile); os.IsNotExist(err) {
-		t.Fatalf("context.yaml file was not created")
+		t.Fatalf("context.yaml file was not created at %s", contextFile)
 	}
 
 	// Read and verify the content
@@ -125,13 +131,15 @@ func TestReadSessionContext(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Change to temp directory
-	originalCwd, _ := os.Getwd()
-	defer os.Chdir(originalCwd)
-	os.Chdir(tempDir)
+	// Mock getLFDataDir to return our temp directory
+	origGetLFDataDir := getLFDataDir
+	getLFDataDir = func() (string, error) {
+		return filepath.Join(tempDir, ".llamafarm"), nil
+	}
+	defer func() { getLFDataDir = origGetLFDataDir }()
 
 	// Test reading non-existent context file
-	ctx := &ChatSessionContext{SessionMode: SessionModeProject}
+	ctx := &ChatSessionContext{SessionMode: SessionModeProject, Namespace: "test", ProjectID: "test"}
 	context, err := readSessionContext(ctx)
 	if err != nil {
 		t.Fatalf("expected no error for non-existent file, got: %v", err)
@@ -140,13 +148,16 @@ func TestReadSessionContext(t *testing.T) {
 		t.Fatalf("expected nil context for non-existent file, got: %v", context)
 	}
 
-	// Create a valid context file
-	llamafarmDir := filepath.Join(tempDir, ".llamafarm")
-	if err := os.MkdirAll(llamafarmDir, 0755); err != nil {
-		t.Fatalf("failed to create .llamafarm dir: %v", err)
+	// Create a valid context file at the expected session path
+	sessionPath, err := ctx.sessionFilePath()
+	if err != nil {
+		t.Fatalf("failed to compute session file path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(sessionPath), 0755); err != nil {
+		t.Fatalf("failed to create context dir: %v", err)
 	}
 
-	contextFile := filepath.Join(llamafarmDir, "context.yaml")
+	contextFile := sessionPath
 	testSessionID := "test-session-456"
 	testTimestamp := "2024-01-15T10:30:45Z"
 	yamlContent := fmt.Sprintf("session_id: %s\ntimestamp: %s\n", testSessionID, testTimestamp)

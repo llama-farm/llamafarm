@@ -85,7 +85,7 @@ func init() {
 }
 
 // getLFDataDir returns the directory to store LlamaFarm data.
-func getLFDataDir() (string, error) {
+var getLFDataDir = func() (string, error) {
 	dataDir := os.Getenv("LF_DATA_DIR")
 	if dataDir != "" {
 		return dataDir, nil
