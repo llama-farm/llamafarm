@@ -68,11 +68,35 @@ func TestReadChecksumFile(t *testing.T) {
 
 func TestReadChecksumFileInvalid(t *testing.T) {
 	tempDir := t.TempDir()
+
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"empty file", ""},
+		{"short checksum", "abc123"},
+		{"no content", "   "},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			checksumFile := tempDir + "/" + test.name + ".sha256"
+			err := os.WriteFile(checksumFile, []byte(test.content), 0644)
+			if err != nil {
+				t.Fatalf("Failed to create test file: %v", err)
+			}
+
+			_, err = readChecksumFile(checksumFile)
+			if err == nil {
+				t.Error("Expected error for invalid checksum file")
+			}
+		})
+	}
 }
 
 func TestReadChecksumFileWhitespaceAndMultiline(t *testing.T) {
 	tempDir := t.TempDir()
-	expectedChecksum := "abcdef1234567890"
+	expectedChecksum := "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
 
 	// Case 1: Extra whitespace before and after
 	checksumFile1 := tempDir + "/checksum1.txt"
@@ -125,31 +149,6 @@ func TestReadChecksumFileWhitespaceAndMultiline(t *testing.T) {
 	}
 	if checksum != expectedChecksum {
 		t.Errorf("Expected checksum %s, got %s", expectedChecksum, checksum)
-	}
-}
-
-	tests := []struct {
-		name    string
-		content string
-	}{
-		{"empty file", ""},
-		{"short checksum", "abc123"},
-		{"no content", "   "},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			checksumFile := tempDir + "/" + test.name + ".sha256"
-			err := os.WriteFile(checksumFile, []byte(test.content), 0644)
-			if err != nil {
-				t.Fatalf("Failed to create test file: %v", err)
-			}
-
-			_, err = readChecksumFile(checksumFile)
-			if err == nil {
-				t.Error("Expected error for invalid checksum file")
-			}
-		})
 	}
 }
 
