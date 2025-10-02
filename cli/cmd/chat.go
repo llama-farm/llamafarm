@@ -20,7 +20,7 @@ var (
 	dryRun               bool
 )
 
-// chatCmd represents the `lf run` command (with chat alias for backwards compatibility)
+// chatCmd represents the `lf chat` command
 var chatCmd = &cobra.Command{
 	Use:   "chat [namespace/project] \"input\"",
 	Short: "Chat with a LlamaFarm project (RAG enabled by default)",
