@@ -194,7 +194,7 @@ func init() {
 	rootCmd.AddCommand(chatCmd)
 }
 
-func printRunCurlCommand(messages []ChatMessage, ctx *ChatSessionContext) error {
+func printRunCurlCommand(messages []Message, ctx *ChatSessionContext) error {
 	curlCmd, err := buildChatCurl(messages, ctx)
 	if err != nil {
 		return err

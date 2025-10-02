@@ -144,7 +144,7 @@ func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 	}
 }
 
-func buildChatCurl(messages []ChatMessage, ctx *ChatSessionContext) (string, error) {
+func buildChatCurl(messages []Message, ctx *ChatSessionContext) (string, error) {
 	if ctx == nil {
 		ctx = newDefaultContextFromGlobals()
 	}
@@ -155,7 +155,7 @@ func buildChatCurl(messages []ChatMessage, ctx *ChatSessionContext) (string, err
 	}
 
 	streamTrue := true
-	var filteredMessages []ChatMessage
+	var filteredMessages []Message
 	for _, msg := range messages {
 		if msg.Role != "client" && msg.Role != "error" {
 			filteredMessages = append(filteredMessages, msg)
@@ -533,7 +533,17 @@ type SessionContext struct {
 func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
 	var contextFile string
 	if ctx == nil {
-		return nil, nil
+		// Fallback inference when context not provided: try project-scoped location first
+		if inferred := newDefaultContextFromGlobals(); inferred != nil {
+			if path, err := inferred.sessionFilePath(); err == nil && strings.TrimSpace(path) != "" {
+				contextFile = path
+			}
+		}
+		// Legacy fallback: CWD/.llamafarm/context.yaml
+		if strings.TrimSpace(contextFile) == "" {
+			cwd := getEffectiveCWD()
+			contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
+		}
 	} else {
 		path, err := ctx.sessionFilePath()
 		if err != nil {

@@ -92,8 +92,9 @@ var getLFDataDir = func() (string, error) {
 	}
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		return filepath.Join(homeDir, ".llamafarm"), nil
+	} else {
+		return "", fmt.Errorf("getLFDataDir: could not determine home directory: %w", err)
 	}
-	return "", fmt.Errorf("getLFDataDir: could not determine home directory")
 }
 
 // getEffectiveCWD returns the directory to treat as the working directory.
