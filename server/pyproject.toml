@@ -15,26 +15,28 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "dotenv>=0.9.9",
-    "fastapi>=0.116.1",
-    "pre-commit>=4.2.0",
-    "pydantic-settings>=2.10.1",
-    "ruff>=0.12.7",
-    "uvicorn>=0.35.0",
-    "openai>=1.0.0",
-    "instructor>=1.0.0",
-    "urllib3==1.26.20",
-    "six>=1.16.0",
-    "requests>=2.25.0",
-    "structlog>=25.4.0",
-    "asgi-correlation-id>=4.3.4",
-    "atomic-agents==2.1.0",
-    "jsonref>=1.1.0",
-    "celery>=5.5.3",
-    # Configuration parsing
-    "pyyaml>=6.0.0",
-    # Fix dotenv parsing
-    "python-dotenv>=1.0.0",
+  # External dependencies
+  "dotenv>=0.9.9",
+  "fastapi>=0.116.1",
+  "pre-commit>=4.2.0",
+  "pydantic-settings>=2.10.1",
+  "ruff>=0.12.7",
+  "uvicorn>=0.35.0",
+  "openai>=1.0.0",
+  "instructor>=1.0.0",
+  "urllib3==1.26.20",
+  "six>=1.16.0",
+  "requests>=2.25.0",
+  "structlog>=25.4.0",
+  "asgi-correlation-id>=4.3.4",
+  "atomic-agents==2.1.0",
+  "jsonref>=1.1.0",             # Can be removed since it's now in config
+  "celery>=5.5.3",
+  # Configuration parsing
+  "pyyaml>=6.0.0", # Can be removed since it's now in config
+  # Fix dotenv parsing
+  "python-dotenv>=1.0.0",
+  "llamafarm-config",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +64,9 @@ lint.select = ["E", "F", "I", "B", "UP", "SIM"]
 
 # Exclude some files
 exclude = ["migrations", ".venv", "venv", "build", "dist"]
+
+[tool.uv.sources]
+llamafarm-config = { path = "../config", editable = true }
 
 # Optional: treat warnings as errors
 # force-exclude = true

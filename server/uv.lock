@@ -665,6 +665,21 @@ wheels = [
 ]
 
 [[package]]
+name = "jsonschema-path"
+version = "0.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pathable" },
+    { name = "pyyaml" },
+    { name = "referencing" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6e/45/41ebc679c2a4fced6a722f624c18d658dee42612b83ea24c1caf7c0eb3a8/jsonschema_path-0.3.4.tar.gz", hash = "sha256:8365356039f16cc65fddffafda5f58766e34bebab7d6d105616ab52bc4297001", size = 11159, upload-time = "2025-01-24T14:33:16.547Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/58/3485da8cb93d2f393bce453adeef16896751f14ba3e2024bc21dc9597646/jsonschema_path-0.3.4-py3-none-any.whl", hash = "sha256:f502191fdc2b22050f9a81c9237be9d27145b9001c55842bece5e94e382e52f8", size = 14810, upload-time = "2025-01-24T14:33:14.652Z" },
+]
+
+[[package]]
 name = "jsonschema-specifications"
 version = "2025.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -701,6 +716,36 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2a/ae/bb56c6828e4797ba5a4821eec7c43b8bf40f69cda4d4f5f8c8a2810ec96a/linkify-it-py-2.0.3.tar.gz", hash = "sha256:68cda27e162e9215c17d786649d1da0021a451bdc436ef9e0fa0ba5234b9b048", size = 27946, upload-time = "2024-02-04T14:48:04.179Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/1e/b832de447dee8b582cac175871d2f6c3d5077cc56d5575cadba1fd1cccfa/linkify_it_py-2.0.3-py3-none-any.whl", hash = "sha256:6bcbc417b0ac14323382aef5c5192c0075bf8a9d6b41820a2b66371eac6b6d79", size = 19820, upload-time = "2024-02-04T14:48:02.496Z" },
+]
+
+[[package]]
+name = "llamafarm-config"
+version = "0.1.0"
+source = { editable = "../config" }
+dependencies = [
+    { name = "jsonref" },
+    { name = "jsonschema" },
+    { name = "jsonschema-path" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jsonref", specifier = ">=1.1.0" },
+    { name = "jsonschema", specifier = ">=4.23.0" },
+    { name = "jsonschema-path", specifier = ">=0.3.4" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "datamodel-code-generator", specifier = ">=0.27.3" },
+    { name = "jsonref", specifier = ">=1.1.0" },
+    { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=7.0.0" },
+    { name = "pytest-cov", specifier = ">=4.0.0" },
+    { name = "ruff", specifier = ">=0.12.7" },
 ]
 
 [[package]]
@@ -1005,6 +1050,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ec/46/68dde5b6bc00c1296ec6466ab27dddede6aec9af1b99090e1107091b3b84/paginate-0.5.7.tar.gz", hash = "sha256:22bd083ab41e1a8b4f3690544afb2c60c25e5c9a63a30fa2f483f6c60c8e5945", size = 19252, upload-time = "2024-08-25T14:17:24.139Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/90/96/04b8e52da071d28f5e21a805b19cb9390aa17a47462ac87f5e2696b9566d/paginate-0.5.7-py2.py3-none-any.whl", hash = "sha256:b885e2af73abcf01d9559fd5216b57ef722f8c42affbb63942377668e35c7591", size = 13746, upload-time = "2024-08-25T14:17:22.55Z" },
+]
+
+[[package]]
+name = "pathable"
+version = "0.4.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/93/8f2c2075b180c12c1e9f6a09d1a985bc2036906b13dff1d8917e395f2048/pathable-0.4.4.tar.gz", hash = "sha256:6905a3cd17804edfac7875b5f6c9142a218c7caef78693c2dbbbfbac186d88b2", size = 8124, upload-time = "2025-01-10T18:43:13.247Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/eb/b6260b31b1a96386c0a880edebe26f89669098acea8e0318bff6adb378fd/pathable-0.4.4-py3-none-any.whl", hash = "sha256:5ae9e94793b6ef5a4cbe0a7ce9dbbefc1eec38df253763fd0aeeacf2762dbbc2", size = 9592, upload-time = "2025-01-10T18:43:11.88Z" },
 ]
 
 [[package]]
@@ -1506,6 +1560,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "instructor" },
     { name = "jsonref" },
+    { name = "llamafarm-config" },
     { name = "openai" },
     { name = "pre-commit" },
     { name = "pydantic-settings" },
@@ -1541,6 +1596,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "instructor", specifier = ">=1.0.0" },
     { name = "jsonref", specifier = ">=1.1.0" },
+    { name = "llamafarm-config", editable = "../config" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pre-commit", specifier = ">=4.2.0" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },

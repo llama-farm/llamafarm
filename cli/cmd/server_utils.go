@@ -193,7 +193,7 @@ func startLocalServerViaDocker(serverURL string) error {
 		return nil
 	}
 
-	OutputProgress("Starting local LlamaFarm server via Docker...")
+	OutputProgress("Starting '%s' as '%s' via Docker...\n", image, containerName)
 
 	// Get Ollama host for container configuration
 	ollamaHostVar := os.Getenv("OLLAMA_HOST")
@@ -220,6 +220,7 @@ func startLocalServerViaDocker(serverURL string) error {
 			"llamafarm.component": "server",
 			"llamafarm.managed":   "true",
 		},
+		User: getCurrentUserGroup(),
 	}
 
 	// Mount effective working directory into the container at the same path

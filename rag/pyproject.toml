@@ -2,6 +2,9 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project]
 name = "llama-rag"
 version = "0.1.0"
@@ -11,142 +14,144 @@ license = { text = "MIT" }
 authors = [{ name = "RAG Team", email = "rag@llamafarm.dev" }]
 maintainers = [{ name = "RAG Team", email = "rag@llamafarm.dev" }]
 keywords = [
-    "rag",
-    "retrieval-augmented-generation",
-    "llama",
-    "ollama",
-    "chromadb",
-    "embeddings",
-    "vector-database",
-    "nlp",
-    "ai",
-    "machine-learning",
+  "rag",
+  "retrieval-augmented-generation",
+  "llama",
+  "ollama",
+  "chromadb",
+  "embeddings",
+  "vector-database",
+  "nlp",
+  "ai",
+  "machine-learning",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: Text Processing :: Linguistic",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Text Processing :: Linguistic",
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "chromadb>=1.0.0",
-    "requests>=2.31.0",
-    "tqdm>=4.65.0",
-    "colorama>=0.4.6",
-    "pypdf2>=3.0.0",
-    "reportlab>=4.4.3",
-    "pyyaml>=6.0.2",
-    "rich>=14.1.0",
-    # Excel parsing dependencies
-    "pandas>=2.0.0",
-    "openpyxl>=3.1.2",
-    "xlrd>=2.0.1",
-    # HTML parsing dependencies
-    "beautifulsoup4>=4.12.0",
-    "lxml>=4.9.0",
-    # Document parsing dependencies
-    "python-docx>=1.0.0",
-    # Character encoding detection
-    "chardet>=5.0.0",
-    "pytest>=8.4.1",
-    "pytest-cov>=6.2.1",
-    "pytest-asyncio>=1.1.0",
-    "pytest-mock>=3.14.1",
-    "python-magic>=0.4.27",
-    "llama-index>=0.13.6",
-    # Celery for task queue processing
-    "celery>=5.5.3",
-    "structlog>=25.4.0",
-    "psutil>=7.0.0",
-    "pydantic-settings>=2.11.0",
+  # External dependencies
+  "chromadb>=1.0.0",
+  "requests>=2.31.0",
+  "tqdm>=4.65.0",
+  "colorama>=0.4.6",
+  "pypdf2>=3.0.0",
+  "reportlab>=4.4.3",
+  "pyyaml>=6.0.2",
+  "rich>=14.1.0",
+  # Excel parsing dependencies
+  "pandas>=2.0.0",
+  "openpyxl>=3.1.2",
+  "xlrd>=2.0.1",
+  # HTML parsing dependencies
+  "beautifulsoup4>=4.12.0",
+  "lxml>=4.9.0",
+  # Document parsing dependencies
+  "python-docx>=1.0.0",
+  # Character encoding detection
+  "chardet>=5.0.0",
+  "pytest>=8.4.1",
+  "pytest-cov>=6.2.1",
+  "pytest-asyncio>=1.1.0",
+  "pytest-mock>=3.14.1",
+  "python-magic>=0.4.27",
+  "llama-index>=0.13.6",
+  # Celery for task queue processing
+  "celery>=5.5.3",
+  "structlog>=25.4.0",
+  "psutil>=7.0.0",
+  "pydantic-settings>=2.11.0",
+  "llamafarm-config",
 ]
 
 [project.optional-dependencies]
 # Development dependencies
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-asyncio>=0.21.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.0.0",
-    "mypy>=1.0.0",
-    "pre-commit>=3.0.0",
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "pytest-asyncio>=0.21.0",
+  "black>=23.0.0",
+  "isort>=5.12.0",
+  "flake8>=6.0.0",
+  "mypy>=1.0.0",
+  "pre-commit>=3.0.0",
 ]
 
 # Testing dependencies
 test = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-mock>=3.10.0",
-    "responses>=0.23.0",
-    "requests-mock>=1.10.0",
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-mock>=3.10.0",
+  "responses>=0.23.0",
+  "requests-mock>=1.10.0",
 ]
 
 # Documentation dependencies
 docs = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.0.0",
-    "mkdocs-mermaid2-plugin>=1.0.0",
-    "mkdocstrings[python]>=0.22.0",
+  "mkdocs>=1.5.0",
+  "mkdocs-material>=9.0.0",
+  "mkdocs-mermaid2-plugin>=1.0.0",
+  "mkdocstrings[python]>=0.22.0",
 ]
 
 # Performance monitoring
 monitoring = [
-    "prometheus-client>=0.17.0",
-    "psutil>=5.9.0",
-    "memory-profiler>=0.61.0",
+  "prometheus-client>=0.17.0",
+  "psutil>=5.9.0",
+  "memory-profiler>=0.61.0",
 ]
 
 # Additional vector databases
 vector-dbs = [
-    "qdrant-client>=1.6.0",
-    "weaviate-client>=3.24.0",
-    "pymilvus>=2.3.0",
-    "pinecone-client>=2.2.0",
-    "lancedb>=0.3.0",
-    "faiss-cpu>=1.7.4",
+  "qdrant-client>=1.6.0",
+  "weaviate-client>=3.24.0",
+  "pymilvus>=2.3.0",
+  "pinecone-client>=2.2.0",
+  "lancedb>=0.3.0",
+  "faiss-cpu>=1.7.4",
 ]
 
 # Additional embedding providers
 embeddings = [
-    "sentence-transformers>=2.2.0",
-    "openai>=1.0.0",
-    "cohere>=4.32.0",
-    "transformers>=4.35.0",
-    "torch>=2.0.0",
+  "sentence-transformers>=2.2.0",
+  "openai>=1.0.0",
+  "cohere>=4.32.0",
+  "transformers>=4.35.0",
+  "torch>=2.0.0",
 ]
 
 # LlamaIndex parsers and advanced document processing
 llamaindex = [
-    "llama-index>=0.9.0",
-    "llama-index-core>=0.9.0",
-    "llama-index-readers-file>=0.1.0",
-    "llama-index-embeddings-openai>=0.1.0",
-    "llama-index-llms-openai>=0.1.0",
-    "python-magic>=0.4.27",                 # For file type detection
-    "pypdf>=3.17.0",                        # Enhanced PDF support
-    "pymupdf>=1.23.0",                      # Alternative PDF parsing
-    "pdfplumber>=0.10.0",                   # Table extraction from PDFs
-    "camelot-py>=0.11.0",                   # Advanced table extraction
-    "tabula-py>=2.8.0",                     # Table extraction via Java
-    "pytesseract>=0.3.10",                  # OCR support for scanned PDFs
-    "pdf2image>=1.16.0",                    # PDF to image conversion
-    "pillow>=10.0.0",                       # Image processing
-    "numpy>=1.24.0",                        # Numerical operations
-    "scipy>=1.10.0",                        # Scientific computing
+  "llama-index>=0.9.0",
+  "llama-index-core>=0.9.0",
+  "llama-index-readers-file>=0.1.0",
+  "llama-index-embeddings-openai>=0.1.0",
+  "llama-index-llms-openai>=0.1.0",
+  "python-magic>=0.4.27",                 # For file type detection
+  "pypdf>=3.17.0",                        # Enhanced PDF support
+  "pymupdf>=1.23.0",                      # Alternative PDF parsing
+  "pdfplumber>=0.10.0",                   # Table extraction from PDFs
+  "camelot-py>=0.11.0",                   # Advanced table extraction
+  "tabula-py>=2.8.0",                     # Table extraction via Java
+  "pytesseract>=0.3.10",                  # OCR support for scanned PDFs
+  "pdf2image>=1.16.0",                    # PDF to image conversion
+  "pillow>=10.0.0",                       # Image processing
+  "numpy>=1.24.0",                        # Numerical operations
+  "scipy>=1.10.0",                        # Scientific computing
 ]
 
 # All optional dependencies
@@ -164,13 +169,13 @@ rag = "cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = [
-    "core",
-    "components", # Include all components (parsers, embedders, extractors, stores)
-    "embedders",
-    "stores",
-    "utils",
-    "retrieval",  # Retrieval strategies
-    "cli",        # CLI system
+  "core",
+  "components", # Include all components (parsers, embedders, extractors, stores)
+  "embedders",
+  "stores",
+  "utils",
+  "retrieval",  # Retrieval strategies
+  "cli",        # CLI system
 ]
 
 # Include data files
@@ -206,12 +211,12 @@ multi_line_output = 3
 line_length = 88
 known_first_party = ["core", "parsers", "embedders", "stores", "utils"]
 skip_glob = [
-    "rag_env/*",
-    "venv/*",
-    ".venv/*",
-    "build/*",
-    "dist/*",
-    "chroma_db/*",
+  "rag_env/*",
+  "venv/*",
+  ".venv/*",
+  "build/*",
+  "dist/*",
+  "chroma_db/*",
 ]
 
 [tool.mypy]
@@ -237,131 +242,134 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = [
-    "-ra",
-    "--strict-markers",
-    "--strict-config",
-    # Coverage disabled for now - uncomment to enable
-    # "--cov=core",
-    # "--cov=parsers",
-    # "--cov=embedders",
-    # "--cov=stores",
-    # "--cov=utils",
-    # "--cov-report=term-missing",
-    # "--cov-report=html",
-    # "--cov-report=xml",
+  "-ra",
+  "--strict-markers",
+  "--strict-config",
+  # Coverage disabled for now - uncomment to enable
+  # "--cov=core",
+  # "--cov=parsers",
+  # "--cov=embedders",
+  # "--cov=stores",
+  # "--cov=utils",
+  # "--cov-report=term-missing",
+  # "--cov-report=html",
+  # "--cov-report=xml",
 ]
 testpaths = ["tests", "."]
 pythonpath = ["."]
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "ollama: marks tests that require Ollama to be running",
-    "chromadb: marks tests that require ChromaDB",
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: marks tests as integration tests",
+  "ollama: marks tests that require Ollama to be running",
+  "chromadb: marks tests that require ChromaDB",
 ]
 filterwarnings = ["ignore::UserWarning", "ignore::DeprecationWarning"]
 
 [tool.coverage.run]
 source = ["core", "parsers", "embedders", "stores", "utils"]
 omit = [
-    "*/tests/*",
-    "*/test_*",
-    "*/__pycache__/*",
-    "*/venv/*",
-    "*/rag_env/*",
-    "setup.py",
+  "*/tests/*",
+  "*/test_*",
+  "*/__pycache__/*",
+  "*/venv/*",
+  "*/rag_env/*",
+  "setup.py",
 ]
 
 [tool.coverage.report]
 exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
+  "pragma: no cover",
+  "def __repr__",
+  "if self.debug:",
+  "if settings.DEBUG",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if 0:",
+  "if __name__ == .__main__.:",
+  "class .*\\bProtocol\\):",
+  "@(abc\\.)?abstractmethod",
 ]
 
 [tool.flake8]
 max-line-length = 88
 extend-ignore = [
-    "E203", # whitespace before ':'
-    "E501", # line too long (handled by black)
-    "W503", # line break before binary operator (handled by black)
+  "E203", # whitespace before ':'
+  "E501", # line too long (handled by black)
+  "W503", # line break before binary operator (handled by black)
 ]
 exclude = [
-    ".git",
-    "__pycache__",
-    ".venv",
-    "venv",
-    "rag_env",
-    "build",
-    "dist",
-    "chroma_db",
-    "*.egg-info",
+  ".git",
+  "__pycache__",
+  ".venv",
+  "venv",
+  "rag_env",
+  "build",
+  "dist",
+  "chroma_db",
+  "*.egg-info",
 ]
 per-file-ignores = [
-    "__init__.py:F401",                   # imported but unused
-    "test_*.py:D100,D101,D102,D103,D104", # missing docstrings in tests
+  "__init__.py:F401",                   # imported but unused
+  "test_*.py:D100,D101,D102,D103,D104", # missing docstrings in tests
 ]
 
 # UV-specific configuration
 [tool.uv]
 dev-dependencies = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-mock>=3.10.0",
-    "responses>=0.23.0",
-    "requests-mock>=1.10.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "mypy>=1.0.0",
-    "pre-commit>=3.0.0",
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-mock>=3.10.0",
+  "responses>=0.23.0",
+  "requests-mock>=1.10.0",
+  "black>=23.0.0",
+  "isort>=5.12.0",
+  "mypy>=1.0.0",
+  "pre-commit>=3.0.0",
 ]
+
+[tool.uv.sources]
+llamafarm-config = { path = "../config", editable = true }
 
 [tool.ruff]
 target-version = "py39"
 line-length = 88
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
+  "E",  # pycodestyle errors
+  "W",  # pycodestyle warnings
+  "F",  # pyflakes
+  "I",  # isort
+  "B",  # flake8-bugbear
+  "C4", # flake8-comprehensions
+  "UP", # pyupgrade
 ]
 ignore = [
-    "E501", # line too long, handled by black
-    "B008", # do not perform function calls in argument defaults
-    "C901", # too complex
+  "E501", # line too long, handled by black
+  "B008", # do not perform function calls in argument defaults
+  "C901", # too complex
 ]
 exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
-    "rag_env",
-    "chroma_db",
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".hg",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "venv",
+  "rag_env",
+  "chroma_db",
 ]
 
 [tool.ruff.per-file-ignores]

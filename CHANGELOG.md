@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.0.5](https://github.com/llama-farm/llamafarm/compare/v0.0.4...v0.0.5) (2025-09-30)
+
+
+### Features
+
+* add directory upload capability to CLI datasets ingest command ([#223](https://github.com/llama-farm/llamafarm/issues/223)) ([5c54648](https://github.com/llama-farm/llamafarm/commit/5c54648e6d5a6ffc2ec7d031ec9265cbf91ce391))
+* add flexible agent handlers for rag support ([#233](https://github.com/llama-farm/llamafarm/issues/233)) ([127710b](https://github.com/llama-farm/llamafarm/commit/127710b087d394f2a748aa07da2004dca02029f9))
+* **cli:** uniform commands ([#215](https://github.com/llama-farm/llamafarm/issues/215)) ([337391a](https://github.com/llama-farm/llamafarm/commit/337391afd28adbc9d50907b69aac33818bd53a77))
+* **cli:** update the cli command structure ([#229](https://github.com/llama-farm/llamafarm/issues/229)) ([94746e5](https://github.com/llama-farm/llamafarm/commit/94746e566b440ba24cd3e2f651bcd4284c10b594))
+* **designer:** add 'included file types' field to parser and extractor add/edit modals + modal restructure ([781e1bd](https://github.com/llama-farm/llamafarm/commit/781e1bd846d859d689aafdf5528cdf826dcb68e4))
+* **designer:** better dummy data ([87fc352](https://github.com/llama-farm/llamafarm/commit/87fc352d8a1267c0eaed27b1e9ed2b78dde3ddb7))
+* **designer:** check for updates from home page ([83f0c81](https://github.com/llama-farm/llamafarm/commit/83f0c8114e10d04002980e7d586d448860a2f54a))
+* **designer:** client side session storage ([#152](https://github.com/llama-farm/llamafarm/issues/152)) ([23f06c4](https://github.com/llama-farm/llamafarm/commit/23f06c42d9c66e2dd226a41ddc69c24bc6763b88))
+* **designer:** import sample datasets (from sample projects) in data tab ([5195b8e](https://github.com/llama-farm/llamafarm/commit/5195b8e72df0719da6aaa1a7b47a43839076940e))
+* **designer:** reprocess assigned datasets when any changes are made to processing strategy ([93932da](https://github.com/llama-farm/llamafarm/commit/93932da49ab6e635a03b49f50b65660b02320fc7))
+* **designer:** sample projects page ([d8eec60](https://github.com/llama-farm/llamafarm/commit/d8eec60af5a881722a1270f4412701649658c504))
+* **designer:** upgrade banner and toast for new versions ([00eb4cd](https://github.com/llama-farm/llamafarm/commit/00eb4cd00e316b7e4de6e797512c433a9c53262f))
+* **rag:** run in separate container ([#181](https://github.com/llama-farm/llamafarm/issues/181)) ([8ba6409](https://github.com/llama-farm/llamafarm/commit/8ba6409536473f756f02c99a68b8cfe1931a5d3b))
+
+
+### Bug Fixes
+
+* address bugs with rag in Docker ([#213](https://github.com/llama-farm/llamafarm/issues/213)) ([f160b79](https://github.com/llama-farm/llamafarm/commit/f160b796cf5838f018b724ecc5ea2b7d30cf3e03))
+* **ci:** resolve merge conflicts in docker workflow; align tags and services to main ([458eb08](https://github.com/llama-farm/llamafarm/commit/458eb08b1080c9a7e772ef4a617040a471934b94))
+* **cli:** address bugs with interactive chat viewport ([#206](https://github.com/llama-farm/llamafarm/issues/206)) ([de4f46b](https://github.com/llama-farm/llamafarm/commit/de4f46bb4b9d85216c374991daafac4b7a9f055b))
+* **cli:** ensure project sync runs for required commands ([#216](https://github.com/llama-farm/llamafarm/issues/216)) ([f27a29b](https://github.com/llama-farm/llamafarm/commit/f27a29b7cef5183d41b50e41ff88db3f420ab50d))
+* **cli:** set docker host mapping for linux ([#242](https://github.com/llama-farm/llamafarm/issues/242)) ([8ccbf7b](https://github.com/llama-farm/llamafarm/commit/8ccbf7bbc23252e067b42c963c4c154b354c72e2))
+* **cli:** set user directive in container ([#246](https://github.com/llama-farm/llamafarm/issues/246)) ([e152341](https://github.com/llama-farm/llamafarm/commit/e152341f85a1d9cb41aaa1125098de5dcc894d03))
+* **cli:** Windows Docker volume mount path conversion ([#222](https://github.com/llama-farm/llamafarm/issues/222)) ([941a46e](https://github.com/llama-farm/llamafarm/commit/941a46e74c833d698167491116459f22c5756397))
+* **config:** update default template ([#225](https://github.com/llama-farm/llamafarm/issues/225)) ([b98508d](https://github.com/llama-farm/llamafarm/commit/b98508d0fea4d76185b9c0dbca8839d81fa82821))
+* **designer:** add better individual parser and extractor descriptions to ui + better formating to edit/add ([b7914bc](https://github.com/llama-farm/llamafarm/commit/b7914bc9f1ae29e2b344c969624129b271d8fdf1))
+* **designer:** addressing sourcery and cubic comments and build errors ([8c20106](https://github.com/llama-farm/llamafarm/commit/8c2010671aa98314da9c4833bc65df120e7b072e))
+* **designer:** another build error fix ([49164bd](https://github.com/llama-farm/llamafarm/commit/49164bdc84297b7cd3c4d5cf128b6f60b6e6b2ba))
+* **designer:** another fix ([cd72833](https://github.com/llama-farm/llamafarm/commit/cd72833fd923049cac7d6b1bb8a8070b9c07e80b))
+* **designer:** build error fix ([ae2ab01](https://github.com/llama-farm/llamafarm/commit/ae2ab0186161abfd2769695c5c93acedb1de862a))
+* **designer:** build errors again ([25994b8](https://github.com/llama-farm/llamafarm/commit/25994b8bdfe231b43629085ca1c3da9212ae5f0d))
+* **designer:** dataset cards to display correct processing strategy ([4c540ec](https://github.com/llama-farm/llamafarm/commit/4c540ec27ccfe382944af0c3a4a98ba564c34554))
+* **designer:** fix build errors and address sourcery comments ([bf22d3c](https://github.com/llama-farm/llamafarm/commit/bf22d3ca66d62c0056fb858e18ed81df1ca3219e))
+* **designer:** header tabs responsiveness - shrink to icons on small screen width ([3aec945](https://github.com/llama-farm/llamafarm/commit/3aec945d029c1c7d0c20a5690f972136e908178b))
+* **designer:** human readable extractor/parser names / more context ([7bf69d0](https://github.com/llama-farm/llamafarm/commit/7bf69d059e6a7e95105d425e7bab433c882211bc))
+* **designer:** light mode logo wasn't showing, increase logo size in header ([bc2584c](https://github.com/llama-farm/llamafarm/commit/bc2584c0313eecf18015ed91798f60bc9ce5a7e4))
+* **designer:** priority cannot go below 0 for parsers/extractors ([07d44a5](https://github.com/llama-farm/llamafarm/commit/07d44a560600f7d9789b9363738e33ba2fada04f))
+* **designer:** revert dataset strat issues, remove rag strategy ([179cb28](https://github.com/llama-farm/llamafarm/commit/179cb287cbb26bf9abedd2beecd5bc6a1bf18879))
+* **designer:** search by sample project tag ([d162c4b](https://github.com/llama-farm/llamafarm/commit/d162c4b31350c4a5fe0954a4099068e067b1784b))
+* **designer:** sourcery comments addressed and build error addressed ([1204eb5](https://github.com/llama-farm/llamafarm/commit/1204eb5906682a0c49adfb9f4a3f4d7aa35bea15))
+* **docs:** oss license and py version badges ([dae37fc](https://github.com/llama-farm/llamafarm/commit/dae37fc1a61c3bd120ea8ca77eef43b89d9b9037))
+* **docs:** remove home page, polish header sizes and alignment ([97194ee](https://github.com/llama-farm/llamafarm/commit/97194ee8ac4322b79a10b3cd0e60448cba0ad21c))
+* **docs:** remove home page, polish header sizes and alignment ([10e8cbe](https://github.com/llama-farm/llamafarm/commit/10e8cbe8cfefada2b1f187fa3a8f94f9fa8efc52))
+* **docs:** sourcery edits to simplfy styling ([0fdb6d8](https://github.com/llama-farm/llamafarm/commit/0fdb6d867813b691637b9ede906ef47d66365c5c))
+* **rag:** store data in proper location within project dir ([#217](https://github.com/llama-farm/llamafarm/issues/217)) ([80d6125](https://github.com/llama-farm/llamafarm/commit/80d61259b4722135ebaefb2fc1e0f825bd5c8950))
+* remove rag_strategy references ([#198](https://github.com/llama-farm/llamafarm/issues/198)) ([84465ec](https://github.com/llama-farm/llamafarm/commit/84465ec5f558a4524ac64bdff90ce5e72e2c0451))
+* resolve ollama integration issues and instructor mode configuration ([#196](https://github.com/llama-farm/llamafarm/issues/196)) ([04633d3](https://github.com/llama-farm/llamafarm/commit/04633d3e110db475c887de4c2d660b169d1e4380))
+* **server:** minor health check improvements ([f27a29b](https://github.com/llama-farm/llamafarm/commit/f27a29b7cef5183d41b50e41ff88db3f420ab50d))
+
+
+### Miscellaneous Chores
+
+* release 0.0.5 ([7faa7e0](https://github.com/llama-farm/llamafarm/commit/7faa7e0b9ed8e08bc8269516164bc0cc653ac54d))
+
 ## [0.0.4](https://github.com/llama-farm/llamafarm/compare/v0.0.3...v0.0.4) (2025-09-22)
 
 

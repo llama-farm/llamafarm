@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Chatbox from './components/Chatbox/Chatbox'
 import { Outlet, useLocation, useSearchParams } from 'react-router-dom'
+import { ProjectUpgradeBanner } from './components/common/UpgradeBanners'
 import { decodeMessageFromUrl } from './utils/homePageUtils'
 
 function Chat() {
@@ -17,7 +18,7 @@ function Chat() {
       const decodedMessage = decodeMessageFromUrl(initialMessageParam)
       if (decodedMessage) {
         setInitialMessage(decodedMessage)
-        
+
         // Clear the URL parameter after handling to clean up the URL
         setSearchParams(params => {
           params.delete('initialMessage')
@@ -41,11 +42,12 @@ function Chat() {
 
   return (
     <div className="w-full h-full flex transition-colors bg-gray-200 dark:bg-blue-800 pt-12">
+      <ProjectUpgradeBanner />
       <div
         className={`h-full transition-all duration-300 ${isPanelOpen ? 'w-1/4' : 'w-[47px]'}`}
       >
-        <Chatbox 
-          isPanelOpen={isPanelOpen} 
+        <Chatbox
+          isPanelOpen={isPanelOpen}
           setIsPanelOpen={setIsPanelOpen}
           initialMessage={initialMessage}
         />

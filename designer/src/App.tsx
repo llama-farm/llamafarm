@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import { ToastProvider } from './components/ui/toast'
 import ProjectModal from './components/Project/ProjectModal'
@@ -26,6 +26,8 @@ import RetrievalMethod from './components/Rag/RetrievalMethod'
 // @ts-ignore - component is TSX local file
 import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
 // Projects standalone page removed; Home now hosts projects section
+import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
+import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
 
 function ProjectModalRoot() {
   const modal = useProjectModalContext()
@@ -44,11 +46,15 @@ function ProjectModalRoot() {
 }
 
 function App() {
+  const location = useLocation()
+  const isHome = location.pathname === '/'
+  const { currentVersion } = useUpgradeAvailability()
   return (
     <main className="h-screen w-full">
       <ToastProvider>
         <ProjectModalProvider>
-          <Header />
+          <Header currentVersion={currentVersion} />
+          {isHome ? <HomeUpgradeBanner /> : null}
           <div className="h-full w-full">
             <Routes>
               <Route path="/" element={<Home />} />

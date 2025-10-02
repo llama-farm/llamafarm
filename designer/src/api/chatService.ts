@@ -10,7 +10,6 @@ import {
 } from '../types/chat'
 import { handleSSEResponse } from '../utils/sseUtils'
 
-
 /**
  * Send a chat message to the inference endpoint
  * @param chatRequest - The chat request payload
@@ -20,23 +19,27 @@ import { handleSSEResponse } from '../utils/sseUtils'
 export async function chatInference(
   chatRequest: ChatRequest,
   sessionId?: string
-): Promise<{data: ChatResponse, sessionId: string}> {
+): Promise<{ data: ChatResponse; sessionId: string }> {
   const headers: Record<string, string> = {}
-  
+
   if (sessionId) {
     headers['X-Session-ID'] = sessionId
   }
 
-  const response = await apiClient.post<ChatResponse>('/inference/chat', chatRequest, {
-    headers,
-  })
+  const response = await apiClient.post<ChatResponse>(
+    '/inference/chat',
+    chatRequest,
+    {
+      headers,
+    }
+  )
 
   // Extract session ID from response headers (server provides this)
   const responseSessionId = response.headers['x-session-id'] || sessionId || ''
 
   return {
     data: response.data,
-    sessionId: responseSessionId
+    sessionId: responseSessionId,
   }
 }
 
@@ -45,8 +48,12 @@ export async function chatInference(
  * @param sessionId - The session ID to delete
  * @returns Promise<DeleteSessionResponse>
  */
-export async function deleteChatSession(sessionId: string): Promise<DeleteSessionResponse> {
-  const response = await apiClient.delete<DeleteSessionResponse>(`/inference/chat/session/${encodeURIComponent(sessionId)}`)
+export async function deleteChatSession(
+  sessionId: string
+): Promise<DeleteSessionResponse> {
+  const response = await apiClient.delete<DeleteSessionResponse>(
+    `/inference/chat/sessions/${encodeURIComponent(sessionId)}`
+  )
   return response.data
 }
 
@@ -92,24 +99,28 @@ export async function chatInferenceStreaming(
   try {
     // Ensure streaming is enabled and validate the request
     const streamingRequest = { ...chatRequest, stream: true }
-    
+
     // Validate the request format
     if (!streamingRequest.messages || streamingRequest.messages.length === 0) {
-      throw new ValidationError('No messages in chat request', { messages: streamingRequest.messages })
+      throw new ValidationError('No messages in chat request', {
+        messages: streamingRequest.messages,
+      })
     }
-    
+
     // Ensure all messages have valid content
     for (const message of streamingRequest.messages) {
       if (!message.content || typeof message.content !== 'string') {
-        throw new ValidationError('Message content must be a string', { message })
+        throw new ValidationError('Message content must be a string', {
+          message,
+        })
       }
     }
-    
+
     const headers: Record<string, string> = {
-      'Accept': 'text/event-stream',
+      Accept: 'text/event-stream',
       'Cache-Control': 'no-cache',
     }
-    
+
     if (sessionId) {
       headers['X-Session-ID'] = sessionId
     }
@@ -118,7 +129,7 @@ export async function chatInferenceStreaming(
     // Construct the full URL using the same base as apiClient
     const baseURL = apiClient.defaults.baseURL || ''
     const url = `${baseURL}/inference/chat`
-    
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -137,36 +148,40 @@ export async function chatInferenceStreaming(
     }
 
     // Extract session ID from response headers
-    const responseSessionId = response.headers.get('x-session-id') || sessionId || ''
+    const responseSessionId =
+      response.headers.get('x-session-id') || sessionId || ''
 
     // Handle the streaming response using SSE utility
     await handleSSEResponse<ChatStreamChunk>(
       response,
-      (chunk) => onChunk?.(chunk),
+      chunk => onChunk?.(chunk),
       {
         signal,
         onComplete,
-        onError
+        onError,
       }
     )
 
     return responseSessionId
-
   } catch (error) {
     // Handle abort errors specifically
     if (error instanceof Error && error.name === 'AbortError') {
-      const abortError = new NetworkError('Streaming request was cancelled', error)
+      const abortError = new NetworkError(
+        'Streaming request was cancelled',
+        error
+      )
       onError?.(abortError)
       throw abortError
     }
-    
-    const networkError = error instanceof NetworkError 
-      ? error 
-      : new NetworkError(
-          error instanceof Error ? error.message : 'Unknown streaming error',
-          error instanceof Error ? error : new Error('Unknown error')
-        )
-    
+
+    const networkError =
+      error instanceof NetworkError
+        ? error
+        : new NetworkError(
+            error instanceof Error ? error.message : 'Unknown streaming error',
+            error instanceof Error ? error : new Error('Unknown error')
+          )
+
     onError?.(networkError)
     throw networkError
   }

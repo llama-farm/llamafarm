@@ -2,10 +2,9 @@
 
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
-from core.base import Document
+from components.retrievers.base import RetrievalResult, RetrievalStrategy
 
 logger = logging.getLogger(__name__)
 

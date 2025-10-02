@@ -1,0 +1,130 @@
+version: v1
+name: mixed-format-demo
+namespace: default
+prompts:
+- role: system
+  content: 'You are a technical analyst that reviews mixed-format project documentation.
+
+    Cite file names and sections when summarizing information. If the context lacks
+    the answer, say so.
+
+    '
+rag:
+  databases:
+  - name: mixed_format_db
+    type: ChromaStore
+    config:
+      collection_name: mixed_format_docs
+      distance_function: cosine
+      persist_directory: ./data/mixed_format_db
+      port: 8000
+    embedding_strategies:
+    - name: default_embeddings
+      type: OllamaEmbedder
+      config:
+        auto_pull: true
+        base_url: http://localhost:11434
+        batch_size: 16
+        dimension: 768
+        model: nomic-embed-text
+        timeout: 60
+      priority: 0
+    retrieval_strategies:
+    - name: blended_search
+      type: HybridUniversalStrategy
+      config:
+        dense_weight: 0.6
+        sparse_weight: 0.4
+        top_k: 8
+      default: true
+  - name: mixed_format_db_20250930122841
+    type: ChromaStore
+    config:
+      collection_name: mixed_format_docs
+      distance_function: cosine
+      persist_directory: ./data/mixed_format_db_20250930122841
+      port: 8000
+    embedding_strategies:
+    - name: default_embeddings
+      type: OllamaEmbedder
+      config:
+        auto_pull: true
+        base_url: http://localhost:11434
+        batch_size: 16
+        dimension: 768
+        model: nomic-embed-text
+        timeout: 60
+      priority: 0
+    retrieval_strategies:
+    - name: blended_search
+      type: HybridUniversalStrategy
+      config:
+        dense_weight: 0.6
+        sparse_weight: 0.4
+        top_k: 8
+      default: true
+  data_processing_strategies:
+  - name: mixed_content_processor
+    description: Handles PDFs, text, Markdown, HTML, and code snippets.
+    parsers:
+    - type: PDFParser_LlamaIndex
+      config:
+        chunk_size: 1000
+        chunk_overlap: 120
+        extract_metadata: true
+      file_include_patterns:
+      - '*.pdf'
+      - '*.PDF'
+      priority: 120
+    - type: MarkdownParser_LlamaIndex
+      config:
+        chunk_size: 800
+        chunk_overlap: 80
+      file_include_patterns:
+      - '*.md'
+      - '*.markdown'
+      priority: 110
+    - type: TextParser_LlamaIndex
+      config:
+        chunk_size: 800
+        chunk_overlap: 80
+      file_include_patterns:
+      - '*.txt'
+      priority: 100
+    - type: TextParser_Python
+      config:
+        chunk_size: 600
+        chunk_overlap: 60
+      file_include_patterns:
+      - '*.html'
+      - '*.py'
+      priority: 90
+    extractors:
+    - type: ContentStatisticsExtractor
+      config:
+        include_readability: true
+        include_structure: true
+      priority: 100
+    - type: EntityExtractor
+      config:
+        entity_types:
+        - ORG
+        - PERSON
+        - PRODUCT
+        - DATE
+        use_fallback: true
+      priority: 90
+datasets:
+- name: mixed_format_dataset_20250930122841
+  data_processing_strategy: mixed_content_processor
+  database: mixed_format_db_20250930122841
+  files:
+  - e9314cbe6375abc60d9611d5dc7039c8368ee66261afdd0945f2d7df2a5466ef
+  - bfc6dfc07a3b7118ad15f7e57c9f2b6eea759b03ec075e5c33046affecd47759
+  - 7103ded57aafcc98b0c0966f75d92c3a76078091d13397764c07122d6051460a
+  - e075052b1dd716f0665f398b4ddfbd3144ff5677fedb420c12d53dfb5b704837
+  - 1d58f9207b989d7a34100b8e4f998ab1be9f5402b7cef62103a97c6d0dec1a06
+runtime:
+  provider: ollama
+  model: llama3.1:8b
+  base_url: http://localhost:11434/v1

@@ -96,7 +96,7 @@ def setup_celery_logging(**kwargs):
 def run_worker():
     try:
         # Only consume from the 'rag' queue, not the 'celery' queue
-        app.worker_main(argv=["worker", "-P", "solo", "-Q", "rag"])
+        app.worker_main(argv=["worker", "-Q", "rag"])
     except KeyboardInterrupt:
         logger.info("RAG worker shutting down due to keyboard interrupt")
     except Exception as e:

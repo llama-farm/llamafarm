@@ -3,65 +3,46 @@ title: Examples
 sidebar_position: 10
 ---
 
-# Examples
+# Example Workflows
 
-LlamaFarm ships with end-to-end examples that demonstrate ingestion pipelines, RAG queries, and chat workflows. Each example lives under `examples/` in the repo with scripts you can run locally.
+The repository ships with interactive demos that highlight different retrieval scenarios. Each example lives under `examples/<folder>` and provides a configuration, sample data, and a script that uses the newest CLI commands (e.g., `lf datasets create`, `lf chat`).
 
-## FDA Letters Assistant (`examples/fda_rag`)
+| Folder | Use Case | Highlights |
+|--------|----------|------------|
+| `large-complex-rag/` | Multi-megabyte Raleigh UDO ordinance PDF | Long-running ingestion, zoning-focused prompts, unique DB/dataset per run. |
+| `many-small-file-rag/` | FDA correspondence packet | Several shorter PDFs, quick iteration, letter-specific queries. |
+| `mixed-format-rag/` | Blend of PDF/Markdown/HTML/text/code | Hybrid retrieval, multiple parsers/extractors in one pipeline. |
+| `quick-rag/` | Two short engineering notes | Rapid smoke test for the environment and CLI. |
 
-- **Documents**: FDA Complete Response letters (PDF).
-- **Strategy**: `pdf_ingest` with heading/entity extractors.
-- **Dataset script**: `examples/fda_rag/run_all.sh` (creates dataset, uploads files, processes, runs queries).
-- **Highlights**:
-  - Demonstrates large PDF ingestion.
-  - Shows how to query for specific regulatory requirements.
-  - Includes baseline chats with and without RAG.
-
-Run the script or execute commands manually:
-
+## How to Run an Example
 ```bash
-cd examples/fda_rag
-./run_all.sh
-# or step-by-step
-lf datasets create -s pdf_ingest -b main_db fda_letters
-lf datasets upload fda_letters ./files/*.pdf
-lf datasets process fda_letters
-lf rag query --database main_db "What did the 2024 letters request?"
-lf chat --database main_db "Summarize deficiencies from 2024 letters"
+# Build or install the CLI if needed
+go build -o lf ./cli
+
+# Run the interactive workflow (press Enter between steps).
+# The script automatically scopes the CLI with `lf --cwd examples/<folder>`.
+./examples/<folder>/run_example.sh
+
+# Optional: point the script at a different directory that contains the lf binary
+./examples/<folder>/run_example.sh /path/to/your/project
+
+# Skip prompts if desired
+NO_PAUSE=1 ./examples/<folder>/run_example.sh
 ```
 
-## Raleigh UDO Planning Helper (`examples/gov_rag`)
+Each script clones the relevant database entry, creates a unique dataset/database pair, uploads the sample documents, processes them, prints the CLI output verbatim, runs meaningful `lf rag query` and `lf chat` commands, and finishes with a baseline `--no-rag` comparison. Clean-up instructions are printed at the end of each script.
 
-- **Documents**: Raleigh Unified Development Ordinance (large PDF).
-- **Strategy**: Custom PDF parser with longer chunking.
-- **Dataset script**: `examples/gov_rag/run_all.sh` (noting ingestion can take several minutes).
-- **Highlights**:
-  - Illustrates long-running ingestion and duplicate detection.
-  - Shows how to query for zoning/transition requirements.
-  - Communicates to users that processing may take extra time.
-
-Usage:
-
+## Manual Command Reference
+Use these commands if you prefer to run the workflows yourself (replace `<folder>` with the example you want to explore):
 ```bash
-cd examples/gov_rag
-./run_all.sh
-# or manually
-lf datasets create -s udo_pdf_processor -b raleigh_udo_db raleigh_udo_dataset
-lf datasets upload raleigh_udo_dataset ./files/UDOSupplement31.pdf
-lf datasets process raleigh_udo_dataset
-sleep 10  # allow worker to finish
-lf rag query --database raleigh_udo_db "Which section covers neighborhood transitions?"
-lf chat --database raleigh_udo_db "Summarize parking requirements with citations"
+lf --cwd examples/<folder> datasets create -s <strategy> -b <database> <dataset>
+lf --cwd examples/<folder> datasets upload <dataset> examples/<folder>/files/*
+lf --cwd examples/<folder> datasets process <dataset>
+lf --cwd examples/<folder> rag query --database <database> --top-k 3 --include-metadata --include-score "Your question"
+lf --cwd examples/<folder> chat --database <database> "Prompt needing citations"
+lf --cwd examples/<folder> chat --no-rag "Same prompt without RAG"
+lf --cwd examples/<folder> datasets delete <dataset>
+rm -rf examples/<folder>/data/<database>
 ```
 
-> **Note:** The dataset processing command may time out while the worker finishes parsing. If you see a timeout, re-run the command or check worker logs—processing continues in the background.
-
-## Build Your Own Example
-
-1. Copy one of the example folders.
-2. Update `llamafarm-example.yaml` with your runtime and RAG strategy.
-3. Replace `files/` with your documents.
-4. Modify the scripts to reference your dataset name and queries.
-5. Document expected results in a README for easy sharing.
-
-Share your example via PR or a discussion thread—we’re collecting real-world workflows to expand the gallery.
+Refer to each example folder’s README for scenario-specific prompts, cleanup suggestions, and contextual background (e.g., why those documents were chosen and what use cases they simulate).
