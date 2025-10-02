@@ -376,7 +376,9 @@ Examples:
 		fmt.Printf("\n📊 Final Summary:\n")
 		fmt.Printf("   Total files: %d\n", len(files))
 		fmt.Printf("   ✅ Successful: %d\n", uploaded)
-		fmt.Printf("   ❌ Failed: %d\n", failed)
+		if failed > 0 {
+			fmt.Printf("   ❌ Failed: %d\n", failed)
+		}
 	},
 }
 
