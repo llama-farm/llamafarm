@@ -144,3 +144,73 @@ func TestGetDefaultUserInstallDir(t *testing.T) {
 		t.Errorf("Expected directory to exist: %s", dir)
 	}
 }
+
+func TestIsExecutable(t *testing.T) {
+	tempDir := t.TempDir()
+
+	if runtime.GOOS == "windows" {
+		// Test Windows executable detection
+		exeFile := filepath.Join(tempDir, "test.exe")
+		err := os.WriteFile(exeFile, []byte("test"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create test exe file: %v", err)
+		}
+
+		info, err := os.Stat(exeFile)
+		if err != nil {
+			t.Fatalf("Failed to stat exe file: %v", err)
+		}
+
+		if !isExecutable(exeFile, info.Mode()) {
+			t.Error("Expected .exe file to be detected as executable on Windows")
+		}
+
+		// Test non-executable file
+		txtFile := filepath.Join(tempDir, "test.txt")
+		err = os.WriteFile(txtFile, []byte("test"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create test txt file: %v", err)
+		}
+
+		info, err = os.Stat(txtFile)
+		if err != nil {
+			t.Fatalf("Failed to stat txt file: %v", err)
+		}
+
+		if isExecutable(txtFile, info.Mode()) {
+			t.Error("Expected .txt file to not be detected as executable on Windows")
+		}
+	} else {
+		// Test Unix executable detection
+		execFile := filepath.Join(tempDir, "test-exec")
+		err := os.WriteFile(execFile, []byte("#!/bin/sh\necho test"), 0755)
+		if err != nil {
+			t.Fatalf("Failed to create test executable file: %v", err)
+		}
+
+		info, err := os.Stat(execFile)
+		if err != nil {
+			t.Fatalf("Failed to stat executable file: %v", err)
+		}
+
+		if !isExecutable(execFile, info.Mode()) {
+			t.Error("Expected file with executable bit to be detected as executable on Unix")
+		}
+
+		// Test non-executable file
+		nonExecFile := filepath.Join(tempDir, "test-nonexec")
+		err = os.WriteFile(nonExecFile, []byte("test"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create test non-executable file: %v", err)
+		}
+
+		info, err = os.Stat(nonExecFile)
+		if err != nil {
+			t.Fatalf("Failed to stat non-executable file: %v", err)
+		}
+
+		if isExecutable(nonExecFile, info.Mode()) {
+			t.Error("Expected file without executable bit to not be detected as executable on Unix")
+		}
+	}
+}

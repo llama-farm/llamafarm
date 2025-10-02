@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 // getCurrentBinaryPath returns the absolute path to the currently running binary
@@ -33,23 +31,41 @@ func getCurrentBinaryPath() (string, error) {
 	return absPath, nil
 }
 
-// validateBinaryPath checks if the given path is a valid binary location
+// validateBinaryPath checks if the given path is a valid binary location using cross-platform methods
 func validateBinaryPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("binary path cannot be empty")
 	}
 
 	// Check if the file exists
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		return fmt.Errorf("binary not found at %s: %w", path, err)
 	}
 
-	// Check if it's executable
-	if err := unix.Access(path, unix.X_OK); err != nil {
-		return fmt.Errorf("binary at %s is not executable: %w", path, err)
+	// Check if it's a regular file (not a directory)
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("path %s is not a regular file", path)
+	}
+
+	// Check if it's executable using cross-platform method
+	if !isExecutable(path, info.Mode()) {
+		return fmt.Errorf("binary at %s is not executable", path)
 	}
 
 	return nil
+}
+
+// isExecutable checks if a file is executable using cross-platform methods
+func isExecutable(path string, mode os.FileMode) bool {
+	if runtime.GOOS == "windows" {
+		// On Windows, check if it's a .exe file or has executable extension
+		ext := strings.ToLower(filepath.Ext(path))
+		return ext == ".exe" || ext == ".bat" || ext == ".cmd" || ext == ".com"
+	}
+
+	// On Unix-like systems, check the executable bit
+	return mode&0111 != 0
 }
 
 // canWriteToLocation checks if we have write permissions to the directory containing the binary
@@ -63,7 +79,17 @@ func canWriteToLocation(path string) bool {
 // canWriteToLocationUnix checks write permissions on Unix-like systems
 func canWriteToLocationUnix(path string) bool {
 	dir := filepath.Dir(path)
-	return unix.Access(dir, unix.W_OK) == nil
+
+	// Try to create a temporary file to test write access
+	tempFile := filepath.Join(dir, ".lf_write_test_"+fmt.Sprintf("%d", os.Getpid()))
+
+	file, err := os.Create(tempFile)
+	if err != nil {
+		return false
+	}
+	file.Close()
+	os.Remove(tempFile)
+	return true
 }
 
 // canWriteToLocationWindows checks write permissions on Windows

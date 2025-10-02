@@ -146,6 +146,30 @@ func TestDownloadFileError(t *testing.T) {
 	}
 }
 
+func TestDownloadFileExceedsMaxDownloadSize(t *testing.T) {
+	// Create a response body larger than maxDownloadSize
+	oversizedContent := make([]byte, maxDownloadSize+1024)
+	for i := range oversizedContent {
+		oversizedContent[i] = 'A'
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(oversizedContent)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(oversizedContent)
+	}))
+	defer server.Close()
+
+	tempFile := t.TempDir() + "/oversized_download"
+	err := downloadFile(server.URL, tempFile)
+	if err == nil {
+		t.Fatalf("Expected error for oversized download, got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum allowed size") {
+		t.Errorf("Expected error about exceeding max size, got: %v", err)
+	}
+}
+
 func TestCreateTempFile(t *testing.T) {
 	tempPath, err := createTempFile("test-binary")
 	if err != nil {

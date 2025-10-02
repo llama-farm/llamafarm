@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import os
+import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 import httpx
 
-GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/llama-farm/llamafarm/releases/latest"
+GITHUB_LATEST_RELEASE_URL = (
+    "https://api.github.com/repos/llama-farm/llamafarm/releases/latest"
+)
 CACHE_TTL = timedelta(hours=6)
 
 
@@ -21,39 +23,47 @@ class CLIRelease:
     from_cache: bool = False
 
 
+# Thread-safe cache using asyncio.Lock
+_cache_lock = asyncio.Lock()
 _cached_release: Optional[CLIRelease] = None
 _cached_at: Optional[datetime] = None
 
 
 async def get_latest_cli_release(force_refresh: bool = False) -> CLIRelease:
-    """Fetch the latest published CLI release from GitHub with simple caching."""
+    """Fetch the latest published CLI release from GitHub with async-safe caching."""
     global _cached_at, _cached_release
 
-    now = datetime.now(timezone.utc)
-    if not force_refresh and _cached_release and _cached_at and now - _cached_at < CACHE_TTL:
-        _cached_release.from_cache = True
-        return _cached_release
-
-    try:
-        release = await _fetch_latest_release_from_github()
-    except httpx.HTTPError as exc:
-        if _cached_release:
+    async with _cache_lock:
+        now = datetime.now(UTC)
+        if (
+            not force_refresh
+            and _cached_release
+            and _cached_at
+            and now - _cached_at < CACHE_TTL
+        ):
             _cached_release.from_cache = True
             return _cached_release
-        raise exc
 
-    release.from_cache = False
-    _cached_release = release
-    _cached_at = now
-    return release
+        try:
+            release = await _fetch_latest_release_from_github()
+        except httpx.HTTPError as exc:
+            if _cached_release:
+                _cached_release.from_cache = True
+                return _cached_release
+            raise exc
+
+        release.from_cache = False
+        _cached_release = release
+        _cached_at = now
+        return release
 
 
-async def _fetch_latest_release_from_github() -> CLIRelease:
+async def _fetch_latest_release_from_github(token: str | None = None) -> CLIRelease:
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "llamafarm-server",
     }
-    token = os.getenv("LF_GITHUB_TOKEN")
+
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
@@ -66,7 +76,7 @@ async def _fetch_latest_release_from_github() -> CLIRelease:
         raise RuntimeError("latest release is marked as draft or prerelease")
 
     published_at = payload.get("published_at")
-    published_dt: Optional[datetime] = None
+    published_dt: datetime | None = None
     if published_at:
         try:
             if published_at.endswith("Z"):

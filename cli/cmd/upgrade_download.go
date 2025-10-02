@@ -147,7 +147,15 @@ func downloadFile(url, localPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outFile.Close()
+
+	// Ensure file is cleaned up on error
+	defer func() {
+		outFile.Close()
+		// If there was an error, remove the incomplete file
+		if err != nil {
+			os.Remove(localPath)
+		}
+	}()
 
 	// Copy with size limit
 	limitedReader := io.LimitReader(resp.Body, maxDownloadSize)
@@ -232,11 +240,4 @@ func cleanupTempFiles(paths []string) {
 			}
 		}
 	}
-}
-
-// getDownloadProgress creates a progress reader for download tracking
-func getDownloadProgress(reader io.Reader, totalSize int64, filename string) io.Reader {
-	// For now, return the reader as-is
-	// In the future, we could add a progress bar here
-	return reader
 }

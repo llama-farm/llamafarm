@@ -24,9 +24,11 @@ def test_cli_upgrade_success(monkeypatch):
     async def fake_get_latest_cli_release(force_refresh: bool = False):
         return release
 
-    monkeypatch.setattr(upgrades_router, "get_latest_cli_release", fake_get_latest_cli_release)
+    monkeypatch.setattr(
+        upgrades_router, "get_latest_cli_release", fake_get_latest_cli_release
+    )
 
-    response = client.get("/v1/system/cli-upgrade")
+    response = client.get("/v1/system/version-check")
     assert response.status_code == 200
     payload = response.json()
     assert payload["latest_version"] == "v1.2.3"
@@ -39,8 +41,10 @@ def test_cli_upgrade_failure(monkeypatch):
     async def fake_get_latest_cli_release(force_refresh: bool = False):
         raise httpx.HTTPError("boom")
 
-    monkeypatch.setattr(upgrades_router, "get_latest_cli_release", fake_get_latest_cli_release)
+    monkeypatch.setattr(
+        upgrades_router, "get_latest_cli_release", fake_get_latest_cli_release
+    )
 
-    response = client.get("/v1/system/cli-upgrade")
+    response = client.get("/v1/system/version-check")
     assert response.status_code == 503
     assert response.json()["detail"] == "Unable to reach GitHub releases"
