@@ -57,7 +57,7 @@ Getting started:
 			return nil
 		}
 		if info != nil && info.UpdateAvailable && info.CurrentVersionIsSemver {
-			fmt.Fprintf(os.Stderr, "🚀 A new LlamaFarm CLI release (%s) is available. Run 'lf upgrade' for details.\n", info.LatestVersion)
+			fmt.Fprintf(os.Stderr, "🚀 A new LlamaFarm CLI release (%s) is available. Run 'lf version upgrade' for details.\n", info.LatestVersion)
 		}
 		return nil
 	},
