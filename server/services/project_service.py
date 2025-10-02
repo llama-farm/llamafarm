@@ -237,7 +237,11 @@ class ProjectService:
 
     @classmethod
     def load_config(cls, namespace: str, project_id: str) -> LlamaFarmConfig:
-        return load_config(cls.get_project_dir(namespace, project_id))
+        from services.model_service import ModelService
+
+        config = load_config(cls.get_project_dir(namespace, project_id))
+        # Normalize to support both legacy and multi-model configs
+        return ModelService.normalize_config(config)
 
     @classmethod
     def save_config(

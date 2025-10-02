@@ -52,19 +52,25 @@ class ProjectChatOrchestratorAgent(LFAgent):
         self,
         project_config: LlamaFarmConfig,
         project_dir: str,
+        model_name: str | None = None,
     ):
+        # Resolve model configuration
+        from services.model_service import ModelService
+
+        model_config = ModelService.get_model_config(project_config, model_name)
+
         # Build base history from config
         history = _get_history(project_config)
-        client = _get_client(project_config)
+        client = _get_client_for_model(model_config)
 
         lf_config = LFAgentConfig(
             client=client,
-            model=project_config.runtime.model,
+            model=model_config.model,
             history=history,
             system_prompt_generator=LFSystemPromptGenerator(
                 project_config=project_config
             ),
-            model_api_parameters=project_config.runtime.model_api_parameters,
+            model_api_parameters=model_config.model_api_parameters,
         )
 
         super().__init__(config=lf_config)
@@ -357,20 +363,69 @@ def _get_client(
 ) -> instructor.client.AsyncInstructor | AsyncOpenAI:
     """Get client for the configured provider using the provider registry.
 
-    This function uses the provider registry pattern to eliminate hard-coded
-    provider logic. New providers can be added by registering them in the
-    registry without modifying this function.
+    DEPRECATED: Use _get_client_for_model instead for multi-model support.
     """
     provider = get_provider(project_config.runtime.provider)
     return provider.get_client(project_config)
 
 
+def _get_client_for_model(model_config):
+    """Get client for a specific model configuration using provider registry.
+
+    Args:
+        model_config: ModelConfig instance from ModelService
+
+    Returns:
+        AsyncOpenAI client (possibly instructor-wrapped)
+    """
+    from services.model_service import ModelConfig
+
+    provider = get_provider(model_config.provider)
+
+    # Create a temporary config-like object for the provider
+    # Providers expect LlamaFarmConfig but we only have model config
+    class TempConfig:
+        class Runtime:
+            def __init__(self, mc: ModelConfig):
+                self.provider = mc.provider
+                self.model = mc.model
+                self.base_url = mc.base_url
+                self.api_key = mc.api_key
+                self.huggingface_token = mc.huggingface_token
+                self.instructor_mode = mc.instructor_mode
+                self.prompt_format = mc.prompt_format
+                self.model_api_parameters = mc.model_api_parameters
+                self.lemonade = mc.lemonade
+
+        def __init__(self, mc: ModelConfig):
+            self.runtime = self.Runtime(mc)
+
+    temp_config = TempConfig(model_config)
+    return provider.get_client(temp_config)  # type: ignore
+
+
 class ProjectChatOrchestratorAgentFactory:
     @staticmethod
     def create_agent(
-        project_config: LlamaFarmConfig, project_dir: str
+        project_config: LlamaFarmConfig,
+        project_dir: str,
+        model_name: str | None = None,
     ) -> ProjectChatOrchestratorAgent:
-        runtime = project_config.runtime
-        pf = runtime.prompt_format or PromptFormat.unstructured
-        logger.info("Creating chat agent", prompt_format=pf.value, model=runtime.model)
-        return ProjectChatOrchestratorAgent(project_config, project_dir=project_dir)
+        from services.model_service import ModelService
+
+        # Get model config for logging
+        model_config = ModelService.get_model_config(project_config, model_name)
+        pf = model_config.prompt_format or PromptFormat.unstructured
+        selected_name = model_name or project_config.runtime.default_model or "default"
+
+        logger.info(
+            "Creating chat agent",
+            prompt_format=pf.value if pf else "unstructured",
+            model=model_config.model,
+            model_name=selected_name,
+            provider=model_config.provider.value,
+        )
+
+        return ProjectChatOrchestratorAgent(
+            project_config, project_dir=project_dir, model_name=model_name
+        )

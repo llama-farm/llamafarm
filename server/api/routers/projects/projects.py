@@ -271,7 +271,7 @@ async def chat(
     if stateless:
         # Stateless mode: create throwaway agent without session or persistence
         agent = ProjectChatOrchestratorAgentFactory.create_agent(
-            project_config, project_dir=project_dir
+            project_config, project_dir=project_dir, model_name=request.model
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -292,7 +292,7 @@ async def chat(
             if record is None:
                 # Create new agent and enable persistence
                 agent = ProjectChatOrchestratorAgentFactory.create_agent(
-                    project_config, project_dir=project_dir
+                    project_config, project_dir=project_dir, model_name=request.model
                 )
                 agent.enable_persistence(session_id=session_id)
                 # Cache the agent in memory

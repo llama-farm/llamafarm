@@ -74,53 +74,117 @@ properties:
 
   runtime:
     type: object
-    required:
-      - provider
-      - model
     properties:
+      # Multi-model configuration (NEW)
+      default_model:
+        type: ["string", "null"]
+        description: "Name of the default model to use (references models.{name}). If not specified and models is defined, uses first model."
+
+      models:
+        type: ["object", "null"]
+        description: "Named model configurations for multi-model support. Each key is a model name, value is the configuration."
+        additionalProperties:
+          type: object
+          required:
+            - provider
+            - model
+          properties:
+            description:
+              type: ["string", "null"]
+              description: "Human-readable description of this model configuration"
+            provider:
+              type: string
+              enum: [openai, ollama, lemonade]
+              description: "Runtime provider for this model"
+            model:
+              type: string
+              description: "Model name or ID"
+            base_url:
+              type: ["string", "null"]
+              description: "Base URL for the provider"
+            api_key:
+              type: ["string", "null"]
+              description: "API key for the provider"
+            huggingface_token:
+              type: ["string", "null"]
+              description: "Hugging Face API token for downloading gated models"
+            instructor_mode:
+              type: ["string", "null"]
+              description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
+            prompt_format:
+              type: ["string", "null"]
+              enum: [structured, unstructured, null]
+              description: "Prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)"
+            model_api_parameters:
+              type: ["object", "null"]
+              description: "Additional parameters passed to the API provider"
+              additionalProperties: true
+            lemonade:
+              type: ["object", "null"]
+              description: "Lemonade-specific configuration"
+              properties:
+                backend:
+                  type: ["string", "null"]
+                  enum: [onnx, llamacpp, transformers, null]
+                  default: onnx
+                  description: "Inference backend for Lemonade"
+                port:
+                  type: ["integer", "null"]
+                  default: 11534
+                  description: "Port for Lemonade server"
+                context_size:
+                  type: ["integer", "null"]
+                  default: 32768
+                  description: "Context window size in tokens"
+                model_path:
+                  type: ["string", "null"]
+                  description: "Custom model storage location"
+
+      # Legacy single-model configuration (for backward compatibility)
       provider:
-        type: string
-        enum: [openai, ollama, lemonade]
-        default: openai
+        type: ["string", "null"]
+        enum: [openai, ollama, lemonade, null]
+        description: "LEGACY: Runtime provider. Use models.{name}.provider instead for multi-model setups."
       model:
-        type: string
-        description: Model name or ID
+        type: ["string", "null"]
+        description: "LEGACY: Model name or ID. Use models.{name}.model instead for multi-model setups."
       base_url:
         type: ["string", "null"]
-        description: Base URL for the provider
+        description: "LEGACY: Base URL for the provider. Use models.{name}.base_url instead."
       api_key:
         type: ["string", "null"]
-        description: API key for the provider (optional, not required for Ollama)
+        description: "LEGACY: API key for the provider. Use models.{name}.api_key instead."
       huggingface_token:
         type: ["string", "null"]
-        description: Hugging Face API token for downloading gated models (required for some Lemonade models)
+        description: "LEGACY: Hugging Face API token. Use models.{name}.huggingface_token instead."
       instructor_mode:
         type: ["string", "null"]
-        description: Instructor mode to use for structured output (e.g., tools, json, md_json, anthropic_tools, gemini_json, etc.)
+        description: "LEGACY: Instructor mode. Use models.{name}.instructor_mode instead."
       prompt_format:
-        type: string
-        description: Selects prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)
-        enum: [structured, unstructured]
+        type: ["string", "null"]
+        enum: [structured, unstructured, null]
+        description: "LEGACY: Prompt format. Use models.{name}.prompt_format instead."
       model_api_parameters:
-        description: Additional parameters passed to the API provider
+        type: ["object", "null"]
+        description: "LEGACY: Additional API parameters. Use models.{name}.model_api_parameters instead."
         additionalProperties: true
       lemonade:
         type: ["object", "null"]
-        description: Lemonade-specific configuration
+        description: "LEGACY: Lemonade configuration. Use models.{name}.lemonade instead."
         properties:
           backend:
-            type: string
-            enum: [onnx, llamacpp, transformers]
+            type: ["string", "null"]
+            enum: [onnx, llamacpp, transformers, null]
             default: onnx
-            description: "Inference backend for Lemonade. onnx (default, works on all systems), llamacpp (CPU/GGUF optimized), or transformers (PyTorch/HuggingFace)"
+            description: "Inference backend for Lemonade"
           port:
-            type: integer
+            type: ["integer", "null"]
             default: 11534
-            description: Port for Lemonade server
+            description: "Port for Lemonade server"
           context_size:
             type: ["integer", "null"]
             default: 32768
-            description: Context window size in tokens (default 32768 for most models)
+            description: "Context window size in tokens"
           model_path:
             type: ["string", "null"]
-            description: Custom model storage location for Lemonade
+            description: "Custom model storage location"
