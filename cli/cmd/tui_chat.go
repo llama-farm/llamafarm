@@ -127,7 +127,6 @@ type chatModel struct {
 	history        []string
 	histIndex      int
 	width          int
-	height         int
 	status         string
 	err            error
 	viewport       viewport.Model
@@ -156,7 +155,7 @@ type serverHealthMsg struct{ health *HealthPayload }
 type modeSwitchMsg struct{ mode ChatMode }
 
 func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) chatModel {
-	messages := []Message{{Role: "client", Content: "Send a message or type '/help' for commands."}}
+	var messages []Message
 
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
@@ -187,13 +186,18 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		// Fetch history from the actual project being chatted with (Namespace/ProjectID)
 		// not the session context storage location (SessionNamespace/SessionProject)
 		history = fetchSessionHistory(chatCtx.ServerURL, chatCtx.Namespace, chatCtx.ProjectID, chatCtx.SessionID)
+		// Build initial message list from history so the transcript shows on load
 		for _, msg := range history.Messages {
 			if msg.Role == "user" {
 				userChatMessages = append(userChatMessages, msg.Content.ChatMessage)
 			}
+			messages = append(messages, Message{Role: msg.Role, Content: msg.Content.ChatMessage})
 		}
 		logDebug(fmt.Sprintf("Restored dev mode history: %+v", history))
 		logDebug(fmt.Sprintf("Restored dev mode user chat messages: %+v", userChatMessages))
+	}
+	if len(messages) == 0 {
+		messages = append(messages, Message{Role: "client", Content: "Send a message or type '/help' for commands."})
 	}
 
 	// Fetch initial greeting for project_seed
@@ -242,7 +246,8 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 			logDebug(fmt.Sprintf("Created new project mode session ID: %s", projectSessionID))
 		}
 
-		projHist := fetchSessionHistory(chatCtx.ServerURL, chatCtx.Namespace, chatCtx.ProjectID, projectSessionID)
+		// Fetch and render project session history using the project's namespace/project
+		projHist := fetchSessionHistory(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project, projectSessionID)
 		for _, msg := range projHist.Messages {
 			if msg.Role == "user" {
 				projectHistory = append(projectHistory, msg.Content.ChatMessage)
@@ -254,7 +259,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		projectSessionID = uuid.New().String()
 	}
 
-	projectMessages = []Message{{Role: "client", Content: "Send a message or type '/help' for commands."}}
+	if len(projectMessages) == 0 {
+		projectMessages = []Message{{Role: "client", Content: "Send a message or type '/help' for commands."}}
+	}
 
 	projectCtx := &ModeContext{
 		Mode:      ModeProject,
@@ -486,7 +493,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(fields) < 2 {
 						m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /mode [dev|project]"})
 						m.textarea.SetValue("")
-						break
+						return m, nil
 					}
 					modeArg := fields[1]
 					var newMode ChatMode
@@ -498,12 +505,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					default:
 						m.messages = append(m.messages, Message{Role: "client", Content: "Unknown mode. Use: /mode [dev|project]"})
 						m.textarea.SetValue("")
-						break
+						return m, nil
 					}
 					if newMode == m.currentMode {
 						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Already in %s mode", modeArg)})
 						m.textarea.SetValue("")
-						break
+						return m, nil
 					}
 					switchMsg := m.switchMode(newMode)
 					m.messages = append(m.messages, Message{Role: "client", Content: switchMsg})
@@ -591,7 +598,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. All commands must start with '/'. Type '/help' for available commands.", cmd)})
 					m.textarea.SetValue("")
 				}
-				break
+				return m, nil
 			}
 
 			m.history = append(m.history, msg)
