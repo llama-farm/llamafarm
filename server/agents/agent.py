@@ -66,7 +66,7 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
             self._use_structured_output = True
 
         atomic_agent_config = AgentConfig(
-            client=client_for_parent,
+            client=client_for_atomic_agent,
             model=config.model,
             history=config.history,
             system_prompt_generator=config.system_prompt_generator,

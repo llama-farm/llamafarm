@@ -79,10 +79,17 @@ class BaseAPI:
     def _load_config(self) -> None:
         """Load configuration from file."""
         from server.services.model_service import ModelService
+        from config.helpers.loader import load_config_dict
+        from config.datamodel import LlamaFarmConfig
 
-        config = load_config(config_path=self.project_dir, validate=True)
-        # Normalize config to handle multi-model format
-        self.config = ModelService.normalize_config(config)
+        # Load as dict first (no Pydantic validation yet)
+        config_dict = load_config_dict(config_path=self.project_dir, validate=False)
+
+        # Normalize to handle multi-model format -> legacy conversion
+        normalized_dict = ModelService.normalize_config_dict(config_dict)
+
+        # Now validate with Pydantic
+        self.config = LlamaFarmConfig(**normalized_dict)
 
     def _load_database_config(self) -> None:
         """Load configuration for database from project config."""

@@ -42,6 +42,66 @@ class ModelService:
     """Service for resolving and managing model configurations."""
 
     @staticmethod
+    def normalize_config_dict(config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Normalize config dict to support both legacy and multi-model formats.
+
+        Converts legacy single-model configs to multi-model format internally.
+        Works on raw dicts before Pydantic validation.
+
+        Args:
+            config_dict: Original configuration dictionary
+
+        Returns:
+            Normalized configuration dict with models dict populated
+        """
+        runtime = config_dict.get("runtime", {})
+
+        # Already has multi-model config
+        if runtime.get("models") and len(runtime["models"]) > 0:
+            # Ensure default_model is set
+            if not runtime.get("default_model"):
+                runtime["default_model"] = list(runtime["models"].keys())[0]
+                logger.debug(
+                    "Auto-set default_model to first model",
+                    default_model=runtime["default_model"],
+                )
+            config_dict["runtime"] = runtime
+            return config_dict
+
+        # Legacy format: convert to multi-model
+        if runtime.get("provider") and runtime.get("model"):
+            logger.info(
+                "Converting legacy single-model config to multi-model format",
+                provider=runtime["provider"],
+                model=runtime["model"],
+            )
+
+            # Create a "default" model from legacy config
+            default_model = {
+                "provider": runtime["provider"],
+                "model": runtime["model"],
+            }
+
+            # Copy all optional legacy fields
+            for field in [
+                "base_url",
+                "api_key",
+                "huggingface_token",
+                "instructor_mode",
+                "prompt_format",
+                "model_api_parameters",
+                "lemonade",
+            ]:
+                if field in runtime and runtime[field] is not None:
+                    default_model[field] = runtime[field]
+
+            runtime["models"] = {"default": default_model}
+            runtime["default_model"] = "default"
+            config_dict["runtime"] = runtime
+
+        return config_dict
+
+    @staticmethod
     def normalize_config(config: LlamaFarmConfig) -> LlamaFarmConfig:
         """Normalize config to support both legacy and multi-model formats.
 

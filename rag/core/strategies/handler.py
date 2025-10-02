@@ -61,7 +61,16 @@ class SchemaHandler:
 
         try:
             # Use the common config loader instead of direct YAML loading
-            config = load_config(config_path=self.config_source, validate=False)
+            from server.services.model_service import ModelService
+            from config.helpers.loader import load_config_dict
+            from config.datamodel import LlamaFarmConfig
+
+            # Load as dict, normalize, then validate
+            config_dict = load_config_dict(config_path=self.config_source, validate=False)
+            normalized_dict = ModelService.normalize_config_dict(config_dict)
+
+            # Create Pydantic object from normalized dict
+            config = LlamaFarmConfig(**normalized_dict)
 
             # Check if this is a global config (has 'rag' section) or direct RAG config
             if config.rag:
