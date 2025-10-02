@@ -34,7 +34,7 @@ func TestSendChatRequestStream_SSE(t *testing.T) {
 	projectID = "project-seed"
 
 	// Prepare messages
-	msgs := []ChatMessage{{Role: "user", Content: "hi"}}
+	msgs := []Message{{Role: "user", Content: "hi"}}
 	got, err := sendChatRequest(msgs, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)

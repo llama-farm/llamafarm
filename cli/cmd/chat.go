@@ -155,7 +155,7 @@ Examples:
 			RAGScoreThreshold:    runRAGScoreThreshold,
 		}
 
-		messages := []ChatMessage{{Role: "user", Content: input}}
+		messages := []Message{{Role: "user", Content: input}}
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

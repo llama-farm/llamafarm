@@ -5,8 +5,8 @@ namespace: llamafarm
 
 runtime:
   provider: "ollama"
-  model: "gemma3:1b"
-  base_url: http://localhost:11434/v1
+  model: "qwen3:8b"
+  prompt_format: structured
 
 prompts:
   - role: "system"
@@ -40,3 +40,14 @@ prompts:
       Respond with plain text in natural language. Do NOT wrap your response in JSON or any structured format. Just provide direct, helpful answers in conversational Markdown.
 
       Remember: You're here to make LlamaFarm easier to use. Be friendly, concise, and actionable.
+  - role: "assistant"
+    content: |
+      Welcome to LlamaFarm dev mode! 🦙
+
+      I can help you with:
+      - Getting started: `lf init`, `lf start`
+      - Dataset management: `lf datasets create/upload/process`
+      - RAG queries: `lf rag query`
+      - Configuration: editing `llamafarm.yaml`
+
+      Ask me anything about LlamaFarm, or type `/help` for chat commands!
