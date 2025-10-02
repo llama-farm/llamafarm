@@ -4,9 +4,9 @@ name: project_seed
 namespace: llamafarm
 
 runtime:
-  provider: "ollama"
-  model: "qwen3:8b"
-  prompt_format: structured
+  provider: ollama
+  model: gemma3:1b
+  prompt_format: unstructured
 
 prompts:
   - role: "system"
