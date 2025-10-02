@@ -31,12 +31,22 @@ import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
 
 function ProjectModalRoot() {
   const modal = useProjectModalContext()
+  // Only render the modal for edit mode; create is handled by Home form
+  if (modal.modalMode !== 'edit') return null
+  // Derive initial details from current project config
+  const cfg = (modal.currentProject?.config || {}) as Record<string, any>
+  const projectBrief = (cfg?.project_brief || {}) as Record<string, any>
+  const initialBrief = {
+    what: projectBrief?.what || '',
+    goals: projectBrief?.goals || '',
+    audience: projectBrief?.audience || '',
+  }
   return (
     <ProjectModal
       isOpen={modal.isModalOpen}
       mode={modal.modalMode}
       initialName={modal.projectName}
-      initialDescription={''}
+      initialBrief={initialBrief}
       onClose={modal.closeModal}
       onSave={modal.saveProject}
       onDelete={modal.modalMode === 'edit' ? modal.deleteProject : undefined}

@@ -9,9 +9,14 @@ interface ChatboxProps {
   initialMessage?: string | null
 }
 
-function Chatbox({ isPanelOpen, setIsPanelOpen, initialMessage }: ChatboxProps) {
+function Chatbox({
+  isPanelOpen,
+  setIsPanelOpen,
+  initialMessage,
+}: ChatboxProps) {
   const [isDiagnosing, setIsDiagnosing] = useState<boolean>(false)
-  const [hasProcessedInitialMessage, setHasProcessedInitialMessage] = useState(false)
+  const [hasProcessedInitialMessage, setHasProcessedInitialMessage] =
+    useState(false)
   const diagnosingInFlightRef = useRef<boolean>(false)
   // Use the enhanced chatbox hook with project session management for Designer Chat
   const {
@@ -45,17 +50,23 @@ function Chatbox({ isPanelOpen, setIsPanelOpen, initialMessage }: ChatboxProps) 
 
   // Handle initial message from home page project creation
   useEffect(() => {
-    if (initialMessage && 
-        !hasProcessedInitialMessage && 
-        !hasMessages && // Only if no existing messages
-        sessionId === null // Only if no existing session
+    if (
+      initialMessage &&
+      !hasProcessedInitialMessage &&
+      !hasMessages && // Only if no existing messages
+      sessionId === null // Only if no existing session
     ) {
-      
       // Use the existing sendMessage function - this will trigger normal session creation
       sendMessage(initialMessage)
       setHasProcessedInitialMessage(true)
     }
-  }, [initialMessage, hasProcessedInitialMessage, hasMessages, sessionId, sendMessage])
+  }, [
+    initialMessage,
+    hasProcessedInitialMessage,
+    hasMessages,
+    sessionId,
+    sendMessage,
+  ])
 
   // Handle sending message
   const handleSendClick = useCallback(async () => {
@@ -203,10 +214,10 @@ function Chatbox({ isPanelOpen, setIsPanelOpen, initialMessage }: ChatboxProps) 
             disabled={isSending}
             className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
             placeholder={
-              isStreaming 
-                ? 'Streaming response...' 
-                : isSending 
-                  ? 'Waiting for response...' 
+              isStreaming
+                ? 'Streaming response...'
+                : isSending
+                  ? 'Waiting for response...'
                   : 'Type here...'
             }
           />

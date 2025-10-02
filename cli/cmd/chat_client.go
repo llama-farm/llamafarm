@@ -144,6 +144,88 @@ func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 	}
 }
 
+func buildChatCurl(messages []ChatMessage, ctx *ChatSessionContext) (string, error) {
+	if ctx == nil {
+		ctx = newDefaultContextFromGlobals()
+	}
+
+	url, err := buildChatAPIURL(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to build chat API URL: %w", err)
+	}
+
+	streamTrue := true
+	var filteredMessages []ChatMessage
+	for _, msg := range messages {
+		if msg.Role != "client" && msg.Role != "error" {
+			filteredMessages = append(filteredMessages, msg)
+		}
+	}
+
+	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
+	if ctx.RAGEnabled {
+		request.RAGEnabled = &ctx.RAGEnabled
+		if ctx.RAGDatabase != "" {
+			request.RAGDatabase = &ctx.RAGDatabase
+		}
+		if ctx.RAGRetrievalStrategy != "" {
+			request.RAGRetrievalStrategy = &ctx.RAGRetrievalStrategy
+		}
+		if ctx.RAGTopK > 0 {
+			request.RAGTopK = &ctx.RAGTopK
+		}
+		if ctx.RAGScoreThreshold > 0 {
+			request.RAGScoreThreshold = &ctx.RAGScoreThreshold
+		}
+	}
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Accept", "text/event-stream")
+
+	return buildChatCurlCommand(url, jsonData, headers), nil
+}
+
+// shellEscapeSingleQuotes safely wraps a string for POSIX shells using single
+// quotes. It follows the standard pattern of ending the string, escaping the
+// single quote, and resuming the quoted string.
+func shellEscapeSingleQuotes(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func buildChatCurlCommand(url string, body []byte, headers http.Header) string {
+	var b strings.Builder
+	b.WriteString("curl -X POST ")
+	for key, values := range headers {
+		if strings.EqualFold(key, "authorization") {
+			continue
+		}
+		for _, v := range values {
+			header := fmt.Sprintf("%s: %s", key, v)
+			b.WriteString("-H ")
+			b.WriteString(shellEscapeSingleQuotes(header))
+			b.WriteByte(' ')
+		}
+	}
+	if auth := headers.Get("Authorization"); auth != "" {
+		b.WriteString("-H ")
+		b.WriteString(shellEscapeSingleQuotes("Authorization: Bearer <redacted>"))
+		b.WriteByte(' ')
+	}
+	if len(body) > 0 {
+		b.WriteString("-d ")
+		b.WriteString(shellEscapeSingleQuotes(string(body)))
+		b.WriteByte(' ')
+	}
+	b.WriteString(shellEscapeSingleQuotes(url))
+	return b.String()
+}
+
 // buildChatAPIURL chooses the appropriate endpoint based on whether
 // namespace and project are set. If both are provided, it uses the
 // project-scoped chat completions endpoint; otherwise it falls back

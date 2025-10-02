@@ -138,8 +138,6 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	base := strings.TrimRight(serverURL, "/")
 	healthURL := base + "/health"
 
-	logDebug(fmt.Sprintf("Checking server health at %s", healthURL))
-
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -147,7 +145,7 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}

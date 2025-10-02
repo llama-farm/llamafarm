@@ -17,13 +17,14 @@ var (
 	runRAGTopK           int
 	runNoRAG             bool
 	runRAGScoreThreshold float64
+	dryRun               bool
 )
 
 // chatCmd represents the `lf chat` command
 var chatCmd = &cobra.Command{
 	Use:   "chat [namespace/project] \"input\"",
-	Short: "Chat with a LlamaFarm project (RAG by default)",
-	Long: `Chat with a LlamaFarm project.
+	Short: "Chat with a LlamaFarm project (RAG enabled by default)",
+	Long: `Chat with a LlamaFarm project. RAG is enabled by default unless --no-rag is used.
 
 Examples:
   # Explicit project and inline input
@@ -41,13 +42,13 @@ Examples:
   # Chat with RAG (default behavior)
   lf chat "What is transformer architecture?"
 
-  # Run with specific database
+  # Chat with specific database
   lf chat --database main_database "Explain attention mechanism"
 
-  # Run with custom retrieval strategy and top-k
+  # Chat with custom retrieval strategy and top-k
   lf chat --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"
 
-  # Run WITHOUT RAG (LLM only)
+  # Chat *without* RAG (LLM only)
   lf chat --no-rag "What is machine learning?"`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		// Valid forms:
@@ -136,10 +137,7 @@ Examples:
 		ns = serverCfg.Namespace
 		proj = serverCfg.Project
 
-		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverURL, true)
-
-		// Construct context and call the project-scoped chat completions via shared helpers
+		// Construct context for request (without contacting server yet)
 		ctx := &ChatSessionContext{
 			ServerURL:        serverURL,
 			Namespace:        ns,
@@ -159,6 +157,17 @@ Examples:
 		}
 
 		messages := []Message{{Role: "user", Content: input}}
+
+		if dryRun {
+			if err := printRunCurlCommand(messages, ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "Error generating curl command: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		// Ensure server is up (auto-start locally if needed)
+		ensureServerAvailable(serverURL, true)
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -180,6 +189,16 @@ func init() {
 	chatCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
 	chatCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
 	chatCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")
+	chatCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the equivalent curl command instead of executing the request")
 
 	rootCmd.AddCommand(chatCmd)
+}
+
+func printRunCurlCommand(messages []ChatMessage, ctx *ChatSessionContext) error {
+	curlCmd, err := buildChatCurl(messages, ctx)
+	if err != nil {
+		return err
+	}
+	fmt.Println(curlCmd)
+	return nil
 }

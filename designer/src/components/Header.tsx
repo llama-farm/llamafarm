@@ -33,7 +33,9 @@ function Header({ currentVersion }: HeaderProps) {
 
   // Project dropdown state
   const [isProjectOpen, setIsProjectOpen] = useState(false)
-  const [activeProject, setActiveProject] = useState<string>(getActiveProject)
+  const [activeProject, setActiveProject] = useState<string>(() =>
+    getActiveProject()
+  )
   const namespace = getCurrentNamespace()
 
   // API hooks
@@ -74,6 +76,32 @@ function Header({ currentVersion }: HeaderProps) {
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
+
+  // React to global active project change events and storage updates
+  useEffect(() => {
+    const onActiveProject = (e: Event) => {
+      try {
+        const { detail } = e as CustomEvent<string>
+        if (detail && detail !== activeProject) {
+          setActiveProject(detail)
+        }
+      } catch {}
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'activeProject' && typeof e.newValue === 'string') {
+        if (e.newValue !== activeProject) setActiveProject(e.newValue)
+      }
+    }
+    window.addEventListener('lf-active-project' as any, onActiveProject as any)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(
+        'lf-active-project' as any,
+        onActiveProject as any
+      )
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [activeProject])
 
   // Synchronize animation with query loading state
   useEffect(() => {
