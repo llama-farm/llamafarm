@@ -68,6 +68,65 @@ func TestReadChecksumFile(t *testing.T) {
 
 func TestReadChecksumFileInvalid(t *testing.T) {
 	tempDir := t.TempDir()
+}
+
+func TestReadChecksumFileWhitespaceAndMultiline(t *testing.T) {
+	tempDir := t.TempDir()
+	expectedChecksum := "abcdef1234567890"
+
+	// Case 1: Extra whitespace before and after
+	checksumFile1 := tempDir + "/checksum1.txt"
+	content1 := "   " + expectedChecksum + "   \n"
+	if err := os.WriteFile(checksumFile1, []byte(content1), 0644); err != nil {
+		t.Fatalf("Failed to write checksum file: %v", err)
+	}
+	checksum, err := readChecksumFile(checksumFile1)
+	if err != nil {
+		t.Fatalf("Failed to read checksum file: %v", err)
+	}
+	if checksum != expectedChecksum {
+		t.Errorf("Expected checksum %s, got %s", expectedChecksum, checksum)
+	}
+
+	// Case 2: Multiple lines, checksum on first line
+	checksumFile2 := tempDir + "/checksum2.txt"
+	content2 := expectedChecksum + "\nextra line\n"
+	if err := os.WriteFile(checksumFile2, []byte(content2), 0644); err != nil {
+		t.Fatalf("Failed to write checksum file: %v", err)
+	}
+	checksum, err = readChecksumFile(checksumFile2)
+	if err != nil {
+		t.Fatalf("Failed to read checksum file: %v", err)
+	}
+	if checksum != expectedChecksum {
+		t.Errorf("Expected checksum %s, got %s", expectedChecksum, checksum)
+	}
+
+	// Case 3: Multiple lines, checksum on second line
+	checksumFile3 := tempDir + "/checksum3.txt"
+	content3 := "not a checksum\n" + expectedChecksum + "\n"
+	if err := os.WriteFile(checksumFile3, []byte(content3), 0644); err != nil {
+		t.Fatalf("Failed to write checksum file: %v", err)
+	}
+	checksum, err = readChecksumFile(checksumFile3)
+	if err == nil && checksum == expectedChecksum {
+		t.Errorf("Expected error for checksum not on first line, got valid checksum")
+	}
+
+	// Case 4: Checksum surrounded by tabs and spaces
+	checksumFile4 := tempDir + "/checksum4.txt"
+	content4 := "\t " + expectedChecksum + " \t\n"
+	if err := os.WriteFile(checksumFile4, []byte(content4), 0644); err != nil {
+		t.Fatalf("Failed to write checksum file: %v", err)
+	}
+	checksum, err = readChecksumFile(checksumFile4)
+	if err != nil {
+		t.Fatalf("Failed to read checksum file: %v", err)
+	}
+	if checksum != expectedChecksum {
+		t.Errorf("Expected checksum %s, got %s", expectedChecksum, checksum)
+	}
+}
 
 	tests := []struct {
 		name    string
