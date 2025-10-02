@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
 import { useNavigate } from 'react-router-dom'
 // removed decorative llama image
 import FontIcon from './common/FontIcon'
@@ -10,9 +11,9 @@ import {
   getProjectsList,
 } from './utils/projectConstants'
 import { getCurrentNamespace } from './utils/namespaceUtils'
-import { 
-  createProjectFromChat, 
-  encodeMessageForUrl 
+import {
+  createProjectFromChat,
+  encodeMessageForUrl,
 } from './utils/homePageUtils'
 
 function Home() {
@@ -20,6 +21,7 @@ function Home() {
   const [search, setSearch] = useState('')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const navigate = useNavigate()
+  useUpgradeAvailability() // keep warm to prefetch latest in background
 
   // Enhanced chat functionality for project creation
 
@@ -65,28 +67,27 @@ function Home() {
     }
 
     setIsCreatingProject(true)
-    
+
     try {
-      
       // 1. Create the project using the existing API
       const { projectName } = await createProjectFromChat(messageContent)
-      
-      
+
       // 2. Set the active project (using existing localStorage mechanism)
       localStorage.setItem('activeProject', projectName)
-      
+
       // 3. Navigate to the new project with the message as a URL parameter
       // This allows the project page to pick up the conversation
       const encodedMessage = encodeMessageForUrl(messageContent)
       navigate(`/chat/dashboard?initialMessage=${encodedMessage}`)
-      
+
       // Clear input on successful creation
       setInputValue('')
-      
     } catch (error) {
       console.error('❌ Failed to create project from chat:', error)
       // Show error to user - you might want to add a toast notification here
-      alert(`Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      alert(
+        `Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
     } finally {
       setIsCreatingProject(false)
     }
@@ -130,6 +131,7 @@ function Home() {
 
   return (
     <div className="min-h-screen flex flex-col items-stretch px-4 sm:px-6 lg:px-8 pt-24 md:pt-28 pb-8 bg-background">
+      {/* version pill now passed via props to Header; no DOM injection here */}
       <div className="max-w-4xl w-full mx-auto text-center space-y-8">
         <div className="space-y-4">
           <p className="text-sm font-medium tracking-wide text-foreground/80">
@@ -153,8 +155,8 @@ function Home() {
               }}
               className="w-full h-24 sm:h-28 bg-transparent border-none resize-none p-4 pr-12 placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed text-foreground placeholder-foreground/50"
               placeholder={
-                isCreatingProject 
-                  ? "Creating your project..." 
+                isCreatingProject
+                  ? 'Creating your project...'
                   : "I'm building an agent that will work with my app..."
               }
               disabled={isCreatingProject}
@@ -164,10 +166,10 @@ function Home() {
               disabled={isCreatingProject || !inputValue.trim()}
               className="absolute bottom-2 right-2 p-0 bg-transparent text-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label={
-                isCreatingProject 
-                  ? 'Creating project...' 
-                  : inputValue.trim() 
-                    ? 'Create project and start chat' 
+                isCreatingProject
+                  ? 'Creating project...'
+                  : inputValue.trim()
+                    ? 'Create project and start chat'
                     : 'Enter a message to create project'
               }
             >
@@ -176,18 +178,19 @@ function Home() {
                   <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : (
-                <FontIcon type="arrow-filled" className="w-6 h-6 text-primary" />
+                <FontIcon
+                  type="arrow-filled"
+                  className="w-6 h-6 text-primary"
+                />
               )}
             </button>
           </div>
         </div>
 
         <p className="max-w-2xl mx-auto text-sm sm:text-base leading-relaxed text-foreground/80">
-          {isCreatingProject ? (
-            "Creating your project and setting up the chat environment..."
-          ) : (
-            "Describe what you're building and we'll create a project for you to start chatting about it right away."
-          )}
+          {isCreatingProject
+            ? 'Creating your project and setting up the chat environment...'
+            : "Describe what you're building and we'll create a project for you to start chatting about it right away."}
         </p>
 
         {/* Project option buttons */}

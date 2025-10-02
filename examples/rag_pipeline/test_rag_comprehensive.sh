@@ -98,7 +98,7 @@ new_db = {
     'name': '${TEST_DB}',
     'type': 'ChromaStore',
     'config': {
-        'collection_name': 'test_cli_documents',
+        'collection_name': '${TEST_DB}',
         'distance_function': 'cosine',
         'persist_directory': './data/${TEST_DB}',
         'port': 8000
@@ -172,7 +172,7 @@ else
             print "  - name: " db
             print "    type: ChromaStore"
             print "    config:"
-            print "      collection_name: test_cli_documents"
+            print "      collection_name: " db"
             print "      distance_function: cosine"
             print "      persist_directory: ./data/" db
             print "      port: 8000"

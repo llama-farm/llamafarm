@@ -1,7 +1,8 @@
 """Essential strategy tests."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from core.strategies.handler import SchemaHandler
 
@@ -20,8 +21,8 @@ class TestStrategies:
 
         assert handler.rag_config is not None
         assert (
-            "databases" in handler.rag_config
-            or "data_processing_strategies" in handler.rag_config
+            handler.rag_config.databases is not None
+            or handler.rag_config.data_processing_strategies is not None
         )
 
     def test_get_available_strategies(self, test_config_path):
@@ -49,7 +50,7 @@ class TestStrategies:
         if available:
             config = handler.get_combined_config(available[0])
             assert config is not None
-            assert "database" in config or "processing_strategy" in config
+            assert config.database and config.processing_strategy is not None
 
     def test_database_config(self, test_config_path):
         """Test database configuration."""
@@ -59,5 +60,5 @@ class TestStrategies:
         if databases:
             db_config = handler.create_database_config(databases[0])
             # New schema structure - check for 'config' instead of 'vector_store'
-            assert "config" in db_config
-            assert "embedding_strategies" in db_config
+            assert db_config.config is not None
+            assert db_config.embedding_strategies is not None

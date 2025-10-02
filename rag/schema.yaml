@@ -151,7 +151,7 @@ definitions:
           type: boolean
           default: true
           description: Clean extracted text
-    
+
     csvParserPandasConfig:
       type: object
       title: CSV Parser (Pandas) Configuration
@@ -186,7 +186,7 @@ definitions:
             type: string
           default: ["", "NA", "N/A", "null", "None"]
           description: Values to treat as NaN
-    
+
     csvParserPythonConfig:
       type: object
       title: CSV Parser (Python) Configuration
@@ -210,7 +210,7 @@ definitions:
           type: string
           default: '"'
           description: Quote character
-    
+
     excelParserOpenPyXLConfig:
       type: object
       title: Excel Parser (OpenPyXL) Configuration
@@ -240,7 +240,7 @@ definitions:
           type: boolean
           default: true
           description: Extract values instead of formulas
-    
+
     excelParserPandasConfig:
       type: object
       title: Excel Parser (Pandas) Configuration
@@ -272,7 +272,7 @@ definitions:
             type: string
           default: ["", "NA", "N/A", "null", "None"]
           description: Values to treat as NaN
-    
+
     docxParserPythonDocxConfig:
       type: object
       title: DOCX Parser (python-docx) Configuration
@@ -309,7 +309,7 @@ definitions:
           type: boolean
           default: false
           description: Extract comments
-    
+
     markdownParserPythonConfig:
       type: object
       title: Markdown Parser (Python) Configuration
@@ -338,7 +338,7 @@ definitions:
           type: boolean
           default: true
           description: Extract markdown links
-    
+
     textParserPythonConfig:
       type: object
       title: Text Parser (Python) Configuration
@@ -372,7 +372,7 @@ definitions:
           type: boolean
           default: true
           description: Extract file statistics
-    
+
     textParserLlamaIndexConfig:
       type: object
       title: Text Parser (LlamaIndex) Configuration
@@ -476,8 +476,20 @@ definitions:
           type: array
           items:
             type: string
-            enum: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
-          default: [llama_pdf_reader, llama_pymupdf_reader, direct_pymupdf, pypdf2_fallback]
+            enum:
+              [
+                llama_pdf_reader,
+                llama_pymupdf_reader,
+                direct_pymupdf,
+                pypdf2_fallback,
+              ]
+          default:
+            [
+              llama_pdf_reader,
+              llama_pymupdf_reader,
+              direct_pymupdf,
+              pypdf2_fallback,
+            ]
           description: Fallback strategies to try in order
 
     csvParserLlamaIndexConfig:
@@ -1187,7 +1199,7 @@ definitions:
           type: boolean
           default: true
           description: Enable this extractor
-    
+
   embedderConfig:
     title: Embedder Configuration
     required: [type, config]
@@ -1822,7 +1834,13 @@ definitions:
               description: Strategy identifier
             type:
               type: string
-              enum: [HuggingFaceEmbedder, OllamaEmbedder, OpenAIEmbedder, SentenceTransformerEmbedder]
+              enum:
+                [
+                  HuggingFaceEmbedder,
+                  OllamaEmbedder,
+                  OpenAIEmbedder,
+                  SentenceTransformerEmbedder,
+                ]
               description: Embedding type
             config:
               type: object
@@ -1837,7 +1855,7 @@ definitions:
               description: Priority for automatic selection
       retrieval_strategies:
         type: array
-        title: Retrieval Strategies  
+        title: Retrieval Strategies
         description: Multiple retrieval strategies for different query patterns
         items:
           type: object
@@ -1849,7 +1867,20 @@ definitions:
               description: Strategy identifier
             type:
               type: string
-              enum: [VectorRetriever, HybridRetriever, BM25Retriever, RerankedRetriever, GraphRetriever, ElasticRetriever, BasicSimilarityStrategy, MetadataFilteredStrategy, MultiQueryStrategy, RerankedStrategy, HybridUniversalStrategy]
+              enum:
+                [
+                  VectorRetriever,
+                  HybridRetriever,
+                  BM25Retriever,
+                  RerankedRetriever,
+                  GraphRetriever,
+                  ElasticRetriever,
+                  BasicSimilarityStrategy,
+                  MetadataFilteredStrategy,
+                  MultiQueryStrategy,
+                  RerankedStrategy,
+                  HybridUniversalStrategy,
+                ]
               description: Retrieval type
             config:
               type: object
@@ -1895,23 +1926,24 @@ definitions:
           properties:
             type:
               type: string
-              enum: [
-                CSVParser_LlamaIndex,
-                CSVParser_Pandas,
-                CSVParser_Python,
-                DirectoryParser,
-                DocxParser_LlamaIndex,
-                DocxParser_PythonDocx,
-                ExcelParser_LlamaIndex,
-                ExcelParser_OpenPyXL,
-                ExcelParser_Pandas,
-                MarkdownParser_LlamaIndex,
-                MarkdownParser_Python,
-                PDFParser_LlamaIndex,
-                PDFParser_PyPDF2,
-                TextParser_LlamaIndex,
-                TextParser_Python
-              ]
+              enum:
+                [
+                  CSVParser_LlamaIndex,
+                  CSVParser_Pandas,
+                  CSVParser_Python,
+                  DirectoryParser,
+                  DocxParser_LlamaIndex,
+                  DocxParser_PythonDocx,
+                  ExcelParser_LlamaIndex,
+                  ExcelParser_OpenPyXL,
+                  ExcelParser_Pandas,
+                  MarkdownParser_LlamaIndex,
+                  MarkdownParser_Python,
+                  PDFParser_LlamaIndex,
+                  PDFParser_PyPDF2,
+                  TextParser_LlamaIndex,
+                  TextParser_Python,
+                ]
               description: Parser type
             config:
               type: object
@@ -1924,29 +1956,21 @@ definitions:
                 pattern: ^\.[a-zA-Z0-9]+$
               description: File extensions this parser handles (e.g., [".pdf", ".PDF"])
               examples:
-                - [".pdf", ".PDF"]  # PDF parser
-                - [".csv", ".tsv"]  # CSV parser
-                - [".md", ".markdown"]  # Markdown parser
+                - [".pdf", ".PDF"] # PDF parser
+                - [".csv", ".tsv"] # CSV parser
+                - [".md", ".markdown"] # Markdown parser
             file_include_patterns:
               type: array
               items:
                 type: string
               description: Glob patterns for files to include (e.g., ["*.pdf", "report_*.pdf"])
               examples:
-                - ["*.pdf", "*.PDF"]  # All PDF files
-                - ["report_*.csv"]  # CSV files starting with report_
-                - ["README*", "*.md"]  # README files and markdown
-            file_exclude_patterns:
-              type: array
-              items:
-                type: string
-              description: Glob patterns for files to exclude (e.g., ["*_draft.pdf", "*.tmp"])
-              examples:
-                - ["*_draft.pdf", "*.tmp.pdf"]  # Draft and temp PDFs
-                - ["~$*", "*.bak"]  # Temp and backup files
+                - ["*.pdf", "*.PDF"] # All PDF files
+                - ["report_*.csv"] # CSV files starting with report_
+                - ["README*", "*.md"] # README files and markdown
             priority:
               type: integer
-              description: Parser priority (higher = try first)
+              description: Parser priority (lower = try first)
               default: 50
               minimum: 0
               maximum: 1000
@@ -1956,16 +1980,12 @@ definitions:
                 type: string
               description: MIME types this parser handles (e.g., ["application/pdf"])
               examples:
-                - ["application/pdf"]  # PDF parser
-                - ["text/csv", "text/tab-separated-values"]  # CSV parser
-                - ["text/markdown", "text/x-markdown"]  # Markdown parser
+                - ["application/pdf"] # PDF parser
+                - ["text/csv", "text/tab-separated-values"] # CSV parser
+                - ["text/markdown", "text/x-markdown"] # Markdown parser
             fallback_parser:
               type: ["string", "null"]
               description: Parser to use if this one fails
-            priority:
-              type: integer
-              default: 0
-              description: Priority for automatic selection
       extractors:
         type: array
         title: Extractors
@@ -1996,19 +2016,11 @@ definitions:
                 type: string
               description: Glob patterns for files to apply this extractor to
               examples:
-                - ["*.pdf", "*.PDF"]  # PDF files only
-                - ["*"]  # All files
-            file_exclude_patterns:
-              type: array
-              items:
-                type: string
-              description: Glob patterns for files to exclude from this extractor
-              examples:
-                - ["*.tmp", "*.bak"]  # Skip temp/backup files
+                - ["*.pdf", "*.PDF"] # PDF files only
+                - ["*"] # All files
             priority:
               type: integer
-              description: Extractor priority (higher = apply first)
+              description: Extractor priority (lower = apply first)
               default: 50
               minimum: 0
               maximum: 1000
- 

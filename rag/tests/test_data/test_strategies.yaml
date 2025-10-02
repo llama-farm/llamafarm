@@ -1,4 +1,28 @@
 # Test configuration for CLI testing - NEW RAG SCHEMA FORMAT
+version: v1
+
+name: minimal_config
+namespace: test
+
+models:
+  - provider: "local"
+    model: "llama3.1:8b"
+
+datasets:
+  - name: "minimal_dataset"
+    files: []
+    data_processing_strategy: "default"
+    database: "minimal_db"
+
+prompts:
+  - role: "system"
+    content: "This is a minimal prompt."
+
+runtime:
+  provider: "openai"
+  model: "llama3.1:8b"
+  api_key: "ollama"
+  base_url: "http://localhost:11434/v1"
 
 rag:
   # ==============================================================================
@@ -21,7 +45,6 @@ rag:
             base_url: "http://localhost:11434"
             batch_size: 4
             timeout: 30
-          default: true
       retrieval_strategies:
         - name: "test_similarity"
           type: "BasicSimilarityStrategy"
@@ -29,7 +52,6 @@ rag:
             distance_metric: "cosine"
             top_k: 5
             score_threshold: 0.0
-          default: true
 
     - name: "quicktest_db"
       type: "ChromaStore"
@@ -45,14 +67,12 @@ rag:
           config:
             model: "nomic-embed-text"
             batch_size: 8
-          default: true
       retrieval_strategies:
         - name: "quick_similarity"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
             top_k: 3
-          default: true
 
   # ==============================================================================
   # TEST DATA PROCESSING STRATEGIES
@@ -60,9 +80,8 @@ rag:
   data_processing_strategies:
     - name: "test_cli_strategy"
       description: "Test strategy for automated CLI testing and verification"
-      tags: ["test", "development", "cli"]
       parsers:
-        - type: "TextParser_Python"  # Changed from DirectoryParser
+        - type: "TextParser_Python" # Changed from DirectoryParser
           config:
             recursive: false
             file_extensions: [".txt", ".md"]
@@ -85,10 +104,9 @@ rag:
 
     - name: "quick_test"
       description: "Minimal configuration for quick testing"
-      tags: ["simple", "fast"]
       parsers:
         - type: "TextParser_Python"
           config:
             chunk_size: 500
             chunk_overlap: 50
-      extractors: []  # No extractors for quick testing
+      extractors: [] # No extractors for quick testing

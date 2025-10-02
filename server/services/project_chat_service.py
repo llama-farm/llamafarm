@@ -1,3 +1,4 @@
+import re
 import sys
 import time
 import uuid
@@ -27,10 +28,21 @@ from config.datamodel import LlamaFarmConfig  # noqa: E402
 logger = FastAPIStructLogger()
 
 
-class ProjectChatService:
-    def __init__(self):
-        self.rag_api_cache: dict[str, Any] = {}
+FALLBACK_ECHO_RESPONSE = (
+    "I notice my previous response wasn't very helpful. Let me try to provide a better answer. "
+    "Could you provide more specific details about what you're looking for? "
+    "For example, if you're asking about a particular feature or need help with something specific, "
+    "please let me know and I'll do my best to assist you properly."
+)
 
+# Echo detection constants for better code clarity
+MIN_LENGTH_RATIO = 0.3  # Minimum length ratio (candidate/input) to avoid echo detection
+LENGTH_EXTENSION_FACTOR = 1.2  # Factor by which candidate must exceed input length
+SIMILARITY_THRESHOLD = 0.8  # Minimum word similarity ratio to trigger echo detection
+SIMILARITY_LENGTH_FACTOR = 1.5  # Maximum length multiplier for similarity-based echo detection
+
+
+class ProjectChatService:
     def _create_rag_config_from_strategy(self, strategy) -> dict[str, Any]:
         """Convert LlamaFarm strategy config to RAG API compatible config."""
         components = strategy.components
@@ -216,26 +228,25 @@ class ProjectChatService:
         logger.info(f"Agent response: {agent_response}")
 
         response_message = agent_response.chat_message
-        
+        logger.debug(f"Response received (length: {len(response_message)} chars)")
+
         # Check if response is echoing input
-        if response_message == message:
-            logger.warning(f"Response is echoing input! Input: {message}, Response: {response_message}")
-            
-            # Clear the corrupted history to prevent learning from bad responses
-            if hasattr(chat_agent, 'history'):
-                logger.warning("Clearing agent history due to echo response")
-                # Remove the last exchange if it was an echo
-                if len(chat_agent.history) >= 2:
-                    # Remove the last assistant response (the echo)
-                    chat_agent.history = chat_agent.history[:-1]
-            
-            # Generate a fallback response
-            response_message = (
-                "I apologize, but I'm having trouble processing your question properly. "
-                "Could you please try rephrasing it or asking something else? "
-                "If this continues, you may want to start a new session."
+        if _is_echo(message, response_message):
+            logger.warning(
+                f"Response is echoing input! Input length: {len(message)}, Response length: {len(response_message)}"
             )
-            logger.info(f"Using fallback response instead of echo")
+            logger.warning(f"Input: '{message}'")
+            logger.warning(f"Response: '{response_message}'")
+
+            # Instead of clearing entire history, just remove the problematic response
+            # to prevent the model from learning bad behavior while preserving context
+            if hasattr(chat_agent, "history"):
+                logger.info("Removing problematic response from history due to echo detection")
+                _remove_echo_response_from_history(chat_agent)
+
+            # Generate a fallback response
+            response_message = FALLBACK_ECHO_RESPONSE
+            logger.info("Using improved fallback response instead of echo")
 
         completion = ChatCompletion(
             id=f"chat-{uuid.uuid4()}",
@@ -257,6 +268,7 @@ class ProjectChatService:
 
     async def stream_chat(
         self,
+        *,
         project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: ProjectChatOrchestratorAgent,
@@ -327,30 +339,43 @@ class ProjectChatService:
         try:
             logger.info("Running async stream")
             previous_response = ""
+            emitted = False
+            echo_detected = False
+            normalized_input = _normalize_text(message)
             async for chunk in chat_agent.run_async_stream(input_schema):
-                if hasattr(chunk, "chat_message") and chunk.chat_message:
-                    logger.info("Processing partial response", message=chunk)
-                    current_response = chunk.chat_message
+                if not hasattr(chunk, "chat_message") or not chunk.chat_message:
+                    continue
+                current_response = chunk.chat_message
+                normalized_current = _normalize_text(current_response)
+                if normalized_input.startswith(normalized_current):
+                    echo_detected = True
+                    logger.info(
+                        "Streaming matches user input prefix; waiting for divergence",
+                        chunk=current_response,
+                    )
+                    continue
 
-                    # Skip duplicates
-                    if current_response == previous_response:
-                        continue
-                    
-                    # Skip if response is just echoing the input
-                    if current_response == message:
-                        logger.warning(f"Skipping echoed input in stream: {current_response}")
-                        continue
-
-                    # If this is the first chunk, yield it entirely
-                    if not previous_response:
-                        yield current_response
-                    # Otherwise, yield only the incremental part
-                    elif len(current_response) > len(previous_response):
+                incremental = current_response
+                if previous_response:
+                    if len(current_response) > len(previous_response):
                         incremental = current_response[len(previous_response) :]
-                        yield incremental
+                    else:
+                        incremental = ""
 
-                    previous_response = current_response
-            return
+                if incremental:
+                    emitted = True
+                    yield incremental
+
+                previous_response = current_response
+
+            if not emitted:
+                if echo_detected or not previous_response:
+                    logger.info("Streaming produced no usable content; using fallback")
+                    _remove_echo_response_from_history(chat_agent)
+                    yield FALLBACK_ECHO_RESPONSE
+                else:
+                    yield previous_response
+                return
         except Exception:
             logger.error(
                 "Model call failed",
@@ -359,3 +384,67 @@ class ProjectChatService:
 
 
 project_chat_service = ProjectChatService()
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\W+", "", text).lower()
+
+
+def _is_echo(user_input: str, candidate: str) -> bool:
+    if not candidate or not user_input:
+        return False
+
+    if _normalize_text(candidate) == _normalize_text(user_input):
+        return True
+
+    if len(candidate.strip()) < len(user_input.strip()) * MIN_LENGTH_RATIO:
+        return False
+
+    normalized_input = _normalize_text(user_input)
+    normalized_candidate = _normalize_text(candidate)
+
+    if normalized_candidate.startswith(normalized_input) and len(candidate) > len(user_input) * LENGTH_EXTENSION_FACTOR:
+        return False
+
+    similarity_ratio = len(set(normalized_candidate.split()) & set(normalized_input.split())) / len(set(normalized_input.split())) if normalized_input.split() else 0
+
+    if similarity_ratio >= SIMILARITY_THRESHOLD and len(candidate) <= len(user_input) * SIMILARITY_LENGTH_FACTOR:
+        return True
+
+    return False
+
+
+def _remove_echo_response_from_history(chat_agent: ProjectChatOrchestratorAgent) -> None:
+    history = getattr(chat_agent, "history", None)
+    if not history:
+        return
+
+    try:
+        if hasattr(history, "history") and isinstance(history.history, list):
+            messages = history.history
+            for i in range(len(messages) - 1, -1, -1):
+                msg = messages[i]
+                role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
+                if role == "assistant":
+                    messages.pop(i)
+                    logger.info(f"Removed assistant message at index {i} from history")
+                    break
+    except Exception:
+        logger.warning("Failed to remove echo response from history", exc_info=True)
+
+
+def _drop_last_history_entry(chat_agent: ProjectChatOrchestratorAgent) -> None:
+    history = getattr(chat_agent, "history", None)
+    if not history:
+        return
+
+    try:
+        if isinstance(history, list):
+            if history:
+                history.pop()
+        elif hasattr(history, "history"):
+            internal = getattr(history, "history", None)
+            if internal and isinstance(internal, list):
+                internal.pop()
+    except Exception:
+        logger.warning("Failed to trim chat history", exc_info=True)

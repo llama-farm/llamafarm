@@ -1,22 +1,30 @@
 """Internal API for RAG system search functionality."""
 
-import json
+# Use the common config module instead of direct YAML loading
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
-from dataclasses import dataclass, asdict
-
-try:
-    import yaml
-except ImportError:
-    yaml = None  # type: ignore
+from typing import Any, Optional, Union
 
 from core.base import Document
 from core.factories import (
     create_embedder_from_config,
-    create_vector_store_from_config,
     create_retrieval_strategy_from_config,
+    create_vector_store_from_config,
 )
-from utils.path_resolver import PathResolver, resolve_paths_in_config
+
+# Add the repo root to the path to find the config module
+repo_root = Path(__file__).parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+try:
+    from config import load_config
+    from config.datamodel import Database, LlamaFarmConfig, RetrievalStrategy
+except ImportError as e:
+    raise ImportError(
+        f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
+    ) from e
 
 
 @dataclass
@@ -26,7 +34,7 @@ class SearchResult:
     id: str
     content: str
     score: float
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     source: Optional[str] = None
 
     @classmethod
@@ -41,163 +49,199 @@ class SearchResult:
             source=doc.source,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
 
-class DatabaseSearchAPI:
-    """API for searching directly against a database without dataset requirement."""
+class BaseAPI:
+    """Base API for all RAG APIs."""
+
+    config: LlamaFarmConfig
+    rag_config: dict[str, Any]
+    database: str | None = None
+    dataset: str | None = None
+    _database_config: Database | None = None
 
     def __init__(
         self,
-        config_path: str = "rag_config.json",
-        base_dir: Optional[str] = None,
-        database: Optional[str] = None,
+        project_dir: str,
+        database: str | None = None,
+        dataset: str | None = None,
     ):
-        """Initialize the database search API.
-
-        Args:
-            config_path: Path to llamafarm.yaml configuration file
-            base_dir: Base directory for relative path resolution
-            database: Database name to search in
-        """
-        self.config_path = config_path
-        self.base_dir = base_dir
+        self.project_dir = project_dir
         self.database = database
+        self.dataset = dataset
+        self._load_config()
         self._load_database_config()
         self._initialize_components()
 
+    def _load_config(self) -> None:
+        """Load configuration from file."""
+        self.config = load_config(config_path=self.project_dir, validate=True)
+
     def _load_database_config(self) -> None:
-        """Load configuration for database from llamafarm.yaml."""
-        resolver = PathResolver(self.base_dir)
-
+        """Load configuration for database from project config."""
         try:
-            resolved_config_path = resolver.resolve_config_path(self.config_path)
-            self.project_dir = resolved_config_path.parent
+            rag_config = self._validate_and_get_rag_config()
+            databases = rag_config.databases
 
-            # Load llamafarm.yaml
-            if yaml is None:
-                raise ImportError("PyYAML is required to parse llamafarm.yaml files")
-
-            with open(resolved_config_path, "r") as f:
-                llamafarm_config = yaml.safe_load(f)
-
-            if not llamafarm_config:
-                raise ValueError("Empty llamafarm config file")
-
-            # Find the database configuration directly from rag section
-            rag_config = llamafarm_config.get("rag", {})
-            databases = rag_config.get("databases", [])
-
-            # If no database specified, use the first one
-            if not self.database and databases:
-                self.database = databases[0].get("name")
-
-            database_config = None
-            for db in databases:
-                if db.get("name") == self.database:
-                    database_config = db
-                    break
-
-            if not database_config:
-                raise ValueError(
-                    f"Database '{self.database}' not found in rag configuration"
-                )
+            self._resolve_database_name(databases)
+            database_config = self._find_database_config(databases)
 
             # Store database config for later use
             self._database_config = database_config
 
             # Build traditional rag config format
-            traditional_config = {}
+            traditional_config = self._build_traditional_config(database_config)
+            self.rag_config = traditional_config
 
-            # Vector store configuration
-            db_type = database_config.get("type")
-            db_config = database_config.get("config", {})
+        except Exception as e:
+            raise ValueError(f"Invalid config file format: {e}") from e
 
-            traditional_config["vector_store"] = {"type": db_type, "config": db_config}
+    def _validate_and_get_rag_config(self):
+        """Validate and return RAG configuration."""
+        rag_config = self.config.rag
+        if not rag_config:
+            raise ValueError("RAG configuration not found in project config")
+        if not rag_config.databases:
+            raise ValueError("No databases found in RAG configuration")
+        return rag_config
 
-            # Embedding configuration - use default embedding strategy
-            embedding_strategies = database_config.get("embedding_strategies", [])
-            default_embedding_strategy = database_config.get(
-                "default_embedding_strategy"
+    def _resolve_database_name(self, databases) -> None:
+        """Resolve database name from dataset or use first available."""
+        if self.dataset:
+            dataset_config = next(
+                (
+                    dataset
+                    for dataset in (self.config.datasets or [])
+                    if dataset.name == self.dataset
+                ),
+                None,
             )
+            if not dataset_config:
+                raise ValueError(f"Dataset '{self.dataset}' not found in config")
+            self.database = dataset_config.database
 
-            embedder_config = None
-            if default_embedding_strategy:
-                # Find the named strategy
-                for strategy in embedding_strategies:
-                    if strategy.get("name") == default_embedding_strategy:
-                        embedder_config = {
-                            "type": strategy.get("type"),
-                            "config": strategy.get("config", {}),
-                        }
-                        break
-            elif embedding_strategies:
-                # Use first available strategy
-                first_strategy = embedding_strategies[0]
-                embedder_config = {
-                    "type": first_strategy.get("type"),
-                    "config": first_strategy.get("config", {}),
-                }
+        # If no database specified, use the first one
+        if not self.database and databases:
+            self.database = databases[0].name
 
-            if embedder_config:
-                traditional_config["embedder"] = embedder_config
-
-            # Retrieval strategy configuration - use default retrieval strategy
-            retrieval_strategies = database_config.get("retrieval_strategies", [])
-            default_retrieval_strategy = database_config.get(
-                "default_retrieval_strategy"
+    def _find_database_config(self, databases):
+        """Find database configuration by name."""
+        database_config = next(
+            (db for db in databases if db.name == self.database), None
+        )
+        if not database_config:
+            raise ValueError(
+                f"Database '{self.database}' not found in rag configuration"
             )
+        return database_config
 
-            retrieval_config = None
-            if default_retrieval_strategy:
-                # Find the named strategy
-                for strategy in retrieval_strategies:
-                    if strategy.get("name") == default_retrieval_strategy:
-                        retrieval_config = {
-                            "type": strategy.get("type"),
-                            "config": strategy.get("config", {}),
-                        }
-                        break
-            elif retrieval_strategies:
-                # Use first strategy or one marked as default
-                for strategy in retrieval_strategies:
-                    if strategy.get("default", False):
-                        retrieval_config = {
-                            "type": strategy.get("type"),
-                            "config": strategy.get("config", {}),
-                        }
-                        break
+    def _build_traditional_config(self, database_config: Database) -> dict[str, Any]:
+        """Build traditional RAG config format from database config."""
+        traditional_config: dict[str, Any] = {}
 
-                if not retrieval_config and retrieval_strategies:
-                    # Use first available strategy as fallback
-                    first_strategy = retrieval_strategies[0]
-                    retrieval_config = {
-                        "type": first_strategy.get("type"),
-                        "config": first_strategy.get("config", {}),
-                    }
+        # Vector store configuration
+        traditional_config["vector_store"] = self._build_vector_store_config(
+            database_config
+        )
 
-            if retrieval_config:
-                traditional_config["retrieval_strategy"] = retrieval_config
+        # Embedding configuration
+        embedder_config = self._build_embedder_config(database_config)
+        if embedder_config:
+            traditional_config["embedder"] = embedder_config
 
-            self.config = traditional_config
+        # Retrieval strategy configuration
+        retrieval_config = self._build_retrieval_config(database_config)
+        if retrieval_config:
+            traditional_config["retrieval_strategy"] = retrieval_config
 
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"Config file not found: {e}")
-        except yaml.YAMLError as e:
-            raise ValueError(f"Invalid config file format: {e}")
+        return traditional_config
+
+    def _build_vector_store_config(self, database_config: Database) -> dict[str, Any]:
+        """Build vector store configuration."""
+        db_type = database_config.type.value
+        return {
+            "type": db_type,
+            "config": database_config.config,
+        }
+
+    def _build_embedder_config(
+        self, database_config: Database
+    ) -> Optional[dict[str, Any]]:
+        """Build embedder configuration from embedding strategies."""
+        embedding_strategies = database_config.embedding_strategies or []
+        default_embedding_strategy = database_config.default_embedding_strategy
+
+        if default_embedding_strategy:
+            # Find the named strategy
+            strategy = next(
+                (
+                    s
+                    for s in embedding_strategies
+                    if s.name == default_embedding_strategy
+                ),
+                None,
+            )
+            if strategy:
+                return self._strategy_to_config(strategy)
+        elif embedding_strategies:
+            # Use first available strategy
+            return self._strategy_to_config(embedding_strategies[0])
+
+        return None
+
+    def _build_retrieval_config(
+        self, database_config: Database
+    ) -> Optional[dict[str, Any]]:
+        """Build retrieval configuration from retrieval strategies."""
+        retrieval_strategies = database_config.retrieval_strategies or []
+        default_retrieval_strategy = database_config.default_retrieval_strategy
+
+        if default_retrieval_strategy:
+            # Find the named strategy
+            strategy = next(
+                (
+                    s
+                    for s in retrieval_strategies
+                    if s.name == default_retrieval_strategy
+                ),
+                None,
+            )
+            if strategy:
+                return self._strategy_to_config(strategy)
+        elif retrieval_strategies:
+            # Use first strategy marked as default, or first available
+            strategy = next(
+                (s for s in retrieval_strategies if getattr(s, "default", False)),
+                retrieval_strategies[0] if retrieval_strategies else None,
+            )
+            if strategy:
+                return self._strategy_to_config(strategy)
+
+        return None
+
+    def _strategy_to_config(self, strategy: RetrievalStrategy) -> dict[str, Any]:
+        """Convert strategy object to config dictionary."""
+        return {
+            "type": strategy.type.value,
+            "config": strategy.config,
+        }
 
     def _get_retrieval_strategy_by_name(self, strategy_name: str):
         """Get a retrieval strategy by name from the database config."""
-        retrieval_strategies = self._database_config.get("retrieval_strategies", [])
+        if not self._database_config:
+            return None
+
+        retrieval_strategies = self._database_config.retrieval_strategies or []
 
         for strategy in retrieval_strategies:
-            if strategy.get("name") == strategy_name:
+            if strategy.name == strategy_name:
                 # Create strategy from config
                 strategy_config = {
-                    "type": strategy.get("type"),
-                    "config": strategy.get("config", {}),
+                    "type": strategy.type.value,
+                    "config": strategy.config,
                 }
                 return create_retrieval_strategy_from_config(strategy_config)
 
@@ -208,28 +252,28 @@ class DatabaseSearchAPI:
         """Initialize RAG components from configuration."""
         try:
             # Initialize embedder
-            if "embedder" in self.config:
-                self.embedder = create_embedder_from_config(self.config["embedder"])
+            if "embedder" in self.rag_config:
+                self.embedder = create_embedder_from_config(self.rag_config["embedder"])
             else:
                 raise ValueError("No embedder configuration found")
 
             # Initialize vector store
-            if "vector_store" in self.config:
+            if "vector_store" in self.rag_config:
                 self.vector_store = create_vector_store_from_config(
-                    self.config["vector_store"], self.project_dir
+                    self.rag_config["vector_store"], project_dir=Path(self.project_dir)
                 )
             else:
                 raise ValueError("No vector store configuration found")
 
             # Initialize retrieval strategy
-            if "retrieval_strategy" in self.config:
+            if "retrieval_strategy" in self.rag_config:
                 self.retrieval_strategy = create_retrieval_strategy_from_config(
-                    self.config["retrieval_strategy"]
+                    self.rag_config["retrieval_strategy"]
                 )
             else:
                 # Fallback to basic universal strategy
                 try:
-                    from components.retrievers.strategies.universal import (
+                    from components.retrievers.basic_similarity import (
                         BasicSimilarityStrategy,
                     )
 
@@ -243,18 +287,24 @@ class DatabaseSearchAPI:
                     self.retrieval_strategy = BasicSimilarityStrategy()
 
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize components: {e}")
+            raise RuntimeError(
+                f"Failed to initialize components: {e}: rag_config: {self.rag_config}"
+            ) from e
+
+
+class DatabaseSearchAPI(BaseAPI):
+    """API for searching directly against a database without dataset requirement."""
 
     def search(
         self,
         query: str,
         top_k: int = 5,
         min_score: Optional[float] = None,
-        metadata_filter: Optional[Dict[str, Any]] = None,
+        metadata_filter: Optional[dict[str, Any]] = None,
         return_raw_documents: bool = False,
         retrieval_strategy: Optional[str] = None,
         **kwargs,
-    ) -> Union[List[SearchResult], List[Document]]:
+    ) -> Union[list[SearchResult], list[Document]]:
         """Search for documents in the database using configured retrieval strategy."""
         # Embed the query
         query_embedding = self.embedder.embed([query])[0]
@@ -309,7 +359,7 @@ class DatabaseSearchAPI:
         return results
 
     def _matches_metadata_filter(
-        self, doc: Document, metadata_filter: Dict[str, Any]
+        self, doc: Document, metadata_filter: dict[str, Any]
     ) -> bool:
         """Check if a document matches metadata filter criteria."""
         if not doc.metadata:
@@ -324,232 +374,19 @@ class DatabaseSearchAPI:
         return True
 
 
-class SearchAPI:
+class SearchAPI(BaseAPI):
     """Internal API for searching the RAG system."""
-
-    def __init__(
-        self,
-        config_path: str = "rag_config.json",
-        base_dir: Optional[str] = None,
-        dataset: Optional[str] = None,
-    ):
-        """Initialize the search API.
-
-        Args:
-            config_path: Path to configuration file
-            base_dir: Base directory for relative path resolution
-            dataset: Dataset name to use when config_path is a llamafarm.yaml file
-        """
-        self.config_path = config_path
-        self.base_dir = base_dir
-        self.dataset = dataset
-        self._load_config()
-        self._initialize_components()
-
-    def _load_config(self) -> None:
-        """Load configuration from file."""
-        resolver = PathResolver(self.base_dir)
-
-        try:
-            resolved_config_path = resolver.resolve_config_path(self.config_path)
-
-            # Check if this is a llamafarm.yaml file that needs dataset parsing
-            if resolved_config_path.name.startswith(
-                "llamafarm"
-            ) or resolved_config_path.suffix.lower() in [".yaml", ".yml"]:
-                if not self.dataset:
-                    raise ValueError(
-                        "Dataset parameter is required when using llamafarm.yaml config files"
-                    )
-                self.config = self._parse_llamafarm_config(
-                    resolved_config_path, self.dataset
-                )
-            else:
-                # Traditional rag config file (JSON)
-                with open(resolved_config_path, "r") as f:
-                    self.config = json.load(f)
-
-            # Resolve any paths within the configuration
-            self.config = resolve_paths_in_config(self.config, resolver)
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"Config file not found: {e}")
-        except (json.JSONDecodeError, yaml.YAMLError) as e:
-            raise ValueError(f"Invalid config file format: {e}")
-
-    def _parse_llamafarm_config(
-        self, config_path: Path, dataset_name: str
-    ) -> Dict[str, Any]:
-        """Parse llamafarm.yaml config and extract rag configuration for the specified dataset.
-
-        Args:
-            config_path: Path to llamafarm.yaml file
-            dataset_name: Name of the dataset to extract configuration for
-
-        Returns:
-            Dictionary in traditional rag config format
-        """
-        # Load llamafarm.yaml
-        if yaml is None:
-            raise ImportError("PyYAML is required to parse llamafarm.yaml files")
-
-        with open(config_path, "r") as f:
-            llamafarm_config = yaml.safe_load(f)
-
-        if not llamafarm_config:
-            raise ValueError("Empty llamafarm config file")
-
-        # Find the dataset configuration
-        datasets = llamafarm_config.get("datasets", [])
-        dataset_config = None
-        for dataset in datasets:
-            if dataset.get("name") == dataset_name:
-                dataset_config = dataset
-                break
-
-        if not dataset_config:
-            raise ValueError(f"Dataset '{dataset_name}' not found in config")
-
-        # Get the database name from dataset config
-        database_name = dataset_config.get("database")
-        if not database_name:
-            raise ValueError(f"No database specified for dataset '{dataset_name}'")
-
-        # Find the database configuration in rag section
-        rag_config = llamafarm_config.get("rag", {})
-        databases = rag_config.get("databases", [])
-        database_config = None
-        for db in databases:
-            if db.get("name") == database_name:
-                database_config = db
-                break
-
-        if not database_config:
-            raise ValueError(
-                f"Database '{database_name}' not found in rag configuration"
-            )
-
-        # Build traditional rag config format
-        traditional_config = {}
-
-        # Vector store configuration
-        db_type = database_config.get("type")
-        db_config = database_config.get("config", {})
-
-        traditional_config["vector_store"] = {"type": db_type, "config": db_config}
-
-        # Embedding configuration - use default embedding strategy
-        embedding_strategies = database_config.get("embedding_strategies", [])
-        default_embedding_strategy = database_config.get("default_embedding_strategy")
-
-        embedder_config = None
-        if default_embedding_strategy:
-            # Find the named strategy
-            for strategy in embedding_strategies:
-                if strategy.get("name") == default_embedding_strategy:
-                    embedder_config = {
-                        "type": strategy.get("type"),
-                        "config": strategy.get("config", {}),
-                    }
-                    break
-        elif embedding_strategies:
-            # Use first available strategy
-            first_strategy = embedding_strategies[0]
-            embedder_config = {
-                "type": first_strategy.get("type"),
-                "config": first_strategy.get("config", {}),
-            }
-
-        if embedder_config:
-            traditional_config["embedder"] = embedder_config
-
-        # Retrieval strategy configuration - use default retrieval strategy
-        retrieval_strategies = database_config.get("retrieval_strategies", [])
-        default_retrieval_strategy = database_config.get("default_retrieval_strategy")
-
-        retrieval_config = None
-        if default_retrieval_strategy:
-            # Find the named strategy
-            for strategy in retrieval_strategies:
-                if strategy.get("name") == default_retrieval_strategy:
-                    retrieval_config = {
-                        "type": strategy.get("type"),
-                        "config": strategy.get("config", {}),
-                    }
-                    break
-        else:
-            # Find default strategy or use first available
-            for strategy in retrieval_strategies:
-                if strategy.get("default", False):
-                    retrieval_config = {
-                        "type": strategy.get("type"),
-                        "config": strategy.get("config", {}),
-                    }
-                    break
-            if not retrieval_config and retrieval_strategies:
-                # Use first available strategy
-                first_strategy = retrieval_strategies[0]
-                retrieval_config = {
-                    "type": first_strategy.get("type"),
-                    "config": first_strategy.get("config", {}),
-                }
-
-        if retrieval_config:
-            traditional_config["retrieval_strategy"] = retrieval_config
-
-        # Store database config for alternative retrieval strategy lookup
-        traditional_config["_database_config"] = database_config
-
-        return traditional_config
-
-    def _initialize_components(self) -> None:
-        """Initialize embedder, vector store, and retrieval strategy from config."""
-        try:
-            self.embedder = create_embedder_from_config(self.config.get("embedder", {}))
-            self.vector_store = create_vector_store_from_config(
-                self.config.get("vector_store", {})
-            )
-
-            # Store database config for alternative retrieval strategy lookup
-            self._database_config = self.config.get("_database_config")
-
-            # Initialize retrieval strategy (with fallback to basic strategy)
-            retrieval_config = self.config.get("retrieval_strategy")
-            if retrieval_config:
-                # Pass database type for optimization
-                database_type = type(self.vector_store).__name__
-                self.retrieval_strategy = create_retrieval_strategy_from_config(
-                    retrieval_config,
-                    # database_type=database_type # TODO: Bobby commented this out because it was causing an error
-                )
-            else:
-                # Fallback to basic universal strategy
-                try:
-                    from components.retrievers.strategies.universal import (
-                        BasicSimilarityStrategy,
-                    )
-
-                    self.retrieval_strategy = BasicSimilarityStrategy()
-                except ImportError:
-                    # Use basic similarity from the standard location
-                    from components.retrievers.basic_similarity.basic_similarity import (
-                        BasicSimilarityStrategy,
-                    )
-
-                    self.retrieval_strategy = BasicSimilarityStrategy()
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize components: {e}")
 
     def search(
         self,
         query: str,
         top_k: int = 5,
         min_score: Optional[float] = None,
-        metadata_filter: Optional[Dict[str, Any]] = None,
+        metadata_filter: Optional[dict[str, Any]] = None,
         return_raw_documents: bool = False,
         retrieval_strategy: Optional[str] = None,
         **kwargs,
-    ) -> Union[List[SearchResult], List[Document]]:
+    ) -> Union[list[SearchResult], list[Document]]:
         """Search for documents matching the query using configured retrieval strategy.
 
         Args:
@@ -565,7 +402,7 @@ class SearchAPI:
             List of SearchResult objects or Document objects if return_raw_documents=True
 
         Example:
-            >>> api = SearchAPI()
+            >>> api = SearchAPI(project_dir=".")
             >>> results = api.search("password reset", top_k=3)
             >>> for result in results:
             ...     print(f"Score: {result.score:.3f} - {result.content[:100]}...")
@@ -575,7 +412,7 @@ class SearchAPI:
 
         # Determine which retrieval strategy to use
         strategy_to_use = self.retrieval_strategy
-        if retrieval_strategy and hasattr(self, "_database_config"):
+        if retrieval_strategy and self._database_config:
             # Look for alternative retrieval strategy by name
             strategy_to_use = self._get_retrieval_strategy_by_name(retrieval_strategy)
 
@@ -619,7 +456,7 @@ class SearchAPI:
         if not self._database_config:
             return self.retrieval_strategy
 
-        retrieval_strategies = self._database_config.get("retrieval_strategies", [])
+        retrieval_strategies = self.rag_config.get("retrieval_strategies", [])
 
         # Find strategy by name
         for strategy in retrieval_strategies:
@@ -634,8 +471,8 @@ class SearchAPI:
         return self.retrieval_strategy
 
     def _filter_by_metadata(
-        self, documents: List[Document], metadata_filter: Dict[str, Any]
-    ) -> List[Document]:
+        self, documents: list[Document], metadata_filter: dict[str, Any]
+    ) -> list[Document]:
         """Filter documents by metadata fields.
 
         Args:
@@ -666,7 +503,7 @@ class SearchAPI:
                 filtered.append(doc)
         return filtered
 
-    def get_collection_info(self) -> Dict[str, Any]:
+    def get_collection_info(self) -> dict[str, Any]:
         """Get information about the vector store collection.
 
         Returns:
@@ -690,7 +527,7 @@ class SearchAPI:
 
     def search_with_context(
         self, query: str, context_size: int = 2, **kwargs
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search and include surrounding context documents.
 
         Args:
@@ -731,11 +568,11 @@ class SearchAPI:
 # Convenience function for simple searches
 def search(
     query: str,
-    config_path: str = "rag_config.json",
+    project_dir: str,
     top_k: int = 5,
     dataset: Optional[str] = None,
     **kwargs,
-) -> List[SearchResult]:
+) -> list[SearchResult]:
     """Convenience function for simple searches.
 
     Args:
@@ -754,10 +591,10 @@ def search(
         >>> print(results[0].content)
 
         # With llamafarm.yaml and dataset
-        >>> results = search("login issues", config_path="llamafarm.yaml", dataset="my_dataset", top_k=3)
+        >>> results = search("login issues", project_dir="l.", dataset="my_dataset", top_k=3)
         >>> print(results[0].content)
     """
-    api = SearchAPI(config_path=config_path, dataset=dataset)
+    api = SearchAPI(project_dir=project_dir, dataset=dataset)
     results = api.search(query, top_k=top_k, **kwargs)
     # Ensure we always return SearchResult objects
     if not results:

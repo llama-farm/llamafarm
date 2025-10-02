@@ -12,6 +12,8 @@ services:
       - OLLAMA_HOST=http://host.docker.internal:11434
     volumes:
       - llamafarm_data:/var/lib/llamafarm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s

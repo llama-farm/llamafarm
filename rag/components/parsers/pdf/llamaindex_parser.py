@@ -75,10 +75,10 @@ class PDFParser_LlamaIndex(BaseParser):
 
     def parse_blob(self, data: bytes, metadata: Dict[str, Any] = None) -> List:
         """Parse PDF from raw bytes."""
-        from core.base import Document
-        import io
-        import tempfile
         import os
+        import tempfile
+
+        from core.base import Document
 
         try:
             from llama_index.core import SimpleDirectoryReader

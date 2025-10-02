@@ -52,15 +52,7 @@ class ProjectService:
 
     @classmethod
     def get_project_dir(cls, namespace: str, project_id: str):
-        # The llamafarm namespace is a special case, it is used to store internal
-        # config files.
-        if namespace == "llamafarm":
-            return os.path.normpath(
-                os.path.join(
-                    Path(__file__).parent.parent, "seeds", project_id.replace("-", "_")
-                )
-            )
-
+        # All projects now use the standard .llamafarm directory structure
         base_path = os.path.join(settings.lf_data_dir, "projects")
         raw_path = os.path.join(base_path, namespace, project_id)
         norm_path = os.path.normpath(raw_path)

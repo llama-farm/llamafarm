@@ -88,29 +88,28 @@ except ImportError:
     QDRANT_AVAILABLE = False
 
 # Import extractors
-from components.extractors.keyword_extractor.keyword_extractor import (
-    YAKEExtractor,
-    RAKEExtractor,
-    TFIDFExtractor,
-)
-from components.extractors.entity_extractor.entity_extractor import EntityExtractor
 from components.extractors.datetime_extractor.datetime_extractor import (
     DateTimeExtractor,
 )
+from components.extractors.entity_extractor.entity_extractor import EntityExtractor
+from components.extractors.heading_extractor.heading_extractor import HeadingExtractor
+from components.extractors.keyword_extractor.keyword_extractor import (
+    RAKEExtractor,
+    TFIDFExtractor,
+    YAKEExtractor,
+)
+from components.extractors.link_extractor.link_extractor import LinkExtractor
+from components.extractors.pattern_extractor.pattern_extractor import PatternExtractor
 from components.extractors.statistics_extractor.statistics_extractor import (
     ContentStatisticsExtractor,
 )
 from components.extractors.summary_extractor.summary_extractor import SummaryExtractor
-from components.extractors.pattern_extractor.pattern_extractor import PatternExtractor
 from components.extractors.table_extractor.table_extractor import TableExtractor
-from components.extractors.link_extractor.link_extractor import LinkExtractor
-from components.extractors.heading_extractor.heading_extractor import HeadingExtractor
 
 # Import retrieval strategies
 from components.retrievers.basic_similarity.basic_similarity import (
     BasicSimilarityStrategy,
 )
-
 from components.retrievers.hybrid_universal.hybrid_universal import (
     HybridUniversalStrategy,
 )
@@ -124,7 +123,7 @@ from components.retrievers.reranked.reranked import RerankedStrategy
 class ComponentFactory:
     """Base factory for creating RAG components."""
 
-    _registry: Dict[str, Type] = {}
+    _registry: dict[str, type] = {}
 
     @classmethod
     def register(cls, name: str, component_class: Type):
@@ -135,12 +134,14 @@ class ComponentFactory:
     def create(
         cls,
         component_type: str,
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         """Create a component instance by type name."""
         if component_type not in cls._registry:
-            raise ValueError(f"Unknown component type: {component_type}")
+            raise ValueError(
+                f"Unknown component type: {component_type}. Registry: {cls._registry}"
+            )
 
         component_class = cls._registry[component_type]
         return component_class(config=config, project_dir=project_dir)
@@ -261,7 +262,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_component_from_config(
-    component_config: Dict[str, Any],
+    component_config: dict[str, Any],
     factory_class: Type[ComponentFactory],
     project_dir: Path | None = None,
 ):
@@ -286,7 +287,7 @@ def create_parser_from_config(parser_config: Dict[str, Any]) -> Parser:
 
 
 def create_vector_store_from_config(
-    store_config: Dict[str, Any], project_dir: Path
+    store_config: dict[str, Any], project_dir: Path
 ) -> VectorStore:
     """Create a vector store from configuration."""
     return create_component_from_config(store_config, VectorStoreFactory, project_dir)

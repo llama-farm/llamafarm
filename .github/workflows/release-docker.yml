@@ -29,7 +29,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Tag Docker images
+      - name: Wait for Docker images and tag them
         env:
           REGISTRY: ghcr.io
           IMAGE_NAME: ${{ github.repository }}
@@ -56,10 +56,50 @@ jobs:
           # Services to retag
           SERVICES=(designer server rag)
 
-          # Try main-<fullsha> first, then main-<shortsha>
+          # Wait for all Docker images to be available
+          echo "Waiting for Docker images to be built and pushed..."
+          MAX_WAIT=1800  # 30 minutes max wait
+          WAIT_INTERVAL=30  # Check every 30 seconds
+          elapsed=0
+
+          while [ $elapsed -lt $MAX_WAIT ]; do
+            all_found=true
+
+            for SERVICE in "${SERVICES[@]}"; do
+              # Try both full and short SHA formats
+              SRC1="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:${TAG}-${FULL_SHA}"
+              SRC2="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:${TAG}-${SHORT_SHA}"
+
+              echo "Checking for ${SERVICE} image..."
+              if ! (docker manifest inspect "${SRC1}" >/dev/null 2>&1 || docker manifest inspect "${SRC2}" >/dev/null 2>&1); then
+                echo "  ${SERVICE} image not ready yet"
+                all_found=false
+                break
+              else
+                echo "  ${SERVICE} image found"
+              fi
+            done
+
+            if [ "$all_found" = true ]; then
+              echo "All Docker images are available!"
+              break
+            fi
+
+            echo "Waiting ${WAIT_INTERVAL} seconds before next check... (elapsed: ${elapsed}s)"
+            sleep $WAIT_INTERVAL
+            elapsed=$((elapsed + WAIT_INTERVAL))
+          done
+
+          if [ $elapsed -ge $MAX_WAIT ]; then
+            echo "ERROR: Timeout waiting for Docker images to be available" >&2
+            exit 1
+          fi
+
+          # Now retag the images
+          echo "Retagging Docker images..."
           for SERVICE in "${SERVICES[@]}"; do
-            SRC1="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:main-${FULL_SHA}"
-            SRC2="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:main-${SHORT_SHA}"
+            SRC1="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:${TAG}-${FULL_SHA}"
+            SRC2="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:${TAG}-${SHORT_SHA}"
             DST="${REGISTRY}/${IMAGE_NAME}/${SERVICE}:${TAG}"
 
             echo "Attempting to retag ${SERVICE} from ${SRC1} -> ${DST}"

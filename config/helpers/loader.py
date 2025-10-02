@@ -5,11 +5,12 @@ with JSON schema validation and write capabilities.
 
 import json
 import os
+import re
+import socket
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
-# urllib.parse imports removed - no longer needed for $ref resolution
 
 try:
     import yaml  # type: ignore
@@ -57,6 +58,91 @@ class ConfigError(Exception):
     pass
 
 
+# Cache for DNS resolution result to avoid repeated lookups
+_host_docker_internal_cache: bool | None = None
+
+
+def _is_host_docker_internal_resolvable() -> bool:
+    """
+    Check if host.docker.internal is resolvable (cached).
+
+    Returns:
+        True if host.docker.internal can be resolved, False otherwise.
+    """
+    global _host_docker_internal_cache
+
+    if _host_docker_internal_cache is None:
+        try:
+            socket.gethostbyname("host.docker.internal")
+            _host_docker_internal_cache = True
+        except (socket.gaierror, OSError):
+            _host_docker_internal_cache = False
+
+    return _host_docker_internal_cache
+
+
+def _reset_host_docker_internal_cache() -> None:
+    """
+    Reset the DNS resolution cache. Primarily for testing purposes.
+    """
+    global _host_docker_internal_cache
+    _host_docker_internal_cache = None
+
+
+def _replace_localhost_url(url: str) -> str:
+    """
+    Replace localhost URLs with host.docker.internal if resolvable.
+
+    Args:
+        url: The URL to potentially replace
+
+    Returns:
+        The URL with localhost replaced by host.docker.internal if applicable
+    """
+    if not isinstance(url, str):
+        return url
+
+    # Pattern to match localhost or 127.0.0.1 URLs with optional port
+    localhost_pattern = r"^(https?://)(localhost|127\.0\.0\.1)(:\d+)?(/.*)?$"
+
+    if re.match(localhost_pattern, url) and _is_host_docker_internal_resolvable():
+        # Replace localhost or 127.0.0.1 with host.docker.internal
+        return re.sub(r"^(https?://)(localhost|127\.0\.0\.1)", r"\1host.docker.internal", url)
+
+    return url
+
+
+def _replace_urls_in_config(config: Any) -> Any:
+    """
+    Recursively traverse config and replace localhost URLs with host.docker.internal.
+
+    Args:
+        config: Configuration dictionary to process
+
+    Returns:
+        Configuration dictionary with URLs replaced
+    """
+    if isinstance(config, dict):
+        result = {}
+        for key, value in config.items():
+            if isinstance(value, str):
+                # Try to replace URLs in string values
+                result[key] = _replace_localhost_url(value)
+            elif isinstance(value, (dict, list)):
+                # Recursively process nested structures
+                result[key] = _replace_urls_in_config(value)
+            else:
+                result[key] = value
+        return result
+    elif isinstance(config, list):
+        return [_replace_urls_in_config(item) for item in config]
+    elif isinstance(config, str):
+        # Handle string values in lists or other contexts
+        return _replace_localhost_url(config)
+    else:
+        return config
+
+
 def _load_schema() -> dict:
     """Load the JSON schema with all $refs dereferenced using compile_schema.py."""
     try:
@@ -94,7 +180,10 @@ def _validate_config(config: dict, schema: dict) -> None:
         jsonschema.validate(config, schema)
     except jsonschema.ValidationError as e:
         path_str = ".".join(str(p) for p in e.path) if hasattr(e, "path") else ""
-        raise ConfigError(f"Configuration validation error: {e.message}" + (f" at path {path_str}" if path_str else "")) from e
+        raise ConfigError(
+            f"Configuration validation error: {e.message}"
+            + (f" at path {path_str}" if path_str else "")
+        ) from e
     except Exception as e:
         raise ConfigError(f"Error during validation: {e}") from e
 
@@ -193,6 +282,9 @@ def load_config_dict(
             f"Unsupported file format: {suffix}. Supported formats: .yaml, .yml, .toml, .json"
         )
 
+    # Replace localhost URLs with host.docker.internal if resolvable
+    config = _replace_urls_in_config(config)
+
     # Validate against schema if requested
     if validate:
         schema = _load_schema()
@@ -259,7 +351,7 @@ def load_config(
 
 def _save_yaml_file(config: dict, file_path: Path, force_sync: bool = False) -> None:
     """Save configuration to a YAML file.
-    
+
     Args:
         config: Configuration dictionary to save
         file_path: Path to save the YAML file
@@ -277,12 +369,12 @@ def _save_yaml_file(config: dict, file_path: Path, force_sync: bool = False) -> 
             sort_keys=False,
             indent=2,
         )
-        
+
         # Then write the complete string to file atomically
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(yaml_content)
             f.flush()  # Explicitly flush to ensure all data is written
-            
+
             # Only force sync for critical files when explicitly requested
             if force_sync:
                 os.fsync(f.fileno())  # Force write to disk (slower but safer)

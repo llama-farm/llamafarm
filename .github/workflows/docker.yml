@@ -25,7 +25,7 @@ jobs:
           - service: designer
             context: ./designer
             dockerfile: ./designer/Dockerfile
-            description: 'LlamaFarm Designer - React frontend with nginx'
+            description: "LlamaFarm Designer - React frontend with nginx"
           - service: server
             context: ./
             dockerfile: ./server/Dockerfile
@@ -72,12 +72,6 @@ jobs:
             org.opencontainers.image.title=LlamaFarm ${{ matrix.service }}
             org.opencontainers.image.description=${{ matrix.description }}
             org.opencontainers.image.vendor=LlamaFarm
-
-      - name: Debug SampleCard content (designer only)
-        if: matrix.service == 'designer'
-        run: |
-          sed -n '1,20p' designer/src/components/Samples/SampleCard.tsx
-          grep -n FontIcon designer/src/components/Samples/SampleCard.tsx || true
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

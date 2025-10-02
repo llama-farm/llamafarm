@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -434,4 +435,86 @@ func TestProgressTracker(t *testing.T) {
 	if progress := tracker.GetProgress(); progress != 100.0 {
 		t.Errorf("Progress after layer2 complete = %f, want 100.0", progress)
 	}
+}
+
+func TestEnsureHostDockerInternal(t *testing.T) {
+	// Note: We can't actually change runtime.GOOS at runtime, so this test
+	// will only effectively test the current OS behavior
+
+	tests := []struct {
+		name        string
+		inputHosts  []string
+		expectedLen int
+		shouldHave  bool // should have host.docker.internal mapping
+	}{
+		{
+			name:        "nil input on Linux should add mapping",
+			inputHosts:  nil,
+			expectedLen: 1, // Will be 1 on Linux, 0 on others
+			shouldHave:  runtime.GOOS == "linux",
+		},
+		{
+			name:        "empty slice on Linux should add mapping",
+			inputHosts:  []string{},
+			expectedLen: 1, // Will be 1 on Linux, 0 on others
+			shouldHave:  runtime.GOOS == "linux",
+		},
+		{
+			name:        "existing host.docker.internal should not duplicate",
+			inputHosts:  []string{"host.docker.internal:host-gateway"},
+			expectedLen: 1,
+			shouldHave:  true,
+		},
+		{
+			name:        "other hosts should be preserved",
+			inputHosts:  []string{"example.com:192.168.1.1"},
+			expectedLen: 1, // Will be 2 on Linux, 1 on others
+			shouldHave:  runtime.GOOS == "linux",
+		},
+		{
+			name:        "mixed hosts with existing host.docker.internal",
+			inputHosts:  []string{"example.com:192.168.1.1", "host.docker.internal:host-gateway"},
+			expectedLen: 2,
+			shouldHave:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ensureHostDockerInternal(tt.inputHosts)
+
+			// Check if host.docker.internal mapping exists
+			hasMapping := false
+			for _, host := range result {
+				if strings.Contains(host, "host.docker.internal") {
+					hasMapping = true
+					break
+				}
+			}
+
+			if hasMapping != tt.shouldHave {
+				t.Errorf("ensureHostDockerInternal() hasMapping = %v, want %v", hasMapping, tt.shouldHave)
+			}
+
+			// On Linux, we expect one additional host entry if it wasn't already present
+			expectedLen := len(tt.inputHosts)
+			if runtime.GOOS == "linux" && !hasHostDockerInternalMapping(tt.inputHosts) {
+				expectedLen++
+			}
+
+			if len(result) != expectedLen {
+				t.Errorf("ensureHostDockerInternal() result length = %d, want %d", len(result), expectedLen)
+			}
+		})
+	}
+}
+
+// Helper function to check if host.docker.internal mapping already exists
+func hasHostDockerInternalMapping(hosts []string) bool {
+	for _, host := range hosts {
+		if strings.Contains(host, "host.docker.internal") {
+			return true
+		}
+	}
+	return false
 }

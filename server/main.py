@@ -1,4 +1,6 @@
 import os
+import shutil
+from pathlib import Path
 
 import uvicorn
 
@@ -12,6 +14,11 @@ setup_logging(settings.LOG_JSON_FORMAT, settings.LOG_LEVEL)
 # Create the data directory if it doesn't exist
 os.makedirs(settings.lf_data_dir, exist_ok=True)
 os.makedirs(os.path.join(settings.lf_data_dir, "projects"), exist_ok=True)
+
+# Copy seed projects to projects directory
+seed_source = Path(__file__).parent / "seeds"
+seed_dest = Path(settings.lf_data_dir) / "projects" / "llamafarm"
+shutil.copytree(seed_source, seed_dest, dirs_exist_ok=True)
 
 app = llama_farm_api()
 

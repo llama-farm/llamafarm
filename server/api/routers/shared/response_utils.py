@@ -118,7 +118,11 @@ def create_streaming_response(
 
 
 def create_streaming_response_from_iterator(
-    request: ChatRequest, stream_source: AsyncGenerator[str], session_id: str
+    request: ChatRequest,
+    stream_source: AsyncGenerator[str],
+    session_id: str,
+    *,
+    default_message: str | None = None,
 ) -> StreamingResponse:
     created_ts = int(time.time())
 
@@ -139,6 +143,8 @@ def create_streaming_response_from_iterator(
         yield f"data: {json.dumps(preface)}\n\n".encode()
         await asyncio.sleep(0)
 
+        emitted = False
+
         async for piece in stream_source:
             if not piece:
                 continue
@@ -158,6 +164,24 @@ def create_streaming_response_from_iterator(
             yield f"data: {json.dumps(payload)}\n\n".encode()
             # Sleep(0) yields control back to event loop, preventing blocking
             # This allows other coroutines to run between stream chunks
+            await asyncio.sleep(0)
+            emitted = True
+
+        if not emitted and default_message:
+            payload = {
+                "id": f"chat-{uuid.uuid4()}",
+                "object": "chat.completion.chunk",
+                "created": created_ts,
+                "model": request.model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": default_message},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            yield f"data: {json.dumps(payload)}\n\n".encode()
             await asyncio.sleep(0)
 
         done_payload = {

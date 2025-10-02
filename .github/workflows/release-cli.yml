@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build (e.g., v1.0.0)'
+        description: "Version to build (e.g., v1.0.0)"
         required: true
-        default: 'v1.0.0'
+        default: "v1.0.0"
 
 permissions:
   contents: write
@@ -33,7 +33,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache-dependency-path: cli/go.sum
 
       - name: Get version
@@ -85,7 +85,7 @@ jobs:
   upload-cli-release:
     name: Upload CLI Release Asset
     needs: build-cli
-    runs-on: 'ubuntu-latest'
+    runs-on: "ubuntu-latest"
     strategy:
       matrix:
         include:
@@ -137,6 +137,10 @@ jobs:
             --notary-issuer ${{ secrets.APPLE_NOTARY_ISSUER }} \
             --verbose
 
+          # Re-SHA the binary since it was signed
+          sha256sum "cli/${{ steps.set-binary-name.outputs.binary_name }}" > "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256"
+          echo "SHA256: $(cat "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256")"
+
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
         with:
@@ -146,6 +150,34 @@ jobs:
             cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256
           fail_on_unmatched_files: true
           append_body: true
+
+  publish-winget:
+    runs-on: windows-latest
+    steps:
+      - name: Get version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            # Strip leading 'v' from version if present
+            $RAW_VERSION = "${{ github.event.inputs.version }}"
+            $STRIPPED_VERSION = $RAW_VERSION -replace '^v', ''
+            echo "version=$STRIPPED_VERSION" >> $env:GITHUB_OUTPUT
+            echo "release_tag=$RAW_VERSION" >> $env:GITHUB_OUTPUT
+          } else {
+            $RAW_VERSION = "${{ github.event.release.tag_name }}"
+            $STRIPPED_VERSION = $RAW_VERSION -replace '^v', ''
+            echo "version=$STRIPPED_VERSION" >> $env:GITHUB_OUTPUT
+            echo "release_tag=${{ github.event.release.tag_name }}" >> $env:GITHUB_OUTPUT
+          }
+
+      - uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: LlamaFarm.CLI
+          installers-regex: '\.exe$' # Only .exe files
+          version: ${{ steps.version.outputs.version }}
+          release-tag: ${{ steps.version.outputs.release_tag }}
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
 
   test-cli-install:
     name: Test Installation Script

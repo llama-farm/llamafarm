@@ -3,15 +3,28 @@ Ingest handler for LlamaFarm CLI integration.
 Manages the flow from CLI file uploads to blob processing and vector storage.
 """
 
+import importlib
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import importlib
 from core.blob_processor import BlobProcessor
+from core.processing_logger import ProcessingLogger
 from core.settings import settings
 from core.strategies.handler import SchemaHandler
-from core.processing_logger import ProcessingLogger
+
+repo_root = Path(__file__).parent.parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+try:
+    from config import load_config
+    from config.datamodel import Database, DataProcessingStrategy
+except ImportError as e:
+    raise ImportError(
+        f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
+    ) from e
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +75,7 @@ class IngestHandler:
             project_dir, self.database_config
         )
 
-    def _get_processing_config(self) -> Dict[str, Any]:
+    def _get_processing_config(self) -> DataProcessingStrategy:
         """
         Get the data processing strategy configuration.
 
@@ -94,13 +107,13 @@ class IngestHandler:
         """
         # Get embedder configuration from config
         embedder_config = self.schema_handler.get_embedder_config(db_config)
-        embedder_type = embedder_config.get("type")
+        embedder_type = embedder_config.type.value
 
         if not embedder_type:
             raise ValueError("No embedder type specified in configuration")
 
         logger.info(
-            f"Initializing embedder: {embedder_type} with config: {embedder_config.get('config', {})}"
+            f"Initializing embedder: {embedder_type} with config: {embedder_config.config}"
         )
 
         # Dynamically import the embedder based on type from config
@@ -115,14 +128,14 @@ class IngestHandler:
             embedder_class = getattr(module, embedder_type)
             # Initialize with config from the config file
             # Pass config as a dictionary, not as kwargs
-            return embedder_class(config=embedder_config.get("config", {}))
+            return embedder_class(config=embedder_config.config)
         except (ImportError, AttributeError) as e:
             logger.error(
                 f"Failed to load embedder {embedder_type} from {module_path}: {e}"
             )
-            raise ValueError(f"Cannot initialize embedder {embedder_type}: {e}")
+            raise ValueError(f"Cannot initialize embedder {embedder_type}: {e}") from e
 
-    def _initialize_vector_store(self, project_dir: Path, db_config: Dict[str, Any]):
+    def _initialize_vector_store(self, project_dir: Path, database: Database):
         """
         Initialize the vector store from database configuration.
 
@@ -134,16 +147,14 @@ class IngestHandler:
             Initialized vector store instance
         """
         # Get vector store configuration from config
-        vector_store_config = self.schema_handler.get_vector_store_config(db_config)
-        vector_store_type = vector_store_config.get("type")
+        vector_store_config = database.config
+        vector_store_type = database.type.value
 
         if not vector_store_type:
             raise ValueError("No vector store type specified in configuration")
 
-        config_dict = vector_store_config.get("config", {}).copy()
-
         logger.info(
-            f"Initializing vector store: {vector_store_type} with config: {config_dict}"
+            f"Initializing vector store: {vector_store_type} with config: {vector_store_config}"
         )
 
         # Dynamically import the store based on type from config
@@ -160,12 +171,14 @@ class IngestHandler:
             # Use the already resolved config_dict from above
 
             # Pass config as a dictionary, not as kwargs
-            return store_class(config=config_dict, project_dir=project_dir)
+            return store_class(config=vector_store_config, project_dir=project_dir)
         except (ImportError, AttributeError) as e:
             logger.error(
                 f"Failed to load vector store {vector_store_type} from {module_path}: {e}"
             )
-            raise ValueError(f"Cannot initialize vector store {vector_store_type}: {e}")
+            raise ValueError(
+                f"Cannot initialize vector store {vector_store_type}: {e}"
+            ) from e
 
     def ingest_file(self, file_data: bytes, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """

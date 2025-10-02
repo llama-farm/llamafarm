@@ -94,6 +94,10 @@ properties:
       instructor_mode:
         type: ["string", "null"]
         description: Instructor mode to use for structured output (e.g., tools, json, md_json, anthropic_tools, gemini_json, etc.)
+      prompt_format:
+        type: string
+        description: Selects prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)
+        enum: [structured, unstructured]
       model_api_parameters:
         description: Additional parameters passed to the API provider
         additionalProperties: true
