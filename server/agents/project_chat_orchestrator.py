@@ -378,8 +378,8 @@ def _get_client(
 
     if project_config.runtime.provider == Provider.lemonade:
         # Get Lemonade configuration with defaults
-        lemonade_config = project_config.runtime.lemonade or {}
-        lemonade_port = lemonade_config.get("port", 11534)
+        lemonade_config = project_config.runtime.lemonade
+        lemonade_port = lemonade_config.port if lemonade_config else 11534
 
         openaiClient = AsyncOpenAI(
             api_key=project_config.runtime.api_key or "lemonade",  # Lemonade uses "lemonade" as API key
