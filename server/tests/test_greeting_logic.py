@@ -162,15 +162,18 @@ class TestGreetingLogic:
         assert "Welcome back" in content
         assert "message" in content.lower()  # Should mention message count
 
+    @patch("agents.project_chat_orchestrator.settings")
     @patch("agents.project_chat_orchestrator._get_client")
     def test_greeting_disabled_via_env(
-        self, mock_get_client, mock_project_config, temp_project_dir, monkeypatch
+        self, mock_get_client, mock_settings, mock_project_config, temp_project_dir
     ):
-        """Test that greetings can be disabled via environment variable."""
+        """Test that greetings can be disabled via settings."""
         # Create a proper AsyncOpenAI mock
         mock_client = MagicMock(spec=AsyncOpenAI)
         mock_get_client.return_value = mock_client
-        monkeypatch.setenv("LF_DEV_MODE_GREETING_ENABLED", "false")
+
+        # Mock settings to disable greetings
+        mock_settings.lf_dev_mode_greeting_enabled = False
 
         agent = ProjectChatOrchestratorAgent(
             project_config=mock_project_config,
@@ -220,6 +223,37 @@ class TestGreetingLogic:
         ]
 
         assert len(assistant_messages) == 0, "Should have no greetings for non-project_seed projects"
+
+    @patch("agents.project_chat_orchestrator._get_client")
+    def test_greeting_not_for_similar_project_names(
+        self, mock_get_client, mock_project_config, temp_project_dir
+    ):
+        """Test that greetings are NOT injected for project names similar to project_seed."""
+        # Create a proper AsyncOpenAI mock
+        mock_client = MagicMock(spec=AsyncOpenAI)
+        mock_get_client.return_value = mock_client
+
+        # Test with project_seed_2 (should NOT get greeting)
+        config = mock_project_config.model_copy()
+        config.name = "project_seed_2"
+
+        agent = ProjectChatOrchestratorAgent(
+            project_config=config,
+            project_dir=temp_project_dir,
+        )
+
+        session_id = "test-session-similar"
+        agent.enable_persistence(session_id=session_id)
+
+        # Check that no greeting was injected for similar project name
+        history = agent.history.get_history()
+        assistant_messages = [
+            msg for msg in history
+            if getattr(msg, "role", None) == "assistant"
+            or (isinstance(msg, dict) and msg.get("role") == "assistant")
+        ]
+
+        assert len(assistant_messages) == 0, "Should have no greetings for project_seed_2 (only exact match 'project_seed' gets greeting)"
 
     @patch("agents.project_chat_orchestrator._get_client")
     def test_greeting_not_duplicated(

@@ -152,19 +152,21 @@ jobs:
     steps:
       - name: Get version
         id: version
+        shell: pwsh
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             # Strip leading 'v' from version if present
-            RAW_VERSION="${{ github.event.inputs.version }}"
-            STRIPPED_VERSION="${RAW_VERSION#v}"
-            echo "version=${STRIPPED_VERSION}" >> $GITHUB_OUTPUT
-            echo "release_tag=${RAW_VERSION}" >> $GITHUB_OUTPUT
-          else
-            RAW_VERSION="${{ github.event.release.tag_name }}"
-            STRIPPED_VERSION="${RAW_VERSION#v}"
-            echo "version=${STRIPPED_VERSION}" >> $GITHUB_OUTPUT
-            echo "release_tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          fi
+            $RAW_VERSION = "${{ github.event.inputs.version }}"
+            $STRIPPED_VERSION = $RAW_VERSION -replace '^v', ''
+            echo "version=$STRIPPED_VERSION" >> $env:GITHUB_OUTPUT
+            echo "release_tag=$RAW_VERSION" >> $env:GITHUB_OUTPUT
+          } else {
+            $RAW_VERSION = "${{ github.event.release.tag_name }}"
+            $STRIPPED_VERSION = $RAW_VERSION -replace '^v', ''
+            echo "version=$STRIPPED_VERSION" >> $env:GITHUB_OUTPUT
+            echo "release_tag=${{ github.event.release.tag_name }}" >> $env:GITHUB_OUTPUT
+          }
+
       - uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: LlamaFarm.CLI

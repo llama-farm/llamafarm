@@ -86,6 +86,8 @@ class ProjectChatOrchestratorAgent(LFAgent):
         # Register docs context provider
         self.docs_context_provider = DocsContextProvider(title="Relevant Documentation")
         self.register_context_provider("docs", self.docs_context_provider)
+        self._is_new_session = True  # Track if this is a new session for greeting logic
+
 
     def enable_persistence(
         self,
@@ -118,9 +120,8 @@ class ProjectChatOrchestratorAgent(LFAgent):
 
     def _inject_greeting_if_needed(self) -> None:
         """Inject appropriate greeting based on session status."""
-        # Check if greetings are disabled via env var
-        greeting_enabled = os.environ.get("LF_DEV_MODE_GREETING_ENABLED", "true").lower() == "true"
-        if not greeting_enabled:
+        # Check if greetings are disabled via settings
+        if not settings.lf_dev_mode_greeting_enabled:
             return
 
         # Only inject greeting for project_seed (dev mode)
@@ -152,21 +153,40 @@ class ProjectChatOrchestratorAgent(LFAgent):
                     f"How can I help you with LlamaFarm today?"
                 )
 
-            # Check if we've already injected a greeting (look for welcome keywords in recent messages)
+            # Check if we've already injected this type of greeting
+            # For new sessions, check for "Welcome to LlamaFarm dev mode"
+            # For returning sessions, check for "Welcome back"
+            expected_greeting_text = "Welcome to LlamaFarm dev mode" if self._is_new_session else "Welcome back"
+
             recent_messages = list(self.history.get_history())[-3:]  # Check last 3 messages
-            has_greeting = any(
-                ("Welcome" in str(getattr(msg, "content", "")) or
-                 "Welcome" in str(msg.get("content", "") if isinstance(msg, dict) else ""))
-                for msg in recent_messages
-                if getattr(msg, "role", None) == "assistant" or
-                (isinstance(msg, dict) and msg.get("role") == "assistant")
-            )
+            has_greeting = False
+            for msg in recent_messages:
+                role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
+                if role == "assistant":
+                    content_obj = getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else None)
+                    # Extract plain text from content
+                    content = None
+                    if isinstance(content_obj, dict):
+                        content = content_obj.get("chat_message")
+                    elif hasattr(content_obj, "chat_message"):
+                        content = getattr(content_obj, "chat_message", None)
+                    elif isinstance(content_obj, str):
+                        # Handle JSON-serialized schemas
+                        try:
+                            parsed = json.loads(content_obj)
+                            if isinstance(parsed, dict) and "chat_message" in parsed:
+                                content = parsed["chat_message"]
+                            else:
+                                content = content_obj
+                        except (json.JSONDecodeError, TypeError):
+                            content = content_obj
+                    if content and expected_greeting_text in content:
+                        has_greeting = True
+                        break
 
             if not has_greeting:
-                # Use the output schema directly
-                greeting_schema = ProjectChatOrchestratorAgentOutputSchema(
-                    chat_message=greeting_content
-                )
+                # Add greeting as schema object - ChatHistory.add_message expects schema, not plain strings
+                greeting_schema = ProjectChatOrchestratorAgentOutputSchema(chat_message=greeting_content)
                 self.history.add_message("assistant", greeting_schema)
                 logger.info("Injected greeting", is_new_session=self._is_new_session)
 
@@ -258,9 +278,17 @@ class ProjectChatOrchestratorAgent(LFAgent):
                         content = content_obj.get("chat_message")
                     elif hasattr(content_obj, "chat_message"):
                         content = getattr(content_obj, "chat_message", None)
-                    # Fallback for plain strings
-                    if content is None and isinstance(content_obj, str):
-                        content = content_obj
+                    elif isinstance(content_obj, str):
+                        # ChatHistory serializes schemas to JSON strings internally
+                        # Try to parse and extract chat_message
+                        try:
+                            parsed = json.loads(content_obj)
+                            if isinstance(parsed, dict) and "chat_message" in parsed:
+                                content = parsed["chat_message"]
+                            else:
+                                content = content_obj
+                        except (json.JSONDecodeError, TypeError):
+                            content = content_obj
                     if role in ("user", "assistant") and isinstance(content, str):
                         serialized.append({"role": role, "content": content})
                 except Exception:
