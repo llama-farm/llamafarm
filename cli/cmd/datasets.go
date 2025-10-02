@@ -404,8 +404,6 @@ var datasetsProcessCmd = &cobra.Command{
 		// Ensure server is up
 		ensureServerAvailable(serverCfg.URL, true)
 
-		fmt.Printf("Processing dataset '%s' (this may take several minutes)\n", datasetName)
-
 		// Call the process endpoint
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process",
 			serverCfg.Namespace, serverCfg.Project, datasetName))
@@ -418,9 +416,11 @@ var datasetsProcessCmd = &cobra.Command{
 
 		stopProgress := func() {}
 		if term.IsTerminal(int(os.Stdout.Fd())) {
-			stopProgress = startProgressDots(2 * time.Second)
+			stopProgress = startProgressSpinner(fmt.Sprintf("Processing dataset '%s' (this may take several minutes)", datasetName))
+		} else {
+			fmt.Printf("Processing dataset '%s' (this may take several minutes)\n", datasetName)
 		}
-		resp, err := getHTTPClient().Do(req)
+		resp, err := getHTTPClientWithTimeout(0).Do(req)
 		stopProgress()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error processing dataset: %v\n", err)
@@ -492,13 +492,14 @@ var datasetsProcessCmd = &cobra.Command{
 			// Color-code status
 			statusDisplay := d.Status
 			statusBadge := ""
-			if d.Status == "processed" {
+			switch d.Status {
+			case "processed":
 				statusDisplay = "PROCESSED"
 				statusBadge = "✅"
-			} else if d.Status == "skipped" {
+			case "skipped":
 				statusDisplay = "SKIPPED"
 				statusBadge = "⏭️"
-			} else if d.Status == "failed" {
+			case "failed":
 				statusDisplay = "FAILED"
 				statusBadge = "❌"
 			}
@@ -507,7 +508,8 @@ var datasetsProcessCmd = &cobra.Command{
 			fmt.Printf("\n   %s [%d] %s\n", statusBadge, i+1, identifier)
 			fmt.Printf("       ├─ Status: %s\n", statusDisplay)
 
-			if d.Status == "processed" {
+			switch d.Status {
+			case "processed":
 				// Parser information
 				if d.Parser != "" {
 					fmt.Printf("       ├─ Parser: %s\n", d.Parser)
@@ -543,7 +545,7 @@ var datasetsProcessCmd = &cobra.Command{
 				if d.Embedder != "" {
 					fmt.Printf("       └─ Embedder: %s\n", d.Embedder)
 				}
-			} else if d.Status == "skipped" {
+			case "skipped":
 				if d.Reason == "duplicate" {
 					fmt.Printf("       ├─ Reason: All chunks already exist in database\n")
 					fmt.Printf("       └─ Action: No new data added (file previously processed)\n")
@@ -557,7 +559,7 @@ var datasetsProcessCmd = &cobra.Command{
 				if d.Embedder != "" {
 					fmt.Printf("       Would use embedder: %s\n", d.Embedder)
 				}
-			} else if d.Status == "failed" {
+			case "failed":
 				if d.Error != "" {
 					fmt.Printf("       Error: %s\n", d.Error)
 				}
@@ -634,28 +636,33 @@ func emptyDefault(s string, d string) string {
 	return s
 }
 
-func startProgressDots(interval time.Duration) func() {
-	if interval <= 0 {
-		interval = 2 * time.Second
-	}
+func startProgressSpinner(message string) func() {
 	done := make(chan struct{})
 	var once sync.Once
+
 	go func() {
-		ticker := time.NewTicker(interval)
+		spinnerChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+		i := 0
+		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
-				fmt.Print(".")
+				fmt.Printf("\r%s %s", spinnerChars[i%len(spinnerChars)], message)
+				i++
 			case <-done:
+				fmt.Print("\r")
 				return
 			}
 		}
 	}()
+
 	return func() {
 		once.Do(func() {
 			close(done)
-			fmt.Println()
+			// Clear the spinner line
+			fmt.Print("\r\033[K")
 		})
 	}
 }
@@ -919,7 +926,7 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := getHTTPClientWithTimeout(0).Do(req)
 	if err != nil {
 		return err
 	}
