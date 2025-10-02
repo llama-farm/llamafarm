@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -67,6 +68,44 @@ var chatCtx = &ChatSessionContext{
 	HTTPClient:       getHTTPClient(),
 }
 
+// fetchAvailableModels fetches the list of available models for a project
+func fetchAvailableModels(serverURL, namespace, projectID string) []ModelInfo {
+	url := fmt.Sprintf("%s/v1/projects/%s/%s/models",
+		strings.TrimSuffix(serverURL, "/"),
+		namespace,
+		projectID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		logDebug(fmt.Sprintf("Error creating models request: %v", err))
+		return nil
+	}
+
+	resp, err := chatCtx.HTTPClient.Do(req)
+	if err != nil {
+		logDebug(fmt.Sprintf("Error fetching models: %v", err))
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var result struct {
+		Models []ModelInfo `json:"models"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	return result.Models
+}
+
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
 func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
 	// Update session context with project info first
@@ -113,6 +152,15 @@ type ModeContext struct {
 	SessionID string
 	Messages  []ChatMessage
 	History   []string
+	Model     string // Currently selected model name
+}
+
+type ModelInfo struct {
+	ID          string
+	Description string
+	Provider    string
+	Model       string
+	IsDefault   bool
 }
 
 type chatModel struct {
@@ -140,6 +188,9 @@ type chatModel struct {
 	currentMode    ChatMode
 	devModeCtx     *ModeContext
 	projectModeCtx *ModeContext
+	// Model switching state
+	availableModels []ModelInfo
+	currentModel    string
 }
 
 type (
@@ -241,29 +292,51 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 
 	projectMessages = []ChatMessage{{Role: "client", Content: "Send a message or type '/help' for commands."}}
 
+	// Fetch available models for project mode
+	var availableModels []ModelInfo
+	var currentModel string
+	if projectInfo != nil {
+		availableModels = fetchAvailableModels(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project)
+		if len(availableModels) > 0 {
+			// Find default model or use first
+			for _, m := range availableModels {
+				if m.IsDefault {
+					currentModel = m.ID
+					break
+				}
+			}
+			if currentModel == "" {
+				currentModel = availableModels[0].ID
+			}
+		}
+	}
+
 	projectCtx := &ModeContext{
 		Mode:      ModeProject,
 		SessionID: projectSessionID,
 		Messages:  projectMessages,
 		History:   projectHistory,
+		Model:     currentModel,
 	}
 
 	return chatModel{
-		serverHealth:   serverHealth,
-		projectInfo:    projectInfo,
-		spin:           s,
-		messages:       messages,
-		thinking:       false,
-		printing:       false,
-		history:        h,
-		histIndex:      len(h),
-		designerStatus: "starting…",
-		textarea:       ta,
-		viewport:       vp,
-		width:          width,
-		currentMode:    ModeDev,
-		devModeCtx:     devCtx,
-		projectModeCtx: projectCtx,
+		serverHealth:    serverHealth,
+		projectInfo:     projectInfo,
+		spin:            s,
+		messages:        messages,
+		thinking:        false,
+		printing:        false,
+		history:         h,
+		histIndex:       len(h),
+		designerStatus:  "starting…",
+		textarea:        ta,
+		viewport:        vp,
+		width:           width,
+		currentMode:     ModeDev,
+		devModeCtx:      devCtx,
+		projectModeCtx:  projectCtx,
+		availableModels: availableModels,
+		currentModel:    currentModel,
 	}
 }
 
@@ -316,6 +389,11 @@ func (m *chatModel) switchMode(newMode ChatMode) string {
 			chatCtx.ProjectID = m.projectInfo.Project
 			chatCtx.SessionID = m.projectModeCtx.SessionID
 			chatCtx.SessionMode = SessionModeProject
+			// Restore model for project mode
+			if m.projectModeCtx.Model != "" {
+				m.currentModel = m.projectModeCtx.Model
+				chatCtx.Model = m.currentModel
+			}
 		}
 	}
 
@@ -327,6 +405,69 @@ func (m *chatModel) switchMode(newMode ChatMode) string {
 		return "🦙 Switched to DEV MODE - Chat with LlamaFarm Assistant"
 	}
 	return fmt.Sprintf("🎯 Switched to PROJECT MODE - Testing %s/%s", chatCtx.Namespace, chatCtx.ProjectID)
+}
+
+// switchModel switches to a different model in PROJECT mode
+func (m *chatModel) switchModel(newModel string) {
+	oldModel := m.currentModel
+	m.currentModel = newModel
+
+	// Update the mode context
+	m.projectModeCtx.Model = newModel
+
+	// Update global chat context
+	chatCtx.Model = newModel
+
+	// Save session context (preserves session ID)
+	_ = writeSessionContext(chatCtx, chatCtx.SessionID)
+
+	// Get model info for display
+	modelInfo := m.getModelInfo(newModel)
+	var modelDesc string
+	if modelInfo.Description != "" {
+		modelDesc = fmt.Sprintf("\n%s", modelInfo.Description)
+	}
+
+	// Add switch notification to chat
+	msg := fmt.Sprintf("🔄 Switched model: %s → %s%s",
+		oldModel,
+		newModel,
+		modelDesc)
+	m.messages = append(m.messages, ChatMessage{Role: "client", Content: msg})
+}
+
+// getNextModel returns the next model in the list (cycles)
+func (m *chatModel) getNextModel() string {
+	if len(m.availableModels) == 0 {
+		return m.currentModel
+	}
+	for i, model := range m.availableModels {
+		if model.ID == m.currentModel {
+			nextIdx := (i + 1) % len(m.availableModels)
+			return m.availableModels[nextIdx].ID
+		}
+	}
+	return m.currentModel
+}
+
+// isValidModel checks if a model name exists in available models
+func (m *chatModel) isValidModel(name string) bool {
+	for _, model := range m.availableModels {
+		if model.ID == name {
+			return true
+		}
+	}
+	return false
+}
+
+// getModelInfo returns model info for a given name
+func (m *chatModel) getModelInfo(name string) ModelInfo {
+	for _, model := range m.availableModels {
+		if model.ID == name {
+			return model
+		}
+	}
+	return ModelInfo{ID: name}
 }
 
 func (m chatModel) Init() tea.Cmd {
@@ -422,6 +563,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 			return m, nil
 
+		case "ctrl+k":
+			// Cycle models (PROJECT mode only)
+			if m.currentMode == ModeProject && len(m.availableModels) > 0 {
+				nextModel := m.getNextModel()
+				m.switchModel(nextModel)
+				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+				m.viewport.GotoBottom()
+			}
+			return m, nil
+
 		case "up":
 			if m.histIndex > 0 {
 				m.histIndex--
@@ -453,7 +604,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := fields[0]
 				switch cmd {
 				case "/help":
-					m.messages = append(m.messages, ChatMessage{Role: "client", Content: "Commands: /help, /switch, /mode [dev|project], /clear, /launch designer, /exit\nPress Ctrl+T to toggle between DEV and PROJECT modes"})
+					helpText := "Commands: /help, /switch, /mode [dev|project], /model [name], /clear, /launch designer, /exit\n"
+					if m.currentMode == ModeProject {
+						helpText += "Shortcuts: Ctrl+T (toggle mode), Ctrl+K (cycle models), Up/Down (history)"
+					} else {
+						helpText += "Press Ctrl+T to switch to PROJECT mode"
+					}
+					m.messages = append(m.messages, ChatMessage{Role: "client", Content: helpText})
 					m.textarea.SetValue("")
 				case "/switch":
 					// Toggle between modes
@@ -491,6 +648,47 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					switchMsg := m.switchMode(newMode)
 					m.messages = append(m.messages, ChatMessage{Role: "client", Content: switchMsg})
+					m.textarea.SetValue("")
+					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+					m.viewport.GotoBottom()
+				case "/model":
+					if m.currentMode != ModeProject {
+						m.messages = append(m.messages, ChatMessage{
+							Role:    "client",
+							Content: "Model switching only available in PROJECT mode. Use Ctrl+T to switch.",
+						})
+						m.textarea.SetValue("")
+						break
+					}
+
+					if len(fields) < 2 {
+						// Show current model and available models
+						var msg strings.Builder
+						msg.WriteString(fmt.Sprintf("Current model: %s\n\nAvailable models:", m.currentModel))
+						for _, model := range m.availableModels {
+							marker := ""
+							if model.ID == m.currentModel {
+								marker = " (current)"
+							}
+							msg.WriteString(fmt.Sprintf("\n  • %s - %s%s", model.ID, model.Description, marker))
+						}
+						msg.WriteString("\n\nUsage: /model <name> or press Ctrl+K to cycle")
+						m.messages = append(m.messages, ChatMessage{Role: "client", Content: msg.String()})
+						m.textarea.SetValue("")
+						break
+					}
+
+					modelName := fields[1]
+					if !m.isValidModel(modelName) {
+						m.messages = append(m.messages, ChatMessage{
+							Role:    "client",
+							Content: fmt.Sprintf("Unknown model '%s'. Type '/model' to see available models.", modelName),
+						})
+						m.textarea.SetValue("")
+						break
+					}
+
+					m.switchModel(modelName)
 					m.textarea.SetValue("")
 					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 					m.viewport.GotoBottom()
@@ -794,7 +992,7 @@ func renderChatInput(m chatModel) string {
 	if m.currentMode == ModeDev {
 		modeHint = "Ctrl+T: test project"
 	} else {
-		modeHint = "Ctrl+T: dev help"
+		modeHint = "Ctrl+T: dev help | Ctrl+K: cycle models"
 	}
 	helpText := fmt.Sprintf("/help for commands | Up/Down: history | %s", modeHint)
 
@@ -833,6 +1031,24 @@ func renderInfoBar(m chatModel) string {
 		project = "unknown/unknown"
 	}
 
+	// Model info (PROJECT MODE only)
+	var modelInfo string
+	if m.currentMode == ModeProject && m.currentModel != "" {
+		// Find model details
+		var modelDetails string
+		for _, model := range m.availableModels {
+			if model.ID == m.currentModel {
+				modelDetails = model.Model
+				break
+			}
+		}
+		if modelDetails != "" {
+			modelInfo = fmt.Sprintf(" | Model: %s (%s)", m.currentModel, modelDetails)
+		} else {
+			modelInfo = fmt.Sprintf(" | Model: %s", m.currentModel)
+		}
+	}
+
 	// Session info (truncate to 8 chars for compactness)
 	var session string
 	if currentSessionID != "" {
@@ -862,8 +1078,8 @@ func renderInfoBar(m chatModel) string {
 	}
 
 	// Build compact status line with mode indicator
-	statusLine := fmt.Sprintf("%s %s: %s | Session: %s | Status: %s | %s",
-		modeEmoji, modeLabel, project, session, statusIcon, serverHost)
+	statusLine := fmt.Sprintf("%s %s: %s%s | Session: %s | Status: %s | %s",
+		modeEmoji, modeLabel, project, modelInfo, session, statusIcon, serverHost)
 
 	// Apply single-line styling with mode-specific background color
 	style := lipgloss.NewStyle().
