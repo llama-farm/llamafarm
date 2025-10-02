@@ -416,7 +416,9 @@ class BlobProcessor:
         documents = []
         for config, parser in matching_parsers:
             if not config.type:
-                logger.warning(f"Parser config missing 'type': {config}. This may indicate a misconfiguration.")
+                logger.warning(
+                    f"Parser config missing 'type': {config}. This may indicate a misconfiguration."
+                )
                 continue
 
             parser_type = config.type.value
@@ -476,15 +478,13 @@ class BlobProcessor:
 
         for config, parser in self.parsers:
             include_patterns = config.file_include_patterns or []
-            exclude_patterns = config.file_exclude_patterns or []
 
             # Check if file matches include patterns and not exclude patterns
             if include_patterns:
                 if self._matches_patterns(filename, include_patterns):
-                    if not self._is_excluded(filename, exclude_patterns):
-                        matching.append((config, parser))
+                    matching.append((config, parser))
             # If no include patterns specified, parser accepts all files (unless excluded)
-            elif not self._is_excluded(filename, exclude_patterns):
+            else:
                 matching.append((config, parser))
 
         return matching
@@ -603,15 +603,13 @@ class BlobProcessor:
 
         for config, extractor in self.extractors:
             include_patterns = config.file_include_patterns or []
-            exclude_patterns = config.file_exclude_patterns or []
 
             # Check if file matches include patterns and not exclude patterns
             if include_patterns:
                 if self._matches_patterns(filename, include_patterns):
-                    if not self._is_excluded(filename, exclude_patterns):
-                        matching.append((config, extractor))
+                    matching.append((config, extractor))
             # If no include patterns specified, extractor applies to all files
-            elif not self._is_excluded(filename, exclude_patterns):
+            else:
                 matching.append((config, extractor))
 
         return matching

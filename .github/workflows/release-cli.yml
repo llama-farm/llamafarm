@@ -137,6 +137,10 @@ jobs:
             --notary-issuer ${{ secrets.APPLE_NOTARY_ISSUER }} \
             --verbose
 
+          # Re-SHA the binary since it was signed
+          sha256sum "cli/${{ steps.set-binary-name.outputs.binary_name }}" > "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256"
+          echo "SHA256: $(cat "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256")"
+
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
         with:

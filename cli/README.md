@@ -23,6 +23,34 @@ Optional:
 sudo mv lf /usr/local/bin/
 ```
 
+## Upgrading
+
+The CLI includes an auto-upgrade feature that can automatically download and install new versions:
+
+```bash
+# Upgrade to latest version
+lf version upgrade
+
+# Upgrade to specific version
+lf version upgrade v1.2.3
+
+# Preview upgrade without executing
+lf version upgrade --dry-run
+
+# Force upgrade even if same version
+lf version upgrade --force
+
+# Install to custom directory
+lf version upgrade --install-dir ~/.local/bin
+```
+
+The upgrade command handles:
+- Cross-platform binary downloads from GitHub releases
+- SHA256 checksum verification for security
+- Automatic sudo/elevation when needed for system directories
+- Atomic binary replacement to prevent corruption
+- Fallback to user directories if system installation fails
+
 ## Commands
 See the [CLI reference](../docs/website/docs/cli/index.md) for an exhaustive list. Some quick examples:
 

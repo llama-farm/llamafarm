@@ -52,7 +52,8 @@ func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
 	}
 
 	if hr, err := checkServerHealth(serverURL); err == nil {
-		// Server is healthy, use it
+		// Server is healthy, check RAG in background and use it
+		go handleRAGServiceInBackground(serverURL, hr)
 		return hr
 	} else if herr, ok := err.(*HealthError); ok {
 		// Server responded but is not healthy (degraded, unhealthy, etc.)
@@ -376,6 +377,54 @@ func pingURL(base string) error {
 	return fmt.Errorf("status %d", resp.StatusCode)
 }
 
+// handleRAGServiceInBackground checks if RAG service is unhealthy and starts it in background if needed
+func handleRAGServiceInBackground(serverURL string, hr *HealthPayload) {
+	if hr == nil {
+		return
+	}
+
+	// Check if RAG service is unhealthy
+	ragComponent := findRAGComponent(hr)
+	if ragComponent == nil || strings.EqualFold(ragComponent.Status, "healthy") {
+		return // RAG is fine, nothing to do
+	}
+
+	// RAG is unhealthy, start it in background if we're on localhost
+	if !isLocalhost(serverURL) {
+		OutputDebug("RAG service is unhealthy on remote server, cannot auto-start")
+		return
+	}
+
+	OutputDebug("RAG service is unhealthy, starting in background...")
+	orchestrator := NewContainerOrchestrator()
+	orchestrator.startRAGContainerAsync(serverURL)
+}
+
+// findRAGComponent finds the RAG component in the health response
+func findRAGComponent(hr *HealthPayload) *Component {
+	if hr == nil {
+		return nil
+	}
+
+	// Check components first
+	for _, component := range hr.Components {
+		name := strings.ToLower(component.Name)
+		if name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag") {
+			return &component
+		}
+	}
+
+	// Check seeds as well
+	for _, seed := range hr.Seeds {
+		name := strings.ToLower(seed.Name)
+		if name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag") {
+			return &seed
+		}
+	}
+
+	return nil
+}
+
 // isUnhealthyOnlyDueToRAG checks if the server is unhealthy solely because of RAG components
 // Returns true if all non-RAG components are healthy and only RAG components are unhealthy
 func isUnhealthyOnlyDueToRAG(hr *HealthPayload) bool {
@@ -388,7 +437,8 @@ func isUnhealthyOnlyDueToRAG(hr *HealthPayload) bool {
 
 	// Check components
 	for _, component := range hr.Components {
-		isRAGComponent := strings.Contains(strings.ToLower(component.Name), "rag")
+		name := strings.ToLower(component.Name)
+		isRAGComponent := name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag")
 		isHealthy := strings.EqualFold(component.Status, "healthy")
 
 		if isRAGComponent && !isHealthy {
@@ -400,7 +450,8 @@ func isUnhealthyOnlyDueToRAG(hr *HealthPayload) bool {
 
 	// Check seeds as well
 	for _, seed := range hr.Seeds {
-		isRAGComponent := strings.Contains(strings.ToLower(seed.Name), "rag")
+		name := strings.ToLower(seed.Name)
+		isRAGComponent := name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag")
 		isHealthy := strings.EqualFold(seed.Status, "healthy")
 
 		if isRAGComponent && !isHealthy {
