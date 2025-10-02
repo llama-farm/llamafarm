@@ -75,20 +75,23 @@ properties:
   runtime:
     type: object
     properties:
-      # Multi-model configuration (NEW)
       default_model:
         type: ["string", "null"]
-        description: "Name of the default model to use (references models.{name}). If not specified and models is defined, uses first model."
+        description: "Name of the default model to use (references a model name in the models list). If not specified, uses first model."
 
       models:
-        type: ["object", "null"]
-        description: "Named model configurations for multi-model support. Each key is a model name, value is the configuration."
-        additionalProperties:
+        type: ["array", "null"]
+        description: "List of model configurations for multi-model support"
+        items:
           type: object
           required:
+            - name
             - provider
             - model
           properties:
+            name:
+              type: string
+              description: "Model identifier (unique name)"
             description:
               type: ["string", "null"]
               description: "Human-readable description of this model configuration"
@@ -139,52 +142,3 @@ properties:
                 model_path:
                   type: ["string", "null"]
                   description: "Custom model storage location"
-
-      # Legacy single-model configuration (for backward compatibility)
-      provider:
-        type: ["string", "null"]
-        enum: [openai, ollama, lemonade, null]
-        description: "LEGACY: Runtime provider. Use models.{name}.provider instead for multi-model setups."
-      model:
-        type: ["string", "null"]
-        description: "LEGACY: Model name or ID. Use models.{name}.model instead for multi-model setups."
-      base_url:
-        type: ["string", "null"]
-        description: "LEGACY: Base URL for the provider. Use models.{name}.base_url instead."
-      api_key:
-        type: ["string", "null"]
-        description: "LEGACY: API key for the provider. Use models.{name}.api_key instead."
-      huggingface_token:
-        type: ["string", "null"]
-        description: "LEGACY: Hugging Face API token. Use models.{name}.huggingface_token instead."
-      instructor_mode:
-        type: ["string", "null"]
-        description: "LEGACY: Instructor mode. Use models.{name}.instructor_mode instead."
-      prompt_format:
-        type: ["string", "null"]
-        enum: [structured, unstructured, null]
-        description: "LEGACY: Prompt format. Use models.{name}.prompt_format instead."
-      model_api_parameters:
-        type: ["object", "null"]
-        description: "LEGACY: Additional API parameters. Use models.{name}.model_api_parameters instead."
-        additionalProperties: true
-      lemonade:
-        type: ["object", "null"]
-        description: "LEGACY: Lemonade configuration. Use models.{name}.lemonade instead."
-        properties:
-          backend:
-            type: ["string", "null"]
-            enum: [onnx, llamacpp, transformers, null]
-            default: onnx
-            description: "Inference backend for Lemonade"
-          port:
-            type: ["integer", "null"]
-            default: 11534
-            description: "Port for Lemonade server"
-          context_size:
-            type: ["integer", "null"]
-            default: 32768
-            description: "Context window size in tokens"
-          model_path:
-            type: ["string", "null"]
-            description: "Custom model storage location"

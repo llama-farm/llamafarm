@@ -445,7 +445,7 @@ class ProjectChatOrchestratorAgentFactory:
         # Get model config for logging
         model_config = ModelService.get_model_config(project_config, model_name)
         pf = model_config.prompt_format or PromptFormat.unstructured
-        selected_name = model_name or project_config.runtime.default_model or "default"
+        selected_name = model_config.name
 
         logger.info(
             "Creating chat agent",

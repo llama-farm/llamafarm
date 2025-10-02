@@ -92,17 +92,40 @@ def _load_seed_runtime_config() -> tuple[str | None, str | None, int | None, str
     try:
         data = yaml.safe_load(seed_path.read_text(encoding="utf-8")) or {}
         runtime = (data or {}).get("runtime") or {}
-        provider = (runtime or {}).get("provider", "ollama")
-        model = (runtime or {}).get("model")
+        models = runtime.get("models") or []
+
+        if not models or not isinstance(models, list):
+            return None, None, None, "runtime.models list missing or empty in seed"
+
+        # Get default_model name or use first model
+        default_model_name = runtime.get("default_model")
+        default_model = None
+
+        if default_model_name:
+            # Find model by name
+            for model_config in models:
+                if model_config.get("name") == default_model_name:
+                    default_model = model_config
+                    break
+
+        # Fallback to first model if default not found
+        if not default_model and models:
+            default_model = models[0]
+
+        if not default_model:
+            return None, None, None, "No models configured in seed"
+
+        provider = default_model.get("provider", "ollama")
+        model = default_model.get("model")
 
         # Get provider-specific port configuration
         port = None
         if provider == "lemonade":
-            lemonade_config = runtime.get("lemonade") or {}
+            lemonade_config = default_model.get("lemonade") or {}
             port = lemonade_config.get("port", 11534)
 
         if not model or not isinstance(model, str):
-            return None, None, None, "runtime.model missing in seed"
+            return None, None, None, "Model name missing in seed"
         return provider, model, port, "ok"
     except Exception as e:
         return None, None, None, f"Failed to parse seed YAML: {e}"

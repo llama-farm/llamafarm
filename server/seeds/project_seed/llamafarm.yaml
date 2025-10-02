@@ -4,9 +4,14 @@ name: project_seed
 namespace: llamafarm
 
 runtime:
-  provider: "ollama"
-  model: "gemma3:1b"
-  base_url: http://localhost:11434/v1
+  models:
+  - name: default
+    description: "Default Ollama model for LlamaFarm"
+    provider: ollama
+    model: gemma3:1b
+    base_url: http://localhost:11434/v1
+    prompt_format: unstructured
+    default: true
 
 prompts:
   - role: "system"

@@ -27,74 +27,57 @@ fi
 
 if [ -n "$CONFIG_FILE" ]; then
     # Use uv run python to parse YAML (uses project's venv)
-    # First try legacy single-model format, then try multi-model format
-    CONFIG_MODEL=$(uv run python -c "import yaml; config = yaml.safe_load(open('$CONFIG_FILE')); rt = config.get('runtime', {}); print(rt.get('model', ''))" 2>/dev/null)
-    CONFIG_HF_TOKEN=$(uv run python -c "import yaml; config = yaml.safe_load(open('$CONFIG_FILE')); print(config.get('runtime', {}).get('huggingface_token', ''))" 2>/dev/null)
-    CONFIG_PORT=$(uv run python -c "import yaml; config = yaml.safe_load(open('$CONFIG_FILE')); print(config.get('runtime', {}).get('lemonade', {}).get('port', ''))" 2>/dev/null)
-    CONFIG_BACKEND=$(uv run python -c "import yaml; config = yaml.safe_load(open('$CONFIG_FILE')); print(config.get('runtime', {}).get('lemonade', {}).get('backend', ''))" 2>/dev/null)
-    CONFIG_CONTEXT_SIZE=$(uv run python -c "import yaml; config = yaml.safe_load(open('$CONFIG_FILE')); print(config.get('runtime', {}).get('lemonade', {}).get('context_size', ''))" 2>/dev/null)
-
-    # If legacy model not found, try multi-model format (find first lemonade model)
-    if [ -z "$CONFIG_MODEL" ]; then
-        CONFIG_MODEL=$(uv run python -c "
+    # Parse multi-model format (find first lemonade model in list)
+    CONFIG_MODEL=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', {})
-for name, model_config in models.items():
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
     if model_config.get('provider') == 'lemonade':
         print(model_config.get('model', ''))
         break
 " 2>/dev/null)
 
-        # Also try to get lemonade config from the multi-model structure
-        if [ -z "$CONFIG_PORT" ]; then
-            CONFIG_PORT=$(uv run python -c "
+    CONFIG_PORT=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', {})
-for name, model_config in models.items():
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
     if model_config.get('provider') == 'lemonade':
         print(model_config.get('lemonade', {}).get('port', ''))
         break
 " 2>/dev/null)
-        fi
 
-        if [ -z "$CONFIG_BACKEND" ]; then
-            CONFIG_BACKEND=$(uv run python -c "
+    CONFIG_BACKEND=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', {})
-for name, model_config in models.items():
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
     if model_config.get('provider') == 'lemonade':
         print(model_config.get('lemonade', {}).get('backend', ''))
         break
 " 2>/dev/null)
-        fi
 
-        if [ -z "$CONFIG_CONTEXT_SIZE" ]; then
-            CONFIG_CONTEXT_SIZE=$(uv run python -c "
+    CONFIG_CONTEXT_SIZE=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', {})
-for name, model_config in models.items():
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
     if model_config.get('provider') == 'lemonade':
         print(model_config.get('lemonade', {}).get('context_size', ''))
         break
 " 2>/dev/null)
-        fi
 
-        if [ -z "$CONFIG_HF_TOKEN" ]; then
-            CONFIG_HF_TOKEN=$(uv run python -c "
+    CONFIG_HF_TOKEN=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', {})
-for name, model_config in models.items():
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
     if model_config.get('provider') == 'lemonade':
         print(model_config.get('huggingface_token', ''))
         break
 " 2>/dev/null)
-        fi
-    fi
+
 
     # Override defaults with config values if present
     [ -n "$CONFIG_PORT" ] && LEMONADE_PORT="$CONFIG_PORT"

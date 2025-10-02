@@ -3,20 +3,18 @@ name: lemonade-example
 namespace: default
 
 runtime:
-  provider: lemonade
-  model: "Phi-3-mini-4k-instruct-onnx"  # Example ONNX model
-
-  # Lemonade-specific configuration (optional)
-  lemonade:
-    backend: onnx  # onnx (default, all systems) | llamacpp (GGUF) | transformers (PyTorch)
-    port: 11534
-    # model_path: ~/.cache/lemonade/models  # Optional: custom model storage
-
-  # Optional: override instructor mode
-  # instructor_mode: md_json
-
-  # Optional: customize prompt format
-  prompt_format: structured  # structured | unstructured
+  models:
+  - name: lemonade-onnx
+    description: "Lemonade with ONNX backend"
+    provider: lemonade
+    model: "Phi-3-mini-4k-instruct-onnx"  # Example ONNX model
+    default: true
+    prompt_format: structured  # structured | unstructured
+    # instructor_mode: md_json  # Optional: override instructor mode
+    lemonade:
+      backend: onnx  # onnx (default, all systems) | llamacpp (GGUF) | transformers (PyTorch)
+      port: 11534
+      # model_path: ~/.cache/lemonade/models  # Optional: custom model storage
 
 prompts:
   - role: system

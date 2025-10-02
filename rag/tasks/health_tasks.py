@@ -213,14 +213,7 @@ def rag_health_check_database_task(
         # Check 1: Database configuration - verify database exists in project config
         database_config = None
         try:
-            from server.services.model_service import ModelService
-            from config.helpers.loader import load_config_dict
-            from config.datamodel import LlamaFarmConfig
-
-            # Load as dict, normalize, then validate
-            config_dict = load_config_dict(config_path=project_dir, validate=False)
-            normalized_dict = ModelService.normalize_config_dict(config_dict)
-            config = LlamaFarmConfig(**normalized_dict)
+            config = load_config(config_path=project_dir, validate=True)
 
             # Find the specific database configuration
             if config:

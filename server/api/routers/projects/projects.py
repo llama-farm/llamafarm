@@ -342,12 +342,16 @@ async def chat(
                         # Return the greeting as a chat completion
                         from openai.types.chat import ChatCompletionMessage
                         from openai.types.chat.chat_completion import Choice
+                        from services.model_service import ModelService
+
+                        # Get the actual model name being used
+                        model_config = ModelService.get_model_config(project_config, request.model)
 
                         return ChatCompletion(
                             id=f"chat-{uuid.uuid4()}",
                             object="chat.completion",
                             created=int(time.time()),
-                            model=project_config.runtime.model,
+                            model=model_config.model,
                             choices=[
                                 Choice(
                                     index=0,
