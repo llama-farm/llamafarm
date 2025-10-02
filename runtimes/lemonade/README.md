@@ -96,22 +96,149 @@ Once started, Lemonade exposes OpenAI-compatible endpoints at:
 
 ## Backend Selection
 
-Lemonade supports three inference backends, each optimized for different scenarios:
+Lemonade supports three inference backends, each optimized for different scenarios. The startup script **automatically detects your hardware** and configures the optimal acceleration.
 
-### ONNX Runtime GenAI (default: `onnx`)
-- Best for: NPU/GPU acceleration, Windows with NPUs, production deployments
-- Model format: ONNX
-- Hardware: Optimized for NPUs, DirectML (Windows), CUDA (NVIDIA)
+### 1. ONNX Runtime GenAI (default: `onnx`)
+**Best for**: Cross-platform compatibility, production deployments
 
-### llama.cpp (`llamacpp`)
-- Best for: CPU inference, broad model compatibility, Apple Silicon
-- Model format: GGUF
-- Hardware: Optimized for CPUs, Metal (macOS), CUDA (NVIDIA)
+```yaml
+runtime:
+  lemonade:
+    backend: onnx  # default
+```
 
-### Hugging Face Transformers (`transformers`)
-- Best for: Development, model experimentation, PyTorch ecosystem
-- Model format: Hugging Face model hub
-- Hardware: Flexible GPU/CPU support
+- **Model format**: ONNX
+- **Auto-detection**: Automatically uses available execution providers
+  - CUDA (NVIDIA GPUs)
+  - DirectML (Windows GPUs)
+  - CoreML (macOS)
+  - CPU fallback
+- **Pros**: Best compatibility, works everywhere, minimal configuration
+- **Cons**: Requires ONNX-format models
+
+### 2. llama.cpp (`llamacpp`)
+**Best for**: GGUF models, maximum performance, Apple Silicon
+
+```yaml
+runtime:
+  lemonade:
+    backend: llamacpp
+    context_size: 32768  # optional, default 32768
+```
+
+- **Model format**: GGUF (quantized models)
+- **Auto-detection**:
+  - **macOS**: Uses Metal (Apple Silicon/Intel GPUs)
+  - **Linux with NVIDIA**: Uses CUDA (best for NVIDIA)
+  - **Linux with AMD/Intel GPU**: Uses Vulkan
+  - **CPU-only**: Automatically falls back to CPU mode
+- **Pros**: Excellent performance, supports quantized models, flexible
+- **Cons**: Requires GGUF-format models
+
+**Hardware Detection Output Examples:**
+```bash
+# On macOS
+Using Metal acceleration for Apple Silicon...
+
+# On Linux with NVIDIA
+Detected NVIDIA GPU, attempting to use CUDA acceleration...
+
+# On Linux with AMD/Intel GPU
+Detected GPU device, using Vulkan acceleration...
+
+# On CPU-only system
+No GPU detected, using CPU-only mode...
+```
+
+### 3. Hugging Face Transformers (`transformers`)
+**Best for**: Development, model experimentation, PyTorch ecosystem
+
+```yaml
+runtime:
+  lemonade:
+    backend: transformers
+```
+
+- **Model format**: Hugging Face Hub models
+- **Auto-detection**: Uses PyTorch's built-in acceleration
+  - CUDA (NVIDIA GPUs on Linux/Windows)
+  - MPS (Metal Performance Shaders on macOS)
+  - CPU fallback
+- **Pros**: Direct access to HuggingFace models, PyTorch optimizations
+- **Cons**: Larger memory footprint
+
+## Backend Configuration Examples
+
+### Using llamacpp on macOS (Metal acceleration)
+```yaml
+runtime:
+  provider: lemonade
+  model: Qwen3-0.6B-GGUF
+
+  lemonade:
+    backend: llamacpp
+    port: 11534
+    context_size: 32768
+```
+
+**Command**: `nx start lemonade`
+**Result**: Automatically uses Metal acceleration
+
+### Using llamacpp on Linux with NVIDIA GPU
+```yaml
+runtime:
+  provider: lemonade
+  model: Llama-3.2-1B-GGUF
+
+  lemonade:
+    backend: llamacpp
+    context_size: 65536
+```
+
+**Command**: `nx start lemonade`
+**Result**: Automatically detects NVIDIA GPU and uses CUDA
+
+### Using ONNX (default)
+```yaml
+runtime:
+  provider: lemonade
+  model: Phi-3-mini-4k-instruct-onnx
+
+  lemonade:
+    backend: onnx  # or omit, it's the default
+    port: 11534
+```
+
+**Command**: `nx start lemonade`
+**Result**: ONNX runtime auto-detects available execution providers
+
+### Using Transformers
+```yaml
+runtime:
+  provider: lemonade
+  model: microsoft/Phi-3-mini-4k-instruct
+
+  lemonade:
+    backend: transformers
+```
+
+**Command**: `nx start lemonade`
+**Result**: PyTorch auto-detects CUDA/MPS/CPU
+
+## Override Environment Variables
+
+You can override any configuration with environment variables:
+
+```bash
+# Force a specific backend
+LEMONADE_BACKEND=transformers nx start lemonade
+
+# Use a different model
+LEMONADE_MODEL=Qwen3-0.6B-GGUF nx start lemonade
+
+# Change port and context size
+LEMONADE_PORT=11535 LEMONADE_CONTEXT_SIZE=65536 nx start lemonade
+```
 
 ## Model Management
 

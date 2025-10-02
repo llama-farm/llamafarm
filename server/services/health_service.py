@@ -6,6 +6,8 @@ from typing import Any
 
 import requests  # type: ignore
 
+from agents.providers import get_provider
+from config.datamodel import Provider
 from core.settings import settings
 
 
@@ -68,15 +70,15 @@ def _check_storage() -> dict:
         }
 
 
-def _load_seed_runtime_config() -> tuple[str | None, str | None, str]:
-    """Return (provider, model, message). Reads the project seed YAML and extracts runtime config.
+def _load_seed_runtime_config() -> tuple[str | None, str | None, int | None, str]:
+    """Return (provider, model, port, message). Reads the project seed YAML and extracts runtime config.
 
-    If missing or invalid, returns (None, None, reason).
+    If missing or invalid, returns (None, None, None, reason).
     """
     try:
         import yaml  # type: ignore
     except Exception:  # pragma: no cover - environment specific
-        return None, None, "PyYAML not installed"
+        return None, None, None, "PyYAML not installed"
 
     seed_path = (
         Path(__file__).resolve().parents[1]
@@ -85,91 +87,47 @@ def _load_seed_runtime_config() -> tuple[str | None, str | None, str]:
         / "llamafarm.yaml"
     )
     if not seed_path.exists():
-        return None, None, f"Seed file not found at {seed_path}"
+        return None, None, None, f"Seed file not found at {seed_path}"
 
     try:
         data = yaml.safe_load(seed_path.read_text(encoding="utf-8")) or {}
         runtime = (data or {}).get("runtime") or {}
         provider = (runtime or {}).get("provider", "ollama")
         model = (runtime or {}).get("model")
+
+        # Get provider-specific port configuration
+        port = None
+        if provider == "lemonade":
+            lemonade_config = runtime.get("lemonade") or {}
+            port = lemonade_config.get("port", 11534)
+
         if not model or not isinstance(model, str):
-            return None, None, "runtime.model missing in seed"
-        return provider, model, "ok"
+            return None, None, None, "runtime.model missing in seed"
+        return provider, model, port, "ok"
     except Exception as e:
-        return None, None, f"Failed to parse seed YAML: {e}"
+        return None, None, None, f"Failed to parse seed YAML: {e}"
 
 
 def _check_ollama() -> dict:
-    start = _now_ms()
-    base = settings.ollama_host.rstrip("/")
-    url = f"{base}/api/tags"
-    try:
-        resp = requests.get(url, timeout=1.0)
-        if 200 <= resp.status_code < 300:
-            return {
-                "name": "ollama",
-                "status": "healthy",
-                "message": f"{base} reachable",
-                "latency_ms": _now_ms() - start,
-                "details": {"host": base},
-            }
-        return {
-            "name": "ollama",
-            "status": "unhealthy",
-            "message": f"{base} returned {resp.status_code}",
-            "latency_ms": _now_ms() - start,
-            "details": {"host": base},
-        }
-    except Exception as e:
-        return {
-            "name": "ollama",
-            "status": "unhealthy",
-            "message": f"{base} unreachable: {e}",
-            "latency_ms": _now_ms() - start,
-            "details": {"host": base},
-        }
+    """Check Ollama runtime health using provider registry."""
+    provider = get_provider(Provider.ollama)
+    return provider.check_health({"base_url": settings.ollama_host})
 
 
 def _check_lemonade(port: int = 11534) -> dict:
-    """Check Lemonade runtime health.
+    """Check Lemonade runtime health using provider registry.
 
     Args:
         port: Lemonade server port (default: 11534)
     """
-    start = _now_ms()
-    base = f"http://127.0.0.1:{port}"
-    url = f"{base}/api/v1/models"
-    try:
-        resp = requests.get(url, timeout=1.0)
-        if 200 <= resp.status_code < 300:
-            return {
-                "name": "lemonade",
-                "status": "healthy",
-                "message": f"{base} reachable",
-                "latency_ms": _now_ms() - start,
-                "details": {"host": base, "port": port},
-            }
-        return {
-            "name": "lemonade",
-            "status": "unhealthy",
-            "message": f"{base} returned {resp.status_code}",
-            "latency_ms": _now_ms() - start,
-            "details": {"host": base, "port": port},
-        }
-    except Exception as e:
-        return {
-            "name": "lemonade",
-            "status": "unhealthy",
-            "message": f"{base} unreachable: {e}",
-            "latency_ms": _now_ms() - start,
-            "details": {"host": base, "port": port},
-        }
+    provider = get_provider(Provider.lemonade)
+    return provider.check_health({"port": port})
 
 
 def _check_seed_project() -> dict:
-    """Validate the project seed runtime is reachable and model is present."""
+    """Validate the project seed runtime is reachable and model is present using provider registry."""
     start = _now_ms()
-    provider, model, reason = _load_seed_runtime_config()
+    provider_str, model, port, reason = _load_seed_runtime_config()
 
     if model is None:
         return {
@@ -177,97 +135,78 @@ def _check_seed_project() -> dict:
             "status": "unhealthy",
             "message": reason,
             "latency_ms": _now_ms() - start,
-            "runtime": {"provider": provider, "model": None},
+            "runtime": {"provider": provider_str, "model": None},
         }
 
-    # Check based on provider
-    if provider == "ollama":
-        base = settings.ollama_host.rstrip("/")
-        url = f"{base}/api/tags"
-        try:
-            resp = requests.get(url, timeout=1.5)
-            ok = 200 <= resp.status_code < 300
-            if not ok:
-                return {
-                    "name": "project",
-                    "status": "unhealthy",
-                    "message": f"Ollama tags returned {resp.status_code}",
-                    "latency_ms": _now_ms() - start,
-                    "runtime": {"provider": provider, "host": base, "model": model},
-                }
-            data = resp.json() if resp.content else {}
-            tags = {item.get("name") for item in (data.get("models") or [])}
-            present = model in tags
+    # Use provider registry for health checks
+    try:
+        # Map provider string to enum
+        provider_enum = Provider(provider_str)
+        provider_impl = get_provider(provider_enum)
+
+        # Build provider-specific config
+        config = {}
+        if provider_str == "ollama":
+            config["base_url"] = settings.ollama_host
+        elif provider_str == "lemonade":
+            config["port"] = port if port else 11534
+
+        # Get health check from provider
+        health_result = provider_impl.check_health(config)
+
+        # Enhance with model validation for Ollama
+        if provider_str == "ollama" and health_result.get("status") == "healthy":
+            details = health_result.get("details", {})
+            models = details.get("models", [])
+            present = model in models
             status = "healthy" if present else "unhealthy"
             message = (
                 "Model available"
                 if present
                 else f"Model '{model}' not found; run: ollama pull {model}"
             )
+
             return {
                 "name": "project",
                 "status": status,
                 "message": message,
                 "latency_ms": _now_ms() - start,
-                "runtime": {"provider": provider, "host": base, "model": model},
-            }
-        except Exception as e:
-            return {
-                "name": "project",
-                "status": "unhealthy",
-                "message": f"Failed to query Ollama: {e}",
-                "latency_ms": _now_ms() - start,
-                "runtime": {"provider": provider, "host": base, "model": model},
+                "runtime": {
+                    "provider": provider_str,
+                    "host": details.get("host"),
+                    "model": model,
+                },
             }
 
-    elif provider == "lemonade":
-        base = "http://127.0.0.1:11534"
-        url = f"{base}/api/v1/models"
-        try:
-            resp = requests.get(url, timeout=1.5)
-            ok = 200 <= resp.status_code < 300
-            if not ok:
-                return {
-                    "name": "project",
-                    "status": "unhealthy",
-                    "message": f"Lemonade returned {resp.status_code}",
-                    "latency_ms": _now_ms() - start,
-                    "runtime": {"provider": provider, "host": base, "model": model},
-                }
-            # For Lemonade, just check if it's reachable - model management is different
-            return {
-                "name": "project",
-                "status": "healthy",
-                "message": "Lemonade runtime available",
-                "latency_ms": _now_ms() - start,
-                "runtime": {"provider": provider, "host": base, "model": model},
-            }
-        except Exception as e:
-            return {
-                "name": "project",
-                "status": "unhealthy",
-                "message": f"Lemonade unreachable: {e}. Start with: nx start lemonade",
-                "latency_ms": _now_ms() - start,
-                "runtime": {"provider": provider, "host": base, "model": model},
-            }
-
-    elif provider == "openai":
-        # OpenAI is cloud-based, just verify model is set
+        # For other providers, use health check result directly
         return {
             "name": "project",
-            "status": "healthy",
-            "message": "OpenAI provider configured",
+            "status": health_result.get("status", "unhealthy"),
+            "message": health_result.get("message", "Provider health check completed"),
             "latency_ms": _now_ms() - start,
-            "runtime": {"provider": provider, "model": model},
+            "runtime": {
+                "provider": provider_str,
+                "model": model,
+                **health_result.get("details", {}),
+            },
         }
 
-    else:
+    except ValueError:
+        # Unknown provider
         return {
             "name": "project",
             "status": "unhealthy",
-            "message": f"Unknown provider: {provider}",
+            "message": f"Unknown provider: {provider_str}",
             "latency_ms": _now_ms() - start,
-            "runtime": {"provider": provider, "model": model},
+            "runtime": {"provider": provider_str, "model": model},
+        }
+    except Exception as e:
+        return {
+            "name": "project",
+            "status": "unhealthy",
+            "message": f"Failed to check provider health: {e}",
+            "latency_ms": _now_ms() - start,
+            "runtime": {"provider": provider_str, "model": model},
         }
 
 

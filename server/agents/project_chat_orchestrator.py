@@ -12,6 +12,7 @@ from atomic_agents.agents.atomic_agent import (  # type: ignore
 from openai import AsyncOpenAI
 
 from agents.agent import LFAgent, LFAgentConfig
+from agents.providers import get_provider
 from core.settings import settings
 from context_providers.docs_context_provider import DocsContextProvider
 
@@ -354,77 +355,14 @@ def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
 def _get_client(
     project_config: LlamaFarmConfig,
 ) -> instructor.client.AsyncInstructor | AsyncOpenAI:
-    mode = _determine_instructor_mode(project_config)
+    """Get client for the configured provider using the provider registry.
 
-    if project_config.runtime.provider == Provider.openai:
-        openaiClient = AsyncOpenAI(
-            api_key=project_config.runtime.api_key,
-            base_url=project_config.runtime.base_url,
-        )
-        if project_config.runtime.prompt_format == PromptFormat.structured:
-            return instructor.from_openai(openaiClient, mode=mode)
-        else:
-            return openaiClient
-
-    if project_config.runtime.provider == Provider.ollama:
-        openaiClient = AsyncOpenAI(
-            api_key=project_config.runtime.api_key or settings.ollama_api_key,
-            base_url=project_config.runtime.base_url or f"{settings.ollama_host}/v1",
-        )
-        if project_config.runtime.prompt_format == PromptFormat.structured:
-            return instructor.from_openai(openaiClient, mode=mode)
-        else:
-            return openaiClient
-
-    if project_config.runtime.provider == Provider.lemonade:
-        # Get Lemonade configuration with defaults
-        lemonade_config = project_config.runtime.lemonade
-        lemonade_port = lemonade_config.port if lemonade_config else 11534
-
-        openaiClient = AsyncOpenAI(
-            api_key=project_config.runtime.api_key or "lemonade",  # Lemonade uses "lemonade" as API key
-            base_url=project_config.runtime.base_url or f"http://127.0.0.1:{lemonade_port}/api/v1",
-        )
-        if project_config.runtime.prompt_format == PromptFormat.structured:
-            return instructor.from_openai(openaiClient, mode=mode)
-        else:
-            return openaiClient
-
-    else:
-        raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")
-
-
-def _determine_instructor_mode(project_config: LlamaFarmConfig) -> instructor.Mode:
-    # Use the configured instructor mode or default based on provider
-    if project_config.runtime.instructor_mode is not None:
-        # It's a string value
-        mode_str = project_config.runtime.instructor_mode
-
-        # Map the configured mode string to instructor.Mode
-        try:
-            mode = instructor.mode.Mode[mode_str.upper()]
-            logger.debug(f"Using configured instructor mode: {mode}")
-        except KeyError as e:
-            # Invalid mode specified
-            raise ValueError(
-                f"Invalid instructor_mode '{mode_str}'. "
-                f"Common modes include: tools, json, md_json, anthropic_tools, gemini_json. "
-                f"See instructor documentation for full list of supported modes."
-            ) from e
-    elif project_config.runtime.provider == Provider.ollama:
-        # Default to MD_JSON for Ollama as it's most compatible
-        mode = instructor.Mode.MD_JSON
-        logger.debug("Using MD_JSON mode for Ollama provider (default)")
-    elif project_config.runtime.provider == Provider.lemonade:
-        # Default to MD_JSON for Lemonade as it's most compatible with local models
-        mode = instructor.Mode.MD_JSON
-        logger.debug("Using MD_JSON mode for Lemonade provider (default)")
-    else:
-        mode = instructor.Mode.TOOLS
-        logger.debug("Using TOOLS mode (default for non-Ollama/Lemonade)")
-
-    logger.debug(f"Instructor mode: {mode}")
-    return mode
+    This function uses the provider registry pattern to eliminate hard-coded
+    provider logic. New providers can be added by registering them in the
+    registry without modifying this function.
+    """
+    provider = get_provider(project_config.runtime.provider)
+    return provider.get_client(project_config)
 
 
 class ProjectChatOrchestratorAgentFactory:

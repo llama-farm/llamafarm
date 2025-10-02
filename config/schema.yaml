@@ -91,6 +91,9 @@ properties:
       api_key:
         type: ["string", "null"]
         description: API key for the provider (optional, not required for Ollama)
+      huggingface_token:
+        type: ["string", "null"]
+        description: Hugging Face API token for downloading gated models (required for some Lemonade models)
       instructor_mode:
         type: ["string", "null"]
         description: Instructor mode to use for structured output (e.g., tools, json, md_json, anthropic_tools, gemini_json, etc.)
@@ -114,6 +117,10 @@ properties:
             type: integer
             default: 11534
             description: Port for Lemonade server
+          context_size:
+            type: ["integer", "null"]
+            default: 32768
+            description: Context window size in tokens (default 32768 for most models)
           model_path:
             type: ["string", "null"]
             description: Custom model storage location for Lemonade
