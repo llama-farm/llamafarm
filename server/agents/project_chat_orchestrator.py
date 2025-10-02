@@ -81,6 +81,7 @@ class ProjectChatOrchestratorAgent(LFAgent):
         self._project_dir = project_dir
         self._persist_enabled = False
         self._is_new_session = True  # Track if this is a new session for greeting logic
+        self.model_name = model_config.model  # Store model name for API responses
 
         # Register docs context provider
         self.docs_context_provider = DocsContextProvider(title="Relevant Documentation")

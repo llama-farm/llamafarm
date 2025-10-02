@@ -252,7 +252,7 @@ class ProjectChatService:
             id=f"chat-{uuid.uuid4()}",
             object="chat.completion",
             created=int(time.time()),
-            model=project_config.runtime.model,
+            model=chat_agent.model_name,  # Use the model name stored in the agent
             choices=[
                 Choice(
                     index=0,

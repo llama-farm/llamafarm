@@ -491,3 +491,19 @@ async def delete_all_chat_sessions(namespace: str, project_id: str):
     with _agent_sessions_lock:
         count = _delete_all_sessions(namespace, project_id)
     return {"message": f"Deleted {count} session(s)", "count": count}
+
+
+@router.get(
+    "/{namespace}/{project_id}/models",
+    responses={
+        200: {"model": dict},
+        404: {"model": ErrorResponse},
+    },
+)
+async def list_models(namespace: str, project_id: str):
+    """List all available models for this project."""
+    from services.model_service import ModelService
+
+    project_config = ProjectService.load_config(namespace, project_id)
+    models = ModelService.list_models(project_config)
+    return {"models": models}
