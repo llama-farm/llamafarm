@@ -78,7 +78,11 @@ class BaseAPI:
 
     def _load_config(self) -> None:
         """Load configuration from file."""
-        self.config = load_config(config_path=self.project_dir, validate=True)
+        from server.services.model_service import ModelService
+
+        config = load_config(config_path=self.project_dir, validate=True)
+        # Normalize config to handle multi-model format
+        self.config = ModelService.normalize_config(config)
 
     def _load_database_config(self) -> None:
         """Load configuration for database from project config."""
