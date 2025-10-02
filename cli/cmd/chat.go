@@ -17,7 +17,7 @@ var (
 	runRAGTopK           int
 	runNoRAG             bool
 	runRAGScoreThreshold float64
-	runCurl              bool
+	dryRun               bool
 )
 
 // chatCmd represents the `lf run` command (with chat alias for backwards compatibility)
@@ -155,7 +155,7 @@ Examples:
 
 		messages := []ChatMessage{{Role: "user", Content: input}}
 
-		if runCurl {
+		if dryRun {
 			if err := printRunCurlCommand(messages, ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "Error generating curl command: %v\n", err)
 				os.Exit(1)
@@ -186,7 +186,7 @@ func init() {
 	chatCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")
 	chatCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
 	chatCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")
-	chatCmd.Flags().BoolVar(&runCurl, "curl", false, "Print the equivalent curl command instead of executing the request")
+	chatCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the equivalent curl command instead of executing the request")
 
 	rootCmd.AddCommand(chatCmd)
 }
