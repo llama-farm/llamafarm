@@ -138,7 +138,7 @@ def _check_lemonade(port: int = 11534) -> dict:
     """
     start = _now_ms()
     base = f"http://127.0.0.1:{port}"
-    url = f"{base}/v1/models"
+    url = f"{base}/api/v1/models"
     try:
         resp = requests.get(url, timeout=1.0)
         if 200 <= resp.status_code < 300:
@@ -222,7 +222,7 @@ def _check_seed_project() -> dict:
 
     elif provider == "lemonade":
         base = "http://127.0.0.1:11534"
-        url = f"{base}/v1/models"
+        url = f"{base}/api/v1/models"
         try:
             resp = requests.get(url, timeout=1.5)
             ok = 200 <= resp.status_code < 300

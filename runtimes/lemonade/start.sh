@@ -39,43 +39,30 @@ echo "Port: $LEMONADE_PORT"
 echo "Host: $LEMONADE_HOST"
 echo "Backend: $LEMONADE_BACKEND"
 
-# Check if lemonade is installed
-if ! command -v lemonade &> /dev/null; then
-    echo -e "${RED}ERROR: Lemonade not found${NC}"
-    echo ""
-    echo "Please install Lemonade SDK:"
-    echo "  pip install lemonade-sdk"
-    echo ""
-    echo "Or install via uv (recommended for LlamaFarm):"
-    echo "  uv pip install lemonade-sdk"
-    echo ""
-    echo "For more information: https://lemonade-server.ai/docs/"
-    exit 1
-fi
-
-echo -e "${GREEN}Lemonade SDK found${NC}"
+# Check if lemonade-server-dev is available
+# Note: We don't do a full check here, let uv handle it
+echo -e "${GREEN}Checking Lemonade SDK...${NC}"
 
 # Check if port is already in use
 if lsof -Pi :$LEMONADE_PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
     echo -e "${YELLOW}WARNING: Port $LEMONADE_PORT is already in use${NC}"
     echo "Another Lemonade instance may be running, or the port is occupied."
-    echo "You can change the port by setting LEMONADE_PORT environment variable."
     echo ""
-    echo "Attempting to start anyway (Lemonade will error if port is truly unavailable)..."
+    echo "Attempting to start anyway (will fail if port is truly unavailable)..."
 fi
 
-# Build lemonade command
-LEMONADE_CMD="lemonade server start --port $LEMONADE_PORT --host $LEMONADE_HOST"
+# Build lemonade-server-dev command
+# Using serve subcommand with configurable port and host
+LEMONADE_CMD="uv run lemonade-server-dev serve --port $LEMONADE_PORT --host $LEMONADE_HOST --no-tray"
 
-# Add backend selection
-if [ -n "$LEMONADE_BACKEND" ]; then
-    LEMONADE_CMD="$LEMONADE_CMD --backend $LEMONADE_BACKEND"
-fi
-
-# Add model if specified
-if [ -n "$LEMONADE_MODEL" ]; then
-    echo "Pre-loading model: $LEMONADE_MODEL"
-    LEMONADE_CMD="$LEMONADE_CMD --model $LEMONADE_MODEL"
+# Add llamacpp backend if specified and not onnx
+if [ "$LEMONADE_BACKEND" = "llamacpp" ]; then
+    # Detect platform for llamacpp backend
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        LEMONADE_CMD="$LEMONADE_CMD --llamacpp metal"
+    else
+        LEMONADE_CMD="$LEMONADE_CMD --llamacpp vulkan"
+    fi
 fi
 
 echo ""
@@ -83,12 +70,17 @@ echo -e "${GREEN}Starting Lemonade Server...${NC}"
 echo "Command: $LEMONADE_CMD"
 echo ""
 echo "Once started, Lemonade will be available at:"
-echo "  http://$LEMONADE_HOST:$LEMONADE_PORT/v1"
+echo "  http://$LEMONADE_HOST:$LEMONADE_PORT/api/v1"
 echo ""
 echo "OpenAI-compatible endpoints:"
-echo "  POST http://$LEMONADE_HOST:$LEMONADE_PORT/v1/chat/completions"
-echo "  POST http://$LEMONADE_HOST:$LEMONADE_PORT/v1/completions"
+echo "  POST http://$LEMONADE_HOST:$LEMONADE_PORT/api/v1/chat/completions"
+echo "  POST http://$LEMONADE_HOST:$LEMONADE_PORT/api/v1/completions"
 echo ""
+if [ -n "$LEMONADE_MODEL" ]; then
+    echo -e "${YELLOW}Note: Model will need to be pulled first using:${NC}"
+    echo "  uv run lemonade-server-dev pull $LEMONADE_MODEL"
+    echo ""
+fi
 echo "Press Ctrl+C to stop"
 echo ""
 

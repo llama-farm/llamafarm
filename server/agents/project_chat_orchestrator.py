@@ -382,8 +382,8 @@ def _get_client(
         lemonade_port = lemonade_config.get("port", 11534)
 
         openaiClient = AsyncOpenAI(
-            api_key=project_config.runtime.api_key or "not-needed",  # Lemonade doesn't require API key
-            base_url=project_config.runtime.base_url or f"http://127.0.0.1:{lemonade_port}/v1",
+            api_key=project_config.runtime.api_key or "lemonade",  # Lemonade uses "lemonade" as API key
+            base_url=project_config.runtime.base_url or f"http://127.0.0.1:{lemonade_port}/api/v1",
         )
         if project_config.runtime.prompt_format == PromptFormat.structured:
             return instructor.from_openai(openaiClient, mode=mode)

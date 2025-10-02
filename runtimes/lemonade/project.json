@@ -6,7 +6,7 @@
     "start": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "bash runtimes/lemonade/start.sh",
+        "command": "cd config && bash ../runtimes/lemonade/start.sh",
         "cwd": "{projectRoot}/../.."
       }
     }
