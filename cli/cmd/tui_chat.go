@@ -68,14 +68,19 @@ var chatCtx = &ChatSessionContext{
 }
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
-func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
+func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
 	// Update session context with project info first
 	if projectInfo != nil {
 		chatCtx.SessionNamespace = projectInfo.Namespace
 		chatCtx.SessionProject = projectInfo.Project
+		if mode == SessionModeProject {
+			chatCtx.Namespace = projectInfo.Namespace
+			chatCtx.ProjectID = projectInfo.Project
+		}
 	}
 	chatCtx.ServerURL = serverURL
 	chatCtx.HTTPClient = getHTTPClient()
+	chatCtx.SessionMode = mode
 
 	// Load existing session context to restore session ID if available
 	// This needs to happen AFTER we set SessionNamespace/SessionProject
@@ -84,6 +89,11 @@ func runChatSessionTUI(projectInfo *config.ProjectInfo, serverHealth *HealthPayl
 		if existingContext, err := readSessionContext(chatCtx); err == nil && existingContext != nil {
 			chatCtx.SessionID = existingContext.SessionID
 			logDebug(fmt.Sprintf("Restored dev mode session ID: %s", chatCtx.SessionID))
+		}
+	} else if chatCtx.SessionMode == SessionModeProject {
+		if existingContext, err := readSessionContext(chatCtx); err == nil && existingContext != nil {
+			chatCtx.SessionID = existingContext.SessionID
+			logDebug(fmt.Sprintf("Restored project mode session ID: %s", chatCtx.SessionID))
 		}
 	}
 
@@ -155,7 +165,7 @@ type serverHealthMsg struct{ health *HealthPayload }
 type modeSwitchMsg struct{ mode ChatMode }
 
 func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) chatModel {
-	var messages []Message
+	var devMessages []Message
 
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
@@ -179,46 +189,56 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 
-	// Load history from server session if available, otherwise from local file
-	var history SessionHistory
-	var userChatMessages []string
-	if chatCtx.SessionID != "" && chatCtx.SessionMode == SessionModeDev {
-		// Fetch history from the actual project being chatted with (Namespace/ProjectID)
-		// not the session context storage location (SessionNamespace/SessionProject)
-		history = fetchSessionHistory(chatCtx.ServerURL, chatCtx.Namespace, chatCtx.ProjectID, chatCtx.SessionID)
-		// Build initial message list from history so the transcript shows on load
-		for _, msg := range history.Messages {
-			if msg.Role == "user" {
-				userChatMessages = append(userChatMessages, msg.Content.ChatMessage)
-			}
-			messages = append(messages, Message{Role: msg.Role, Content: msg.Content.ChatMessage})
+	// Build DEV mode history regardless of current session mode
+	var devHistory SessionHistory
+	var devUserChatMessages []string
+	var devSessionID string
+	{
+		// Read DEV session context from disk: session storage is keyed to user's project
+		// while chat target for DEV is llamafarm/project_seed
+		devCtxForRead := &ChatSessionContext{
+			ServerURL:        chatCtx.ServerURL,
+			Namespace:        "llamafarm",
+			ProjectID:        "project_seed",
+			SessionMode:      SessionModeDev,
+			SessionNamespace: chatCtx.SessionNamespace,
+			SessionProject:   chatCtx.SessionProject,
+			HTTPClient:       chatCtx.HTTPClient,
 		}
-		logDebug(fmt.Sprintf("Restored dev mode history: %+v", history))
-		logDebug(fmt.Sprintf("Restored dev mode user chat messages: %+v", userChatMessages))
-	}
-	if len(messages) == 0 {
-		messages = append(messages, Message{Role: "client", Content: "Send a message or type '/help' for commands."})
+		if existingContext, err := readSessionContext(devCtxForRead); err == nil && existingContext != nil {
+			devSessionID = existingContext.SessionID
+		}
+		if devSessionID != "" {
+			devHistory = fetchSessionHistory(chatCtx.ServerURL, "llamafarm", "project_seed", devSessionID)
+			for _, msg := range devHistory.Messages {
+				if msg.Role == "user" {
+					devUserChatMessages = append(devUserChatMessages, msg.Content.ChatMessage)
+				}
+				devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content.ChatMessage})
+			}
+			logDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
+		}
+		if len(devMessages) == 0 {
+			devMessages = append(devMessages, Message{Role: "client", Content: "Send a message or type '/help' for commands."})
+		}
 	}
 
-	// Fetch initial greeting for project_seed
+	// Fetch initial greeting for project_seed (disabled)
 	// if greeting := fetchInitialGreeting(chatCtx); greeting != "" {
 	// 	messages = append(messages, Message{Role: "assistant", Content: greeting})
 	// }
 
 	width, _, _ := term.GetSize(uintptr(os.Stdout.Fd()))
 
-	messages = append(messages, Message{Role: "client", Content: renderServerStatusProblems(serverHealth)})
+	// Always include server status as a client message in both modes
+	devMessages = append(devMessages, Message{Role: "client", Content: renderServerStatusProblems(serverHealth)})
 
-	// Set viewport content AFTER all messages are added
-	vp.SetContent(renderChatContent(chatModel{messages: messages}))
-	// transcript = append(transcript, problems)
-
-	// Initialize mode contexts - start in DEV mode
+	// Initialize mode contexts - build DEV context
 	devCtx := &ModeContext{
 		Mode:      ModeDev,
-		SessionID: chatCtx.SessionID,
-		Messages:  messages,
-		History:   userChatMessages,
+		SessionID: devSessionID,
+		Messages:  devMessages,
+		History:   devUserChatMessages,
 	}
 
 	// Project mode context - try to restore session or create new one
@@ -262,6 +282,8 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	if len(projectMessages) == 0 {
 		projectMessages = []Message{{Role: "client", Content: "Send a message or type '/help' for commands."}}
 	}
+	// Add server status to project messages as well
+	projectMessages = append(projectMessages, Message{Role: "client", Content: renderServerStatusProblems(serverHealth)})
 
 	projectCtx := &ModeContext{
 		Mode:      ModeProject,
@@ -270,20 +292,33 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		History:   projectHistory,
 	}
 
+	// Choose initial mode and state
+	initialMode := ModeDev
+	initialMessages := devMessages
+	initialHistory := devUserChatMessages
+	if chatCtx.SessionMode == SessionModeProject && projectInfo != nil {
+		initialMode = ModeProject
+		initialMessages = projectMessages
+		initialHistory = projectHistory
+	}
+
+	// Initialize viewport content with initial mode messages
+	vp.SetContent(renderChatContent(chatModel{messages: initialMessages}))
+
 	return chatModel{
 		serverHealth:   serverHealth,
 		projectInfo:    projectInfo,
 		spin:           s,
-		messages:       messages,
+		messages:       initialMessages,
 		thinking:       false,
 		printing:       false,
-		history:        userChatMessages,
-		histIndex:      len(userChatMessages),
+		history:        initialHistory,
+		histIndex:      len(initialHistory),
 		designerStatus: "starting…",
 		textarea:       ta,
 		viewport:       vp,
 		width:          width,
-		currentMode:    ModeDev,
+		currentMode:    initialMode,
 		devModeCtx:     devCtx,
 		projectModeCtx: projectCtx,
 	}

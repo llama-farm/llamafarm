@@ -138,6 +138,8 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	base := strings.TrimRight(serverURL, "/")
 	healthURL := base + "/health"
 
+	logDebug(fmt.Sprintf("Checking server health at %s", healthURL))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -154,11 +156,13 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var payload HealthPayload
 		if err := json.Unmarshal(body, &payload); err != nil {
+			logDebug(fmt.Sprintf("Invalid health payload: %v", err))
 			return nil, fmt.Errorf("invalid health payload: %v", err)
 		}
 		if strings.EqualFold(payload.Status, "healthy") {
 			return &payload, nil
 		}
+		logDebug(fmt.Sprintf("Server is %s", payload.Status))
 		return nil, &HealthError{Status: payload.Status, HealthResp: payload}
 	}
 	return nil, fmt.Errorf("unexpected health status %d", resp.StatusCode)
