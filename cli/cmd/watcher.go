@@ -169,7 +169,9 @@ func StartConfigWatcher(namespace, project string) error {
 		}
 	}()
 
-	fmt.Fprintf(os.Stderr, "Watching project: %s\n", cwd)
+	if debug {
+		fmt.Fprintf(os.Stderr, "Watching project: %s\n", cwd)
+	}
 	logDebug(fmt.Sprintf("Watching target directory: %s\n", cwdConfigPath))
 	logDebug(fmt.Sprintf("Watching home directory: %s\n", homeConfigDir))
 

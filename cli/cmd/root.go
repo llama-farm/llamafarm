@@ -84,6 +84,19 @@ func init() {
 	}
 }
 
+// getLFDataDir returns the directory to store LlamaFarm data.
+var getLFDataDir = func() (string, error) {
+	dataDir := os.Getenv("LF_DATA_DIR")
+	if dataDir != "" {
+		return dataDir, nil
+	}
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(homeDir, ".llamafarm"), nil
+	} else {
+		return "", fmt.Errorf("getLFDataDir: could not determine home directory: %w", err)
+	}
+}
+
 // getEffectiveCWD returns the directory to treat as the working directory.
 // If the global --cwd flag is provided, it returns its absolute path; otherwise os.Getwd().
 func getEffectiveCWD() string {

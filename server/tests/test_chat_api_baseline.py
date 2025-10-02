@@ -86,7 +86,9 @@ def app_client(mocker):
                 # Mirror current bug: stream yields exactly the user input
                 yield SimpleNamespace(chat_message=input_schema.chat_message)
 
-    def make_agent(project_config: LlamaFarmConfig, project_dir: str):
+    def make_agent(
+        project_config: LlamaFarmConfig, project_dir: str, session_id: str | None = None
+    ):
         tag = f"{project_config.namespace}/{project_config.name}"
         return StubAgent(tag)
 

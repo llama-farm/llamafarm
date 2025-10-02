@@ -143,9 +143,9 @@ class DocsContextService:
             return []
 
         # Sort by score (highest first), then by doc path length (shorter = more specific)
-        sorted_docs = sorted(
-            matched_docs.items(), key=lambda x: (-x[1], len(x[0]))
-        )[:max_docs]
+        sorted_docs = sorted(matched_docs.items(), key=lambda x: (-x[1], len(x[0])))[
+            :max_docs
+        ]
 
         results = []
         for doc_path, score in sorted_docs:

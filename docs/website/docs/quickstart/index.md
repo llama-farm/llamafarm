@@ -77,9 +77,13 @@ nx start server # Terminal 2
 
 Open another terminal to run `lf` commands against the locally running stack.
 
-## 6. Run a One-off Chat
+## 6. Chat with Your Project
 
 ```bash
+# Interactive chat (opens TUI using project from llamafarm.yaml)
+lf chat
+
+# One-off message
 lf chat "What can you do?"
 ```
 

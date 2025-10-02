@@ -41,10 +41,14 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
    lf start                      # Spins up Docker services & opens the dev chat UI
    ```
 
-4. **Try a one-off chat (optional)**
-   ```bash
-   lf chat "Hello, LlamaFarm!"
-   ```
+4. **Start an interactive project chat or send a one-off message**
+```bash
+# Interactive project chat (auto-detects namespace/project from llamafarm.yaml)
+lf chat
+
+# One-off message
+lf chat "Hello, LlamaFarm!"
+```
 
 Need the full walkthrough with dataset ingestion and troubleshooting tips? Jump to the [Quickstart guide](docs/website/docs/quickstart/index.md).
 
@@ -90,6 +94,7 @@ Open another terminal to run `lf` commands (installed or built from source). Thi
 | ---- | ------- | ----- |
 | Initialize a project | `lf init my-project` | Creates `llamafarm.yaml` from server template. |
 | Start dev stack + chat TUI | `lf start` | Spins up server, rag worker, monitors Ollama/vLLM. |
+| Interactive project chat | `lf chat` | Opens TUI using project from `llamafarm.yaml`. |
 | Send single prompt | `lf chat "Explain retrieval augmented generation"` | Uses RAG by default; add `--no-rag` for pure LLM. |
 | Preview REST call | `lf chat --curl "What models are configured?"` | Prints sanitized `curl` command. |
 | Create dataset | `lf datasets create -s pdf_ingest -b main_db research-notes` | Validates strategy/database against project config. |

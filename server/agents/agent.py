@@ -10,7 +10,6 @@ from atomic_agents import (  # type: ignore
     BasicChatInputSchema,
     BasicChatOutputSchema,
 )
-from atomic_agents.base.base_io_schema import BaseIOSchema  # type: ignore
 from atomic_agents.context.chat_history import ChatHistory  # type: ignore
 from atomic_agents.context.system_prompt_generator import (  # type: ignore
     SystemPromptGenerator,  # type: ignore

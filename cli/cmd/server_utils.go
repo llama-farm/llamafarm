@@ -145,7 +145,7 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -154,11 +154,13 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var payload HealthPayload
 		if err := json.Unmarshal(body, &payload); err != nil {
+			logDebug(fmt.Sprintf("Invalid health payload: %v", err))
 			return nil, fmt.Errorf("invalid health payload: %v", err)
 		}
 		if strings.EqualFold(payload.Status, "healthy") {
 			return &payload, nil
 		}
+		logDebug(fmt.Sprintf("Server is %s", payload.Status))
 		return nil, &HealthError{Status: payload.Status, HealthResp: payload}
 	}
 	return nil, fmt.Errorf("unexpected health status %d", resp.StatusCode)

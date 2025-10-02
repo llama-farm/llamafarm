@@ -293,9 +293,8 @@ async def chat(
             if record is None:
                 # Create new agent and enable persistence
                 agent = ProjectChatOrchestratorAgentFactory.create_agent(
-                    project_config, project_dir=project_dir
+                    project_config, project_dir=project_dir, session_id=session_id
                 )
-                agent.enable_persistence(session_id=session_id)
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(
                     namespace=namespace,
@@ -322,48 +321,14 @@ async def chat(
 
     # If no user message, check if this is a greeting request (new session)
     if latest_user_message is None:
-        # For new sessions on project_seed, return the greeting from history
-        if project_id == "project_seed" and hasattr(agent, 'history'):
-            history_messages = list(agent.history.get_history())
-            # Look for the greeting message (last assistant message if it exists)
-            for msg in reversed(history_messages):
-                role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
-                if role == "assistant":
-                    content_obj = getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else None)
-                    content = None
-                    if isinstance(content_obj, dict):
-                        content = content_obj.get("chat_message")
-                    elif hasattr(content_obj, "chat_message"):
-                        content = getattr(content_obj, "chat_message", None)
-                    elif isinstance(content_obj, str):
-                        content = content_obj
-
-                    if content and "Welcome" in content:
-                        # Return the greeting as a chat completion
-                        from openai.types.chat import ChatCompletionMessage
-                        from openai.types.chat.chat_completion import Choice
-
-                        return ChatCompletion(
-                            id=f"chat-{uuid.uuid4()}",
-                            object="chat.completion",
-                            created=int(time.time()),
-                            model=project_config.runtime.model,
-                            choices=[
-                                Choice(
-                                    index=0,
-                                    message=ChatCompletionMessage(
-                                        role="assistant",
-                                        content=content,
-                                    ),
-                                    finish_reason="stop",
-                                )
-                            ],
-                        )
-
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
 
     # Inject relevant documentation based on user query (dev mode only)
-    if settings.lf_dev_mode_docs_enabled and project_id == "project_seed" and hasattr(agent, "docs_context_provider"):
+    if (
+        settings.lf_dev_mode_docs_enabled
+        and project_id == "project_seed"
+        and hasattr(agent, "docs_context_provider")
+    ):
         docs_service = get_docs_service()
         matched_docs = docs_service.match_docs_for_query(latest_user_message)
         agent.docs_context_provider.set_docs(matched_docs)
@@ -484,17 +449,14 @@ async def get_chat_session_history(namespace: str, project_id: str, session_id: 
     """Retrieve the chat history for a specific session."""
     try:
         project_dir = ProjectService.get_project_dir(namespace, project_id)
-        history_file = Path(project_dir) / "sessions" / session_id / "history.json"
+        project_config = ProjectService.load_config(namespace, project_id)
 
-        if not history_file.exists():
-            return {"messages": []}
+        agent = ProjectChatOrchestratorAgentFactory.create_agent(
+            project_config, project_dir=project_dir, session_id=session_id
+        )
+        history = agent.history.get_history()
 
-        import json
-
-        with open(history_file, encoding="utf-8") as f:
-            data = json.load(f)
-
-        return {"messages": data if isinstance(data, list) else []}
+        return {"messages": history}
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to load session history: {e}"

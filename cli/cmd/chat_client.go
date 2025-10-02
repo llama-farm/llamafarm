@@ -16,8 +16,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// ChatMessage represents a single chat message
-type ChatMessage struct {
+// Message represents a single chat message
+type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
@@ -25,7 +25,7 @@ type ChatMessage struct {
 // ChatRequest represents the request payload for the chat API
 type ChatRequest struct {
 	Model            *string            `json:"model,omitempty"`
-	Messages         []ChatMessage      `json:"messages"`
+	Messages         []Message          `json:"messages"`
 	Metadata         map[string]string  `json:"metadata,omitempty"`
 	Modalities       []string           `json:"modalities,omitempty"`
 	ResponseFormat   map[string]string  `json:"response_format,omitempty"`
@@ -48,9 +48,9 @@ type ChatRequest struct {
 
 // ChatChoice represents a choice in the chat response
 type ChatChoice struct {
-	Index        int         `json:"index"`
-	Message      ChatMessage `json:"message"`
-	FinishReason string      `json:"finish_reason"`
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string  `json:"finish_reason"`
 }
 
 // ChatResponse represents the response from the chat API
@@ -112,32 +112,118 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
 
 func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 	if ctx == nil {
-		cwd := getEffectiveCWD()
-		return filepath.Join(cwd, ".llamafarm", "context.yaml"), nil
+		return "", fmt.Errorf("session context is nil")
+	}
+
+	lfDataDir, err := getLFDataDir()
+	if err != nil {
+		return "", err
+	}
+
+	ns := ctx.SessionNamespace
+	if strings.TrimSpace(ns) == "" {
+		ns = ctx.Namespace
+	}
+	proj := ctx.SessionProject
+	if strings.TrimSpace(proj) == "" {
+		proj = ctx.ProjectID
+	}
+	if strings.TrimSpace(ns) == "" || strings.TrimSpace(proj) == "" {
+		return "", fmt.Errorf("dev session requires namespace and project")
 	}
 
 	switch ctx.SessionMode {
 	case SessionModeStateless:
 		return "", nil
 	case SessionModeDev:
-		ns := ctx.SessionNamespace
-		if strings.TrimSpace(ns) == "" {
-			ns = ctx.Namespace
-		}
-		proj := ctx.SessionProject
-		if strings.TrimSpace(proj) == "" {
-			proj = ctx.ProjectID
-		}
-		if strings.TrimSpace(ns) == "" || strings.TrimSpace(proj) == "" {
-			return "", fmt.Errorf("dev session requires namespace and project")
-		}
-		cwd := getEffectiveCWD()
-		base := filepath.Join(cwd, ".llamafarm", "projects", ns, proj, "dev")
+		base := filepath.Join(lfDataDir, "projects", ns, proj, "cli", "context", "dev")
 		return filepath.Join(base, "context.yaml"), nil
 	default:
-		cwd := getEffectiveCWD()
-		return filepath.Join(cwd, ".llamafarm", "context.yaml"), nil
+		base := filepath.Join(lfDataDir, "projects", ns, proj, "cli", "context")
+		return filepath.Join(base, "context.yaml"), nil
 	}
+}
+
+func buildChatCurl(messages []Message, ctx *ChatSessionContext) (string, error) {
+	if ctx == nil {
+		ctx = newDefaultContextFromGlobals()
+	}
+
+	url, err := buildChatAPIURL(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to build chat API URL: %w", err)
+	}
+
+	streamTrue := true
+	var filteredMessages []Message
+	for _, msg := range messages {
+		if msg.Role != "client" && msg.Role != "error" {
+			filteredMessages = append(filteredMessages, msg)
+		}
+	}
+
+	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
+	if ctx.RAGEnabled {
+		request.RAGEnabled = &ctx.RAGEnabled
+		if ctx.RAGDatabase != "" {
+			request.RAGDatabase = &ctx.RAGDatabase
+		}
+		if ctx.RAGRetrievalStrategy != "" {
+			request.RAGRetrievalStrategy = &ctx.RAGRetrievalStrategy
+		}
+		if ctx.RAGTopK > 0 {
+			request.RAGTopK = &ctx.RAGTopK
+		}
+		if ctx.RAGScoreThreshold > 0 {
+			request.RAGScoreThreshold = &ctx.RAGScoreThreshold
+		}
+	}
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Accept", "text/event-stream")
+
+	return buildChatCurlCommand(url, jsonData, headers), nil
+}
+
+// shellEscapeSingleQuotes safely wraps a string for POSIX shells using single
+// quotes. It follows the standard pattern of ending the string, escaping the
+// single quote, and resuming the quoted string.
+func shellEscapeSingleQuotes(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func buildChatCurlCommand(url string, body []byte, headers http.Header) string {
+	var b strings.Builder
+	b.WriteString("curl -X POST ")
+	for key, values := range headers {
+		if strings.EqualFold(key, "authorization") {
+			continue
+		}
+		for _, v := range values {
+			header := fmt.Sprintf("%s: %s", key, v)
+			b.WriteString("-H ")
+			b.WriteString(shellEscapeSingleQuotes(header))
+			b.WriteByte(' ')
+		}
+	}
+	if auth := headers.Get("Authorization"); auth != "" {
+		b.WriteString("-H ")
+		b.WriteString(shellEscapeSingleQuotes("Authorization: Bearer <redacted>"))
+		b.WriteByte(' ')
+	}
+	if len(body) > 0 {
+		b.WriteString("-d ")
+		b.WriteString(shellEscapeSingleQuotes(string(body)))
+		b.WriteByte(' ')
+	}
+	b.WriteString(shellEscapeSingleQuotes(url))
+	return b.String()
 }
 
 // buildChatAPIURL chooses the appropriate endpoint based on whether
@@ -153,7 +239,7 @@ func buildChatAPIURL(ctx *ChatSessionContext) (string, error) {
 }
 
 // sendChatRequest connects to the server with stream=true and returns the full assistant message.
-func sendChatRequest(messages []ChatMessage, ctx *ChatSessionContext) (string, error) {
+func sendChatRequest(messages []Message, ctx *ChatSessionContext) (string, error) {
 	chunks, errs, cancel := startChatStream(messages, ctx)
 	defer cancel()
 	var builder strings.Builder
@@ -196,7 +282,7 @@ func fetchInitialGreeting(ctx *ChatSessionContext) string {
 
 	// Create request with empty messages array
 	req := ChatRequest{
-		Messages: []ChatMessage{},
+		Messages: []Message{},
 		Stream:   boolPtr(false),
 	}
 
@@ -273,7 +359,7 @@ func boolPtr(b bool) *bool {
 // startChatStream opens a streaming chat request and returns a channel of
 // content chunks and an error channel. The caller should read until the
 // chunks channel is closed. The returned cancel function aborts the stream.
-func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan string, <-chan error, func()) {
+func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string, <-chan error, func()) {
 	outCh := make(chan string, 16)
 	errCh := make(chan error, 1)
 	var cancelFn context.CancelFunc = func() {}
@@ -304,7 +390,7 @@ func startChatStream(messages []ChatMessage, ctx *ChatSessionContext) (<-chan st
 		}
 		streamTrue := true
 		// Filter out client messages - they're only for display
-		var filteredMessages []ChatMessage
+		var filteredMessages []Message
 		for _, msg := range messages {
 			if msg.Role != "client" && msg.Role != "error" {
 				filteredMessages = append(filteredMessages, msg)
@@ -447,11 +533,17 @@ type SessionContext struct {
 func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
 	var contextFile string
 	if ctx == nil {
-		cwd := getEffectiveCWD()
-		if cwd == "" {
-			return nil, fmt.Errorf("failed to determine effective working directory")
+		// Fallback inference when context not provided: try project-scoped location first
+		if inferred := newDefaultContextFromGlobals(); inferred != nil {
+			if path, err := inferred.sessionFilePath(); err == nil && strings.TrimSpace(path) != "" {
+				contextFile = path
+			}
 		}
-		contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
+		// Legacy fallback: CWD/.llamafarm/context.yaml
+		if strings.TrimSpace(contextFile) == "" {
+			cwd := getEffectiveCWD()
+			contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
+		}
 	} else {
 		path, err := ctx.sessionFilePath()
 		if err != nil {
@@ -481,6 +573,8 @@ func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
 		return nil, nil
 	}
 
+	logDebug(fmt.Sprintf("readSessionContext: returning context from path %s: %+v", contextFile, context))
+
 	return &context, nil
 }
 
@@ -491,13 +585,7 @@ func writeSessionContext(ctx *ChatSessionContext, sessionID string) error {
 	}
 
 	var contextFile string
-	if ctx == nil {
-		cwd := getEffectiveCWD()
-		if cwd == "" {
-			return fmt.Errorf("failed to determine effective working directory")
-		}
-		contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
-	} else {
+	if ctx != nil {
 		path, err := ctx.sessionFilePath()
 		if err != nil {
 			return err
@@ -563,68 +651,71 @@ func deleteChatSession() error {
 	return nil
 }
 
+type SessionHistory struct {
+	Messages []SessionHistoryMessage `json:"messages"`
+}
+
+type SessionHistoryMessage struct {
+	Role    string                       `json:"role"`
+	Content SessionHistoryMessageContent `json:"content"`
+}
+
+type SessionHistoryMessageContent struct {
+	ChatMessage string `json:"chat_message"`
+}
+
+type SessionHistoryResponse struct {
+	Messages []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"messages"`
+}
+
 // fetchSessionHistory retrieves the chat history for a session from the server.
 // Returns a slice of user messages suitable for CLI history (up/down arrow).
-func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) []string {
+func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) SessionHistory {
 	if sessionID == "" {
-		return nil
+		return SessionHistory{}
 	}
 	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s/history", strings.TrimSuffix(serverURL, "/"), namespace, projectID, sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil
+		logDebug(fmt.Sprintf("fetchSessionHistory: failed to create request: %v", err))
+		return SessionHistory{}
 	}
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
-		return nil
+		logDebug(fmt.Sprintf("fetchSessionHistory: failed to send request: %v", err))
+		return SessionHistory{}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		logDebug(fmt.Sprintf("fetchSessionHistory: failed to get history: %d", resp.StatusCode))
+		return SessionHistory{}
 	}
 
-	var result struct {
-		Messages []struct {
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
-		} `json:"messages"`
+	var result SessionHistoryResponse
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logDebug(fmt.Sprintf("fetchSessionHistory: failed to read body: %v", err))
+		return SessionHistory{}
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&result); err != nil {
+		logDebug(fmt.Sprintf("fetchSessionHistory: failed to decode history: %v, %s", err, string(body)))
+		return SessionHistory{}
 	}
-
-	var history []string
+	var messages []SessionHistoryMessage
 	for _, msg := range result.Messages {
-		// Only include user messages for CLI history
-		if msg.Role == "user" {
-			// First, try to parse content as a string (it may be JSON-encoded string)
-			var contentStr string
-			if err := json.Unmarshal(msg.Content, &contentStr); err == nil {
-				// Now try to parse the string as JSON object with chat_message field
-				var chatMsg struct {
-					ChatMessage string `json:"chat_message"`
-				}
-				if err := json.Unmarshal([]byte(contentStr), &chatMsg); err == nil && chatMsg.ChatMessage != "" {
-					history = append(history, chatMsg.ChatMessage)
-				} else {
-					// If it's not a chat_message object, use the string as-is
-					history = append(history, contentStr)
-				}
-			} else {
-				// Fallback: try to parse as direct chat_message object
-				var chatMsg struct {
-					ChatMessage string `json:"chat_message"`
-				}
-				if err := json.Unmarshal(msg.Content, &chatMsg); err == nil && chatMsg.ChatMessage != "" {
-					history = append(history, chatMsg.ChatMessage)
-				}
-			}
+		var content SessionHistoryMessageContent
+		if err := json.Unmarshal([]byte(msg.Content), &content); err != nil {
+			logDebug(fmt.Sprintf("fetchSessionHistory: failed to unmarshal content: %v", err))
+			continue
 		}
+		messages = append(messages, SessionHistoryMessage{Role: msg.Role, Content: content})
 	}
 
-	return history
+	return SessionHistory{Messages: messages}
 }
