@@ -5,14 +5,37 @@ Handles iterative parser selection based on file patterns.
 
 import fnmatch
 import logging
+import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, TypedDict
 
+from components.extractors.base import BaseExtractor
 from components.parsers.base.base_parser import BaseParser
 from core.base import Document
-from components.extractors.base import BaseExtractor
+
+repo_root = Path(__file__).parent.parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+try:
+    from config.datamodel import (
+        DataProcessingStrategy,
+        Extractor,
+        Parser,
+    )
+except ImportError as e:
+    raise ImportError(
+        f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
+    ) from e
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+class ExtractorOutput(TypedDict):
+    name: str
+    count: int
+    new_fields: list[str]
 
 
 class BlobProcessor:
@@ -21,7 +44,7 @@ class BlobProcessor:
     Implements centralized pattern matching using fnmatch for glob-style patterns.
     """
 
-    def __init__(self, strategy_config: Dict[str, Any]):
+    def __init__(self, strategy_config: DataProcessingStrategy):
         """
         Initialize the blob processor with a strategy configuration.
 
@@ -29,14 +52,12 @@ class BlobProcessor:
             strategy_config: Dictionary containing parsers and extractors config
         """
         self.strategy_config = strategy_config
-        self.parsers = self._initialize_parsers(strategy_config.get("parsers", []))
-        self.extractors = self._initialize_extractors(
-            strategy_config.get("extractors", [])
-        )
+        self.parsers = self._initialize_parsers(strategy_config.parsers or [])
+        self.extractors = self._initialize_extractors(strategy_config.extractors or [])
 
     def _initialize_parsers(
-        self, parser_configs: List[Dict[str, Any]]
-    ) -> List[Tuple[Dict, BaseParser]]:
+        self, parser_configs: list[Parser]
+    ) -> list[tuple[Parser, BaseParser]]:
         """
         Initialize parsers from configuration and sort by priority.
 
@@ -46,25 +67,29 @@ class BlobProcessor:
         Returns:
             List of tuples containing (config, parser_instance) sorted by priority
         """
-        parsers = []
+        parsers: list[tuple[Parser, BaseParser]] = []
         for config in parser_configs:
+            if not config.type:
+                continue
+
+            parser_type = config.type.value
             try:
-                parser_class = self._get_parser_class(config["type"])
+                parser_class = self._get_parser_class(parser_type)
                 # Pass the parser type name and config
                 parser_instance = parser_class(
-                    name=config["type"], config=config.get("config", {})
+                    name=parser_type, config=config.config or {}
                 )
                 parsers.append((config, parser_instance))
             except Exception as e:
-                logger.warning(f"Failed to initialize parser {config['type']}: {e}")
+                logger.warning(f"Failed to initialize parser {parser_type}: {e}")
 
-        # Sort by priority (higher priority first)
-        parsers.sort(key=lambda x: x[0].get("priority", 0), reverse=True)
+        # Sort by priority (lower numbers are higher priority)
+        parsers.sort(key=lambda x: x[0].priority or 0)
         return parsers
 
     def _initialize_extractors(
-        self, extractor_configs: List[Dict[str, Any]]
-    ) -> List[Tuple[Dict, Any]]:
+        self, extractor_configs: list[Extractor]
+    ) -> list[tuple[Extractor, BaseExtractor]]:
         """
         Initialize extractors from configuration and sort by priority.
 
@@ -77,14 +102,17 @@ class BlobProcessor:
         extractors = []
         for config in extractor_configs:
             try:
-                extractor_class = self._get_extractor_class(config["type"])
-                extractor_instance = extractor_class(config.get("config", {}))
+                extractor_type = config.type
+                extractor_config = config.config or {}
+
+                extractor_class = self._get_extractor_class(extractor_type)
+                extractor_instance = extractor_class(extractor_config)
                 extractors.append((config, extractor_instance))
             except Exception as e:
-                logger.warning(f"Failed to initialize extractor {config['type']}: {e}")
+                logger.warning(f"Failed to initialize extractor {config.type}: {e}")
 
-        # Sort by priority (higher priority first)
-        extractors.sort(key=lambda x: x[0].get("priority", 0), reverse=True)
+        # Sort by priority (lower numbers are higher priority)
+        extractors.sort(key=lambda x: x[0].priority or 0)
         return extractors
 
     def _get_parser_class(self, parser_type: str) -> type:
@@ -103,7 +131,6 @@ class BlobProcessor:
             Parser class
         """
         import importlib
-        import os
         from pathlib import Path
 
         # Try to dynamically discover the parser module
@@ -235,13 +262,11 @@ class BlobProcessor:
             Extractor class
         """
         import importlib
-        from pathlib import Path
 
         # Handle different naming conventions
         # ContentStatisticsExtractor -> statistics_extractor
         # EntityExtractor -> entity_extractor
         # KeywordExtractor -> keyword_extractor
-
         # Convert CamelCase to snake_case for directory name
         import re
 
@@ -256,7 +281,7 @@ class BlobProcessor:
             # Try without 'extractor' suffix
             f"components.extractors.{snake_name.replace('_extractor', '')}.{snake_name.replace('_extractor', '')}_extractor",
             # Try in base module
-            f"components.extractors.base",
+            "components.extractors.base",
         ]
 
         # Special cases for known extractors
@@ -320,7 +345,7 @@ class BlobProcessor:
 
         return MockExtractor
 
-    def _matches_patterns(self, filename: str, patterns: List[str]) -> bool:
+    def _matches_patterns(self, filename: str, patterns: list[str]) -> bool:
         """
         Check if filename matches any of the glob patterns.
 
@@ -336,7 +361,7 @@ class BlobProcessor:
                 return True
         return False
 
-    def _is_excluded(self, filename: str, exclude_patterns: List[str]) -> bool:
+    def _is_excluded(self, filename: str, exclude_patterns: list[str]) -> bool:
         """
         Check if filename matches any of the exclusion patterns.
 
@@ -354,8 +379,8 @@ class BlobProcessor:
         )
 
     def process_blob(
-        self, blob_data: bytes, metadata: Dict[str, Any]
-    ) -> List[Document]:
+        self, blob_data: bytes, metadata: dict[str, Any]
+    ) -> list[Document]:
         """
         Process a blob of data with automatic parser selection based on file patterns.
 
@@ -370,28 +395,33 @@ class BlobProcessor:
         logger.info(f"Processing blob: {filename}")
         logger.debug(f"Blob metadata: {metadata}")
         logger.debug(
-            f"First 20 bytes of blob: {blob_data[:20] if blob_data else 'empty'}"
+            f"First 20 bytes of blob: {blob_data[:20].decode(errors='replace') if blob_data else 'empty'}"
         )
 
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
         logger.debug(
-            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0]['type'] for p in matching_parsers]}"
+            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type.value if p[0].type else None for p in matching_parsers]}"
         )
 
         if not matching_parsers:
             logger.warning(f"No parser found for file: {filename}")
             # Try with the lowest priority text parser as ultimate fallback
             for config, parser in self.parsers:
-                if config["type"] == "TextParser_Python":
+                if config.type and config.type.value == "TextParser_Python":
                     matching_parsers = [(config, parser)]
                     break
 
         # Try parsers in priority order until one succeeds
         documents = []
         for config, parser in matching_parsers:
+            if not config.type:
+                logger.warning(f"Parser config missing 'type': {config}. This may indicate a misconfiguration.")
+                continue
+
+            parser_type = config.type.value
             try:
-                logger.debug(f"Attempting to parse {filename} with {config['type']}")
+                logger.debug(f"Attempting to parse {filename} with {parser_type}")
                 documents = parser.parse_blob(blob_data, metadata)
 
                 if documents:
@@ -402,10 +432,10 @@ class BlobProcessor:
                     )
 
                     logger.info(
-                        f"Successfully parsed {filename} with {config['type']} - got {len(documents)} chunks"
+                        f"Successfully parsed {filename} with {parser_type} - got {len(documents)} chunks"
                     )
                     # Use debug level for detailed parser output
-                    logger.debug(f"\n📄 Parser Output: {config['type']}")
+                    logger.debug(f"\n📄 Parser Output: {parser_type}")
                     logger.debug(f"   ├─ Chunks created: {len(documents)}")
                     logger.debug(f"   ├─ Average chunk size: {avg_chunk_size} chars")
                     logger.debug(
@@ -417,7 +447,7 @@ class BlobProcessor:
                     break
 
             except Exception as e:
-                logger.debug(f"Parser {config['type']} failed for {filename}: {e}")
+                logger.debug(f"Parser {parser_type} failed for {filename}: {e}")
                 continue
 
         if not documents:
@@ -432,7 +462,7 @@ class BlobProcessor:
 
         return documents
 
-    def _find_matching_parsers(self, filename: str) -> List[Tuple[Dict, BaseParser]]:
+    def _find_matching_parsers(self, filename: str) -> list[tuple[Parser, BaseParser]]:
         """
         Find all parsers that match the given filename based on patterns.
 
@@ -442,11 +472,11 @@ class BlobProcessor:
         Returns:
             List of matching (config, parser) tuples sorted by priority
         """
-        matching = []
+        matching: list[tuple[Parser, BaseParser]] = []
 
         for config, parser in self.parsers:
-            include_patterns = config.get("file_include_patterns", [])
-            exclude_patterns = config.get("file_exclude_patterns", [])
+            include_patterns = config.file_include_patterns or []
+            exclude_patterns = config.file_exclude_patterns or []
 
             # Check if file matches include patterns and not exclude patterns
             if include_patterns:
@@ -460,8 +490,8 @@ class BlobProcessor:
         return matching
 
     def _apply_extractors(
-        self, documents: List[Document], filename: str
-    ) -> List[Document]:
+        self, documents: list[Document], filename: str
+    ) -> list[Document]:
         """
         Apply matching extractors to the documents based on file patterns.
 
@@ -476,13 +506,14 @@ class BlobProcessor:
         matching_extractors = self._find_matching_extractors(filename)
 
         # Apply each matching extractor
-        extractor_outputs = []
+        extractor_outputs: list[ExtractorOutput] = []
         for config, extractor in matching_extractors:
             try:
-                logger.debug(f"Applying extractor {config['type']} to {filename}")
+                extractor_type = config.type
+                logger.debug(f"Applying extractor {extractor_type} to {filename}")
 
                 # Count metadata before extraction
-                before_keys = set()
+                before_keys: set = set()
                 for doc in documents:
                     before_keys.update(doc.metadata.keys())
 
@@ -490,37 +521,36 @@ class BlobProcessor:
                 documents = extractor.extract(documents)
 
                 # Count metadata after extraction
-                after_keys = set()
-                extracted_data = {}
+                after_keys: set = set()
                 for doc in documents:
                     after_keys.update(doc.metadata.keys())
                     # Mark that this extractor was applied
-                    doc.metadata[f"extractor_{config['type']}"] = True
+                    doc.metadata[f"extractor_{extractor_type}"] = True
 
                 # Find what was extracted
-                new_keys = after_keys - before_keys - {f"extractor_{config['type']}"}
+                new_keys = after_keys - before_keys - {f"extractor_{extractor_type}"}
 
                 # Count extracted items for specific extractors
-                extractor_type = config["type"]
                 extraction_count = 0
+                extractor_type_lower = extractor_type.lower() if extractor_type else ""
 
-                if "keyword" in extractor_type.lower():
+                if "keyword" in extractor_type_lower:
                     for doc in documents:
                         if "keywords" in doc.metadata:
                             extraction_count += len(doc.metadata.get("keywords", []))
-                elif "entity" in extractor_type.lower():
+                elif "entity" in extractor_type_lower:
                     for doc in documents:
                         if "entities" in doc.metadata:
                             extraction_count += len(doc.metadata.get("entities", []))
-                elif "link" in extractor_type.lower():
+                elif "link" in extractor_type_lower:
                     for doc in documents:
                         if "links" in doc.metadata:
                             extraction_count += len(doc.metadata.get("links", []))
-                elif "heading" in extractor_type.lower():
+                elif "heading" in extractor_type_lower:
                     for doc in documents:
                         if "headings" in doc.metadata:
                             extraction_count += len(doc.metadata.get("headings", []))
-                elif "table" in extractor_type.lower():
+                elif "table" in extractor_type_lower:
                     for doc in documents:
                         if "tables" in doc.metadata:
                             extraction_count += len(doc.metadata.get("tables", []))
@@ -528,27 +558,29 @@ class BlobProcessor:
                 if extraction_count > 0 or new_keys:
                     extractor_outputs.append(
                         {
-                            "name": config["type"],
+                            "name": extractor_type,
                             "count": extraction_count,
                             "new_fields": list(new_keys),
                         }
                     )
 
             except Exception as e:
-                logger.warning(f"Extractor {config['type']} failed for {filename}: {e}")
+                logger.warning(f"Extractor {extractor_type} failed for {filename}: {e}")
                 continue
 
         # Log extractor outputs at debug level
-        if extractor_outputs:
+        if extractor_outputs and len(extractor_outputs) > 0:
             logger.debug("\n🔍 Extractors Applied:")
             for output in extractor_outputs:
-                if output["count"] > 0:
+                output_count = output["count"] or 0
+                output_fields = output.get("new_fields", [])
+                if output_count > 0:
                     logger.debug(
-                        f"   ├─ {output['name']}: extracted {output['count']} items"
+                        f"   ├─ {output['name']}: extracted {output_count} items"
                     )
-                elif output["new_fields"]:
+                elif output_fields:
                     logger.debug(
-                        f"   ├─ {output['name']}: added fields {output['new_fields']}"
+                        f"   ├─ {output['name']}: added fields {output_fields}"
                     )
                 else:
                     logger.debug(f"   ├─ {output['name']}: applied")
@@ -557,7 +589,7 @@ class BlobProcessor:
 
     def _find_matching_extractors(
         self, filename: str
-    ) -> List[Tuple[Dict, BaseExtractor]]:
+    ) -> list[tuple[Extractor, BaseExtractor]]:
         """
         Find all extractors that match the given filename based on patterns.
 
@@ -567,11 +599,11 @@ class BlobProcessor:
         Returns:
             List of matching (config, extractor) tuples sorted by priority
         """
-        matching = []
+        matching: list[tuple[Extractor, BaseExtractor]] = []
 
         for config, extractor in self.extractors:
-            include_patterns = config.get("file_include_patterns", [])
-            exclude_patterns = config.get("file_exclude_patterns", [])
+            include_patterns = config.file_include_patterns or []
+            exclude_patterns = config.file_exclude_patterns or []
 
             # Check if file matches include patterns and not exclude patterns
             if include_patterns:
@@ -584,7 +616,7 @@ class BlobProcessor:
 
         return matching
 
-    def get_supported_extensions(self) -> List[str]:
+    def get_supported_extensions(self) -> list[str]:
         """
         Get list of all supported file extensions from all parsers.
 
@@ -593,9 +625,9 @@ class BlobProcessor:
         """
         extensions = set()
         for config, _ in self.parsers:
-            patterns = config.get("file_include_patterns", [])
+            patterns = config.file_include_patterns or []
             for pattern in patterns:
                 # Extract extensions from patterns like "*.pdf"
                 if pattern.startswith("*."):
                     extensions.add(pattern[1:])  # Remove the "*"
-        return sorted(list(extensions))
+        return sorted(extensions)

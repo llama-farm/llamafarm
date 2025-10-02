@@ -50,7 +50,7 @@ class TestStrategies:
         if available:
             config = handler.get_combined_config(available[0])
             assert config is not None
-            assert "database" in config or "processing_strategy" in config
+            assert config.database and config.processing_strategy is not None
 
     def test_database_config(self, test_config_path):
         """Test database configuration."""

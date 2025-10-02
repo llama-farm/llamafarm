@@ -20,7 +20,7 @@ if str(repo_root) not in sys.path:
 
 try:
     from config import load_config
-    from config.datamodel import Database, LlamaFarmConfig
+    from config.datamodel import Database, LlamaFarmConfig, RetrievalStrategy
 except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
@@ -138,7 +138,7 @@ class BaseAPI:
             )
         return database_config
 
-    def _build_traditional_config(self, database_config) -> dict[str, Any]:
+    def _build_traditional_config(self, database_config: Database) -> dict[str, Any]:
         """Build traditional RAG config format from database config."""
         traditional_config: dict[str, Any] = {}
 
@@ -159,15 +159,17 @@ class BaseAPI:
 
         return traditional_config
 
-    def _build_vector_store_config(self, database_config) -> dict[str, Any]:
+    def _build_vector_store_config(self, database_config: Database) -> dict[str, Any]:
         """Build vector store configuration."""
-        db_type = database_config.type
+        db_type = database_config.type.value
         return {
-            "type": db_type.value if hasattr(db_type, "value") else str(db_type),
+            "type": db_type,
             "config": database_config.config,
         }
 
-    def _build_embedder_config(self, database_config) -> Optional[dict[str, Any]]:
+    def _build_embedder_config(
+        self, database_config: Database
+    ) -> Optional[dict[str, Any]]:
         """Build embedder configuration from embedding strategies."""
         embedding_strategies = database_config.embedding_strategies or []
         default_embedding_strategy = database_config.default_embedding_strategy
@@ -190,7 +192,9 @@ class BaseAPI:
 
         return None
 
-    def _build_retrieval_config(self, database_config) -> Optional[dict[str, Any]]:
+    def _build_retrieval_config(
+        self, database_config: Database
+    ) -> Optional[dict[str, Any]]:
         """Build retrieval configuration from retrieval strategies."""
         retrieval_strategies = database_config.retrieval_strategies or []
         default_retrieval_strategy = database_config.default_retrieval_strategy
@@ -218,28 +222,25 @@ class BaseAPI:
 
         return None
 
-    def _strategy_to_config(self, strategy) -> dict[str, Any]:
+    def _strategy_to_config(self, strategy: RetrievalStrategy) -> dict[str, Any]:
         """Convert strategy object to config dictionary."""
         return {
-            "type": strategy.type.value
-            if hasattr(strategy.type, "value")
-            else str(strategy.type),
+            "type": strategy.type.value,
             "config": strategy.config,
         }
 
     def _get_retrieval_strategy_by_name(self, strategy_name: str):
         """Get a retrieval strategy by name from the database config."""
-        retrieval_strategies = (
-            getattr(self._database_config, "retrieval_strategies", None) or []
-        )
+        if not self._database_config:
+            return None
+
+        retrieval_strategies = self._database_config.retrieval_strategies or []
 
         for strategy in retrieval_strategies:
             if strategy.name == strategy_name:
                 # Create strategy from config
                 strategy_config = {
-                    "type": strategy.type.value
-                    if hasattr(strategy.type, "value")
-                    else str(strategy.type),
+                    "type": strategy.type.value,
                     "config": strategy.config,
                 }
                 return create_retrieval_strategy_from_config(strategy_config)
