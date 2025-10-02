@@ -929,7 +929,9 @@ const Models = () => {
   }
 
   return (
-    <div className="h-full w-full flex flex-col gap-3 pb-32">
+    <div
+      className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-32' : ''}`}
+    >
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl">
           {mode === 'designer' ? 'Models' : 'Config editor'}
@@ -938,13 +940,8 @@ const Models = () => {
       </div>
 
       {mode !== 'designer' ? (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="text-sm text-muted-foreground mb-1">Edit config</div>
-          <div className="rounded-md overflow-hidden">
-            <div className="h-[70vh]">
-              <ConfigEditor />
-            </div>
-          </div>
+        <div className="flex-1 min-h-0 overflow-hidden pb-6">
+          <ConfigEditor className="h-full" />
         </div>
       ) : (
         <>

@@ -46,6 +46,7 @@ import {
   useReIngestDataset,
 } from '../../hooks/useDatasets'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 
 function StrategyView() {
   const navigate = useNavigate()
@@ -1107,760 +1108,678 @@ function StrategyView() {
   // (Removed) save button logic – edits persist immediately
 
   return (
-    <div className="w-full flex flex-col gap-3 pb-20">
-      {/* Breadcrumb + Actions */}
-      <div className="flex items-center justify-between mb-1">
-        <nav className="text-sm md:text-base flex items-center gap-1.5">
-          <button
-            className="text-teal-600 dark:text-teal-400 hover:underline"
-            onClick={() => navigate('/chat/rag')}
-          >
-            RAG
-          </button>
-          <span className="text-muted-foreground px-1">/</span>
-          <span className="text-foreground">Processing strategies</span>
-          <span className="text-muted-foreground px-1">/</span>
-          <span className="text-foreground">{strategyName}</span>
-        </nav>
-        <PageActions mode={mode} onModeChange={setMode} />
-      </div>
-
-      {/* Header */}
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg md:text-xl font-medium">{strategyName}</h2>
-          <button
-            className="p-1 rounded-md hover:bg-accent text-muted-foreground"
-            onClick={() => {
-              setEditName(strategyName)
-              setEditDescription(strategyDescription)
-              setIsEditOpen(true)
-            }}
-            aria-label="Edit strategy"
-            title="Edit strategy"
-          >
-            <FontIcon type="edit" className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-      {strategyDescription && (
-        <div className="text-sm text-muted-foreground">
-          {strategyDescription}
+    <div
+      className={`w-full h-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-20' : ''}`}
+    >
+      {/* Header / Breadcrumbs */}
+      {mode === 'designer' ? (
+        <>
+          <div className="flex items-center justify-between mb-1">
+            <nav className="text-sm md:text-base flex items-center gap-1.5">
+              <button
+                className="text-teal-600 dark:text-teal-400 hover:underline"
+                onClick={() => navigate('/chat/rag')}
+              >
+                RAG
+              </button>
+              <span className="text-muted-foreground px-1">/</span>
+              <span className="text-foreground">Processing strategies</span>
+              <span className="text-muted-foreground px-1">/</span>
+              <span className="text-foreground">{strategyName}</span>
+            </nav>
+            <PageActions mode={mode} onModeChange={setMode} />
+          </div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg md:text-xl font-medium">{strategyName}</h2>
+              <button
+                className="p-1 rounded-md hover:bg-accent text-muted-foreground"
+                onClick={() => {
+                  setEditName(strategyName)
+                  setEditDescription(strategyDescription)
+                  setIsEditOpen(true)
+                }}
+                aria-label="Edit strategy"
+                title="Edit strategy"
+              >
+                <FontIcon type="edit" className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          {strategyDescription && (
+            <div className="text-sm text-muted-foreground">
+              {strategyDescription}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-2xl">Config editor</h2>
+          <PageActions mode={mode} onModeChange={setMode} />
         </div>
       )}
 
-      {/* Used by + Actions */}
-      <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="text-xs text-muted-foreground">Used by</div>
-          {assignedDatasets.length === 0 ? (
-            <>
-              <div className="text-xs text-muted-foreground">
-                No datasets yet
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsManageOpen(true)}
-              >
-                Assign to dataset(s)
-              </Button>
-            </>
-          ) : (
-            <>
-              {assignedDatasets.map(u => (
-                <Badge
-                  key={u}
-                  variant="default"
-                  size="sm"
-                  className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
-                >
-                  {u}
-                </Badge>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsManageOpen(true)}
-              >
-                Manage datasets
-              </Button>
-            </>
-          )}
+      {mode !== 'designer' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ConfigEditor className="h-full" />
         </div>
-        <div className="flex items-center gap-2 ml-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsAddParserOpen(true)}
-          >
-            <Plus className="w-4 h-4" /> Add Parser
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsAddExtractorOpen(true)}
-          >
-            <Plus className="w-4 h-4" /> Add Extractor
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`${
-              canReprocess
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
-                : ''
-            }`}
-            onClick={async () => {
-              if (!activeProject?.namespace || !activeProject?.project) return
-              const failures: string[] = []
-              for (const n of assignedDatasets) {
-                try {
-                  await reIngestMutation.mutateAsync({
-                    namespace: activeProject.namespace!,
-                    project: activeProject.project!,
-                    dataset: n,
-                  })
-                  toast({ message: `Reprocessing ${n}…`, variant: 'default' })
-                } catch (e) {
-                  console.error('Failed to start reprocessing', n, e)
-                  toast({
-                    message: `Failed to start reprocessing ${n}`,
-                    variant: 'destructive',
-                  })
-                  failures.push(n)
-                }
-              }
-              if (failures.length === 0) {
-                clearNeedsReprocess()
-              }
-            }}
-            disabled={
-              assignedDatasets.length === 0 ||
-              !needsReprocess ||
-              reIngestMutation.isPending
-            }
-          >
-            Reprocess datasets
-          </Button>
-          {isUniversal ? (
-            <Button variant="outline" size="sm" onClick={handleResetDefaults}>
-              Reset to defaults
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Manage Datasets Modal */}
-      <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
-        <DialogContent className="sm:max-w-2xl p-0">
-          <div className="flex flex-col max-h-[70vh]">
-            <DialogHeader className="bg-background p-4 border-b">
-              <DialogTitle className="text-lg text-foreground">
-                Assign to dataset(s)
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-2">
-              <div className="text-xs text-muted-foreground">
-                Datasets always have a processing strategy. You can't unassign
-                here. Select additional datasets to assign to this strategy. You
-                can also assign datasets to other strategies from those strategy
-                pages.
-              </div>
-              {!allDatasets || allDatasets.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  No datasets found in this project.
-                </div>
+      ) : (
+        <>
+          {/* Used by + Actions */}
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-xs text-muted-foreground">Used by</div>
+              {assignedDatasets.length === 0 ? (
+                <>
+                  <div className="text-xs text-muted-foreground">
+                    No datasets yet
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsManageOpen(true)}
+                  >
+                    Assign to dataset(s)
+                  </Button>
+                </>
               ) : (
-                <ul className="rounded-md border border-border divide-y divide-border">
-                  {allDatasets.map(ds => {
-                    const name = ds.name
-                    const current = (ds as any).rag_strategy
-                    const selected =
-                      selectedDatasets.has(name) || current === strategyName
-                    const assignedElsewhere =
-                      current && current !== 'auto' && current !== strategyName
-                    return (
-                      <li
-                        key={name}
-                        className={`flex items-center gap-3 px-3 py-3 hover:bg-muted/30 ${
-                          current === strategyName
-                            ? 'opacity-70 cursor-not-allowed'
-                            : 'cursor-pointer'
-                        }`}
-                        aria-disabled={current === strategyName}
-                        onClick={() => {
-                          if (current === strategyName) return
-                          toggleDataset(name)
-                        }}
-                      >
-                        <Checkbox
-                          checked={selected}
-                          onCheckedChange={() => toggleDataset(name)}
-                          onClick={e => e.stopPropagation()}
-                          disabled={current === strategyName}
-                          title={
-                            current === strategyName
-                              ? 'This dataset cannot be unassigned from this strategy.'
-                              : assignedElsewhere
-                                ? 'This dataset is already assigned to another strategy and cannot be assigned here.'
-                                : undefined
-                          }
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-foreground truncate">
-                            {name}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {assignedElsewhere
-                              ? `Currently: ${current}`
-                              : current
-                                ? `Currently: ${current}`
-                                : ''}
-                          </div>
-                        </div>
-                        {selected ? (
-                          <Badge
-                            variant="default"
-                            size="sm"
-                            className="rounded-xl"
-                          >
-                            Selected
-                          </Badge>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ul>
+                <>
+                  {assignedDatasets.map(u => (
+                    <Badge
+                      key={u}
+                      variant="default"
+                      size="sm"
+                      className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                    >
+                      {u}
+                    </Badge>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsManageOpen(true)}
+                  >
+                    Manage datasets
+                  </Button>
+                </>
               )}
             </div>
-            <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
-              <button
-                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-                onClick={() => setIsManageOpen(false)}
-                type="button"
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddParserOpen(true)}
               >
-                Cancel
-              </button>
-              <button
-                className="px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90"
-                onClick={saveAssignments}
-                type="button"
+                <Plus className="w-4 h-4" /> Add Parser
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddExtractorOpen(true)}
               >
-                Save assignments
-              </button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reprocess Confirmation Modal */}
-      <Dialog open={isReprocessOpen} onOpenChange={setIsReprocessOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg text-foreground">
-              Reprocess now?
-            </DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            Reprocess these dataset(s) with "{strategyName}" now?
-          </div>
-          {/* Show per-dataset errors if any */}
-          {reprocessErrors && Object.keys(reprocessErrors).length > 0 ? (
-            <div className="mt-2 rounded-md border border-destructive bg-destructive/10 p-2 text-sm">
-              <div className="font-semibold text-destructive mb-1">
-                Some datasets failed to reprocess:
-              </div>
-              <ul className="list-disc ml-4">
-                {Object.entries(reprocessErrors).map(
-                  ([datasetId, errorMsg]) => (
-                    <li key={datasetId}>
-                      <span className="font-medium">
-                        {getDatasetNameById(datasetId)}:
-                      </span>{' '}
-                      {String(errorMsg)}
-                    </li>
-                  )
-                )}
-              </ul>
-            </div>
-          ) : null}
-          {pendingAdded.length > 0 ? (
-            <div className="mt-2 rounded-md border border-border bg-accent/10 p-2 text-sm">
-              {pendingAdded.map(n => (
-                <div key={n} className="py-0.5">
-                  {n}
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <DialogFooter className="flex items-center gap-2">
-            <button
-              className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-              onClick={() => setIsReprocessOpen(false)}
-              type="button"
-            >
-              Skip for now
-            </button>
-            <button
-              className="px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90"
-              onClick={async () => {
-                if (!activeProject?.namespace || !activeProject?.project) {
-                  setIsReprocessOpen(false)
-                  return
-                }
-                const errors: { [datasetId: string]: unknown } = {}
-                await Promise.all(
-                  pendingAdded.map(async n => {
+                <Plus className="w-4 h-4" /> Add Extractor
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`${
+                  canReprocess
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
+                    : ''
+                }`}
+                onClick={async () => {
+                  if (!activeProject?.namespace || !activeProject?.project)
+                    return
+                  const failures: string[] = []
+                  for (const n of assignedDatasets) {
                     try {
                       await reIngestMutation.mutateAsync({
                         namespace: activeProject.namespace!,
                         project: activeProject.project!,
                         dataset: n,
                       })
-                    } catch (err) {
-                      errors[n] = (err as any)?.message || 'Unknown error'
+                      toast({
+                        message: `Reprocessing ${n}…`,
+                        variant: 'default',
+                      })
+                    } catch (e) {
+                      console.error('Failed to start reprocessing', n, e)
+                      toast({
+                        message: `Failed to start reprocessing ${n}`,
+                        variant: 'destructive',
+                      })
+                      failures.push(n)
                     }
-                  })
-                )
-                if (Object.keys(errors).length > 0) {
-                  setReprocessErrors(errors)
-                } else {
-                  toast({
-                    message: 'Reprocessing started…',
-                    variant: 'default',
-                  })
-                  setIsReprocessOpen(false)
+                  }
+                  if (failures.length === 0) {
+                    clearNeedsReprocess()
+                  }
+                }}
+                disabled={
+                  assignedDatasets.length === 0 ||
+                  !needsReprocess ||
+                  reIngestMutation.isPending
                 }
-              }}
-              type="button"
-            >
-              Reprocess now
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Processing editors */}
-      {/* Tabs header outside card */}
-      <Tabs
-        activeTab={activeTab}
-        setActiveTab={t => setActiveTab(t as 'parsers' | 'extractors')}
-        tabs={[
-          { id: 'parsers', label: `Parsers (${parserRows.length})` },
-          { id: 'extractors', label: `Extractors (${extractorRows.length})` },
-        ]}
-      />
-      <section className="rounded-lg border border-border bg-card p-4">
-        {activeTab === 'parsers' ? (
-          <div className="flex flex-col gap-2">
-            {parserRows.map(row => {
-              const open = openRows.has(row.id)
-              return (
-                <div
-                  key={row.id}
-                  className="rounded-lg border border-border bg-card p-3 hover:bg-accent/20 transition-colors"
+              >
+                Reprocess datasets
+              </Button>
+              {isUniversal ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetDefaults}
                 >
-                  <div
-                    className="w-full flex items-center gap-2 text-left cursor-pointer"
-                    onClick={() => toggleRow(row.id)}
-                    aria-expanded={open}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        toggleRow(row.id)
-                      }
-                    }}
-                  >
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`}
-                    />
-                    <div className="text-sm font-medium w-[280px] max-w-[38vw] truncate">
-                      {getFriendlyParserName(row.name)}
-                    </div>
-                    <div className="hidden md:block flex-1 min-w-[220px] text-left pr-4">
-                      <span className="text-sm text-muted-foreground">
-                        Good for:
-                      </span>{' '}
-                      <span className="text-sm font-medium text-foreground align-bottom whitespace-normal break-words">
-                        {summarizeFileTypes(row.include) || '—'}
-                      </span>
-                    </div>
-                    <Badge
-                      variant={getPriorityVariant(row.priority)}
-                      size="sm"
-                      className="rounded-xl mr-2 ml-6"
-                    >
-                      Priority: {row.priority}
-                    </Badge>
-                    <div className="flex items-center gap-1 ml-auto">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label="Configure parser"
-                        onClick={e => {
-                          e.stopPropagation()
-                          openEditParser(row.id)
-                        }}
-                      >
-                        <Settings className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label="Remove parser"
-                        onClick={e => {
-                          e.stopPropagation()
-                          openDeleteParser(row.id)
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  {open ? (
-                    <div className="mt-2 rounded-md border border-border bg-accent/10 p-2 text-sm">
-                      <div className="text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          Parser type:
-                        </span>{' '}
-                        {row.name}
-                      </div>
-                      <div className="text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          Include:
-                        </span>{' '}
-                        {row.include}{' '}
-                        <span className="ml-2 font-medium text-foreground">
-                          Exclude:
-                        </span>{' '}
-                        {row.exclude}
-                      </div>
-                      <div className="mt-1 text-muted-foreground">
-                        {row.summary}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {extractorRows.map(row => {
-              const open = openRows.has(row.id)
-              return (
-                <div
-                  key={row.id}
-                  className="rounded-lg border border-border bg-card p-3 hover:bg-accent/20 transition-colors"
-                >
-                  <div
-                    className="w-full flex items-center gap-2 text-left cursor-pointer"
-                    onClick={() => toggleRow(row.id)}
-                    aria-expanded={open}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        toggleRow(row.id)
-                      }
-                    }}
-                  >
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`}
-                    />
-                    <div className="text-sm font-medium w-[280px] max-w-[38vw] truncate">
-                      {getFriendlyExtractorName(row.name)}
-                    </div>
-                    <div className="hidden md:block flex-1 min-w-[220px] text-left pr-4">
-                      <span className="text-sm text-muted-foreground">
-                        Applies to:
-                      </span>{' '}
-                      <span className="text-sm font-medium text-foreground whitespace-normal break-words">
-                        {row.applyTo || 'All (*)'}
-                      </span>
-                    </div>
-                    <Badge
-                      variant={getPriorityVariant(row.priority)}
-                      size="sm"
-                      className="rounded-xl mr-2 ml-6"
-                    >
-                      Priority: {row.priority}
-                    </Badge>
-                    <div className="flex items-center gap-1 ml-auto">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label="Configure extractor"
-                        onClick={e => {
-                          e.stopPropagation()
-                          openEditExtractor(row.id)
-                        }}
-                      >
-                        <Settings className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label="Remove extractor"
-                        onClick={e => {
-                          e.stopPropagation()
-                          openDeleteExtractor(row.id)
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  {open ? (
-                    <div className="mt-2 rounded-md border border-border bg-accent/10 p-2 text-sm">
-                      <div className="text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          Apply to:
-                        </span>{' '}
-                        {row.applyTo}
-                      </div>
-                      <div className="mt-1 text-muted-foreground">
-                        {row.summary}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
-      {activeTab === 'parsers' ? (
-        <div className="mt-2 text-sm text-muted-foreground">
-          Parsers convert different file formats (PDF, Word, Excel, etc.) into
-          text that AI systems can read and understand.
-        </div>
-      ) : null}
-      {activeTab === 'extractors' ? (
-        <div className="mt-2 text-sm text-muted-foreground">
-          Extractors pull out specific types of information (like dates, names,
-          tables, or keywords) from the parsed text to make it more useful for
-          AI retrieval and analysis.
-        </div>
-      ) : null}
-
-      {/* Add Parser Modal */}
-      <Dialog open={isAddParserOpen} onOpenChange={setIsAddParserOpen}>
-        <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0">
-          <div className="flex flex-col max-h-[80vh]">
-            <DialogHeader className="bg-background p-4 border-b">
-              <DialogTitle className="text-lg text-foreground">
-                Add parser
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
-              <div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Label className="text-xs text-muted-foreground">
-                    Parser type
-                  </Label>
-                  <Label className="text-xs text-muted-foreground">
-                    Priority
-                  </Label>
-                </div>
-                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-                  <div>
-                    {(() => {
-                      const existing = new Set(parserRows.map(p => p.name))
-                      const available = ORDERED_PARSER_TYPES.filter(
-                        t => !existing.has(t) && PARSER_SCHEMAS[t]
-                      )
-                      if (!newParserType && available.length > 0) {
-                        const first = available[0]
-                        setTimeout(() => {
-                          setNewParserType(first)
-                          setNewParserConfig(getDefaultConfigForParser(first))
-                          setNewParserIncludes(
-                            getDefaultIncludePatternsForParser(first)
-                          )
-                        }, 0)
-                      }
-                      return (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-between"
-                            >
-                              {newParserType
-                                ? getFriendlyParserName(newParserType)
-                                : available[0]
-                                  ? getFriendlyParserName(available[0])
-                                  : 'No parsers available'}
-                              <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            {available.length === 0 ? (
-                              <DropdownMenuItem disabled>
-                                No parsers available
-                              </DropdownMenuItem>
-                            ) : (
-                              available.map(t => (
-                                <DropdownMenuItem
-                                  key={t}
-                                  onClick={() => {
-                                    setNewParserType(t)
-                                    setNewParserConfig(
-                                      getDefaultConfigForParser(t)
-                                    )
-                                    setNewParserIncludes(
-                                      getDefaultIncludePatternsForParser(t)
-                                    )
-                                  }}
-                                >
-                                  {getFriendlyParserName(t)}
-                                </DropdownMenuItem>
-                              ))
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )
-                    })()}
-                    {newParserType && PARSER_SCHEMAS[newParserType] ? (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {PARSER_SCHEMAS[newParserType].description}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div>
-                    <Input
-                      type="number"
-                      className="bg-background w-40"
-                      value={newParserPriority}
-                      min={0}
-                      onChange={e => {
-                        const raw = e.target.value
-                        setNewParserPriority(raw)
-                        const n = Number(raw)
-                        setNewParserPriorityError(
-                          !Number.isInteger(n) || n < 0 || n > MAX_PRIORITY
-                        )
-                      }}
-                    />
-                    {newParserPriorityError ? (
-                      <div className="text-xs text-destructive mt-1">
-                        Priority must be an integer between 0 and {MAX_PRIORITY}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              {newParserType && PARSER_SCHEMAS[newParserType] ? (
-                <>
-                  <div className="rounded-lg border border-border bg-accent/10 p-3">
-                    <div className="text-sm font-medium mb-2">
-                      {PARSER_SCHEMAS[newParserType].title}
-                    </div>
-                    <ParserSettingsForm
-                      schema={PARSER_SCHEMAS[newParserType]}
-                      value={newParserConfig}
-                      onChange={setNewParserConfig}
-                    />
-                  </div>
-                  <PatternEditor
-                    label="Included files / file types"
-                    description="Specify which files this parser should process - file patterns, extensions, or specific filenames"
-                    placeholder="*.pdf, data_*, report.docx"
-                    value={newParserIncludes}
-                    onChange={setNewParserIncludes}
-                    isSuspicious={isSuspiciousPattern}
-                  />
-                </>
+                  Reset to defaults
+                </Button>
               ) : null}
             </div>
-            <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
-              <button
-                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-                onClick={() => setIsAddParserOpen(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm ${
-                  newParserType.trim().length > 0 && !newParserPriorityError
-                    ? 'bg-primary text-primary-foreground hover:opacity-90'
-                    : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
-                }`}
-                onClick={handleCreateParser}
-                disabled={
-                  newParserType.trim().length === 0 || newParserPriorityError
-                }
-                type="button"
-              >
-                Add parser
-              </button>
-            </DialogFooter>
           </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Edit Parser Modal (config only) */}
-      <Dialog open={isEditParserOpen} onOpenChange={setIsEditParserOpen}>
-        <DialogContent
-          className="sm:max-w-3xl lg:max-w-4xl p-0"
-          onOpenAutoFocus={e => e.preventDefault()}
-        >
-          <div className="flex flex-col max-h-[80vh]">
-            <DialogHeader className="bg-background p-4 border-b">
-              <DialogTitle className="text-lg text-foreground">
-                Edit parser
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
-              {(() => {
-                const found = parserRows.find(p => p.id === editParserId)
-                if (!found) return null
-                const schema = PARSER_SCHEMAS[found.name]
-                if (!schema) {
-                  return (
+          {/* Manage Datasets Modal */}
+          <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
+            <DialogContent className="sm:max-w-2xl p-0">
+              <div className="flex flex-col max-h-[70vh]">
+                <DialogHeader className="bg-background p-4 border-b">
+                  <DialogTitle className="text-lg text-foreground">
+                    Assign to dataset(s)
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-2">
+                  <div className="text-xs text-muted-foreground">
+                    Datasets always have a processing strategy. You can't
+                    unassign here. Select additional datasets to assign to this
+                    strategy. You can also assign datasets to other strategies
+                    from those strategy pages.
+                  </div>
+                  {!allDatasets || allDatasets.length === 0 ? (
                     <div className="text-sm text-muted-foreground">
-                      No schema found for this parser type.
+                      No datasets found in this project.
                     </div>
-                  )
-                }
-                return (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-                      <div>
-                        <div className="text-sm font-medium text-foreground">
-                          {getFriendlyParserName(found.name)}
+                  ) : (
+                    <ul className="rounded-md border border-border divide-y divide-border">
+                      {allDatasets.map(ds => {
+                        const name = ds.name
+                        const current = (ds as any).rag_strategy
+                        const selected =
+                          selectedDatasets.has(name) || current === strategyName
+                        const assignedElsewhere =
+                          current &&
+                          current !== 'auto' &&
+                          current !== strategyName
+                        return (
+                          <li
+                            key={name}
+                            className={`flex items-center gap-3 px-3 py-3 hover:bg-muted/30 ${
+                              current === strategyName
+                                ? 'opacity-70 cursor-not-allowed'
+                                : 'cursor-pointer'
+                            }`}
+                            aria-disabled={current === strategyName}
+                            onClick={() => {
+                              if (current === strategyName) return
+                              toggleDataset(name)
+                            }}
+                          >
+                            <Checkbox
+                              checked={selected}
+                              onCheckedChange={() => toggleDataset(name)}
+                              onClick={e => e.stopPropagation()}
+                              disabled={current === strategyName}
+                              title={
+                                current === strategyName
+                                  ? 'This dataset cannot be unassigned from this strategy.'
+                                  : assignedElsewhere
+                                    ? 'This dataset is already assigned to another strategy and cannot be assigned here.'
+                                    : undefined
+                              }
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {name}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {assignedElsewhere
+                                  ? `Currently: ${current}`
+                                  : current
+                                    ? `Currently: ${current}`
+                                    : ''}
+                              </div>
+                            </div>
+                            {selected ? (
+                              <Badge
+                                variant="default"
+                                size="sm"
+                                className="rounded-xl"
+                              >
+                                Selected
+                              </Badge>
+                            ) : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
+                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    onClick={() => setIsManageOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90"
+                    onClick={saveAssignments}
+                    type="button"
+                  >
+                    Save assignments
+                  </button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Reprocess Confirmation Modal */}
+          <Dialog open={isReprocessOpen} onOpenChange={setIsReprocessOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg text-foreground">
+                  Reprocess now?
+                </DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-muted-foreground">
+                Reprocess these dataset(s) with "{strategyName}" now?
+              </div>
+              {/* Show per-dataset errors if any */}
+              {reprocessErrors && Object.keys(reprocessErrors).length > 0 ? (
+                <div className="mt-2 rounded-md border border-destructive bg-destructive/10 p-2 text-sm">
+                  <div className="font-semibold text-destructive mb-1">
+                    Some datasets failed to reprocess:
+                  </div>
+                  <ul className="list-disc ml-4">
+                    {Object.entries(reprocessErrors).map(
+                      ([datasetId, errorMsg]) => (
+                        <li key={datasetId}>
+                          <span className="font-medium">
+                            {getDatasetNameById(datasetId)}:
+                          </span>{' '}
+                          {String(errorMsg)}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              ) : null}
+              {pendingAdded.length > 0 ? (
+                <div className="mt-2 rounded-md border border-border bg-accent/10 p-2 text-sm">
+                  {pendingAdded.map(n => (
+                    <div key={n} className="py-0.5">
+                      {n}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <DialogFooter className="flex items-center gap-2">
+                <button
+                  className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                  onClick={() => setIsReprocessOpen(false)}
+                  type="button"
+                >
+                  Skip for now
+                </button>
+                <button
+                  className="px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90"
+                  onClick={async () => {
+                    if (!activeProject?.namespace || !activeProject?.project) {
+                      setIsReprocessOpen(false)
+                      return
+                    }
+                    const errors: { [datasetId: string]: unknown } = {}
+                    await Promise.all(
+                      pendingAdded.map(async n => {
+                        try {
+                          await reIngestMutation.mutateAsync({
+                            namespace: activeProject.namespace!,
+                            project: activeProject.project!,
+                            dataset: n,
+                          })
+                        } catch (err) {
+                          errors[n] = (err as any)?.message || 'Unknown error'
+                        }
+                      })
+                    )
+                    if (Object.keys(errors).length > 0) {
+                      setReprocessErrors(errors)
+                    } else {
+                      toast({
+                        message: 'Reprocessing started…',
+                        variant: 'default',
+                      })
+                      setIsReprocessOpen(false)
+                    }
+                  }}
+                  type="button"
+                >
+                  Reprocess now
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Processing editors */}
+          {/* Tabs header outside card */}
+          <Tabs
+            activeTab={activeTab}
+            setActiveTab={t => setActiveTab(t as 'parsers' | 'extractors')}
+            tabs={[
+              { id: 'parsers', label: `Parsers (${parserRows.length})` },
+              {
+                id: 'extractors',
+                label: `Extractors (${extractorRows.length})`,
+              },
+            ]}
+          />
+          <section className="rounded-lg border border-border bg-card p-4">
+            {activeTab === 'parsers' ? (
+              <div className="flex flex-col gap-2">
+                {parserRows.map(row => {
+                  const open = openRows.has(row.id)
+                  return (
+                    <div
+                      key={row.id}
+                      className="rounded-lg border border-border bg-card p-3 hover:bg-accent/20 transition-colors"
+                    >
+                      <div
+                        className="w-full flex items-center gap-2 text-left cursor-pointer"
+                        onClick={() => toggleRow(row.id)}
+                        aria-expanded={open}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleRow(row.id)
+                          }
+                        }}
+                      >
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`}
+                        />
+                        <div className="text-sm font-medium w-[280px] max-w-[38vw] truncate">
+                          {getFriendlyParserName(row.name)}
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {schema.description}
+                        <div className="hidden md:block flex-1 min-w-[220px] text-left pr-4">
+                          <span className="text-sm text-muted-foreground">
+                            Good for:
+                          </span>{' '}
+                          <span className="text-sm font-medium text-foreground align-bottom whitespace-normal break-words">
+                            {summarizeFileTypes(row.include) || '—'}
+                          </span>
+                        </div>
+                        <Badge
+                          variant={getPriorityVariant(row.priority)}
+                          size="sm"
+                          className="rounded-xl mr-2 ml-6"
+                        >
+                          Priority: {row.priority}
+                        </Badge>
+                        <div className="flex items-center gap-1 ml-auto">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Configure parser"
+                            onClick={e => {
+                              e.stopPropagation()
+                              openEditParser(row.id)
+                            }}
+                          >
+                            <Settings className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Remove parser"
+                            onClick={e => {
+                              e.stopPropagation()
+                              openDeleteParser(row.id)
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
+                      {open ? (
+                        <div className="mt-2 rounded-md border border-border bg-accent/10 p-2 text-sm">
+                          <div className="text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              Parser type:
+                            </span>{' '}
+                            {row.name}
+                          </div>
+                          <div className="text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              Include:
+                            </span>{' '}
+                            {row.include}{' '}
+                            <span className="ml-2 font-medium text-foreground">
+                              Exclude:
+                            </span>{' '}
+                            {row.exclude}
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            {row.summary}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {extractorRows.map(row => {
+                  const open = openRows.has(row.id)
+                  return (
+                    <div
+                      key={row.id}
+                      className="rounded-lg border border-border bg-card p-3 hover:bg-accent/20 transition-colors"
+                    >
+                      <div
+                        className="w-full flex items-center gap-2 text-left cursor-pointer"
+                        onClick={() => toggleRow(row.id)}
+                        aria-expanded={open}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleRow(row.id)
+                          }
+                        }}
+                      >
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`}
+                        />
+                        <div className="text-sm font-medium w-[280px] max-w-[38vw] truncate">
+                          {getFriendlyExtractorName(row.name)}
+                        </div>
+                        <div className="hidden md:block flex-1 min-w-[220px] text-left pr-4">
+                          <span className="text-sm text-muted-foreground">
+                            Applies to:
+                          </span>{' '}
+                          <span className="text-sm font-medium text-foreground whitespace-normal break-words">
+                            {row.applyTo || 'All (*)'}
+                          </span>
+                        </div>
+                        <Badge
+                          variant={getPriorityVariant(row.priority)}
+                          size="sm"
+                          className="rounded-xl mr-2 ml-6"
+                        >
+                          Priority: {row.priority}
+                        </Badge>
+                        <div className="flex items-center gap-1 ml-auto">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Configure extractor"
+                            onClick={e => {
+                              e.stopPropagation()
+                              openEditExtractor(row.id)
+                            }}
+                          >
+                            <Settings className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Remove extractor"
+                            onClick={e => {
+                              e.stopPropagation()
+                              openDeleteExtractor(row.id)
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {open ? (
+                        <div className="mt-2 rounded-md border border-border bg-accent/10 p-2 text-sm">
+                          <div className="text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              Apply to:
+                            </span>{' '}
+                            {row.applyTo}
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            {row.summary}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+
+          {activeTab === 'parsers' ? (
+            <div className="mt-2 text-sm text-muted-foreground">
+              Parsers convert different file formats (PDF, Word, Excel, etc.)
+              into text that AI systems can read and understand.
+            </div>
+          ) : null}
+          {activeTab === 'extractors' ? (
+            <div className="mt-2 text-sm text-muted-foreground">
+              Extractors pull out specific types of information (like dates,
+              names, tables, or keywords) from the parsed text to make it more
+              useful for AI retrieval and analysis.
+            </div>
+          ) : null}
+
+          {/* Add Parser Modal */}
+          <Dialog open={isAddParserOpen} onOpenChange={setIsAddParserOpen}>
+            <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0">
+              <div className="flex flex-col max-h-[80vh]">
+                <DialogHeader className="bg-background p-4 border-b">
+                  <DialogTitle className="text-lg text-foreground">
+                    Add parser
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
+                  <div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Label className="text-xs text-muted-foreground">
+                        Parser type
+                      </Label>
+                      <Label className="text-xs text-muted-foreground">
+                        Priority
+                      </Label>
+                    </div>
+                    <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
                       <div>
-                        <Label className="text-xs text-muted-foreground mb-0.5">
-                          Priority
-                        </Label>
+                        {(() => {
+                          const existing = new Set(parserRows.map(p => p.name))
+                          const available = ORDERED_PARSER_TYPES.filter(
+                            t => !existing.has(t) && PARSER_SCHEMAS[t]
+                          )
+                          if (!newParserType && available.length > 0) {
+                            const first = available[0]
+                            setTimeout(() => {
+                              setNewParserType(first)
+                              setNewParserConfig(
+                                getDefaultConfigForParser(first)
+                              )
+                              setNewParserIncludes(
+                                getDefaultIncludePatternsForParser(first)
+                              )
+                            }, 0)
+                          }
+                          return (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-between"
+                                >
+                                  {newParserType
+                                    ? getFriendlyParserName(newParserType)
+                                    : available[0]
+                                      ? getFriendlyParserName(available[0])
+                                      : 'No parsers available'}
+                                  <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                {available.length === 0 ? (
+                                  <DropdownMenuItem disabled>
+                                    No parsers available
+                                  </DropdownMenuItem>
+                                ) : (
+                                  available.map(t => (
+                                    <DropdownMenuItem
+                                      key={t}
+                                      onClick={() => {
+                                        setNewParserType(t)
+                                        setNewParserConfig(
+                                          getDefaultConfigForParser(t)
+                                        )
+                                        setNewParserIncludes(
+                                          getDefaultIncludePatternsForParser(t)
+                                        )
+                                      }}
+                                    >
+                                      {getFriendlyParserName(t)}
+                                    </DropdownMenuItem>
+                                  ))
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )
+                        })()}
+                        {newParserType && PARSER_SCHEMAS[newParserType] ? (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {PARSER_SCHEMAS[newParserType].description}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div>
                         <Input
                           type="number"
                           className="bg-background w-40"
-                          aria-label="Priority"
-                          value={editParserPriority}
+                          value={newParserPriority}
                           min={0}
                           onChange={e => {
                             const raw = e.target.value
-                            setEditParserPriority(raw)
+                            setNewParserPriority(raw)
                             const n = Number(raw)
-                            setEditParserPriorityError(
+                            setNewParserPriorityError(
                               !Number.isInteger(n) || n < 0 || n > MAX_PRIORITY
                             )
                           }}
                         />
-                        {editParserPriorityError ? (
+                        {newParserPriorityError ? (
                           <div className="text-xs text-destructive mt-1">
                             Priority must be an integer between 0 and{' '}
                             {MAX_PRIORITY}
@@ -1868,531 +1787,666 @@ function StrategyView() {
                         ) : null}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-border bg-accent/10 p-3">
-                      <div className="text-sm font-medium mb-2">
-                        {schema.title}
+                  </div>
+                  {newParserType && PARSER_SCHEMAS[newParserType] ? (
+                    <>
+                      <div className="rounded-lg border border-border bg-accent/10 p-3">
+                        <div className="text-sm font-medium mb-2">
+                          {PARSER_SCHEMAS[newParserType].title}
+                        </div>
+                        <ParserSettingsForm
+                          schema={PARSER_SCHEMAS[newParserType]}
+                          value={newParserConfig}
+                          onChange={setNewParserConfig}
+                        />
                       </div>
-                      <ParserSettingsForm
-                        schema={schema}
-                        value={editParserConfig}
-                        onChange={setEditParserConfig}
+                      <PatternEditor
+                        label="Included files / file types"
+                        description="Specify which files this parser should process - file patterns, extensions, or specific filenames"
+                        placeholder="*.pdf, data_*, report.docx"
+                        value={newParserIncludes}
+                        onChange={setNewParserIncludes}
+                        isSuspicious={isSuspiciousPattern}
                       />
-                    </div>
-                    <PatternEditor
-                      label="Included files / file types"
-                      description="Specify which files this parser should process - file patterns, extensions, or specific filenames"
-                      placeholder="*.pdf, data_*, report.docx"
-                      value={editParserIncludes}
-                      onChange={setEditParserIncludes}
-                      isSuspicious={isSuspiciousPattern}
-                    />
-                  </>
-                )
-              })()}
-            </div>
-            <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
-              <div className="mr-auto">
+                    </>
+                  ) : null}
+                </div>
+                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    onClick={() => setIsAddParserOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={`px-3 py-2 rounded-md text-sm ${
+                      newParserType.trim().length > 0 && !newParserPriorityError
+                        ? 'bg-primary text-primary-foreground hover:opacity-90'
+                        : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
+                    }`}
+                    onClick={handleCreateParser}
+                    disabled={
+                      newParserType.trim().length === 0 ||
+                      newParserPriorityError
+                    }
+                    type="button"
+                  >
+                    Add parser
+                  </button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Parser Modal (config only) */}
+          <Dialog open={isEditParserOpen} onOpenChange={setIsEditParserOpen}>
+            <DialogContent
+              className="sm:max-w-3xl lg:max-w-4xl p-0"
+              onOpenAutoFocus={e => e.preventDefault()}
+            >
+              <div className="flex flex-col max-h-[80vh]">
+                <DialogHeader className="bg-background p-4 border-b">
+                  <DialogTitle className="text-lg text-foreground">
+                    Edit parser
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
+                  {(() => {
+                    const found = parserRows.find(p => p.id === editParserId)
+                    if (!found) return null
+                    const schema = PARSER_SCHEMAS[found.name]
+                    if (!schema) {
+                      return (
+                        <div className="text-sm text-muted-foreground">
+                          No schema found for this parser type.
+                        </div>
+                      )
+                    }
+                    return (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                          <div>
+                            <div className="text-sm font-medium text-foreground">
+                              {getFriendlyParserName(found.name)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {schema.description}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-0.5">
+                              Priority
+                            </Label>
+                            <Input
+                              type="number"
+                              className="bg-background w-40"
+                              aria-label="Priority"
+                              value={editParserPriority}
+                              min={0}
+                              onChange={e => {
+                                const raw = e.target.value
+                                setEditParserPriority(raw)
+                                const n = Number(raw)
+                                setEditParserPriorityError(
+                                  !Number.isInteger(n) ||
+                                    n < 0 ||
+                                    n > MAX_PRIORITY
+                                )
+                              }}
+                            />
+                            {editParserPriorityError ? (
+                              <div className="text-xs text-destructive mt-1">
+                                Priority must be an integer between 0 and{' '}
+                                {MAX_PRIORITY}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-accent/10 p-3">
+                          <div className="text-sm font-medium mb-2">
+                            {schema.title}
+                          </div>
+                          <ParserSettingsForm
+                            schema={schema}
+                            value={editParserConfig}
+                            onChange={setEditParserConfig}
+                          />
+                        </div>
+                        <PatternEditor
+                          label="Included files / file types"
+                          description="Specify which files this parser should process - file patterns, extensions, or specific filenames"
+                          placeholder="*.pdf, data_*, report.docx"
+                          value={editParserIncludes}
+                          onChange={setEditParserIncludes}
+                          isSuspicious={isSuspiciousPattern}
+                        />
+                      </>
+                    )
+                  })()}
+                </div>
+                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
+                  <div className="mr-auto">
+                    <button
+                      className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+                      onClick={() => {
+                        if (!editParserId) return
+                        openDeleteParser(editParserId)
+                      }}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    onClick={() => setIsEditParserOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 ${
+                      editParserPriorityError
+                        ? 'opacity-50 cursor-not-allowed'
+                        : ''
+                    }`}
+                    onClick={handleUpdateParser}
+                    type="button"
+                    disabled={editParserPriorityError}
+                  >
+                    Save changes
+                  </button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Parser Modal */}
+          <Dialog
+            open={isDeleteParserOpen}
+            onOpenChange={setIsDeleteParserOpen}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg text-foreground">
+                  Delete parser
+                </DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-muted-foreground">
+                Are you sure you want to delete this parser? This action cannot
+                be undone.
+              </div>
+              <DialogFooter className="flex items-center gap-2">
                 <button
-                  className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
-                  onClick={() => {
-                    if (!editParserId) return
-                    openDeleteParser(editParserId)
-                  }}
+                  className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                  onClick={() => setIsDeleteParserOpen(false)}
                   type="button"
                 >
-                  Remove
+                  Cancel
                 </button>
-              </div>
-              <button
-                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-                onClick={() => setIsEditParserOpen(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 ${
-                  editParserPriorityError ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-                onClick={handleUpdateParser}
-                type="button"
-                disabled={editParserPriorityError}
-              >
-                Save changes
-              </button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+                <button
+                  className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+                  onClick={handleDeleteParser}
+                  type="button"
+                >
+                  Delete
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-      {/* Delete Parser Modal */}
-      <Dialog open={isDeleteParserOpen} onOpenChange={setIsDeleteParserOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg text-foreground">
-              Delete parser
-            </DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            Are you sure you want to delete this parser? This action cannot be
-            undone.
-          </div>
-          <DialogFooter className="flex items-center gap-2">
-            <button
-              className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-              onClick={() => setIsDeleteParserOpen(false)}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
-              onClick={handleDeleteParser}
-              type="button"
-            >
-              Delete
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Extractor Modal (schema-driven) */}
-      <Dialog open={isAddExtractorOpen} onOpenChange={setIsAddExtractorOpen}>
-        <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0">
-          <div className="flex flex-col max-h-[80vh]">
-            <DialogHeader className="bg-background p-4 border-b">
-              <DialogTitle className="text-lg text-foreground">
-                Add extractor
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
-              <div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Label className="text-xs text-muted-foreground">
-                    Extractor type
-                  </Label>
-                  <Label className="text-xs text-muted-foreground">
-                    Priority
-                  </Label>
-                </div>
-                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+          {/* Add Extractor Modal (schema-driven) */}
+          <Dialog
+            open={isAddExtractorOpen}
+            onOpenChange={setIsAddExtractorOpen}
+          >
+            <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0">
+              <div className="flex flex-col max-h-[80vh]">
+                <DialogHeader className="bg-background p-4 border-b">
+                  <DialogTitle className="text-lg text-foreground">
+                    Add extractor
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
                   <div>
-                    {(() => {
-                      const existing = new Set(extractorRows.map(e => e.name))
-                      const available = ORDERED_EXTRACTOR_TYPES.filter(
-                        t => !existing.has(t) && EXTRACTOR_SCHEMAS[t]
-                      )
-                      if (!newExtractorType && available.length > 0) {
-                        const first = available[0]
-                        setTimeout(() => {
-                          setNewExtractorType(first)
-                          setNewExtractorConfig(
-                            getDefaultConfigForExtractor(first)
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Label className="text-xs text-muted-foreground">
+                        Extractor type
+                      </Label>
+                      <Label className="text-xs text-muted-foreground">
+                        Priority
+                      </Label>
+                    </div>
+                    <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                      <div>
+                        {(() => {
+                          const existing = new Set(
+                            extractorRows.map(e => e.name)
                           )
-                        }, 0)
-                      }
-                      return (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-between"
-                            >
-                              {newExtractorType
-                                ? getFriendlyExtractorName(newExtractorType)
-                                : available[0]
-                                  ? getFriendlyExtractorName(available[0])
-                                  : 'No extractors available'}
-                              <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            {available.length === 0 ? (
-                              <DropdownMenuItem disabled>
-                                No extractors available
-                              </DropdownMenuItem>
-                            ) : (
-                              available.map(t => (
-                                <DropdownMenuItem
-                                  key={t}
-                                  onClick={() => {
-                                    setNewExtractorType(t)
-                                    setNewExtractorConfig(
-                                      getDefaultConfigForExtractor(t)
-                                    )
-                                  }}
+                          const available = ORDERED_EXTRACTOR_TYPES.filter(
+                            t => !existing.has(t) && EXTRACTOR_SCHEMAS[t]
+                          )
+                          if (!newExtractorType && available.length > 0) {
+                            const first = available[0]
+                            setTimeout(() => {
+                              setNewExtractorType(first)
+                              setNewExtractorConfig(
+                                getDefaultConfigForExtractor(first)
+                              )
+                            }, 0)
+                          }
+                          return (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-between"
                                 >
-                                  {getFriendlyExtractorName(t)}
-                                </DropdownMenuItem>
-                              ))
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )
-                    })()}
-                  </div>
-                  <div>
-                    <Input
-                      type="number"
-                      className="bg-background w-40"
-                      value={newExtractorPriority}
-                      min={0}
-                      onChange={e => {
-                        const raw = e.target.value
-                        setNewExtractorPriority(raw)
-                        const n = Number(raw)
-                        setNewExtractorPriorityError(
-                          !Number.isInteger(n) || n < 0 || n > MAX_PRIORITY
-                        )
-                      }}
-                    />
-                    {newExtractorPriorityError ? (
-                      <div className="text-xs text-destructive mt-1">
-                        Priority must be an integer between 0 and {MAX_PRIORITY}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              {newExtractorType && EXTRACTOR_SCHEMAS[newExtractorType] ? (
-                <>
-                  <div className="text-xs text-muted-foreground">
-                    {EXTRACTOR_SCHEMAS[newExtractorType].description}
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">
-                      Priority
-                    </Label>
-                    <Input
-                      type="number"
-                      className="bg-background w-40"
-                      value={newExtractorPriority}
-                      min={0}
-                      onChange={e => {
-                        const raw = e.target.value
-                        setNewExtractorPriority(raw)
-                        const n = Number(raw)
-                        setNewExtractorPriorityError(
-                          !Number.isInteger(n) || n < 0 || n > MAX_PRIORITY
-                        )
-                      }}
-                    />
-                    {newExtractorPriorityError ? (
-                      <div className="text-xs text-destructive mt-1">
-                        Priority must be an integer between 0 and {MAX_PRIORITY}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="rounded-lg border border-border bg-accent/10 p-3">
-                    <div className="text-sm font-medium mb-2">
-                      {EXTRACTOR_SCHEMAS[newExtractorType].title}
-                    </div>
-                    <ExtractorSettingsForm
-                      schema={EXTRACTOR_SCHEMAS[newExtractorType]}
-                      value={newExtractorConfig}
-                      onChange={setNewExtractorConfig}
-                    />
-                  </div>
-                  <PatternEditor
-                    label="Applies to files / file types"
-                    description="Specify which files this extractor should run on - use '*' for all parsed content, or limit by patterns"
-                    placeholder="*, *.pdf, *.txt, data_*"
-                    value={newExtractorApplies}
-                    onChange={setNewExtractorApplies}
-                    isSuspicious={isSuspiciousPattern}
-                  />
-                </>
-              ) : null}
-            </div>
-            <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
-              <button
-                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-                onClick={() => setIsAddExtractorOpen(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm ${
-                  newExtractorType.trim().length > 0 &&
-                  !newExtractorPriorityError
-                    ? 'bg-primary text-primary-foreground hover:opacity-90'
-                    : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
-                }`}
-                onClick={handleCreateExtractor}
-                disabled={
-                  newExtractorType.trim().length === 0 ||
-                  newExtractorPriorityError
-                }
-                type="button"
-              >
-                Add extractor
-              </button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Extractor Modal (schema-driven) */}
-      <Dialog open={isEditExtractorOpen} onOpenChange={setIsEditExtractorOpen}>
-        <DialogContent
-          className="sm:max-w-3xl lg:max-w-4xl p-0"
-          onOpenAutoFocus={e => e.preventDefault()}
-        >
-          <div className="flex flex-col max-h-[80vh]">
-            <DialogHeader className="bg-background p-4 border-b">
-              <DialogTitle className="text-lg text-foreground">
-                Edit extractor
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
-              {(() => {
-                const found = extractorRows.find(e => e.id === editExtractorId)
-                if (!found) return null
-                const schema = EXTRACTOR_SCHEMAS[found.name]
-                if (!schema) {
-                  return (
-                    <div className="text-sm text-muted-foreground">
-                      No schema found for this extractor type.
-                    </div>
-                  )
-                }
-                return (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-                      <div>
-                        <div className="text-sm font-medium text-foreground">
-                          {getFriendlyExtractorName(found.name)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {schema.description}
-                        </div>
+                                  {newExtractorType
+                                    ? getFriendlyExtractorName(newExtractorType)
+                                    : available[0]
+                                      ? getFriendlyExtractorName(available[0])
+                                      : 'No extractors available'}
+                                  <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                {available.length === 0 ? (
+                                  <DropdownMenuItem disabled>
+                                    No extractors available
+                                  </DropdownMenuItem>
+                                ) : (
+                                  available.map(t => (
+                                    <DropdownMenuItem
+                                      key={t}
+                                      onClick={() => {
+                                        setNewExtractorType(t)
+                                        setNewExtractorConfig(
+                                          getDefaultConfigForExtractor(t)
+                                        )
+                                      }}
+                                    >
+                                      {getFriendlyExtractorName(t)}
+                                    </DropdownMenuItem>
+                                  ))
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )
+                        })()}
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground mb-0.5">
+                        <Input
+                          type="number"
+                          className="bg-background w-40"
+                          value={newExtractorPriority}
+                          min={0}
+                          onChange={e => {
+                            const raw = e.target.value
+                            setNewExtractorPriority(raw)
+                            const n = Number(raw)
+                            setNewExtractorPriorityError(
+                              !Number.isInteger(n) || n < 0 || n > MAX_PRIORITY
+                            )
+                          }}
+                        />
+                        {newExtractorPriorityError ? (
+                          <div className="text-xs text-destructive mt-1">
+                            Priority must be an integer between 0 and{' '}
+                            {MAX_PRIORITY}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  {newExtractorType && EXTRACTOR_SCHEMAS[newExtractorType] ? (
+                    <>
+                      <div className="text-xs text-muted-foreground">
+                        {EXTRACTOR_SCHEMAS[newExtractorType].description}
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
                           Priority
                         </Label>
                         <Input
                           type="number"
                           className="bg-background w-40"
-                          value={editExtractorPriority}
+                          value={newExtractorPriority}
                           min={0}
                           onChange={e => {
                             const raw = e.target.value
-                            setEditExtractorPriority(raw)
+                            setNewExtractorPriority(raw)
                             const n = Number(raw)
-                            setEditExtractorPriorityError(
-                              Number.isFinite(n) && n < 0
+                            setNewExtractorPriorityError(
+                              !Number.isInteger(n) || n < 0 || n > MAX_PRIORITY
                             )
                           }}
                         />
-                        {editExtractorPriorityError ? (
+                        {newExtractorPriorityError ? (
                           <div className="text-xs text-destructive mt-1">
-                            Priority cannot be less than 0
+                            Priority must be an integer between 0 and{' '}
+                            {MAX_PRIORITY}
                           </div>
                         ) : null}
                       </div>
-                    </div>
-                    <div className="rounded-lg border border-border bg-accent/10 p-3">
-                      <div className="text-sm font-medium mb-2">
-                        {schema.title}
+                      <div className="rounded-lg border border-border bg-accent/10 p-3">
+                        <div className="text-sm font-medium mb-2">
+                          {EXTRACTOR_SCHEMAS[newExtractorType].title}
+                        </div>
+                        <ExtractorSettingsForm
+                          schema={EXTRACTOR_SCHEMAS[newExtractorType]}
+                          value={newExtractorConfig}
+                          onChange={setNewExtractorConfig}
+                        />
                       </div>
-                      <ExtractorSettingsForm
-                        schema={schema}
-                        value={editExtractorConfig}
-                        onChange={setEditExtractorConfig}
+                      <PatternEditor
+                        label="Applies to files / file types"
+                        description="Specify which files this extractor should run on - use '*' for all parsed content, or limit by patterns"
+                        placeholder="*, *.pdf, *.txt, data_*"
+                        value={newExtractorApplies}
+                        onChange={setNewExtractorApplies}
+                        isSuspicious={isSuspiciousPattern}
                       />
-                    </div>
-                    <PatternEditor
-                      label="Applies to files / file types"
-                      description="Specify which files this extractor should run on - use '*' for all parsed content, or limit by patterns"
-                      placeholder="*, *.pdf, *.txt, data_*"
-                      value={editExtractorApplies}
-                      onChange={setEditExtractorApplies}
-                      isSuspicious={isSuspiciousPattern}
-                    />
-                  </>
-                )
-              })()}
-            </div>
-            <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
-              <div className="mr-auto">
+                    </>
+                  ) : null}
+                </div>
+                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    onClick={() => setIsAddExtractorOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={`px-3 py-2 rounded-md text-sm ${
+                      newExtractorType.trim().length > 0 &&
+                      !newExtractorPriorityError
+                        ? 'bg-primary text-primary-foreground hover:opacity-90'
+                        : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
+                    }`}
+                    onClick={handleCreateExtractor}
+                    disabled={
+                      newExtractorType.trim().length === 0 ||
+                      newExtractorPriorityError
+                    }
+                    type="button"
+                  >
+                    Add extractor
+                  </button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Extractor Modal (schema-driven) */}
+          <Dialog
+            open={isEditExtractorOpen}
+            onOpenChange={setIsEditExtractorOpen}
+          >
+            <DialogContent
+              className="sm:max-w-3xl lg:max-w-4xl p-0"
+              onOpenAutoFocus={e => e.preventDefault()}
+            >
+              <div className="flex flex-col max-h-[80vh]">
+                <DialogHeader className="bg-background p-4 border-b">
+                  <DialogTitle className="text-lg text-foreground">
+                    Edit extractor
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
+                  {(() => {
+                    const found = extractorRows.find(
+                      e => e.id === editExtractorId
+                    )
+                    if (!found) return null
+                    const schema = EXTRACTOR_SCHEMAS[found.name]
+                    if (!schema) {
+                      return (
+                        <div className="text-sm text-muted-foreground">
+                          No schema found for this extractor type.
+                        </div>
+                      )
+                    }
+                    return (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                          <div>
+                            <div className="text-sm font-medium text-foreground">
+                              {getFriendlyExtractorName(found.name)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {schema.description}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-0.5">
+                              Priority
+                            </Label>
+                            <Input
+                              type="number"
+                              className="bg-background w-40"
+                              value={editExtractorPriority}
+                              min={0}
+                              onChange={e => {
+                                const raw = e.target.value
+                                setEditExtractorPriority(raw)
+                                const n = Number(raw)
+                                setEditExtractorPriorityError(
+                                  Number.isFinite(n) && n < 0
+                                )
+                              }}
+                            />
+                            {editExtractorPriorityError ? (
+                              <div className="text-xs text-destructive mt-1">
+                                Priority cannot be less than 0
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-accent/10 p-3">
+                          <div className="text-sm font-medium mb-2">
+                            {schema.title}
+                          </div>
+                          <ExtractorSettingsForm
+                            schema={schema}
+                            value={editExtractorConfig}
+                            onChange={setEditExtractorConfig}
+                          />
+                        </div>
+                        <PatternEditor
+                          label="Applies to files / file types"
+                          description="Specify which files this extractor should run on - use '*' for all parsed content, or limit by patterns"
+                          placeholder="*, *.pdf, *.txt, data_*"
+                          value={editExtractorApplies}
+                          onChange={setEditExtractorApplies}
+                          isSuspicious={isSuspiciousPattern}
+                        />
+                      </>
+                    )
+                  })()}
+                </div>
+                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
+                  <div className="mr-auto">
+                    <button
+                      className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+                      onClick={() => {
+                        if (!editExtractorId) return
+                        setDeleteExtractorId(editExtractorId)
+                        setIsDeleteExtractorOpen(true)
+                      }}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    onClick={() => setIsEditExtractorOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 ${
+                      editExtractorPriorityError
+                        ? 'opacity-50 cursor-not-allowed'
+                        : ''
+                    }`}
+                    onClick={handleUpdateExtractor}
+                    type="button"
+                    disabled={editExtractorPriorityError}
+                  >
+                    Save changes
+                  </button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Extractor Modal */}
+          <Dialog
+            open={isDeleteExtractorOpen}
+            onOpenChange={setIsDeleteExtractorOpen}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg text-foreground">
+                  Delete extractor
+                </DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-muted-foreground">
+                Are you sure you want to delete this extractor? This action
+                cannot be undone.
+              </div>
+              <DialogFooter className="flex items-center gap-2">
+                <button
+                  className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                  onClick={() => setIsDeleteExtractorOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+                  onClick={handleDeleteExtractor}
+                  type="button"
+                >
+                  Delete
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          {/* Edit Strategy Modal */}
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+            <DialogContent className="sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle className="text-lg text-foreground">
+                  Edit strategy
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col gap-3 pt-1">
+                <div>
+                  <label className="text-xs text-muted-foreground">
+                    Strategy name
+                  </label>
+                  <input
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                    placeholder="Enter name"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">
+                    Description
+                  </label>
+                  <textarea
+                    rows={4}
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                    placeholder="Add a brief description"
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex items-center gap-2">
                 <button
                   className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
                   onClick={() => {
-                    if (!editExtractorId) return
-                    setDeleteExtractorId(editExtractorId)
-                    setIsDeleteExtractorOpen(true)
+                    if (!strategyId) return
+                    const ok = confirm(
+                      'Are you sure you want to delete this strategy?'
+                    )
+                    if (ok) {
+                      try {
+                        localStorage.removeItem(
+                          `lf_strategy_name_override_${strategyId}`
+                        )
+                        localStorage.removeItem(
+                          `lf_strategy_description_${strategyId}`
+                        )
+                        // Mark strategy as deleted so it disappears from lists
+                        const raw = localStorage.getItem('lf_strategy_deleted')
+                        const arr = raw ? (JSON.parse(raw) as string[]) : []
+                        const set = new Set(arr)
+                        set.add(strategyId)
+                        localStorage.setItem(
+                          'lf_strategy_deleted',
+                          JSON.stringify(Array.from(set))
+                        )
+                      } catch {}
+                      setIsEditOpen(false)
+                      setStrategyMetaTick(t => t + 1)
+                      navigate('/chat/rag')
+                      toast({ message: 'Strategy deleted', variant: 'default' })
+                    }
                   }}
                   type="button"
                 >
-                  Remove
+                  Delete
                 </button>
-              </div>
-              <button
-                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-                onClick={() => setIsEditExtractorOpen(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 ${
-                  editExtractorPriorityError
-                    ? 'opacity-50 cursor-not-allowed'
-                    : ''
-                }`}
-                onClick={handleUpdateExtractor}
-                type="button"
-                disabled={editExtractorPriorityError}
-              >
-                Save changes
-              </button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    onClick={() => setIsEditOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={`px-3 py-2 rounded-md text-sm ${editName.trim().length > 0 ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
+                    onClick={() => {
+                      if (!strategyId || editName.trim().length === 0) return
+                      try {
+                        localStorage.setItem(
+                          `lf_strategy_name_override_${strategyId}`,
+                          editName.trim()
+                        )
+                        localStorage.setItem(
+                          `lf_strategy_description_${strategyId}`,
+                          editDescription
+                        )
+                      } catch {}
+                      setIsEditOpen(false)
+                      setStrategyMetaTick(t => t + 1)
+                    }}
+                    disabled={editName.trim().length === 0}
+                    type="button"
+                  >
+                    Save
+                  </button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-      {/* Delete Extractor Modal */}
-      <Dialog
-        open={isDeleteExtractorOpen}
-        onOpenChange={setIsDeleteExtractorOpen}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg text-foreground">
-              Delete extractor
-            </DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            Are you sure you want to delete this extractor? This action cannot
-            be undone.
-          </div>
-          <DialogFooter className="flex items-center gap-2">
-            <button
-              className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-              onClick={() => setIsDeleteExtractorOpen(false)}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
-              onClick={handleDeleteExtractor}
-              type="button"
-            >
-              Delete
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* Edit Strategy Modal */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg text-foreground">
-              Edit strategy
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 pt-1">
-            <div>
-              <label className="text-xs text-muted-foreground">
-                Strategy name
-              </label>
-              <input
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                placeholder="Enter name"
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">
-                Description
-              </label>
-              <textarea
-                rows={4}
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                placeholder="Add a brief description"
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex items-center gap-2">
-            <button
-              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
-              onClick={() => {
-                if (!strategyId) return
-                const ok = confirm(
-                  'Are you sure you want to delete this strategy?'
-                )
-                if (ok) {
-                  try {
-                    localStorage.removeItem(
-                      `lf_strategy_name_override_${strategyId}`
-                    )
-                    localStorage.removeItem(
-                      `lf_strategy_description_${strategyId}`
-                    )
-                    // Mark strategy as deleted so it disappears from lists
-                    const raw = localStorage.getItem('lf_strategy_deleted')
-                    const arr = raw ? (JSON.parse(raw) as string[]) : []
-                    const set = new Set(arr)
-                    set.add(strategyId)
-                    localStorage.setItem(
-                      'lf_strategy_deleted',
-                      JSON.stringify(Array.from(set))
-                    )
-                  } catch {}
-                  setIsEditOpen(false)
-                  setStrategyMetaTick(t => t + 1)
-                  navigate('/chat/rag')
-                  toast({ message: 'Strategy deleted', variant: 'default' })
-                }
-              }}
-              type="button"
-            >
-              Delete
-            </button>
-            <div className="flex items-center gap-2 ml-auto">
-              <button
-                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-                onClick={() => setIsEditOpen(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm ${editName.trim().length > 0 ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
-                onClick={() => {
-                  if (!strategyId || editName.trim().length === 0) return
-                  try {
-                    localStorage.setItem(
-                      `lf_strategy_name_override_${strategyId}`,
-                      editName.trim()
-                    )
-                    localStorage.setItem(
-                      `lf_strategy_description_${strategyId}`,
-                      editDescription
-                    )
-                  } catch {}
-                  setIsEditOpen(false)
-                  setStrategyMetaTick(t => t + 1)
-                }}
-                disabled={editName.trim().length === 0}
-                type="button"
-              >
-                Save
-              </button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {/* End processing editors */}
 
-      {/* End processing editors */}
-
-      {/* Retrieval and Embedding moved to project-level settings. */}
+          {/* Retrieval and Embedding moved to project-level settings. */}
+        </>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { Input } from '../ui/input'
 // Badge import removed after removing summary card
 // import { Badge } from '../ui/badge'
 import PageActions from '../common/PageActions'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { Mode } from '../ModeToggle'
 import { useToast } from '../ui/toast'
 import { Label } from '../ui/label'
@@ -541,702 +542,761 @@ function ChangeEmbeddingModel() {
   }
 
   return (
-    <div className="h-full w-full flex flex-col gap-3 pb-40">
+    <div
+      className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-40' : ''}`}
+    >
       {/* Breadcrumb + Actions */}
-      <div className="flex items-center justify-between mb-1 md:mb-3">
-        <nav className="text-sm md:text-base flex items-center gap-1.5">
-          <button
-            className="text-teal-600 dark:text-teal-400 hover:underline"
-            onClick={() => navigate('/chat/rag')}
-          >
-            RAG
-          </button>
-          <span className="text-muted-foreground px-1">/</span>
-          <span className="text-foreground">Edit strategy</span>
-        </nav>
-        <PageActions mode={mode} onModeChange={setMode} />
-      </div>
-
-      {/* Header */}
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-lg md:text-xl font-medium">Edit strategy</h2>
-        <div className="flex items-center gap-3">
-          <div className="text-xs text-muted-foreground max-w-[50vw] truncate">
-            {summaryProvider && summaryModel ? (
-              <>
-                <span className="text-foreground">{summaryProvider}</span>
-                <span className="mx-1">•</span>
-                <span className="font-mono">{summaryModel}</span>
-                {summaryLocation ? (
-                  <>
-                    <span className="mx-1">•</span>
-                    <span>{summaryLocation}</span>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              'No model selected yet'
-            )}
+      {mode === 'designer' ? (
+        <>
+          <div className="flex items-center justify-between mb-1 md:mb-3">
+            <nav className="text-sm md:text-base flex items-center gap-1.5">
+              <button
+                className="text-teal-600 dark:text-teal-400 hover:underline"
+                onClick={() => navigate('/chat/rag')}
+              >
+                RAG
+              </button>
+              <span className="text-muted-foreground px-1">/</span>
+              <span className="text-foreground">Edit strategy</span>
+            </nav>
+            <PageActions mode={mode} onModeChange={setMode} />
           </div>
-          {!isDefaultStrategy && (
-            <label className="text-xs flex items-center gap-2 select-none">
-              <input
-                type="checkbox"
-                checked={makeDefault}
-                onChange={e => setMakeDefault(e.target.checked)}
-              />
-              Make default
-            </label>
-          )}
-          <Button onClick={() => setConfirmOpen(true)}>Save strategy</Button>
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg md:text-xl font-medium">Edit strategy</h2>
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-muted-foreground max-w-[50vw] truncate">
+                {summaryProvider && summaryModel ? (
+                  <>
+                    <span className="text-foreground">{summaryProvider}</span>
+                    <span className="mx-1">•</span>
+                    <span className="font-mono">{summaryModel}</span>
+                    {summaryLocation ? (
+                      <>
+                        <span className="mx-1">•</span>
+                        <span>{summaryLocation}</span>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  'No model selected yet'
+                )}
+              </div>
+              {!isDefaultStrategy && (
+                <label className="text-xs flex items-center gap-2 select-none">
+                  <input
+                    type="checkbox"
+                    checked={makeDefault}
+                    onChange={e => setMakeDefault(e.target.checked)}
+                  />
+                  Make default
+                </label>
+              )}
+              <Button onClick={() => setConfirmOpen(true)}>
+                Save strategy
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-2xl">Config editor</h2>
+          <PageActions mode={mode} onModeChange={setMode} />
         </div>
-      </div>
+      )}
 
       {/* Removed 'Current model' summary card per request */}
 
-      {/* Strategy name and settings */}
-      <section className="rounded-lg border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">
-              Strategy name
-            </Label>
-            <Input
-              value={strategyName}
-              onChange={e => setStrategyName(e.target.value)}
-              placeholder="Enter a name"
-              className="h-9"
-            />
-          </div>
+      {mode !== 'designer' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ConfigEditor className="h-full" />
         </div>
-
-        {/* Top settings grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Base URL</Label>
-            <Input
-              value={baseUrl}
-              onChange={e => setBaseUrl(e.target.value)}
-              placeholder="http://localhost:11434"
-              className="h-9"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Dimension</Label>
-            <Input
-              type="number"
-              value={dimension}
-              onChange={e => setDimension(Number(e.target.value || 768))}
-              className="h-9"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Batch size</Label>
-            <Input
-              type="number"
-              value={batchSize}
-              onChange={e =>
-                setBatchSize(
-                  Math.min(512, Math.max(1, Number(e.target.value || 16)))
-                )
-              }
-              className="h-9"
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">
-              Timeout (sec)
-            </Label>
-            <Input
-              type="number"
-              value={timeoutSec}
-              onChange={e =>
-                setTimeoutSec(
-                  Math.min(600, Math.max(10, Number(e.target.value || 60)))
-                )
-              }
-              className="h-9"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">
-              Auto-pull model
-            </Label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
-                  <span>{ollamaAutoPull ? 'Enabled' : 'Disabled'}</span>
-                  <FontIcon type="chevron-down" className="w-4 h-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-48">
-                <DropdownMenuItem onClick={() => setOllamaAutoPull(true)}>
-                  Enabled
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setOllamaAutoPull(false)}>
-                  Disabled
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div />
-        </div>
-        {!isDefaultStrategy && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs flex items-center gap-2 select-none">
-              <input
-                type="checkbox"
-                checked={makeDefault}
-                onChange={e => setMakeDefault(e.target.checked)}
-              />
-              Make default strategy
-            </label>
-          </div>
-        )}
-
-        <div className="text-sm text-muted-foreground">
-          Select a new embedding model and configure connection/performance
-          options.
-        </div>
-
-        {/* Source switcher */}
-        <div className="w-full flex items-center">
-          <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
-            <button
-              className={`flex-1 h-10 text-sm ${sourceTab === 'local' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
-              onClick={() => setSourceTab('local')}
-              aria-pressed={sourceTab === 'local'}
-            >
-              Local models
-            </button>
-            <button
-              className={`flex-1 h-10 text-sm ${sourceTab === 'cloud' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
-              onClick={() => setSourceTab('cloud')}
-              aria-pressed={sourceTab === 'cloud'}
-            >
-              Cloud models
-            </button>
-          </div>
-        </div>
-
-        {sourceTab === 'local' && (
-          <div className="w-full overflow-hidden rounded-lg border border-border">
-            <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
-              <div className="col-span-4">Model</div>
-              <div className="col-span-2">dim</div>
-              <div className="col-span-2">Quality</div>
-              <div className="col-span-2">Download</div>
-              <div className="col-span-1">RAM/VRAM</div>
-              <div className="col-span-1" />
+      ) : (
+        <>
+          {/* Strategy name and settings */}
+          <section className="rounded-lg border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">
+                  Strategy name
+                </Label>
+                <Input
+                  value={strategyName}
+                  onChange={e => setStrategyName(e.target.value)}
+                  placeholder="Enter a name"
+                  className="h-9"
+                />
+              </div>
             </div>
-            {filteredGroups.map(group => {
-              const isOpen = expandedGroupId === group.id
-              return (
-                <div key={group.id} className="border-t border-border">
-                  <div
-                    className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
-                    onClick={() =>
-                      setExpandedGroupId(prev =>
-                        prev === group.id ? null : group.id
-                      )
-                    }
-                  >
-                    <div className="col-span-4 flex items-center gap-2">
-                      <FontIcon
-                        type="chevron-down"
-                        className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                      />
-                      <span className="truncate font-medium">{group.name}</span>
-                    </div>
-                    <div className="col-span-2 text-xs text-muted-foreground">
-                      {group.dim}
-                    </div>
-                    <div className="col-span-2 text-xs text-muted-foreground">
-                      {group.quality}
-                    </div>
-                    <div className="col-span-2 text-xs text-muted-foreground">
-                      {group.download}
-                    </div>
-                    <div className="col-span-1 text-xs text-muted-foreground">
-                      {group.ramVram}
-                    </div>
-                    <div className="col-span-1" />
-                  </div>
-                  {group.variants && isOpen && (
-                    <div className="px-3 pb-2">
-                      {group.variants.map(v => {
-                        const isUsing =
-                          selected?.runtime === 'Local' &&
-                          selected?.modelId === v.id
-                        return (
-                          <div
-                            key={v.id}
-                            className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                          >
-                            <div className="col-span-4 flex items-center text-muted-foreground">
-                              <span className="inline-block w-4" />
-                              <span className="ml-2 font-mono text-xs truncate">
-                                {v.label}
-                              </span>
-                            </div>
-                            <div className="col-span-2 text-xs text-muted-foreground">
-                              {v.dim}
-                            </div>
-                            <div className="col-span-2 text-xs text-muted-foreground">
-                              {v.quality}
-                            </div>
-                            <div className="col-span-2 text-xs text-muted-foreground">
-                              {group.download}
-                            </div>
-                            <div className="col-span-1 text-xs text-muted-foreground">
-                              {group.ramVram}
-                            </div>
-                            <div className="col-span-1 flex items-center justify-end pr-2">
-                              <Button
-                                size="sm"
-                                className="h-8 px-3"
-                                onClick={() => openConfirmLocal(group, v)}
+
+            {/* Top settings grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">
+                  Base URL
+                </Label>
+                <Input
+                  value={baseUrl}
+                  onChange={e => setBaseUrl(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  className="h-9"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">
+                  Dimension
+                </Label>
+                <Input
+                  type="number"
+                  value={dimension}
+                  onChange={e => setDimension(Number(e.target.value || 768))}
+                  className="h-9"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">
+                  Batch size
+                </Label>
+                <Input
+                  type="number"
+                  value={batchSize}
+                  onChange={e =>
+                    setBatchSize(
+                      Math.min(512, Math.max(1, Number(e.target.value || 16)))
+                    )
+                  }
+                  className="h-9"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">
+                  Timeout (sec)
+                </Label>
+                <Input
+                  type="number"
+                  value={timeoutSec}
+                  onChange={e =>
+                    setTimeoutSec(
+                      Math.min(600, Math.max(10, Number(e.target.value || 60)))
+                    )
+                  }
+                  className="h-9"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">
+                  Auto-pull model
+                </Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
+                      <span>{ollamaAutoPull ? 'Enabled' : 'Disabled'}</span>
+                      <FontIcon type="chevron-down" className="w-4 h-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-48">
+                    <DropdownMenuItem onClick={() => setOllamaAutoPull(true)}>
+                      Enabled
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setOllamaAutoPull(false)}>
+                      Disabled
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div />
+            </div>
+            {!isDefaultStrategy && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs flex items-center gap-2 select-none">
+                  <input
+                    type="checkbox"
+                    checked={makeDefault}
+                    onChange={e => setMakeDefault(e.target.checked)}
+                  />
+                  Make default strategy
+                </label>
+              </div>
+            )}
+
+            <div className="text-sm text-muted-foreground">
+              Select a new embedding model and configure connection/performance
+              options.
+            </div>
+
+            {/* Source switcher */}
+            <div className="w-full flex items-center">
+              <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
+                <button
+                  className={`flex-1 h-10 text-sm ${sourceTab === 'local' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
+                  onClick={() => setSourceTab('local')}
+                  aria-pressed={sourceTab === 'local'}
+                >
+                  Local models
+                </button>
+                <button
+                  className={`flex-1 h-10 text-sm ${sourceTab === 'cloud' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
+                  onClick={() => setSourceTab('cloud')}
+                  aria-pressed={sourceTab === 'cloud'}
+                >
+                  Cloud models
+                </button>
+              </div>
+            </div>
+
+            {sourceTab === 'local' && (
+              <div className="w-full overflow-hidden rounded-lg border border-border">
+                <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
+                  <div className="col-span-4">Model</div>
+                  <div className="col-span-2">dim</div>
+                  <div className="col-span-2">Quality</div>
+                  <div className="col-span-2">Download</div>
+                  <div className="col-span-1">RAM/VRAM</div>
+                  <div className="col-span-1" />
+                </div>
+                {filteredGroups.map(group => {
+                  const isOpen = expandedGroupId === group.id
+                  return (
+                    <div key={group.id} className="border-t border-border">
+                      <div
+                        className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
+                        onClick={() =>
+                          setExpandedGroupId(prev =>
+                            prev === group.id ? null : group.id
+                          )
+                        }
+                      >
+                        <div className="col-span-4 flex items-center gap-2">
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          />
+                          <span className="truncate font-medium">
+                            {group.name}
+                          </span>
+                        </div>
+                        <div className="col-span-2 text-xs text-muted-foreground">
+                          {group.dim}
+                        </div>
+                        <div className="col-span-2 text-xs text-muted-foreground">
+                          {group.quality}
+                        </div>
+                        <div className="col-span-2 text-xs text-muted-foreground">
+                          {group.download}
+                        </div>
+                        <div className="col-span-1 text-xs text-muted-foreground">
+                          {group.ramVram}
+                        </div>
+                        <div className="col-span-1" />
+                      </div>
+                      {group.variants && isOpen && (
+                        <div className="px-3 pb-2">
+                          {group.variants.map(v => {
+                            const isUsing =
+                              selected?.runtime === 'Local' &&
+                              selected?.modelId === v.id
+                            return (
+                              <div
+                                key={v.id}
+                                className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
                               >
-                                {isUsing ? (
-                                  <span className="inline-flex items-center gap-1">
-                                    <FontIcon
-                                      type="checkmark-filled"
-                                      className="w-4 h-4"
-                                    />{' '}
-                                    Using
+                                <div className="col-span-4 flex items-center text-muted-foreground">
+                                  <span className="inline-block w-4" />
+                                  <span className="ml-2 font-mono text-xs truncate">
+                                    {v.label}
                                   </span>
-                                ) : (
-                                  'Use'
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      })}
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground">
+                                  {v.dim}
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground">
+                                  {v.quality}
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground">
+                                  {group.download}
+                                </div>
+                                <div className="col-span-1 text-xs text-muted-foreground">
+                                  {group.ramVram}
+                                </div>
+                                <div className="col-span-1 flex items-center justify-end pr-2">
+                                  <Button
+                                    size="sm"
+                                    className="h-8 px-3"
+                                    onClick={() => openConfirmLocal(group, v)}
+                                  >
+                                    {isUsing ? (
+                                      <span className="inline-flex items-center gap-1">
+                                        <FontIcon
+                                          type="checkmark-filled"
+                                          className="w-4 h-4"
+                                        />{' '}
+                                        Using
+                                      </span>
+                                    ) : (
+                                      'Use'
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {sourceTab === 'cloud' && (
+              <div className="w-full rounded-lg border border-border p-4 md:p-6 flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Select cloud provider
+                  </Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
+                        <span>{provider}</span>
+                        <FontIcon type="chevron-down" className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-64">
+                      {filteredProviderOptions.map(p => (
+                        <DropdownMenuItem
+                          key={p}
+                          className="w-full justify-start text-left"
+                          onClick={() => {
+                            setProvider(p)
+                            setModel(modelMap[p][0])
+                            // reset cloud selection state
+                            if (selected?.runtime === 'Cloud') setSelected(null)
+                          }}
+                        >
+                          {p}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Select embedding model
+                  </Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
+                        <span>{model}</span>
+                        <FontIcon type="chevron-down" className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
+                      {modelsForProvider.map(m => (
+                        <DropdownMenuItem
+                          key={m}
+                          className="w-full justify-start text-left"
+                          onClick={() => {
+                            setModel(m)
+                            if (selected?.runtime === 'Cloud') setSelected(null)
+                          }}
+                        >
+                          {m}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {model === 'Custom' && (
+                    <Input
+                      placeholder="Enter model name/id"
+                      value={customModel}
+                      onChange={e => setCustomModel(e.target.value)}
+                      className="h-9"
+                    />
+                  )}
+
+                  {/* OpenAI */}
+                  {provider === 'OpenAI' && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Base URL (optional)
+                        </Label>
+                        <Input
+                          placeholder="https://api.openai.com"
+                          value={baseUrl}
+                          onChange={e => setBaseUrl(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Organization (optional)
+                        </Label>
+                        <Input
+                          placeholder="org_xxx"
+                          value={openaiOrg}
+                          onChange={e => setOpenaiOrg(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Timeout (sec)
+                        </Label>
+                        <Input
+                          type="number"
+                          value={timeoutSec}
+                          onChange={e =>
+                            setTimeoutSec(Number(e.target.value || 60))
+                          }
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Max retries
+                        </Label>
+                        <Input
+                          type="number"
+                          value={openaiMaxRetries}
+                          onChange={e =>
+                            setOpenaiMaxRetries(Number(e.target.value || 3))
+                          }
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {/* Azure */}
+                  {provider === 'Azure OpenAI' && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Deployment name
+                        </Label>
+                        <Input
+                          placeholder="my-embed-deployment"
+                          value={azureDeployment}
+                          onChange={e => setAzureDeployment(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Endpoint/Resource name
+                        </Label>
+                        <Input
+                          placeholder="my-azure-openai"
+                          value={azureResource}
+                          onChange={e => setAzureResource(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          API version (optional)
+                        </Label>
+                        <Input
+                          placeholder="2024-02-15-preview"
+                          value={azureApiVersion}
+                          onChange={e => setAzureApiVersion(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {/* Google */}
+                  {provider === 'Google' && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Project ID
+                        </Label>
+                        <Input
+                          placeholder="my-gcp-project"
+                          value={vertexProjectId}
+                          onChange={e => setVertexProjectId(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Location/Region
+                        </Label>
+                        <Input
+                          placeholder="us-central1"
+                          value={vertexLocation}
+                          onChange={e => setVertexLocation(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Endpoint (optional)
+                        </Label>
+                        <Input
+                          placeholder="optional override"
+                          value={vertexEndpoint}
+                          onChange={e => setVertexEndpoint(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {/* Bedrock */}
+                  {provider === 'AWS Bedrock' && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Region
+                        </Label>
+                        <Input
+                          placeholder="us-east-1"
+                          value={bedrockRegion}
+                          onChange={e => setBedrockRegion(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cloud API key */}
+                  {provider !== 'Ollama (remote)' && (
+                    <div className="flex flex-col gap-2">
+                      <Label className="text-xs text-muted-foreground">
+                        API Key
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          type={showApiKey ? 'text' : 'password'}
+                          placeholder="enter here"
+                          value={apiKey}
+                          onChange={e => setApiKey(e.target.value)}
+                          className="h-9 pr-9"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowApiKey(v => !v)}
+                          aria-label={
+                            showApiKey ? 'Hide API key' : 'Show API key'
+                          }
+                        >
+                          <FontIcon
+                            type={showApiKey ? 'eye-off' : 'eye'}
+                            className="w-4 h-4"
+                          />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-              )
-            })}
-          </div>
-        )}
 
-        {sourceTab === 'cloud' && (
-          <div className="w-full rounded-lg border border-border p-4 md:p-6 flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label className="text-xs text-muted-foreground">
-                Select cloud provider
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
-                    <span>{provider}</span>
-                    <FontIcon type="chevron-down" className="w-4 h-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64">
-                  {filteredProviderOptions.map(p => (
-                    <DropdownMenuItem
-                      key={p}
-                      className="w-full justify-start text-left"
-                      onClick={() => {
-                        setProvider(p)
-                        setModel(modelMap[p][0])
-                        // reset cloud selection state
-                        if (selected?.runtime === 'Cloud') setSelected(null)
-                      }}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={checkConnection}
                     >
-                      {p}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label className="text-xs text-muted-foreground">
-                Select embedding model
-              </Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
-                    <span>{model}</span>
-                    <FontIcon type="chevron-down" className="w-4 h-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-                  {modelsForProvider.map(m => (
-                    <DropdownMenuItem
-                      key={m}
-                      className="w-full justify-start text-left"
-                      onClick={() => {
-                        setModel(m)
-                        if (selected?.runtime === 'Cloud') setSelected(null)
-                      }}
+                      {connectionStatus === 'checking'
+                        ? 'Checking…'
+                        : 'Check connection'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={runTestEmbedding}
                     >
-                      {m}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {model === 'Custom' && (
-                <Input
-                  placeholder="Enter model name/id"
-                  value={customModel}
-                  onChange={e => setCustomModel(e.target.value)}
-                  className="h-9"
-                />
-              )}
+                      {testStatus === 'running' ? 'Testing…' : 'Test embedding'}
+                    </Button>
+                  </div>
+                  <Button
+                    onClick={() =>
+                      setSelected({
+                        runtime: 'Cloud',
+                        provider,
+                        modelId:
+                          model === 'Custom' ? customModel.trim() : model,
+                      })
+                    }
+                    disabled={
+                      provider !== 'Ollama (remote)' &&
+                      apiKey.trim().length === 0
+                    }
+                  >
+                    {selected?.runtime === 'Cloud' &&
+                    selected?.modelId ===
+                      (model === 'Custom' ? customModel.trim() : model) ? (
+                      <span className="inline-flex items-center gap-1">
+                        <FontIcon type="checkmark-filled" className="w-4 h-4" />{' '}
+                        Using
+                      </span>
+                    ) : (
+                      'Use cloud model'
+                    )}
+                  </Button>
+                </div>
 
-              {/* OpenAI */}
-              {provider === 'OpenAI' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Base URL (optional)
-                    </Label>
-                    <Input
-                      placeholder="https://api.openai.com"
-                      value={baseUrl}
-                      onChange={e => setBaseUrl(e.target.value)}
-                      className="h-9"
-                    />
+                {(connectionStatus === 'ok' ||
+                  connectionStatus === 'error') && (
+                  <div
+                    className={`text-xs ${connectionStatus === 'ok' ? 'text-teal-600 dark:text-teal-400' : 'text-destructive'}`}
+                  >
+                    {connectionMsg}
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Organization (optional)
-                    </Label>
-                    <Input
-                      placeholder="org_xxx"
-                      value={openaiOrg}
-                      onChange={e => setOpenaiOrg(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Timeout (sec)
-                    </Label>
-                    <Input
-                      type="number"
-                      value={timeoutSec}
-                      onChange={e =>
-                        setTimeoutSec(Number(e.target.value || 60))
-                      }
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Max retries
-                    </Label>
-                    <Input
-                      type="number"
-                      value={openaiMaxRetries}
-                      onChange={e =>
-                        setOpenaiMaxRetries(Number(e.target.value || 3))
-                      }
-                      className="h-9"
-                    />
-                  </div>
-                </div>
-              )}
-              {/* Azure */}
-              {provider === 'Azure OpenAI' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Deployment name
-                    </Label>
-                    <Input
-                      placeholder="my-embed-deployment"
-                      value={azureDeployment}
-                      onChange={e => setAzureDeployment(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Endpoint/Resource name
-                    </Label>
-                    <Input
-                      placeholder="my-azure-openai"
-                      value={azureResource}
-                      onChange={e => setAzureResource(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      API version (optional)
-                    </Label>
-                    <Input
-                      placeholder="2024-02-15-preview"
-                      value={azureApiVersion}
-                      onChange={e => setAzureApiVersion(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                </div>
-              )}
-              {/* Google */}
-              {provider === 'Google' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Project ID
-                    </Label>
-                    <Input
-                      placeholder="my-gcp-project"
-                      value={vertexProjectId}
-                      onChange={e => setVertexProjectId(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Location/Region
-                    </Label>
-                    <Input
-                      placeholder="us-central1"
-                      value={vertexLocation}
-                      onChange={e => setVertexLocation(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Endpoint (optional)
-                    </Label>
-                    <Input
-                      placeholder="optional override"
-                      value={vertexEndpoint}
-                      onChange={e => setVertexEndpoint(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                </div>
-              )}
-              {/* Bedrock */}
-              {provider === 'AWS Bedrock' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Region
-                    </Label>
-                    <Input
-                      placeholder="us-east-1"
-                      value={bedrockRegion}
-                      onChange={e => setBedrockRegion(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Cloud API key */}
-              {provider !== 'Ollama (remote)' && (
-                <div className="flex flex-col gap-2">
-                  <Label className="text-xs text-muted-foreground">
-                    API Key
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      type={showApiKey ? 'text' : 'password'}
-                      placeholder="enter here"
-                      value={apiKey}
-                      onChange={e => setApiKey(e.target.value)}
-                      className="h-9 pr-9"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowApiKey(v => !v)}
-                      aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
-                    >
-                      <FontIcon
-                        type={showApiKey ? 'eye-off' : 'eye'}
-                        className="w-4 h-4"
-                      />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={checkConnection}>
-                  {connectionStatus === 'checking'
-                    ? 'Checking…'
-                    : 'Check connection'}
-                </Button>
-                <Button variant="outline" size="sm" onClick={runTestEmbedding}>
-                  {testStatus === 'running' ? 'Testing…' : 'Test embedding'}
-                </Button>
-              </div>
-              <Button
-                onClick={() =>
-                  setSelected({
-                    runtime: 'Cloud',
-                    provider,
-                    modelId: model === 'Custom' ? customModel.trim() : model,
-                  })
-                }
-                disabled={
-                  provider !== 'Ollama (remote)' && apiKey.trim().length === 0
-                }
-              >
-                {selected?.runtime === 'Cloud' &&
-                selected?.modelId ===
-                  (model === 'Custom' ? customModel.trim() : model) ? (
-                  <span className="inline-flex items-center gap-1">
-                    <FontIcon type="checkmark-filled" className="w-4 h-4" />{' '}
-                    Using
-                  </span>
-                ) : (
-                  'Use cloud model'
                 )}
-              </Button>
-            </div>
-
-            {(connectionStatus === 'ok' || connectionStatus === 'error') && (
-              <div
-                className={`text-xs ${connectionStatus === 'ok' ? 'text-teal-600 dark:text-teal-400' : 'text-destructive'}`}
-              >
-                {connectionMsg}
+                {testStatus !== 'idle' && (
+                  <div className="text-xs text-muted-foreground">
+                    {testStatus === 'ok'
+                      ? `Test completed${testLatencyMs ? ` in ${testLatencyMs} ms` : ''}`
+                      : testStatus === 'error'
+                        ? 'Test failed'
+                        : 'Running test…'}
+                  </div>
+                )}
               </div>
             )}
-            {testStatus !== 'idle' && (
-              <div className="text-xs text-muted-foreground">
-                {testStatus === 'ok'
-                  ? `Test completed${testLatencyMs ? ` in ${testLatencyMs} ms` : ''}`
-                  : testStatus === 'error'
-                    ? 'Test failed'
-                    : 'Running test…'}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
+          </section>
 
-      {/* Save modal */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogTitle>Save this embedding strategy?</DialogTitle>
-          <DialogDescription>
-            <div className="mt-2 text-sm">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                <div className="text-muted-foreground">Strategy name</div>
-                <div className="truncate">{strategyName || '(unnamed)'}</div>
-                <div className="text-muted-foreground">Runtime</div>
-                <div>{runtimeLabel}</div>
-                <div className="text-muted-foreground">Provider</div>
-                <div>{summaryProvider || 'n/a'}</div>
-                <div className="text-muted-foreground">Model</div>
-                <div className="font-mono truncate">
-                  {summaryModel || 'n/a'}
-                </div>
-                <div className="text-muted-foreground">Base URL / Location</div>
-                <div className="truncate">{summaryLocation || 'n/a'}</div>
-                <div className="text-muted-foreground">
-                  Vector dimension (d)
-                </div>
-                <div>{dimension ?? meta?.dim ?? 'n/a'}</div>
-                <div className="text-muted-foreground">Batch size</div>
-                <div>{batchSize}</div>
-                <div className="text-muted-foreground">Timeout (sec)</div>
-                <div>{timeoutSec}</div>
-                <div className="text-muted-foreground">Auto-pull model</div>
-                <div>{ollamaAutoPull ? 'Enabled' : 'Disabled'}</div>
-                {summaryProvider === 'OpenAI' ? (
-                  <>
-                    <div className="text-muted-foreground">Organization</div>
-                    <div className="truncate">{openaiOrg || '(none)'}</div>
-                    <div className="text-muted-foreground">Max retries</div>
-                    <div>{openaiMaxRetries}</div>
-                  </>
-                ) : null}
-                {summaryProvider === 'Azure OpenAI' ? (
-                  <>
-                    <div className="text-muted-foreground">Deployment</div>
-                    <div className="truncate">{azureDeployment || 'n/a'}</div>
-                    <div className="text-muted-foreground">Endpoint</div>
-                    <div className="truncate">{azureResource || 'n/a'}</div>
-                    <div className="text-muted-foreground">API version</div>
+          {/* Save modal */}
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent>
+              <DialogTitle>Save this embedding strategy?</DialogTitle>
+              <DialogDescription>
+                <div className="mt-2 text-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                    <div className="text-muted-foreground">Strategy name</div>
                     <div className="truncate">
-                      {azureApiVersion || '(default)'}
+                      {strategyName || '(unnamed)'}
                     </div>
-                  </>
-                ) : null}
-                {summaryProvider === 'Google' ? (
-                  <>
-                    <div className="text-muted-foreground">Project ID</div>
-                    <div className="truncate">{vertexProjectId || 'n/a'}</div>
-                    <div className="text-muted-foreground">Location</div>
-                    <div className="truncate">{vertexLocation || 'n/a'}</div>
-                    <div className="text-muted-foreground">Endpoint</div>
-                    <div className="truncate">{vertexEndpoint || '(auto)'}</div>
-                  </>
-                ) : null}
-                {summaryProvider === 'AWS Bedrock' ? (
-                  <>
-                    <div className="text-muted-foreground">Region</div>
-                    <div className="truncate">{bedrockRegion || 'n/a'}</div>
-                  </>
-                ) : null}
-              </div>
-              {!isDefaultStrategy && makeDefault ? (
-                <div className="mt-3 text-xs">Will set as default</div>
-              ) : null}
-            </div>
-          </DialogDescription>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveEdited}>
-              {selected?.runtime === 'Local'
-                ? 'Download and save strategy'
-                : 'Save strategy'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                    <div className="text-muted-foreground">Runtime</div>
+                    <div>{runtimeLabel}</div>
+                    <div className="text-muted-foreground">Provider</div>
+                    <div>{summaryProvider || 'n/a'}</div>
+                    <div className="text-muted-foreground">Model</div>
+                    <div className="font-mono truncate">
+                      {summaryModel || 'n/a'}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Base URL / Location
+                    </div>
+                    <div className="truncate">{summaryLocation || 'n/a'}</div>
+                    <div className="text-muted-foreground">
+                      Vector dimension (d)
+                    </div>
+                    <div>{dimension ?? meta?.dim ?? 'n/a'}</div>
+                    <div className="text-muted-foreground">Batch size</div>
+                    <div>{batchSize}</div>
+                    <div className="text-muted-foreground">Timeout (sec)</div>
+                    <div>{timeoutSec}</div>
+                    <div className="text-muted-foreground">Auto-pull model</div>
+                    <div>{ollamaAutoPull ? 'Enabled' : 'Disabled'}</div>
+                    {summaryProvider === 'OpenAI' ? (
+                      <>
+                        <div className="text-muted-foreground">
+                          Organization
+                        </div>
+                        <div className="truncate">{openaiOrg || '(none)'}</div>
+                        <div className="text-muted-foreground">Max retries</div>
+                        <div>{openaiMaxRetries}</div>
+                      </>
+                    ) : null}
+                    {summaryProvider === 'Azure OpenAI' ? (
+                      <>
+                        <div className="text-muted-foreground">Deployment</div>
+                        <div className="truncate">
+                          {azureDeployment || 'n/a'}
+                        </div>
+                        <div className="text-muted-foreground">Endpoint</div>
+                        <div className="truncate">{azureResource || 'n/a'}</div>
+                        <div className="text-muted-foreground">API version</div>
+                        <div className="truncate">
+                          {azureApiVersion || '(default)'}
+                        </div>
+                      </>
+                    ) : null}
+                    {summaryProvider === 'Google' ? (
+                      <>
+                        <div className="text-muted-foreground">Project ID</div>
+                        <div className="truncate">
+                          {vertexProjectId || 'n/a'}
+                        </div>
+                        <div className="text-muted-foreground">Location</div>
+                        <div className="truncate">
+                          {vertexLocation || 'n/a'}
+                        </div>
+                        <div className="text-muted-foreground">Endpoint</div>
+                        <div className="truncate">
+                          {vertexEndpoint || '(auto)'}
+                        </div>
+                      </>
+                    ) : null}
+                    {summaryProvider === 'AWS Bedrock' ? (
+                      <>
+                        <div className="text-muted-foreground">Region</div>
+                        <div className="truncate">{bedrockRegion || 'n/a'}</div>
+                      </>
+                    ) : null}
+                  </div>
+                  {!isDefaultStrategy && makeDefault ? (
+                    <div className="mt-3 text-xs">Will set as default</div>
+                  ) : null}
+                </div>
+              </DialogDescription>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  onClick={() => setConfirmOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={saveEdited}>
+                  {selected?.runtime === 'Local'
+                    ? 'Download and save strategy'
+                    : 'Save strategy'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-      {/* Re-embed confirmation modal */}
-      <Dialog open={reembedOpen} onOpenChange={setReembedOpen}>
-        <DialogContent>
-          <DialogTitle>Re-embed project data?</DialogTitle>
-          <DialogDescription>
-            To keep your project running smoothly, this change requires
-            re-embedding project data. Would you like to proceed now?
-          </DialogDescription>
-          <DialogFooter>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setReembedOpen(false)
-                toast({ message: 'Strategy saved', variant: 'default' })
-                navigate('/chat/rag')
-              }}
-            >
-              I'll do it later
-            </Button>
-            <Button
-              onClick={() => {
-                setReembedOpen(false)
-                toast({ message: 'Strategy saved', variant: 'default' })
-                navigate('/chat/rag')
-              }}
-            >
-              Yes, proceed with re-embed
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {/* Re-embed confirmation modal */}
+          <Dialog open={reembedOpen} onOpenChange={setReembedOpen}>
+            <DialogContent>
+              <DialogTitle>Re-embed project data?</DialogTitle>
+              <DialogDescription>
+                To keep your project running smoothly, this change requires
+                re-embedding project data. Would you like to proceed now?
+              </DialogDescription>
+              <DialogFooter>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setReembedOpen(false)
+                    toast({ message: 'Strategy saved', variant: 'default' })
+                    navigate('/chat/rag')
+                  }}
+                >
+                  I'll do it later
+                </Button>
+                <Button
+                  onClick={() => {
+                    setReembedOpen(false)
+                    toast({ message: 'Strategy saved', variant: 'default' })
+                    navigate('/chat/rag')
+                  }}
+                >
+                  Yes, proceed with re-embed
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
     </div>
   )
 }
