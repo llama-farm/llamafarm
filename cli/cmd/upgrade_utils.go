@@ -109,118 +109,6 @@ func canWriteToLocationWindows(path string) bool {
 	return true
 }
 
-// needsElevation determines if elevation (sudo/UAC) is required for the upgrade
-func needsElevation(path string) bool {
-	if runtime.GOOS == "windows" {
-		return needsElevationWindows(path)
-	}
-	return needsElevationUnix(path)
-}
-
-// needsElevationUnix determines if sudo is needed on Unix-like systems
-func needsElevationUnix(path string) bool {
-	// If we can't write to the location and it's in a system directory, we need sudo
-	if canWriteToLocation(path) {
-		return false
-	}
-
-	// Check if the path is in common system directories using absolute path comparison
-	systemDirs := []string{
-		"/usr/local/bin",
-		"/usr/bin",
-		"/bin",
-		"/opt",
-	}
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		// If we can't resolve the absolute path, assume elevation is needed
-		return true
-	}
-
-	// Get the directory containing the binary
-	pathDir := filepath.Dir(absPath)
-
-	for _, sysDir := range systemDirs {
-		absSysDir, err := filepath.Abs(sysDir)
-		if err != nil {
-			continue
-		}
-		// Check if the binary's directory is within the system directory
-		if pathDir == absSysDir || strings.HasPrefix(pathDir+string(filepath.Separator), absSysDir+string(filepath.Separator)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// needsElevationWindows determines if UAC elevation is needed on Windows
-func needsElevationWindows(path string) bool {
-	// If we can write to the location, no elevation needed
-	if canWriteToLocation(path) {
-		return false
-	}
-
-	// Check if the path is in system directories that typically require elevation
-	systemDirs := []string{
-		"C:\\Program Files",
-		"C:\\Program Files (x86)",
-		"C:\\Windows",
-	}
-
-	upperPath := strings.ToUpper(path)
-	for _, sysDir := range systemDirs {
-		if strings.HasPrefix(upperPath, strings.ToUpper(sysDir)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// getDefaultUserInstallDir returns a default user-writable installation directory
-func getDefaultUserInstallDir() (string, error) {
-	if runtime.GOOS == "windows" {
-		return getDefaultUserInstallDirWindows()
-	}
-	return getDefaultUserInstallDirUnix()
-}
-
-// getDefaultUserInstallDirUnix returns the default user install directory on Unix-like systems
-func getDefaultUserInstallDirUnix() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	userBinDir := filepath.Join(homeDir, ".local", "bin")
-
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(userBinDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create user bin directory: %w", err)
-	}
-
-	return userBinDir, nil
-}
-
-// getDefaultUserInstallDirWindows returns the default user install directory on Windows
-func getDefaultUserInstallDirWindows() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	userBinDir := filepath.Join(homeDir, "AppData", "Local", "Programs", "LlamaFarm")
-
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(userBinDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create user bin directory: %w", err)
-	}
-
-	return userBinDir, nil
-}
-
 // detectPlatform returns the platform string used in GitHub releases
 func detectPlatform() string {
 	goos := runtime.GOOS
@@ -300,4 +188,108 @@ func formatVersionForDisplay(version string) string {
 	// Normalize version to avoid double "v" prefix (handle both "v" and "V")
 	normalized := strings.TrimPrefix(strings.TrimPrefix(version, "v"), "V")
 	return "v" + normalized
+}
+
+// getDefaultUserInstallDir returns a default user-writable installation directory
+func getDefaultUserInstallDir() (string, error) {
+	if runtime.GOOS == "windows" {
+		return getDefaultUserInstallDirWindows()
+	}
+	return getDefaultUserInstallDirUnix()
+}
+
+// needsElevationUnix determines if sudo is needed on Unix-like systems
+func needsElevationUnix(path string) bool {
+	// If we can't write to the location and it's in a system directory, we need sudo
+	if canWriteToLocation(path) {
+		return false
+	}
+
+	// Check if the path is in common system directories using absolute path comparison
+	systemDirs := []string{
+		"/usr/local/bin",
+		"/usr/bin",
+		"/bin",
+		"/opt",
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		// If we can't resolve the absolute path, assume elevation is needed
+		return true
+	}
+
+	// Get the directory containing the binary
+	pathDir := filepath.Dir(absPath)
+
+	for _, sysDir := range systemDirs {
+		absSysDir, err := filepath.Abs(sysDir)
+		if err != nil {
+			continue
+		}
+		// Check if the binary's directory is within the system directory
+		if pathDir == absSysDir || strings.HasPrefix(pathDir+string(filepath.Separator), absSysDir+string(filepath.Separator)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// needsElevationWindows determines if UAC elevation is needed on Windows
+func needsElevationWindows(path string) bool {
+	// If we can write to the location, no elevation needed
+	if canWriteToLocation(path) {
+		return false
+	}
+
+	// Check if the path is in system directories that typically require elevation
+	systemDirs := []string{
+		"C:\\Program Files",
+		"C:\\Program Files (x86)",
+		"C:\\Windows",
+	}
+
+	upperPath := strings.ToUpper(path)
+	for _, sysDir := range systemDirs {
+		if strings.HasPrefix(upperPath, strings.ToUpper(sysDir)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getDefaultUserInstallDirUnix returns the default user install directory on Unix-like systems
+func getDefaultUserInstallDirUnix() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	userBinDir := filepath.Join(homeDir, ".local", "bin")
+
+	// Create the directory if it doesn't exist
+	if err := os.MkdirAll(userBinDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create user bin directory: %w", err)
+	}
+
+	return userBinDir, nil
+}
+
+// getDefaultUserInstallDirWindows returns the default user install directory on Windows
+func getDefaultUserInstallDirWindows() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	userBinDir := filepath.Join(homeDir, "AppData", "Local", "Programs", "LlamaFarm")
+
+	// Create the directory if it doesn't exist
+	if err := os.MkdirAll(userBinDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create user bin directory: %w", err)
+	}
+
+	return userBinDir, nil
 }

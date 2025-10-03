@@ -666,24 +666,6 @@ func getServiceNameFromComponent(comp *Component) string {
 	return name // Return as-is for unknown services
 }
 
-// Legacy function - deprecated, use EnsureServicesWithConfig instead
-func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
-	config := ServerOnlyConfig(serverURL)
-	return EnsureServicesWithConfig(config)
-}
-
-// Legacy function - deprecated, use EnsureServicesWithConfig instead
-func ensureServerOnlyAvailable(serverURL string, printStatus bool) *HealthPayload {
-	config := ChatNoRAGConfig(serverURL)
-	return EnsureServicesWithConfig(config)
-}
-
-// Legacy function - deprecated, use EnsureServicesWithConfig instead
-func ensureServerAndRAGAvailable(serverURL string, printStatus bool) *HealthPayload {
-	config := RAGCommandConfig(serverURL)
-	return EnsureServicesWithConfig(config)
-}
-
 // checkServerHealth requires /health to be healthy.
 func checkServerHealth(serverURL string) (*HealthPayload, error) {
 	base := strings.TrimRight(serverURL, "/")
@@ -824,53 +806,6 @@ func resolvePort(serverURL string, defaultPort int) int {
 	return defaultPort
 }
 
-// prettyPrintHealth decodes a /health payload and renders a concise, readable summary
-func prettyPrintHealth(w io.Writer, hr HealthPayload) {
-	prefix := "❌"
-	switch hr.Status {
-	case "degraded":
-		prefix = "⚠️"
-	case "healthy":
-		prefix = "✅"
-	}
-
-	fmt.Fprintf(w, "%s Server is %s\n", prefix, hr.Status)
-	if strings.TrimSpace(hr.Summary) != "" {
-		fmt.Fprintf(w, "Summary: %s\n", hr.Summary)
-	}
-	if len(hr.Components) > 0 {
-		for _, c := range hr.Components {
-			if c.Status == "healthy" {
-				continue
-			}
-
-			icon := iconForStatus(c.Status)
-			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, c.Name, c.Status, c.Message, c.LatencyMs)
-			for k, v := range c.Details {
-				fmt.Fprintf(w, "      %s: %v\n", k, v)
-			}
-		}
-	}
-	if len(hr.Seeds) > 0 {
-		var builder strings.Builder
-		for _, s := range hr.Seeds {
-			if s.Status == "healthy" {
-				continue
-			}
-
-			icon := iconForStatus(s.Status)
-			builder.WriteString(fmt.Sprintf("  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs))
-			for k, v := range s.Runtime {
-				builder.WriteString(fmt.Sprintf("      %s: %v\n", k, v))
-			}
-		}
-		if builder.Len() > 0 {
-			fmt.Fprintln(w, "Seeds:")
-		}
-		fmt.Fprintln(w, builder.String())
-	}
-}
-
 // prettyPrintHealthProblems prints only the non-healthy components and seeds from a HealthPayload.
 // It is intended for concise error reporting.
 func prettyPrintHealthProblems(w io.Writer, hr HealthPayload) {
@@ -930,29 +865,6 @@ func pingURL(base string) error {
 	return fmt.Errorf("status %d", resp.StatusCode)
 }
 
-// handleRAGServiceInBackground checks if RAG service is unhealthy and starts it in background if needed
-func handleRAGServiceInBackground(serverURL string, hr *HealthPayload) {
-	if hr == nil {
-		return
-	}
-
-	// Check if RAG service is unhealthy
-	ragComponent := findRAGComponent(hr)
-	if ragComponent == nil || strings.EqualFold(ragComponent.Status, "healthy") {
-		return // RAG is fine, nothing to do
-	}
-
-	// RAG is unhealthy, start it in background if we're on localhost
-	if !isLocalhost(serverURL) {
-		OutputDebug("RAG service is unhealthy on remote server, cannot auto-start")
-		return
-	}
-
-	OutputDebug("RAG service is unhealthy, starting in background...")
-	orchestrator := NewContainerOrchestrator()
-	orchestrator.startRAGContainerAsync(serverURL)
-}
-
 // findRAGComponent finds the RAG component in the health response
 func findRAGComponent(hr *HealthPayload) *Component {
 	if hr == nil {
@@ -976,48 +888,6 @@ func findRAGComponent(hr *HealthPayload) *Component {
 	}
 
 	return nil
-}
-
-// isUnhealthyOnlyDueToRAG checks if the server is unhealthy solely because of RAG components
-// Returns true if all non-RAG components are healthy and only RAG components are unhealthy
-func isUnhealthyOnlyDueToRAG(hr *HealthPayload) bool {
-	if hr == nil {
-		return false
-	}
-
-	hasUnhealthyRAG := false
-	hasUnhealthyNonRAG := false
-
-	// Check components
-	for _, component := range hr.Components {
-		name := strings.ToLower(component.Name)
-		isRAGComponent := name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag")
-		isHealthy := strings.EqualFold(component.Status, "healthy")
-
-		if isRAGComponent && !isHealthy {
-			hasUnhealthyRAG = true
-		} else if !isRAGComponent && !isHealthy {
-			hasUnhealthyNonRAG = true
-		}
-	}
-
-	// Check seeds as well
-	for _, seed := range hr.Seeds {
-		name := strings.ToLower(seed.Name)
-		isRAGComponent := name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag")
-		isHealthy := strings.EqualFold(seed.Status, "healthy")
-
-		if isRAGComponent && !isHealthy {
-			hasUnhealthyRAG = true
-		} else if !isRAGComponent && !isHealthy {
-			hasUnhealthyNonRAG = true
-		}
-	}
-
-	// Server is unhealthy only due to RAG if:
-	// 1. There are unhealthy RAG components, AND
-	// 2. There are NO unhealthy non-RAG components
-	return hasUnhealthyRAG && !hasUnhealthyNonRAG
 }
 
 // convertToDockerPath normalizes a host path to use forward slashes which Docker accepts across platforms.

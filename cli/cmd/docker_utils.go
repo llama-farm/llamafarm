@@ -455,12 +455,6 @@ func pullImage(imageName string) error {
 	return pullImageWithForce(imageName, false)
 }
 
-// PullImageForce pulls a docker image using the Docker SDK with progress tracking
-// Always pulls even if image exists locally (public function for external use)
-func PullImageForce(imageName string) error {
-	return pullImageWithForce(imageName, false)
-}
-
 // pullImageWithForce pulls a docker image using the Docker SDK with progress tracking
 // If force is true, pulls even if image exists locally
 func pullImageWithForce(imageName string, force bool) error {
@@ -1138,45 +1132,6 @@ func (nm *NetworkManager) EnsureNetwork() error {
 
 	if err != nil {
 		return fmt.Errorf("failed to create Docker network: %v", err)
-	}
-
-	return nil
-}
-
-// CleanupNetwork removes the Docker network if it exists using Docker SDK
-func (nm *NetworkManager) CleanupNetwork() error {
-	ctx := context.Background()
-	cli, err := createDockerClient()
-	if err != nil {
-		return err
-	}
-	defer cli.Close()
-
-	// Find the network
-	networks, err := cli.NetworkList(ctx, network.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to list networks: %v", err)
-	}
-
-	var networkID string
-	for _, net := range networks {
-		if net.Name == nm.networkName {
-			networkID = net.ID
-			break
-		}
-	}
-
-	if networkID == "" {
-		return nil // Network doesn't exist
-	}
-
-	if debug {
-		logDebug(fmt.Sprintf("Removing Docker network: %s", nm.networkName))
-	}
-
-	err = cli.NetworkRemove(ctx, networkID)
-	if err != nil {
-		return fmt.Errorf("failed to remove Docker network: %v", err)
 	}
 
 	return nil
