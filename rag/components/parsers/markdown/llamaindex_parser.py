@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
-from components.parsers.base.base_parser import BaseParser
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,6 @@ class MarkdownParser_LlamaIndex(BaseParser):
 
     def _load_metadata(self) -> ParserConfig:
         """Load parser metadata."""
-        from components.parsers.base.base_parser import ParserConfig
 
         return ParserConfig(
             name="MarkdownParser_LlamaIndex",
