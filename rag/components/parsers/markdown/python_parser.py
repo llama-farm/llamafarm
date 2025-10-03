@@ -4,11 +4,12 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
 import re
+from components.parsers.base.base_parser import BaseParser
 
 logger = logging.getLogger(__name__)
 
 
-class MarkdownParser_Python:
+class MarkdownParser_Python(BaseParser):
     """Markdown parser using native Python with basic parsing."""
 
     def __init__(
@@ -27,6 +28,22 @@ class MarkdownParser_Python:
     def validate_config(self) -> bool:
         """Validate configuration."""
         return True
+
+    def _load_metadata(self):
+        """Load parser metadata."""
+        from components.parsers.base.base_parser import ParserConfig
+
+        return ParserConfig(
+            name=self.name,
+            description="Markdown parser using native Python with basic parsing",
+            supported_extensions=[".md", ".markdown", ".mdown", ".mkd"],
+            config=self.config
+        )
+
+    def can_parse(self, file_path: str) -> bool:
+        """Check if this parser can handle the file."""
+        path = Path(file_path)
+        return path.suffix.lower() in [".md", ".markdown", ".mdown", ".mkd"]
 
     def parse(self, source: str, **kwargs):
         """Parse Markdown using Python."""

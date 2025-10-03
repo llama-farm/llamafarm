@@ -3,11 +3,12 @@
 from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
+from components.parsers.base.base_parser import BaseParser
 
 logger = logging.getLogger(__name__)
 
 
-class MarkdownParser_LlamaIndex:
+class MarkdownParser_LlamaIndex(BaseParser):
     """Markdown parser using LlamaIndex with advanced features."""
 
     def __init__(
@@ -33,6 +34,22 @@ class MarkdownParser_LlamaIndex:
     def validate_config(self) -> bool:
         """Validate configuration."""
         return True
+
+    def _load_metadata(self):
+        """Load parser metadata."""
+        from components.parsers.base.base_parser import ParserConfig
+
+        return ParserConfig(
+            name=self.name,
+            description="Markdown parser using LlamaIndex with advanced features",
+            supported_extensions=[".md", ".markdown", ".mdown", ".mkd"],
+            config=self.config
+        )
+
+    def can_parse(self, file_path: str) -> bool:
+        """Check if this parser can handle the file."""
+        path = Path(file_path)
+        return path.suffix.lower() in [".md", ".markdown", ".mdown", ".mkd"]
 
     def parse(self, source: str, **kwargs):
         """Parse markdown using LlamaIndex."""

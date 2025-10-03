@@ -23,7 +23,7 @@ class PDFParser_PyPDF2(BaseParser):
         self.preserve_layout = self.config.get("preserve_layout", True)
         self.extract_page_info = self.config.get("extract_page_info", True)
         self.extract_page_structure = self.config.get("extract_page_structure", True)
-        self.combine_pages = self.config.get("combine_pages", True)
+        self.combine_pages = self.config.get("combine_pages", False)
         self.page_separator = self.config.get(
             "page_separator", "\n\n--- Page Break ---\n\n"
         )
@@ -74,57 +74,42 @@ class PDFParser_PyPDF2(BaseParser):
         return True
 
     def parse_blob(self, data: bytes, metadata: Dict[str, Any] = None) -> List:
-        """Parse PDF from raw bytes."""
-        from core.base import Document
-        import io
+        """Parse PDF from raw bytes - delegates to parse() for chunking support."""
+        import tempfile
+        import os
 
         try:
             import PyPDF2
         except ImportError:
-            print("PyPDF2 not installed. Install with: pip install PyPDF2")
+            logger.error("PyPDF2 not installed. Install with: pip install PyPDF2")
             return []
 
+        # Write blob to temporary file and use parse() method which has all chunking logic
         try:
-            # Create a BytesIO object from the raw data
-            pdf_file = io.BytesIO(data)
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
+                tmp_file.write(data)
+                tmp_path = tmp_file.name
 
-            documents = []
-            total_text = ""
+            try:
+                # Use parse() method which respects combine_pages and chunking config
+                result = self.parse(tmp_path)
 
-            # Extract text from all pages
-            for page_num, page in enumerate(pdf_reader.pages, 1):
-                try:
-                    page_text = page.extract_text()
-                    if page_text and len(page_text.strip()) > self.min_text_length:
-                        total_text += page_text + "\n"
-                except Exception as e:
-                    print(f"Error extracting text from page {page_num}: {e}")
-                    continue
+                # Update metadata in documents with blob metadata
+                if result and result.documents and metadata:
+                    for doc in result.documents:
+                        if doc.metadata:
+                            doc.metadata.update(metadata)
+                        else:
+                            doc.metadata = metadata.copy()
 
-            # Create document if we extracted any text
-            if total_text.strip():
-                filename = (
-                    metadata.get("filename", "unknown.pdf")
-                    if metadata
-                    else "unknown.pdf"
-                )
-                doc = Document(
-                    content=total_text,
-                    metadata={
-                        "source": filename,
-                        "parser": "PDFParser_PyPDF2",
-                        "page_count": len(pdf_reader.pages),
-                        **(metadata or {}),
-                    },
-                    source=filename,
-                )
-                documents.append(doc)
-
-            return documents
+                return result.documents if result else []
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
 
         except Exception as e:
-            print(f"Error parsing PDF: {e}")
+            logger.error(f"Error parsing PDF blob: {e}")
             return []
 
     def parse(self, source: str, **kwargs):

@@ -87,8 +87,17 @@ def process_dataset_task(self: Task, namespace: str, project: str, dataset: str)
 
         # Process results
         files_ingested = []
-        for i, (success, details) in enumerate(results):
+        for i, result_item in enumerate(results):
             file_hash = dataset_config.files[i]
+            # Handle case where result might not be a tuple
+            if isinstance(result_item, tuple) and len(result_item) == 2:
+                success, details = result_item
+            else:
+                logger.error(f"Unexpected result type for {file_hash}: {type(result_item)}")
+                logger.error(f"Result value: {result_item}")
+                success = False
+                details = {"error": f"Unexpected result format: {type(result_item).__name__}"}
+
             if not success:
                 logger.error(f"Failed to ingest file {file_hash}: {details}")
                 raise Exception(f"Failed to ingest file {file_hash}")

@@ -110,6 +110,7 @@ rag:
             chunk_overlap: 150
             chunk_strategy: "paragraphs"
             extract_metadata: true
+            combine_pages: false  # CRITICAL: Must be false to enable chunking
 
         # Word Document Parser
         - type: "DocxParser_LlamaIndex"
