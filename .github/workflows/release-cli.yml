@@ -153,6 +153,7 @@ jobs:
 
   publish-winget:
     runs-on: windows-latest
+    needs: upload-cli-release
     steps:
       - name: Get version
         id: version
