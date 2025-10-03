@@ -13,6 +13,7 @@ sys.path.insert(0, str(repo_root))
 
 from config.datamodel import LlamaFarmConfig, PromptFormat  # noqa: E402
 from .base import RuntimeProvider
+from .health import HealthCheckResult
 
 
 class LemonadeProvider(RuntimeProvider):
@@ -57,53 +58,54 @@ class LemonadeProvider(RuntimeProvider):
             return instructor.mode.Mode[config.runtime.instructor_mode.upper()]
         return self.get_default_instructor_mode()
 
-    def check_health(self, config: dict = None) -> dict:
+    def check_health(self, config: LlamaFarmConfig) -> HealthCheckResult:
         """Check health of Lemonade runtime."""
         start = int(time.time() * 1000)
-        port = config.get("port", 11534) if config else 11534
-        base = f"http://127.0.0.1:{port}"
+        # Use get_base_url to extract config (handles lemonade.port, base_url, etc.)
+        base = self.get_base_url(config).replace("/api/v1", "")
         url = f"{base}/api/v1/models"
 
         try:
             resp = requests.get(url, timeout=1.0)
+            latency = int(time.time() * 1000) - start
+
             if 200 <= resp.status_code < 300:
                 data = resp.json()
                 models = data.get("data", [])
                 model_ids = [m.get("id") for m in models if m.get("id")]
 
-                return {
-                    "name": "lemonade",
-                    "status": "healthy",
-                    "message": f"{base} reachable, {len(model_ids)} model(s) loaded",
-                    "latency_ms": int(time.time() * 1000) - start,
-                    "details": {
+                return HealthCheckResult(
+                    name="lemonade",
+                    status="healthy",
+                    message=f"{base} reachable, {len(model_ids)} model(s) loaded",
+                    latency_ms=latency,
+                    details={
                         "host": base,
-                        "port": port,
                         "model_count": len(model_ids),
                         "models": model_ids,
                     },
-                }
+                )
             else:
-                return {
-                    "name": "lemonade",
-                    "status": "unhealthy",
-                    "message": f"{base} returned HTTP {resp.status_code}",
-                    "latency_ms": int(time.time() * 1000) - start,
-                    "details": {"host": base, "port": port, "status_code": resp.status_code},
-                }
+                return HealthCheckResult(
+                    name="lemonade",
+                    status="unhealthy",
+                    message=f"{base} returned HTTP {resp.status_code}",
+                    latency_ms=latency,
+                    details={"host": base, "status_code": resp.status_code},
+                )
         except requests.exceptions.Timeout:
-            return {
-                "name": "lemonade",
-                "status": "unhealthy",
-                "message": f"Timeout connecting to {base} - is Lemonade running? (nx start lemonade)",
-                "latency_ms": int(time.time() * 1000) - start,
-                "details": {"host": base, "port": port},
-            }
+            return HealthCheckResult(
+                name="lemonade",
+                status="unhealthy",
+                message=f"Timeout connecting to {base} - is Lemonade running? (nx start lemonade)",
+                latency_ms=int(time.time() * 1000) - start,
+                details={"host": base},
+            )
         except Exception as e:
-            return {
-                "name": "lemonade",
-                "status": "unhealthy",
-                "message": f"Error: {str(e)}",
-                "latency_ms": int(time.time() * 1000) - start,
-                "details": {"host": base, "port": port},
-            }
+            return HealthCheckResult(
+                name="lemonade",
+                status="unhealthy",
+                message=f"Error: {str(e)}",
+                latency_ms=int(time.time() * 1000) - start,
+                details={"host": base},
+            )

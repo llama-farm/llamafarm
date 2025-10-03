@@ -5,6 +5,8 @@ from typing import Optional, TYPE_CHECKING
 import instructor
 from openai import AsyncOpenAI
 
+from .health import HealthCheckResult
+
 if TYPE_CHECKING:
     from config.datamodel import LlamaFarmConfig
 
@@ -69,18 +71,14 @@ class RuntimeProvider(ABC):
         pass
 
     @abstractmethod
-    def check_health(self, config: Optional[dict] = None) -> dict:
+    def check_health(self, config: "LlamaFarmConfig") -> HealthCheckResult:
         """Check health of this provider's runtime.
 
         Args:
-            config: Optional provider-specific configuration
+            config: LlamaFarm configuration (or temp config with model settings)
+                   Provider extracts base_url, port, etc. from config.runtime
 
         Returns:
-            Dictionary with health check results containing:
-                - name: str - Provider name
-                - status: str - "healthy" or "unhealthy"
-                - message: str - Human-readable status message
-                - latency_ms: int - Response time in milliseconds
-                - details: dict - Additional provider-specific details
+            HealthCheckResult with status, message, latency, and details
         """
         pass

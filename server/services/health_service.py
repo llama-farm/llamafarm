@@ -7,8 +7,10 @@ from typing import Any
 import requests  # type: ignore
 
 from agents.providers import get_provider
-from config.datamodel import Provider
+from agents.providers.health import HealthCheckResult
+from config.datamodel import Provider, Model
 from core.settings import settings
+from services.model_service import ModelService
 
 
 def _now_ms() -> int:
@@ -133,18 +135,44 @@ def _load_seed_runtime_config() -> tuple[str | None, str | None, int | None, str
 
 def _check_ollama() -> dict:
     """Check Ollama runtime health using provider registry."""
+    # Create a temp config with Ollama settings from environment
+    class TempConfig:
+        class Runtime:
+            provider = Provider.ollama
+            base_url = f"{settings.ollama_host}/v1"
+            api_key = settings.ollama_api_key
+            model = None
+            instructor_mode = None
+            prompt_format = None
+            model_api_parameters = None
+            lemonade = None
+
+        runtime = Runtime()
+
     provider = get_provider(Provider.ollama)
-    return provider.check_health({"base_url": settings.ollama_host})
+    result = provider.check_health(TempConfig())
+    return result.to_dict()
 
 
-def _check_lemonade(port: int = 11534) -> dict:
-    """Check Lemonade runtime health using provider registry.
+def _create_temp_config(model_config: Model):
+    """Create a temp LlamaFarmConfig from a Model for provider health checks."""
+    class TempConfig:
+        class Runtime:
+            def __init__(self, mc: Model):
+                self.provider = mc.provider
+                self.model = mc.model
+                self.base_url = mc.base_url
+                self.api_key = mc.api_key
+                self.huggingface_token = mc.huggingface_token
+                self.instructor_mode = mc.instructor_mode
+                self.prompt_format = mc.prompt_format
+                self.model_api_parameters = mc.model_api_parameters
+                self.lemonade = mc.lemonade
 
-    Args:
-        port: Lemonade server port (default: 11534)
-    """
-    provider = get_provider(Provider.lemonade)
-    return provider.check_health({"port": port})
+        def __init__(self, mc: Model):
+            self.runtime = self.Runtime(mc)
+
+    return TempConfig(model_config)
 
 
 def _check_seed_project() -> dict:
@@ -161,32 +189,38 @@ def _check_seed_project() -> dict:
             "runtime": {"provider": provider_str, "model": None},
         }
 
-    # Use provider registry for health checks
+    # Load seed project config for ModelService
     try:
-        # Map provider string to enum
-        provider_enum = Provider(provider_str)
-        provider_impl = get_provider(provider_enum)
+        import yaml
+        seed_path = (
+            Path(__file__).resolve().parents[1]
+            / "seeds"
+            / "project_seed"
+            / "llamafarm.yaml"
+        )
+        project_config_data = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
+        from config.datamodel import LlamaFarmConfig
+        project_config = LlamaFarmConfig(**project_config_data)
 
-        # Build provider-specific config
-        config = {}
-        if provider_str == "ollama":
-            config["base_url"] = settings.ollama_host
-        elif provider_str == "lemonade":
-            config["port"] = port if port else 11534
+        # Use ModelService to get the correct model config
+        model_config = ModelService.get_model_config(project_config, model_name=None)
 
-        # Get health check from provider
-        health_result = provider_impl.check_health(config)
+        # Create temp config for health check
+        temp_config = _create_temp_config(model_config)
+
+        # Get provider and check health
+        provider_impl = get_provider(model_config.provider)
+        health_result = provider_impl.check_health(temp_config)
 
         # Enhance with model validation for Ollama
-        if provider_str == "ollama" and health_result.get("status") == "healthy":
-            details = health_result.get("details", {})
-            models = details.get("models", [])
-            present = model in models
+        if model_config.provider == Provider.ollama and health_result.status == "healthy":
+            models = health_result.details.get("models", [])
+            present = model_config.model in models
             status = "healthy" if present else "unhealthy"
             message = (
                 "Model available"
                 if present
-                else f"Model '{model}' not found; run: ollama pull {model}"
+                else f"Model '{model_config.model}' not found; run: ollama pull {model_config.model}"
             )
 
             return {
@@ -195,34 +229,25 @@ def _check_seed_project() -> dict:
                 "message": message,
                 "latency_ms": _now_ms() - start,
                 "runtime": {
-                    "provider": provider_str,
-                    "host": details.get("host"),
-                    "model": model,
+                    "provider": model_config.provider.value,
+                    "host": health_result.details.get("host"),
+                    "model": model_config.model,
                 },
             }
 
         # For other providers, use health check result directly
         return {
             "name": "project",
-            "status": health_result.get("status", "unhealthy"),
-            "message": health_result.get("message", "Provider health check completed"),
+            "status": health_result.status,
+            "message": health_result.message,
             "latency_ms": _now_ms() - start,
             "runtime": {
-                "provider": provider_str,
-                "model": model,
-                **health_result.get("details", {}),
+                "provider": model_config.provider.value,
+                "model": model_config.model,
+                **health_result.details,
             },
         }
 
-    except ValueError:
-        # Unknown provider
-        return {
-            "name": "project",
-            "status": "unhealthy",
-            "message": f"Unknown provider: {provider_str}",
-            "latency_ms": _now_ms() - start,
-            "runtime": {"provider": provider_str, "model": model},
-        }
     except Exception as e:
         return {
             "name": "project",

@@ -13,6 +13,7 @@ sys.path.insert(0, str(repo_root))
 
 from config.datamodel import LlamaFarmConfig, PromptFormat  # noqa: E402
 from .base import RuntimeProvider
+from .health import HealthCheckResult
 
 
 class OpenAIProvider(RuntimeProvider):
@@ -50,14 +51,15 @@ class OpenAIProvider(RuntimeProvider):
             return instructor.mode.Mode[config.runtime.instructor_mode.upper()]
         return self.get_default_instructor_mode()
 
-    def check_health(self, config: dict = None) -> dict:
+    def check_health(self, config: LlamaFarmConfig) -> HealthCheckResult:
         """Check health of OpenAI API.
 
         Note: This is a basic implementation. Full health check would require
         making an authenticated request to verify API key validity.
         """
         start = int(time.time() * 1000)
-        base_url = config.get("base_url", "https://api.openai.com/v1") if config else "https://api.openai.com/v1"
+        # Extract base URL from config using provider's method
+        base_url = self.get_base_url(config)
 
         # For OpenAI, we can check if the base URL is reachable
         # A full health check would require an API key
@@ -65,27 +67,28 @@ class OpenAIProvider(RuntimeProvider):
             # Just check if we can reach the base domain
             domain = base_url.split("/v1")[0]
             resp = requests.get(domain, timeout=2.0)
+            latency = int(time.time() * 1000) - start
 
-            return {
-                "name": "openai",
-                "status": "reachable",
-                "message": f"{base_url} domain reachable (API key not verified)",
-                "latency_ms": int(time.time() * 1000) - start,
-                "details": {"base_url": base_url},
-            }
+            return HealthCheckResult(
+                name="openai",
+                status="reachable",
+                message=f"{base_url} domain reachable (API key not verified)",
+                latency_ms=latency,
+                details={"base_url": base_url},
+            )
         except requests.exceptions.Timeout:
-            return {
-                "name": "openai",
-                "status": "unhealthy",
-                "message": f"Timeout connecting to {base_url}",
-                "latency_ms": int(time.time() * 1000) - start,
-                "details": {"base_url": base_url},
-            }
+            return HealthCheckResult(
+                name="openai",
+                status="unhealthy",
+                message=f"Timeout connecting to {base_url}",
+                latency_ms=int(time.time() * 1000) - start,
+                details={"base_url": base_url},
+            )
         except Exception as e:
-            return {
-                "name": "openai",
-                "status": "unhealthy",
-                "message": f"Error: {str(e)}",
-                "latency_ms": int(time.time() * 1000) - start,
-                "details": {"base_url": base_url},
-            }
+            return HealthCheckResult(
+                name="openai",
+                status="unhealthy",
+                message=f"Error: {str(e)}",
+                latency_ms=int(time.time() * 1000) - start,
+                details={"base_url": base_url},
+            )

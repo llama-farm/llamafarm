@@ -14,6 +14,7 @@ sys.path.insert(0, str(repo_root))
 from config.datamodel import LlamaFarmConfig, PromptFormat  # noqa: E402
 from core.settings import settings
 from .base import RuntimeProvider
+from .health import HealthCheckResult
 
 
 class OllamaProvider(RuntimeProvider):
@@ -51,49 +52,52 @@ class OllamaProvider(RuntimeProvider):
             return instructor.mode.Mode[config.runtime.instructor_mode.upper()]
         return self.get_default_instructor_mode()
 
-    def check_health(self, config: dict = None) -> dict:
+    def check_health(self, config: LlamaFarmConfig) -> HealthCheckResult:
         """Check health of Ollama runtime."""
         start = int(time.time() * 1000)
-        base = config.get("base_url", settings.ollama_host) if config else settings.ollama_host
+        # Extract base URL from config
+        base = self.get_base_url(config).replace("/v1", "")  # Remove /v1 suffix for health check
         url = f"{base}/api/tags"
 
         try:
             resp = requests.get(url, timeout=1.0)
+            latency = int(time.time() * 1000) - start
+
             if 200 <= resp.status_code < 300:
                 data = resp.json()
                 model_count = len(data.get("models", []))
-                return {
-                    "name": "ollama",
-                    "status": "healthy",
-                    "message": f"{base} reachable, {model_count} model(s) available",
-                    "latency_ms": int(time.time() * 1000) - start,
-                    "details": {
+                return HealthCheckResult(
+                    name="ollama",
+                    status="healthy",
+                    message=f"{base} reachable, {model_count} model(s) available",
+                    latency_ms=latency,
+                    details={
                         "host": base,
                         "model_count": model_count,
                         "models": [m.get("name") for m in data.get("models", [])],
                     },
-                }
+                )
             else:
-                return {
-                    "name": "ollama",
-                    "status": "unhealthy",
-                    "message": f"{base} returned HTTP {resp.status_code}",
-                    "latency_ms": int(time.time() * 1000) - start,
-                    "details": {"host": base, "status_code": resp.status_code},
-                }
+                return HealthCheckResult(
+                    name="ollama",
+                    status="unhealthy",
+                    message=f"{base} returned HTTP {resp.status_code}",
+                    latency_ms=latency,
+                    details={"host": base, "status_code": resp.status_code},
+                )
         except requests.exceptions.Timeout:
-            return {
-                "name": "ollama",
-                "status": "unhealthy",
-                "message": f"Timeout connecting to {base}",
-                "latency_ms": int(time.time() * 1000) - start,
-                "details": {"host": base},
-            }
+            return HealthCheckResult(
+                name="ollama",
+                status="unhealthy",
+                message=f"Timeout connecting to {base}",
+                latency_ms=int(time.time() * 1000) - start,
+                details={"host": base},
+            )
         except Exception as e:
-            return {
-                "name": "ollama",
-                "status": "unhealthy",
-                "message": f"Error: {str(e)}",
-                "latency_ms": int(time.time() * 1000) - start,
-                "details": {"host": base},
-            }
+            return HealthCheckResult(
+                name="ollama",
+                status="unhealthy",
+                message=f"Error: {str(e)}",
+                latency_ms=int(time.time() * 1000) - start,
+                details={"host": base},
+            )
