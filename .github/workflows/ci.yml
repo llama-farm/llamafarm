@@ -43,6 +43,22 @@ jobs:
           mkdir -p cli/cmd/config
           cp config/schema.yaml cli/cmd/config/
 
+      - name: Generate Python datamodels
+        working-directory: config
+        run: |
+          echo "Generating datamodels from schema..."
+          ./generate-types.sh
+          echo "✓ Datamodel generation complete"
+
+      - name: Validate datamodel generation
+        working-directory: config
+        run: |
+          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
+            echo "❌ Error: datamodel.py not generated or is empty"
+            exit 1
+          fi
+          echo "✓ Datamodel validation passed"
+
       - name: Build CLI
         working-directory: cli
         run: go build -v ./...
