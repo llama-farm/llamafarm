@@ -29,15 +29,31 @@ class MarkdownParser_Python(BaseParser):
         """Validate configuration."""
         return True
 
-    def _load_metadata(self):
+    def _load_metadata(self) -> ParserConfig:
         """Load parser metadata."""
         from components.parsers.base.base_parser import ParserConfig
 
         return ParserConfig(
-            name=self.name,
-            description="Markdown parser using native Python with basic parsing",
+            name="MarkdownParser_Python",
+            display_name="Python Markdown Parser",
+            version="1.0.0",
             supported_extensions=[".md", ".markdown", ".mdown", ".mkd"],
-            config=self.config
+            mime_types=["text/markdown", "text/x-markdown"],
+            capabilities=[
+                "frontmatter_extraction",
+                "header_extraction",
+                "code_block_extraction",
+                "link_extraction",
+                "section_based_chunking",
+            ],
+            dependencies={},
+            default_config={
+                "chunk_size": 1000,
+                "chunk_strategy": "sections",
+                "extract_metadata": True,
+                "extract_code_blocks": True,
+                "extract_links": True,
+            }
         )
 
     def can_parse(self, file_path: str) -> bool:

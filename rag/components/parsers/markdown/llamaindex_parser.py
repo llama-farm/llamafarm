@@ -35,15 +35,33 @@ class MarkdownParser_LlamaIndex(BaseParser):
         """Validate configuration."""
         return True
 
-    def _load_metadata(self):
+    def _load_metadata(self) -> ParserConfig:
         """Load parser metadata."""
         from components.parsers.base.base_parser import ParserConfig
 
         return ParserConfig(
-            name=self.name,
-            description="Markdown parser using LlamaIndex with advanced features",
+            name="MarkdownParser_LlamaIndex",
+            display_name="LlamaIndex Markdown Parser",
+            version="1.0.0",
             supported_extensions=[".md", ".markdown", ".mdown", ".mkd"],
-            config=self.config
+            mime_types=["text/markdown", "text/x-markdown"],
+            capabilities=[
+                "heading_extraction",
+                "code_block_extraction",
+                "link_extraction",
+                "metadata_extraction",
+            ],
+            dependencies={"llama-index": ["llama-index-core", "llama-index-readers-file"]},
+            default_config={
+                "chunk_size": 1000,
+                "chunk_overlap": 100,
+                "chunk_strategy": "headings",
+                "extract_metadata": True,
+                "extract_headings": True,
+                "extract_links": True,
+                "extract_code_blocks": True,
+                "preserve_formatting": False,
+            }
         )
 
     def can_parse(self, file_path: str) -> bool:
