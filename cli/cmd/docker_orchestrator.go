@@ -250,6 +250,25 @@ func (co *ContainerOrchestrator) startRAGContainer() error {
 		User: getCurrentUserGroup(),
 	}
 
+	// Get Ollama host for container configuration
+	ollamaHost := os.Getenv("OLLAMA_HOST")
+	if ollamaHost == "" {
+		ollamaHost = "http://localhost:11434"
+	}
+
+	// Pass through or configure Ollama access inside the container
+	if isLocalhost(ollamaHost) {
+		ollamaPort := resolvePort(ollamaHost, 11434)
+		spec.AddHosts = []string{"host.docker.internal:host-gateway"}
+		spec.Env["OLLAMA_HOST"] = fmt.Sprintf("http://host.docker.internal:%d", ollamaPort)
+	} else {
+		spec.Env["OLLAMA_HOST"] = ollamaHost
+	}
+
+	if v, ok := os.LookupEnv("OLLAMA_PORT"); ok && strings.TrimSpace(v) != "" {
+		spec.Env["OLLAMA_PORT"] = v
+	}
+
 	logDebug(fmt.Sprintf("Starting RAG container with network: %s", networkName))
 
 	// Use the new Docker SDK-based container starter with network support
