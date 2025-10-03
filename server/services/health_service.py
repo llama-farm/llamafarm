@@ -72,65 +72,6 @@ def _check_storage() -> dict:
         }
 
 
-def _load_seed_runtime_config() -> tuple[str | None, str | None, int | None, str]:
-    """Return (provider, model, port, message). Reads the project seed YAML and extracts runtime config.
-
-    If missing or invalid, returns (None, None, None, reason).
-    """
-    try:
-        import yaml  # type: ignore
-    except Exception:  # pragma: no cover - environment specific
-        return None, None, None, "PyYAML not installed"
-
-    seed_path = (
-        Path(__file__).resolve().parents[1]
-        / "seeds"
-        / "project_seed"
-        / "llamafarm.yaml"
-    )
-    if not seed_path.exists():
-        return None, None, None, f"Seed file not found at {seed_path}"
-
-    try:
-        data = yaml.safe_load(seed_path.read_text(encoding="utf-8")) or {}
-        runtime = (data or {}).get("runtime") or {}
-        models = runtime.get("models") or []
-
-        if not models or not isinstance(models, list):
-            return None, None, None, "runtime.models list missing or empty in seed"
-
-        # Get default_model name or use first model
-        default_model_name = runtime.get("default_model")
-        default_model = None
-
-        if default_model_name:
-            # Find model by name
-            for model_config in models:
-                if model_config.get("name") == default_model_name:
-                    default_model = model_config
-                    break
-
-        # Fallback to first model if default not found
-        if not default_model and models:
-            default_model = models[0]
-
-        if not default_model:
-            return None, None, None, "No models configured in seed"
-
-        provider = default_model.get("provider", "ollama")
-        model = default_model.get("model")
-
-        # Get provider-specific port configuration
-        port = None
-        if provider == "lemonade":
-            lemonade_config = default_model.get("lemonade") or {}
-            port = lemonade_config.get("port", 11534)
-
-        if not model or not isinstance(model, str):
-            return None, None, None, "Model name missing in seed"
-        return provider, model, port, "ok"
-    except Exception as e:
-        return None, None, None, f"Failed to parse seed YAML: {e}"
 
 
 def _check_ollama() -> dict:
@@ -178,16 +119,6 @@ def _create_temp_config(model_config: Model):
 def _check_seed_project() -> dict:
     """Validate the project seed runtime is reachable and model is present using provider registry."""
     start = _now_ms()
-    provider_str, model, port, reason = _load_seed_runtime_config()
-
-    if model is None:
-        return {
-            "name": "project",
-            "status": "unhealthy",
-            "message": reason,
-            "latency_ms": _now_ms() - start,
-            "runtime": {"provider": provider_str, "model": None},
-        }
 
     # Load seed project config for ModelService
     try:
@@ -198,6 +129,16 @@ def _check_seed_project() -> dict:
             / "project_seed"
             / "llamafarm.yaml"
         )
+
+        if not seed_path.exists():
+            return {
+                "name": "project",
+                "status": "unhealthy",
+                "message": f"Seed file not found at {seed_path}",
+                "latency_ms": _now_ms() - start,
+                "runtime": {"provider": None, "model": None},
+            }
+
         project_config_data = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
         from config.datamodel import LlamaFarmConfig
         project_config = LlamaFarmConfig(**project_config_data)
@@ -254,7 +195,7 @@ def _check_seed_project() -> dict:
             "status": "unhealthy",
             "message": f"Failed to check provider health: {e}",
             "latency_ms": _now_ms() - start,
-            "runtime": {"provider": provider_str, "model": model},
+            "runtime": {"provider": None, "model": None},
         }
 
 
