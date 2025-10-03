@@ -111,7 +111,9 @@ func displayVersion(v string) string {
 	if v == "" {
 		return "unknown"
 	}
-	return v
+	// Normalize version to avoid double "v" prefix
+	normalized := strings.TrimPrefix(v, "v")
+	return "v" + normalized
 }
 
 func normalizeForSemver(raw string) (string, *semver.Version) {
