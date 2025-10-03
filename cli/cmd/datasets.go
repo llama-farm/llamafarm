@@ -403,8 +403,8 @@ var datasetsProcessCmd = &cobra.Command{
 
 		datasetName := args[0]
 
-		// Ensure server is up
-		ensureServerAvailable(serverCfg.URL, true)
+		// Ensure server and RAG are up (process command needs RAG for ingestion)
+		ensureServerAndRAGAvailable(serverCfg.URL, true)
 
 		// Call the process endpoint
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process",

@@ -96,7 +96,109 @@ func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
 		os.Exit(1)
 	}
 
-	// Poll for readiness
+	// Wait for server to be healthy, then start RAG async in background
+	hr := waitForServerHealth(serverURL)
+	go handleRAGServiceInBackground(serverURL, hr)
+	return hr
+}
+
+// ensureServerAndRAGAvailable ensures both server and RAG containers are running and healthy.
+// This function waits for RAG to be ready before returning, unlike ensureServerAvailable
+// which starts RAG asynchronously in the background.
+func ensureServerAndRAGAvailable(serverURL string, printStatus bool) *HealthPayload {
+	if serverURL == "" {
+		serverURL = "http://localhost:8000"
+	}
+
+	// Check if server is already healthy
+	if hr, err := checkServerHealth(serverURL); err == nil {
+		// Server is healthy, now ensure RAG is healthy too
+		return ensureRAGHealthy(serverURL, hr, printStatus)
+	} else if herr, ok := err.(*HealthError); ok {
+		// Server exists but not healthy - handle as before
+		if printStatus || herr.Status == "unhealthy" {
+			prettyPrintHealth(os.Stderr, herr.HealthResp)
+		}
+		if herr.Status == "unhealthy" {
+			// Check if unhealthy is only due to RAG being down
+			if isUnhealthyOnlyDueToRAG(&herr.HealthResp) {
+				OutputWarning("Server is unhealthy due to RAG component, starting RAG service...")
+				if isLocalhost(serverURL) {
+					return ensureRAGHealthy(serverURL, &herr.HealthResp, printStatus)
+				} else {
+					OutputError("Server is unhealthy due to RAG component, but cannot start RAG on remote server")
+					os.Exit(1)
+				}
+			} else {
+				// Server is unhealthy for other reasons
+				os.Exit(1)
+			}
+		} else {
+			// Server is degraded but running - try to get RAG healthy
+			return ensureRAGHealthy(serverURL, &herr.HealthResp, printStatus)
+		}
+	}
+
+	// Server not available - start it (same as current logic)
+	if !isLocalhost(serverURL) {
+		OutputError("Could not contact server %s", serverURL)
+		os.Exit(1)
+	}
+
+	if err := startLocalServerViaDocker(serverURL); err != nil {
+		OutputError("Could not start local server: %v", err)
+		os.Exit(1)
+	}
+
+	// Wait for server to be healthy (timeout starts after container is started)
+	hr := waitForServerHealth(serverURL)
+
+	// CRITICAL: Now that server started from scratch, start RAG and wait for it
+	return ensureRAGHealthy(serverURL, hr, printStatus)
+}
+
+// ensureRAGHealthy ensures RAG service is healthy, starting it if necessary and waiting for readiness
+func ensureRAGHealthy(serverURL string, serverHealth *HealthPayload, printStatus bool) *HealthPayload {
+	// Check if RAG is already healthy
+	ragComponent := findRAGComponent(serverHealth)
+	if ragComponent != nil && strings.EqualFold(ragComponent.Status, "healthy") {
+		return serverHealth // RAG already healthy
+	}
+
+	// Start RAG container if needed (includes image pull - no timeout during this phase)
+	orchestrator := NewContainerOrchestrator()
+	if !orchestrator.IsRAGContainerRunning() {
+		OutputProgress("Starting RAG service (pulling image if needed)...\n")
+		if err := orchestrator.startRAGContainer(); err != nil {
+			OutputError("Could not start RAG container: %v", err)
+			os.Exit(1)
+		}
+		OutputProgress("RAG container started, waiting for service to become ready...\n")
+	} else {
+		OutputProgress("RAG container is running, waiting for service to become ready...\n")
+	}
+
+	// Wait for RAG to be healthy (timeout starts AFTER container is started)
+	timeout := 30 * time.Second
+	if err := orchestrator.waitForRAGReadiness(timeout, serverURL); err != nil {
+		OutputError("RAG service did not become ready within %v: %v", timeout, err)
+		os.Exit(1)
+	}
+
+	// Get fresh server health now that RAG should be ready
+	if hr, err := checkServerHealth(serverURL); err == nil {
+		OutputSuccess("Server and RAG are ready\n")
+		return hr
+	} else {
+		OutputError("Server health check failed after RAG startup: %v", err)
+		os.Exit(1)
+	}
+	return nil
+}
+
+// waitForServerHealth waits for server to become healthy with timeout
+func waitForServerHealth(serverURL string) *HealthPayload {
+	// Poll for readiness (timeout starts after container startup is complete)
 	timeout := serverStartTimeout
 	if timeout <= 0 {
 		timeout = 45 * time.Second
@@ -117,12 +219,11 @@ func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
 			time.Sleep(duration)
 		}
 	}
+
 	OutputError("Server did not become ready at %s within timeout", serverURL)
 	if herr, ok := lastError.(*HealthError); ok {
 		// Render once on each failed poll tick to aid diagnosis
-		if printStatus || herr.Status == "unhealthy" {
-			prettyPrintHealth(os.Stderr, herr.HealthResp)
-		}
+		prettyPrintHealth(os.Stderr, herr.HealthResp)
 		if herr.Status == "unhealthy" {
 			os.Exit(1)
 		}

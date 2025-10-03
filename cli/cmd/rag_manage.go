@@ -48,7 +48,7 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerAndRAGAvailable(serverCfg.URL, true)
 
 		// Confirm operation unless force flag is set
 		if !force {
@@ -116,7 +116,7 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerAndRAGAvailable(serverCfg.URL, true)
 
 		// Build deletion request
 		req := buildDeleteRequest()
@@ -185,7 +185,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerAndRAGAvailable(serverCfg.URL, true)
 
 		// Get prune preview
 		preview, err := getPrunePreview(serverCfg, manageDatabase)
@@ -251,7 +251,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerAndRAGAvailable(serverCfg.URL, true)
 
 		fmt.Printf("📦 Exporting database to %s...\n", outputFile)
 
@@ -297,7 +297,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL, true)
+		ensureServerAndRAGAvailable(serverCfg.URL, true)
 
 		// Read import file
 		importData, err := readImportFile(inputFile)

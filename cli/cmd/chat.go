@@ -167,7 +167,11 @@ Examples:
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverURL, true)
+		if runNoRAG {
+			ensureServerAvailable(serverURL, true) // Server only, RAG async
+		} else {
+			ensureServerAndRAGAvailable(serverURL, true) // Wait for both server and RAG
+		}
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
