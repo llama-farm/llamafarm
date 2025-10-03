@@ -27,8 +27,62 @@ fi
 
 if [ -n "$CONFIG_FILE" ]; then
     # Use uv run python to parse YAML (uses project's venv)
-    # Parse multi-model format (find first lemonade model in list)
-    CONFIG_MODEL=$(uv run python -c "
+    # Parse multi-model format
+    # If LEMONADE_MODEL_NAME env var is set, find that specific model
+    # Otherwise, find first lemonade model in list
+    if [ -n "$LEMONADE_MODEL_NAME" ]; then
+        CONFIG_MODEL=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+        print(model_config.get('model', ''))
+        break
+" 2>/dev/null)
+
+        CONFIG_PORT=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+        print(model_config.get('lemonade', {}).get('port', ''))
+        break
+" 2>/dev/null)
+
+        CONFIG_BACKEND=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+        print(model_config.get('lemonade', {}).get('backend', ''))
+        break
+" 2>/dev/null)
+
+        CONFIG_CONTEXT_SIZE=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+        print(model_config.get('lemonade', {}).get('context_size', ''))
+        break
+" 2>/dev/null)
+
+        CONFIG_HF_TOKEN=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+        print(model_config.get('huggingface_token', ''))
+        break
+" 2>/dev/null)
+    else
+        # No LEMONADE_MODEL_NAME specified, use first lemonade model
+        CONFIG_MODEL=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
@@ -38,7 +92,7 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-    CONFIG_PORT=$(uv run python -c "
+        CONFIG_PORT=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
@@ -48,7 +102,7 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-    CONFIG_BACKEND=$(uv run python -c "
+        CONFIG_BACKEND=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
@@ -58,7 +112,7 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-    CONFIG_CONTEXT_SIZE=$(uv run python -c "
+        CONFIG_CONTEXT_SIZE=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
@@ -68,7 +122,7 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-    CONFIG_HF_TOKEN=$(uv run python -c "
+        CONFIG_HF_TOKEN=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
@@ -77,6 +131,7 @@ for model_config in models:
         print(model_config.get('huggingface_token', ''))
         break
 " 2>/dev/null)
+    fi
 
 
     # Override defaults with config values if present
