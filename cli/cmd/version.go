@@ -18,9 +18,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of LlamaFarm CLI",
 	Long:  "Print the version number of LlamaFarm CLI",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Normalize version to avoid double "v" prefix
-		displayVersion := strings.TrimPrefix(Version, "v")
-		fmt.Printf("LlamaFarm CLI v%s\n", displayVersion)
+		fmt.Printf("LlamaFarm CLI %s\n", formatVersionForDisplay(Version))
 	},
 }
 

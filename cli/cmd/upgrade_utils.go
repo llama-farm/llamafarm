@@ -289,3 +289,15 @@ func normalizeVersion(version string) string {
 	// Add 'v' prefix to the normalized version
 	return "v" + normalized
 }
+
+// formatVersionForDisplay normalizes a version string for consistent display.
+// It ensures the version has a "v" prefix while avoiding double prefixes.
+// Examples: "v1.0.0" -> "v1.0.0", "1.0.0" -> "v1.0.0", "" -> "unknown"
+func formatVersionForDisplay(version string) string {
+	if version == "" {
+		return "unknown"
+	}
+	// Normalize version to avoid double "v" prefix (handle both "v" and "V")
+	normalized := strings.TrimPrefix(strings.TrimPrefix(version, "v"), "V")
+	return "v" + normalized
+}
