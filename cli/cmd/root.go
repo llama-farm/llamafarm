@@ -45,6 +45,22 @@ Getting started:
 		}
 		return nil
 	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		// Avoid duplicate output when the user explicitly runs the upgrade command.
+		if cmd != nil && cmd.Name() == "upgrade" {
+			return nil
+		}
+
+		info, err := maybeCheckForUpgrade(false)
+		if err != nil {
+			logDebug(fmt.Sprintf("skipping upgrade notification: %v", err))
+			return nil
+		}
+		if info != nil && info.UpdateAvailable && info.CurrentVersionIsSemver {
+			fmt.Fprintf(os.Stderr, "🚀 A new LlamaFarm CLI release (%s) is available. Run 'lf version upgrade' for details.\n", info.LatestVersion)
+		}
+		return nil
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -65,6 +81,19 @@ func init() {
 
 	if debug {
 		InitDebugLogger("")
+	}
+}
+
+// getLFDataDir returns the directory to store LlamaFarm data.
+var getLFDataDir = func() (string, error) {
+	dataDir := os.Getenv("LF_DATA_DIR")
+	if dataDir != "" {
+		return dataDir, nil
+	}
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(homeDir, ".llamafarm"), nil
+	} else {
+		return "", fmt.Errorf("getLFDataDir: could not determine home directory: %w", err)
 	}
 }
 

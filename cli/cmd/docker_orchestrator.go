@@ -61,6 +61,8 @@ func (co *ContainerOrchestrator) EnsureMultiContainerStack(serverURL string, pri
 		return &herr.HealthResp
 	}
 
+	logDebug("Starting server container because server is not healthy...")
+
 	// Start server with network
 	if err := co.startServerContainer(serverURL); err != nil {
 		OutputError("Could not start server container: %v\n", err)
@@ -221,13 +223,9 @@ func (co *ContainerOrchestrator) startRAGContainer() error {
 	}
 
 	// Get data directory
-	dataDir := os.Getenv("LF_DATA_DIR")
-	if dataDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("could not determine home directory: %v", err)
-		}
-		dataDir = fmt.Sprintf("%s/.llamafarm/data", homeDir)
+	dataDir, err := getLFDataDir()
+	if err != nil {
+		return fmt.Errorf("failed to get data directory: %v", err)
 	}
 
 	// Create data directory if it doesn't exist

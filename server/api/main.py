@@ -1,5 +1,7 @@
 import fastapi
 from asgi_correlation_id import CorrelationIdMiddleware
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
 import api.routers as routers
 from api.errors import register_exception_handlers
@@ -14,8 +16,14 @@ logger = FastAPIStructLogger()
 API_PREFIX = "/v1"
 
 
+class NoNoneJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        # `jsonable_encoder` lets you apply exclude_none globally
+        return super().render(jsonable_encoder(content, exclude_none=True))
+
+
 def llama_farm_api() -> fastapi.FastAPI:
-    app = fastapi.FastAPI()
+    app = fastapi.FastAPI(default_response_class=NoNoneJSONResponse)
 
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(StructLogMiddleware)
@@ -28,6 +36,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.datasets_router, prefix=API_PREFIX)
     app.include_router(routers.inference_router, prefix=API_PREFIX)
     app.include_router(routers.rag_router, prefix=API_PREFIX)
+    app.include_router(routers.upgrades_router, prefix=API_PREFIX)
     # Health endpoints are exposed at the root (no version prefix)
     app.include_router(routers.health_router)
 

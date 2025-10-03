@@ -63,10 +63,10 @@ def test_get_task_pending_state(mocker):
     body = resp.json()
     assert body["task_id"] == "tk-1"
     assert body["state"] == "PENDING"
-    assert body["meta"] is None
-    assert body["result"] is None
-    assert body["error"] is None
-    assert body["traceback"] is None
+    assert not hasattr(body, "meta")
+    assert not hasattr(body, "result")
+    assert not hasattr(body, "error")
+    assert not hasattr(body, "traceback")
     mocked_app.AsyncResult.assert_called_once_with("tk-1")
 
 
@@ -82,8 +82,8 @@ def test_get_task_success_state(mocker):
     body = resp.json()
     assert body["state"] == "SUCCESS"
     assert body["result"] == {"ok": True}
-    assert body["error"] is None
-    assert body["traceback"] is None
+    assert not hasattr(body, "error")
+    assert not hasattr(body, "traceback")
 
 
 def test_get_task_failure_state(mocker):

@@ -4,6 +4,7 @@ name: project_seed
 namespace: llamafarm
 
 runtime:
+  default_model: default
   models:
   - name: default
     description: "Default Ollama model for LlamaFarm"
@@ -11,7 +12,7 @@ runtime:
     model: gemma3:1b
     base_url: http://localhost:11434/v1
     prompt_format: unstructured
-    default: true
+
 
 prompts:
   - role: "system"
@@ -45,3 +46,14 @@ prompts:
       Respond with plain text in natural language. Do NOT wrap your response in JSON or any structured format. Just provide direct, helpful answers in conversational Markdown.
 
       Remember: You're here to make LlamaFarm easier to use. Be friendly, concise, and actionable.
+  - role: "assistant"
+    content: |
+      Welcome to LlamaFarm dev mode! 🦙
+
+      I can help you with:
+      - Getting started: `lf init`, `lf start`
+      - Dataset management: `lf datasets create/upload/process`
+      - RAG queries: `lf rag query`
+      - Configuration: editing `llamafarm.yaml`
+
+      Ask me anything about LlamaFarm, or type `/help` for chat commands!

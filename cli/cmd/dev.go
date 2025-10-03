@@ -29,29 +29,40 @@ var startCmd = &cobra.Command{
 			ollamaHost = "http://localhost:11434"
 		}
 
-		// Load config to get namespace and project for watcher
-		cwd := getEffectiveCWD()
-		cfg, err := config.LoadConfig(cwd)
-		if err != nil {
-			OutputError("Error loading config: %v\nRun `lf init` to create a new project if none exists.\n", err)
-			os.Exit(1)
-		}
-
-		projectInfo, err := cfg.GetProjectInfo()
-		if err != nil {
-			OutputWarning("Warning: Could not extract project info for watcher: %v\n", err)
-		} else {
-			// Start the config file watcher in background
-			if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
-				OutputWarning("Warning: Failed to start config watcher: %v\n", err)
-			}
-		}
-
-		// Use container orchestrator for development
-		orchestrator := NewContainerOrchestrator()
-		serverHealth := orchestrator.EnsureMultiContainerStack(serverURL, false)
-		runChatSessionTUI(projectInfo, serverHealth)
+		start(SessionModeDev)
 	},
+}
+
+func start(mode SessionMode) {
+	// Load config to get namespace and project for watcher
+	cwd := getEffectiveCWD()
+	cfg, err := config.LoadConfig(cwd)
+	if err != nil {
+		OutputError("Error loading config: %v\nRun `lf init` to create a new project if none exists.\n", err)
+		os.Exit(1)
+	}
+
+	projectInfo, err := cfg.GetProjectInfo()
+	if err != nil {
+		OutputWarning("Warning: Could not extract project info for watcher: %v\n", err)
+	} else {
+		// Start the config file watcher in background
+		if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
+			OutputWarning("Warning: Failed to start config watcher: %v\n", err)
+		}
+	}
+
+	serverInfo, err := config.GetServerConfig(cwd, serverURL, "", "")
+	if err != nil {
+		OutputError("Error getting server config: %v\n", err)
+		os.Exit(1)
+	}
+	serverURL = serverInfo.URL
+
+	// Use container orchestrator for development
+	orchestrator := NewContainerOrchestrator()
+	serverHealth := orchestrator.EnsureMultiContainerStack(serverURL, false)
+	runChatSessionTUI(mode, projectInfo, serverHealth)
 }
 
 func init() {

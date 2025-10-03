@@ -1936,14 +1936,6 @@ definitions:
                 - ["*.pdf", "*.PDF"]  # All PDF files
                 - ["report_*.csv"]  # CSV files starting with report_
                 - ["README*", "*.md"]  # README files and markdown
-            file_exclude_patterns:
-              type: array
-              items:
-                type: string
-              description: Glob patterns for files to exclude (e.g., ["*_draft.pdf", "*.tmp"])
-              examples:
-                - ["*_draft.pdf", "*.tmp.pdf"]  # Draft and temp PDFs
-                - ["~$*", "*.bak"]  # Temp and backup files
             priority:
               type: integer
               description: Parser priority (higher = try first)
@@ -1998,13 +1990,6 @@ definitions:
               examples:
                 - ["*.pdf", "*.PDF"]  # PDF files only
                 - ["*"]  # All files
-            file_exclude_patterns:
-              type: array
-              items:
-                type: string
-              description: Glob patterns for files to exclude from this extractor
-              examples:
-                - ["*.tmp", "*.bak"]  # Skip temp/backup files
             priority:
               type: integer
               description: Extractor priority (higher = apply first)

@@ -10,7 +10,9 @@ Send a single prompt to your project’s chat endpoint. By default, responses in
 ## Synopsis
 
 ```
-lf chat [namespace/project] "message" [flags]
+lf chat                        # Interactive TUI using project from llamafarm.yaml
+lf chat [namespace/project]    # Interactive TUI for explicit project
+lf chat [namespace/project] "message" [flags]  # One-off request
 ```
 
 If you omit `namespace/project`, the CLI resolves them from `llamafarm.yaml`.
@@ -37,7 +39,10 @@ If you omit `namespace/project`, the CLI resolves them from `llamafarm.yaml`.
 ## Examples
 
 ```bash
-# Basic chat (RAG enabled)
+# Interactive project chat (auto-detect project)
+lf chat
+
+# Basic one-off chat (RAG enabled)
 lf chat "Summarize the latest FDA letters."
 
 # Explicit project with file input

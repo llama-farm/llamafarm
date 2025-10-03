@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.0.6](https://github.com/llama-farm/llamafarm/compare/v0.0.5...v0.0.6) (2025-10-02)
+
+
+### Features
+
+* **cli:** add curl preview and processing heartbeat ([#243](https://github.com/llama-farm/llamafarm/issues/243)) ([f4d1c59](https://github.com/llama-farm/llamafarm/commit/f4d1c5921f63db06c4ff8c9b0e2e3cd3ce4c71c7))
+* **cli:** add upgrade awareness ([#248](https://github.com/llama-farm/llamafarm/issues/248)) ([6955a8f](https://github.com/llama-farm/llamafarm/commit/6955a8f2d27ab925f58dddddf812ab938848b71e))
+* **designer:** designer onboarding questions and editable project details ([e778400](https://github.com/llama-farm/llamafarm/commit/e77840029cd6dea62a4e6978b15f27946a8be29b))
+* **designer:** project details and editor on dashboard + dashboard clean up ([68523d0](https://github.com/llama-farm/llamafarm/commit/68523d0e0ec5ea80323eec8c3e7123fb50c430c0))
+* **designer:** update create project flow, edit modal to work, proejct create loading state, ([2931226](https://github.com/llama-farm/llamafarm/commit/2931226bf45f719cc5c9ecf519d0439d05769494))
+* Enhanced CLI chat experience with dev mode, greetings, and RAG fixes ([#254](https://github.com/llama-farm/llamafarm/issues/254)) ([7ad8f78](https://github.com/llama-farm/llamafarm/commit/7ad8f78c49cdbbeb9db9a45408091e4a6d495d21))
+
+
+### Bug Fixes
+
+* **designer:** addressing sourcery comments ([32211de](https://github.com/llama-farm/llamafarm/commit/32211debbb045c86bb2cb2e2098427bd9cf9f30b))
+* **designer:** build error - remove unused svg ([7eadb74](https://github.com/llama-farm/llamafarm/commit/7eadb748abe91d36d3162a56cd021a92c703a614))
+* **designer:** persist project details ([5888ff4](https://github.com/llama-farm/llamafarm/commit/5888ff4b1852a3948ff216765b68e5bac4fba8a2))
+* **designer:** remove description to fix build error ([075af8f](https://github.com/llama-farm/llamafarm/commit/075af8f7088f3c1ffeaf52f527216283f2704a1a))
+* health check ([#261](https://github.com/llama-farm/llamafarm/issues/261)) ([1586fc3](https://github.com/llama-farm/llamafarm/commit/1586fc31598b3e76a8ea3f62ce43f10f74fea4d9))
+* **rag:** unable to process data ([#257](https://github.com/llama-farm/llamafarm/issues/257)) ([9fea950](https://github.com/llama-farm/llamafarm/commit/9fea950d6fdce6309d6ea8187399516ca1c7cfe6))
+* remove nulls and invalid values from llamafarm.yaml ([#264](https://github.com/llama-farm/llamafarm/issues/264)) ([a98ef40](https://github.com/llama-farm/llamafarm/commit/a98ef40173d2f53941c6e549756360f057048eac))
+* resolve designer chat echo detection and unhelpful responses ([#256](https://github.com/llama-farm/llamafarm/issues/256)) ([284bc34](https://github.com/llama-farm/llamafarm/commit/284bc34a24f8952eb3db38584f948f630617136e))
+* show status indicator for failures ([#266](https://github.com/llama-farm/llamafarm/issues/266)) ([fc72d7d](https://github.com/llama-farm/llamafarm/commit/fc72d7d866904f66474c4be61beb73bbc5b238a6))
+
+
+### Miscellaneous Chores
+
+* release 0.0.6 ([a2fd333](https://github.com/llama-farm/llamafarm/commit/a2fd3332df86efdaddf633cf466ca70686724d93))
+
 ## [0.0.5](https://github.com/llama-farm/llamafarm/compare/v0.0.4...v0.0.5) (2025-09-30)
 
 

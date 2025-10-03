@@ -13,9 +13,12 @@ interface ProjectModalProps {
   isOpen: boolean
   mode: ProjectModalMode
   initialName?: string
-  initialDescription?: string
+  initialBrief?: { what: string; goals: string; audience: string }
   onClose: () => void
-  onSave: (name: string) => void
+  onSave: (
+    name: string,
+    details: { brief: { what: string; goals: string; audience: string } }
+  ) => void
   onDelete?: () => void
   isLoading?: boolean
   projectError?: string | null
@@ -25,7 +28,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   isOpen,
   mode,
   initialName = '',
-  initialDescription = '',
+  initialBrief = { what: '', goals: '', audience: '' },
   onClose,
   onSave,
   onDelete,
@@ -33,14 +36,26 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   projectError = null,
 }) => {
   const [name, setName] = useState(initialName)
-  const [desc, setDesc] = useState(initialDescription)
+  const [what, setWhat] = useState(initialBrief.what || '')
+  const [goals, setGoals] = useState(initialBrief.goals || '')
+  const [audience, setAudience] = useState(initialBrief.audience || '')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       setName(initialName)
-      setDesc(initialDescription)
+      setWhat(initialBrief.what || '')
+      setGoals(initialBrief.goals || '')
+      setAudience(initialBrief.audience || '')
+      setConfirmingDelete(false)
     }
-  }, [isOpen, initialName, initialDescription])
+  }, [
+    isOpen,
+    initialName,
+    initialBrief?.what,
+    initialBrief?.goals,
+    initialBrief?.audience,
+  ])
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -62,8 +77,12 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   const handleDelete = () => {
     if (!onDelete) return
-    const ok = confirm('Are you sure you want to delete this project?')
-    if (ok) onDelete()
+    setConfirmingDelete(true)
+  }
+
+  const handleConfirmDelete = () => {
+    if (!onDelete) return
+    onDelete()
   }
 
   const handleCancel = (e: React.MouseEvent) => {
@@ -74,6 +93,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
+      setConfirmingDelete(false)
       onClose()
     }
   }
@@ -117,28 +137,71 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               <p className="text-xs text-destructive mt-1">{projectError}</p>
             )}
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Description</label>
-            <textarea
-              rows={4}
-              className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-              placeholder="Add a brief description"
-              value={desc}
-              onChange={e => setDesc(e.target.value)}
-            />
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground">What are you building?</label>
+              <textarea
+                rows={4}
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground min-h-[44px]"
+                placeholder="What are you building?"
+                value={what}
+                onChange={e => setWhat(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">What do you hope to achieve?</label>
+              <textarea
+                rows={4}
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground min-h-[44px]"
+                placeholder="What do you hope to achieve?"
+                value={goals}
+                onChange={e => setGoals(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Who will use this?</label>
+              <input
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                placeholder="Who will use this?"
+                value={audience}
+                onChange={e => setAudience(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        <DialogFooter className="flex items-center justify-between gap-2">
+        <DialogFooter className="flex items-center justify-between sm:justify-between gap-2">
           {mode === 'edit' ? (
-            <button
-              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
-              onClick={handleDelete}
-              disabled={isLoading}
-              type="button"
-            >
-              {isLoading ? 'Deleting...' : 'Delete'}
-            </button>
+            confirmingDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Delete this project?</span>
+                <button
+                  className="px-3 py-2 rounded-md text-sm text-primary hover:underline disabled:opacity-50"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={isLoading}
+                  type="button"
+                >
+                  Keep
+                </button>
+                <button
+                  className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
+                  onClick={handleConfirmDelete}
+                  disabled={isLoading}
+                  type="button"
+                >
+                  Confirm delete
+                </button>
+              </div>
+            ) : (
+              <button
+                className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
+                onClick={handleDelete}
+                disabled={isLoading}
+                type="button"
+              >
+                Delete
+              </button>
+            )
           ) : (
             <div />
           )}
@@ -160,7 +223,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               onClick={e => {
                 e.preventDefault()
                 if (isValid) {
-                  onSave(name.trim())
+                  onSave(name.trim(), { brief: { what, goals, audience } })
                 }
               }}
               disabled={!isValid}

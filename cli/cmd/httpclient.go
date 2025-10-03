@@ -15,7 +15,7 @@ type HTTPClient interface {
 }
 
 // DefaultHTTPClient is the default HTTP client
-type DefaultHTTPClient struct{}
+type DefaultHTTPClient struct{ Timeout time.Duration }
 
 // Do implements the HTTPClient interface
 func (c *DefaultHTTPClient) Do(req *http.Request) (*http.Response, error) {
@@ -49,6 +49,10 @@ func (v *VerboseHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 func getHTTPClient() HTTPClient {
 	return &VerboseHTTPClient{Inner: httpClient}
+}
+
+func getHTTPClientWithTimeout(timeout time.Duration) HTTPClient {
+	return &VerboseHTTPClient{Inner: &DefaultHTTPClient{Timeout: timeout}}
 }
 
 func logHeaders(kind string, hdr http.Header) {
