@@ -53,21 +53,21 @@ func TestResolveImageTag(t *testing.T) {
 			version:     "v1.0.0",
 			component:   "server",
 			defaultTag:  "latest",
-			expectedTag: "1.0.0",
+			expectedTag: "v1.0.0",
 		},
 		{
 			name:        "prerelease version",
 			version:     "v1.0.0-rc1",
 			component:   "server",
 			defaultTag:  "latest",
-			expectedTag: "1.0.0-rc1",
+			expectedTag: "v1.0.0-rc1",
 		},
 		{
 			name:        "prerelease with build metadata",
 			version:     "v1.0.0-beta.1+build.123",
 			component:   "server",
 			defaultTag:  "latest",
-			expectedTag: "1.0.0-beta.1+build.123",
+			expectedTag: "v1.0.0-beta.1+build.123",
 		},
 		{
 			name:        "dev version",
@@ -120,14 +120,14 @@ func TestResolveImageTag(t *testing.T) {
 			version:     "1.0.0",
 			component:   "server",
 			defaultTag:  "latest",
-			expectedTag: "1.0.0",
+			expectedTag: "v1.0.0",
 		},
 		{
 			name:        "prerelease version without v prefix",
 			version:     "2.1.0-rc1",
 			component:   "server",
 			defaultTag:  "latest",
-			expectedTag: "2.1.0-rc1",
+			expectedTag: "v2.1.0-rc1",
 		},
 	}
 
@@ -181,7 +181,7 @@ func TestGetImageURL(t *testing.T) {
 			name:        "server with semantic version",
 			version:     "v1.2.3",
 			component:   "server",
-			expectedURL: "ghcr.io/llama-farm/llamafarm/server:1.2.3",
+			expectedURL: "ghcr.io/llama-farm/llamafarm/server:v1.2.3",
 		},
 		{
 			name:        "designer with dev version",
@@ -193,13 +193,13 @@ func TestGetImageURL(t *testing.T) {
 			name:        "rag with prerelease version",
 			version:     "v2.0.0-alpha.1",
 			component:   "rag",
-			expectedURL: "ghcr.io/llama-farm/llamafarm/rag:2.0.0-alpha.1",
+			expectedURL: "ghcr.io/llama-farm/llamafarm/rag:v2.0.0-alpha.1",
 		},
 		{
 			name:        "version without v prefix gets normalized",
 			version:     "1.0.0",
 			component:   "server",
-			expectedURL: "ghcr.io/llama-farm/llamafarm/server:1.0.0",
+			expectedURL: "ghcr.io/llama-farm/llamafarm/server:v1.0.0",
 		},
 		{
 			name:           "global override applies",

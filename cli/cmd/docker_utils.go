@@ -664,8 +664,11 @@ func resolveImageTag(component string, defaultTag string) string {
 
 	// Handle version patterns: vX.X.X, X.X.X, with optional suffixes
 	if versionPattern.MatchString(version) {
-		// Strip "v" prefix for Docker tag consistency (Docker images are tagged without "v")
-		return strings.TrimPrefix(version, "v")
+		// Ensure version has "v" prefix for Docker tag consistency
+		if !strings.HasPrefix(version, "v") {
+			return "v" + version
+		}
+		return version
 	}
 
 	// Handle dev versions
