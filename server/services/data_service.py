@@ -95,10 +95,7 @@ class DataService:
         if not mime_type or mime_type == "application/octet-stream":
             # Try to guess from filename
             guessed_type, _ = mimetypes.guess_type(file.filename or "")
-            if guessed_type:
-                mime_type = guessed_type
-            else:
-                mime_type = "application/octet-stream"
+            mime_type = guessed_type if guessed_type else "application/octet-stream"
 
         # Create metadata file
         metadata_path = os.path.join(data_dir, "meta", f"{data_hash}.json")

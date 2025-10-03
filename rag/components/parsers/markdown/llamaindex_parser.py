@@ -49,7 +49,7 @@ class MarkdownParser_LlamaIndex(BaseParser):
     def can_parse(self, file_path: str) -> bool:
         """Check if this parser can handle the file."""
         path = Path(file_path)
-        return path.suffix.lower() in [".md", ".markdown", ".mdown", ".mkd"]
+        return path.suffix.lower() in {".md", ".markdown", ".mdown", ".mkd"}
 
     def parse(self, source: str, **kwargs):
         """Parse markdown using LlamaIndex."""
