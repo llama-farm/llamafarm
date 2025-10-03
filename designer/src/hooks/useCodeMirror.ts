@@ -126,7 +126,6 @@ export function useCodeMirror(
       keymap,
       defaultKeymap,
       tags,
-      oneDark,
     } = modules
 
     const extensions = []
