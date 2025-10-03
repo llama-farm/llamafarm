@@ -423,8 +423,9 @@ class BlobProcessor:
 
             parser_type = config.type.value
             try:
-                logger.debug(f"Attempting to parse {filename} with {parser_type}")
+                logger.info(f"[PARSER DEBUG] Attempting to parse {filename} with {parser_type} (priority: {config.priority})")
                 documents = parser.parse_blob(blob_data, metadata)
+                logger.info(f"[PARSER DEBUG] {parser_type} returned {len(documents) if documents else 0} documents")
 
                 if documents:
                     # Calculate chunk statistics
@@ -449,7 +450,9 @@ class BlobProcessor:
                     break
 
             except Exception as e:
-                logger.debug(f"Parser {parser_type} failed for {filename}: {e}")
+                logger.warning(f"[PARSER DEBUG] {parser_type} FAILED for {filename}: {e}")
+                import traceback
+                logger.warning(f"[PARSER DEBUG] Traceback: {traceback.format_exc()}")
                 continue
 
         if not documents:
