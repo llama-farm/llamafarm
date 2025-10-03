@@ -167,11 +167,13 @@ Examples:
 		}
 
 		// Ensure server is up (auto-start locally if needed)
+		var config *ServiceOrchestrationConfig
 		if runNoRAG {
-			ensureServerAvailable(serverURL, true) // Server only, RAG async
+			config = ChatNoRAGConfig(serverURL) // Server only, completely ignore RAG
 		} else {
-			ensureServerAndRAGAvailable(serverURL, true) // Wait for both server and RAG
+			config = RAGCommandConfig(serverURL) // Wait for both server and RAG
 		}
+		EnsureServicesWithConfig(config)
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

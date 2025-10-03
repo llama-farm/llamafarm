@@ -1087,9 +1087,8 @@ type NetworkManager struct {
 
 // NewNetworkManager creates a new network manager instance
 func NewNetworkManager() *NetworkManager {
-	// Create network name with timestamp for uniqueness
-	timestamp := time.Now().Format("20060102-150405")
-	networkName := fmt.Sprintf("llamafarm-%s", timestamp)
+	// Use a static network name that all LlamaFarm services share
+	networkName := "llamafarm"
 
 	return &NetworkManager{
 		networkName: networkName,
