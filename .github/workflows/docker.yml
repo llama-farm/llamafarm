@@ -12,15 +12,16 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
-    name: Build and Push Docker Images
+  # Build AMD64 images on standard Ubuntu runners
+  build-amd64:
+    name: Build AMD64 Docker Images
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
         include:
           - service: designer
             context: ./designer
@@ -33,16 +34,15 @@ jobs:
           - service: rag
             context: ./
             dockerfile: ./rag/Dockerfile
-            description: "LlamaFarm RAG"
+            description: "LlamaFarm RAG - Celery worker for RAG processing"
+          - service: runtime
+            context: ./
+            dockerfile: ./runtime/Dockerfile
+            description: "LlamaFarm Runtime - Python runtime service"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -61,37 +61,168 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,prefix=${{ github.ref_name }}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch,suffix=-amd64
+            type=ref,event=pr,suffix=-amd64
+            type=semver,pattern={{version}},suffix=-amd64
+            type=semver,pattern={{major}}.{{minor}},suffix=-amd64
+            type=semver,pattern={{major}},suffix=-amd64
+            type=sha,prefix=${{ github.ref_name }}-,suffix=-amd64
+            type=raw,value=latest-amd64,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.title=LlamaFarm ${{ matrix.service }}
             org.opencontainers.image.description=${{ matrix.description }}
             org.opencontainers.image.vendor=LlamaFarm
 
-      - name: Build and push Docker image
+      - name: Build and push AMD64 Docker image
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.service }}-amd64
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-amd64
           build-args: |
             GIT_SHA=${{ github.sha }}
 
-  # Build multi-service docker-compose for testing
+  # Build ARM64 images on native ARM64 runners for efficiency
+  build-arm64:
+    name: Build ARM64 Docker Images
+    runs-on: ubuntu-latest-arm64
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [designer, server, rag, runtime]
+        include:
+          - service: designer
+            context: ./designer
+            dockerfile: ./designer/Dockerfile
+            description: "LlamaFarm Designer - React frontend with nginx"
+          - service: server
+            context: ./
+            dockerfile: ./server/Dockerfile
+            description: "LlamaFarm Server - FastAPI backend"
+          - service: rag
+            context: ./
+            dockerfile: ./rag/Dockerfile
+            description: "LlamaFarm RAG - Celery worker for RAG processing"
+          - service: runtime
+            context: ./
+            dockerfile: ./runtime/Dockerfile
+            description: "LlamaFarm Runtime - Python runtime service"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch,suffix=-arm64
+            type=ref,event=pr,suffix=-arm64
+            type=semver,pattern={{version}},suffix=-arm64
+            type=semver,pattern={{major}}.{{minor}},suffix=-arm64
+            type=semver,pattern={{major}},suffix=-arm64
+            type=sha,prefix=${{ github.ref_name }}-,suffix=-arm64
+            type=raw,value=latest-arm64,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=LlamaFarm ${{ matrix.service }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.vendor=LlamaFarm
+
+      - name: Build and push ARM64 Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-arm64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+
+  # Create multi-arch manifests combining AMD64 and ARM64 images
+  create-manifest:
+    name: Create Multi-Arch Manifests
+    runs-on: ubuntu-latest
+    needs: [build-amd64, build-arm64]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [designer, server, rag, runtime]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for multi-arch tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=${{ github.ref_name }}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          # Get the image tags from metadata
+          TAGS="${{ steps.meta.outputs.tags }}"
+          
+          # Create multi-arch manifests for each tag
+          for TAG in $TAGS; do
+            echo "Creating multi-arch manifest for $TAG"
+            
+            # Create manifest combining AMD64 and ARM64 images
+            docker buildx imagetools create \
+              --tag "$TAG" \
+              "$TAG-amd64" \
+              "$TAG-arm64"
+          done
+
+  # Build multi-service docker-compose for testing (PR only)
   test-compose:
     name: Test Docker Compose
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-amd64]
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout repository
@@ -127,6 +258,7 @@ jobs:
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
           docker compose -f docker-compose.yml logs rag
+          # Note: runtime service is not included in docker-compose.yml as it's a separate service
 
       - name: Cleanup
         if: always()
@@ -138,7 +270,7 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: create-manifest
     if: github.event_name != 'pull_request'
 
     permissions:
@@ -147,7 +279,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
