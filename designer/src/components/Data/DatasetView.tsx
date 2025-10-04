@@ -30,6 +30,7 @@ import { DatasetFile } from '../../types/datasets'
 import { defaultStrategies } from '../Rag/strategies'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
+import ConfigEditor from '../ConfigEditor/ConfigEditor'
 
 type Dataset = {
   id: string
@@ -612,554 +613,593 @@ function DatasetView() {
 
   return (
     <div
-      className="h-full w-full flex flex-col gap-3 pb-40"
+      className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-40' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="flex items-center justify-between mb-3">
-        <nav className="text-sm md:text-base flex items-center gap-1.5">
-          <button
-            className="text-teal-600 dark:text-teal-400 hover:underline"
-            onClick={() => navigate('/chat/data')}
-          >
-            Data
-          </button>
-          <span className="text-muted-foreground px-1">\</span>
-          <span className="text-foreground">{datasetName}</span>
-        </nav>
-        <PageActions mode={mode} onModeChange={setMode} />
-      </div>
+      {mode === 'designer' ? (
+        <div className="flex items-center justify-between mb-3">
+          <nav className="text-sm md:text-base flex items-center gap-1.5">
+            <button
+              className="text-teal-600 dark:text-teal-400 hover:underline"
+              onClick={() => navigate('/chat/data')}
+            >
+              Data
+            </button>
+            <span className="text-muted-foreground px-1">\</span>
+            <span className="text-foreground">{datasetName}</span>
+          </nav>
+          <PageActions mode={mode} onModeChange={setMode} />
+        </div>
+      ) : (
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-2xl">Config editor</h2>
+          <PageActions mode={mode} onModeChange={setMode} />
+        </div>
+      )}
 
-      {/* Header row */}
-      <div className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl md:text-2xl font-medium">{datasetName}</h2>
-              <button
-                className="p-1 rounded-md hover:bg-accent text-muted-foreground"
-                onClick={openEdit}
-                aria-label="Edit dataset"
-                title="Edit dataset"
-              >
-                <FontIcon type="edit" className="w-4 h-4" />
-              </button>
+      {mode !== 'designer' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ConfigEditor className="h-full" />
+        </div>
+      ) : (
+        <>
+          {/* Header row */}
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl md:text-2xl font-medium">
+                    {datasetName}
+                  </h2>
+                  <button
+                    className="p-1 rounded-md hover:bg-accent text-muted-foreground"
+                    onClick={openEdit}
+                    aria-label="Edit dataset"
+                    title="Edit dataset"
+                  >
+                    <FontIcon type="edit" className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground max-w-[640px]">
+                  {dataset?.description && dataset.description.trim().length > 0
+                    ? dataset.description
+                    : 'Add a short description so teammates know what this dataset is for.'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" size="sm" className="rounded-xl">
+                  {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
+                  {dataset?.processedPercent ?? 0}% processed
+                </Badge>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (
+                      !datasetId ||
+                      !activeProject?.namespace ||
+                      !activeProject?.project
+                    )
+                      return
+
+                    try {
+                      const result = await reIngestMutation.mutateAsync({
+                        namespace: activeProject.namespace,
+                        project: activeProject.project,
+                        dataset: datasetId,
+                      })
+
+                      // Extract task ID from task_uri (e.g., "http://localhost:8000/v1/projects/ns/proj/tasks/abc-123" -> "abc-123")
+                      const taskId = result.task_uri.split('/').pop()
+                      if (taskId) {
+                        setCurrentTaskId(taskId)
+                        toast({
+                          message: 'Dataset reprocessing started...',
+                          variant: 'default',
+                        })
+                      }
+                    } catch (error) {
+                      console.error('Failed to start reprocessing:', error)
+                      toast({
+                        message:
+                          'Failed to start reprocessing. Please try again.',
+                        variant: 'destructive',
+                      })
+                    }
+                  }}
+                  disabled={reIngestMutation.isPending || !!currentTaskId}
+                >
+                  {reIngestMutation.isPending
+                    ? 'Starting...'
+                    : currentTaskId && taskStatus?.state === 'PENDING'
+                      ? 'Processing...'
+                      : 'Reprocess'}
+                </Button>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground max-w-[640px]">
-              {dataset?.description && dataset.description.trim().length > 0
-                ? dataset.description
-                : 'Add a short description so teammates know what this dataset is for.'}
-            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" size="sm" className="rounded-xl">
-              {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
-              {dataset?.processedPercent ?? 0}% processed
-            </Badge>
-            <Button
-              size="sm"
-              onClick={async () => {
+
+          {/* Processing Strategy card */}
+          <section className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium">Processing strategy</h3>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/chat/rag/${strategyId}`)}
+                >
+                  Configure
+                </Button>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="sm">Change</Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Choose a processing strategy</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-3">
+                      <div className="w-full">
+                        <SearchInput
+                          placeholder="Search processing strategies"
+                          value={strategyQuery}
+                          onChange={e => setStrategyQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="max-h-[360px] overflow-auto rounded-md border border-border/60">
+                        <ul>
+                          {defaultStrategies
+                            .filter(s =>
+                              [s.name, s.description]
+                                .join(' ')
+                                .toLowerCase()
+                                .includes(strategyQuery.toLowerCase())
+                            )
+                            .map(s => (
+                              <li
+                                key={s.id}
+                                className="px-3 py-3 border-b last:border-b-0 border-border/60 hover:bg-muted/30 transition-colors"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Badge
+                                      variant="default"
+                                      size="sm"
+                                      className="rounded-xl shrink-0"
+                                    >
+                                      {s.name}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        navigate(`/chat/rag/${s.id}`)
+                                      }
+                                    >
+                                      Configure
+                                    </Button>
+                                    <DialogClose asChild>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          if (!datasetId) return
+                                          try {
+                                            localStorage.setItem(
+                                              `lf_dataset_strategy_id_${datasetId}`,
+                                              s.id
+                                            )
+                                            localStorage.setItem(
+                                              `lf_dataset_strategy_name_${datasetId}`,
+                                              s.name
+                                            )
+                                          } catch {}
+                                          setStrategyId(s.id)
+                                          setStrategyName(s.name)
+                                          toast({
+                                            message: `Processing strategy set to ${s.name}`,
+                                            variant: 'default',
+                                          })
+                                        }}
+                                      >
+                                        Use
+                                      </Button>
+                                    </DialogClose>
+                                  </div>
+                                </div>
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  {s.description}
+                                </div>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                      <div className="mt-3 flex">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate('/chat/rag')}
+                        >
+                          Manage or add processing strategies
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <Badge variant="default" size="sm" className="rounded-xl">
+                {strategyName}
+              </Badge>
+              <Badge variant="secondary" size="sm" className="rounded-xl">
+                Last processed{' '}
+                {dataset?.lastRun
+                  ? new Date(dataset.lastRun).toLocaleString()
+                  : '—'}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="text-xs text-muted-foreground">Parsers</div>
+                <Input
+                  value={parsersSummary}
+                  readOnly
+                  className="bg-background"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="text-xs text-muted-foreground">Extractors</div>
+                <Input
+                  value={extractorsSummary}
+                  readOnly
+                  className="bg-background"
+                />
+              </div>
+            </div>
+          </section>
+
+          <Dialog
+            open={isEditOpen}
+            onOpenChange={open => {
+              setIsEditOpen(open)
+              if (!open) {
+                // Reset confirmation state when modal closes
+                setShowDeleteConfirmation(false)
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {showDeleteConfirmation ? 'Delete Dataset' : 'Edit dataset'}
+                </DialogTitle>
+              </DialogHeader>
+
+              {showDeleteConfirmation ? (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-red-600">
+                      Confirm Deletion
+                    </h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Are you sure you want to delete the dataset "{datasetName}
+                      "?
+                    </p>
+                    <p className="mt-1 text-xs text-red-500">
+                      This action cannot be undone. All files and data will be
+                      permanently deleted.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 justify-center">
+                    <Button
+                      variant="secondary"
+                      onClick={handleCancelDelete}
+                      disabled={deleteDatasetMutation.isPending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleConfirmDelete}
+                      disabled={deleteDatasetMutation.isPending}
+                    >
+                      {deleteDatasetMutation.isPending ? (
+                        <>
+                          <span className="inline-block animate-spin mr-2">
+                            ⟳
+                          </span>
+                          Deleting...
+                        </>
+                      ) : (
+                        'Delete Dataset'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">
+                        Name
+                      </label>
+                      <Input
+                        autoFocus
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        placeholder="Dataset name"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">
+                        Description
+                      </label>
+                      <Textarea
+                        value={editDescription}
+                        onChange={e => setEditDescription(e.target.value)}
+                        placeholder="Optional description"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <Button variant="destructive" onClick={handleDeleteClick}>
+                      Delete
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      <DialogClose asChild>
+                        <Button variant="secondary">Cancel</Button>
+                      </DialogClose>
+                      <Button
+                        onClick={handleSaveEdit}
+                        disabled={!editName.trim()}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* File deletion confirmation modal */}
+          {showDeleteFileConfirmation && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full mx-4 border border-border">
+                <h3 className="text-lg font-semibold text-red-600 mb-2">
+                  Delete File
+                </h3>
+                <p className="text-muted-foreground mb-4">
+                  Are you sure you want to delete this file?
+                </p>
+                <p className="text-sm text-muted-foreground mb-6 font-mono bg-muted p-2 rounded">
+                  {pendingDeleteFileHash?.substring(0, 20)}...
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={handleCancelDeleteFile}
+                    className="px-4 py-2 border border-border rounded hover:bg-muted"
+                    disabled={deleteFileMutation.isPending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDeleteFile}
+                    disabled={deleteFileMutation.isPending}
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {deleteFileMutation.isPending
+                      ? 'Deleting...'
+                      : 'Delete File'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Processing strategy and Embedding model sections removed per request */}
+
+          {isDragging && (
+            <div className="w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
+              <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
+                {isDropped ? (
+                  <Loader />
+                ) : (
+                  <FontIcon
+                    type="upload"
+                    className="w-10 h-10 text-blue-200 dark:text-white"
+                  />
+                )}
+                <div className="text-xl text-foreground">Drop data here</div>
+              </div>
+              <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
+                You can upload PDFs, CSVs, or other documents directly to this
+                dataset.
+              </p>
+            </div>
+          )}
+
+          {/* Raw data */}
+          <section className="rounded-lg border border-border bg-card p-4 mb-40">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium">Raw data</h3>
+              <Button size="sm" onClick={() => fileInputRef.current?.click()}>
+                Upload data
+              </Button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={async e => {
                 if (
                   !datasetId ||
                   !activeProject?.namespace ||
                   !activeProject?.project
-                )
-                  return
-
-                try {
-                  const result = await reIngestMutation.mutateAsync({
-                    namespace: activeProject.namespace,
-                    project: activeProject.project,
-                    dataset: datasetId,
-                  })
-
-                  // Extract task ID from task_uri (e.g., "http://localhost:8000/v1/projects/ns/proj/tasks/abc-123" -> "abc-123")
-                  const taskId = result.task_uri.split('/').pop()
-                  if (taskId) {
-                    setCurrentTaskId(taskId)
-                    toast({
-                      message: 'Dataset reprocessing started...',
-                      variant: 'default',
-                    })
-                  }
-                } catch (error) {
-                  console.error('Failed to start reprocessing:', error)
+                ) {
                   toast({
-                    message: 'Failed to start reprocessing. Please try again.',
+                    message: 'Missing required information for upload',
                     variant: 'destructive',
                   })
+                  return
                 }
+
+                const list = e.target.files ? Array.from(e.target.files) : []
+                if (list.length === 0) return
+
+                try {
+                  await handleFilesUpload(list)
+                } catch {}
+
+                // Reset input so same files can be picked again
+                e.currentTarget.value = ''
               }}
-              disabled={reIngestMutation.isPending || !!currentTaskId}
-            >
-              {reIngestMutation.isPending
-                ? 'Starting...'
-                : currentTaskId && taskStatus?.state === 'PENDING'
-                  ? 'Processing...'
-                  : 'Reprocess'}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Processing Strategy card */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Processing strategy</h3>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(`/chat/rag/${strategyId}`)}
-            >
-              Configure
-            </Button>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm">Change</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Choose a processing strategy</DialogTitle>
-                </DialogHeader>
-                <div className="flex flex-col gap-3">
-                  <div className="w-full">
-                    <SearchInput
-                      placeholder="Search processing strategies"
-                      value={strategyQuery}
-                      onChange={e => setStrategyQuery(e.target.value)}
-                    />
-                  </div>
-                  <div className="max-h-[360px] overflow-auto rounded-md border border-border/60">
-                    <ul>
-                      {defaultStrategies
-                        .filter(s =>
-                          [s.name, s.description]
-                            .join(' ')
-                            .toLowerCase()
-                            .includes(strategyQuery.toLowerCase())
-                        )
-                        .map(s => (
-                          <li
-                            key={s.id}
-                            className="px-3 py-3 border-b last:border-b-0 border-border/60 hover:bg-muted/30 transition-colors"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Badge
-                                  variant="default"
-                                  size="sm"
-                                  className="rounded-xl shrink-0"
-                                >
-                                  {s.name}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => navigate(`/chat/rag/${s.id}`)}
-                                >
-                                  Configure
-                                </Button>
-                                <DialogClose asChild>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => {
-                                      if (!datasetId) return
-                                      try {
-                                        localStorage.setItem(
-                                          `lf_dataset_strategy_id_${datasetId}`,
-                                          s.id
-                                        )
-                                        localStorage.setItem(
-                                          `lf_dataset_strategy_name_${datasetId}`,
-                                          s.name
-                                        )
-                                      } catch {}
-                                      setStrategyId(s.id)
-                                      setStrategyName(s.name)
-                                      toast({
-                                        message: `Processing strategy set to ${s.name}`,
-                                        variant: 'default',
-                                      })
-                                    }}
-                                  >
-                                    Use
-                                  </Button>
-                                </DialogClose>
-                              </div>
-                            </div>
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              {s.description}
-                            </div>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                  <div className="mt-3 flex">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate('/chat/rag')}
-                    >
-                      Manage or add processing strategies
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <Badge variant="default" size="sm" className="rounded-xl">
-            {strategyName}
-          </Badge>
-          <Badge variant="secondary" size="sm" className="rounded-xl">
-            Last processed{' '}
-            {dataset?.lastRun
-              ? new Date(dataset.lastRun).toLocaleString()
-              : '—'}
-          </Badge>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Parsers</div>
-            <Input value={parsersSummary} readOnly className="bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-muted-foreground">Extractors</div>
-            <Input
-              value={extractorsSummary}
-              readOnly
-              className="bg-background"
             />
-          </div>
-        </div>
-      </section>
-
-      <Dialog
-        open={isEditOpen}
-        onOpenChange={open => {
-          setIsEditOpen(open)
-          if (!open) {
-            // Reset confirmation state when modal closes
-            setShowDeleteConfirmation(false)
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {showDeleteConfirmation ? 'Delete Dataset' : 'Edit dataset'}
-            </DialogTitle>
-          </DialogHeader>
-
-          {showDeleteConfirmation ? (
-            <div className="space-y-4">
-              <div className="text-center">
-                <h3 className="text-lg font-semibold text-red-600">
-                  Confirm Deletion
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Are you sure you want to delete the dataset "{datasetName}"?
-                </p>
-                <p className="mt-1 text-xs text-red-500">
-                  This action cannot be undone. All files and data will be
-                  permanently deleted.
-                </p>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-1/2">
+                <SearchInput
+                  placeholder="Search raw files"
+                  value={searchValue}
+                  onChange={e => setSearchValue(e.target.value)}
+                />
               </div>
-
-              <div className="flex gap-3 justify-center">
-                <Button
-                  variant="secondary"
-                  onClick={handleCancelDelete}
-                  disabled={deleteDatasetMutation.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleConfirmDelete}
-                  disabled={deleteDatasetMutation.isPending}
-                >
-                  {deleteDatasetMutation.isPending ? (
-                    <>
-                      <span className="inline-block animate-spin mr-2">⟳</span>
-                      Deleting...
-                    </>
-                  ) : (
-                    'Delete Dataset'
+            </div>
+            <div className="rounded-md border border-input bg-background p-0 text-xs">
+              {files.length === 0 ? (
+                <div className="p-3 text-muted-foreground">
+                  No files assigned yet.
+                  {/* Debug info */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="mt-2 text-xs">
+                      <div>
+                        API Dataset: {currentApiDataset ? 'Found' : 'Not found'}
+                      </div>
+                      <div>
+                        API Files: {currentApiDataset?.files?.length || 0}
+                      </div>
+                    </div>
                   )}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-muted-foreground">Name</label>
-                  <Input
-                    autoFocus
-                    value={editName}
-                    onChange={e => setEditName(e.target.value)}
-                    placeholder="Dataset name"
-                  />
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-muted-foreground">
-                    Description
-                  </label>
-                  <Textarea
-                    value={editDescription}
-                    onChange={e => setEditDescription(e.target.value)}
-                    placeholder="Optional description"
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <Button variant="destructive" onClick={handleDeleteClick}>
-                  Delete
-                </Button>
-                <div className="flex items-center gap-2">
-                  <DialogClose asChild>
-                    <Button variant="secondary">Cancel</Button>
-                  </DialogClose>
-                  <Button onClick={handleSaveEdit} disabled={!editName.trim()}>
-                    Save
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* File deletion confirmation modal */}
-      {showDeleteFileConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full mx-4 border border-border">
-            <h3 className="text-lg font-semibold text-red-600 mb-2">
-              Delete File
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              Are you sure you want to delete this file?
-            </p>
-            <p className="text-sm text-muted-foreground mb-6 font-mono bg-muted p-2 rounded">
-              {pendingDeleteFileHash?.substring(0, 20)}...
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={handleCancelDeleteFile}
-                className="px-4 py-2 border border-border rounded hover:bg-muted"
-                disabled={deleteFileMutation.isPending}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDeleteFile}
-                disabled={deleteFileMutation.isPending}
-                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteFileMutation.isPending ? 'Deleting...' : 'Delete File'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Processing strategy and Embedding model sections removed per request */}
-
-      {isDragging && (
-        <div className="w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
-          <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
-            {isDropped ? (
-              <Loader />
-            ) : (
-              <FontIcon
-                type="upload"
-                className="w-10 h-10 text-blue-200 dark:text-white"
-              />
-            )}
-            <div className="text-xl text-foreground">Drop data here</div>
-          </div>
-          <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
-            You can upload PDFs, CSVs, or other documents directly to this
-            dataset.
-          </p>
-        </div>
-      )}
-
-      {/* Raw data */}
-      <section className="rounded-lg border border-border bg-card p-4 mb-40">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Raw data</h3>
-          <Button size="sm" onClick={() => fileInputRef.current?.click()}>
-            Upload data
-          </Button>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          multiple
-          onChange={async e => {
-            if (
-              !datasetId ||
-              !activeProject?.namespace ||
-              !activeProject?.project
-            ) {
-              toast({
-                message: 'Missing required information for upload',
-                variant: 'destructive',
-              })
-              return
-            }
-
-            const list = e.target.files ? Array.from(e.target.files) : []
-            if (list.length === 0) return
-
-            try {
-              await handleFilesUpload(list)
-            } catch {}
-
-            // Reset input so same files can be picked again
-            e.currentTarget.value = ''
-          }}
-        />
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-1/2">
-            <SearchInput
-              placeholder="Search raw files"
-              value={searchValue}
-              onChange={e => setSearchValue(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="rounded-md border border-input bg-background p-0 text-xs">
-          {files.length === 0 ? (
-            <div className="p-3 text-muted-foreground">
-              No files assigned yet.
-              {/* Debug info */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="mt-2 text-xs">
-                  <div>
-                    API Dataset: {currentApiDataset ? 'Found' : 'Not found'}
+              ) : (
+                <div>
+                  <div className="p-3 border-b border-border/60 bg-muted/20">
+                    <div className="text-xs font-medium">
+                      {files.length} file{files.length !== 1 ? 's' : ''}
+                    </div>
                   </div>
-                  <div>API Files: {currentApiDataset?.files?.length || 0}</div>
+                  <ul>
+                    {files
+                      .filter(f =>
+                        f.name.toLowerCase().includes(searchValue.toLowerCase())
+                      )
+                      .map(f => (
+                        <li
+                          key={f.id}
+                          className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
+                        >
+                          <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
+                            <span>{f.fullHash ? f.name : f.name}</span>
+                            {f.fullHash && (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(
+                                        f.fullHash!
+                                      )
+                                      setCopyStatus(prev => ({
+                                        ...prev,
+                                        [f.id]: 'Copied!',
+                                      }))
+                                    } catch (err) {
+                                      setCopyStatus(prev => ({
+                                        ...prev,
+                                        [f.id]: 'Failed to copy',
+                                      }))
+                                    }
+                                    setTimeout(() => {
+                                      setCopyStatus(prev => ({
+                                        ...prev,
+                                        [f.id]: undefined,
+                                      }))
+                                    }, 1500)
+                                  }}
+                                  className="text-xs text-blue-600 hover:text-blue-800 text-left"
+                                  title="Click to copy full hash"
+                                >
+                                  Copy full hash
+                                </button>
+                                {copyStatus?.[f.id] && (
+                                  <span
+                                    className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}
+                                  >
+                                    {copyStatus[f.id]}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <div className="w-1/2 flex items-center justify-between gap-4">
+                            <div className="text-xs text-muted-foreground">
+                              {f.size === 'unknown' || f.fullHash
+                                ? 'N/A'
+                                : `${Math.ceil(f.size / 1024)} KB`}
+                            </div>
+                            <div className="flex items-center gap-6">
+                              {fileUploadStatuses.find(s => s.id === f.id)
+                                ?.status === 'uploading' && (
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <FontIcon type="fade" className="w-4 h-4" />
+                                  <span className="text-xs">Processing</span>
+                                </div>
+                              )}
+                              {fileUploadStatuses.find(s => s.id === f.id)
+                                ?.status === 'success' && (
+                                <FontIcon
+                                  type="checkmark-outline"
+                                  className="w-4 h-4 text-teal-600 dark:text-teal-400"
+                                />
+                              )}
+                              <button
+                                className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                                onClick={() =>
+                                  f.fullHash && handleDeleteFile(f.fullHash)
+                                }
+                                disabled={
+                                  f.fullHash ? isFileDeleting(f.fullHash) : true
+                                }
+                                aria-label={`Delete ${f.name} from dataset`}
+                                title="Delete file"
+                              >
+                                {f.fullHash && isFileDeleting(f.fullHash) ? (
+                                  <span className="text-xs">...</span>
+                                ) : (
+                                  <FontIcon
+                                    type="trashcan"
+                                    className="w-4 h-4"
+                                  />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                  </ul>
                 </div>
               )}
             </div>
-          ) : (
-            <div>
-              <div className="p-3 border-b border-border/60 bg-muted/20">
-                <div className="text-xs font-medium">
-                  {files.length} file{files.length !== 1 ? 's' : ''}
-                </div>
-              </div>
-              <ul>
-                {files
-                  .filter(f =>
-                    f.name.toLowerCase().includes(searchValue.toLowerCase())
-                  )
-                  .map(f => (
-                    <li
-                      key={f.id}
-                      className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
-                    >
-                      <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
-                        <span>{f.fullHash ? f.name : f.name}</span>
-                        {f.fullHash && (
-                          <>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await navigator.clipboard.writeText(
-                                    f.fullHash!
-                                  )
-                                  setCopyStatus(prev => ({
-                                    ...prev,
-                                    [f.id]: 'Copied!',
-                                  }))
-                                } catch (err) {
-                                  setCopyStatus(prev => ({
-                                    ...prev,
-                                    [f.id]: 'Failed to copy',
-                                  }))
-                                }
-                                setTimeout(() => {
-                                  setCopyStatus(prev => ({
-                                    ...prev,
-                                    [f.id]: undefined,
-                                  }))
-                                }, 1500)
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-800 text-left"
-                              title="Click to copy full hash"
-                            >
-                              Copy full hash
-                            </button>
-                            {copyStatus?.[f.id] && (
-                              <span
-                                className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}
-                              >
-                                {copyStatus[f.id]}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      <div className="w-1/2 flex items-center justify-between gap-4">
-                        <div className="text-xs text-muted-foreground">
-                          {f.size === 'unknown' || f.fullHash
-                            ? 'N/A'
-                            : `${Math.ceil(f.size / 1024)} KB`}
-                        </div>
-                        <div className="flex items-center gap-6">
-                          {fileUploadStatuses.find(s => s.id === f.id)
-                            ?.status === 'uploading' && (
-                            <div className="flex items-center gap-1 text-muted-foreground">
-                              <FontIcon type="fade" className="w-4 h-4" />
-                              <span className="text-xs">Processing</span>
-                            </div>
-                          )}
-                          {fileUploadStatuses.find(s => s.id === f.id)
-                            ?.status === 'success' && (
-                            <FontIcon
-                              type="checkmark-outline"
-                              className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                            />
-                          )}
-                          <button
-                            className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
-                            onClick={() =>
-                              f.fullHash && handleDeleteFile(f.fullHash)
-                            }
-                            disabled={
-                              f.fullHash ? isFileDeleting(f.fullHash) : true
-                            }
-                            aria-label={`Delete ${f.name} from dataset`}
-                            title="Delete file"
-                          >
-                            {f.fullHash && isFileDeleting(f.fullHash) ? (
-                              <span className="text-xs">...</span>
-                            ) : (
-                              <FontIcon type="trashcan" className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      </section>
+          </section>
 
-      {/* File deletion now handled directly via API calls with confirmation dialog */}
+          {/* File deletion now handled directly via API calls with confirmation dialog */}
+        </>
+      )}
     </div>
   )
 }

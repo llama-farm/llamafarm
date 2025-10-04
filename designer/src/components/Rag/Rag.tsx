@@ -509,7 +509,9 @@ function Rag() {
 
   return (
     <>
-      <div className="w-full flex flex-col gap-4 pb-32">
+      <div
+        className={`w-full h-full flex flex-col ${mode === 'designer' ? 'gap-4 pb-32' : ''}`}
+      >
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-2xl">
             {mode === 'designer' ? 'RAG' : 'Config editor'}
@@ -517,15 +519,8 @@ function Rag() {
           <PageActions mode={mode} onModeChange={setMode} />
         </div>
         {mode !== 'designer' ? (
-          <div className="rounded-lg border border-border bg-card p-4">
-            <div className="text-sm text-muted-foreground mb-1">
-              Edit config
-            </div>
-            <div className="rounded-md overflow-hidden">
-              <div className="h-[70vh]">
-                <ConfigEditor />
-              </div>
-            </div>
+          <div className="flex-1 min-h-0 overflow-hidden pb-6">
+            <ConfigEditor className="h-full" />
           </div>
         ) : (
           <>

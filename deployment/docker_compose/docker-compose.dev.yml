@@ -17,18 +17,6 @@ services:
       - ../../server:/app/server
       - ../../config:/app/config
       - llamafarm_dev_data:/var/lib/llamafarm
-    command:
-      [
-        "uv",
-        "run",
-        "uvicorn",
-        "main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000",
-        "--reload",
-      ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s
