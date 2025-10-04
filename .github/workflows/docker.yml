@@ -90,7 +90,7 @@ jobs:
   # Build ARM64 images on native ARM64 runners for efficiency
   build-arm64:
     name: Build ARM64 Docker Images
-    runs-on: ubuntu-latest-arm64
+    runs-on: ubuntu-latest-arm
     permissions:
       contents: read
       packages: write
