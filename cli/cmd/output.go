@@ -180,8 +180,19 @@ func sendConsolidatedProgressMessage(format string, args ...interface{}) {
 		go func() {
 			time.Sleep(100 * time.Millisecond) // Reduced from 500ms to 100ms for more frequent updates
 			outputManager.mu.Lock()
+			defer outputManager.mu.Unlock()
+
 			outputManager.progressMessageSent = false
-			outputManager.mu.Unlock()
+
+			// If there's a pending progress message that wasn't sent due to throttling, send it now
+			if outputManager.lastProgressMessage != "" && outputManager.tuiProgram != nil {
+				msg := OutputMessage{
+					Type:    ProgressMessage,
+					Content: outputManager.lastProgressMessage,
+					Writer:  os.Stdout,
+				}
+				outputManager.tuiProgram.Send(TUIMessageMsg{Message: msg})
+			}
 		}()
 	}
 }
