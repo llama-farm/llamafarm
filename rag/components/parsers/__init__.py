@@ -3,9 +3,9 @@
 from pathlib import Path
 import importlib
 import importlib.util
-import logging
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.__init__")
 
 # Check for libmagic availability
 try:

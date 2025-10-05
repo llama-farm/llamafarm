@@ -2,11 +2,11 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Type
-import logging
 
 from core.base import Document
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.extractors.base")
 
 
 class BaseExtractor(ABC):

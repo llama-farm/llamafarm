@@ -2,10 +2,10 @@
 
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import logging
 from components.parsers.base.base_parser import BaseParser, ParserConfig
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.pdfpdf2_parser")
 
 
 class PDFParser_PyPDF2(BaseParser):

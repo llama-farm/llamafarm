@@ -1,6 +1,5 @@
 """Direct handler for new RAG schema - NO LEGACY CONVERSION."""
 
-import logging
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -12,6 +11,7 @@ from rag.core.base import Parser
 # Use the common config module instead of direct YAML loading
 
 # Add the repo root to the path to find the config module
+from core.logging import RAGStructLogger
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
@@ -31,7 +31,7 @@ except ImportError as e:
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
     ) from e
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.core.strategies.handler")
 
 
 class DbProcessingConfig:

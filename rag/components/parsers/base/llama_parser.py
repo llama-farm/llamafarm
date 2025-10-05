@@ -2,15 +2,15 @@
 
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import logging
 
 from .base_parser import BaseParser, ParserConfig
 import sys
 
+from core.logging import RAGStructLogger
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from core.base import Document, ProcessingResult
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.components.parsers.base.llama_parser")
 
 # Lazy imports to avoid missing dependencies
 LLAMA_INDEX_AVAILABLE = False

@@ -1,9 +1,9 @@
 """Factory classes for creating RAG system components."""
 
-import logging
 from pathlib import Path
 from typing import Dict, Any, Type
 from core.base import Parser, Embedder, VectorStore
+from core.logging import RAGStructLogger
 
 # Import parsers using the new modular system
 from components.parsers import (
@@ -258,7 +258,7 @@ class RetrievalStrategyFactory(ComponentFactory):
     }
 
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.core.factories")
 
 
 def create_component_from_config(

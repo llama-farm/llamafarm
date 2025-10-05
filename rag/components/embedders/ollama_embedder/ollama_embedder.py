@@ -4,12 +4,12 @@ from pathlib import Path
 from core.settings import settings
 import requests
 import json
-import logging
 from typing import List, Dict, Any, Optional
 
 from core.base import Embedder
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.embedders.ollama_embedder.ollama_embedder")
 
 
 class OllamaEmbedder(Embedder):

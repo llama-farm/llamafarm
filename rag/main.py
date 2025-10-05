@@ -10,12 +10,12 @@ RAG-related tasks from the server.
 import sys
 
 from celery_app import app, run_worker
-from core.logging import FastAPIStructLogger, setup_logging
+from core.logging import RAGStructLogger, setup_logging
 from core.settings import settings
 
 # import tasks
 
-logger = FastAPIStructLogger()
+logger = RAGStructLogger("rag.main")
 
 # Add the current directory to Python path for imports
 # sys.path.insert(0, str(Path(__file__).parent))

@@ -4,7 +4,6 @@ RAG Health Check Tasks
 Celery tasks for RAG service health monitoring and diagnostics.
 """
 
-import logging
 import os
 import sys
 import time
@@ -16,6 +15,7 @@ from celery import Task
 
 from api import DatabaseSearchAPI
 from celery_app import app
+from core.logging import RAGStructLogger
 
 # Add the repo root to the path to find the config module
 repo_root = Path(__file__).parent.parent.parent
@@ -23,7 +23,7 @@ if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 from config import load_config  # noqa: E402
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.tasks.health")
 
 
 class HealthTask(Task):

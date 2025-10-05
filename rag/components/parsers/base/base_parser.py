@@ -1,6 +1,5 @@
 """Abstract base parser class for all RAG parsers."""
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +8,8 @@ from typing import Any, Dict, List
 # Import from rag module
 from core.base import Document, ProcessingResult
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.base.base_parser")
 
 
 @dataclass

@@ -1,13 +1,13 @@
 """Enhanced Parser Factory with tool-specific parser selection."""
 
 import importlib.util
-import logging
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.parser_factory")
 
 
 class ToolAwareParserFactory:

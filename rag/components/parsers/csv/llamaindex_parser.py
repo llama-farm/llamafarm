@@ -2,9 +2,9 @@
 
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-import logging
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.csv.llamaindex_parser")
 
 
 class CSVParser_LlamaIndex:

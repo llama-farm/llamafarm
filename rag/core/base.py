@@ -4,11 +4,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import logging
 
 from core.settings import settings
 
 
+from core.logging import RAGStructLogger
 @dataclass
 class Document:
     """Universal document representation."""

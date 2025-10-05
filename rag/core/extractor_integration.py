@@ -1,6 +1,5 @@
 """Integration between parsers and extractors."""
 
-import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
@@ -8,7 +7,8 @@ from core.base import Document, ProcessingResult
 from components.extractors.base import ExtractorPipeline, create_pipeline_from_config
 from components.extractors import registry
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.core.extractor_integration")
 
 
 class ExtractorIntegrator:

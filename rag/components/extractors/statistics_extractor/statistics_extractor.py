@@ -5,12 +5,12 @@ import string
 import math
 from collections import Counter
 from typing import Dict, Any, List, Optional
-import logging
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.extractors.statistics_extractor.statistics_extractor")
 
 
 class ContentStatisticsExtractor(BaseExtractor):

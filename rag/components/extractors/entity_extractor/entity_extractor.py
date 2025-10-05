@@ -2,12 +2,12 @@
 
 import re
 from typing import Dict, Any, List, Optional, Set
-import logging
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.extractors.entity_extractor.entity_extractor")
 
 
 class EntityExtractor(BaseExtractor):

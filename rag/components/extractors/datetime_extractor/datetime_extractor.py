@@ -3,12 +3,12 @@
 import re
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Union
-import logging
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.extractors.datetime_extractor.datetime_extractor")
 
 
 class DateTimeExtractor(BaseExtractor):

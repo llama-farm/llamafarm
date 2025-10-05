@@ -1,22 +1,25 @@
 """Helper for detecting and installing libmagic."""
 
-import subprocess
-import sys
 import platform
-import logging
+import subprocess
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+
+logger = RAGStructLogger("rag.utils.libmagic_helper")
 
 
 def check_libmagic():
     """Check if libmagic is available and working."""
     try:
         import magic
+
         # Try to actually use it
         magic.Magic()
         return True
     except ImportError:
-        logger.warning("python-magic not installed. Install with: uv pip install python-magic")
+        logger.warning(
+            "python-magic not installed. Install with: uv pip install python-magic or ensure that the libmagic system library is installed."
+        )
         return False
     except Exception as e:
         if "failed to find libmagic" in str(e).lower():
@@ -29,7 +32,7 @@ def check_libmagic():
 def handle_missing_libmagic():
     """Handle missing libmagic library."""
     system = platform.system()
-    
+
     if system == "Darwin":  # macOS
         logger.warning("=" * 60)
         logger.warning("libmagic not found! This is required for file type detection.")
@@ -37,17 +40,21 @@ def handle_missing_libmagic():
         logger.warning("To fix this on macOS, run:")
         logger.warning("  brew install libmagic")
         logger.warning("")
-        logger.warning("If you don't have Homebrew, install it first from https://brew.sh")
+        logger.warning(
+            "If you don't have Homebrew, install it first from https://brew.sh"
+        )
         logger.warning("=" * 60)
-        
+
         # Try to auto-install if brew is available
         if check_brew_available():
-            response = input("\nWould you like to install libmagic automatically? [y/N]: ")
-            if response.lower() == 'y':
+            response = input(
+                "\nWould you like to install libmagic automatically? [y/N]: "
+            )
+            if response.lower() == "y":
                 if install_libmagic_macos():
                     logger.info("Installation complete. Please restart your script.")
                     raise SystemExit(0)  # More explicit than sys.exit()
-    
+
     elif system == "Linux":
         logger.warning("=" * 60)
         logger.warning("libmagic not found! This is required for file type detection.")
@@ -57,7 +64,7 @@ def handle_missing_libmagic():
         logger.warning("  Fedora/RedHat: sudo dnf install file-libs")
         logger.warning("  Arch: sudo pacman -S file")
         logger.warning("=" * 60)
-    
+
     elif system == "Windows":
         logger.warning("=" * 60)
         logger.warning("libmagic not found! This is required for file type detection.")
@@ -72,7 +79,7 @@ def handle_missing_libmagic():
 def check_brew_available():
     """Check if Homebrew is available on macOS."""
     try:
-        result = subprocess.run(['which', 'brew'], capture_output=True, text=True)
+        result = subprocess.run(["which", "brew"], capture_output=True, text=True)
         return result.returncode == 0
     except:
         return False
@@ -80,18 +87,21 @@ def check_brew_available():
 
 def install_libmagic_macos():
     """Attempt to install libmagic on macOS using Homebrew.
-    
+
     Returns:
         bool: True if installation succeeded, False otherwise
     """
     try:
         logger.info("Installing libmagic via Homebrew...")
-        result = subprocess.run(['brew', 'install', 'libmagic'], 
-                              capture_output=True, text=True)
-        
+        result = subprocess.run(
+            ["brew", "install", "libmagic"], capture_output=True, text=True
+        )
+
         if result.returncode == 0:
             logger.info("✅ libmagic installed successfully!")
-            logger.info("Please restart your Python script to use the new installation.")
+            logger.info(
+                "Please restart your Python script to use the new installation."
+            )
             return True
         else:
             logger.error(f"Failed to install libmagic: {result.stderr}")

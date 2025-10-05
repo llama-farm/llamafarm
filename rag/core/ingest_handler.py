@@ -4,12 +4,12 @@ Manages the flow from CLI file uploads to blob processing and vector storage.
 """
 
 import importlib
-import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.blob_processor import BlobProcessor
+from core.logging import RAGStructLogger
 from core.processing_logger import ProcessingLogger
 from core.settings import settings
 from core.strategies.handler import SchemaHandler
@@ -26,7 +26,7 @@ except ImportError as e:
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
     ) from e
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.core.ingest_handler")
 
 
 class IngestHandler:
