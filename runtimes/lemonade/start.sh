@@ -30,15 +30,27 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Fallback to current directory if not set by argument
+# Fallback: search for llamafarm.yaml in multiple locations
 if [ -z "$CONFIG_FILE" ]; then
-    if [ -f "./llamafarm.yaml" ]; then
-        CONFIG_FILE="./llamafarm.yaml"
-    fi
+    # Search in common locations relative to where the script might be run from
+    for location in \
+        "./llamafarm.yaml" \
+        "../../llamafarm.yaml" \
+        "../llamafarm.yaml"; do
+        if [ -f "$location" ]; then
+            CONFIG_FILE="$location"
+            break
+        fi
+    done
 fi
 
 if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
-    echo "Error: llamafarm.yaml not found in current directory. Use --config-file <path>"
+    echo "Error: llamafarm.yaml not found. Searched in:"
+    echo "  - ./llamafarm.yaml (current directory)"
+    echo "  - ../../llamafarm.yaml (project root from runtimes/lemonade)"
+    echo "  - ../llamafarm.yaml (one level up)"
+    echo ""
+    echo "Use --config-file <path> to specify a different location"
     exit 1
 fi
 
@@ -88,35 +100,6 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-        CONFIG_AUTO_DOWNLOAD=$(uv run python -c "
-import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', [])
-for model_config in models:
-    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('auto_download', ''))
-        break
-" 2>/dev/null)
-
-        CONFIG_CHECKPOINT=$(uv run python -c "
-import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', [])
-for model_config in models:
-    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('checkpoint', ''))
-        break
-" 2>/dev/null)
-
-        CONFIG_RECIPE=$(uv run python -c "
-import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', [])
-for model_config in models:
-    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('recipe', ''))
-        break
-" 2>/dev/null)
 
     else
         # No LEMONADE_MODEL_NAME specified, use first lemonade model
@@ -160,35 +143,6 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-        CONFIG_AUTO_DOWNLOAD=$(uv run python -c "
-import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', [])
-for model_config in models:
-    if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('auto_download', ''))
-        break
-" 2>/dev/null)
-
-        CONFIG_CHECKPOINT=$(uv run python -c "
-import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', [])
-for model_config in models:
-    if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('checkpoint', ''))
-        break
-" 2>/dev/null)
-
-        CONFIG_RECIPE=$(uv run python -c "
-import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
-models = config.get('runtime', {}).get('models', [])
-for model_config in models:
-    if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('recipe', ''))
-        break
-" 2>/dev/null)
 
     fi
 
@@ -243,47 +197,29 @@ if [ -z "$LEMONADE_MODEL" ]; then
     echo ""
     echo "Set LEMONADE_MODEL environment variable or configure runtime.model in llamafarm.yaml"
     echo ""
-    echo "Example: LEMONADE_MODEL=Qwen3-0.6B-GGUF nx start lemonade"
+    echo "Example: LEMONADE_MODEL=user.Qwen3-4B nx start lemonade"
+    echo ""
+    echo "To download models, use:"
+    echo "  uv run lemonade-server-dev pull user.Qwen3-4B --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M --recipe llamacpp"
     echo ""
     exit 1
 fi
 
-# Auto-download model if configured
-if [ "$CONFIG_AUTO_DOWNLOAD" = "True" ] || [ "$CONFIG_AUTO_DOWNLOAD" = "true" ]; then
-    echo -e "${GREEN}Auto-download enabled for model: $LEMONADE_MODEL${NC}"
-
-    if [ -n "$CONFIG_CHECKPOINT" ] && [ -n "$CONFIG_RECIPE" ]; then
-        echo "Checking if model needs to be downloaded..."
-        echo "Checkpoint: $CONFIG_CHECKPOINT"
-        echo "Recipe: $CONFIG_RECIPE"
-
-        # Check if model is already downloaded
-        MODEL_EXISTS=$(uv run lemonade-server-dev list 2>/dev/null | grep -c "$LEMONADE_MODEL" || true)
-
-        if [ "$MODEL_EXISTS" -eq 0 ]; then
-            echo -e "${YELLOW}Model not found locally. Downloading from HuggingFace...${NC}"
-            echo "This may take several minutes depending on model size and network speed."
-
-            # Download using lemonade-server-dev pull
-            uv run lemonade-server-dev pull "$LEMONADE_MODEL" --checkpoint "$CONFIG_CHECKPOINT" --recipe "$CONFIG_RECIPE" || {
-                echo -e "${RED}Failed to download model${NC}"
-                echo "Make sure HF_TOKEN is set if downloading gated models"
-                exit 1
-            }
-
-            echo -e "${GREEN}Model downloaded successfully!${NC}"
-        else
-            echo "Model already downloaded, skipping download."
-        fi
-    else
-        echo -e "${YELLOW}WARNING: auto_download=true but checkpoint or recipe not specified${NC}"
-        echo "Set lemonade.checkpoint and lemonade.recipe in llamafarm.yaml for auto-download"
-        echo "Example:"
-        echo "  lemonade:"
-        echo "    auto_download: true"
-        echo "    checkpoint: 'bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M'"
-        echo "    recipe: 'llamacpp'"
-    fi
+# Check if model is downloaded
+MODEL_EXISTS=$(uv run lemonade-server-dev list 2>/dev/null | grep -c "$LEMONADE_MODEL" || true)
+if [ "$MODEL_EXISTS" -eq 0 ]; then
+    echo -e "${RED}ERROR: Model '$LEMONADE_MODEL' not found${NC}"
+    echo ""
+    echo "Please download the model first using:"
+    echo "  uv run lemonade-server-dev pull $LEMONADE_MODEL --checkpoint <checkpoint> --recipe <recipe>"
+    echo ""
+    echo "Example:"
+    echo "  uv run lemonade-server-dev pull user.Qwen3-4B --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M --recipe llamacpp"
+    echo ""
+    echo "To see all available models:"
+    echo "  uv run lemonade-server-dev list"
+    echo ""
+    exit 1
 fi
 
 # Build lemonade-server-dev command

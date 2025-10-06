@@ -29,9 +29,7 @@ for model in lemonade_models:
     name = model.get('name', '')
     model_id = model.get('model', '')
     port = model.get('lemonade', {}).get('port', 'default')
-    auto_download = model.get('lemonade', {}).get('auto_download', False)
-    checkpoint = model.get('lemonade', {}).get('checkpoint', '')
-    print(f'{name}|{model_id}|{port}|{auto_download}|{checkpoint}')
+    print(f'{name}|{model_id}|{port}')
 " 2>/dev/null)
 
 if [ -z "$MODEL_INFO" ]; then
@@ -53,20 +51,12 @@ echo ""
 PIDS=()
 MODEL_COUNT=0
 
-while IFS='|' read -r MODEL_NAME MODEL_ID PORT AUTO_DOWNLOAD CHECKPOINT; do
+while IFS='|' read -r MODEL_NAME MODEL_ID PORT; do
     MODEL_COUNT=$((MODEL_COUNT + 1))
 
     echo -e "${CYAN}[$MODEL_COUNT] $MODEL_NAME${NC}"
     echo "    Model:  $MODEL_ID"
     echo "    Port:   $PORT"
-
-    if [ "$AUTO_DOWNLOAD" = "True" ]; then
-        echo -e "    ${YELLOW}Auto-download: enabled${NC}"
-        if [ -n "$CHECKPOINT" ]; then
-            echo "    Checkpoint: $CHECKPOINT"
-        fi
-    fi
-
     echo "    Logs:   /tmp/lemonade-$MODEL_NAME.log"
 
     LEMONADE_MODEL_NAME=$MODEL_NAME bash ../runtimes/lemonade/start.sh > /tmp/lemonade-$MODEL_NAME.log 2>&1 &
