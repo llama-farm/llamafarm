@@ -86,7 +86,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}-amd64
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}-amd64
-          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=${{ runner.temp }}/${{ matrix.service }}-amd64.tar' || '' }}
+          outputs: ${{ github.event_name == 'pull_request' && format('type=docker,dest={0}/{1}-amd64.tar', runner.temp, matrix.service) || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
 
@@ -167,7 +167,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}-arm64
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}-arm64
-          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=${{ runner.temp }}/${{ matrix.service }}-arm64.tar' || '' }}
+          outputs: ${{ github.event_name == 'pull_request' && format('type=docker,dest={0}/{1}-arm64.tar', runner.temp, matrix.service) || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
 
@@ -224,8 +224,8 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           echo "Loading images from artifacts for PR validation"
-          docker load -i /tmp/${{ matrix.service }}-amd64.tar
-          docker load -i /tmp/${{ matrix.service }}-arm64.tar
+          docker load -i ${{ runner.temp }}/${{ matrix.service }}-amd64.tar
+          docker load -i ${{ runner.temp }}/${{ matrix.service }}-arm64.tar
 
           # List loaded images for verification
           echo "Loaded images:"
@@ -312,13 +312,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: "*-image"
-          path: /tmp/artifacts
+          path: ${{ runner.temp }}/artifacts
           merge-multiple: true
 
       - name: Load all images from artifacts
         run: |
           echo "Loading all Docker images from artifacts..."
-          for tar_file in /tmp/artifacts/*.tar; do
+          for tar_file in ${{ runner.temp }}/artifacts/*.tar; do
             if [ -f "$tar_file" ]; then
               echo "Loading: $tar_file"
               docker load -i "$tar_file"
