@@ -13,16 +13,16 @@ Lemonade provides:
 
 ## Installation
 
-Install the Lemonade SDK:
-
-```bash
-pip install lemonade-sdk
-```
-
-Or using uv (recommended for LlamaFarm development):
+Install the Lemonade SDK using uv (recommended):
 
 ```bash
 uv pip install lemonade-sdk
+```
+
+Alternatively, using pip:
+
+```bash
+pip install lemonade-sdk
 ```
 
 For more information, see: https://lemonade-server.ai/docs/
@@ -157,15 +157,17 @@ name: my-project
 namespace: default
 
 runtime:
-  provider: lemonade
-  model: "Phi-3-mini-4k-instruct-onnx"  # Example ONNX model
-  base_url: "http://127.0.0.1:11534/v1"
-
-  # Lemonade-specific configuration (optional)
-  lemonade:
-    backend: onnx  # onnx, llamacpp, or transformers
-    port: 11534
-    model_path: ~/.cache/lemonade/models  # Custom model storage location
+  models:
+    - name: lemon
+      description: "Lemonade local model"
+      provider: lemonade
+      model: user.Qwen3-4B
+      base_url: "http://127.0.0.1:11534/v1"
+      default: true
+      lemonade:
+        backend: llamacpp  # llamacpp, onnx, or transformers
+        port: 11534
+        context_size: 32768
 
 prompts:
   - role: system

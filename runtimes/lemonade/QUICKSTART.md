@@ -125,14 +125,17 @@ name: my-lemonade-project
 namespace: default
 
 runtime:
-  provider: lemonade
-  model: "user.Qwen3-4B"  # Use the model you downloaded
-  base_url: "http://127.0.0.1:11534/v1"
-
-  lemonade:
-    backend: llamacpp
-    port: 11534
-    context_size: 32768
+  models:
+    - name: lemon
+      description: "Lemonade local model"
+      provider: lemonade
+      model: user.Qwen3-4B  # Use the model you downloaded
+      base_url: "http://127.0.0.1:11534/v1"
+      default: true
+      lemonade:
+        backend: llamacpp
+        port: 11534
+        context_size: 32768
 
 prompts:
   - role: system
@@ -151,20 +154,21 @@ You can configure multiple Lemonade models by running separate instances on diff
 
 ```yaml
 runtime:
-  default_model: fast
-
   models:
-    fast:
+    - name: fast
+      description: "Fast Lemonade model"
       provider: lemonade
-      model: "user.Qwen3-0.6B"
+      model: user.Qwen3-0.6B
       base_url: "http://127.0.0.1:11534/v1"
+      default: true
       lemonade:
         backend: llamacpp
         port: 11534
 
-    powerful:
+    - name: powerful
+      description: "Powerful Lemonade model"
       provider: lemonade
-      model: "user.Qwen3-8B"
+      model: user.Qwen3-8B
       base_url: "http://127.0.0.1:11535/v1"
       lemonade:
         backend: llamacpp
@@ -194,11 +198,16 @@ Or in `llamafarm.yaml`:
 
 ```yaml
 runtime:
-  provider: lemonade
-  model: "Phi-3-mini-4k-instruct-onnx"
-
-  lemonade:
-    backend: onnx
+  models:
+    - name: onnx-model
+      description: "ONNX model"
+      provider: lemonade
+      model: Phi-3-mini-4k-instruct-onnx
+      base_url: "http://127.0.0.1:11534/v1"
+      default: true
+      lemonade:
+        backend: onnx
+        port: 11534
 ```
 
 ### Using Transformers (PyTorch)
