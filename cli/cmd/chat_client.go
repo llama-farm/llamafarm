@@ -164,6 +164,12 @@ func buildChatCurl(messages []Message, ctx *ChatSessionContext) (string, error) 
 	}
 
 	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
+
+	// Include model if specified
+	if ctx.Model != "" {
+		request.Model = &ctx.Model
+	}
+
 	if ctx.RAGEnabled {
 		request.RAGEnabled = &ctx.RAGEnabled
 		if ctx.RAGDatabase != "" {
