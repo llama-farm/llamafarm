@@ -16,13 +16,30 @@ LEMONADE_MODEL="${LEMONADE_MODEL:-}"  # Optional: pre-load a specific model
 # Try to read config from project llamafarm.yaml if available
 # This allows the startup script to respect project configuration
 # Try multiple possible locations for llamafarm.yaml
+# Parse --config-file or -f argument
 CONFIG_FILE=""
-if [ -f "../../llamafarm.yaml" ]; then
-    CONFIG_FILE="../../llamafarm.yaml"
-elif [ -f "../llamafarm.yaml" ]; then
-    CONFIG_FILE="../llamafarm.yaml"
-elif [ -f "llamafarm.yaml" ]; then
-    CONFIG_FILE="llamafarm.yaml"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --config-file|-f)
+            CONFIG_FILE="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Fallback to current directory if not set by argument
+if [ -z "$CONFIG_FILE" ]; then
+    if [ -f "./llamafarm.yaml" ]; then
+        CONFIG_FILE="./llamafarm.yaml"
+    fi
+fi
+
+if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: llamafarm.yaml not found in current directory. Use --config-file <path>"
+    exit 1
 fi
 
 if [ -n "$CONFIG_FILE" ]; then
