@@ -86,7 +86,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}-amd64
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}-amd64
-          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=/${{ runner.temp }}/${{ matrix.service }}-amd64.tar' || '' }}
+          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=${{ runner.temp }}/${{ matrix.service }}-amd64.tar' || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
 
@@ -95,7 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.service }}-amd64-image
-          path: /${{ runner.temp }}/${{ matrix.service }}-amd64.tar
+          path: ${{ runner.temp }}/${{ matrix.service }}-amd64.tar
           retention-days: 1
 
   # Build ARM64 images on native ARM64 runners for efficiency
@@ -167,7 +167,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}-arm64
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}-arm64
-          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=/${{ runner.temp }}/${{ matrix.service }}-arm64.tar' || '' }}
+          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=${{ runner.temp }}/${{ matrix.service }}-arm64.tar' || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
 
@@ -176,7 +176,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.service }}-arm64-image
-          path: /${{ runner.temp }}/${{ matrix.service }}-arm64.tar
+          path: ${{ runner.temp }}/${{ matrix.service }}-arm64.tar
           retention-days: 1
 
   # Create multi-arch manifests combining AMD64 and ARM64 images
@@ -211,14 +211,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.service }}-amd64-image
-          path: /tmp/
+          path: ${{ runner.temp }}
 
       - name: Download ARM64 image artifact (PR only)
         if: github.event_name == 'pull_request'
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.service }}-arm64-image
-          path: /tmp/
+          path: ${{ runner.temp }}
 
       - name: Load images from artifacts (PR only)
         if: github.event_name == 'pull_request'
