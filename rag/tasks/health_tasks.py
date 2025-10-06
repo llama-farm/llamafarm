@@ -275,7 +275,7 @@ def rag_health_check_database_task(
             try:
                 # Initialize the search API to test database connectivity
                 search_api = DatabaseSearchAPI(
-                    config_path=project_dir, database=database
+                    project_dir=project_dir, database=database
                 )
 
                 # Try to get database stats/info
