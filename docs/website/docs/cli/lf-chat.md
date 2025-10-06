@@ -21,6 +21,7 @@ If you omit `namespace/project`, the CLI resolves them from `llamafarm.yaml`.
 
 | Flag | Description |
 | ---- | ----------- |
+| `--model` | Select a specific model from your multi-model configuration. |
 | `--file`, `-f` | Read prompt content from a file. |
 | `--no-rag` | Skip retrieval—direct LLM call. |
 | `--database` | Target a specific RAG database. |
@@ -45,6 +46,9 @@ lf chat
 # Basic one-off chat (RAG enabled)
 lf chat "Summarize the latest FDA letters."
 
+# Use a specific model
+lf chat --model powerful "Complex reasoning question"
+
 # Explicit project with file input
 lf chat company/legal -f prompt.txt
 
@@ -53,6 +57,9 @@ lf chat --no-rag --curl "Explain RAG in 2 sentences"
 
 # Override strategy for targeted retrieval
 lf chat --database main_db --retrieval-strategy hybrid_search "Find biologics references"
+
+# Combine model selection with RAG
+lf chat --model lemon --database main_db "Query with specific model and database"
 ```
 
 ## Sessions

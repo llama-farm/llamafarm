@@ -29,7 +29,37 @@ datasets: [...]
 
 ### Runtime
 
-Controls how chat completions are executed.
+Controls how chat completions are executed. LlamaFarm supports both **multi-model** (recommended) and **legacy single-model** configurations.
+
+#### Multi-Model Configuration (Recommended)
+
+Configure multiple models and switch between them via CLI or API:
+
+```yaml
+runtime:
+  default_model: fast  # Which model to use by default
+
+  models:
+    fast:
+      description: "Fast Ollama model"
+      provider: ollama
+      model: gemma3:1b
+      prompt_format: unstructured
+
+    powerful:
+      description: "More capable model"
+      provider: ollama
+      model: qwen3:8b
+```
+
+**Using multi-model:**
+- CLI: `lf chat --model powerful "your question"`
+- CLI: `lf models list`
+- API: `POST /v1/projects/{ns}/{id}/chat/completions` with `{"model": "powerful", ...}`
+
+#### Legacy Single-Model Configuration (Still Supported)
+
+The original flat runtime configuration is automatically converted internally:
 
 ```yaml
 runtime:
@@ -42,14 +72,38 @@ runtime:
     temperature: 0.2
 ```
 
-| Field                  | Type                      | Required                                                                         | Description                                                                                                       |
-| ---------------------- | ------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `provider`             | enum (`openai`, `ollama`) | ✅                                                                               | `openai` works with any OpenAI-compatible API (OpenAI, vLLM, Together, LM Studio). `ollama` targets local Ollama. |
-| `model`                | string                    | ✅                                                                               | Model identifier understood by the provider.                                                                      |
-| `base_url`             | string or null            | ⚠️ Required when pointing at a non-default host (vLLM, Together).                |
-| `api_key`              | string or null            | ⚠️ Required for most hosted providers. Use `.env` + environment variables.       |
-| `instructor_mode`      | string or null            | Optional (e.g., `json`, `md_json`, `tools`) to activate structured output modes. |
-| `model_api_parameters` | object                    | Optional passthrough to provider (temperature, top_p, etc.).                     |
+#### Runtime Fields
+
+**Multi-model format:**
+
+| Field           | Type   | Required | Description                                   |
+| --------------- | ------ | -------- | --------------------------------------------- |
+| `default_model` | string | ✅       | Name of the default model to use              |
+| `models`        | array  | ✅       | List of model configurations (see below)      |
+
+**Per-model fields:**
+
+| Field                  | Type                                  | Required                                                                   | Description                                                                                                            |
+| ---------------------- | ------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `name`                 | string                                | ✅                                                                         | Unique identifier for this model                                                                                       |
+| `provider`             | enum (`openai`, `ollama`, `lemonade`) | ✅                                                                         | `openai` for OpenAI-compatible APIs, `ollama` for local Ollama, `lemonade` for local GGUF models with NPU/GPU support |
+| `model`                | string                                | ✅                                                                         | Model identifier understood by the provider                                                                            |
+| `description`          | string                                | Optional                                                                   | Human-readable description of the model                                                                                |
+| `default`              | boolean                               | Optional                                                                   | Set to `true` to make this the default model (alternative to `default_model`)                                         |
+| `base_url`             | string or null                        | ⚠️ Required for non-default hosts (vLLM, Together, Lemonade)              | API endpoint URL                                                                                                       |
+| `api_key`              | string or null                        | ⚠️ Required for most hosted providers. Use `.env` + environment variables | Authentication key                                                                                                     |
+| `instructor_mode`      | string or null                        | Optional                                                                   | `json`, `md_json`, `tools` for structured output modes                                                                 |
+| `prompt_format`        | string                                | Optional                                                                   | `unstructured` or other format                                                                                         |
+| `model_api_parameters` | object                                | Optional                                                                   | Passthrough parameters (temperature, top_p, etc.)                                                                      |
+| `lemonade`             | object                                | ⚠️ Required for `provider: lemonade`                                      | Lemonade-specific configuration (see below)                                                                            |
+
+**Lemonade-specific fields:**
+
+| Field          | Type   | Required | Description                                  |
+| -------------- | ------ | -------- | -------------------------------------------- |
+| `backend`      | string | ✅       | `llamacpp`, `onnx`, or `transformers`        |
+| `port`         | number | ✅       | Port number (default: 11534)                 |
+| `context_size` | number | Optional | Context window size (default: 32768)         |
 
 > **Extending providers:** To add a new provider enum, update `config/schema.yaml`, regenerate types via `config/generate-types.sh`, and implement routing in the server/CLI. See [Extending runtimes](../extending/index.md#extend-runtimes).
 

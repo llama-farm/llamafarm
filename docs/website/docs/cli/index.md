@@ -31,6 +31,7 @@ Environment helpers:
 | [`lf init`](./lf-init.md) | Scaffold a project and generate `llamafarm.yaml`. |
 | [`lf start`](./lf-start.md) | Launch server + RAG services and open the dev chat UI. |
 | [`lf chat`](./lf-chat.md) | Send single prompts, preview REST calls, manage sessions. |
+| [`lf models`](./lf-models.md) | List available models and manage multi-model configurations. |
 | [`lf datasets`](./lf-datasets.md) | Create, upload, process, and delete datasets. |
 | [`lf rag`](./lf-rag.md) | Query documents and access RAG maintenance tools. |
 | [`lf projects`](./lf-projects.md) | List projects by namespace. |
