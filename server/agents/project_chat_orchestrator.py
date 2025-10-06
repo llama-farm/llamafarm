@@ -57,7 +57,19 @@ class ProjectChatOrchestratorAgent(LFAgent):
         # Resolve model configuration
         from services.model_service import ModelService
 
+        logger.info(
+            "Creating ProjectChatOrchestratorAgent",
+            model_name=model_name,
+            project=project_config.name,
+        )
         model_config = ModelService.get_model_config(project_config, model_name)
+        logger.info(
+            "Resolved model configuration",
+            model_name=model_config.name,
+            provider=model_config.provider.value,
+            model=model_config.model,
+            base_url=model_config.base_url,
+        )
 
         # Build base history from config
         history = _get_history(project_config)

@@ -797,6 +797,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue("")
 			m.thinking = true
 			m.printing = true
+			// Update chatCtx with current model selection (PROJECT mode)
+			if m.currentMode == ModeProject && m.currentModel != "" {
+				chatCtx.Model = m.currentModel
+			}
 			// Start channel-based streaming - important for showing progress
 			chunks, errs, _ := startChatStream(m.messages, chatCtx)
 			ch := make(chan tea.Msg, 32)
