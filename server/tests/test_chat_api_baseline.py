@@ -87,10 +87,16 @@ def app_client(mocker):
                 yield SimpleNamespace(chat_message=input_schema.chat_message)
 
     def make_agent(
-        project_config: LlamaFarmConfig, project_dir: str, session_id: str | None = None
+        project_config: LlamaFarmConfig,
+        project_dir: str,
+        model_name: str | None = None,
+        session_id: str | None = None,
     ):
         tag = f"{project_config.namespace}/{project_config.name}"
-        return StubAgent(tag)
+        agent = StubAgent(tag)
+        # Add model_name attribute for fallback testing
+        agent.model_name = model_name or "test-model"
+        return agent
 
     mocker.patch(
         "api.routers.projects.projects.ProjectChatOrchestratorAgentFactory.create_agent",

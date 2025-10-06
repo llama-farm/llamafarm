@@ -1,14 +1,9 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"llamafarm-cli/cmd/config"
 
@@ -66,52 +61,20 @@ Examples:
 		// Ensure server is up
 		ensureServerAvailable(serverURL, true)
 
-		// Call API endpoint
-		url := fmt.Sprintf("%s/v1/projects/%s/%s/models", strings.TrimSuffix(serverURL, "/"), ns, proj)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+		// Fetch models using shared function
+		models := fetchAvailableModels(serverURL, ns, proj)
+		if models == nil {
+			fmt.Fprintf(os.Stderr, "Error fetching models from server\n")
 			os.Exit(1)
 		}
 
-		resp, err := getHTTPClient().Do(req)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching models: %v\n", err)
-			os.Exit(1)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			fmt.Fprintf(os.Stderr, "Server error %d: %s\n", resp.StatusCode, string(body))
-			os.Exit(1)
-		}
-
-		var result struct {
-			Models []struct {
-				ID          string `json:"id"`
-				Description string `json:"description"`
-				Provider    string `json:"provider"`
-				Model       string `json:"model"`
-				IsDefault   bool   `json:"is_default"`
-			} `json:"models"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing response: %v\n", err)
-			os.Exit(1)
-		}
-
-		if len(result.Models) == 0 {
+		if len(models) == 0 {
 			fmt.Println("No models configured")
 			return
 		}
 
 		fmt.Printf("Models for %s/%s:\n\n", ns, proj)
-		for _, m := range result.Models {
+		for _, m := range models {
 			defaultMarker := ""
 			if m.IsDefault {
 				defaultMarker = " (default)"
