@@ -32,7 +32,9 @@ def test_projects_tool():
     
     # Test creating a project
     print("\n2. Testing create project:")
-    result = tool.run(ProjectsToolInput(action="create", namespace="test", project_id="test_project"))
+    result = tool.run(
+        ProjectsToolInput(action="create", namespace="test", project_id="test_project")
+    )
     print(f"   Success: {result.success}")
     print(f"   Message: {result.message}")
     if result.projects:
@@ -41,7 +43,9 @@ def test_projects_tool():
     
     # Test creating the same project again (should fail)
     print("\n3. Testing create duplicate project:")
-    result = tool.run(ProjectsToolInput(action="create", namespace="test", project_id="test_project"))
+    result = tool.run(
+        ProjectsToolInput(action="create", namespace="test", project_id="test_project")
+    )
     print(f"   Success: {result.success}")
     print(f"   Message: {result.message}")
     

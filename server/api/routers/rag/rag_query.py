@@ -85,7 +85,8 @@ async def handle_rag_query(
     try:
         # Use Celery service to perform search
         logger.info(
-            f"Performing RAG search via Celery service: query='{request.query[:100]}...', database='{database_name}'"
+            f"Performing RAG search via Celery service: "
+            f"query='{request.query[:100]}...', database='{database_name}'"
         )
 
         search_results = search_with_rag(

@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 class PromptEngineeringToolInput(BaseIOSchema):
     """Input schema for prompt engineering tool."""
-    action: Literal["start_engineering", "continue_conversation", "generate_prompts", "save_prompts", "analyze_context"]
+    action: Literal[
+        "start_engineering", "continue_conversation", "generate_prompts",
+        "save_prompts", "analyze_context"
+    ]
     namespace: str
     project_id: str
     user_input: Optional[str] = None  # Required for start_engineering
@@ -46,7 +49,9 @@ class PromptEngineeringToolOutput(BaseIOSchema):
     errors: Optional[List[str]] = None
 
 
-class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeringToolOutput]):
+class PromptEngineeringTool(
+    BaseTool[PromptEngineeringToolInput, PromptEngineeringToolOutput]
+):
     """Tool for comprehensive prompt engineering with conversational interface."""
 
     def __init__(self):
@@ -54,18 +59,23 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
         # Store active engineering sessions
         self._sessions: Dict[str, PromptEngineeringCore] = {}
 
-    def run(self, input_data: PromptEngineeringToolInput) -> PromptEngineeringToolOutput:
+    def run(
+        self, input_data: PromptEngineeringToolInput
+    ) -> PromptEngineeringToolOutput:
         """Execute the prompt engineering tool based on the specified action."""
         try:
             logger.info(
                 f"Executing prompt engineering tool - action: {input_data.action}, "
-                f"namespace: {input_data.namespace}, project_id: {input_data.project_id}"
+                f"namespace: {input_data.namespace}, "
+                f"project_id: {input_data.project_id}"
             )
 
             session_key = f"{input_data.namespace}/{input_data.project_id}"
 
             if input_data.action == "analyze_context":
-                return self._analyze_context(input_data.namespace, input_data.project_id)
+                return self._analyze_context(
+                    input_data.namespace, input_data.project_id
+                )
 
             elif input_data.action == "start_engineering":
                 if not input_data.user_input:
@@ -83,9 +93,15 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                 if not input_data.user_response or not input_data.question_answered:
                     return PromptEngineeringToolOutput(
                         success=False,
-                        message="user_response and question_answered are required for continue_conversation action",
+                        message=(
+                            "user_response and question_answered are required for "
+                            "continue_conversation action"
+                        ),
                         action=input_data.action,
-                        errors=["Missing required parameters: user_response, question_answered"]
+                        errors=[
+                            "Missing required parameters: user_response, "
+                            "question_answered"
+                        ]
                     )
                 return self._continue_conversation(
                     session_key, input_data.user_response, input_data.question_answered
@@ -98,11 +114,15 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                 if not input_data.generated_prompts_data:
                     return PromptEngineeringToolOutput(
                         success=False,
-                        message="generated_prompts_data is required for save_prompts action",
+                        message=(
+                            "generated_prompts_data is required for save_prompts action"
+                        ),
                         action=input_data.action,
                         errors=["Missing required parameter: generated_prompts_data"]
                     )
-                return self._save_prompts(session_key, input_data.generated_prompts_data)
+                return self._save_prompts(
+                    session_key, input_data.generated_prompts_data
+                )
 
             else:
                 return PromptEngineeringToolOutput(
@@ -121,7 +141,9 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                 errors=[str(e)]
             )
 
-    def _analyze_context(self, namespace: str, project_id: str) -> PromptEngineeringToolOutput:
+    def _analyze_context(
+        self, namespace: str, project_id: str
+    ) -> PromptEngineeringToolOutput:
         """Analyze project context to provide insights for prompt engineering"""
         try:
             # Create temporary engineering core to analyze context
@@ -149,7 +171,8 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
             # Add optimization opportunities
             if not context.existing_prompts:
                 context_summary["optimization_opportunities"].append(
-                    "No prompts configured - perfect opportunity to create optimized prompts"
+                    "No prompts configured - perfect opportunity to create "
+                    "optimized prompts"
                 )
             elif len(context.existing_prompts) < 2:
                 context_summary["optimization_opportunities"].append(
@@ -158,18 +181,21 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
 
             if context.rag_enabled and not context.domain:
                 context_summary["optimization_opportunities"].append(
-                    "RAG is enabled but domain is unclear - prompts could be optimized for document search"
+                    "RAG is enabled but domain is unclear - prompts could be "
+                    "optimized for document search"
                 )
 
             # Add recommendations
             if context.ai_provider != context.ai_provider.GENERIC:
                 context_summary["recommendations"].append(
-                    f"I can optimize prompts specifically for {context.ai_provider.value}"
+                    f"I can optimize prompts specifically for "
+                    f"{context.ai_provider.value}"
                 )
 
             if context.domain:
                 context_summary["recommendations"].append(
-                    f"Detected {context.domain} domain - I can create specialized prompts for this use case"
+                    f"Detected {context.domain} domain - I can create specialized "
+                    f"prompts for this use case"
                 )
 
             # Create user-friendly message
@@ -203,7 +229,9 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                 errors=[str(e)]
             )
 
-    def _start_engineering(self, namespace: str, project_id: str, user_input: str) -> PromptEngineeringToolOutput:
+    def _start_engineering(
+        self, namespace: str, project_id: str, user_input: str
+    ) -> PromptEngineeringToolOutput:
         """Start the prompt engineering process"""
         try:
             session_key = f"{namespace}/{project_id}"
@@ -233,7 +261,9 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                 )
 
         except Exception as e:
-            logger.error(f"Failed to start engineering for {namespace}/{project_id}: {e}")
+            logger.error(
+                f"Failed to start engineering for {namespace}/{project_id}: {e}"
+            )
             return PromptEngineeringToolOutput(
                 success=False,
                 message=f"Failed to start prompt engineering: {str(e)}",
@@ -241,13 +271,18 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                 errors=[str(e)]
             )
 
-    def _continue_conversation(self, session_key: str, user_response: str, question_answered: str) -> PromptEngineeringToolOutput:
+    def _continue_conversation(
+        self, session_key: str, user_response: str, question_answered: str
+    ) -> PromptEngineeringToolOutput:
         """Continue the prompt engineering conversation"""
         try:
             if session_key not in self._sessions:
                 return PromptEngineeringToolOutput(
                     success=False,
-                    message="No active prompt engineering session found. Please start with 'start_engineering' action.",
+                    message=(
+                        "No active prompt engineering session found. Please start "
+                        "with 'start_engineering' action."
+                    ),
                     action="continue_conversation",
                     errors=["Session not found"]
                 )
@@ -265,7 +300,9 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                     completion_percentage=result.get("completion_percentage"),
                     data={
                         "is_complete": result.get("is_complete", False),
-                        "ready_for_generation": result.get("phase") == "ready_for_generation"
+                        "ready_for_generation": (
+                            result.get("phase") == "ready_for_generation"
+                        )
                     }
                 )
             else:
@@ -302,7 +339,8 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
             if result["success"]:
                 # Create user-friendly summary
                 summary_parts = [
-                    f"Successfully generated {result['prompts_generated']} optimized prompts:",
+                    f"Successfully generated {result['prompts_generated']} "
+                    f"optimized prompts:",
                 ]
 
                 for prompt in result["prompts"]:
@@ -338,7 +376,9 @@ class PromptEngineeringTool(BaseTool[PromptEngineeringToolInput, PromptEngineeri
                 errors=[str(e)]
             )
 
-    def _save_prompts(self, session_key: str, generated_prompts_data: Dict[str, Any]) -> PromptEngineeringToolOutput:
+    def _save_prompts(
+        self, session_key: str, generated_prompts_data: Dict[str, Any]
+    ) -> PromptEngineeringToolOutput:
         """Save generated prompts to project configuration"""
         try:
             if session_key not in self._sessions:
@@ -402,7 +442,10 @@ if __name__ == "__main__":
         action="start_engineering",
         namespace="test",
         project_id="sample",
-        user_input="I want to create prompts for a customer support chatbot that helps with billing questions"
+        user_input=(
+            "I want to create prompts for a customer support chatbot that "
+            "helps with billing questions"
+        )
     ))
 
     print(f"Started engineering: {result.message}")
