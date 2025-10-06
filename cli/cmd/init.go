@@ -65,7 +65,8 @@ var initCmd = &cobra.Command{
 		if base == "" {
 			base = "http://localhost:8000"
 		}
-		ensureServerAvailable(base, true)
+		config := ServerOnlyConfig(base)
+		EnsureServicesWithConfig(config)
 
 		// Build URL
 		url := buildServerURL(base, fmt.Sprintf("/v1/projects/%s", ns))

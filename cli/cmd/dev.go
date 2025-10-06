@@ -59,9 +59,16 @@ func start(mode SessionMode) {
 	}
 	serverURL = serverInfo.URL
 
-	// Use container orchestrator for development
-	orchestrator := NewContainerOrchestrator()
-	serverHealth := orchestrator.EnsureMultiContainerStack(serverURL, false)
+	// Use new service orchestrator for development
+	config := StartCommandConfig(serverURL)
+	serverHealth, _ := EnsureServicesWithConfigAndResult(config)
+
+	// Filter health status to avoid alarming messages for optional services (like RAG)
+	// that are starting in the background
+	if serverHealth != nil {
+		serverHealth = FilterHealthForOptionalServices(serverHealth, config)
+	}
+
 	runChatSessionTUI(mode, projectInfo, serverHealth)
 }
 

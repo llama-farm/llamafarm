@@ -741,7 +741,32 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TUIMessageMsg:
 		// Handle output messages routed through the messaging API
 		formattedContent := FormatMessage(msg.Message)
-		m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
+
+		if msg.Message.Type == ProgressMessage {
+			// For progress messages, find and remove the most recent progress message,
+			// then add the updated progress message at the bottom (most recent position)
+			// This keeps progress updates always visible at the bottom of the chat
+			foundProgressIdx := -1
+
+			// Search backwards through all messages to find the most recent progress message
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				if m.messages[i].Role == "client" && strings.HasPrefix(m.messages[i].Content, "🔄") {
+					foundProgressIdx = i
+					break
+				}
+			}
+
+			if foundProgressIdx >= 0 {
+				// Remove the old progress message by slicing it out
+				m.messages = append(m.messages[:foundProgressIdx], m.messages[foundProgressIdx+1:]...)
+			}
+
+			// Always add the new progress message at the bottom (most recent position)
+			m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
+		} else {
+			// For non-progress messages, add normally
+			m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
+		}
 	}
 
 	m.transcript = computeTranscript(m)

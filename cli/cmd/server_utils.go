@@ -11,10 +11,85 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 var containerName = "llamafarm-server"
+
+// Service Orchestration Types
+
+type ServiceRequirement int
+
+const (
+	ServiceIgnored  ServiceRequirement = iota // Don't start, don't check
+	ServiceOptional                           // Start async, don't wait, don't fail if unhealthy
+	ServiceRequired                           // Start and wait, fail if can't become healthy
+)
+
+type ServiceStatus int
+
+const (
+	StatusUnknown ServiceStatus = iota
+	StatusStarting
+	StatusHealthy
+	StatusDegraded
+	StatusUnhealthy
+	StatusFailed
+)
+
+type ServiceState struct {
+	Name    string
+	Status  ServiceStatus
+	Message string
+	Error   error
+	Health  *Component // From health payload
+}
+
+type ServiceOrchestrationConfig struct {
+	ServerURL       string
+	PrintStatus     bool
+	ServiceNeeds    map[string]ServiceRequirement
+	DefaultTimeout  time.Duration
+	ServiceTimeouts map[string]time.Duration
+}
+
+func (config *ServiceOrchestrationConfig) isLocalhost() bool {
+	return isLocalhost(config.ServerURL)
+}
+
+type OrchestrationResult struct {
+	ServerHealth *HealthPayload
+	Services     map[string]*ServiceState
+
+	// Channels for async monitoring
+	ServerReady chan *ServiceState
+	RAGReady    chan *ServiceState
+	Done        chan struct{}
+}
+
+type ServiceDefinition struct {
+	Name            string
+	Dependencies    []string
+	CanStartLocally bool
+	DefaultTimeout  time.Duration
+
+	// Service-specific functions
+	CheckHealth func(serverURL string) (*Component, error)
+	StartLocal  func(serverURL string) error
+	WaitReady   func(serverURL string, timeout time.Duration) error
+}
+
+type ServiceOrchestrator struct {
+	config       *ServiceOrchestrationConfig
+	serviceGraph map[string]*ServiceDefinition
+	results      map[string]*ServiceState
+
+	// Channels for coordination
+	serviceReady map[string]chan *ServiceState
+	done         chan struct{}
+	mu           sync.RWMutex
+}
 
 type Component struct {
 	Name      string                 `json:"name"`
@@ -42,95 +117,553 @@ func (e *HealthError) Error() string {
 	return fmt.Sprintf("server unhealthy: %s", e.Status)
 }
 
-// ensureServerAvailable verifies the server at serverURL is reachable.
-// If not reachable and the host is localhost, it attempts to start the
-// server via Docker, then waits for readiness. Returns an error if it
-// ultimately cannot ensure availability.
-func ensureServerAvailable(serverURL string, printStatus bool) *HealthPayload {
-	if serverURL == "" {
-		serverURL = "http://localhost:8000"
-	}
+// Service Graph Definition
 
-	if hr, err := checkServerHealth(serverURL); err == nil {
-		// Server is healthy, check RAG in background and use it
-		go handleRAGServiceInBackground(serverURL, hr)
-		return hr
-	} else if herr, ok := err.(*HealthError); ok {
-		// Server responded but is not healthy (degraded, unhealthy, etc.)
-		// This means the server is running, so we should use it rather than start a new one
-		if printStatus || herr.Status == "unhealthy" {
-			prettyPrintHealth(os.Stderr, herr.HealthResp)
-		}
-		if herr.Status == "unhealthy" {
-			// Check if unhealthy is only due to RAG being down
-			if isUnhealthyOnlyDueToRAG(&herr.HealthResp) {
-				OutputWarning("Server is unhealthy due to RAG component, attempting to start RAG service...")
-				// Try to start RAG service
-				if isLocalhost(serverURL) {
-					orchestrator := NewContainerOrchestrator()
-					go orchestrator.startRAGContainerAsync(serverURL)
-					// Return the current health status - RAG will be started in background
-					return &herr.HealthResp
-				} else {
-					OutputError("Server is unhealthy due to RAG component, but cannot start RAG on remote server")
-					os.Exit(1)
-				}
-			} else {
-				// Server is unhealthy for other reasons
-				os.Exit(1)
-			}
-		} else {
-			// Server is degraded but running - use it
-			return &herr.HealthResp
+var ServiceGraph = map[string]*ServiceDefinition{
+	"server": {
+		Name:            "server",
+		Dependencies:    []string{}, // No dependencies - always first
+		CanStartLocally: true,
+		DefaultTimeout:  45 * time.Second,
+		CheckHealth:     checkServerHealthForService,
+		StartLocal:      startServerContainerForService,
+		WaitReady:       waitForServerReadyForService,
+	},
+	"rag": {
+		Name:            "rag",
+		Dependencies:    []string{"server"}, // Depends on server
+		CanStartLocally: true,
+		DefaultTimeout:  30 * time.Second,
+		CheckHealth:     checkRAGHealthForService,
+		StartLocal:      startRAGContainerForService,
+		WaitReady:       waitForRAGReadyForService,
+	},
+}
+
+// Service-specific health check functions
+
+func checkServerHealthForService(serverURL string) (*Component, error) {
+	hr, err := checkServerHealth(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	// Find server component in health response
+	for _, comp := range hr.Components {
+		if strings.Contains(strings.ToLower(comp.Name), "server") || comp.Name == "api" {
+			return &comp, nil
 		}
 	}
+	// If no specific server component, create one from overall health
+	return &Component{
+		Name:    "server",
+		Status:  hr.Status,
+		Message: hr.Summary,
+	}, nil
+}
 
-	// Only attempt auto-start when pointing to localhost
-	if !isLocalhost(serverURL) {
-		OutputError("Could not contact server %s", serverURL)
-		os.Exit(1)
+func checkRAGHealthForService(serverURL string) (*Component, error) {
+	hr, err := checkServerHealth(serverURL)
+	if err != nil {
+		return nil, err
 	}
+	ragComponent := findRAGComponent(hr)
+	if ragComponent == nil {
+		return nil, fmt.Errorf("RAG component not found in health response")
+	}
+	return ragComponent, nil
+}
 
-	if err := startLocalServerViaDocker(serverURL); err != nil {
-		OutputError("Could not start local server: %v", err)
-		os.Exit(1)
-	}
+func startServerContainerForService(serverURL string) error {
+	return startLocalServerViaDocker(serverURL)
+}
 
-	// Poll for readiness
-	timeout := serverStartTimeout
-	if timeout <= 0 {
-		timeout = 45 * time.Second
-	}
+func startRAGContainerForService(serverURL string) error {
+	orchestrator := NewContainerOrchestrator()
+	return orchestrator.startRAGContainer()
+}
+
+func waitForServerReadyForService(serverURL string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	var lastError error = nil
+	for time.Now().Before(deadline) {
+		if _, err := checkServerHealth(serverURL); err == nil {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("server did not become ready within %v", timeout)
+}
 
-	OutputProgress("Waiting for server to become ready...\n")
-	for {
-		if hr, err := checkServerHealth(serverURL); err == nil {
-			return hr
-		} else {
-			lastError = err
-			if time.Now().After(deadline) {
-				break
-			}
-			duration := 1 * time.Second
-			time.Sleep(duration)
+func waitForRAGReadyForService(serverURL string, timeout time.Duration) error {
+	orchestrator := NewContainerOrchestrator()
+	return orchestrator.waitForRAGReadiness(timeout, serverURL)
+}
+
+// ServiceOrchestrator Implementation
+
+func NewServiceOrchestrator(config *ServiceOrchestrationConfig) *ServiceOrchestrator {
+	return &ServiceOrchestrator{
+		config:       config,
+		serviceGraph: ServiceGraph,
+		results:      make(map[string]*ServiceState),
+		serviceReady: make(map[string]chan *ServiceState),
+		done:         make(chan struct{}),
+	}
+}
+
+func (so *ServiceOrchestrator) EnsureServices() *OrchestrationResult {
+	// Initialize channels
+	so.serviceReady["server"] = make(chan *ServiceState, 1)
+	so.serviceReady["rag"] = make(chan *ServiceState, 1)
+
+	// Build execution plan based on dependencies
+	executionPlan := so.buildExecutionPlan()
+
+	// Execute services in dependency order
+	for _, stage := range executionPlan {
+		so.executeStage(stage)
+	}
+
+	// Build final result
+	result := &OrchestrationResult{
+		Services:    so.results,
+		ServerReady: so.serviceReady["server"],
+		RAGReady:    so.serviceReady["rag"],
+		Done:        so.done,
+	}
+
+	// Set server health from server service state
+	if serverState, exists := so.results["server"]; exists && serverState.Status == StatusHealthy {
+		if hr, err := checkServerHealth(so.config.ServerURL); err == nil {
+			result.ServerHealth = hr
 		}
 	}
-	OutputError("Server did not become ready at %s within timeout", serverURL)
-	if herr, ok := lastError.(*HealthError); ok {
-		// Render once on each failed poll tick to aid diagnosis
-		if printStatus || herr.Status == "unhealthy" {
-			prettyPrintHealth(os.Stderr, herr.HealthResp)
+
+	close(so.done)
+	return result
+}
+
+func (so *ServiceOrchestrator) buildExecutionPlan() [][]string {
+	visited := make(map[string]bool)
+	stages := [][]string{}
+
+	for len(visited) < len(so.config.ServiceNeeds) {
+		currentStage := []string{}
+
+		for serviceName, requirement := range so.config.ServiceNeeds {
+			if requirement == ServiceIgnored || visited[serviceName] {
+				continue
+			}
+
+			// Check if all dependencies are satisfied
+			if so.dependenciesSatisfied(serviceName, visited) {
+				currentStage = append(currentStage, serviceName)
+			}
 		}
-		if herr.Status == "unhealthy" {
-			os.Exit(1)
+
+		if len(currentStage) == 0 {
+			break // No more services can be processed
+		}
+
+		stages = append(stages, currentStage)
+		for _, service := range currentStage {
+			visited[service] = true
+		}
+	}
+
+	return stages
+}
+
+func (so *ServiceOrchestrator) dependenciesSatisfied(serviceName string, visited map[string]bool) bool {
+	serviceDef, exists := so.serviceGraph[serviceName]
+	if !exists {
+		return false
+	}
+
+	for _, dep := range serviceDef.Dependencies {
+		if !visited[dep] {
+			return false
+		}
+	}
+	return true
+}
+
+func (so *ServiceOrchestrator) executeStage(serviceNames []string) {
+	var wg sync.WaitGroup
+
+	for _, serviceName := range serviceNames {
+		requirement := so.config.ServiceNeeds[serviceName]
+
+		wg.Add(1)
+		go func(name string, req ServiceRequirement) {
+			defer wg.Done()
+
+			state := so.ensureService(name, req)
+
+			so.mu.Lock()
+			so.results[name] = state
+			so.mu.Unlock()
+
+			// Notify waiters
+			if ch, exists := so.serviceReady[name]; exists {
+				select {
+				case ch <- state:
+				default: // Channel full, don't block
+				}
+			}
+		}(serviceName, requirement)
+	}
+
+	// Wait for required services in this stage
+	so.waitForRequiredServices(serviceNames)
+}
+
+func (so *ServiceOrchestrator) waitForRequiredServices(serviceNames []string) {
+	for _, serviceName := range serviceNames {
+		requirement := so.config.ServiceNeeds[serviceName]
+		if requirement == ServiceRequired {
+			// Wait for this service to complete
+			<-so.serviceReady[serviceName]
+		}
+	}
+}
+
+func (so *ServiceOrchestrator) ensureService(serviceName string, requirement ServiceRequirement) *ServiceState {
+	serviceDef, exists := so.serviceGraph[serviceName]
+	if !exists {
+		return &ServiceState{
+			Name:   serviceName,
+			Status: StatusFailed,
+			Error:  fmt.Errorf("unknown service: %s", serviceName),
+		}
+	}
+
+	// Step 1: Check if service is already healthy
+	if component, err := serviceDef.CheckHealth(so.config.ServerURL); err == nil {
+		if strings.EqualFold(component.Status, "healthy") {
+			return &ServiceState{
+				Name:    serviceName,
+				Status:  StatusHealthy,
+				Message: fmt.Sprintf("%s is already healthy", serviceName),
+				Health:  component,
+			}
+		}
+	}
+
+	// Step 2: Service not healthy, need to start it
+	if !so.config.isLocalhost() {
+		// Remote server - can't start services, just wait/poll
+		return so.waitForServiceRemote(serviceName, serviceDef, requirement)
+	}
+
+	// Step 3: Local server - start service
+	if !serviceDef.CanStartLocally {
+		return &ServiceState{
+			Name:   serviceName,
+			Status: StatusFailed,
+			Error:  fmt.Errorf("service %s cannot be started locally", serviceName),
+		}
+	}
+
+	// Start the service
+	if so.config.PrintStatus {
+		OutputProgress("Starting %s service...\n", serviceName)
+	}
+
+	if err := serviceDef.StartLocal(so.config.ServerURL); err != nil {
+		if so.config.PrintStatus {
+			OutputError("Failed to start %s: %v\n", serviceName, err)
+		}
+		return &ServiceState{
+			Name:   serviceName,
+			Status: StatusFailed,
+			Error:  fmt.Errorf("failed to start %s: %v", serviceName, err),
+		}
+	}
+
+	// Test progress message to verify the system is working
+	if so.config.PrintStatus && serviceName == "rag" {
+		OutputProgress("RAG container started, initializing...\n")
+	}
+
+	// Wait for service to be ready (if required)
+	timeout := so.getServiceTimeout(serviceName, serviceDef)
+
+	if requirement == ServiceRequired {
+		if so.config.PrintStatus {
+			OutputProgress("Waiting for %s to become ready...\n", serviceName)
+		}
+
+		if err := serviceDef.WaitReady(so.config.ServerURL, timeout); err != nil {
+			return &ServiceState{
+				Name:   serviceName,
+				Status: StatusFailed,
+				Error:  fmt.Errorf("%s did not become ready: %v", serviceName, err),
+			}
+		}
+
+		if so.config.PrintStatus {
+			OutputSuccess("%s is ready\n", serviceName)
+		}
+
+		return &ServiceState{
+			Name:    serviceName,
+			Status:  StatusHealthy,
+			Message: fmt.Sprintf("%s started and ready", serviceName),
 		}
 	} else {
-		OutputError("%v", lastError)
-		os.Exit(1)
+		// Optional service - start in background, don't wait
+		go func() {
+			if err := serviceDef.WaitReady(so.config.ServerURL, timeout); err != nil {
+				if so.config.PrintStatus {
+					OutputWarning("%s service may not be fully ready: %v\n", serviceName, err)
+				}
+			} else {
+				if so.config.PrintStatus {
+					OutputSuccess("%s service is ready\n", serviceName)
+				}
+			}
+		}()
+
+		return &ServiceState{
+			Name:    serviceName,
+			Status:  StatusStarting,
+			Message: fmt.Sprintf("%s started in background", serviceName),
+		}
 	}
-	return nil
+}
+
+func (so *ServiceOrchestrator) waitForServiceRemote(serviceName string, serviceDef *ServiceDefinition, requirement ServiceRequirement) *ServiceState {
+	timeout := so.getServiceTimeout(serviceName, serviceDef)
+	deadline := time.Now().Add(timeout)
+
+	if so.config.PrintStatus {
+		OutputWarning("%s service is not healthy on remote server, waiting for it to come online...\n", serviceName)
+	}
+
+	for time.Now().Before(deadline) {
+		if component, err := serviceDef.CheckHealth(so.config.ServerURL); err == nil {
+			if strings.EqualFold(component.Status, "healthy") {
+				if so.config.PrintStatus {
+					OutputSuccess("%s service is now ready on remote server\n", serviceName)
+				}
+				return &ServiceState{
+					Name:    serviceName,
+					Status:  StatusHealthy,
+					Message: fmt.Sprintf("%s became healthy on remote server", serviceName),
+					Health:  component,
+				}
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	// Timeout reached
+	if requirement == ServiceRequired {
+		return &ServiceState{
+			Name:   serviceName,
+			Status: StatusFailed,
+			Error:  fmt.Errorf("%s service did not become ready on remote server within %v", serviceName, timeout),
+		}
+	} else {
+		// Optional service - proceed with degraded functionality
+		if so.config.PrintStatus {
+			OutputWarning("%s service did not become ready within %v, proceeding with degraded functionality\n", serviceName, timeout)
+		}
+		return &ServiceState{
+			Name:    serviceName,
+			Status:  StatusDegraded,
+			Message: fmt.Sprintf("%s service not ready on remote server", serviceName),
+		}
+	}
+}
+
+func (so *ServiceOrchestrator) getServiceTimeout(serviceName string, serviceDef *ServiceDefinition) time.Duration {
+	if timeout, exists := so.config.ServiceTimeouts[serviceName]; exists {
+		return timeout
+	}
+	if so.config.DefaultTimeout > 0 {
+		return so.config.DefaultTimeout
+	}
+	return serviceDef.DefaultTimeout
+}
+
+// Command-Specific Configuration Factories
+
+// StartCommandConfig creates config for lf start - Server required, RAG optional (background)
+func StartCommandConfig(serverURL string) *ServiceOrchestrationConfig {
+	return &ServiceOrchestrationConfig{
+		ServerURL:   serverURL,
+		PrintStatus: true, // Show progress for lf start so users see what's happening
+		ServiceNeeds: map[string]ServiceRequirement{
+			"server": ServiceRequired,
+			"rag":    ServiceOptional, // Start async, don't wait
+		},
+		DefaultTimeout: 45 * time.Second,
+	}
+}
+
+// RAGCommandConfig creates config for RAG commands - Both server and RAG required
+func RAGCommandConfig(serverURL string) *ServiceOrchestrationConfig {
+	return &ServiceOrchestrationConfig{
+		ServerURL:   serverURL,
+		PrintStatus: true,
+		ServiceNeeds: map[string]ServiceRequirement{
+			"server": ServiceRequired,
+			"rag":    ServiceRequired, // Wait for both
+		},
+		DefaultTimeout: 45 * time.Second,
+	}
+}
+
+// ChatNoRAGConfig creates config for lf chat --no-rag - Only server
+func ChatNoRAGConfig(serverURL string) *ServiceOrchestrationConfig {
+	return &ServiceOrchestrationConfig{
+		ServerURL:   serverURL,
+		PrintStatus: true,
+		ServiceNeeds: map[string]ServiceRequirement{
+			"server": ServiceRequired,
+			// RAG not mentioned = ServiceIgnored
+		},
+		DefaultTimeout: 45 * time.Second,
+	}
+}
+
+// ServerOnlyConfig creates config for server-only commands - Server required, RAG optional (background)
+func ServerOnlyConfig(serverURL string) *ServiceOrchestrationConfig {
+	return &ServiceOrchestrationConfig{
+		ServerURL:   serverURL,
+		PrintStatus: true,
+		ServiceNeeds: map[string]ServiceRequirement{
+			"server": ServiceRequired,
+			"rag":    ServiceOptional, // Start async, don't wait
+		},
+		DefaultTimeout: 45 * time.Second,
+	}
+}
+
+// New unified service orchestration function
+func EnsureServicesWithConfig(config *ServiceOrchestrationConfig) *HealthPayload {
+	orchestrator := NewServiceOrchestrator(config)
+	result := orchestrator.EnsureServices()
+
+	// Check if any required services failed
+	for serviceName, requirement := range config.ServiceNeeds {
+		if requirement == ServiceRequired {
+			if state, exists := result.Services[serviceName]; exists {
+				if state.Status == StatusFailed {
+					OutputError("Required service %s failed: %v", serviceName, state.Error)
+					os.Exit(1)
+				}
+			}
+		}
+	}
+
+	return result.ServerHealth
+}
+
+// EnsureServicesWithConfigAndResult returns both health and orchestration result
+func EnsureServicesWithConfigAndResult(config *ServiceOrchestrationConfig) (*HealthPayload, *OrchestrationResult) {
+	orchestrator := NewServiceOrchestrator(config)
+	result := orchestrator.EnsureServices()
+
+	// Check if any required services failed
+	for serviceName, requirement := range config.ServiceNeeds {
+		if requirement == ServiceRequired {
+			if state, exists := result.Services[serviceName]; exists {
+				if state.Status == StatusFailed {
+					OutputError("Required service %s failed: %v", serviceName, state.Error)
+					os.Exit(1)
+				}
+			}
+		}
+	}
+
+	return result.ServerHealth, result
+}
+
+// FilterHealthForOptionalServices creates a health payload that doesn't show alarming messages for optional services
+func FilterHealthForOptionalServices(health *HealthPayload, config *ServiceOrchestrationConfig) *HealthPayload {
+	if health == nil {
+		return nil
+	}
+
+	// Create a copy of the health payload
+	filtered := &HealthPayload{
+		Status:     health.Status,
+		Summary:    health.Summary,
+		Components: []Component{},
+		Seeds:      []Component{},
+		Timestamp:  health.Timestamp,
+	}
+
+	// Filter components - only include healthy ones or required unhealthy ones
+	for _, comp := range health.Components {
+		serviceName := getServiceNameFromComponent(&comp)
+		requirement, exists := config.ServiceNeeds[serviceName]
+
+		if !exists {
+			// Unknown service, include as-is
+			filtered.Components = append(filtered.Components, comp)
+		} else if requirement == ServiceRequired || strings.EqualFold(comp.Status, "healthy") {
+			// Required service (show all statuses) or healthy optional service
+			filtered.Components = append(filtered.Components, comp)
+		}
+		// Skip unhealthy optional services
+	}
+
+	// Filter seeds similarly
+	for _, seed := range health.Seeds {
+		serviceName := getServiceNameFromComponent(&seed)
+		requirement, exists := config.ServiceNeeds[serviceName]
+
+		if !exists {
+			// Unknown service, include as-is
+			filtered.Seeds = append(filtered.Seeds, seed)
+		} else if requirement == ServiceRequired || strings.EqualFold(seed.Status, "healthy") {
+			// Required service (show all statuses) or healthy optional service
+			filtered.Seeds = append(filtered.Seeds, seed)
+		}
+		// Skip unhealthy optional services
+	}
+
+	// Adjust overall status if we filtered out unhealthy components
+	if len(filtered.Components) < len(health.Components) || len(filtered.Seeds) < len(health.Seeds) {
+		// Check if remaining components are all healthy
+		allHealthy := true
+		for _, comp := range filtered.Components {
+			if !strings.EqualFold(comp.Status, "healthy") {
+				allHealthy = false
+				break
+			}
+		}
+		if allHealthy {
+			for _, seed := range filtered.Seeds {
+				if !strings.EqualFold(seed.Status, "healthy") {
+					allHealthy = false
+					break
+				}
+			}
+		}
+
+		if allHealthy {
+			filtered.Status = "healthy"
+			filtered.Summary = "All required services are healthy"
+		}
+	}
+
+	return filtered
+}
+
+// Helper function to determine service name from component
+func getServiceNameFromComponent(comp *Component) string {
+	name := strings.ToLower(comp.Name)
+	if strings.Contains(name, "rag") {
+		return "rag"
+	}
+	if strings.Contains(name, "server") || name == "api" {
+		return "server"
+	}
+	return name // Return as-is for unknown services
 }
 
 // checkServerHealth requires /health to be healthy.
@@ -273,53 +806,6 @@ func resolvePort(serverURL string, defaultPort int) int {
 	return defaultPort
 }
 
-// prettyPrintHealth decodes a /health payload and renders a concise, readable summary
-func prettyPrintHealth(w io.Writer, hr HealthPayload) {
-	prefix := "❌"
-	switch hr.Status {
-	case "degraded":
-		prefix = "⚠️"
-	case "healthy":
-		prefix = "✅"
-	}
-
-	fmt.Fprintf(w, "%s Server is %s\n", prefix, hr.Status)
-	if strings.TrimSpace(hr.Summary) != "" {
-		fmt.Fprintf(w, "Summary: %s\n", hr.Summary)
-	}
-	if len(hr.Components) > 0 {
-		for _, c := range hr.Components {
-			if c.Status == "healthy" {
-				continue
-			}
-
-			icon := iconForStatus(c.Status)
-			fmt.Fprintf(w, "  %s %-20s %-10s %s (latency: %dms)\n", icon, c.Name, c.Status, c.Message, c.LatencyMs)
-			for k, v := range c.Details {
-				fmt.Fprintf(w, "      %s: %v\n", k, v)
-			}
-		}
-	}
-	if len(hr.Seeds) > 0 {
-		var builder strings.Builder
-		for _, s := range hr.Seeds {
-			if s.Status == "healthy" {
-				continue
-			}
-
-			icon := iconForStatus(s.Status)
-			builder.WriteString(fmt.Sprintf("  %s %-20s %-10s %s (latency: %dms)\n", icon, s.Name, s.Status, s.Message, s.LatencyMs))
-			for k, v := range s.Runtime {
-				builder.WriteString(fmt.Sprintf("      %s: %v\n", k, v))
-			}
-		}
-		if builder.Len() > 0 {
-			fmt.Fprintln(w, "Seeds:")
-		}
-		fmt.Fprintln(w, builder.String())
-	}
-}
-
 // prettyPrintHealthProblems prints only the non-healthy components and seeds from a HealthPayload.
 // It is intended for concise error reporting.
 func prettyPrintHealthProblems(w io.Writer, hr HealthPayload) {
@@ -379,29 +865,6 @@ func pingURL(base string) error {
 	return fmt.Errorf("status %d", resp.StatusCode)
 }
 
-// handleRAGServiceInBackground checks if RAG service is unhealthy and starts it in background if needed
-func handleRAGServiceInBackground(serverURL string, hr *HealthPayload) {
-	if hr == nil {
-		return
-	}
-
-	// Check if RAG service is unhealthy
-	ragComponent := findRAGComponent(hr)
-	if ragComponent == nil || strings.EqualFold(ragComponent.Status, "healthy") {
-		return // RAG is fine, nothing to do
-	}
-
-	// RAG is unhealthy, start it in background if we're on localhost
-	if !isLocalhost(serverURL) {
-		OutputDebug("RAG service is unhealthy on remote server, cannot auto-start")
-		return
-	}
-
-	OutputDebug("RAG service is unhealthy, starting in background...")
-	orchestrator := NewContainerOrchestrator()
-	orchestrator.startRAGContainerAsync(serverURL)
-}
-
 // findRAGComponent finds the RAG component in the health response
 func findRAGComponent(hr *HealthPayload) *Component {
 	if hr == nil {
@@ -425,48 +888,6 @@ func findRAGComponent(hr *HealthPayload) *Component {
 	}
 
 	return nil
-}
-
-// isUnhealthyOnlyDueToRAG checks if the server is unhealthy solely because of RAG components
-// Returns true if all non-RAG components are healthy and only RAG components are unhealthy
-func isUnhealthyOnlyDueToRAG(hr *HealthPayload) bool {
-	if hr == nil {
-		return false
-	}
-
-	hasUnhealthyRAG := false
-	hasUnhealthyNonRAG := false
-
-	// Check components
-	for _, component := range hr.Components {
-		name := strings.ToLower(component.Name)
-		isRAGComponent := name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag")
-		isHealthy := strings.EqualFold(component.Status, "healthy")
-
-		if isRAGComponent && !isHealthy {
-			hasUnhealthyRAG = true
-		} else if !isRAGComponent && !isHealthy {
-			hasUnhealthyNonRAG = true
-		}
-	}
-
-	// Check seeds as well
-	for _, seed := range hr.Seeds {
-		name := strings.ToLower(seed.Name)
-		isRAGComponent := name == "rag-service" || strings.HasPrefix(name, "rag-") || strings.HasSuffix(name, "-rag")
-		isHealthy := strings.EqualFold(seed.Status, "healthy")
-
-		if isRAGComponent && !isHealthy {
-			hasUnhealthyRAG = true
-		} else if !isRAGComponent && !isHealthy {
-			hasUnhealthyNonRAG = true
-		}
-	}
-
-	// Server is unhealthy only due to RAG if:
-	// 1. There are unhealthy RAG components, AND
-	// 2. There are NO unhealthy non-RAG components
-	return hasUnhealthyRAG && !hasUnhealthyNonRAG
 }
 
 // convertToDockerPath normalizes a host path to use forward slashes which Docker accepts across platforms.

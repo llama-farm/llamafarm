@@ -78,8 +78,9 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		// Ensure server is available
-		ensureServerAvailable(serverCfg.URL, true)
+		// Ensure server and RAG are available
+		config := RAGCommandConfig(serverCfg.URL)
+		EnsureServicesWithConfig(config)
 
 		// Build the request
 		queryRequest := buildQueryRequest(queryText)

@@ -48,7 +48,8 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		ensureServerAvailable(serverCfg.URL, true)
+		config := RAGCommandConfig(serverCfg.URL)
+		EnsureServicesWithConfig(config)
 
 		// Confirm operation unless force flag is set
 		if !force {
@@ -116,7 +117,8 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		ensureServerAvailable(serverCfg.URL, true)
+		config := RAGCommandConfig(serverCfg.URL)
+		EnsureServicesWithConfig(config)
 
 		// Build deletion request
 		req := buildDeleteRequest()
@@ -185,7 +187,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL, true)
+		config := RAGCommandConfig(serverCfg.URL)
+		EnsureServicesWithConfig(config)
 
 		// Get prune preview
 		preview, err := getPrunePreview(serverCfg, manageDatabase)
@@ -251,7 +254,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL, true)
+		config := RAGCommandConfig(serverCfg.URL)
+		EnsureServicesWithConfig(config)
 
 		fmt.Printf("📦 Exporting database to %s...\n", outputFile)
 
@@ -297,7 +301,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		ensureServerAvailable(serverCfg.URL, true)
+		config := RAGCommandConfig(serverCfg.URL)
+		EnsureServicesWithConfig(config)
 
 		// Read import file
 		importData, err := readImportFile(inputFile)
