@@ -1,5 +1,10 @@
 name: Build and Push Docker Images
 
+# This workflow handles Docker image building with different strategies:
+# - For PRs: Build images and save as artifacts (no registry push)
+# - For branches/tags: Build and push to registry, create multi-arch manifests
+# - PR artifacts are used by create-manifest and test-compose jobs for validation
+
 on:
   push:
     branches: [main]
@@ -70,6 +75,7 @@ jobs:
             org.opencontainers.image.vendor=LlamaFarm
 
       - name: Build and push AMD64 Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
@@ -80,8 +86,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}-amd64
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}-amd64
+          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=/tmp/${{ matrix.service }}-amd64.tar' || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
+
+      - name: Upload AMD64 image artifact (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-amd64-image
+          path: /tmp/${{ matrix.service }}-amd64.tar
+          retention-days: 1
 
   # Build ARM64 images on native ARM64 runners for efficiency
   build-arm64:
@@ -141,18 +156,28 @@ jobs:
             org.opencontainers.image.vendor=LlamaFarm
 
       - name: Build and push ARM64 Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/arm64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}-arm64
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}-arm64
+          outputs: ${{ github.event_name == 'pull_request' && 'type=docker,dest=/tmp/${{ matrix.service }}-arm64.tar' || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
+
+      - name: Upload ARM64 image artifact (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-arm64-image
+          path: /tmp/${{ matrix.service }}-arm64.tar
+          retention-days: 1
 
   # Create multi-arch manifests combining AMD64 and ARM64 images
   create-manifest:
@@ -174,11 +199,37 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download AMD64 image artifact (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.service }}-amd64-image
+          path: /tmp/
+
+      - name: Download ARM64 image artifact (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.service }}-arm64-image
+          path: /tmp/
+
+      - name: Load images from artifacts (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Loading images from artifacts for PR validation"
+          docker load -i /tmp/${{ matrix.service }}-amd64.tar
+          docker load -i /tmp/${{ matrix.service }}-arm64.tar
+
+          # List loaded images for verification
+          echo "Loaded images:"
+          docker images | grep ${{ matrix.service }}
 
       - name: Extract metadata for multi-arch tags
         id: meta
@@ -187,13 +238,15 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha,prefix=${{ github.ref_name }}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Create and push multi-arch manifest
+      - name: Create and push multi-arch manifest (branches/tags)
+        if: github.event_name != 'pull_request'
         run: |
           # Get the image tags from metadata
           TAGS="${{ steps.meta.outputs.tags }}"
@@ -211,17 +264,93 @@ jobs:
             echo "✅ Multi-arch manifest created and pushed: $TAG"
           done
 
-  # Build multi-service docker-compose for testing (PR only)
+      - name: Validate loaded images (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Validating PR images are properly loaded and functional"
+
+          # Get the PR tags from metadata
+          TAGS="${{ steps.meta.outputs.tags }}"
+
+          for TAG in $TAGS; do
+            echo "Checking images for tag: $TAG"
+
+            # Verify both architecture images exist
+            if docker image inspect "$TAG-amd64" >/dev/null 2>&1; then
+              echo "✅ AMD64 image found: $TAG-amd64"
+            else
+              echo "❌ AMD64 image missing: $TAG-amd64"
+              exit 1
+            fi
+
+            if docker image inspect "$TAG-arm64" >/dev/null 2>&1; then
+              echo "✅ ARM64 image found: $TAG-arm64"
+            else
+              echo "❌ ARM64 image missing: $TAG-arm64"
+              exit 1
+            fi
+
+            echo "✅ Both architecture images validated for $TAG"
+          done
+
+          echo "✅ All PR images validated successfully"
+
+  # Build multi-service docker-compose for testing
   test-compose:
     name: Test Docker Compose
     runs-on: ubuntu-latest
-    needs: [build-amd64, build-arm64]
+    needs: [create-manifest]
+    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Download all image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-image"
+          path: /tmp/artifacts
+          merge-multiple: true
+
+      - name: Load all images from artifacts
+        run: |
+          echo "Loading all Docker images from artifacts..."
+          for tar_file in /tmp/artifacts/*.tar; do
+            if [ -f "$tar_file" ]; then
+              echo "Loading: $tar_file"
+              docker load -i "$tar_file"
+            fi
+          done
+
+          echo "Loaded images:"
+          docker images
+
+      - name: Tag images for docker-compose
+        env:
+          IMAGE_TAG: pr-${{ github.event.number }}
+        run: |
+          # Tag the loaded images with the expected format for docker-compose
+          SERVICES=(designer server rag)
+
+          for SERVICE in "${SERVICES[@]}"; do
+            # Find the loaded images for this service
+            AMD64_IMAGE=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "$SERVICE" | grep "amd64" | head -1 | tr -d ' ')
+
+            if [ -n "$AMD64_IMAGE" ]; then
+              # Tag for docker-compose (use AMD64 for testing)
+              NEW_TAG="ghcr.io/${{ github.repository }}/${SERVICE}:${IMAGE_TAG}"
+              echo "Tagging $AMD64_IMAGE -> $NEW_TAG"
+              docker tag "$AMD64_IMAGE" "$NEW_TAG"
+            else
+              echo "Warning: No AMD64 image found for $SERVICE"
+            fi
+          done
+
+          echo "Tagged images:"
+          docker images | grep "pr-${{ github.event.number }}"
 
       - name: Ensure data dir exists for bind mount
         run: |
@@ -231,7 +360,7 @@ jobs:
       - name: Test services startup
         working-directory: deployment/docker_compose
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: pr-${{ github.event.number }}
         run: |
           # Start services and check they come up healthy
           docker compose -f docker-compose.yml up -d
