@@ -137,6 +137,14 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
 
+      - name: Generate Python datamodels (config component only)
+        if: matrix.component == 'config'
+        working-directory: config
+        run: |
+          echo "Generating datamodels for config component tests..."
+          ./generate-types.sh
+          echo "✓ Datamodel generation complete"
+
       - name: Check if component has tests
         id: check-tests
         working-directory: ${{ matrix.component }}
