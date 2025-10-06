@@ -108,9 +108,6 @@ properties:
             api_key:
               type: ["string", "null"]
               description: "API key for the provider"
-            huggingface_token:
-              type: ["string", "null"]
-              description: "Hugging Face API token for downloading gated models"
             instructor_mode:
               type: ["string", "null"]
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
@@ -142,3 +139,14 @@ properties:
                 model_path:
                   type: ["string", "null"]
                   description: "Custom model storage location"
+                auto_download:
+                  type: ["boolean", "null"]
+                  default: false
+                  description: "Automatically download model from HuggingFace if not cached"
+                checkpoint:
+                  type: ["string", "null"]
+                  description: "Full HuggingFace checkpoint path including quantization (e.g., 'bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M')"
+                recipe:
+                  type: ["string", "null"]
+                  enum: [llamacpp, transformers, onnx, null]
+                  description: "Lemonade recipe to use with the model (should match backend)"

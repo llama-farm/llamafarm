@@ -298,7 +298,6 @@ def _get_client_for_model(model_config):
                 self.model = mc.model
                 self.base_url = mc.base_url
                 self.api_key = mc.api_key
-                self.huggingface_token = mc.huggingface_token
                 self.instructor_mode = mc.instructor_mode
                 self.prompt_format = mc.prompt_format
                 self.model_api_parameters = mc.model_api_parameters

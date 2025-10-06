@@ -30,7 +30,6 @@ class ModelConfig:
         self.model: str = data["model"]
         self.base_url: str | None = data.get("base_url")
         self.api_key: str | None = data.get("api_key")
-        self.huggingface_token: str | None = data.get("huggingface_token")
         self.instructor_mode: str | None = data.get("instructor_mode")
         # PromptFormat might already be an enum from Pydantic
         prompt_fmt = data.get("prompt_format")
