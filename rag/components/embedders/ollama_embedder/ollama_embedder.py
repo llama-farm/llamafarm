@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from core.base import Embedder
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.embedders.ollama_embedder.ollama_embedder")
 
 
@@ -129,7 +130,9 @@ class OllamaEmbedder(Embedder):
         if response.status_code == 200:
             return response.json()
         else:
-            raise Exception(f"Ollama API error {response.status_code}: {response.text}")
+            raise Exception(
+                f"Ollama API error {response.status_code}: {response.text}"
+            ) from response.raise_for_status()
 
     def embed_text(self, text: str) -> List[float]:
         """Embed a single text string."""

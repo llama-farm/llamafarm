@@ -2,16 +2,13 @@
 Heading Extractor for identifying document structure and hierarchy.
 """
 
-import logging
 import re
-from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from core.base import Document
 
 from components.extractors.base import BaseExtractor
-
-logger = logging.getLogger(__name__)
 
 
 class HeadingExtractor(BaseExtractor):

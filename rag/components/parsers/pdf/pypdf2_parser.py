@@ -1,10 +1,11 @@
 """PDF parser using PyPDF2 library."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-from components.parsers.base.base_parser import BaseParser, ParserConfig
+from typing import Any, Dict, List, Optional
 
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.pdfpdf2_parser")
 
 
@@ -143,13 +144,19 @@ class PDFParser_PyPDF2(BaseParser):
                 for i, page_text in enumerate(page_texts):
                     if len(page_text.strip()) >= self.min_text_length:
                         page_meta = base_metadata.copy()
-                        page_meta.update({
-                            "page_number": i + 1,
-                            "total_pages": len(page_texts),
-                            "is_single_page": True,
-                        })
+                        page_meta.update(
+                            {
+                                "page_number": i + 1,
+                                "total_pages": len(page_texts),
+                                "is_single_page": True,
+                            }
+                        )
 
-                        filename = metadata.get("filename", "document.pdf") if metadata else "document.pdf"
+                        filename = (
+                            metadata.get("filename", "document.pdf")
+                            if metadata
+                            else "document.pdf"
+                        )
                         doc = Document(
                             content=page_text,
                             metadata=page_meta,
@@ -162,12 +169,18 @@ class PDFParser_PyPDF2(BaseParser):
                 chunks = self._chunk_text(text)
                 for i, chunk in enumerate(chunks):
                     chunk_metadata = base_metadata.copy()
-                    chunk_metadata.update({
-                        "chunk_index": i,
-                        "total_chunks": len(chunks),
-                    })
+                    chunk_metadata.update(
+                        {
+                            "chunk_index": i,
+                            "total_chunks": len(chunks),
+                        }
+                    )
 
-                    filename = metadata.get("filename", "document.pdf") if metadata else "document.pdf"
+                    filename = (
+                        metadata.get("filename", "document.pdf")
+                        if metadata
+                        else "document.pdf"
+                    )
                     doc = Document(
                         content=chunk,
                         metadata=chunk_metadata,
@@ -177,7 +190,11 @@ class PDFParser_PyPDF2(BaseParser):
                     documents.append(doc)
             else:
                 # Single document
-                filename = metadata.get("filename", "document.pdf") if metadata else "document.pdf"
+                filename = (
+                    metadata.get("filename", "document.pdf")
+                    if metadata
+                    else "document.pdf"
+                )
                 doc = Document(
                     content=text,
                     metadata=base_metadata,

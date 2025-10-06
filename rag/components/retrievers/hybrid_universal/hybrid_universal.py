@@ -1,10 +1,11 @@
 """Hybrid universal strategy - combines multiple strategies with configurable weights."""
 
-from typing import List, Dict, Any
+from pathlib import Path
+from typing import Any
+
 from components.retrievers.base import (
-    RetrievalStrategy,
-    RetrievalResult,
     HybridRetrievalStrategy,
+    RetrievalResult,
 )
 from core.base import Document
 
@@ -28,9 +29,12 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
     """
 
     def __init__(
-        self, name: str = "HybridUniversalStrategy", config: Dict[str, Any] = None
+        self,
+        name: str = "HybridUniversalStrategy",
+        config: dict[str, Any] | None = None,
+        project_dir: Path | None = None,
     ):
-        super().__init__(name, config)
+        super().__init__(name, config, project_dir)
         config = config or {}
 
         # Initialize sub-strategies based on config
@@ -53,7 +57,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
         # Create strategy instances
         self._initialize_strategies(strategies_config)
 
-    def _initialize_strategies(self, strategies_config: List[Dict[str, Any]]) -> None:
+    def _initialize_strategies(self, strategies_config: list[dict[str, Any]]) -> None:
         """Initialize sub-strategies from configuration.
 
         Args:
@@ -97,7 +101,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
                 )
 
     def retrieve(
-        self, query_embedding: List[float], vector_store, top_k: int = 5, **kwargs
+        self, query_embedding: list[float], vector_store, top_k: int = 5, **kwargs
     ) -> RetrievalResult:
         """Combine results from multiple strategies.
 
@@ -123,7 +127,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
 
         # Get results from all strategies
         results = []
-        strategy_performances = {}
+        strategy_performances: dict[str, dict[str, Any]] = {}
 
         for strategy in self.strategies:
             try:
@@ -144,7 +148,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
 
             except Exception as e:
                 # Log error and continue with other strategies
-                print(f"Strategy {strategy.name} failed: {e}")
+                self.logger.error(f"Strategy {strategy.name} failed: {e}")
                 strategy_performances[strategy.name] = {
                     "success": False,
                     "error": str(e),
@@ -186,7 +190,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
         return combined_result
 
     def _rank_fusion_combine(
-        self, results: List[RetrievalResult], top_k: int
+        self, results: list[RetrievalResult], top_k: int
     ) -> RetrievalResult:
         """Combine results using reciprocal rank fusion.
 
@@ -203,8 +207,8 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
         """
         from collections import defaultdict
 
-        doc_fusion_scores = defaultdict(float)
-        doc_objects = {}
+        doc_fusion_scores: defaultdict[str, float] = defaultdict(float)
+        doc_objects: dict[str, Document] = {}
 
         for i, result in enumerate(results):
             strategy_weight = self.weights[i] if i < len(self.weights) else 1.0
@@ -244,8 +248,8 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
         )
 
     def _apply_diversity_boost(
-        self, documents: List[Document], scores: List[float]
-    ) -> tuple[List[Document], List[float]]:
+        self, documents: list[Document], scores: list[float]
+    ) -> tuple[list[Document], list[float]]:
         """Apply diversity boost to reduce redundancy in results.
 
         Args:
@@ -315,7 +319,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
         # Validate all sub-strategies
         return all(strategy.validate_config() for strategy in self.strategies)
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         """Get configuration schema for this strategy."""
         return {
             "type": "object",
@@ -376,7 +380,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
             "additionalProperties": False,
         }
 
-    def get_performance_info(self) -> Dict[str, Any]:
+    def get_performance_info(self) -> dict[str, Any]:
         """Get performance characteristics of this strategy."""
         if not self.strategies:
             return {

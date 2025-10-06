@@ -114,6 +114,7 @@ class RAGStructLogger:
             structlog.contextvars.bind_contextvars(**{key: arg.id})
 
         structlog.contextvars.bind_contextvars(**new_values)
+        return self
 
     @staticmethod
     def unbind(*keys: str):

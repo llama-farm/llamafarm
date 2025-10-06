@@ -7,8 +7,8 @@ from typing import Any, Dict, List
 
 # Import from rag module
 from core.base import Document, ProcessingResult
-
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.base.base_parser")
 
 
@@ -36,7 +36,7 @@ class BaseParser(ABC):
             config: Parser configuration dictionary
         """
         self.config = config or {}
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logger.bind(name=self.__class__.__name__)
 
         # Load parser metadata
         self.metadata = self._load_metadata()

@@ -3,17 +3,18 @@ Metadata enricher for adding comprehensive metadata to documents.
 """
 
 import hashlib
-import logging
+import json
+import mimetypes
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
-import mimetypes
-import json
+from typing import Any, Optional, Union
 
 from core.base import Document
-from .metadata_config import MetadataSchema, DocumentMetadata, CoreMetadataConfig
+from core.logging import RAGStructLogger
 
-logger = logging.getLogger(__name__)
+from .metadata_config import MetadataSchema
+
+logger = RAGStructLogger("rag.components.metadata.metadata_enricher")
 
 
 class MetadataEnricher:
@@ -27,9 +28,9 @@ class MetadataEnricher:
             schema: Metadata schema configuration
         """
         self.schema = schema or MetadataSchema()
-        self.logger = logger
+        self.logger = logger.bind(name=self.__class__.__name__)
 
-    def enrich_documents(self, documents: List[Document]) -> List[Document]:
+    def enrich_documents(self, documents: list[Document]) -> list[Document]:
         """
         Enrich multiple documents with metadata.
 
@@ -222,8 +223,8 @@ class MetadataEnricher:
             )
 
     def _ensure_chroma_compatibility(
-        self, metadata: Dict[str, Any]
-    ) -> Dict[str, Union[str, int, float, bool, None]]:
+        self, metadata: dict[str, Any]
+    ) -> dict[str, Union[str, int, float, bool, None]]:
         """
         Ensure metadata is compatible with ChromaDB.
 
@@ -265,7 +266,7 @@ class MetadataEnricher:
 class MetadataFilter:
     """Filter documents based on metadata criteria."""
 
-    def __init__(self, filters: Dict[str, Any]):
+    def __init__(self, filters: dict[str, Any]):
         """
         Initialize metadata filter.
 
@@ -274,7 +275,7 @@ class MetadataFilter:
         """
         self.filters = filters
 
-    def filter_documents(self, documents: List[Document]) -> List[Document]:
+    def filter_documents(self, documents: list[Document]) -> list[Document]:
         """
         Filter documents based on metadata.
 

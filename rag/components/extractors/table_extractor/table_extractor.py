@@ -2,14 +2,11 @@
 Table Extractor for finding and extracting structured tabular data from documents.
 """
 
-import logging
 import re
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
-
-logger = logging.getLogger(__name__)
 
 
 class TableExtractor(BaseExtractor):
@@ -126,7 +123,7 @@ class TableExtractor(BaseExtractor):
             }
 
         except Exception as e:
-            logger.error(f"Error in table extraction: {e}")
+            self.logger.error(f"Error in table extraction: {e}")
             return {"tables": [], "table_count": 0, "error": str(e)}
 
     def _extract_pipe_tables(self, text: str) -> List[Dict[str, Any]]:

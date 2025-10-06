@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.__init__")
 
 # Check for libmagic availability
@@ -72,7 +73,7 @@ class ParserFactory:
         cls._parsers[name] = parser_class
 
     @classmethod
-    def create_parser(cls, name: str, config: dict = None):
+    def create_parser(cls, name: str, config: dict | None = None):
         """Create a parser instance.
 
         Args:
