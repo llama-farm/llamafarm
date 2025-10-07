@@ -97,7 +97,6 @@ class ProjectChatOrchestratorAgent(LFAgent):
         # Register docs context provider
         self.docs_context_provider = DocsContextProvider(title="Relevant Documentation")
         self.register_context_provider("docs", self.docs_context_provider)
-        self._is_new_session = True  # Track if this is a new session for greeting logic
 
     def enable_persistence(
         self,
