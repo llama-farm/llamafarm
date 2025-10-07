@@ -21,15 +21,27 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Fallback to current directory only (align with start.sh)
+# Search for llamafarm.yaml in multiple locations
 if [ -z "$LF_CONFIG_FILE" ]; then
+    # Try current directory first
     if [ -f "./llamafarm.yaml" ]; then
         LF_CONFIG_FILE="./llamafarm.yaml"
+    # Try parent directory (in case we're in config/ or cli/)
+    elif [ -f "../llamafarm.yaml" ]; then
+        LF_CONFIG_FILE="../llamafarm.yaml"
+    # Try two levels up (in case we're deeper)
+    elif [ -f "../../llamafarm.yaml" ]; then
+        LF_CONFIG_FILE="../../llamafarm.yaml"
     fi
 fi
 
 if [ -z "$LF_CONFIG_FILE" ] || [ ! -f "$LF_CONFIG_FILE" ]; then
-    echo "Error: llamafarm.yaml not found in current directory. Use --config-file <path>"
+    echo "Error: llamafarm.yaml not found. Searched:"
+    echo "  - ./llamafarm.yaml"
+    echo "  - ../llamafarm.yaml"
+    echo "  - ../../llamafarm.yaml"
+    echo ""
+    echo "Use --config-file <path> to specify location"
     exit 1
 fi
 
