@@ -362,19 +362,53 @@ jobs:
         env:
           IMAGE_TAG: pr-${{ github.event.number }}
         run: |
+          echo "Starting services with improved healthcheck timing..."
+          
           # Start services and check they come up healthy
           docker compose -f docker-compose.yml up -d
 
-          # Wait for services to be ready
-          sleep 30
+          echo "Waiting for services to initialize..."
+          
+          # Wait longer for services to be ready (server needs 60s start_period + retries)
+          # Total potential time: 60s start_period + (5 retries * 15s interval) = 135s max
+          for i in {1..18}; do
+            echo "Health check attempt $i/18 (waiting 10s)..."
+            sleep 10
+            
+            # Check service status
+            if docker compose -f docker-compose.yml ps --format json | jq -r '.[].Health' | grep -q "healthy"; then
+              echo "✅ At least one service is healthy, checking all..."
+              docker compose -f docker-compose.yml ps
+              break
+            fi
+            
+            if [ $i -eq 18 ]; then
+              echo "❌ Services did not become healthy within 3 minutes"
+              echo "Final service status:"
+              docker compose -f docker-compose.yml ps
+              echo "=== SERVER LOGS ==="
+              docker compose -f docker-compose.yml logs server
+              echo "=== RAG LOGS ==="
+              docker compose -f docker-compose.yml logs rag
+              echo "=== DESIGNER LOGS ==="
+              docker compose -f docker-compose.yml logs designer
+              exit 1
+            fi
+          done
 
-          # Check if services are running
+          echo "✅ Services started successfully!"
+          echo "Final service status:"
           docker compose -f docker-compose.yml ps
 
-          # Basic health checks
-          docker compose -f docker-compose.yml logs server
-          docker compose -f docker-compose.yml logs designer
-          docker compose -f docker-compose.yml logs rag
+          # Test server health endpoint directly
+          echo "Testing server health endpoint..."
+          curl -f http://localhost:8000/health/liveness || {
+            echo "❌ Server health endpoint failed"
+            docker compose -f docker-compose.yml logs server
+            exit 1
+          }
+          
+          echo "✅ Server health endpoint responding correctly"
 
       - name: Cleanup
         if: always()

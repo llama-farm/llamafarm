@@ -16,8 +16,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
     networks:
       - llamafarm
@@ -36,10 +36,10 @@ services:
     healthcheck:
       test:
         ["CMD", "python", "-c", "import celery; print('RAG worker running')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
     restart: unless-stopped
     networks:
       - llamafarm
@@ -57,10 +57,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     restart: unless-stopped
     networks:
       - llamafarm
