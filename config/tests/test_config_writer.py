@@ -260,7 +260,9 @@ class TestConfigWriter:
                         }
                     ],
                 },
-                "runtime": {"model": "gpt-4"},
+                "runtime": {
+                    "models": [{"name": "test_model", "model": "gpt-4", "provider": "openai"}]
+                },
             }
 
             updated_path, _ = update_config(config_path, updates)
@@ -277,7 +279,7 @@ class TestConfigWriter:
                 ]
                 == 32
             )
-            assert loaded_config["runtime"]["model"] == "gpt-4"
+            assert loaded_config["runtime"]["models"][0]["model"] == "gpt-4"
 
             # Verify other values remain unchanged
             assert loaded_config["version"] == "v1"
@@ -335,7 +337,16 @@ class TestConfigWriter:
                         }
                     ],
                 },
-                "runtime": {"model_api_parameters": {"top_p": 0.9}},
+                "runtime": {
+                    "models": [
+                        {
+                            "provider": "ollama",
+                            "name": "test_model",
+                            "model": "test_model",
+                            "model_api_parameters": {"top_p": 0.9},
+                        }
+                    ],
+                },
             }
 
             update_config(config_path, updates)
@@ -354,7 +365,7 @@ class TestConfigWriter:
             assert embedder_config["model"] == "nomic-embed-text"
             assert embedder_config["base_url"] == "http://localhost:11434"
             # Runtime deep merge
-            assert loaded_config["runtime"]["model_api_parameters"]["top_p"] == 0.9
+            assert loaded_config["runtime"]["models"][0]["model_api_parameters"]["top_p"] == 0.9
 
     def test_update_nonexistent_file(self):
         """Test updating a file that doesn't exist."""
