@@ -533,6 +533,5 @@ async def list_models(namespace: str, project_id: str):
         models=[
             ModelResponse(model=model, default=model.name == default_model)
             for model in models
-            if model.name != default_model
         ],
     )
