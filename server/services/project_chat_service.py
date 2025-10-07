@@ -81,7 +81,7 @@ def _check_model_availability(project_config: LlamaFarmConfig) -> tuple[bool, st
 MODEL_NOT_FOUND_RESPONSE = (
     "The configured model '{model}' is not available. "
     "Please ensure the model is installed and try again. "
-    "For Ollama models, run: ollama pull {model}"
+    "If you're using Ollama, run: ollama pull {model}"
 )
 
 
