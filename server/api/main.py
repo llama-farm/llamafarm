@@ -1,4 +1,5 @@
 import fastapi
+from fastapi.middleware.cors import CORSMiddleware
 from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -28,6 +29,15 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(StructLogMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
+    # Enable CORS for local designer/dev environments
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
     # Register global exception handlers
     register_exception_handlers(app)
@@ -37,6 +47,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.inference_router, prefix=API_PREFIX)
     app.include_router(routers.rag_router, prefix=API_PREFIX)
     app.include_router(routers.upgrades_router, prefix=API_PREFIX)
+    app.include_router(routers.examples_router, prefix=API_PREFIX)
     # Health endpoints are exposed at the root (no version prefix)
     app.include_router(routers.health_router)
 

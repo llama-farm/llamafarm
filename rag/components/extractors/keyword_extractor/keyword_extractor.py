@@ -3,13 +3,13 @@
 import re
 from collections import Counter, defaultdict
 from typing import Dict, Any, List, Optional
-import logging
 import math
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.extractors.keyword_extractor.keyword_extractor")
 
 
 class RAKEExtractor(BaseExtractor):

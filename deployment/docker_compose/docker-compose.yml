@@ -1,9 +1,7 @@
 services:
   # FastAPI Backend Server (Lightweight - no RAG dependencies)
   server:
-    build:
-      context: ../../
-      dockerfile: server/Dockerfile
+    image: ghcr.io/llama-farm/llamafarm/server:${IMAGE_TAG-latest}
     ports:
       - "8000:8000"
     environment:
@@ -26,9 +24,7 @@ services:
 
   # RAG Service (Separate container with RAG dependencies)
   rag:
-    build:
-      context: ../../
-      dockerfile: rag/Dockerfile
+    image: ghcr.io/llama-farm/llamafarm/rag:${IMAGE_TAG-latest}
     environment:
       - PYTHONUNBUFFERED=1
       - LF_DATA_DIR=/var/lib/llamafarm
@@ -50,9 +46,7 @@ services:
 
   # React Frontend Designer
   designer:
-    build:
-      context: ../../designer
-      dockerfile: Dockerfile
+    image: ghcr.io/llama-farm/llamafarm/designer:${IMAGE_TAG-latest}
     ports:
       - "3123:80"
     environment:

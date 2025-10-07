@@ -1,0 +1,26 @@
+version: 1
+id: rag-pipeline
+slug: rag-pipeline
+title: RAG Pipeline Demo
+description: End-to-end RAG using real mixed documents (TXT, MD, PY, HTML, PDF).
+tags:
+  - rag
+  - pipeline
+  - demo
+primaryModel: llama3.1:8b
+config:
+  yaml_path: examples/rag_pipeline/llamafarm-example.yaml
+datasets:
+  - name: demo-dataset
+    strategy: universal_processor
+    database: main_database
+    ingest:
+      - examples/rag_pipeline/sample_files/research_papers/*.txt
+      - examples/rag_pipeline/sample_files/code_documentation/*.md
+      - examples/rag_pipeline/sample_files/code/*.py
+      - examples/rag_pipeline/sample_files/news_articles/*.html
+      - examples/rag_pipeline/sample_files/fda/*.pdf
+process_after_ingest: true
+retrieval:
+  database: main_database
+  top_k: 5

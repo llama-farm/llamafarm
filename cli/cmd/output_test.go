@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"testing"
+	"time"
 )
 
 func TestOutputManagerDirectMode(t *testing.T) {
@@ -123,4 +124,59 @@ func TestMessageQueueing(t *testing.T) {
 	}
 
 	ClearTUIMode()
+}
+
+func TestProgressMessageThrottling(t *testing.T) {
+	// Clear any existing state
+	ClearTUIMode()
+
+	// Enable TUI mode without a program to test throttling logic
+	outputManager.mu.Lock()
+	outputManager.inTUIMode = true
+	outputManager.tuiProgram = nil
+	outputManager.progressMessageSent = false
+	outputManager.lastProgressMessage = ""
+	outputManager.mu.Unlock()
+	defer ClearTUIMode()
+
+	// Send first progress message - should be stored
+	OutputProgress("Progress 1")
+
+	// Verify first message was stored
+	outputManager.mu.RLock()
+	firstMessage := outputManager.lastProgressMessage
+	outputManager.mu.RUnlock()
+
+	if firstMessage != "Progress 1" {
+		t.Errorf("Expected first message to be 'Progress 1', got %q", firstMessage)
+	}
+
+	// Send second progress message quickly (within throttle window)
+	OutputProgress("Progress 2")
+
+	// Verify second message was stored (throttled but not sent)
+	outputManager.mu.RLock()
+	secondMessage := outputManager.lastProgressMessage
+	outputManager.mu.RUnlock()
+
+	if secondMessage != "Progress 2" {
+		t.Errorf("Expected second message to be 'Progress 2', got %q", secondMessage)
+	}
+
+	// Wait for throttle timer to reset and flush any pending messages
+	time.Sleep(150 * time.Millisecond) // Wait longer than the 100ms throttle window
+
+	// Verify the last message is still available (proving the fix works)
+	outputManager.mu.RLock()
+	finalMessage := outputManager.lastProgressMessage
+	progressSent := outputManager.progressMessageSent
+	outputManager.mu.RUnlock()
+
+	if finalMessage != "Progress 2" {
+		t.Errorf("Expected final message to be 'Progress 2', got %q", finalMessage)
+	}
+
+	if progressSent {
+		t.Error("Expected progressMessageSent to be false after throttle timer reset")
+	}
 }

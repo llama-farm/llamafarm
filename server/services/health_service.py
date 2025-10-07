@@ -72,10 +72,9 @@ def _check_storage() -> dict:
         }
 
 
-
-
 def _check_ollama() -> dict:
     """Check Ollama runtime health using provider registry."""
+
     # Create a temp config with Ollama settings from environment
     class TempConfig:
         class Runtime:
@@ -97,6 +96,7 @@ def _check_ollama() -> dict:
 
 def _create_temp_config(model_config: Model):
     """Create a temp LlamaFarmConfig from a Model for provider health checks."""
+
     class TempConfig:
         class Runtime:
             def __init__(self, mc: Model):
@@ -122,6 +122,7 @@ def _check_seed_project() -> dict:
     # Load seed project config for ModelService
     try:
         import yaml
+
         seed_path = (
             Path(__file__).resolve().parents[1]
             / "seeds"
@@ -140,6 +141,7 @@ def _check_seed_project() -> dict:
 
         project_config_data = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
         from config.datamodel import LlamaFarmConfig
+
         project_config = LlamaFarmConfig(**project_config_data)
 
         # Use ModelService to get the correct model config
@@ -153,7 +155,10 @@ def _check_seed_project() -> dict:
         health_result = provider_impl.check_health(temp_config)
 
         # Enhance with model validation for Ollama
-        if model_config.provider == Provider.ollama and health_result.status == "healthy":
+        if (
+            model_config.provider == Provider.ollama
+            and health_result.status == "healthy"
+        ):
             models = health_result.details.get("models", [])
             present = model_config.model in models
             status = "healthy" if present else "unhealthy"
@@ -177,7 +182,7 @@ def _check_seed_project() -> dict:
 
         # For other providers, use health check result directly
         return {
-            "name": "project",
+            "name": "seed:project",
             "status": health_result.status,
             "message": health_result.message,
             "latency_ms": _now_ms() - start,
@@ -196,8 +201,6 @@ def _check_seed_project() -> dict:
             "latency_ms": _now_ms() - start,
             "runtime": {"provider": None, "model": None},
         }
-
-
 
 
 def _check_rag_service() -> dict:
@@ -259,15 +262,15 @@ def _check_rag_service() -> dict:
 def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
-    
+
     # Only consider non-RAG components for overall status
     # RAG service status is included in response but doesn't affect overall health
     for c in components + seeds:
-        # Skip RAG service when computing overall status
-        if c.get("name") == "rag-service":
+        # Skip RAG service and Project seed when computing overall status
+        if c.get("name", "") in ["rag-service", "seed:project"]:
             continue
         worst = max(worst, order.get(c.get("status", "unhealthy"), 2))
-    
+
     return next((k for k, v in order.items() if v == worst), "unhealthy")
 
 

@@ -1,11 +1,12 @@
 """PDF parser using PyPDF2 library."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-import logging
-from components.parsers.base.base_parser import BaseParser, ParserConfig
+from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+from components.parsers.base.base_parser import BaseParser, ParserConfig
+from core.logging import RAGStructLogger
+
+logger = RAGStructLogger("rag.components.parsers.pdfpdf2_parser")
 
 
 class PDFParser_PyPDF2(BaseParser):
@@ -23,7 +24,7 @@ class PDFParser_PyPDF2(BaseParser):
         self.preserve_layout = self.config.get("preserve_layout", True)
         self.extract_page_info = self.config.get("extract_page_info", True)
         self.extract_page_structure = self.config.get("extract_page_structure", True)
-        self.combine_pages = self.config.get("combine_pages", True)
+        self.combine_pages = self.config.get("combine_pages", False)
         self.page_separator = self.config.get(
             "page_separator", "\n\n--- Page Break ---\n\n"
         )
@@ -74,49 +75,130 @@ class PDFParser_PyPDF2(BaseParser):
         return True
 
     def parse_blob(self, data: bytes, metadata: Dict[str, Any] = None) -> List:
-        """Parse PDF from raw bytes."""
-        from core.base import Document
+        """Parse PDF from raw bytes using in-memory buffer."""
         import io
+        from core.base import Document
 
         try:
             import PyPDF2
         except ImportError:
-            print("PyPDF2 not installed. Install with: pip install PyPDF2")
+            logger.error("PyPDF2 not installed. Install with: pip install PyPDF2")
             return []
 
         try:
-            # Create a BytesIO object from the raw data
-            pdf_file = io.BytesIO(data)
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            # Use BytesIO for in-memory parsing - no need for temp files
+            pdf_buffer = io.BytesIO(data)
 
-            documents = []
-            total_text = ""
+            try:
+                pdf_reader = PyPDF2.PdfReader(pdf_buffer)
+            except PyPDF2.errors.PdfReadError as e:
+                logger.error(f"Invalid PDF data: {e}")
+                return []
 
-            # Extract text from all pages
-            for page_num, page in enumerate(pdf_reader.pages, 1):
+            # Extract text and apply chunking directly
+            text = ""
+            page_texts = []
+
+            for page_num, page in enumerate(pdf_reader.pages):
                 try:
+                    if self.preserve_layout:
+                        page_text = page.extract_text(extraction_mode="layout")
+                    else:
+                        page_text = page.extract_text()
+                except TypeError:
                     page_text = page.extract_text()
-                    if page_text and len(page_text.strip()) > self.min_text_length:
-                        total_text += page_text + "\n"
-                except Exception as e:
-                    print(f"Error extracting text from page {page_num}: {e}")
-                    continue
 
-            # Create document if we extracted any text
-            if total_text.strip():
+                if page_text:
+                    if self.extract_page_info:
+                        page_texts.append(f"\n--- Page {page_num + 1} ---\n{page_text}")
+                    else:
+                        page_texts.append(page_text)
+
+            # Join pages
+            if self.combine_pages:
+                text = self.page_separator.join(page_texts) if page_texts else ""
+            else:
+                text = "\n\n".join(page_texts) if page_texts else ""
+
+            if not text.strip():
+                logger.warning("No text extracted from PDF blob")
+                return []
+
+            # Build metadata
+            base_metadata = {
+                "parser": self.name,
+                "parser_type": "PDFParser",
+                "tool": "PyPDF2",
+                "total_pages": len(pdf_reader.pages),
+                "extraction_mode": "layout" if self.preserve_layout else "standard",
+            }
+
+            if metadata:
+                base_metadata.update(metadata)
+
+            # Create documents based on chunking strategy
+            documents = []
+
+            if not self.combine_pages and len(page_texts) > 1:
+                # Separate document per page
+                for i, page_text in enumerate(page_texts):
+                    if len(page_text.strip()) >= self.min_text_length:
+                        page_meta = base_metadata.copy()
+                        page_meta.update(
+                            {
+                                "page_number": i + 1,
+                                "total_pages": len(page_texts),
+                                "is_single_page": True,
+                            }
+                        )
+
+                        filename = (
+                            metadata.get("filename", "document.pdf")
+                            if metadata
+                            else "document.pdf"
+                        )
+                        doc = Document(
+                            content=page_text,
+                            metadata=page_meta,
+                            id=f"{filename}_page_{i + 1}",
+                            source=filename,
+                        )
+                        documents.append(doc)
+            elif self.chunk_size and self.chunk_size > 0 and not self.combine_pages:
+                # Apply chunking
+                chunks = self._chunk_text(text)
+                for i, chunk in enumerate(chunks):
+                    chunk_metadata = base_metadata.copy()
+                    chunk_metadata.update(
+                        {
+                            "chunk_index": i,
+                            "total_chunks": len(chunks),
+                        }
+                    )
+
+                    filename = (
+                        metadata.get("filename", "document.pdf")
+                        if metadata
+                        else "document.pdf"
+                    )
+                    doc = Document(
+                        content=chunk,
+                        metadata=chunk_metadata,
+                        id=f"{filename}_chunk_{i + 1}",
+                        source=filename,
+                    )
+                    documents.append(doc)
+            else:
+                # Single document
                 filename = (
-                    metadata.get("filename", "unknown.pdf")
+                    metadata.get("filename", "document.pdf")
                     if metadata
-                    else "unknown.pdf"
+                    else "document.pdf"
                 )
                 doc = Document(
-                    content=total_text,
-                    metadata={
-                        "source": filename,
-                        "parser": "PDFParser_PyPDF2",
-                        "page_count": len(pdf_reader.pages),
-                        **(metadata or {}),
-                    },
+                    content=text,
+                    metadata=base_metadata,
+                    id=filename,
                     source=filename,
                 )
                 documents.append(doc)
@@ -124,7 +206,7 @@ class PDFParser_PyPDF2(BaseParser):
             return documents
 
         except Exception as e:
-            print(f"Error parsing PDF: {e}")
+            logger.error(f"Error parsing PDF blob: {e}")
             return []
 
     def parse(self, source: str, **kwargs):

@@ -151,6 +151,10 @@ definitions:
           type: boolean
           default: true
           description: Clean extracted text
+        combine_pages:
+          type: boolean
+          default: false
+          description: Combine all pages into a single document. MUST be false to enable chunking.
 
     csvParserPandasConfig:
       type: object

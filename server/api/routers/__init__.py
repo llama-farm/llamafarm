@@ -4,6 +4,7 @@ from .inference import router as inference_router
 from .health import router as health_router
 from .rag import router as rag_router
 from .system import upgrades_router
+from .examples import router as examples_router
 
 __all__ = [
     "projects_router",
@@ -12,4 +13,5 @@ __all__ = [
     "health_router",
     "rag_router",
     "upgrades_router",
+    "examples_router",
 ]

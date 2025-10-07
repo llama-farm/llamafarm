@@ -1,0 +1,22 @@
+version: 1
+id: fda-rag
+slug: fda-rag
+title: FDA Correspondence RAG
+description: Chat over FDA correspondence PDFs with a tuned PDF processing strategy.
+tags:
+  - fda
+  - healthcare
+  - pdf
+primaryModel: llama3.1:8b
+config:
+  yaml_path: examples/fda_rag/llamafarm-example-fda.yaml
+datasets:
+  - name: fda_letters
+    strategy: fda_pdf_processor
+    database: fda_letters_db
+    ingest:
+      - examples/fda_rag/files/*.pdf
+process_after_ingest: true
+retrieval:
+  database: fda_letters_db
+  top_k: 8

@@ -70,7 +70,8 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		ensureServerAvailable(serverURL, true)
+		config := ServerOnlyConfig(serverURL)
+		EnsureServicesWithConfig(config)
 
 		// Build request
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))

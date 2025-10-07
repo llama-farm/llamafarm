@@ -1,0 +1,22 @@
+version: 1
+id: gov-rag
+slug: raleigh-udo
+title: Raleigh UDO RAG
+description: Municipal-planning walkthrough using Raleigh's Unified Development Ordinance.
+tags:
+  - government
+  - planning
+  - pdf
+primaryModel: llama3.1:8b
+config:
+  yaml_path: examples/gov_rag/llamafarm-example-gov.yaml
+datasets:
+  - name: raleigh_udo_dataset
+    strategy: udo_pdf_processor
+    database: raleigh_udo_db
+    ingest:
+      - examples/gov_rag/files/*.pdf
+process_after_ingest: true
+retrieval:
+  database: raleigh_udo_db
+  top_k: 6

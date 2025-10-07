@@ -381,7 +381,7 @@ func (m *chatModel) restoreModeState(mode ChatMode) {
 	m.histIndex = len(ctx.History)
 }
 
-func (m *chatModel) switchMode(newMode ChatMode) string {
+func (m *chatModel) switchMode(newMode ChatMode) {
 	// Save current state
 	m.saveCurrentModeState()
 
@@ -414,11 +414,36 @@ func (m *chatModel) switchMode(newMode ChatMode) string {
 	// Save session context for the new mode
 	_ = writeSessionContext(chatCtx, chatCtx.SessionID)
 
-	// Return switch message
-	if newMode == ModeDev {
-		return "🦙 Switched to DEV MODE - Chat with LlamaFarm Assistant"
+	config := &ServiceOrchestrationConfig{
+		ServerURL:   serverURL,
+		PrintStatus: true,
+		ServiceNeeds: map[string]ServiceRequirement{
+			"server": ServiceRequired,
+			"rag":    ServiceOptional, // Start async, don't wait
+		},
+		DefaultTimeout: 45 * time.Second,
 	}
-	return fmt.Sprintf("🎯 Switched to PROJECT MODE - Testing %s/%s", chatCtx.Namespace, chatCtx.ProjectID)
+	health, _ := checkServerHealth(serverURL)
+	m.serverHealth = FilterHealthForOptionalServices(health, config, chatCtx.SessionMode)
+
+	// Return switch message
+	chatMsg := ""
+	if newMode == ModeDev {
+		chatMsg = "🦙 Switched to DEV mode - Chat with LlamaFarm Assistant"
+	} else {
+		chatMsg = fmt.Sprintf("🎯 Switched to PROJECT mode - Testing %s/%s", chatCtx.Namespace, chatCtx.ProjectID)
+	}
+
+	shouldAppend := true
+	if len(m.messages) > 0 {
+		lastMsg := m.messages[len(m.messages)-1]
+		if lastMsg.Role == "client" && lastMsg.Content == chatMsg {
+			shouldAppend = false
+		}
+	}
+	if shouldAppend {
+		m.messages = append(m.messages, Message{Role: "client", Content: chatMsg})
+	}
 }
 
 // switchModel switches to a different model in PROJECT mode
@@ -571,8 +596,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.currentMode == ModeProject {
 				newMode = ModeDev
 			}
-			switchMsg := m.switchMode(newMode)
-			m.messages = append(m.messages, Message{Role: "client", Content: switchMsg})
+			m.switchMode(newMode)
 			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 			m.viewport.GotoBottom()
 			return m, nil
@@ -619,25 +643,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := fields[0]
 				switch cmd {
 				case "/help":
-					helpText := "Commands: /help, /switch, /mode [dev|project], /model [name], /clear, /launch designer, /exit\n"
-					if m.currentMode == ModeProject {
-						helpText += "Shortcuts: Ctrl+T to toggle between DEV and PROJECT modes, Ctrl+K (cycle models), Up/Down (history)"
-					} else {
-						helpText += "Press Ctrl+T to switch to PROJECT mode"
-					}
-					m.messages = append(m.messages, Message{Role: "client", Content: helpText})
+					m.messages = append(m.messages, Message{Role: "client", Content: "Commands: /help, /mode [dev|project], /clear, /launch designer, /exit\nPress Ctrl+T to toggle between DEV and PROJECT modes"})
 					m.textarea.SetValue("")
-				case "/switch":
-					// Toggle between modes
-					newMode := ModeProject
-					if m.currentMode == ModeProject {
-						newMode = ModeDev
-					}
-					switchMsg := m.switchMode(newMode)
-					m.messages = append(m.messages, Message{Role: "client", Content: switchMsg})
-					m.textarea.SetValue("")
-					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
-					m.viewport.GotoBottom()
 				case "/mode":
 					if len(fields) < 2 {
 						m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /mode [dev|project]"})
@@ -661,8 +668,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.textarea.SetValue("")
 						return m, nil
 					}
-					switchMsg := m.switchMode(newMode)
-					m.messages = append(m.messages, Message{Role: "client", Content: switchMsg})
+					m.switchMode(newMode)
 					m.textarea.SetValue("")
 					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 					m.viewport.GotoBottom()
@@ -900,7 +906,32 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TUIMessageMsg:
 		// Handle output messages routed through the messaging API
 		formattedContent := FormatMessage(msg.Message)
-		m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
+
+		if msg.Message.Type == ProgressMessage {
+			// For progress messages, find and remove the most recent progress message,
+			// then add the updated progress message at the bottom (most recent position)
+			// This keeps progress updates always visible at the bottom of the chat
+			foundProgressIdx := -1
+
+			// Search backwards through all messages to find the most recent progress message
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				if m.messages[i].Role == "client" && strings.HasPrefix(m.messages[i].Content, "🔄") {
+					foundProgressIdx = i
+					break
+				}
+			}
+
+			if foundProgressIdx >= 0 {
+				// Remove the old progress message by slicing it out
+				m.messages = append(m.messages[:foundProgressIdx], m.messages[foundProgressIdx+1:]...)
+			}
+
+			// Always add the new progress message at the bottom (most recent position)
+			m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
+		} else {
+			// For non-progress messages, add normally
+			m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
+		}
 	}
 
 	m.transcript = computeTranscript(m)

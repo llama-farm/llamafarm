@@ -1,0 +1,22 @@
+version: 1
+id: many-small-file-rag
+slug: many-small-file-rag
+title: Many Small File Rag
+description: Multiple short PDFs to validate list handling and merging in retrieval.
+tags:
+  - rag
+  - pdf
+  - small-files
+primaryModel: llama3.1:8b
+config:
+  yaml_path: examples/many-small-file-rag/llamafarm.yaml
+datasets:
+  - name: small_pdfs
+    strategy: universal_processor
+    database: small_pdfs_db
+    ingest:
+      - examples/many-small-file-rag/files/*.pdf
+process_after_ingest: true
+retrieval:
+  database: small_pdfs_db
+  top_k: 8

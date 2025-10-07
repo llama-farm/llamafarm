@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Set, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
-import logging
 
 from core.base import Document
 from utils.hash_utils import extract_document_hash_from_chunk_id
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.core.document_manager")
 
 
 class DeletionStrategy(Enum):

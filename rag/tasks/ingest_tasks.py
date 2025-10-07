@@ -5,7 +5,6 @@ Celery tasks for RAG file ingestion and processing operations.
 """
 
 import json
-import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -18,8 +17,9 @@ from celery_app import app
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.ingest_handler import IngestHandler
+from core.logging import RAGStructLogger
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.tasks.ingest")
 
 
 class IngestTask(Task):
@@ -29,13 +29,11 @@ class IngestTask(Task):
         """Log task failure details."""
         logger.error(
             "RAG ingest task failed",
-            extra={
-                "task_id": task_id,
-                "task_name": self.name,
-                "error": str(exc),
-                "task_args": args,
-                "task_kwargs": kwargs,
-            },
+            task_id=task_id,
+            task_name=self.name,
+            error=str(exc),
+            task_args=args,
+            task_kwargs=kwargs,
             exc_info=True,
         )
 

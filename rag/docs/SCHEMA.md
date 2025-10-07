@@ -112,7 +112,7 @@ data_processing_strategies:
     - name: "pdf_processing"  # Unique identifier (lowercase, underscores)
       description: "Standard PDF document processing"
       
-      # DirectoryParser configuration (ALWAYS ACTIVE)
+    # DirectoryParser configuration (ALWAYS ACTIVE)
     directory_config:
       recursive: true  # Scan subdirectories
       supported_files: ["*.pdf", "*.PDF"]  # Glob patterns for accepted files

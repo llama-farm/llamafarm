@@ -153,6 +153,7 @@ jobs:
 
   publish-winget:
     runs-on: windows-latest
+    needs: upload-cli-release
     steps:
       - name: Get version
         id: version
@@ -177,7 +178,7 @@ jobs:
           installers-regex: '\.exe$' # Only .exe files
           version: ${{ steps.version.outputs.version }}
           release-tag: ${{ steps.version.outputs.release_tag }}
-          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          token: ${{ secrets.WINGET_TOKEN }}
 
   test-cli-install:
     name: Test Installation Script

@@ -122,27 +122,4 @@ properties:
             lemonade:
               type: ["object", "null"]
               description: "Lemonade-specific configuration"
-              properties:
-                backend:
-                  type: ["string", "null"]
-                  enum: [onnx, llamacpp, transformers, null]
-                  default: onnx
-                  description: "Inference backend for Lemonade"
-                port:
-                  type: ["integer", "null"]
-                  default: 11534
-                  description: "Port for Lemonade server"
-                context_size:
-                  type: ["integer", "null"]
-                  default: 32768
-                  description: "Context window size in tokens"
-                model_path:
-                  type: ["string", "null"]
-                  description: "Custom model storage location"
-                checkpoint:
-                  type: ["string", "null"]
-                  description: "Full HuggingFace checkpoint path including quantization (e.g., 'bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M')"
-                recipe:
-                  type: ["string", "null"]
-                  enum: [llamacpp, transformers, onnx, null]
-                  description: "Lemonade recipe to use with the model (should match backend)"
+              additionalProperties: true

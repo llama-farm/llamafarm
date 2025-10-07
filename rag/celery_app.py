@@ -5,14 +5,14 @@ This module configures the Celery application for the RAG service worker.
 It sets up the broker connection, task routing, and imports all RAG tasks.
 """
 
-import logging
 import os
 
 from celery import Celery, signals  # type: ignore
 
+from core.logging import RAGStructLogger
 from core.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.celery")
 
 # Create Celery app instance
 app = Celery("LlamaFarm-RAG-Worker")

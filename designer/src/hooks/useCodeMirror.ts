@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
-import type { CodeMirrorModules, CodeMirrorInstance, UseCodeMirrorReturn, CodeMirrorConfig } from '../types/codemirror'
+import type {
+  CodeMirrorModules,
+  CodeMirrorInstance,
+  UseCodeMirrorReturn,
+  CodeMirrorConfig,
+} from '../types/codemirror'
 
 // Dynamic imports for CodeMirror packages
 const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
@@ -9,10 +14,16 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
     { EditorState, StateEffect },
     { json },
     { defaultKeymap },
-    { bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, HighlightStyle },
+    {
+      bracketMatching,
+      indentOnInput,
+      foldGutter,
+      syntaxHighlighting,
+      HighlightStyle,
+    },
     { highlightSelectionMatches },
     { tags },
-    { oneDark }
+    { oneDark },
   ] = await Promise.all([
     import('@codemirror/view'),
     import('@codemirror/state'),
@@ -21,7 +32,7 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
     import('@codemirror/language'),
     import('@codemirror/search'),
     import('@lezer/highlight'),
-    import('@codemirror/theme-one-dark')
+    import('@codemirror/theme-one-dark'),
   ])
 
   return {
@@ -39,7 +50,7 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
     HighlightStyle,
     highlightSelectionMatches,
     tags,
-    oneDark
+    oneDark,
   }
 }
 
@@ -48,7 +59,7 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
  * Handles all the editor lifecycle and provides clean interface
  */
 export function useCodeMirror(
-  content: string, 
+  content: string,
   config: CodeMirrorConfig = {}
 ): UseCodeMirrorReturn {
   const { theme } = useTheme()
@@ -69,7 +80,7 @@ export function useCodeMirror(
     language: 'json',
     tabSize: 2,
     indentUnit: 2,
-    ...config
+    ...config,
   }
 
   // Load CodeMirror modules
@@ -115,16 +126,13 @@ export function useCodeMirror(
       keymap,
       defaultKeymap,
       tags,
-      oneDark
     } = modules
 
     const extensions = []
 
-    // Theme setup - apply appropriate theme
-    if (defaultConfig.theme === 'dark') {
-      extensions.push(oneDark)
-    }
-    // Light theme uses default CodeMirror styling with our custom overrides
+    // We provide our own theme and highlight styles for both modes to ensure
+    // consistent, non-red/green-forward palettes. Avoid pushing oneDark so its
+    // highlight colors don't override our custom hues.
 
     // Language support
     if (defaultConfig.language === 'json') {
@@ -158,15 +166,46 @@ export function useCodeMirror(
 
     // Add syntax highlighting for both themes
     const customHighlightStyle = HighlightStyle.define([
-      // JSON-specific highlighting
-      { tag: tags.propertyName, color: defaultConfig.theme === 'dark' ? '#e06c75' : '#d73a49' }, // Red for property names
-      { tag: tags.string, color: defaultConfig.theme === 'dark' ? '#98c379' : '#032f62' }, // Green/Blue for strings
-      { tag: tags.number, color: defaultConfig.theme === 'dark' ? '#d19a66' : '#005cc5' }, // Orange/Blue for numbers
-      { tag: tags.bool, color: defaultConfig.theme === 'dark' ? '#56b6c2' : '#005cc5' }, // Cyan/Blue for booleans
-      { tag: tags.null, color: defaultConfig.theme === 'dark' ? '#e06c75' : '#d73a49' }, // Red for null
-      { tag: tags.keyword, color: defaultConfig.theme === 'dark' ? '#c678dd' : '#d73a49' }, // Purple/Red for keywords
-      { tag: tags.bracket, color: defaultConfig.theme === 'dark' ? '#abb2bf' : '#24292e' }, // Gray for brackets
-      { tag: tags.punctuation, color: defaultConfig.theme === 'dark' ? '#abb2bf' : '#24292e' }, // Gray for punctuation
+      // shadcn/tailwind-inspired palette mapping, favoring lighter blues/teals/pinks/purples
+      // property names → light blue
+      {
+        tag: tags.propertyName,
+        color: defaultConfig.theme === 'dark' ? '#93c5fd' : '#60a5fa',
+      },
+      // strings → light teal
+      {
+        tag: tags.string,
+        color: defaultConfig.theme === 'dark' ? '#5eead4' : '#2dd4bf',
+      },
+      // numbers → light orange/amber
+      {
+        tag: tags.number,
+        color: defaultConfig.theme === 'dark' ? '#fdba74' : '#fb923c',
+      },
+      // booleans → violet (avoid strong green)
+      {
+        tag: tags.bool,
+        color: defaultConfig.theme === 'dark' ? '#c4b5fd' : '#a78bfa',
+      },
+      // null → pink (avoid red)
+      {
+        tag: tags.null,
+        color: defaultConfig.theme === 'dark' ? '#f9a8d4' : '#f472b6',
+      },
+      // keywords → purple/violet
+      {
+        tag: tags.keyword,
+        color: defaultConfig.theme === 'dark' ? '#a78bfa' : '#8b5cf6',
+      },
+      // punctuation / brackets → slate
+      {
+        tag: tags.bracket,
+        color: defaultConfig.theme === 'dark' ? '#94a3b8' : '#475569',
+      },
+      {
+        tag: tags.punctuation,
+        color: defaultConfig.theme === 'dark' ? '#94a3b8' : '#475569',
+      },
     ])
 
     extensions.push(syntaxHighlighting(customHighlightStyle))
@@ -176,46 +215,63 @@ export function useCodeMirror(
       modules.EditorView.theme({
         '&': {
           fontSize: '14px',
-          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-          backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : 'hsl(var(--background))',
+          fontFamily:
+            'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+          backgroundColor:
+            defaultConfig.theme === 'dark'
+              ? '#10182e'
+              : 'hsl(var(--background))',
         },
         '.cm-content': {
           padding: '20px 20px 40px 20px', // Add extra bottom padding to show last line
           minHeight: '100%',
           caretColor: defaultConfig.theme === 'dark' ? '#ffffff' : '#000000',
-          backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : '#ffffff',
+          backgroundColor:
+            defaultConfig.theme === 'dark' ? '#10182e' : '#ffffff',
           margin: '0',
           color: defaultConfig.theme === 'dark' ? '#abb2bf' : '#1f2937',
         },
         '.cm-focused': {
-          outline: 'none'
+          outline: 'none',
         },
         '.cm-editor': {
           height: '100%',
-          backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : 'hsl(var(--background))',
+          maxHeight: '100%',
+          backgroundColor:
+            defaultConfig.theme === 'dark'
+              ? '#10182e'
+              : 'hsl(var(--background))',
         },
         '.cm-scroller': {
           height: '100%',
-          backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : '#ffffff',
-          overflow: 'auto !important', // CRITICAL: Force overflow with !important
+          maxHeight: '100%',
+          backgroundColor:
+            defaultConfig.theme === 'dark' ? '#10182e' : '#ffffff',
+          overflow: 'auto !important',
           fontFamily: 'inherit',
           scrollbarWidth: 'thin',
-          scrollbarColor: defaultConfig.theme === 'dark' 
-            ? '#3a4a5c #10182e' 
-            : '#cbd5e1 #f8fafc',
+          scrollbarColor:
+            defaultConfig.theme === 'dark'
+              ? '#3a4a5c #10182e'
+              : '#cbd5e1 #f8fafc',
           padding: '0',
           margin: '0',
           paddingBottom: '20px', // Extra space at bottom to ensure last line visibility
         },
         '.cm-gutters': {
           paddingRight: '8px',
-          backgroundColor: defaultConfig.theme === 'dark' ? '#10182e' : '#ffffff',
-          border: 'none',
+          backgroundColor:
+            defaultConfig.theme === 'dark' ? '#0f172a' : '#e2e8f0', // slate blue theme
+          color: defaultConfig.theme === 'dark' ? '#94a3b8' : '#475569', // slate for numbers
+          borderRight:
+            defaultConfig.theme === 'dark'
+              ? '1px solid #1e293b'
+              : '1px solid #cbd5e1',
         },
         '.cm-lineNumbers .cm-gutterElement': {
           paddingRight: '12px',
           paddingLeft: '8px',
-          color: defaultConfig.theme === 'dark' ? '#5c6370' : '#64748b',
+          color: defaultConfig.theme === 'dark' ? '#94a3b8' : '#475569',
           fontSize: '14px',
         },
         // Fix webkit scrollbar selectors (make them separate, not nested)
@@ -230,7 +286,10 @@ export function useCodeMirror(
         '.cm-scroller::-webkit-scrollbar-thumb': {
           background: defaultConfig.theme === 'dark' ? '#3a4a5c' : '#cbd5e1',
           borderRadius: '6px',
-          border: defaultConfig.theme === 'dark' ? '2px solid #10182e' : '2px solid #f8fafc',
+          border:
+            defaultConfig.theme === 'dark'
+              ? '2px solid #10182e'
+              : '2px solid #f8fafc',
         },
         '.cm-scroller::-webkit-scrollbar-thumb:hover': {
           background: defaultConfig.theme === 'dark' ? '#4a5a6c' : '#94a3b8',
@@ -240,7 +299,7 @@ export function useCodeMirror(
         },
         '.cm-scroller::-webkit-scrollbar-corner': {
           background: defaultConfig.theme === 'dark' ? '#10182e' : '#f8fafc',
-        }
+        },
       })
     )
 
@@ -256,12 +315,12 @@ export function useCodeMirror(
     try {
       const state = EditorState.create({
         doc: content,
-        extensions: createExtensions
+        extensions: createExtensions,
       })
 
       const view = new EditorView({
         state,
-        parent: editorRef.current
+        parent: editorRef.current,
       })
 
       // Create our instance wrapper
@@ -274,7 +333,7 @@ export function useCodeMirror(
         },
         reconfigure: (newExtensions: any[]) => {
           view.dispatch({
-            effects: modules.StateEffect.reconfigure.of(newExtensions)
+            effects: modules.StateEffect.reconfigure.of(newExtensions),
           })
         },
         focus: () => view.focus(),
@@ -284,10 +343,10 @@ export function useCodeMirror(
             changes: {
               from: 0,
               to: view.state.doc.length,
-              insert: newContent
-            }
+              insert: newContent,
+            },
           })
-        }
+        },
       }
 
       viewRef.current = instance
@@ -297,7 +356,13 @@ export function useCodeMirror(
       console.error('Failed to initialize CodeMirror:', err)
       setError('Failed to initialize editor')
     }
-  }, [modules, createExtensions, content, defaultConfig.readOnly, isInitialized])
+  }, [
+    modules,
+    createExtensions,
+    content,
+    defaultConfig.readOnly,
+    isInitialized,
+  ])
 
   // Update content when it changes
   useEffect(() => {
@@ -315,8 +380,13 @@ export function useCodeMirror(
       // Reconfigure the editor with new theme extensions
       viewRef.current.reconfigure(createExtensions)
     }
-  }, [defaultConfig.theme, viewRef.current, isInitialized, modules, createExtensions])
-
+  }, [
+    defaultConfig.theme,
+    viewRef.current,
+    isInitialized,
+    modules,
+    createExtensions,
+  ])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -350,6 +420,6 @@ export function useCodeMirror(
     error,
     modules,
     destroy,
-    reconfigure
+    reconfigure,
   }
 }

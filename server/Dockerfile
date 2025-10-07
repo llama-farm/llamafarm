@@ -1,4 +1,4 @@
-# Use Python 3.12 slim image
+# Use Python 3.12 slim image with multi-arch support
 FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
 
 # Disable/limit bytecode compilation to avoid CI stalls

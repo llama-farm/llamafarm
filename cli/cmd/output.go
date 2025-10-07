@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -35,10 +37,12 @@ type TUIMessageMsg struct {
 
 // OutputManager manages all CLI output routing
 type OutputManager struct {
-	mu           sync.RWMutex
-	tuiProgram   *tea.Program
-	inTUIMode    bool
-	messageQueue []OutputMessage
+	mu                  sync.RWMutex
+	tuiProgram          *tea.Program
+	inTUIMode           bool
+	messageQueue        []OutputMessage
+	lastProgressMessage string
+	progressMessageSent bool
 }
 
 var outputManager = &OutputManager{}
@@ -131,7 +135,66 @@ func OutputSuccess(format string, args ...interface{}) {
 
 // OutputProgress sends a progress message
 func OutputProgress(format string, args ...interface{}) {
-	sendMessage(ProgressMessage, format, args...)
+	outputManager.mu.RLock()
+	inTUI := outputManager.inTUIMode
+	outputManager.mu.RUnlock()
+
+	if inTUI {
+		// In TUI mode, consolidate progress messages to avoid multiple lines
+		sendConsolidatedProgressMessage(format, args...)
+	} else {
+		// In terminal mode, send progress messages normally
+		sendMessage(ProgressMessage, format, args...)
+	}
+}
+
+// sendConsolidatedProgressMessage handles progress messages in TUI mode by updating a single line
+func sendConsolidatedProgressMessage(format string, args ...interface{}) {
+	content := fmt.Sprintf(format, args...)
+
+	// Remove carriage return characters that are meant for terminal overwriting
+	// In TUI mode, we don't want these as they interfere with message display
+	content = strings.TrimPrefix(content, "\r")
+	content = strings.ReplaceAll(content, "\r", "")
+
+	outputManager.mu.Lock()
+	defer outputManager.mu.Unlock()
+
+	// Update the last progress message
+	outputManager.lastProgressMessage = content
+
+	// If this is the first progress message or we haven't sent one recently, send it
+	if !outputManager.progressMessageSent {
+		msg := OutputMessage{
+			Type:    ProgressMessage,
+			Content: content,
+			Writer:  os.Stdout,
+		}
+
+		if outputManager.tuiProgram != nil {
+			outputManager.tuiProgram.Send(TUIMessageMsg{Message: msg})
+		}
+		outputManager.progressMessageSent = true
+
+		// Reset the flag after a short delay to allow periodic updates
+		go func() {
+			time.Sleep(100 * time.Millisecond) // Reduced from 500ms to 100ms for more frequent updates
+			outputManager.mu.Lock()
+			defer outputManager.mu.Unlock()
+
+			outputManager.progressMessageSent = false
+
+			// If there's a pending progress message that wasn't sent due to throttling, send it now
+			if outputManager.lastProgressMessage != "" && outputManager.tuiProgram != nil {
+				msg := OutputMessage{
+					Type:    ProgressMessage,
+					Content: outputManager.lastProgressMessage,
+					Writer:  os.Stdout,
+				}
+				outputManager.tuiProgram.Send(TUIMessageMsg{Message: msg})
+			}
+		}()
+	}
 }
 
 // OutputDebug sends a debug message (respects the global debug flag)

@@ -1,13 +1,13 @@
 """Source path extractor to ensure file path information is preserved in document metadata."""
 
-import logging
 from pathlib import Path
 from typing import List
 
 from ..base import BaseExtractor
 from core.base import Document
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.extractors.path_extractor.path_extractor")
 
 
 class PathExtractor(BaseExtractor):

@@ -83,10 +83,19 @@ class DataService:
         project_id: str,
         file: UploadFile,
     ) -> MetadataFileContent:
+        import mimetypes
+
         data_dir = cls.get_data_dir(namespace, project_id)
         file_data = await file.read()
         data_hash = cls.hash_data(file_data)
         resolved_file_name = cls.append_collision_timestamp(file.filename or "unknown")
+
+        # Detect MIME type from filename if not provided or is generic
+        mime_type = file.content_type
+        if not mime_type or mime_type == "application/octet-stream":
+            # Try to guess from filename
+            guessed_type, _ = mimetypes.guess_type(file.filename or "")
+            mime_type = guessed_type if guessed_type else "application/octet-stream"
 
         # Create metadata file
         metadata_path = os.path.join(data_dir, "meta", f"{data_hash}.json")
@@ -95,7 +104,7 @@ class DataService:
             resolved_file_name=resolved_file_name,
             timestamp=datetime.now().timestamp(),
             size=len(file_data),
-            mime_type=file.content_type or "application/octet-stream",
+            mime_type=mime_type,
             hash=data_hash,
         )
         with open(metadata_path, "w") as f:

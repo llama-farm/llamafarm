@@ -1,12 +1,14 @@
 """Base classes for the extensible RAG system."""
 
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-import logging
+from typing import Any
 
-from core.settings import settings
+from core.logging import RAGStructLogger
+
+logger = RAGStructLogger("rag.core.base")
 
 
 @dataclass
@@ -14,12 +16,12 @@ class Document:
     """Universal document representation."""
 
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    id: Optional[str] = None
-    source: Optional[str] = None
-    embeddings: Optional[List[float]] = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    source: str | None = None
+    embeddings: list[float] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content": self.content,
@@ -34,9 +36,9 @@ class Document:
 class ProcessingResult:
     """Result of processing documents through a component."""
 
-    documents: List[Document]
-    errors: List[Dict[str, Any]] = field(default_factory=list)
-    metrics: Dict[str, Any] = field(default_factory=dict)
+    documents: list[Document]
+    errors: list[dict[str, Any]] = field(default_factory=list)
+    metrics: dict[str, Any] = field(default_factory=dict)
 
 
 class Component(ABC):
@@ -44,17 +46,17 @@ class Component(ABC):
 
     def __init__(
         self,
-        name: str = None,
-        config: Dict[str, Any] = None,
+        name: str | None = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         self.name = name or self.__class__.__name__
         self.config = config or {}
-        self.logger = logging.getLogger(self.name)
+        self.logger = logger.bind(name=self.name)
         self.project_dir = project_dir
 
     @abstractmethod
-    def process(self, documents: List[Document]) -> ProcessingResult:
+    def process(self, documents: list[Document]) -> ProcessingResult:
         """Process documents and return results."""
         pass
 
@@ -71,7 +73,7 @@ class Parser(Component):
         """Parse documents from source."""
         pass
 
-    def process(self, documents: List[Document]) -> ProcessingResult:
+    def process(self, documents: list[Document]) -> ProcessingResult:
         """Process already parsed documents (pass-through for parsers)."""
         return ProcessingResult(documents)
 
@@ -80,11 +82,11 @@ class Embedder(Component):
     """Base class for embedding generators."""
 
     @abstractmethod
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts."""
         pass
 
-    def process(self, documents: List[Document]) -> ProcessingResult:
+    def process(self, documents: list[Document]) -> ProcessingResult:
         """Add embeddings to documents."""
         texts = [doc.content for doc in documents]
         embeddings = self.embed(texts)
@@ -124,12 +126,12 @@ class VectorStore(Component):
         self.persist_directory = str(Path(project_dir) / "lf_data" / "stores" / name)
 
     @abstractmethod
-    def add_documents(self, documents: List[Document]) -> bool:
+    def add_documents(self, documents: list[Document]) -> bool:
         """Add documents to the vector store."""
         pass
 
     @abstractmethod
-    def search(self, query: str, top_k: int = 10) -> List[Document]:
+    def search(self, query: str, top_k: int = 10) -> list[Document]:
         """Search for similar documents."""
         pass
 
@@ -138,7 +140,7 @@ class VectorStore(Component):
         """Delete the collection."""
         pass
 
-    def process(self, documents: List[Document]) -> ProcessingResult:
+    def process(self, documents: list[Document]) -> ProcessingResult:
         """Add documents to vector store."""
         success = self.add_documents(documents)
 
@@ -164,8 +166,8 @@ class Pipeline:
 
     def __init__(self, name: str = "Pipeline"):
         self.name = name
-        self.components: List[Component] = []
-        self.logger = logging.getLogger(self.name)
+        self.components: list[Component] = []
+        self.logger = logger.bind(name=self.name)
 
     def add_component(self, component: Component) -> "Pipeline":
         """Add a component to the pipeline."""
@@ -174,7 +176,7 @@ class Pipeline:
         return self
 
     def run(
-        self, source: str = None, documents: List[Document] = None
+        self, source: str | None = None, documents: list[Document] | None = None
     ) -> ProcessingResult:
         """Run the pipeline."""
         if source and not documents:

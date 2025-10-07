@@ -35,29 +35,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-<<<<<<< HEAD
-# Fallback: search for llamafarm.yaml in multiple locations
-if [ -z "$CONFIG_FILE" ]; then
-    # Search in common locations relative to where the script might be run from
-    for location in \
-        "./llamafarm.yaml" \
-        "../../llamafarm.yaml" \
-        "../llamafarm.yaml"; do
-        if [ -f "$location" ]; then
-            CONFIG_FILE="$location"
-            break
-        fi
-    done
-fi
-
-if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
-    echo "Error: llamafarm.yaml not found. Searched in:"
-    echo "  - ./llamafarm.yaml (current directory)"
-    echo "  - ../../llamafarm.yaml (project root from runtimes/lemonade)"
-    echo "  - ../llamafarm.yaml (one level up)"
-    echo ""
-    echo "Use --config-file <path> to specify a different location"
-=======
 # Fallback to current directory if not set by argument
 if [ -z "$LF_CONFIG_FILE" ]; then
     if [ -f "./llamafarm.yaml" ]; then
@@ -67,7 +44,6 @@ fi
 
 if [ -z "$LF_CONFIG_FILE" ] || [ ! -f "$LF_CONFIG_FILE" ]; then
     echo "Error: llamafarm.yaml not found in current directory. Use --config-file <path>"
->>>>>>> 532f762 (fix(runtimes): update lemonade start script)
     exit 1
 fi
 
@@ -117,8 +93,6 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-<<<<<<< HEAD
-=======
         CONFIG_CHECKPOINT=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$LF_CONFIG_FILE'))
@@ -138,7 +112,6 @@ for model_config in models:
         print(model_config.get('lemonade', {}).get('recipe', ''))
         break
 " 2>/dev/null)
->>>>>>> 532f762 (fix(runtimes): update lemonade start script)
 
     else
         # No lf_model_name specified, use first lemonade model
@@ -182,8 +155,6 @@ for model_config in models:
         break
 " 2>/dev/null)
 
-<<<<<<< HEAD
-=======
         CONFIG_CHECKPOINT=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$LF_CONFIG_FILE'))
@@ -203,7 +174,6 @@ for model_config in models:
         print(model_config.get('lemonade', {}).get('recipe', ''))
         break
 " 2>/dev/null)
->>>>>>> 532f762 (fix(runtimes): update lemonade start script)
 
     fi
 
@@ -263,26 +233,6 @@ if [ -z "$LEMONADE_MODEL" ]; then
     exit 1
 fi
 
-<<<<<<< HEAD
-# Check if model is downloaded
-MODEL_EXISTS=$(uv run lemonade-server-dev list 2>/dev/null | grep -c "$LEMONADE_MODEL" || true)
-if [ "$MODEL_EXISTS" -eq 0 ]; then
-    echo -e "${RED}ERROR: Model '$LEMONADE_MODEL' not found${NC}"
-    echo ""
-    echo "Please download the model first using:"
-    echo "  uv run lemonade-server-dev pull $LEMONADE_MODEL --checkpoint <checkpoint> --recipe <recipe>"
-    echo ""
-    echo "Example:"
-    echo "  uv run lemonade-server-dev pull user.Qwen3-4B --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M --recipe llamacpp"
-    echo ""
-    echo "To see all available models:"
-    echo "  uv run lemonade-server-dev list"
-    echo ""
-    exit 1
-fi
-
-=======
->>>>>>> 532f762 (fix(runtimes): update lemonade start script)
 # Build lemonade-server-dev command
 # Using serve subcommand (NOT run - serve is the correct command)
 # Note: PyPI package provides lemonade-server-dev, installer provides lemonade-server

@@ -112,8 +112,9 @@ func TestEnsureServerAvailable_LocalhostUp(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// ensureServerAvailable should return without error for a healthy localhost server
-	ensureServerAvailable(ts.URL, true)
+	// EnsureServicesWithConfig should return without error for a healthy localhost server
+	config := ServerOnlyConfig(ts.URL)
+	EnsureServicesWithConfig(config)
 }
 
 // dummy HTTP client used to test VerboseHTTPClient behavior

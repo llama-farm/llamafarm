@@ -95,9 +95,9 @@ func buildUpgradeInfo(release *releaseInfo) *UpgradeInfo {
 
 	// Development builds (non-semver) should never auto-notify, but we still surface info to the command.
 	return &UpgradeInfo{
-		CurrentVersion:           displayVersion(currentRaw),
+		CurrentVersion:           formatVersionForDisplay(currentRaw),
 		CurrentVersionNormalized: currentNormalized,
-		LatestVersion:            displayVersion(latestRaw),
+		LatestVersion:            formatVersionForDisplay(latestRaw),
 		LatestVersionNormalized:  latestNormalized,
 		ReleaseURL:               release.HTMLURL,
 		PublishedAt:              release.PublishedAt,
@@ -105,13 +105,6 @@ func buildUpgradeInfo(release *releaseInfo) *UpgradeInfo {
 		UpdateAvailable:          updateAvailable,
 		CurrentVersionIsSemver:   currentSemver != nil,
 	}
-}
-
-func displayVersion(v string) string {
-	if v == "" {
-		return "unknown"
-	}
-	return v
 }
 
 func normalizeForSemver(raw string) (string, *semver.Version) {

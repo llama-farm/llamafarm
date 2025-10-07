@@ -75,16 +75,22 @@ const Data = () => {
 
   // Convert API datasets to UI format; provide demo fallback if none
   const datasets = useMemo(() => {
-    if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
-      const apiList = apiDatasets.datasets.map(dataset => ({
-        id: dataset.name,
-        name: dataset.name,
-        // No rag_strategy on datasets; server provides data_processing_strategy/database
-        files: (dataset as any).files,
-        lastRun: new Date(),
-        embedModel: 'text-embedding-3-large',
-        // Estimate chunk count numerically for display
-        numChunks: Array.isArray((dataset as any).files)
+    const apiList = (apiDatasets?.datasets || []).map(dataset => ({
+      id: dataset.name,
+      name: dataset.name,
+      // No rag_strategy on datasets; server provides data_processing_strategy/database
+      files: Array.isArray((dataset as any).details?.files_metadata)
+        ? (dataset as any).details.files_metadata
+        : (dataset as any).files,
+      lastRun: new Date(),
+      embedModel: 'text-embedding-3-large',
+      // Estimate chunk count numerically for display
+      numChunks: Array.isArray((dataset as any).details?.files_metadata)
+        ? Math.max(
+            0,
+            ((dataset as any).details.files_metadata.length || 0) * 100
+          )
+        : Array.isArray((dataset as any).files)
           ? Math.max(
               0,
               (Array.isArray((dataset as any).files)
@@ -92,74 +98,58 @@ const Data = () => {
                 : 0) * 100
             )
           : 0,
-        processedPercent: 100,
-        version: 'v1',
-        description: '',
-      }))
+      processedPercent: 100,
+      version: 'v1',
+      description: '',
+    }))
 
-      // Merge any locally created demo datasets (e.g., offline imports) without duplicating API items
-      try {
-        const stored = localStorage.getItem('lf_demo_datasets')
-        const localArr: any[] = stored ? JSON.parse(stored) : []
-        const apiIds = new Set(apiList.map(d => d.id))
-        const localAsUi = Array.isArray(localArr)
-          ? localArr
-              .filter(d => !apiIds.has(d.id))
-              .map(d => ({
-                id: d.id,
-                name: d.name,
-                files: d.files || [],
-                lastRun: new Date(d.lastRun || Date.now()),
-                embedModel: d.embedModel || 'text-embedding-3-large',
-                numChunks: d.numChunks ?? 0,
-                processedPercent: d.processedPercent ?? 0,
-                version: d.version || 'v1',
-                description: d.description || 'Local dataset',
-              }))
-          : []
-        return [...apiList, ...localAsUi]
-      } catch {
-        return apiList
-      }
-    }
-
-    // Demo fallback datasets to populate the grid when API has none
+    // Load locally persisted demo/imported datasets
+    let localList: any[] = []
     try {
       const stored = localStorage.getItem('lf_demo_datasets')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
-      }
+      const parsed = stored ? JSON.parse(stored) : []
+      if (Array.isArray(parsed)) localList = parsed
     } catch {}
 
-    const demo = [
-      {
-        id: 'demo-arxiv',
-        name: 'arxiv-papers',
-        files: [],
-        lastRun: new Date(),
-        embedModel: 'text-embedding-3-large',
-        numChunks: 12800,
-        processedPercent: 100,
-        version: 'v1',
-        description: 'Demo dataset of academic PDFs',
-      },
-      {
-        id: 'demo-handbook',
-        name: 'company-handbook',
-        files: [],
-        lastRun: new Date(),
-        embedModel: 'text-embedding-3-large',
-        numChunks: 4200,
-        processedPercent: 100,
-        version: 'v2',
-        description: 'Demo employee handbook and policies',
-      },
-    ]
-    try {
-      localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
-    } catch {}
-    return demo
+    // If no API datasets, fall back to local list or seed demo entries
+    if (apiList.length === 0) {
+      if (localList.length > 0) return localList
+      const demo = [
+        {
+          id: 'demo-arxiv',
+          name: 'arxiv-papers',
+          files: [],
+          lastRun: new Date(),
+          embedModel: 'text-embedding-3-large',
+          numChunks: 12800,
+          processedPercent: 100,
+          version: 'v1',
+          description: 'Demo dataset of academic PDFs',
+        },
+        {
+          id: 'demo-handbook',
+          name: 'company-handbook',
+          files: [],
+          lastRun: new Date(),
+          embedModel: 'text-embedding-3-large',
+          numChunks: 4200,
+          processedPercent: 100,
+          version: 'v2',
+          description: 'Demo employee handbook and policies',
+        },
+      ]
+      try {
+        localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
+      } catch {}
+      return demo
+    }
+
+    // Merge API and local lists when API returns entries, keeping API as source of truth
+    const mergedById = new Map<string, any>()
+    for (const ds of apiList) mergedById.set(ds.id, ds)
+    for (const ds of localList)
+      if (!mergedById.has(ds.id)) mergedById.set(ds.id, ds)
+    return Array.from(mergedById.values())
   }, [apiDatasets, localDatasetsVersion])
 
   // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists

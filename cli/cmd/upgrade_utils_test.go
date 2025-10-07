@@ -218,3 +218,25 @@ func TestIsExecutable_UncommonWindowsExtensions(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatVersionForDisplay(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"1.0.0", "v1.0.0"},
+		{"v1.0.0", "v1.0.0"},
+		{"V1.0.0", "v1.0.0"},
+		{"v1.2.3-beta", "v1.2.3-beta"},
+		{"2.0.0-rc.1", "v2.0.0-rc.1"},
+		{"dev", "vdev"},
+		{"", "unknown"},
+	}
+
+	for _, test := range tests {
+		result := formatVersionForDisplay(test.input)
+		if result != test.expected {
+			t.Errorf("For input %s, expected %s, got %s", test.input, test.expected, result)
+		}
+	}
+}

@@ -4,7 +4,6 @@ RAG Query Tasks
 Celery tasks for complex RAG query operations and processing.
 """
 
-import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -17,8 +16,9 @@ from celery_app import app
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api import DatabaseSearchAPI
+from core.logging import RAGStructLogger
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.tasks.query")
 
 
 class QueryTask(Task):
@@ -28,13 +28,11 @@ class QueryTask(Task):
         """Log task failure details."""
         logger.error(
             "RAG query task failed",
-            extra={
-                "task_id": task_id,
-                "task_name": self.name,
-                "error": str(exc),
-                "task_args": args,
-                "task_kwargs": kwargs,
-            },
+            task_id=task_id,
+            task_name=self.name,
+            error=str(exc),
+            task_args=args,
+            task_kwargs=kwargs,
         )
 
 
