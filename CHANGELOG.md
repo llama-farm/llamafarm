@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.0.7](https://github.com/llama-farm/llamafarm/compare/v0.0.6...v0.0.7) (2025-10-07)
+
+
+### Features
+
+* **designer:** Config editor updates ([#269](https://github.com/llama-farm/llamafarm/issues/269)) ([dfb2282](https://github.com/llama-farm/llamafarm/commit/dfb2282548e78953406e7aad26195110e86ebb31))
+* **designer:** re-do import example projects or datasets + empty states and data import ([8a2f50e](https://github.com/llama-farm/llamafarm/commit/8a2f50ec6bd97135ef242348a8b9c8f7ae7112a4))
+* **examples:** add manifest.yaml for quick, many-small-file, large-complex, and mixed-format samples ([4d82997](https://github.com/llama-farm/llamafarm/commit/4d8299793ed6594a025ef3aeccfb41ee9da7a0e1))
+
+
+### Bug Fixes
+
+* **cli:** don't show seed status errors in project chat mode ([#286](https://github.com/llama-farm/llamafarm/issues/286)) ([a6581f1](https://github.com/llama-farm/llamafarm/commit/a6581f1440161faf980af2595640f09dbe97830f))
+* **cli:** improve rag startup orchestration ([#275](https://github.com/llama-farm/llamafarm/issues/275)) ([469aabe](https://github.com/llama-farm/llamafarm/commit/469aabe3a64af99868c0f4a2f80787650d8b46b4))
+* **cli:** incorrect version string ([#272](https://github.com/llama-farm/llamafarm/issues/272)) ([35a268b](https://github.com/llama-farm/llamafarm/commit/35a268b481904dc4195a3753dcf35726f4707f5c))
+* **designer:** build errors and cubic comments ([1fb40d0](https://github.com/llama-farm/llamafarm/commit/1fb40d00f9287e34dc10f101c7a37076b64b0dd3))
+* **designer:** build errors fix ([8f9bf87](https://github.com/llama-farm/llamafarm/commit/8f9bf87077639c452da34e581e5c02a5a718f781))
+* **designer:** update missing descriptions and meta data for examples ([f248a3a](https://github.com/llama-farm/llamafarm/commit/f248a3ad65588a27400298acc4f1693042c10d98))
+* **merge:** resolve conflicts across schema, templates, examples, and server routers; align with new RAG schema and upgrades API ([985134d](https://github.com/llama-farm/llamafarm/commit/985134d4d1818b4ec7bfb03b992bb706f6b51bbd))
+* PDF and Markdown parsers now properly chunk documents ([#276](https://github.com/llama-farm/llamafarm/issues/276)) ([c1fb5bc](https://github.com/llama-farm/llamafarm/commit/c1fb5bca2dff3e0b1036617ca3924616c0a7b4ee))
+* **rag:** startup ([#273](https://github.com/llama-farm/llamafarm/issues/273)) ([f79d7d0](https://github.com/llama-farm/llamafarm/commit/f79d7d0fbd5a1bc021d304382c16f12f49cbf3fe))
+
+
+### Miscellaneous Chores
+
+* release 0.0.7 ([19cacf2](https://github.com/llama-farm/llamafarm/commit/19cacf2d479066439ae897e07e2ecd73dab222f5))
+
 ## [0.0.6](https://github.com/llama-farm/llamafarm/compare/v0.0.5...v0.0.6) (2025-10-02)
 
 

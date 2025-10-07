@@ -15,6 +15,8 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
 - **Composable RAG pipelines** you can tailor through YAML, not bespoke code.
 - **Extendable everything**: runtimes, embedders, databases, extractors, and CLI tooling.
 
+**📺 Video demo (90 seconds):** https://youtu.be/W7MHGyN0MdQ
+
 ---
 
 ## 🚀 Quickstart (TL;DR)
@@ -28,8 +30,10 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
    ```bash
    # macOS / Linux
    curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
+
+   # Windows (via winget)
+   winget install LlamaFarm.CLI
    ```
-   - Windows: grab the latest `lf.exe` from the [releases page](https://github.com/llama-farm/llamafarm/releases/latest) and add it to your PATH.
 
 2. **Adjust Ollama context window**
    - Open the Ollama app, go to **Settings → Advanced**, and set the context window to match production (e.g., 100K tokens).
@@ -103,6 +107,61 @@ Open another terminal to run `lf` commands (installed or built from source). Thi
 | Semantic query | `lf rag query --database main_db "What did the 2024 FDA letters require?"` | Use `--filter`, `--include-metadata`, etc. |
 
 See the [CLI reference](docs/website/docs/cli/index.md) for full command details and troubleshooting advice.
+
+---
+
+## 🌐 REST API
+
+LlamaFarm provides a comprehensive REST API (compatible with OpenAI's format) for integrating with your applications. The API runs at `http://localhost:8000`.
+
+### Key Endpoints
+
+**Chat Completions** (OpenAI-compatible)
+```bash
+curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "What are the FDA requirements?"}
+    ],
+    "stream": false,
+    "rag_enabled": true,
+    "database": "main_db"
+  }'
+```
+
+**RAG Query**
+```bash
+curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "clinical trial requirements",
+    "database": "main_db",
+    "top_k": 5
+  }'
+```
+
+**Dataset Management**
+```bash
+# Upload file
+curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/data \
+  -F "file=@document.pdf"
+
+# Process dataset
+curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/process
+```
+
+### Finding Your Namespace and Project
+
+Check your `llamafarm.yaml`:
+```yaml
+name: my-project        # Your project name
+namespace: my-org       # Your namespace
+```
+
+Or inspect the file system: `~/.llamafarm/projects/{namespace}/{project}/`
+
+See the complete [API Reference](docs/website/docs/api/index.md) for all endpoints, request/response formats, Python/TypeScript clients, and examples.
 
 ---
 

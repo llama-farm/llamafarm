@@ -5,7 +5,6 @@ Celery tasks for RAG search operations including database searches
 and retrieval operations.
 """
 
-import logging
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -18,8 +17,9 @@ from celery_app import app
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api import DatabaseSearchAPI
+from core.logging import RAGStructLogger
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.tasks.search")
 
 
 class SearchTask(Task):

@@ -1,12 +1,12 @@
 """Basic similarity retrieval strategy using cosine similarity."""
 
-import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from components.retrievers.base import RetrievalResult, RetrievalStrategy
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.retrievers.basic_similarity.basic_similarity")
 
 
 class BasicSimilarityStrategy(RetrievalStrategy):

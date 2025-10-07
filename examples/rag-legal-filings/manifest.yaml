@@ -1,0 +1,23 @@
+version: 1
+id: rag-legal-filings
+slug: rag-legal-filings
+title: RAG 007 Legal Filings Demo
+description: End-to-end RAG using real legal filings from the James Bond franchise.
+tags:
+  - rag
+  - legal
+  - filings
+  - demo
+primaryModel: gemma3:1b
+config:
+  yaml_path: examples/rag-legal-filings/llamafarm.yaml
+datasets:
+  - name: legal_filings_dataset_007
+    strategy: legal_filings_pdf_processor_007
+    database: legal_filings_db_007
+    ingest:
+      - examples/rag-legal-filings/files/*.pdf
+process_after_ingest: true
+retrieval:
+  database: legal_filings_db_007
+  top_k: 5

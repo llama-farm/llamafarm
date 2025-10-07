@@ -1,0 +1,194 @@
+version: v1
+name: legal_filings_rag_demo_007
+namespace: default
+prompts:
+  - role: system
+    content: |
+      You are a legal assistant specializing in James Bond franchise litigation.
+
+      CRITICAL: You MUST ONLY use information from the retrieved legal document context provided here.
+      DO NOT use your general knowledge about James Bond or legal cases.
+
+      When provided with retrieved context from legal filings:
+      1. Base your entire response ONLY on the retrieved text
+      2. Quote directly from the legal documents when possible
+      3. Cite specific case names, section numbers, and page references from the retrieved context
+      4. Pay special attention to:
+         - Case names and citations (e.g., "MGM v. American Honda Motor")
+         - Court decisions and rulings
+         - Legal precedents and their implications
+         - Parties involved in litigation
+         - Dates of filings and decisions
+         - Trademark and copyright disputes
+
+      If the retrieved context does not contain information to answer the question, respond with:
+      "Unable to locate this information in the provided legal filings."
+
+      Always prioritize accuracy over completeness - only state what you can verify from the retrieved legal documents.
+rag:
+  databases:
+    - name: legal_filings_db_007
+      type: ChromaStore
+      config:
+        collection_name: legal_filings_007
+        distance_function: cosine
+        persist_directory: ./data/007_legal_filings_db
+        port: 8000
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            auto_pull: true
+            base_url: http://localhost:11434
+            batch_size: 8
+            dimension: 768
+            model: nomic-embed-text
+            timeout: 90
+          priority: 0
+      retrieval_strategies:
+        - name: legal_hybrid_strategy
+          type: HybridUniversalStrategy
+          config:
+            strategies:
+              - type: BasicSimilarityStrategy
+                config:
+                  distance_metric: cosine
+                  top_k: 12
+                  score_threshold: 0.3
+                weight: 0.7
+              - type: MetadataFilteredStrategy
+                config:
+                  top_k: 8
+                  filters: {}
+                  pre_filter: true
+                weight: 0.3
+            fusion_method: rrf
+            top_k: 8
+          default: true
+        - name: legal_filings_focus_007
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 6
+            score_threshold: 0.25
+          default: false
+      default_retrieval_strategy: legal_hybrid_strategy
+  data_processing_strategies:
+    - name: legal_filings_pdf_processor_007
+      description:
+        Optimized parser for legal filings PDFs with comprehensive metadata
+        extraction.
+      parsers:
+        - type: PDFParser_LlamaIndex
+          config:
+            chunk_size: 1200
+            chunk_overlap: 200
+            chunk_strategy: semantic
+            extract_metadata: true
+            extract_outline: true
+            extract_tables: true
+            preserve_layout: true
+            fallback_strategies:
+              - llama_pdf_reader
+              - llama_pymupdf_reader
+              - direct_pymupdf
+              - pypdf2_fallback
+          file_include_patterns:
+            - "*.pdf"
+            - "*.PDF"
+          priority: 10
+        - type: PDFParser_PyPDF2
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            chunk_strategy: paragraphs
+            extract_metadata: true
+            preserve_layout: true
+            extract_page_info: true
+            extract_annotations: true
+            extract_outlines: true
+            clean_text: true
+          file_include_patterns:
+            - "*.pdf"
+            - "*.PDF"
+          priority: 50
+      extractors:
+        - type: HeadingExtractor
+          config:
+            max_level: 6
+            include_hierarchy: true
+            extract_outline: true
+          priority: 100
+        - type: EntityExtractor
+          config:
+            entity_types:
+              - PERSON
+              - ORG
+              - GPE
+              - DATE
+              - TIME
+              - MONEY
+              - LAW
+              - NORP
+            use_fallback: true
+            min_entity_length: 2
+            merge_entities: true
+            confidence_threshold: 0.6
+          priority: 95
+        - type: PatternExtractor
+          config:
+            patterns:
+              - email
+              - phone
+              - url
+            custom_patterns:
+              case_citation: \d+\s+F\.\d*d\s+\d+
+              court_case: '[A-Z][a-z]+\s+v\.\s+[A-Z][a-z]+'
+              legal_section: §\s*\d+(\.\d+)*
+              year_in_parens: \(\d{4}\)
+            include_context: true
+            context_window: 50
+          priority: 90
+        - type: DateTimeExtractor
+          config:
+            formats:
+              - "%B %d, %Y"
+              - "%m/%d/%Y"
+              - "%Y-%m-%d"
+              - "%d %B %Y"
+            include_relative: false
+            return_iso: true
+            timezone: UTC
+          priority: 85
+        - type: KeywordExtractor
+          config:
+            algorithm: yake
+            max_keywords: 15
+            min_score: 0.1
+            deduplication_threshold: 0.8
+            include_scores: true
+          priority: 80
+        - type: ContentStatisticsExtractor
+          config:
+            include_structure: true
+            include_readability: true
+          priority: 75
+datasets:
+  - name: legal_filings_dataset_007
+    data_processing_strategy: legal_filings_pdf_processor_007
+    database: legal_filings_db_007
+    files:
+      - 40db471a2630c03e021343e626b8ecded9e7fb9c233512870919d9e023ba5525
+      - 44844555c876b392a77afe068308f1fbce08198c8b28c03b969a33220efbc916
+      - 62540151151b40cb69aa1b121ff909790a37efab8c8d27401fa183a559d4e4a9
+      - 5100de44585d21787cf90d6ee7532e1c7dd77baa23144e850282e94b1c77fb37
+      - db3c0b7021a4add05e501174f04ef624f01758fad224da0eb23967ee5bcabc49
+runtime:
+  provider: ollama
+  model: gemma3:1b
+  base_url: http://localhost:11434/v1
+  model_api_parameters:
+    temperature: 0.1
+    top_p: 0.7
+    # max_tokens: 2048
+    # num_ctx: 128000

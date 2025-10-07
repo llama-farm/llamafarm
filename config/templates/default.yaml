@@ -97,8 +97,8 @@ rag:
           priority: 10  # Primary PDF parser
           config:
             chunk_strategy: "semantic"
-            chunk_size: 1000
-            chunk_overlap: 200
+            chunk_size: 300
+            chunk_overlap: 50
             extract_metadata: true
             extract_tables: true
 
@@ -106,18 +106,19 @@ rag:
           file_include_patterns: ["*.pdf", "*.PDF"]
           priority: 50  # Fallback PDF parser
           config:
-            chunk_size: 1000
-            chunk_overlap: 150
+            chunk_size: 300
+            chunk_overlap: 50
             chunk_strategy: "paragraphs"
             extract_metadata: true
+            combine_pages: false  # CRITICAL: Must be false to enable chunking
 
         # Word Document Parser
         - type: "DocxParser_LlamaIndex"
           file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
           priority: 10
           config:
-            chunk_size: 1000
-            chunk_overlap: 150
+            chunk_size: 500
+            chunk_overlap: 100
             extract_metadata: true
             extract_tables: true
 
@@ -126,7 +127,7 @@ rag:
           file_include_patterns: ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*"]
           priority: 10
           config:
-            chunk_size: 1000
+            chunk_size: 400
             chunk_strategy: "sections"
             extract_metadata: true
             extract_code_blocks: true
@@ -137,7 +138,7 @@ rag:
           file_include_patterns: ["*.csv", "*.CSV", "*.tsv", "*.TSV", "*.dat"]
           priority: 10
           config:
-            chunk_size: 500
+            chunk_size: 1000
             chunk_strategy: "rows"
             extract_metadata: true
             encoding: "utf-8"
@@ -164,8 +165,8 @@ rag:
           priority: 50  # Lower priority, acts as fallback
           config:
             encoding: "utf-8"
-            chunk_size: 1200
-            chunk_overlap: 200
+            chunk_size: 500
+            chunk_overlap: 100
             chunk_strategy: "sentences"
             clean_text: true
             extract_metadata: true

@@ -90,17 +90,22 @@ function DatasetView() {
 
   // Files from API data only
   const files = useMemo(() => {
-    if (!currentApiDataset?.files) return []
-    return currentApiDataset.files.map((fileObj: any) => {
+    const filesSource: any[] = Array.isArray(
+      (currentApiDataset as any)?.details?.files_metadata
+    )
+      ? (currentApiDataset as any).details.files_metadata
+      : (currentApiDataset as any)?.files || []
+    if (!filesSource) return []
+    return filesSource.map((fileObj: any) => {
       // Handle new API response format with file details
       if (
         typeof fileObj === 'object' &&
         fileObj !== null &&
-        'original_filename' in fileObj
+        ('original_filename' in fileObj || 'original_file_name' in fileObj)
       ) {
         return {
           id: fileObj.hash,
-          name: fileObj.original_filename,
+          name: fileObj.original_filename || fileObj.original_file_name,
           size: fileObj.size,
           lastModified: new Date(fileObj.timestamp * 1000).toLocaleString(),
           type: fileObj.mime_type,

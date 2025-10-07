@@ -2,10 +2,10 @@
 
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-import logging
 from components.parsers.base.base_parser import BaseParser, ParserConfig
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.pdf.llamaindex_parser")
 
 
 class PDFParser_LlamaIndex(BaseParser):

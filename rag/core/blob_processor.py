@@ -4,7 +4,6 @@ Handles iterative parser selection based on file patterns.
 """
 
 import fnmatch
-import logging
 import sys
 from pathlib import Path
 from typing import Any, TypedDict
@@ -12,6 +11,7 @@ from typing import Any, TypedDict
 from components.extractors.base import BaseExtractor
 from components.parsers.base.base_parser import BaseParser
 from core.base import Document
+from core.logging import RAGStructLogger
 
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
@@ -28,8 +28,7 @@ except ImportError as e:
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
     ) from e
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger = RAGStructLogger("rag.core.blob_processor")
 
 
 class ExtractorOutput(TypedDict):
@@ -423,8 +422,13 @@ class BlobProcessor:
 
             parser_type = config.type.value
             try:
-                logger.debug(f"Attempting to parse {filename} with {parser_type}")
+                logger.debug(
+                    f"Attempting to parse {filename} with {parser_type} (priority: {config.priority})"
+                )
                 documents = parser.parse_blob(blob_data, metadata)
+                logger.debug(
+                    f"{parser_type} returned {len(documents) if documents else 0} documents"
+                )
 
                 if documents:
                     # Calculate chunk statistics
@@ -449,7 +453,10 @@ class BlobProcessor:
                     break
 
             except Exception as e:
-                logger.debug(f"Parser {parser_type} failed for {filename}: {e}")
+                logger.warning(f"{parser_type} FAILED for {filename}: {e}")
+                import traceback
+
+                logger.warning(f"Traceback: {traceback.format_exc()}")
                 continue
 
         if not documents:

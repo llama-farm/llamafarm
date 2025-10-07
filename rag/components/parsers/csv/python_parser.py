@@ -2,10 +2,10 @@
 
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import logging
 import csv
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.csvthon_parser")
 
 
 class CSVParser_Python:

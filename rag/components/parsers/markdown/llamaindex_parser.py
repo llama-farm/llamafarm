@@ -2,12 +2,13 @@
 
 from pathlib import Path
 from typing import Dict, Any, Optional
-import logging
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.markdown.llamaindex_parser")
 
 
-class MarkdownParser_LlamaIndex:
+class MarkdownParser_LlamaIndex(BaseParser):
     """Markdown parser using LlamaIndex with advanced features."""
 
     def __init__(
@@ -33,6 +34,39 @@ class MarkdownParser_LlamaIndex:
     def validate_config(self) -> bool:
         """Validate configuration."""
         return True
+
+    def _load_metadata(self) -> ParserConfig:
+        """Load parser metadata."""
+
+        return ParserConfig(
+            name="MarkdownParser_LlamaIndex",
+            display_name="LlamaIndex Markdown Parser",
+            version="1.0.0",
+            supported_extensions=[".md", ".markdown", ".mdown", ".mkd"],
+            mime_types=["text/markdown", "text/x-markdown"],
+            capabilities=[
+                "heading_extraction",
+                "code_block_extraction",
+                "link_extraction",
+                "metadata_extraction",
+            ],
+            dependencies={"llama-index": ["llama-index-core", "llama-index-readers-file"]},
+            default_config={
+                "chunk_size": 1000,
+                "chunk_overlap": 100,
+                "chunk_strategy": "headings",
+                "extract_metadata": True,
+                "extract_headings": True,
+                "extract_links": True,
+                "extract_code_blocks": True,
+                "preserve_formatting": False,
+            }
+        )
+
+    def can_parse(self, file_path: str) -> bool:
+        """Check if this parser can handle the file."""
+        path = Path(file_path)
+        return path.suffix.lower() in {".md", ".markdown", ".mdown", ".mkd"}
 
     def parse(self, source: str, **kwargs):
         """Parse markdown using LlamaIndex."""

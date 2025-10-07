@@ -1,0 +1,1433 @@
+# API Reference
+
+LlamaFarm provides a comprehensive REST API for managing projects, datasets, chat interactions, and RAG (Retrieval-Augmented Generation) operations. The API follows RESTful conventions and is compatible with OpenAI's chat completion format.
+
+## Base URL
+
+The API is served at: `http://localhost:8000`
+
+All versioned endpoints use the `/v1` prefix:
+```
+http://localhost:8000/v1
+```
+
+## Finding Your Namespace and Project Name
+
+### Understanding Namespaces and Projects
+
+LlamaFarm organizes your work into **namespaces** (organizational containers) and **projects** (individual configurations):
+
+- **Namespace**: A top-level organizational unit (e.g., your username, team name, or organization)
+- **Project Name**: The unique identifier for a specific LlamaFarm project within a namespace
+
+### From Your llamafarm.yaml
+
+The easiest way to find your namespace and project name is to check your `llamafarm.yaml` configuration file:
+
+```yaml
+version: v1
+name: my-project        # This is your project name
+namespace: my-org       # This is your namespace
+```
+
+### From the File System
+
+Projects are stored in:
+```
+~/.llamafarm/projects/{namespace}/{project_name}/
+```
+
+For example, if you see:
+```
+~/.llamafarm/projects/acme-corp/chatbot/
+```
+
+Then:
+- Namespace: `acme-corp`
+- Project name: `chatbot`
+
+### Using the API
+
+You can also list projects programmatically:
+
+```bash
+# List all projects in a namespace
+curl http://localhost:8000/v1/projects/my-org
+```
+
+### Custom Data Directory
+
+If you've set a custom data directory using the `LF_DATA_DIR` environment variable, check:
+```
+$LF_DATA_DIR/projects/{namespace}/{project_name}/
+```
+
+## Authentication
+
+Currently, the API does not require authentication. This is designed for local development environments. For production deployments, implement authentication at the reverse proxy or load balancer level.
+
+## Response Format
+
+### Success Responses
+
+Successful requests return JSON with appropriate HTTP status codes (200, 201, etc.):
+
+```json
+{
+  "field": "value",
+  ...
+}
+```
+
+### Error Responses
+
+Error responses follow a consistent format with appropriate HTTP status codes (400, 404, 500, etc.):
+
+```json
+{
+  "detail": "Error message description"
+}
+```
+
+Common HTTP status codes:
+- `200 OK` - Request succeeded
+- `201 Created` - Resource created successfully
+- `400 Bad Request` - Invalid request parameters
+- `404 Not Found` - Resource not found
+- `422 Unprocessable Entity` - Validation error
+- `500 Internal Server Error` - Server error
+
+## API Endpoints Overview
+
+### Projects
+- `GET /v1/projects/{namespace}` - List projects
+- `POST /v1/projects/{namespace}` - Create project
+- `GET /v1/projects/{namespace}/{project}` - Get project details
+- `PUT /v1/projects/{namespace}/{project}` - Update project configuration
+- `DELETE /v1/projects/{namespace}/{project}` - Delete project
+
+### Chat
+- `POST /v1/projects/{namespace}/{project}/chat/completions` - Send chat message (OpenAI-compatible)
+- `GET /v1/projects/{namespace}/{project}/chat/sessions/{session_id}/history` - Get chat history
+- `DELETE /v1/projects/{namespace}/{project}/chat/sessions/{session_id}` - Delete chat session
+- `DELETE /v1/projects/{namespace}/{project}/chat/sessions` - Delete all sessions
+
+### Datasets
+- `GET /v1/projects/{namespace}/{project}/datasets` - List datasets
+- `POST /v1/projects/{namespace}/{project}/datasets` - Create dataset
+- `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}` - Delete dataset
+- `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data` - Upload file to dataset
+- `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/process` - Process dataset into vector database
+- `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}/data/{file_hash}` - Remove file from dataset
+
+### RAG (Retrieval-Augmented Generation)
+- `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG system
+- `GET /v1/projects/{namespace}/{project}/rag/health` - Check RAG health
+
+### Tasks
+- `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get async task status
+
+### Examples
+- `GET /v1/examples` - List available examples
+- `POST /v1/examples/{example_id}/import-project` - Import example as new project
+- `POST /v1/examples/{example_id}/import-data` - Import example data into existing project
+
+### Health
+- `GET /health` - Overall health check
+- `GET /health/liveness` - Liveness probe
+
+### System Info
+- `GET /` - Basic hello endpoint
+- `GET /info` - System information
+
+---
+
+## Projects API
+
+### List Projects
+
+List all projects in a namespace.
+
+**Endpoint:** `GET /v1/projects/{namespace}`
+
+**Parameters:**
+- `namespace` (path, required): The namespace to list projects from
+
+**Response:**
+```json
+{
+  "total": 2,
+  "projects": [
+    {
+      "namespace": "my-org",
+      "name": "chatbot",
+      "config": {
+        "version": "v1",
+        "name": "chatbot",
+        "namespace": "my-org",
+        "runtime": { ... },
+        ...
+      }
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org
+```
+
+### Create Project
+
+Create a new project in a namespace.
+
+**Endpoint:** `POST /v1/projects/{namespace}`
+
+**Parameters:**
+- `namespace` (path, required): The namespace to create the project in
+
+**Request Body:**
+```json
+{
+  "name": "my-new-project",
+  "config_template": "server"  // Optional: server, rag, or custom template name
+}
+```
+
+**Response:**
+```json
+{
+  "project": {
+    "namespace": "my-org",
+    "name": "my-new-project",
+    "config": { ... }
+  }
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org \
+  -H "Content-Type: application/json" \
+  -d '{"name": "chatbot", "config_template": "server"}'
+```
+
+### Get Project
+
+Get details of a specific project.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Response:**
+```json
+{
+  "project": {
+    "namespace": "my-org",
+    "name": "chatbot",
+    "config": {
+      "version": "v1",
+      "name": "chatbot",
+      "namespace": "my-org",
+      "runtime": {
+        "provider": "ollama",
+        "model": "llama3.2:3b"
+      },
+      ...
+    }
+  }
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot
+```
+
+### Update Project
+
+Update a project's configuration.
+
+**Endpoint:** `PUT /v1/projects/{namespace}/{project}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Request Body:**
+```json
+{
+  "config": {
+    "version": "v1",
+    "name": "chatbot",
+    "namespace": "my-org",
+    "runtime": {
+      "provider": "ollama",
+      "model": "llama3.2:3b"
+    },
+    ...
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "project": {
+    "namespace": "my-org",
+    "name": "chatbot",
+    "config": { ... }
+  }
+}
+```
+
+**Example:**
+```bash
+curl -X PUT http://localhost:8000/v1/projects/my-org/chatbot \
+  -H "Content-Type: application/json" \
+  -d @updated-config.json
+```
+
+### Delete Project
+
+Delete a project (currently returns project info; actual deletion not implemented).
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Response:**
+```json
+{
+  "project": {
+    "namespace": "my-org",
+    "name": "chatbot",
+    "config": { ... }
+  }
+}
+```
+
+---
+
+## Chat API
+
+### Send Chat Message (OpenAI-Compatible)
+
+Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat completion API.
+
+**Endpoint:** `POST /v1/projects/{namespace}/{project}/chat/completions`
+
+**Headers:**
+- `X-Session-ID` (optional): Session ID for stateful conversations. If not provided, a new session is created.
+- `X-No-Session` (optional): Set to any value for stateless mode (no conversation history)
+
+**Request Body:**
+```json
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    },
+    {
+      "role": "user",
+      "content": "What is LlamaFarm?"
+    }
+  ],
+  "stream": false,
+  "temperature": 0.7,
+  "max_tokens": 1000,
+  "rag_enabled": true,
+  "database": "main_db",
+  "rag_top_k": 5,
+  "rag_score_threshold": 0.7
+}
+```
+
+**Request Fields:**
+- `messages` (required): Array of chat messages with `role` and `content`
+- `model` (optional): Select which model to use (OpenAI-compatible, added in PR #263 multi-model support)
+- `stream` (optional): Enable streaming responses (Server-Sent Events)
+- `temperature` (optional): Sampling temperature (0.0-2.0)
+- `max_tokens` (optional): Maximum tokens to generate
+- `top_p` (optional): Nucleus sampling parameter
+- `top_k` (optional): Top-k sampling parameter
+- `rag_enabled` (optional): Enable/disable RAG (uses config default if not specified)
+- `database` (optional): Database to use for RAG queries
+- `rag_top_k` (optional): Number of RAG results to retrieve
+- `rag_score_threshold` (optional): Minimum similarity score for RAG results
+
+**Response (Non-Streaming):**
+```json
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "model": "llama3.2:3b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "LlamaFarm is a framework for building AI applications..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 20,
+    "completion_tokens": 100,
+    "total_tokens": 120
+  }
+}
+```
+
+**Response Headers:**
+- `X-Session-ID`: The session ID (only in stateful mode)
+
+**Streaming Response:**
+
+When `stream: true`, the response is sent as Server-Sent Events:
+
+```
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"llama3.2:3b","choices":[{"index":0,"delta":{"role":"assistant","content":"Llama"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"llama3.2:3b","choices":[{"index":0,"delta":{"content":"Farm"},"finish_reason":null}]}
+
+data: [DONE]
+```
+
+**Example (Non-Streaming):**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
+**Example (Streaming):**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ],
+    "stream": true
+  }'
+```
+
+**Example (Stateless):**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-No-Session: true" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
+**Example (With RAG):**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "What are the FDA regulations?"}
+    ],
+    "rag_enabled": true,
+    "database": "fda_db",
+    "rag_top_k": 10
+  }'
+```
+
+### Get Chat History
+
+Retrieve conversation history for a session.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/chat/sessions/{session_id}/history`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `session_id` (path, required): Session ID
+
+**Response:**
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello!"
+    },
+    {
+      "role": "assistant",
+      "content": "Hi! How can I help you today?"
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123/history
+```
+
+### Delete Chat Session
+
+Delete a specific chat session and its history.
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}/chat/sessions/{session_id}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `session_id` (path, required): Session ID
+
+**Response:**
+```json
+{
+  "message": "Session abc-123 deleted"
+}
+```
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123
+```
+
+### Delete All Chat Sessions
+
+Delete all chat sessions for a project.
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}/chat/sessions`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Response:**
+```json
+{
+  "message": "Deleted 5 session(s)",
+  "count": 5
+}
+```
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions
+```
+
+---
+
+## Datasets API
+
+### List Datasets
+
+List all datasets in a project.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/datasets`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `include_extra_details` (query, optional): Include detailed file information (default: true)
+
+**Response:**
+```json
+{
+  "total": 2,
+  "datasets": [
+    {
+      "name": "research_papers",
+      "database": "main_db",
+      "data_processing_strategy": "universal_processor",
+      "files": ["abc123", "def456"],
+      "details": {
+        "total_files": 2,
+        "total_size_bytes": 1048576,
+        "file_details": [
+          {
+            "hash": "abc123",
+            "original_filename": "paper1.pdf",
+            "size": 524288,
+            "timestamp": 1677652288.0
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/datasets
+```
+
+### Get Available Strategies
+
+Get available data processing strategies and databases for a project.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/datasets/strategies`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Response:**
+```json
+{
+  "data_processing_strategies": ["universal_processor", "custom_strategy"],
+  "databases": ["main_db", "research_db"]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/datasets/strategies
+```
+
+### Create Dataset
+
+Create a new dataset.
+
+**Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Request Body:**
+```json
+{
+  "name": "research_papers",
+  "data_processing_strategy": "universal_processor",
+  "database": "main_db"
+}
+```
+
+**Response:**
+```json
+{
+  "dataset": {
+    "name": "research_papers",
+    "database": "main_db",
+    "data_processing_strategy": "universal_processor",
+    "files": []
+  }
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "research_papers",
+    "data_processing_strategy": "universal_processor",
+    "database": "main_db"
+  }'
+```
+
+### Delete Dataset
+
+Delete a dataset.
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `dataset` (path, required): Dataset name
+
+**Response:**
+```json
+{
+  "dataset": {
+    "name": "research_papers",
+    "database": "main_db",
+    "data_processing_strategy": "universal_processor",
+    "files": []
+  }
+}
+```
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers
+```
+
+### Upload File to Dataset
+
+Upload a file to a dataset (stores the file but does not process it).
+
+**Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `dataset` (path, required): Dataset name
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: File upload with field name `file`
+
+**Response:**
+```json
+{
+  "filename": "paper1.pdf",
+  "hash": "abc123def456",
+  "processed": false
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data \
+  -F "file=@paper1.pdf"
+```
+
+### Process Dataset
+
+Process all files in a dataset into the vector database.
+
+**Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/process`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `dataset` (path, required): Dataset name
+- `async_processing` (query, optional): Process asynchronously (default: false)
+
+**Response (Synchronous):**
+```json
+{
+  "message": "Dataset processing completed",
+  "processed_files": 2,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "strategy": "universal_processor",
+  "database": "main_db",
+  "details": [
+    {
+      "hash": "abc123",
+      "filename": "paper1.pdf",
+      "status": "processed",
+      "parser": "pdf",
+      "extractors": ["text"],
+      "chunks": 42,
+      "chunk_size": 500,
+      "embedder": "sentence-transformers"
+    }
+  ]
+}
+```
+
+**Response (Asynchronous):**
+```json
+{
+  "message": "Dataset processing started asynchronously",
+  "processed_files": 0,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "strategy": "universal_processor",
+  "database": "main_db",
+  "details": [
+    {
+      "hash": "abc123",
+      "filename": null,
+      "status": "pending"
+    }
+  ],
+  "task_id": "task-123-abc"
+}
+```
+
+**Example (Synchronous):**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/process
+```
+
+**Example (Asynchronous):**
+```bash
+curl -X POST "http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/process?async_processing=true"
+```
+
+### Remove File from Dataset
+
+Remove a file from a dataset.
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}/data/{file_hash}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `dataset` (path, required): Dataset name
+- `file_hash` (path, required): Hash of the file to remove
+- `remove_from_disk` (query, optional): Also delete the file from disk (default: false)
+
+**Response:**
+```json
+{
+  "file_hash": "abc123"
+}
+```
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123
+```
+
+**Example (Remove from disk):**
+```bash
+curl -X DELETE "http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123?remove_from_disk=true"
+```
+
+---
+
+## RAG API
+
+### Query RAG System
+
+Perform a semantic search query against a RAG database.
+
+**Endpoint:** `POST /v1/projects/{namespace}/{project}/rag/query`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Request Body:**
+```json
+{
+  "query": "What are the clinical trial requirements?",
+  "database": "fda_db",
+  "top_k": 5,
+  "score_threshold": 0.7,
+  "retrieval_strategy": "hybrid",
+  "metadata_filters": {
+    "document_type": "regulation"
+  }
+}
+```
+
+**Request Fields:**
+- `query` (required): The search query text
+- `database` (optional): Database name (uses default if not specified)
+- `top_k` (optional): Number of results to return (default: 5)
+- `score_threshold` (optional): Minimum similarity score
+- `retrieval_strategy` (optional): Strategy to use for retrieval
+- `metadata_filters` (optional): Filter results by metadata
+- `distance_metric` (optional): Distance metric to use
+- `hybrid_alpha` (optional): Alpha parameter for hybrid search
+- `rerank_model` (optional): Model to use for reranking
+- `query_expansion` (optional): Enable query expansion
+- `max_tokens` (optional): Maximum tokens in results
+
+**Response:**
+```json
+{
+  "query": "What are the clinical trial requirements?",
+  "results": [
+    {
+      "content": "Clinical trials must follow FDA regulations...",
+      "score": 0.92,
+      "metadata": {
+        "document_id": "fda_21cfr312",
+        "page": 5,
+        "document_type": "regulation"
+      },
+      "chunk_id": "chunk_123",
+      "document_id": "fda_21cfr312"
+    }
+  ],
+  "total_results": 5,
+  "processing_time_ms": 45.2,
+  "retrieval_strategy_used": "hybrid",
+  "database_used": "fda_db"
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the clinical trial requirements?",
+    "database": "fda_db",
+    "top_k": 5
+  }'
+```
+
+### Check RAG Health
+
+Get health status of the RAG system and databases.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/health`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database` (query, optional): Specific database to check
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "databases": [
+    {
+      "name": "main_db",
+      "status": "healthy",
+      "document_count": 150,
+      "size_bytes": 10485760
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/rag/health
+```
+
+**Example (Specific database):**
+```bash
+curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/health?database=main_db"
+```
+
+---
+
+## Tasks API
+
+### Get Task Status
+
+Get the status of an asynchronous task.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/tasks/{task_id}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `task_id` (path, required): Task ID returned from async operations
+
+**Response:**
+```json
+{
+  "task_id": "task-123-abc",
+  "state": "SUCCESS",
+  "meta": {
+    "current": 2,
+    "total": 2
+  },
+  "result": {
+    "processed_files": 2,
+    "failed_files": 0
+  },
+  "error": null,
+  "traceback": null
+}
+```
+
+**Task States:**
+- `PENDING` - Task is queued
+- `STARTED` - Task is running
+- `SUCCESS` - Task completed successfully
+- `FAILURE` - Task failed with error
+- `RETRY` - Task is being retried
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
+```
+
+---
+
+## Examples API
+
+### List Examples
+
+List all available example projects.
+
+**Endpoint:** `GET /v1/examples`
+
+**Response:**
+```json
+{
+  "examples": [
+    {
+      "id": "fda_rag",
+      "slug": "fda_rag",
+      "title": "FDA RAG Example",
+      "description": "Example using FDA warning letters",
+      "primaryModel": "llama3.2:3b",
+      "tags": ["rag", "healthcare"],
+      "dataset_count": 1,
+      "data_size_bytes": 2097152,
+      "data_size_human": "2.0MB",
+      "project_size_bytes": 4096,
+      "project_size_human": "4.0KB",
+      "updated_at": "2024-01-15T10:30:00"
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/examples
+```
+
+### Import Example as Project
+
+Import an example as a new project.
+
+**Endpoint:** `POST /v1/examples/{example_id}/import-project`
+
+**Parameters:**
+- `example_id` (path, required): Example ID to import
+
+**Request Body:**
+```json
+{
+  "namespace": "my-org",
+  "name": "my-fda-project",
+  "process": true
+}
+```
+
+**Response:**
+```json
+{
+  "project": "my-fda-project",
+  "namespace": "my-org",
+  "datasets": ["fda_letters"],
+  "task_ids": ["task-123-abc"]
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/examples/fda_rag/import-project \
+  -H "Content-Type: application/json" \
+  -d '{
+    "namespace": "my-org",
+    "name": "my-fda-project",
+    "process": true
+  }'
+```
+
+### Import Example Data
+
+Import example data into an existing project.
+
+**Endpoint:** `POST /v1/examples/{example_id}/import-data`
+
+**Parameters:**
+- `example_id` (path, required): Example ID to import data from
+
+**Request Body:**
+```json
+{
+  "namespace": "my-org",
+  "project": "my-project",
+  "include_strategies": true,
+  "process": true
+}
+```
+
+**Response:**
+```json
+{
+  "project": "my-project",
+  "namespace": "my-org",
+  "datasets": ["fda_letters"],
+  "task_ids": ["task-456-def"]
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/examples/fda_rag/import-data \
+  -H "Content-Type: application/json" \
+  -d '{
+    "namespace": "my-org",
+    "project": "my-project",
+    "include_strategies": true,
+    "process": true
+  }'
+```
+
+---
+
+## Health API
+
+### Overall Health Check
+
+Check overall system health.
+
+**Endpoint:** `GET /health`
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "services": {
+    "api": "healthy",
+    "celery": "healthy",
+    "redis": "healthy"
+  }
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/health
+```
+
+### Liveness Probe
+
+Simple liveness check for container orchestration.
+
+**Endpoint:** `GET /health/liveness`
+
+**Response:**
+```json
+{
+  "status": "alive"
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/health/liveness
+```
+
+---
+
+## System Info
+
+### Root Endpoint
+
+Basic hello endpoint.
+
+**Endpoint:** `GET /`
+
+**Response:**
+```json
+{
+  "message": "Hello, World!"
+}
+```
+
+### System Information
+
+Get system version and configuration info.
+
+**Endpoint:** `GET /info`
+
+**Response:**
+```json
+{
+  "version": "0.1.0",
+  "data_directory": "/Users/username/.llamafarm"
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/info
+```
+
+---
+
+## Multi-Model Support
+
+As of PR #263, LlamaFarm supports multiple models per project with OpenAI-compatible `model` field in chat requests.
+
+### Configuration
+
+In your `llamafarm.yaml`:
+
+```yaml
+runtime:
+  models:
+    - name: fast-model
+      provider: ollama
+      model: llama3.2:3b
+    - name: smart-model
+      provider: ollama
+      model: llama3.2:70b
+  default_model: fast-model
+```
+
+### Using Different Models
+
+The `model` field in chat completions requests is OpenAI-compatible and allows you to select which configured model to use:
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "smart-model",
+    "messages": [
+      {"role": "user", "content": "Explain quantum computing"}
+    ]
+  }'
+```
+
+If `model` is not specified, the `default_model` from your configuration is used. This makes LlamaFarm a drop-in replacement for OpenAI's API with the added benefit of model selection.
+
+### Get Available Models
+
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/models
+```
+
+---
+
+## Rate Limiting and Performance
+
+### Concurrent Requests
+
+The API handles concurrent requests efficiently:
+- Chat sessions are thread-safe with internal locking
+- Dataset processing can run asynchronously with Celery
+- Multiple chat sessions can be active simultaneously
+
+### Session Management
+
+- Sessions expire after 30 minutes of inactivity
+- Use `X-No-Session` header for stateless requests
+- Session cleanup happens automatically
+
+### Async Processing
+
+For long-running operations (dataset processing):
+1. Use `async_processing=true` to get immediate response
+2. Poll the task endpoint to check status
+3. Retrieve final results when `state` is `SUCCESS`
+
+---
+
+## Best Practices
+
+### Error Handling
+
+Always check HTTP status codes and handle errors:
+
+```bash
+response=$(curl -s -w "\n%{http_code}" http://localhost:8000/v1/projects/my-org/chatbot)
+http_code=$(echo "$response" | tail -n 1)
+body=$(echo "$response" | head -n -1)
+
+if [ "$http_code" -eq 200 ]; then
+  echo "Success: $body"
+else
+  echo "Error ($http_code): $body"
+fi
+```
+
+### Using RAG Effectively
+
+1. **Create datasets first**: Upload and process files before querying
+2. **Use appropriate top_k**: Start with 5-10 results
+3. **Set score thresholds**: Filter low-quality results (e.g., 0.7)
+4. **Test queries**: Use the RAG query endpoint to test retrieval before chat
+
+### Chat Sessions
+
+1. **Stateful conversations**: Reuse session IDs for context
+2. **Stateless queries**: Use `X-No-Session` for one-off questions
+3. **Clean up**: Delete old sessions to free resources
+4. **History access**: Use history endpoint to debug conversations
+
+### Dataset Processing
+
+1. **Upload first, process later**: Separate ingestion from processing
+2. **Use async for large datasets**: Enable async processing for >10 files
+3. **Monitor task status**: Poll task endpoint for progress
+4. **Handle duplicates**: System automatically skips duplicate files
+
+---
+
+## API Clients
+
+### Python Example
+
+```python
+import requests
+
+class LlamaFarmClient:
+    def __init__(self, base_url="http://localhost:8000"):
+        self.base_url = base_url
+        self.session = requests.Session()
+
+    def chat(self, namespace, project, message, session_id=None):
+        url = f"{self.base_url}/v1/projects/{namespace}/{project}/chat/completions"
+        headers = {}
+        if session_id:
+            headers["X-Session-ID"] = session_id
+
+        response = self.session.post(
+            url,
+            headers=headers,
+            json={
+                "messages": [{"role": "user", "content": message}]
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def query_rag(self, namespace, project, query, database=None, top_k=5):
+        url = f"{self.base_url}/v1/projects/{namespace}/{project}/rag/query"
+        response = self.session.post(
+            url,
+            json={
+                "query": query,
+                "database": database,
+                "top_k": top_k
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+
+# Usage
+client = LlamaFarmClient()
+result = client.chat("my-org", "chatbot", "Hello!")
+print(result["choices"][0]["message"]["content"])
+```
+
+### JavaScript/TypeScript Example
+
+```typescript
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+interface ChatRequest {
+  messages: ChatMessage[];
+  stream?: boolean;
+  rag_enabled?: boolean;
+  database?: string;
+}
+
+class LlamaFarmClient {
+  constructor(private baseUrl: string = "http://localhost:8000") {}
+
+  async chat(
+    namespace: string,
+    project: string,
+    messages: ChatMessage[],
+    sessionId?: string
+  ): Promise<any> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (sessionId) {
+      headers["X-Session-ID"] = sessionId;
+    }
+
+    const response = await fetch(
+      `${this.baseUrl}/v1/projects/${namespace}/${project}/chat/completions`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ messages }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async queryRAG(
+    namespace: string,
+    project: string,
+    query: string,
+    database?: string,
+    topK: number = 5
+  ): Promise<any> {
+    const response = await fetch(
+      `${this.baseUrl}/v1/projects/${namespace}/${project}/rag/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          database,
+          top_k: topK,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+}
+
+// Usage
+const client = new LlamaFarmClient();
+const result = await client.chat("my-org", "chatbot", [
+  { role: "user", content: "Hello!" }
+]);
+console.log(result.choices[0].message.content);
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Problem:** `404 Not Found` when accessing project
+- **Solution**: Verify namespace and project name are correct. List projects to confirm.
+
+**Problem:** Chat returns empty or error
+- **Solution**: Check that the model is configured correctly and Ollama is running.
+
+**Problem:** RAG query returns no results
+- **Solution**: Ensure dataset is processed and database exists. Check RAG health endpoint.
+
+**Problem:** Dataset processing stuck
+- **Solution**: Check Celery worker status. Use async processing and poll task endpoint.
+
+**Problem:** Session not persisting
+- **Solution**: Ensure you're passing `X-Session-ID` header and not using `X-No-Session`.
+
+### Debugging Tips
+
+1. **Check logs**: Server logs are written to stdout
+2. **Verify configuration**: Use `GET /v1/projects/{namespace}/{project}` to inspect config
+3. **Test health**: Use `/health` endpoint to verify services are running
+4. **Inspect tasks**: For async operations, poll task endpoint for detailed error info
+5. **Use curl verbose**: Add `-v` flag to curl for detailed request/response info
+
+---
+
+## Next Steps
+
+- Learn about [Configuration](../configuration/index.md)
+- Explore [RAG concepts](../rag/index.md)
+- Review [Examples](../examples/index.md)
+- Check [Troubleshooting](../troubleshooting/index.md)

@@ -2,17 +2,14 @@
 Link Extractor for finding URLs, email addresses, and references in text.
 """
 
-import logging
 import re
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from core.base import Document
 from urllib.parse import urlparse
 
 from components.extractors.base import BaseExtractor
-
-logger = logging.getLogger(__name__)
 
 
 class LinkExtractor(BaseExtractor):

@@ -1,21 +1,24 @@
 """Factory classes for creating RAG system components."""
 
-import logging
 from pathlib import Path
-from typing import Dict, Any, Type
-from core.base import Parser, Embedder, VectorStore
+from typing import Any, Dict, Type
+
+from components.parsers import (
+    DirectoryParser,
+    LlamaIndexCSVExcelParser,
+    LlamaIndexDocxParser,
+    LlamaIndexMarkdownParser,
+    LlamaIndexPDFParser,
+    LlamaIndexTextParser,
+    LlamaIndexWebParser,
+)
 
 # Import parsers using the new modular system
 from components.parsers import (
     ParserFactory as NewParserFactory,
-    DirectoryParser,
-    LlamaIndexTextParser,
-    LlamaIndexPDFParser,
-    LlamaIndexCSVExcelParser,
-    LlamaIndexDocxParser,
-    LlamaIndexMarkdownParser,
-    LlamaIndexWebParser,
 )
+from core.base import Embedder, Parser, VectorStore
+from core.logging import RAGStructLogger
 
 # Create aliases for backward compatibility
 PlainTextParser = LlamaIndexTextParser
@@ -126,7 +129,7 @@ class ComponentFactory:
     _registry: dict[str, type] = {}
 
     @classmethod
-    def register(cls, name: str, component_class: Type):
+    def register(cls, name: str, component_class: type):
         """Register a component class with a name."""
         cls._registry[name] = component_class
 
@@ -159,7 +162,7 @@ class ParserFactoryWrapper(ComponentFactory):
     def create(
         cls,
         component_type: str,
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         """Create a parser instance using the new ParserFactory.
@@ -258,12 +261,12 @@ class RetrievalStrategyFactory(ComponentFactory):
     }
 
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.core.factories")
 
 
 def create_component_from_config(
     component_config: dict[str, Any],
-    factory_class: Type[ComponentFactory],
+    factory_class: type[ComponentFactory],
     project_dir: Path | None = None,
 ):
     """Create a component from configuration using the appropriate factory."""

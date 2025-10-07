@@ -1,0 +1,22 @@
+version: 1
+id: quick-rag
+slug: quick-rag
+title: Quick RAG
+description: Two tiny engineering notes for a fast smoke test of ingestion and retrieval.
+tags:
+  - rag
+  - quick
+  - notes
+primaryModel: llama3.1:8b
+config:
+  yaml_path: examples/quick-rag/llamafarm.yaml
+datasets:
+  - name: quick_notes
+    strategy: universal_processor
+    database: quick_db
+    ingest:
+      - examples/quick-rag/files/*
+process_after_ingest: true
+retrieval:
+  database: quick_db
+  top_k: 8

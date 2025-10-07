@@ -1,12 +1,13 @@
 # src/core/logger.py
 import logging
-import os
 import re
 from typing import Any
 
 import structlog
 from pydantic import BaseModel
 from structlog.types import EventDict, Processor
+
+from .settings import settings
 
 
 def drop_color_message_key(_, __, event_dict: EventDict) -> EventDict:
@@ -77,22 +78,21 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
 
     # Configure celery logger
     celery_logger = logging.getLogger("celery.worker")
-    celery_logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+    celery_logger.setLevel(settings.CELERY_LOG_LEVEL.upper() or "INFO")
 
-    # Configure uvicorn loggers to use our root logger setup
-    for logger_name in ["uvicorn", "uvicorn.error"]:
-        uvicorn_logger = logging.getLogger(logger_name)
+    # Configure other loggers to use our root logger setup
+    for logger_name in ["rag", "rag.tasks", "rag.core", "rag.components"]:
+        rag_logger = logging.getLogger(logger_name)
         # Clear any existing handlers to prevent duplication
-        for handler in uvicorn_logger.handlers[:]:
-            uvicorn_logger.removeHandler(handler)
+        for handler in rag_logger.handlers[:]:
+            rag_logger.removeHandler(handler)
         # Let logs propagate to root logger (which has our structlog handler)
-        # uvicorn_logger.propagate = True
-        uvicorn_logger.name = "uvicorn"
-        uvicorn_logger.setLevel(log_level.upper())
+        rag_logger.name = logger_name
+        rag_logger.setLevel(log_level.upper())
 
 
-class FastAPIStructLogger:
-    def __init__(self, log_name="rag"):
+class RAGStructLogger:
+    def __init__(self, log_name=settings.LOG_NAME):
         self.logger = structlog.stdlib.get_logger(log_name)
 
     @staticmethod
@@ -114,6 +114,7 @@ class FastAPIStructLogger:
             structlog.contextvars.bind_contextvars(**{key: arg.id})
 
         structlog.contextvars.bind_contextvars(**new_values)
+        return self
 
     @staticmethod
     def unbind(*keys: str):
@@ -138,3 +139,7 @@ class FastAPIStructLogger:
 
     def exception(self, event: str | None = None, *args: Any, **kw: Any):
         self.logger.exception(event, *args, **kw)
+
+
+# Initialize logging when module is imported
+setup_logging(json_logs=settings.LOG_JSON_FORMAT, log_level=settings.LOG_LEVEL)

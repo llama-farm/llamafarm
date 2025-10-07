@@ -1,13 +1,38 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
-import {
-  ChatApiError,
-  NetworkError,
-  ValidationError
-} from '../types/chat'
+import { ChatApiError, NetworkError, ValidationError } from '../types/chat'
 
-// Use '/api' path consistently - Vite proxy will handle routing
+// Prefer explicit API host via env; fall back to Vite proxy '/api'
 const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
-const API_BASE_URL = `/api/${API_VERSION}`
+const API_HOST = (import.meta.env as any).VITE_APP_API_URL as string | undefined
+
+function resolveBaseUrl(): string {
+  // 1) Explicit host from env
+  if (API_HOST && typeof API_HOST === 'string' && API_HOST.trim().length > 0) {
+    let base = `${API_HOST.replace(/\/$/, '')}/${API_VERSION}`
+    // If env points at docker hostname `server`, but we're on localhost, fall back
+    if (
+      base.includes('://server:') &&
+      typeof window !== 'undefined' &&
+      window.location.hostname === 'localhost'
+    ) {
+      base = `http://localhost:8000/${API_VERSION}`
+    }
+    return base
+  }
+
+  // 2) Local dev convenience: if running on localhost, prefer direct API to avoid proxy flakiness
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname === 'localhost'
+  ) {
+    return `http://localhost:8000/${API_VERSION}`
+  }
+
+  // 3) Default to vite proxy
+  return `/api/${API_VERSION}`
+}
+
+const API_BASE_URL = resolveBaseUrl()
 
 /**
  * Shared API client instance with common configuration
@@ -32,7 +57,7 @@ apiClient.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response
       const errorData = data as any // Type assertion for error response data
-      
+
       switch (status) {
         case 400:
           throw new ValidationError(

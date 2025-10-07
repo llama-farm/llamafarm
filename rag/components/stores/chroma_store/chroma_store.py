@@ -1,7 +1,6 @@
 """ChromaDB vector store implementation."""
 
 import json
-import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -10,7 +9,8 @@ import chromadb
 from core.base import Document, VectorStore
 from utils.hash_utils import DeduplicationTracker
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.stores.chroma_store.chroma_store")
 
 
 class ChromaStore(VectorStore):

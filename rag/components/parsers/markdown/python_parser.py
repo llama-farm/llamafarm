@@ -2,13 +2,14 @@
 
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import logging
 import re
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.markdownthon_parser")
 
 
-class MarkdownParser_Python:
+class MarkdownParser_Python(BaseParser):
     """Markdown parser using native Python with basic parsing."""
 
     def __init__(
@@ -27,6 +28,37 @@ class MarkdownParser_Python:
     def validate_config(self) -> bool:
         """Validate configuration."""
         return True
+
+    def _load_metadata(self) -> ParserConfig:
+        """Load parser metadata."""
+
+        return ParserConfig(
+            name="MarkdownParser_Python",
+            display_name="Python Markdown Parser",
+            version="1.0.0",
+            supported_extensions=[".md", ".markdown", ".mdown", ".mkd"],
+            mime_types=["text/markdown", "text/x-markdown"],
+            capabilities=[
+                "frontmatter_extraction",
+                "header_extraction",
+                "code_block_extraction",
+                "link_extraction",
+                "section_based_chunking",
+            ],
+            dependencies={},
+            default_config={
+                "chunk_size": 1000,
+                "chunk_strategy": "sections",
+                "extract_metadata": True,
+                "extract_code_blocks": True,
+                "extract_links": True,
+            }
+        )
+
+    def can_parse(self, file_path: str) -> bool:
+        """Check if this parser can handle the file."""
+        path = Path(file_path)
+        return path.suffix.lower() in {".md", ".markdown", ".mdown", ".mkd"}
 
     def parse(self, source: str, **kwargs):
         """Parse Markdown using Python."""

@@ -1,20 +1,20 @@
 """Base classes for retrieval strategies."""
 
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-from core.base import Document, Component
+from core.base import Component, Document
 
 
 @dataclass
 class RetrievalResult:
     """Result from a retrieval strategy."""
 
-    documents: List[Document]
-    scores: List[float]
-    strategy_metadata: Dict[str, Any]
+    documents: list[Document]
+    scores: list[float]
+    strategy_metadata: dict[str, Any]
 
 
 class RetrievalStrategy(Component, ABC):
@@ -25,7 +25,10 @@ class RetrievalStrategy(Component, ABC):
     """
 
     def __init__(
-        self, name: str, config: Dict[str, Any] = None, project_dir: Path | None = None
+        self,
+        name: str,
+        config: dict[str, Any] | None = None,
+        project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
         self.config = config or {}
@@ -40,7 +43,7 @@ class RetrievalStrategy(Component, ABC):
 
     @abstractmethod
     def retrieve(
-        self, query_embedding: List[float], vector_store, top_k: int = 5, **kwargs
+        self, query_embedding: list[float], vector_store, top_k: int = 5, **kwargs
     ) -> RetrievalResult:
         """Retrieve documents using this strategy.
 
@@ -72,11 +75,14 @@ class HybridRetrievalStrategy(RetrievalStrategy):
     """Base class for hybrid retrieval strategies that combine multiple approaches."""
 
     def __init__(
-        self, name: str, config: Dict[str, Any] = None, project_dir: Path | None = None
+        self,
+        name: str,
+        config: dict[str, Any] | None = None,
+        project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
         config = config or {}
-        self.strategies = []
+        self.strategies: list[RetrievalStrategy] = []
         self.weights = config.get("weights", [])
 
     def process(self, data: Any) -> Any:
@@ -93,11 +99,11 @@ class HybridRetrievalStrategy(RetrievalStrategy):
             self.weights.append(weight)
 
     def combine_results(
-        self, results: List[RetrievalResult], top_k: int
+        self, results: list[RetrievalResult], top_k: int
     ) -> RetrievalResult:
         """Combine results from multiple strategies."""
         # Simple score combination - override in subclasses for more sophisticated merging
-        doc_scores = {}
+        doc_scores: dict[str, float] = {}
         all_docs = {}
 
         for i, result in enumerate(results):
@@ -105,7 +111,7 @@ class HybridRetrievalStrategy(RetrievalStrategy):
 
             for doc, score in zip(result.documents, result.scores):
                 if doc.id not in doc_scores:
-                    doc_scores[doc.id] = 0
+                    doc_scores[doc.id] = 0.0
                     all_docs[doc.id] = doc
 
                 doc_scores[doc.id] += weight * score

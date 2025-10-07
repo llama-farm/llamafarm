@@ -1,0 +1,99 @@
+version: v1
+name: fda-chat-demo
+namespace: default
+
+runtime:
+  provider: ollama
+  model: llama3.1:8b
+  base_url: http://localhost:11434/v1
+  temperature: 0.2
+  agent_handler: simple_rag
+
+prompts:
+  - role: system
+    content: |
+      You are an expert regulatory affairs assistant helping summarize and explain FDA correspondence letters.
+      Always cite the specific letter title or identifier when referencing information.
+      If a question cannot be answered using the provided context, state that clearly.
+
+rag:
+  databases:
+    - name: fda_letters_db
+      type: ChromaStore
+      config:
+        collection_name: fda_letters
+        distance_function: cosine
+        persist_directory: ./data/fda_letters_db
+        port: 8000
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            auto_pull: true
+            base_url: http://localhost:11434
+            batch_size: 16
+            dimension: 768
+            model: nomic-embed-text
+            timeout: 60
+          priority: 0
+      retrieval_strategies:
+        - name: targeted_letters
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 8
+          default: true
+  data_processing_strategies:
+    - name: fda_pdf_processor
+      description: Parser tuned for FDA correspondence PDFs
+      parsers:
+        - type: PDFParser_LlamaIndex
+          file_include_patterns:
+            - '*.pdf'
+            - '*.PDF'
+          priority: 100
+          config:
+            chunk_size: 1200
+            chunk_overlap: 150
+            chunk_strategy: semantic
+            extract_metadata: true
+            extract_images: false
+        - type: PDFParser_PyPDF2
+          file_include_patterns:
+            - '*.pdf'
+            - '*.PDF'
+          priority: 50
+          config:
+            chunk_size: 1000
+            chunk_overlap: 120
+            chunk_strategy: paragraphs
+            extract_metadata: true
+      extractors:
+        - type: ContentStatisticsExtractor
+          file_include_patterns:
+            - '*'
+          priority: 100
+          config:
+            include_readability: true
+            include_structure: true
+        - type: EntityExtractor
+          file_include_patterns:
+            - '*'
+          priority: 90
+          config:
+            entity_types:
+              - ORG
+              - DATE
+              - PERSON
+              - PRODUCT
+            min_entity_length: 2
+            use_fallback: true
+
+datasets:
+  - name: fda_letters
+    database: fda_letters_db
+    data_processing_strategy: fda_pdf_processor
+    files:
+      - 81abd139a97521c1e673d2b0c2bc9f701dd72d67edc3108f0d91e5750af6a3c5
+      - ad1def8bec11d53b8888e35561462045aad771804d10ef7b3bf697c667132bbe
+      - e9314cbe6375abc60d9611d5dc7039c8368ee66261afdd0945f2d7df2a5466ef

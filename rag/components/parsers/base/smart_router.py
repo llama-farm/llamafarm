@@ -3,10 +3,10 @@
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
-import logging
 import mimetypes
 
-logger = logging.getLogger(__name__)
+from core.logging import RAGStructLogger
+logger = RAGStructLogger("rag.components.parsers.base.smart_router")
 
 # Try to import magic for content-based detection
 try:

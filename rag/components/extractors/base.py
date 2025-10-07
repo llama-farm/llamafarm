@@ -1,12 +1,12 @@
 """Base classes for extractors."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Type
-import logging
+from typing import Any, Dict, Optional
 
 from core.base import Document
+from core.logging import RAGStructLogger
 
-logger = logging.getLogger(__name__)
+logger = RAGStructLogger("rag.components.extractors.base")
 
 
 class BaseExtractor(ABC):
@@ -21,10 +21,10 @@ class BaseExtractor(ABC):
             raise TypeError(
                 f"Logger name must be a string, got {type(logger_name)}: {logger_name}"
             )
-        self.logger = logging.getLogger(logger_name)
+        self.logger = logger.bind(name=logger_name)
 
     @abstractmethod
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """
         Extract metadata from documents and enhance them.
 
@@ -37,7 +37,7 @@ class BaseExtractor(ABC):
         pass
 
     @abstractmethod
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """
         Get list of required dependencies for this extractor.
 
@@ -86,19 +86,19 @@ class ExtractorRegistry:
     """Registry for managing extractors."""
 
     def __init__(self):
-        self._extractors: Dict[str, Type[BaseExtractor]] = {}
+        self._extractors: dict[str, type[BaseExtractor]] = {}
 
-    def register(self, name: str, extractor_class: Type[BaseExtractor]) -> None:
+    def register(self, name: str, extractor_class: type[BaseExtractor]) -> None:
         """Register an extractor class."""
         self._extractors[name] = extractor_class
         logger.info(f"Registered extractor: {name}")
 
-    def get(self, name: str) -> Optional[Type[BaseExtractor]]:
+    def get(self, name: str) -> type[BaseExtractor] | None:
         """Get an extractor class by name."""
         return self._extractors.get(name)
 
     def create(
-        self, name: str, config: Optional[Dict[str, Any]] = None
+        self, name: str, config: dict[str, Any] | None = None
     ) -> Optional[BaseExtractor]:
         """Create an extractor instance."""
         extractor_class = self.get(name)
@@ -116,11 +116,11 @@ class ExtractorRegistry:
             logger.error(f"Failed to create extractor {name}: {e}")
             return None
 
-    def list_extractors(self) -> List[str]:
+    def list_extractors(self) -> list[str]:
         """List all registered extractors."""
         return list(self._extractors.keys())
 
-    def get_all_info(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_info(self) -> dict[str, dict[str, Any]]:
         """Get information about all registered extractors."""
         info = {}
         for name, extractor_class in self._extractors.items():
@@ -139,11 +139,11 @@ class ExtractorRegistry:
 class ExtractorPipeline:
     """Pipeline for running multiple extractors in sequence."""
 
-    def __init__(self, extractors: List[BaseExtractor]):
+    def __init__(self, extractors: list[BaseExtractor]):
         self.extractors = extractors
-        self.logger = logging.getLogger(f"{__name__}.ExtractorPipeline")
+        self.logger = logger.bind(name=f"{__name__}.ExtractorPipeline")
 
-    def run(self, documents: List[Document]) -> List[Document]:
+    def run(self, documents: list[Document]) -> list[Document]:
         """Run all extractors in sequence."""
         processed_docs = documents
 
@@ -162,7 +162,7 @@ class ExtractorPipeline:
         """Add an extractor to the pipeline."""
         self.extractors.append(extractor)
 
-    def get_pipeline_info(self) -> Dict[str, Any]:
+    def get_pipeline_info(self) -> dict[str, Any]:
         """Get information about the pipeline."""
         return {
             "extractors": [
@@ -174,7 +174,7 @@ class ExtractorPipeline:
 
 def create_extractor_from_config(
     extractor_config: Dict[str, Any], registry: ExtractorRegistry
-) -> Optional[BaseExtractor]:
+) -> BaseExtractor | None:
     """
     Create an extractor instance from configuration.
 
@@ -196,7 +196,7 @@ def create_extractor_from_config(
 
 
 def create_pipeline_from_config(
-    extractors_config: List[Dict[str, Any]], registry: ExtractorRegistry
+    extractors_config: list[dict[str, Any]], registry: ExtractorRegistry
 ) -> ExtractorPipeline:
     """
     Create an extractor pipeline from configuration.
