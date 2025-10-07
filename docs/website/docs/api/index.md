@@ -1196,18 +1196,6 @@ If `model` is not specified, the `default_model` from your configuration is used
 curl http://localhost:8000/v1/projects/my-org/chatbot/models
 ```
 
-### Legacy Single-Model Configuration
-
-For backward compatibility, you can still use the legacy single-model format:
-
-```yaml
-runtime:
-  provider: ollama
-  model: llama3.2:3b
-```
-
-This is automatically converted to the new multi-model format with one model.
-
 ---
 
 ## Rate Limiting and Performance
