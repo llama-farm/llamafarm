@@ -582,7 +582,7 @@ func EnsureServicesWithConfigAndResult(config *ServiceOrchestrationConfig) (*Hea
 }
 
 // FilterHealthForOptionalServices creates a health payload that doesn't show alarming messages for optional services
-func FilterHealthForOptionalServices(health *HealthPayload, config *ServiceOrchestrationConfig) *HealthPayload {
+func FilterHealthForOptionalServices(health *HealthPayload, config *ServiceOrchestrationConfig, mode SessionMode) *HealthPayload {
 	if health == nil {
 		return nil
 	}
@@ -611,19 +611,21 @@ func FilterHealthForOptionalServices(health *HealthPayload, config *ServiceOrche
 		// Skip unhealthy optional services
 	}
 
-	// Filter seeds similarly
-	for _, seed := range health.Seeds {
-		serviceName := getServiceNameFromComponent(&seed)
-		requirement, exists := config.ServiceNeeds[serviceName]
+	// Include seeds for DEV mode
+	if mode == SessionModeDev {
+		for _, seed := range health.Seeds {
+			serviceName := getServiceNameFromComponent(&seed)
+			requirement, exists := config.ServiceNeeds[serviceName]
 
-		if !exists {
-			// Unknown service, include as-is
-			filtered.Seeds = append(filtered.Seeds, seed)
-		} else if requirement == ServiceRequired || strings.EqualFold(seed.Status, "healthy") {
-			// Required service (show all statuses) or healthy optional service
-			filtered.Seeds = append(filtered.Seeds, seed)
+			if !exists {
+				// Unknown service, include as-is
+				filtered.Seeds = append(filtered.Seeds, seed)
+			} else if requirement == ServiceRequired || strings.EqualFold(seed.Status, "healthy") {
+				// Required service (show all statuses) or healthy optional service
+				filtered.Seeds = append(filtered.Seeds, seed)
+			}
+			// Skip unhealthy optional services
 		}
-		// Skip unhealthy optional services
 	}
 
 	// Adjust overall status if we filtered out unhealthy components
@@ -694,7 +696,7 @@ func checkServerHealth(serverURL string) (*HealthPayload, error) {
 			return &payload, nil
 		}
 		logDebug(fmt.Sprintf("Server is %s", payload.Status))
-		return nil, &HealthError{Status: payload.Status, HealthResp: payload}
+		return &payload, &HealthError{Status: payload.Status, HealthResp: payload}
 	}
 	return nil, fmt.Errorf("unexpected health status %d", resp.StatusCode)
 }
@@ -838,7 +840,7 @@ func iconForStatus(s string) string {
 	case "healthy":
 		return "✅"
 	case "degraded":
-		return "⚠️"
+		return "⚠️ "
 	case "unhealthy":
 		return "❌"
 	default:

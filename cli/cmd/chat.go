@@ -173,6 +173,7 @@ Examples:
 		} else {
 			config = RAGCommandConfig(serverURL) // Wait for both server and RAG
 		}
+		// Ensure health checks reflect project context before contacting server
 		EnsureServicesWithConfig(config)
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {

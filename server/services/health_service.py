@@ -167,7 +167,7 @@ def _check_seed_project() -> dict:
             else f"Model '{model}' not found; run: ollama pull {model}"
         )
         return {
-            "name": "project",
+            "name": "seed:project",
             "status": status,
             "message": message,
             "latency_ms": _now_ms() - start,
@@ -181,8 +181,6 @@ def _check_seed_project() -> dict:
             "latency_ms": _now_ms() - start,
             "runtime": {"host": base, "model": model},
         }
-
-
 
 
 def _check_rag_service() -> dict:
@@ -244,15 +242,15 @@ def _check_rag_service() -> dict:
 def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
-    
+
     # Only consider non-RAG components for overall status
     # RAG service status is included in response but doesn't affect overall health
     for c in components + seeds:
-        # Skip RAG service when computing overall status
-        if c.get("name") == "rag-service":
+        # Skip RAG service and Project seed when computing overall status
+        if c.get("name", "") in ["rag-service", "seed:project"]:
             continue
         worst = max(worst, order.get(c.get("status", "unhealthy"), 2))
-    
+
     return next((k for k, v in order.items() if v == worst), "unhealthy")
 
 
