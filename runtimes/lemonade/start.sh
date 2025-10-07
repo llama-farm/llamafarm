@@ -69,7 +69,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('port', ''))
+        print(model_config.get('provider_config', {}).get('port', ''))
         break
 " 2>/dev/null)
 
@@ -79,7 +79,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('backend', ''))
+        print(model_config.get('provider_config', {}).get('backend', ''))
         break
 " 2>/dev/null)
 
@@ -89,7 +89,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('context_size', ''))
+        print(model_config.get('provider_config', {}).get('context_size', ''))
         break
 " 2>/dev/null)
 
@@ -99,7 +99,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('checkpoint', ''))
+        print(model_config.get('provider_config', {}).get('checkpoint', ''))
         break
 " 2>/dev/null)
 
@@ -109,7 +109,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
-        print(model_config.get('lemonade', {}).get('recipe', ''))
+        print(model_config.get('provider_config', {}).get('recipe', ''))
         break
 " 2>/dev/null)
 
@@ -131,7 +131,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('port', ''))
+        print(model_config.get('provider_config', {}).get('port', ''))
         break
 " 2>/dev/null)
 
@@ -141,7 +141,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('backend', ''))
+        print(model_config.get('provider_config', {}).get('backend', ''))
         break
 " 2>/dev/null)
 
@@ -151,7 +151,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('context_size', ''))
+        print(model_config.get('provider_config', {}).get('context_size', ''))
         break
 " 2>/dev/null)
 
@@ -161,7 +161,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('checkpoint', ''))
+        print(model_config.get('provider_config', {}).get('checkpoint', ''))
         break
 " 2>/dev/null)
 
@@ -171,7 +171,7 @@ config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
-        print(model_config.get('lemonade', {}).get('recipe', ''))
+        print(model_config.get('provider_config', {}).get('recipe', ''))
         break
 " 2>/dev/null)
 

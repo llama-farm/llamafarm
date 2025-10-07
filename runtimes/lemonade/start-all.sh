@@ -44,7 +44,7 @@ lemonade_models = [m for m in models if m.get('provider') == 'lemonade']
 for model in lemonade_models:
     name = model.get('name', '')
     model_id = model.get('model', '')
-    port = model.get('lemonade', {}).get('port', 'default')
+    port = model.get('provider_config', {}).get('port', 'default')
     print(f'{name}|{model_id}|{port}')
 " 2>/dev/null)
 

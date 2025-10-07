@@ -119,7 +119,7 @@ properties:
               type: ["object", "null"]
               description: "Additional parameters passed to the API provider"
               additionalProperties: true
-            lemonade:
+            provider_config:
               type: ["object", "null"]
-              description: "Lemonade-specific configuration"
+              description: "Provider-specific configuration (e.g., lemonade settings, ollama options)"
               additionalProperties: true

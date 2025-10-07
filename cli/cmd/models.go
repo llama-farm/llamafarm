@@ -59,7 +59,8 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up
-		ensureServerAvailable(serverURL, true)
+		config := ChatNoRAGConfig(serverURL) // Server only, no need for RAG
+		EnsureServicesWithConfig(config)
 
 		// Fetch models using shared function
 		models := fetchAvailableModels(serverURL, ns, proj)

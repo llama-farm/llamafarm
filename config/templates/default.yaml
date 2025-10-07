@@ -73,7 +73,7 @@ runtime:
   #   model: user.Qwen3-0.6B  # Must match downloaded model name
   #   base_url: "http://127.0.0.1:11534/v1"
   #   prompt_format: unstructured
-  #   lemonade:
+  #   provider_config:
   #     backend: llamacpp  # llamacpp (GGUF), onnx, or transformers
   #     port: 11534
   #     context_size: 32768
@@ -85,7 +85,7 @@ runtime:
   #   model: user.Qwen3-4B
   #   base_url: "http://127.0.0.1:11534/v1"
   #   default: true  # Make this the default model
-  #   lemonade:
+  #   provider_config:
   #     backend: llamacpp
   #     port: 11534
   #     context_size: 32768
@@ -95,7 +95,7 @@ runtime:
   #   description: "Lemonade - powerful 8B reasoning model"
   #   provider: lemonade
   #   model: user.Qwen3-8B
-  #   lemonade:
+  #   provider_config:
   #     backend: llamacpp
   #     port: 11535 # Different port!
   #     context_size: 65536
@@ -105,7 +105,7 @@ runtime:
   #   description: "Lemonade - coding specialist model"
   #   provider: lemonade
   #   model: user.Qwen2.5-Coder-32B-Instruct
-  #   lemonade:
+  #   provider_config:
   #     backend: llamacpp
   #     port: 11536 # Different port!
   #     context_size: 32768

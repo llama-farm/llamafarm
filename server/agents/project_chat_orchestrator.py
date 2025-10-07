@@ -20,9 +20,12 @@ repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 from config.datamodel import (  # noqa: E402
     LlamaFarmConfig,
+    Model,
     Prompt,
     PromptFormat,
     Provider,
+    Runtime,
+    Version,
 )
 
 from core.logging import FastAPIStructLogger  # noqa: E402
@@ -284,8 +287,16 @@ def _get_client(
 
     DEPRECATED: Use _get_client_for_model instead for multi-model support.
     """
-    provider = get_provider(project_config.runtime.provider)
-    return provider.get_client(project_config)
+    import warnings
+    warnings.warn(
+        "_get_client is deprecated, use _get_client_for_model with ModelService",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    # Get the active model and delegate to _get_client_for_model
+    from services.model_service import ModelService
+    model_config = ModelService.get_model_config(project_config)
+    return _get_client_for_model(model_config)
 
 
 def _get_client_for_model(model_config):
@@ -301,25 +312,27 @@ def _get_client_for_model(model_config):
 
     provider = get_provider(model_config.provider)
 
-    # Create a temporary config-like object for the provider
-    # Providers expect LlamaFarmConfig but we only have model config
-    class TempConfig:
-        class Runtime:
-            def __init__(self, mc: ModelConfig):
-                self.provider = mc.provider
-                self.model = mc.model
-                self.base_url = mc.base_url
-                self.api_key = mc.api_key
-                self.instructor_mode = mc.instructor_mode
-                self.prompt_format = mc.prompt_format
-                self.model_api_parameters = mc.model_api_parameters
-                self.lemonade = mc.lemonade
+    # Build a minimal config with this model
+    model_obj = Model(
+        name=model_config.name,
+        provider=model_config.provider,
+        model=model_config.model,
+        base_url=model_config.base_url,
+        api_key=model_config.api_key,
+        instructor_mode=model_config.instructor_mode,
+        prompt_format=model_config.prompt_format,
+        model_api_parameters=model_config.model_api_parameters,
+        provider_config=model_config.provider_config,
+    )
 
-        def __init__(self, mc: ModelConfig):
-            self.runtime = self.Runtime(mc)
+    config = LlamaFarmConfig(
+        version=Version.v1,
+        name="temp",
+        namespace="temp",
+        runtime=Runtime(models=[model_obj])
+    )
 
-    temp_config = TempConfig(model_config)
-    return provider.get_client(temp_config)  # type: ignore
+    return provider.get_client(config)
 
 
 class ProjectChatOrchestratorAgentFactory:

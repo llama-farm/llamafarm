@@ -21,18 +21,20 @@ class LemonadeProvider(RuntimeProvider):
 
     def get_base_url(self, config: LlamaFarmConfig) -> str:
         """Get base URL for Lemonade API."""
-        if config.runtime.base_url:
-            return config.runtime.base_url
+        model = config.runtime.get_active_model()
+        if model.base_url:
+            return model.base_url
 
         port = 11534  # default
-        if config.runtime.lemonade:
-            port = config.runtime.lemonade.port or 11534
+        if model.provider_config:
+            port = model.provider_config.get("port", 11534)
 
         return f"http://127.0.0.1:{port}/api/v1"
 
     def get_api_key(self, config: LlamaFarmConfig) -> str:
         """Get API key for Lemonade (uses 'lemonade' as default)."""
-        return config.runtime.api_key or "lemonade"
+        model = config.runtime.get_active_model()
+        return model.api_key or "lemonade"
 
     def get_default_instructor_mode(self) -> instructor.Mode:
         """Lemonade works best with MD_JSON mode for local models."""
@@ -42,20 +44,22 @@ class LemonadeProvider(RuntimeProvider):
         self, config: LlamaFarmConfig
     ) -> instructor.client.AsyncInstructor | AsyncOpenAI:
         """Get Lemonade client with optional instructor wrapping."""
+        model = config.runtime.get_active_model()
         client = AsyncOpenAI(
             api_key=self.get_api_key(config),
             base_url=self.get_base_url(config),
         )
 
-        if config.runtime.prompt_format == PromptFormat.structured:
+        if model.prompt_format == PromptFormat.structured:
             mode = self._determine_mode(config)
             return instructor.from_openai(client, mode=mode)
         return client
 
     def _determine_mode(self, config: LlamaFarmConfig) -> instructor.Mode:
         """Determine instructor mode from config or use default."""
-        if config.runtime.instructor_mode:
-            return instructor.mode.Mode[config.runtime.instructor_mode.upper()]
+        model = config.runtime.get_active_model()
+        if model.instructor_mode:
+            return instructor.mode.Mode[model.instructor_mode.upper()]
         return self.get_default_instructor_mode()
 
     def check_health(self, config: LlamaFarmConfig) -> HealthCheckResult:

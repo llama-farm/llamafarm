@@ -12,7 +12,7 @@ from typing import Any
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
-from config.datamodel import LlamaFarmConfig, Provider, PromptFormat, Lemonade  # noqa: E402
+from config.datamodel import LlamaFarmConfig, Provider, PromptFormat  # noqa: E402
 from core.logging import FastAPIStructLogger  # noqa: E402
 
 logger = FastAPIStructLogger(__name__)
@@ -38,12 +38,7 @@ class ModelConfig:
             else (PromptFormat(prompt_fmt) if prompt_fmt else None)
         )
         self.model_api_parameters: dict[str, Any] | None = data.get("model_api_parameters")
-        # Lemonade might already be a Lemonade object from Pydantic
-        lemonade_data = data.get("lemonade")
-        self.lemonade: Lemonade | None = (
-            lemonade_data if isinstance(lemonade_data, Lemonade)
-            else (Lemonade(**lemonade_data) if lemonade_data else None)
-        )
+        self.provider_config: dict[str, Any] | None = data.get("provider_config")
 
 
 class ModelService:

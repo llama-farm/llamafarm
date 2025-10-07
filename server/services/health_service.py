@@ -8,7 +8,7 @@ import requests  # type: ignore
 
 from agents.providers import get_provider
 from agents.providers.health import HealthCheckResult
-from config.datamodel import Provider, Model
+from config.datamodel import Provider, Model, Version, LlamaFarmConfig, Runtime
 from core.settings import settings
 from services.model_service import ModelService
 
@@ -74,45 +74,27 @@ def _check_storage() -> dict:
 
 def _check_ollama() -> dict:
     """Check Ollama runtime health using provider registry."""
+    # Create minimal config with one model for health check
+    model = Model(
+        name="ollama-health",
+        provider=Provider.ollama,
+        model="health-check",
+        base_url=f"{settings.ollama_host}/v1",
+        api_key=settings.ollama_api_key,
+    )
 
-    # Create a temp config with Ollama settings from environment
-    class TempConfig:
-        class Runtime:
-            provider = Provider.ollama
-            base_url = f"{settings.ollama_host}/v1"
-            api_key = settings.ollama_api_key
-            model = None
-            instructor_mode = None
-            prompt_format = None
-            model_api_parameters = None
-            lemonade = None
-
-        runtime = Runtime()
+    config = LlamaFarmConfig(
+        version=Version.v1,
+        name="health",
+        namespace="system",
+        runtime=Runtime(models=[model])
+    )
 
     provider = get_provider(Provider.ollama)
-    result = provider.check_health(TempConfig())
+    result = provider.check_health(config)
     return result.to_dict()
 
 
-def _create_temp_config(model_config: Model):
-    """Create a temp LlamaFarmConfig from a Model for provider health checks."""
-
-    class TempConfig:
-        class Runtime:
-            def __init__(self, mc: Model):
-                self.provider = mc.provider
-                self.model = mc.model
-                self.base_url = mc.base_url
-                self.api_key = mc.api_key
-                self.instructor_mode = mc.instructor_mode
-                self.prompt_format = mc.prompt_format
-                self.model_api_parameters = mc.model_api_parameters
-                self.lemonade = mc.lemonade
-
-        def __init__(self, mc: Model):
-            self.runtime = self.Runtime(mc)
-
-    return TempConfig(model_config)
 
 
 def _check_seed_project() -> dict:
@@ -147,12 +129,29 @@ def _check_seed_project() -> dict:
         # Use ModelService to get the correct model config
         model_config = ModelService.get_model_config(project_config, model_name=None)
 
-        # Create temp config for health check
-        temp_config = _create_temp_config(model_config)
+        # Create a minimal config with just this model for health check
+        model_obj = Model(
+            name=model_config.name,
+            provider=model_config.provider,
+            model=model_config.model,
+            base_url=model_config.base_url,
+            api_key=model_config.api_key,
+            instructor_mode=model_config.instructor_mode,
+            prompt_format=model_config.prompt_format,
+            model_api_parameters=model_config.model_api_parameters,
+            provider_config=model_config.provider_config,
+        )
+
+        health_check_config = LlamaFarmConfig(
+            version=project_config.version,
+            name=project_config.name,
+            namespace=project_config.namespace,
+            runtime=Runtime(models=[model_obj])
+        )
 
         # Get provider and check health
         provider_impl = get_provider(model_config.provider)
-        health_result = provider_impl.check_health(temp_config)
+        health_result = provider_impl.check_health(health_check_config)
 
         # Enhance with model validation for Ollama
         if (

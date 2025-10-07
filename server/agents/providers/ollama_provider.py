@@ -22,11 +22,13 @@ class OllamaProvider(RuntimeProvider):
 
     def get_base_url(self, config: LlamaFarmConfig) -> str:
         """Get base URL for Ollama API."""
-        return config.runtime.base_url or f"{settings.ollama_host}/v1"
+        model = config.runtime.get_active_model()
+        return model.base_url or f"{settings.ollama_host}/v1"
 
     def get_api_key(self, config: LlamaFarmConfig) -> str:
         """Get API key for Ollama (usually not required)."""
-        return config.runtime.api_key or settings.ollama_api_key
+        model = config.runtime.get_active_model()
+        return model.api_key or settings.ollama_api_key
 
     def get_default_instructor_mode(self) -> instructor.Mode:
         """Ollama works best with MD_JSON mode for local models."""
@@ -36,20 +38,22 @@ class OllamaProvider(RuntimeProvider):
         self, config: LlamaFarmConfig
     ) -> instructor.client.AsyncInstructor | AsyncOpenAI:
         """Get Ollama client with optional instructor wrapping."""
+        model = config.runtime.get_active_model()
         client = AsyncOpenAI(
             api_key=self.get_api_key(config),
             base_url=self.get_base_url(config),
         )
 
-        if config.runtime.prompt_format == PromptFormat.structured:
+        if model.prompt_format == PromptFormat.structured:
             mode = self._determine_mode(config)
             return instructor.from_openai(client, mode=mode)
         return client
 
     def _determine_mode(self, config: LlamaFarmConfig) -> instructor.Mode:
         """Determine instructor mode from config or use default."""
-        if config.runtime.instructor_mode:
-            return instructor.mode.Mode[config.runtime.instructor_mode.upper()]
+        model = config.runtime.get_active_model()
+        if model.instructor_mode:
+            return instructor.mode.Mode[model.instructor_mode.upper()]
         return self.get_default_instructor_mode()
 
     def check_health(self, config: LlamaFarmConfig) -> HealthCheckResult:

@@ -130,10 +130,11 @@ class ProjectContextAnalyzer:
 
             # Determine AI provider
             provider = AIProvider.GENERIC
-            if config.runtime:
-                if config.runtime.provider.value == "openai":
+            if config.runtime and config.runtime.models:
+                model = config.runtime.get_active_model()
+                if model.provider.value == "openai":
                     provider = AIProvider.OPENAI
-                elif config.runtime.provider.value == "ollama":
+                elif model.provider.value == "ollama":
                     provider = AIProvider.OLLAMA
 
             # Extract existing prompts
@@ -151,11 +152,20 @@ class ProjectContextAnalyzer:
             # Extract dataset information
             datasets = [dataset.name for dataset in config.datasets]
 
+            # Get model name from active model if available
+            model_name = None
+            if config.runtime and config.runtime.models:
+                try:
+                    model = config.runtime.get_active_model()
+                    model_name = model.model
+                except ValueError:
+                    pass  # No models configured
+
             context = ProjectContext(
                 namespace=self.namespace,
                 project_id=self.project_id,
                 ai_provider=provider,
-                model_name=config.runtime.model if config.runtime else None,
+                model_name=model_name,
                 existing_prompts=existing_prompts,
                 datasets=datasets,
                 rag_enabled=rag_enabled
