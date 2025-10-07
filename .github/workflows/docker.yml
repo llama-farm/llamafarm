@@ -370,19 +370,22 @@ jobs:
           echo "Waiting for services to initialize..."
           
           # Wait longer for services to be ready (server needs 60s start_period + retries)
-          # Total potential time: 60s start_period + (5 retries * 15s interval) = 135s max
-          for i in {1..18}; do
-            echo "Health check attempt $i/18 (waiting 10s)..."
-            sleep 10
+          # Total potential time: 60s start_period + (5 retries * 30s interval) = 210s max
+          for i in {1..12}; do
+            echo "Health check attempt $i/12 (waiting 15s)..."
+            sleep 15
             
-            # Check service status
-            if docker compose -f docker-compose.yml ps --format json | jq -r '.[].Health' | grep -q "healthy"; then
+            # Check service status using docker compose ps without jq parsing
+            echo "Current service status:"
+            docker compose -f docker-compose.yml ps
+            
+            # Check if server service is healthy by looking for "healthy" in the output
+            if docker compose -f docker-compose.yml ps | grep -q "healthy"; then
               echo "✅ At least one service is healthy, checking all..."
-              docker compose -f docker-compose.yml ps
               break
             fi
             
-            if [ $i -eq 18 ]; then
+            if [ $i -eq 12 ]; then
               echo "❌ Services did not become healthy within 3 minutes"
               echo "Final service status:"
               docker compose -f docker-compose.yml ps
@@ -402,13 +405,21 @@ jobs:
 
           # Test server health endpoint directly
           echo "Testing server health endpoint..."
-          curl -f http://localhost:8000/health/liveness || {
-            echo "❌ Server health endpoint failed"
+          HEALTH_RESPONSE=$(curl -s -f http://localhost:8000/health/liveness) || {
+            echo "❌ Server health endpoint failed to respond"
             docker compose -f docker-compose.yml logs server
             exit 1
           }
           
-          echo "✅ Server health endpoint responding correctly"
+          echo "Health endpoint response: $HEALTH_RESPONSE"
+          
+          # Verify the response contains expected content
+          if echo "$HEALTH_RESPONSE" | grep -q "alive"; then
+            echo "✅ Server health endpoint responding correctly"
+          else
+            echo "❌ Server health endpoint returned unexpected response: $HEALTH_RESPONSE"
+            exit 1
+          fi
 
       - name: Cleanup
         if: always()
