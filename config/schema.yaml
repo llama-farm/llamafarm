@@ -139,10 +139,6 @@ properties:
                 model_path:
                   type: ["string", "null"]
                   description: "Custom model storage location"
-                auto_download:
-                  type: ["boolean", "null"]
-                  default: false
-                  description: "Automatically download model from HuggingFace if not cached"
                 checkpoint:
                   type: ["string", "null"]
                   description: "Full HuggingFace checkpoint path including quantization (e.g., 'bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M')"

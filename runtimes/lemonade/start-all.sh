@@ -4,20 +4,36 @@ set -e
 # Start All Lemonade Models Script
 # This script reads llamafarm.yaml and starts a Lemonade server for each lemonade model
 
-# Find llamafarm.yaml
-CONFIG_FILE=""
-if [ -f "../../llamafarm.yaml" ]; then
-    CONFIG_FILE="../../llamafarm.yaml"
-elif [ -f "../llamafarm.yaml" ]; then
-    CONFIG_FILE="../llamafarm.yaml"
-elif [ -f "llamafarm.yaml" ]; then
-    CONFIG_FILE="llamafarm.yaml"
+# Resolve script directory to reliably invoke sibling start.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Parse arguments similar to start.sh to find config file
+LF_CONFIG_FILE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --config-file|-f)
+            LF_CONFIG_FILE="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Fallback to current directory only (align with start.sh)
+if [ -z "$LF_CONFIG_FILE" ]; then
+    if [ -f "./llamafarm.yaml" ]; then
+        LF_CONFIG_FILE="./llamafarm.yaml"
+    fi
 fi
 
-if [ -z "$CONFIG_FILE" ]; then
-    echo "Error: llamafarm.yaml not found"
+if [ -z "$LF_CONFIG_FILE" ] || [ ! -f "$LF_CONFIG_FILE" ]; then
+    echo "Error: llamafarm.yaml not found in current directory. Use --config-file <path>"
     exit 1
 fi
+
+CONFIG_FILE="$LF_CONFIG_FILE"
 
 # Get all Lemonade model details from config
 MODEL_INFO=$(uv run python -c "
@@ -59,7 +75,7 @@ while IFS='|' read -r MODEL_NAME MODEL_ID PORT; do
     echo "    Port:   $PORT"
     echo "    Logs:   /tmp/lemonade-$MODEL_NAME.log"
 
-    LEMONADE_MODEL_NAME=$MODEL_NAME bash ../runtimes/lemonade/start.sh > /tmp/lemonade-$MODEL_NAME.log 2>&1 &
+    LF_MODEL_NAME="$MODEL_NAME" CONFIG_FILE="$CONFIG_FILE" bash "$SCRIPT_DIR/start.sh" --config-file "$CONFIG_FILE" > /tmp/lemonade-$MODEL_NAME.log 2>&1 &
     PIDS+=($!)
     echo "    PID:    $!"
     echo ""

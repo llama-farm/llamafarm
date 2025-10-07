@@ -59,9 +59,9 @@ func (co *ContainerOrchestrator) EnsureMultiContainerStack(serverURL string, pri
 			go co.startRAGContainerAsync(serverURL)
 		}
 		return &herr.HealthResp
+	} else {
+		logDebug(fmt.Sprintf("Starting server container because server is not healthy. %s", err))
 	}
-
-	logDebug("Starting server container because server is not healthy...")
 
 	// Start server with network
 	if err := co.startServerContainer(serverURL); err != nil {

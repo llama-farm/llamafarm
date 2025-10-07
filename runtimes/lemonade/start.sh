@@ -16,12 +16,17 @@ LEMONADE_MODEL="${LEMONADE_MODEL:-}"  # Optional: pre-load a specific model
 # Try to read config from project llamafarm.yaml if available
 # This allows the startup script to respect project configuration
 # Try multiple possible locations for llamafarm.yaml
-# Parse --config-file or -f argument
-CONFIG_FILE=""
+# Parse --config-file/-f and --model-name/-m arguments in any order
+LF_CONFIG_FILE=""
+lf_model_name=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --config-file|-f)
-            CONFIG_FILE="$2"
+            LF_CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --model-name|-m)
+            lf_model_name="$2"
             shift 2
             ;;
         *)
@@ -30,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+<<<<<<< HEAD
 # Fallback: search for llamafarm.yaml in multiple locations
 if [ -z "$CONFIG_FILE" ]; then
     # Search in common locations relative to where the script might be run from
@@ -51,61 +57,94 @@ if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
     echo "  - ../llamafarm.yaml (one level up)"
     echo ""
     echo "Use --config-file <path> to specify a different location"
+=======
+# Fallback to current directory if not set by argument
+if [ -z "$LF_CONFIG_FILE" ]; then
+    if [ -f "./llamafarm.yaml" ]; then
+        LF_CONFIG_FILE="./llamafarm.yaml"
+    fi
+fi
+
+if [ -z "$LF_CONFIG_FILE" ] || [ ! -f "$LF_CONFIG_FILE" ]; then
+    echo "Error: llamafarm.yaml not found in current directory. Use --config-file <path>"
+>>>>>>> 532f762 (fix(runtimes): update lemonade start script)
     exit 1
 fi
 
-if [ -n "$CONFIG_FILE" ]; then
+if [ -n "$LF_CONFIG_FILE" ]; then
     # Use uv run python to parse YAML (uses project's venv)
     # Parse multi-model format
-    # If LEMONADE_MODEL_NAME env var is set, find that specific model
+    # If LF_MODEL_NAME env var is set, find that specific model
     # Otherwise, find first lemonade model in list
-    if [ -n "$LEMONADE_MODEL_NAME" ]; then
+    if [ -n "$LF_MODEL_NAME" ]; then
         CONFIG_MODEL=$(uv run python -c "
 import yaml
 config = yaml.safe_load(open('$CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
-    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
         print(model_config.get('model', ''))
         break
 " 2>/dev/null)
 
         CONFIG_PORT=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
-    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
         print(model_config.get('lemonade', {}).get('port', ''))
         break
 " 2>/dev/null)
 
         CONFIG_BACKEND=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
-    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
         print(model_config.get('lemonade', {}).get('backend', ''))
         break
 " 2>/dev/null)
 
         CONFIG_CONTEXT_SIZE=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
-    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LEMONADE_MODEL_NAME':
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
         print(model_config.get('lemonade', {}).get('context_size', ''))
         break
 " 2>/dev/null)
 
+<<<<<<< HEAD
+=======
+        CONFIG_CHECKPOINT=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
+        print(model_config.get('lemonade', {}).get('checkpoint', ''))
+        break
+" 2>/dev/null)
+
+        CONFIG_RECIPE=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
+        print(model_config.get('lemonade', {}).get('recipe', ''))
+        break
+" 2>/dev/null)
+>>>>>>> 532f762 (fix(runtimes): update lemonade start script)
 
     else
-        # No LEMONADE_MODEL_NAME specified, use first lemonade model
+        # No lf_model_name specified, use first lemonade model
         CONFIG_MODEL=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
@@ -115,7 +154,7 @@ for model_config in models:
 
         CONFIG_PORT=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
@@ -125,7 +164,7 @@ for model_config in models:
 
         CONFIG_BACKEND=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
@@ -135,7 +174,7 @@ for model_config in models:
 
         CONFIG_CONTEXT_SIZE=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade':
@@ -143,6 +182,28 @@ for model_config in models:
         break
 " 2>/dev/null)
 
+<<<<<<< HEAD
+=======
+        CONFIG_CHECKPOINT=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade':
+        print(model_config.get('lemonade', {}).get('checkpoint', ''))
+        break
+" 2>/dev/null)
+
+        CONFIG_RECIPE=$(uv run python -c "
+import yaml
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
+models = config.get('runtime', {}).get('models', [])
+for model_config in models:
+    if model_config.get('provider') == 'lemonade':
+        print(model_config.get('lemonade', {}).get('recipe', ''))
+        break
+" 2>/dev/null)
+>>>>>>> 532f762 (fix(runtimes): update lemonade start script)
 
     fi
 
@@ -153,9 +214,6 @@ for model_config in models:
     [ -n "$CONFIG_CONTEXT_SIZE" ] && LEMONADE_CONTEXT_SIZE="$CONFIG_CONTEXT_SIZE"
     [ -n "$CONFIG_MODEL" ] && [ -z "$LEMONADE_MODEL" ] && LEMONADE_MODEL="$CONFIG_MODEL"
 fi
-
-# HF_TOKEN should be set via environment variable (.env or export HF_TOKEN=...)
-# It's used by Lemonade for downloading gated models from HuggingFace
 
 # Color output for better UX
 RED='\033[0;31m'
@@ -205,6 +263,7 @@ if [ -z "$LEMONADE_MODEL" ]; then
     exit 1
 fi
 
+<<<<<<< HEAD
 # Check if model is downloaded
 MODEL_EXISTS=$(uv run lemonade-server-dev list 2>/dev/null | grep -c "$LEMONADE_MODEL" || true)
 if [ "$MODEL_EXISTS" -eq 0 ]; then
@@ -222,6 +281,8 @@ if [ "$MODEL_EXISTS" -eq 0 ]; then
     exit 1
 fi
 
+=======
+>>>>>>> 532f762 (fix(runtimes): update lemonade start script)
 # Build lemonade-server-dev command
 # Using serve subcommand (NOT run - serve is the correct command)
 # Note: PyPI package provides lemonade-server-dev, installer provides lemonade-server
