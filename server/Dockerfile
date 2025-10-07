@@ -36,8 +36,8 @@ COPY rag/schema.yaml ./rag/schema.yaml
 RUN ls -la config
 RUN cd config && uv sync --locked  --verbose
 
-# Compile the config schema
-RUN cd config && uv run python compile_schema.py
+# Generate config schema and datamodel types
+RUN cd config && ./generate-types.sh
 RUN rm -rf rag
 
 

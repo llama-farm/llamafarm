@@ -37,8 +37,8 @@ RUN ls -la config
 RUN cd config && uv sync --locked  --verbose
 RUN cd rag && uv sync --locked  --verbose
 
-# Compile the config schema
-RUN cd config && uv run python compile_schema.py
+# Generate config schema and datamodel types
+RUN cd config && ./generate-types.sh
 
 # Fix ownership and permissions of UV directories after they've been populated
 RUN chmod -R 777 /tmp/uv-cache /tmp/uv-venv
