@@ -3,70 +3,62 @@
 import sys
 import time
 from pathlib import Path
-import requests
+
 import instructor
+import requests
 from openai import AsyncOpenAI
 
-# Add repo root to path for config imports
-repo_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
+from core.settings import settings
 
-from config.datamodel import LlamaFarmConfig, PromptFormat  # noqa: E402
 from .base import RuntimeProvider
 from .health import HealthCheckResult
+
+# Add repo root to path for config imports
+repo_root = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(repo_root))
+
+from config.datamodel import PromptFormat  # noqa: E402
+
+default_instructor_mode = instructor.Mode.MD_JSON
 
 
 class LemonadeProvider(RuntimeProvider):
     """Lemonade local runtime provider implementation."""
 
-    def get_base_url(self, config: LlamaFarmConfig) -> str:
-        """Get base URL for Lemonade API."""
-        model = config.runtime.get_active_model()
-        if model.base_url:
-            return model.base_url
-
-        port = 11534  # default
-        if model.provider_config:
-            port = model.provider_config.get("port", 11534)
-
-        return f"http://127.0.0.1:{port}/api/v1"
-
-    def get_api_key(self, config: LlamaFarmConfig) -> str:
-        """Get API key for Lemonade (uses 'lemonade' as default)."""
-        model = config.runtime.get_active_model()
-        return model.api_key or "lemonade"
-
-    def get_default_instructor_mode(self) -> instructor.Mode:
-        """Lemonade works best with MD_JSON mode for local models."""
+    @property
+    def _default_instructor_mode(self) -> instructor.Mode:
         return instructor.Mode.MD_JSON
 
-    def get_client(
-        self, config: LlamaFarmConfig
-    ) -> instructor.client.AsyncInstructor | AsyncOpenAI:
-        """Get Lemonade client with optional instructor wrapping."""
-        model = config.runtime.get_active_model()
-        client = AsyncOpenAI(
-            api_key=self.get_api_key(config),
-            base_url=self.get_base_url(config),
+    @property
+    def _base_url(self) -> str:
+        """Get base URL for Lemonade API."""
+
+        return (
+            self._model_config.base_url
+            or f"http://{settings.lemonade_host}:{settings.lemonade_port}/api/v1"
         )
 
-        if model.prompt_format == PromptFormat.structured:
-            mode = self._determine_mode(config)
+    @property
+    def _api_key(self) -> str:
+        """Get API key for Lemonade (uses 'lemonade' as default)."""
+        return self._model_config.api_key or settings.lemonade_api_key
+
+    def get_client(self) -> instructor.client.AsyncInstructor | AsyncOpenAI:
+        """Get Lemonade client with optional instructor wrapping."""
+        client = AsyncOpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+        )
+
+        if self._model_config.prompt_format == PromptFormat.structured:
+            mode = self._instructor_mode
             return instructor.from_openai(client, mode=mode)
         return client
 
-    def _determine_mode(self, config: LlamaFarmConfig) -> instructor.Mode:
-        """Determine instructor mode from config or use default."""
-        model = config.runtime.get_active_model()
-        if model.instructor_mode:
-            return instructor.mode.Mode[model.instructor_mode.upper()]
-        return self.get_default_instructor_mode()
-
-    def check_health(self, config: LlamaFarmConfig) -> HealthCheckResult:
+    def check_health(self) -> HealthCheckResult:
         """Check health of Lemonade runtime."""
         start = int(time.time() * 1000)
-        # Use get_base_url to extract config (handles lemonade.port, base_url, etc.)
-        base = self.get_base_url(config).replace("/api/v1", "")
+        base = self._base_url.replace("/api/v1", "")
         url = f"{base}/api/v1/models"
 
         try:

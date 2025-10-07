@@ -42,5 +42,10 @@ class Settings(BaseSettings, env_file=".env"):
     lf_dev_mode_docs_enabled: bool = True
     lf_dev_mode_greeting_enabled: bool = True
 
+    # Lemonade Configuration
+    lemonade_port: int = 11534
+    lemonade_host: str = "127.0.0.1"
+    lemonade_api_key: str = "lemonade"
+
 
 settings = Settings()

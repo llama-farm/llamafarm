@@ -12,9 +12,8 @@ from atomic_agents.agents.atomic_agent import (  # type: ignore
 from openai import AsyncOpenAI
 
 from agents.agent import LFAgent, LFAgentConfig
-from agents.providers import get_provider
 from context_providers.docs_context_provider import DocsContextProvider
-from core.settings import settings
+from services import runtime_service
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -23,9 +22,6 @@ from config.datamodel import (  # noqa: E402
     Model,
     Prompt,
     PromptFormat,
-    Provider,
-    Runtime,
-    Version,
 )
 
 from core.logging import FastAPIStructLogger  # noqa: E402
@@ -65,7 +61,7 @@ class ProjectChatOrchestratorAgent(LFAgent):
             model_name=model_name,
             project=project_config.name,
         )
-        model_config = ModelService.get_model_config(project_config, model_name)
+        model_config = ModelService.get_model(project_config, model_name)
         logger.info(
             "Resolved model configuration",
             model_name=model_config.name,
@@ -102,7 +98,6 @@ class ProjectChatOrchestratorAgent(LFAgent):
         self.docs_context_provider = DocsContextProvider(title="Relevant Documentation")
         self.register_context_provider("docs", self.docs_context_provider)
         self._is_new_session = True  # Track if this is a new session for greeting logic
-
 
     def enable_persistence(
         self,
@@ -280,26 +275,9 @@ def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
     return history
 
 
-def _get_client(
-    project_config: LlamaFarmConfig,
-) -> instructor.client.AsyncInstructor | AsyncOpenAI:
-    """Get client for the configured provider using the provider registry.
-
-    DEPRECATED: Use _get_client_for_model instead for multi-model support.
-    """
-    import warnings
-    warnings.warn(
-        "_get_client is deprecated, use _get_client_for_model with ModelService",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    # Get the active model and delegate to _get_client_for_model
-    from services.model_service import ModelService
-    model_config = ModelService.get_model_config(project_config)
-    return _get_client_for_model(model_config)
-
-
-def _get_client_for_model(model_config):
+def _get_client_for_model(
+    model_config: Model,
+) -> AsyncOpenAI | instructor.client.AsyncInstructor:
     """Get client for a specific model configuration using provider registry.
 
     Args:
@@ -308,31 +286,8 @@ def _get_client_for_model(model_config):
     Returns:
         AsyncOpenAI client (possibly instructor-wrapped)
     """
-    from services.model_service import ModelConfig
-
-    provider = get_provider(model_config.provider)
-
-    # Build a minimal config with this model
-    model_obj = Model(
-        name=model_config.name,
-        provider=model_config.provider,
-        model=model_config.model,
-        base_url=model_config.base_url,
-        api_key=model_config.api_key,
-        instructor_mode=model_config.instructor_mode,
-        prompt_format=model_config.prompt_format,
-        model_api_parameters=model_config.model_api_parameters,
-        provider_config=model_config.provider_config,
-    )
-
-    config = LlamaFarmConfig(
-        version=Version.v1,
-        name="temp",
-        namespace="temp",
-        runtime=Runtime(models=[model_obj])
-    )
-
-    return provider.get_client(config)
+    provider = runtime_service.get_provider(model_config.provider, model_config)
+    return provider.get_client()
 
 
 class ProjectChatOrchestratorAgentFactory:
@@ -346,7 +301,7 @@ class ProjectChatOrchestratorAgentFactory:
         from services.model_service import ModelService
 
         # Get model config for logging
-        model_config = ModelService.get_model_config(project_config, model_name)
+        model_config = ModelService.get_model(project_config, model_name)
         pf = model_config.prompt_format or PromptFormat.unstructured
         selected_name = model_config.name
 

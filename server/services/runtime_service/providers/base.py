@@ -1,14 +1,19 @@
 """Base class for runtime providers."""
 
+import sys
 from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
+from pathlib import Path
+
 import instructor
 from openai import AsyncOpenAI
 
 from .health import HealthCheckResult
 
-if TYPE_CHECKING:
-    from config.datamodel import LlamaFarmConfig
+# Add repo root to path for config imports
+repo_root = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(repo_root))
+
+from config.datamodel import Model  # noqa: E402
 
 
 class RuntimeProvider(ABC):
@@ -22,10 +27,11 @@ class RuntimeProvider(ABC):
     5. Check the health of the provider's runtime
     """
 
+    def __init__(self, model_config: Model) -> None:
+        self._model_config: Model = model_config
+
     @abstractmethod
-    def get_client(
-        self, config: "LlamaFarmConfig"
-    ) -> instructor.client.AsyncInstructor | AsyncOpenAI:
+    def get_client(self) -> instructor.client.AsyncInstructor | AsyncOpenAI:
         """Get OpenAI-compatible client for this provider.
 
         Args:
@@ -38,40 +44,7 @@ class RuntimeProvider(ABC):
         pass
 
     @abstractmethod
-    def get_default_instructor_mode(self) -> instructor.Mode:
-        """Get default instructor mode for this provider.
-
-        Returns:
-            The instructor.Mode that works best with this provider
-        """
-        pass
-
-    @abstractmethod
-    def get_base_url(self, config: "LlamaFarmConfig") -> str:
-        """Get base URL for this provider.
-
-        Args:
-            config: LlamaFarm configuration containing runtime settings
-
-        Returns:
-            The base URL for the provider's API
-        """
-        pass
-
-    @abstractmethod
-    def get_api_key(self, config: "LlamaFarmConfig") -> Optional[str]:
-        """Get API key for this provider.
-
-        Args:
-            config: LlamaFarm configuration containing runtime settings
-
-        Returns:
-            The API key to use, or None if not required
-        """
-        pass
-
-    @abstractmethod
-    def check_health(self, config: "LlamaFarmConfig") -> HealthCheckResult:
+    def check_health(self) -> HealthCheckResult:
         """Check health of this provider's runtime.
 
         Args:
@@ -82,3 +55,22 @@ class RuntimeProvider(ABC):
             HealthCheckResult with status, message, latency, and details
         """
         pass
+
+    @property
+    @abstractmethod
+    def _default_instructor_mode(self) -> instructor.Mode:
+        """Return the default instructor mode for this runtime."""
+        pass
+
+    @property
+    def _instructor_mode(self) -> instructor.Mode:
+        """Get instructor mode for this runtime."""
+        mode = self._model_config.instructor_mode
+        try:
+            return (
+                instructor.mode.Mode[mode.upper()]
+                if mode
+                else self._default_instructor_mode
+            )
+        except (KeyError, TypeError):
+            return self._default_instructor_mode

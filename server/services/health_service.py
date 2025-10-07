@@ -4,12 +4,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-import requests  # type: ignore
+from config.datamodel import Model, Provider
 
-from agents.providers import get_provider
-from agents.providers.health import HealthCheckResult
-from config.datamodel import Provider, Model, Version, LlamaFarmConfig, Runtime
 from core.settings import settings
+from services import runtime_service
 from services.model_service import ModelService
 
 
@@ -75,26 +73,16 @@ def _check_storage() -> dict:
 def _check_ollama() -> dict:
     """Check Ollama runtime health using provider registry."""
     # Create minimal config with one model for health check
-    model = Model(
-        name="ollama-health",
-        provider=Provider.ollama,
-        model="health-check",
-        base_url=f"{settings.ollama_host}/v1",
-        api_key=settings.ollama_api_key,
-    )
+    model_config_dict = {
+        "name": "ollama-health",
+        "provider": Provider.ollama,
+        "model": "health-check",
+    }
+    model_config = Model.model_validate(model_config_dict)
 
-    config = LlamaFarmConfig(
-        version=Version.v1,
-        name="health",
-        namespace="system",
-        runtime=Runtime(models=[model])
-    )
-
-    provider = get_provider(Provider.ollama)
-    result = provider.check_health(config)
+    provider = runtime_service.get_provider(Provider.ollama, model_config)
+    result = provider.check_health()
     return result.to_dict()
-
-
 
 
 def _check_seed_project() -> dict:
@@ -127,31 +115,13 @@ def _check_seed_project() -> dict:
         project_config = LlamaFarmConfig(**project_config_data)
 
         # Use ModelService to get the correct model config
-        model_config = ModelService.get_model_config(project_config, model_name=None)
-
-        # Create a minimal config with just this model for health check
-        model_obj = Model(
-            name=model_config.name,
-            provider=model_config.provider,
-            model=model_config.model,
-            base_url=model_config.base_url,
-            api_key=model_config.api_key,
-            instructor_mode=model_config.instructor_mode,
-            prompt_format=model_config.prompt_format,
-            model_api_parameters=model_config.model_api_parameters,
-            provider_config=model_config.provider_config,
-        )
-
-        health_check_config = LlamaFarmConfig(
-            version=project_config.version,
-            name=project_config.name,
-            namespace=project_config.namespace,
-            runtime=Runtime(models=[model_obj])
-        )
+        model_config = ModelService.get_model(project_config, model_name=None)
 
         # Get provider and check health
-        provider_impl = get_provider(model_config.provider)
-        health_result = provider_impl.check_health(health_check_config)
+        provider_impl = runtime_service.get_provider(
+            model_config.provider, model_config
+        )
+        health_result = provider_impl.check_health()
 
         # Enhance with model validation for Ollama
         if (

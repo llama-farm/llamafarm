@@ -12,7 +12,7 @@ import celery.result  # type: ignore
 from atomic_agents import AtomicAgent  # type: ignore
 from fastapi import APIRouter, Header, HTTPException, Response
 from openai.types.chat import ChatCompletion
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
@@ -34,7 +34,7 @@ from services.docs_context_service import get_docs_service
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
-from config.datamodel import LlamaFarmConfig  # noqa: E402
+from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 
 
 class Project(BaseModel):
@@ -72,6 +72,22 @@ class UpdateProjectRequest(BaseModel):
 
 class UpdateProjectResponse(BaseModel):
     project: Project
+
+
+class ModelResponse(Model):
+    """Response for model API endpoint."""
+
+    default: bool = Field(
+        False,
+        description="Whether this model is the default model in the runtime config",
+    )
+
+
+class ListModelsResponse(BaseModel):
+    """Response for list models API endpoint."""
+
+    total: int = Field(..., description="Total number of models")
+    models: list[ModelResponse] = Field(..., description="List of models")
 
 
 router = APIRouter(
@@ -293,9 +309,10 @@ async def chat(
             if record is None:
                 # Create new agent and enable persistence
                 agent = ProjectChatOrchestratorAgentFactory.create_agent(
-
-                    project_config, project_dir=project_dir, model_name=request.model, session_id=session_id
-
+                    project_config,
+                    project_dir=project_dir,
+                    model_name=request.model,
+                    session_id=session_id,
                 )
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(
@@ -498,7 +515,7 @@ async def delete_all_chat_sessions(namespace: str, project_id: str):
 @router.get(
     "/{namespace}/{project_id}/models",
     responses={
-        200: {"model": dict},
+        200: {"model": ListModelsResponse},
         404: {"model": ErrorResponse},
     },
 )
@@ -508,4 +525,14 @@ async def list_models(namespace: str, project_id: str):
 
     project_config = ProjectService.load_config(namespace, project_id)
     models = ModelService.list_models(project_config)
-    return {"models": models}
+
+    default_model = project_config.runtime.default_model
+
+    return ListModelsResponse(
+        total=len(models),
+        models=[
+            ModelResponse(model=model, default=model.name == default_model)
+            for model in models
+            if model.name != default_model
+        ],
+    )
