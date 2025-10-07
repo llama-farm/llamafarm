@@ -352,7 +352,7 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 
 **Request Fields:**
 - `messages` (required): Array of chat messages with `role` and `content`
-- `model` (optional): Override the configured model
+- `model` (optional): Select which model to use (OpenAI-compatible, added in PR #263 multi-model support)
 - `stream` (optional): Enable streaming responses (Server-Sent Events)
 - `temperature` (optional): Sampling temperature (0.0-2.0)
 - `max_tokens` (optional): Maximum tokens to generate
@@ -1155,7 +1155,7 @@ curl http://localhost:8000/info
 
 ## Multi-Model Support
 
-As of PR #263, LlamaFarm supports multiple models per project.
+As of PR #263, LlamaFarm supports multiple models per project with OpenAI-compatible `model` field in chat requests.
 
 ### Configuration
 
@@ -1175,7 +1175,7 @@ runtime:
 
 ### Using Different Models
 
-Specify the model in your chat request:
+The `model` field in chat completions requests is OpenAI-compatible and allows you to select which configured model to use:
 
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
@@ -1188,11 +1188,25 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   }'
 ```
 
+If `model` is not specified, the `default_model` from your configuration is used. This makes LlamaFarm a drop-in replacement for OpenAI's API with the added benefit of model selection.
+
 ### Get Available Models
 
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/models
 ```
+
+### Legacy Single-Model Configuration
+
+For backward compatibility, you can still use the legacy single-model format:
+
+```yaml
+runtime:
+  provider: ollama
+  model: llama3.2:3b
+```
+
+This is automatically converted to the new multi-model format with one model.
 
 ---
 
