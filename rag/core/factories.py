@@ -91,7 +91,7 @@ except ImportError:
     QDRANT_AVAILABLE = False
 
 # Import extractors
-from components.extractors.datetime_extractor.datetime_extractor import (
+from components.extractors.date_time_extractor.date_time_extractor import (
     DateTimeExtractor,
 )
 from components.extractors.entity_extractor.entity_extractor import EntityExtractor

@@ -75,6 +75,8 @@ dependencies = [
   "psutil>=7.0.0",
   "pydantic-settings>=2.11.0",
   "llamafarm-config",
+  "docx2txt>=0.9",
+  "spacy>=3.8.7",
 ]
 
 [project.optional-dependencies]

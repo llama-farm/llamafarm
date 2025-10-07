@@ -298,6 +298,7 @@ class BlobProcessor:
             )
 
         # Try to import from potential paths
+        extractor_load_errors = []
         for module_path in potential_paths:
             try:
                 logger.debug(f"Trying to import extractor from: {module_path}")
@@ -321,12 +322,13 @@ class BlobProcessor:
                         return extractor_class
 
             except (ImportError, AttributeError) as e:
+                extractor_load_errors.append(f"Could not load from {module_path}: {e}")
                 logger.debug(f"Could not load from {module_path}: {e}")
                 continue
 
         # If we couldn't find the extractor, log a warning and return mock
         logger.warning(
-            f"Could not dynamically load extractor {extractor_type}, using mock extractor"
+            f"Could not dynamically load extractor {extractor_type}. Falling back to mock extractor. Errors: {extractor_load_errors}"
         )
 
         class MockExtractor(BaseExtractor):
