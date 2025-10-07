@@ -7,6 +7,12 @@ sidebar_label: Start Here
 
 LlamaFarm helps you ship retrieval-augmented and agentic AI apps from your laptop to production. It is fully open-source and intentionally extendable—swap model providers, vector stores, parsers, and CLI workflows without rewriting your project.
 
+## 📺 Video Demo
+
+**Quick Overview (90 seconds):** https://youtu.be/W7MHGyN0MdQ
+
+Get a fast introduction to LlamaFarm's core features and see it in action.
+
 ## What You Can Do Today
 
 - **Prototype locally** with Ollama or any OpenAI-compatible runtime (vLLM, Together, custom gateways).
@@ -27,5 +33,13 @@ LlamaFarm helps you ship retrieval-augmented and agentic AI apps from your lapto
 - **Configuration over code** – projects are reproducible because behaviour lives in `llamafarm.yaml`.
 - **Composable modules** – RAG, prompts, and runtime selection work independently but integrate cleanly.
 - **Open for extension** – documentation includes patterns for registering new providers, stores, and utilities.
+
+## 🎥 In-Depth Tutorial
+
+**Complete Walkthrough (7 minutes):** https://youtu.be/HNnZ4iaOSJ4
+
+Watch a comprehensive demonstration of LlamaFarm's features including project setup, dataset ingestion, RAG queries, and configuration options.
+
+---
 
 Ready to build? Start with the [Quickstart](./quickstart/index.md) and keep the CLI open in another terminal.
