@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Any, Optional
 
+import docx
+
 from components.parsers.base.base_parser import BaseParser, ParserConfig
 from components.parsers.docx.docx_utils import (
     DocxChunker,
@@ -12,6 +14,7 @@ from components.parsers.docx.docx_utils import (
     DocxTableExtractor,
     DocxTempFileHandler,
 )
+from core.base import ProcessingResult
 from core.logging import RAGStructLogger
 
 logger = RAGStructLogger("rag.components.parsers.docx.python_docx_parser")
@@ -28,6 +31,7 @@ class DocxParser_PythonDocx(BaseParser):
         super().__init__(config or {})  # Call BaseParser init
         self.name = name
         self.chunk_size = self.config.get("chunk_size", 1000)
+        self.chunk_overlap = self.config.get("chunk_overlap", 100)
         self.chunk_strategy = self.config.get("chunk_strategy", "paragraphs")
         self.extract_metadata = self.config.get("extract_metadata", True)
         self.extract_tables = self.config.get("extract_tables", True)
@@ -72,21 +76,6 @@ class DocxParser_PythonDocx(BaseParser):
 
     def parse(self, source: str, **kwargs):
         """Parse DOCX using python-docx."""
-        from core.base import ProcessingResult
-
-        try:
-            import docx
-        except ImportError:
-            return ProcessingResult(
-                documents=[],
-                errors=[
-                    {
-                        "error": "python-docx not installed. Install with: pip install python-docx",
-                        "source": source,
-                    }
-                ],
-            )
-
         path = Path(source)
         if not path.exists():
             return ProcessingResult(
@@ -163,12 +152,16 @@ class DocxParser_PythonDocx(BaseParser):
             # Apply chunking if needed
             if self.chunk_size and self.chunk_size > 0:
                 if self.chunk_strategy == "paragraphs":
-                    chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+                    chunks = DocxChunker.chunk_by_paragraphs(
+                        full_text, self.chunk_size, self.chunk_overlap
+                    )
                 elif self.chunk_strategy == "characters":
                     chunks = DocxChunker.chunk_by_characters(full_text, self.chunk_size)
                 else:
                     # Default to paragraph chunking for unknown strategies
-                    chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+                    chunks = DocxChunker.chunk_by_paragraphs(
+                        full_text, self.chunk_size, self.chunk_overlap
+                    )
 
                 documents = DocxDocumentFactory.create_documents_from_chunks(
                     chunks, metadata, str(path), self.chunk_strategy
@@ -300,7 +293,7 @@ class DocxParser_PythonDocx(BaseParser):
                 if self.chunk_size and self.chunk_size > 0:
                     if self.chunk_strategy == "paragraphs":
                         chunks = DocxChunker.chunk_by_paragraphs(
-                            full_text, self.chunk_size
+                            full_text, self.chunk_size, self.chunk_overlap
                         )
                     elif self.chunk_strategy == "characters":
                         chunks = DocxChunker.chunk_by_characters(
@@ -309,7 +302,7 @@ class DocxParser_PythonDocx(BaseParser):
                     else:
                         # Default to paragraph chunking for unknown strategies
                         chunks = DocxChunker.chunk_by_paragraphs(
-                            full_text, self.chunk_size
+                            full_text, self.chunk_size, self.chunk_overlap
                         )
 
                     documents = DocxDocumentFactory.create_documents_from_chunks(
