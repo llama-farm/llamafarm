@@ -194,10 +194,9 @@ class DocxTableExtractor:
                 row_text.append(cell_text)
             rows.append(" | ".join(row_text))
 
-        if rows:
-            # Add separator after header row
-            if len(rows) > 1:
-                rows.insert(1, "-" * len(rows[0]))
+        if rows and len(rows) > 1:
+            rows.insert(1, "-" * len(rows[0]))
+
 
         return "\n".join(rows)
 
