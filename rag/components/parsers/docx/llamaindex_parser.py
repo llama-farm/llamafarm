@@ -1,9 +1,16 @@
 """DOCX parser using LlamaIndex."""
 
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
+import docx
+from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
+from llama_index.readers.file import DocxReader
+
 from components.parsers.base.base_parser import BaseParser, ParserConfig
+from core.base import Document, ProcessingResult
 from core.logging import RAGStructLogger
 
 logger = RAGStructLogger("rag.components.parsers.docx.llamaindex_parser")
@@ -72,22 +79,6 @@ class DocxParser_LlamaIndex(BaseParser):
 
     def parse(self, source: str, **kwargs):
         """Parse DOCX/DOC using LlamaIndex."""
-        from core.base import Document, ProcessingResult
-
-        try:
-            from llama_index.readers.file import DocxReader
-            from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
-        except ImportError:
-            return ProcessingResult(
-                documents=[],
-                errors=[
-                    {
-                        "error": "LlamaIndex not installed. Install with: pip install llama-index llama-index-readers-file",
-                        "source": source,
-                    }
-                ],
-            )
-
         path = Path(source)
         if not path.exists():
             return ProcessingResult(
@@ -122,8 +113,6 @@ class DocxParser_LlamaIndex(BaseParser):
                 # Extract additional metadata if python-docx is available
                 if self.extract_metadata:
                     try:
-                        import docx
-
                         doc = docx.Document(str(path))
 
                         # Document properties
@@ -171,8 +160,6 @@ class DocxParser_LlamaIndex(BaseParser):
                 elif self.chunk_strategy == "paragraphs":
                     # For paragraph-based chunking, try to use the document structure
                     try:
-                        import docx
-
                         doc = docx.Document(str(path))
 
                         # Group paragraphs into chunks
@@ -213,14 +200,11 @@ class DocxParser_LlamaIndex(BaseParser):
 
                         # Create documents from chunks
                         for i, chunk_content in enumerate(chunks):
-                            chunk_metadata = metadata.copy()
-                            chunk_metadata.update(
-                                {
-                                    "chunk_index": i,
-                                    "total_chunks": len(chunks),
-                                    "chunk_strategy": "paragraphs",
-                                }
-                            )
+                            chunk_metadata = metadata | {
+                                "chunk_index": i,
+                                "total_chunks": len(chunks),
+                                "chunk_strategy": "paragraphs",
+                            }
 
                             doc = Document(
                                 content=chunk_content,
@@ -248,14 +232,11 @@ class DocxParser_LlamaIndex(BaseParser):
                     nodes = splitter.get_nodes_from_documents([llama_doc])
 
                     for i, node in enumerate(nodes):
-                        chunk_metadata = metadata.copy()
-                        chunk_metadata.update(
-                            {
-                                "chunk_index": i,
-                                "total_chunks": len(nodes),
-                                "chunk_strategy": self.chunk_strategy,
-                            }
-                        )
+                        chunk_metadata = metadata | {
+                            "chunk_index": i,
+                            "total_chunks": len(nodes),
+                            "chunk_strategy": self.chunk_strategy,
+                        }
 
                         doc = Document(
                             content=node.text if hasattr(node, "text") else str(node),
@@ -284,19 +265,6 @@ class DocxParser_LlamaIndex(BaseParser):
 
     def parse_blob(self, data: bytes, metadata: dict[str, Any] | None = None) -> list:
         """Parse DOCX from raw bytes using in-memory buffer."""
-        import os
-        import tempfile
-
-        from core.base import Document
-
-        try:
-            from llama_index.readers.file import DocxReader
-            from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
-        except ImportError:
-            logger.error(
-                "LlamaIndex not installed. Install with: pip install llama-index llama-index-readers-file"
-            )
-            return []
 
         try:
             # LlamaIndex DocxReader needs a file on disk, so write temporarily
@@ -330,7 +298,7 @@ class DocxParser_LlamaIndex(BaseParser):
 
                     # Add provided metadata
                     if metadata:
-                        base_metadata.update(metadata)
+                        base_metadata |= metadata
 
                     # Add LlamaIndex metadata
                     if hasattr(llama_doc, "metadata"):
@@ -339,8 +307,6 @@ class DocxParser_LlamaIndex(BaseParser):
                     # Extract additional metadata if python-docx is available
                     if self.extract_metadata:
                         try:
-                            import docx
-
                             doc = docx.Document(tmp_path)
 
                             # Document properties
@@ -393,8 +359,6 @@ class DocxParser_LlamaIndex(BaseParser):
                         elif self.chunk_strategy == "paragraphs":
                             # For paragraph-based chunking, try to use the document structure
                             try:
-                                import docx
-
                                 doc = docx.Document(tmp_path)
 
                                 # Group paragraphs into chunks
@@ -435,14 +399,11 @@ class DocxParser_LlamaIndex(BaseParser):
 
                                 # Create documents from chunks
                                 for i, chunk_content in enumerate(chunks):
-                                    chunk_metadata = base_metadata.copy()
-                                    chunk_metadata.update(
-                                        {
-                                            "chunk_index": i,
-                                            "total_chunks": len(chunks),
-                                            "chunk_strategy": "paragraphs",
-                                        }
-                                    )
+                                    chunk_metadata = base_metadata | {
+                                        "chunk_index": i,
+                                        "total_chunks": len(chunks),
+                                        "chunk_strategy": "paragraphs",
+                                    }
 
                                     doc = Document(
                                         content=chunk_content,
@@ -470,14 +431,11 @@ class DocxParser_LlamaIndex(BaseParser):
                         nodes = splitter.get_nodes_from_documents([llama_doc])
 
                         for i, node in enumerate(nodes):
-                            chunk_metadata = base_metadata.copy()
-                            chunk_metadata.update(
-                                {
-                                    "chunk_index": i,
-                                    "total_chunks": len(nodes),
-                                    "chunk_strategy": self.chunk_strategy,
-                                }
-                            )
+                            chunk_metadata = base_metadata | {
+                                "chunk_index": i,
+                                "total_chunks": len(nodes),
+                                "chunk_strategy": self.chunk_strategy,
+                            }
 
                             doc = Document(
                                 content=node.text

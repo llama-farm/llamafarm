@@ -327,8 +327,9 @@ class BlobProcessor:
                 continue
 
         # If we couldn't find the extractor, log a warning and return mock
+        error_details = "; ".join(extractor_load_errors)
         logger.warning(
-            f"Could not dynamically load extractor {extractor_type}. Falling back to mock extractor. Errors: {extractor_load_errors}"
+            f"Could not dynamically load extractor {extractor_type}. Falling back to mock extractor. Errors: {error_details}"
         )
 
         class MockExtractor(BaseExtractor):

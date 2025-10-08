@@ -322,30 +322,25 @@ class DocxParser_PythonDocx(BaseParser):
                                 content_parts.append(text)
 
                     elif isinstance(element, docx.table.Table) and self.extract_tables:
-                        table_text = self._extract_table(element)
-                        if table_text:
+                        if table_text := self._extract_table(element):
                             content_parts.append(f"\n{table_text}\n")
 
                 # Extract headers if configured
                 if self.extract_headers:
                     for section in doc.sections:
-                        header = section.header
-                        if header:
-                            header_text = "\n".join(
+                        if header := section.header:
+                            if header_text := "\n".join(
                                 p.text for p in header.paragraphs if p.text.strip()
-                            )
-                            if header_text:
+                            ):
                                 content_parts.insert(0, f"Header: {header_text}")
 
                 # Extract footers if configured
                 if self.extract_footers:
                     for section in doc.sections:
-                        footer = section.footer
-                        if footer:
-                            footer_text = "\n".join(
+                        if footer := section.footer:
+                            if footer_text := "\n".join(
                                 p.text for p in footer.paragraphs if p.text.strip()
-                            )
-                            if footer_text:
+                            ):
                                 content_parts.append(f"Footer: {footer_text}")
 
                 # Join all content
@@ -372,7 +367,7 @@ class DocxParser_PythonDocx(BaseParser):
 
                 # Add provided metadata
                 if metadata:
-                    base_metadata.update(metadata)
+                    base_metadata |= metadata
 
                 if self.extract_metadata:
                     # Extract document properties
@@ -404,14 +399,11 @@ class DocxParser_PythonDocx(BaseParser):
                 if self.chunk_size and self.chunk_size > 0:
                     chunks = self._chunk_text(full_text)
                     for i, chunk in enumerate(chunks):
-                        chunk_metadata = base_metadata.copy()
-                        chunk_metadata.update(
-                            {
-                                "chunk_index": i,
-                                "total_chunks": len(chunks),
-                                "chunk_strategy": self.chunk_strategy,
-                            }
-                        )
+                        chunk_metadata = base_metadata | {
+                            "chunk_index": i,
+                            "total_chunks": len(chunks),
+                            "chunk_strategy": self.chunk_strategy,
+                        }
 
                         doc = Document(
                             content=chunk,
