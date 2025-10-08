@@ -20,12 +20,6 @@ class DocxMetadataExtractor:
     ) -> dict[str, Any]:
         """Extract document properties using python-docx."""
         try:
-            import docx
-        except ImportError:
-            logger.debug("python-docx not available for metadata extraction")
-            return base_metadata
-
-        try:
             metadata = base_metadata.copy()
 
             # Document properties

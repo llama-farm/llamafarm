@@ -7,6 +7,7 @@ from typing import Any, Optional
 import yaml
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.parser_factory")
 
 
@@ -284,7 +285,6 @@ class ToolAwareParserFactory:
             ".xlsx": "excel",
             ".xls": "excel",
             ".docx": "docx",
-            ".doc": "docx",
             ".md": "markdown",
             ".markdown": "markdown",
             ".html": "website",

@@ -75,7 +75,7 @@ class DocxParser_LlamaIndex(BaseParser):
 
     def can_parse(self, file_path: str) -> bool:
         """Check if this parser can handle the given file."""
-        return file_path.lower().endswith(".docx") or file_path.lower().endswith(".doc")
+        return file_path.lower().endswith(".docx")
 
     def validate_config(self) -> bool:
         """Validate configuration."""

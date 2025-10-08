@@ -311,9 +311,7 @@ class TestDocxParser_LlamaIndex:
         """Test that parser rejects non-.docx files."""
         parser = DocxParser_LlamaIndex()
 
-        # Note: The user reverted the fix, so .doc files are currently accepted
-        # This test reflects the current behavior
-        assert parser.can_parse("document.doc") is True  # Currently accepts .doc
+        assert parser.can_parse("document.doc") is False
         assert parser.can_parse("document.txt") is False
         assert parser.can_parse("document.pdf") is False
         assert parser.can_parse("document") is False

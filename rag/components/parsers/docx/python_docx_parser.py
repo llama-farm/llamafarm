@@ -191,7 +191,6 @@ class DocxParser_PythonDocx(BaseParser):
 
     def _iter_block_items(self, parent):
         """Iterate through document elements in order."""
-        import docx
 
         if isinstance(parent, docx.document.Document):
             parent_elm = parent.element.body
@@ -206,15 +205,6 @@ class DocxParser_PythonDocx(BaseParser):
 
     def parse_blob(self, data: bytes, metadata: dict[str, Any] | None = None) -> list:
         """Parse DOCX from raw bytes using in-memory buffer."""
-
-        try:
-            import docx
-        except ImportError:
-            logger.error(
-                "python-docx not installed. Install with: pip install python-docx"
-            )
-            return []
-
         try:
             # python-docx needs a file on disk, so write temporarily
             with DocxTempFileHandler(data) as tmp_path:
