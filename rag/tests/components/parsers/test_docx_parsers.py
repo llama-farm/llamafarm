@@ -2,19 +2,17 @@
 Comprehensive tests for DOCX parsers and utilities.
 """
 
-import pytest
-import tempfile
 import os
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import pytest
 
 from components.parsers.docx.docx_utils import (
     DocxChunker,
-    DocxMetadataExtractor,
     DocxDocumentFactory,
-    DocxTempFileHandler,
-    DocxTableExtractor,
     DocxHeaderFooterExtractor,
+    DocxTableExtractor,
+    DocxTempFileHandler,
 )
 from components.parsers.docx.llamaindex_parser import DocxParser_LlamaIndex
 from components.parsers.docx.python_docx_parser import DocxParser_PythonDocx
@@ -97,6 +95,29 @@ class TestDocxChunker:
         assert len(chunks) == 1
         assert chunks[0] == "Short"
 
+    def test_chunk_by_paragraphs_non_ascii_characters(self):
+        """Test paragraph chunking with non-ASCII and multi-byte characters."""
+        text = "Première paragraphe avec des caractères spéciaux: àáâãäåæçèéêë.\n\nSecond paragraph with emoji: 🚀🌟💫.\n\nTroisième paragraphe avec des caractères chinois: 你好世界."
+        chunks = DocxChunker.chunk_by_paragraphs(text, chunk_size=50, chunk_overlap=0)
+
+        assert len(chunks) == 3
+        # Verify character integrity is maintained
+        assert "àáâãäåæçèéêë" in chunks[0]
+        assert "🚀🌟💫" in chunks[1]
+        assert "你好世界" in chunks[2]
+
+    def test_chunk_by_characters_multi_byte_characters(self):
+        """Test character chunking with multi-byte characters."""
+        text = "Hello 世界! This is a test with émojis 🎉 and spëcial chars."
+        chunks = DocxChunker.chunk_by_characters(text, chunk_size=20)
+
+        # Verify no broken multi-byte sequences
+        combined = "".join(chunks)
+        assert combined == text
+        assert "世界" in combined
+        assert "🎉" in combined
+        assert "émojis" in combined
+
 
 class TestDocxDocumentFactory:
     """Test the DocxDocumentFactory utility class."""
@@ -112,16 +133,28 @@ class TestDocxDocumentFactory:
         )
 
         assert len(documents) == 3
+        self._verify_chunk_documents(documents, chunks, metadata, source_path)
 
-        for i, doc in enumerate(documents):
+    def _verify_chunk_documents(self, documents, chunks, metadata, source_path):
+        """Helper method to verify chunk document properties."""
+        expected_properties = [
+            (0, "First chunk", "test_chunk_1"),
+            (1, "Second chunk", "test_chunk_2"),
+            (2, "Third chunk", "test_chunk_3"),
+        ]
+
+        for i, (expected_index, expected_content, expected_id) in enumerate(
+            expected_properties
+        ):
+            doc = documents[i]
             assert isinstance(doc, Document)
-            assert doc.content == chunks[i]
-            assert doc.metadata["chunk_index"] == i
+            assert doc.content == expected_content
+            assert doc.metadata["chunk_index"] == expected_index
             assert doc.metadata["total_chunks"] == 3
             assert doc.metadata["chunk_strategy"] == "paragraphs"
             assert doc.metadata["source"] == "test.docx"
             assert doc.metadata["author"] == "Test Author"
-            assert doc.id == f"test_chunk_{i + 1}"
+            assert doc.id == expected_id
             assert doc.source == source_path
 
     def test_create_single_document(self):
@@ -137,6 +170,19 @@ class TestDocxDocumentFactory:
         assert doc.metadata == metadata
         assert doc.id == "test"
         assert doc.source == source_path
+
+    def test_create_documents_from_empty_chunks(self):
+        """Test creating documents from empty chunk list."""
+        chunks = []
+        metadata = {"source": "test.docx"}
+        source_path = "/path/to/test.docx"
+
+        documents = DocxDocumentFactory.create_documents_from_chunks(
+            chunks, metadata, source_path, "paragraphs"
+        )
+
+        assert isinstance(documents, list)
+        assert len(documents) == 0
 
 
 class TestDocxTempFileHandler:
@@ -164,7 +210,17 @@ class TestDocxTableExtractor:
 
     def test_extract_table_as_text(self):
         """Test table extraction as formatted text."""
-        # Mock table structure
+        mock_table = self._create_mock_table()
+        result = DocxTableExtractor.extract_table_as_text(mock_table)
+
+        lines = result.split("\n")
+        assert len(lines) == 3
+        assert lines[0] == "Header 1 | Header 2"
+        assert lines[1].startswith("-")  # Separator line
+        assert lines[2] == "Data 1 | Data 2"
+
+    def _create_mock_table(self):
+        """Helper method to create a mock table structure."""
         mock_table = Mock()
 
         # Mock rows
@@ -173,39 +229,28 @@ class TestDocxTableExtractor:
         mock_table.rows = [mock_row1, mock_row2]
 
         # Mock cells for row 1
-        mock_cell1_1 = Mock()
-        mock_cell1_2 = Mock()
+        mock_cell1_1, mock_cell1_2 = (
+            self._create_mock_cell("Header 1"),
+            self._create_mock_cell("Header 2"),
+        )
         mock_row1.cells = [mock_cell1_1, mock_cell1_2]
 
         # Mock cells for row 2
-        mock_cell2_1 = Mock()
-        mock_cell2_2 = Mock()
+        mock_cell2_1, mock_cell2_2 = (
+            self._create_mock_cell("Data 1"),
+            self._create_mock_cell("Data 2"),
+        )
         mock_row2.cells = [mock_cell2_1, mock_cell2_2]
 
-        # Mock paragraphs in cells
-        mock_para1_1 = Mock()
-        mock_para1_1.text = "Header 1"
-        mock_cell1_1.paragraphs = [mock_para1_1]
+        return mock_table
 
-        mock_para1_2 = Mock()
-        mock_para1_2.text = "Header 2"
-        mock_cell1_2.paragraphs = [mock_para1_2]
-
-        mock_para2_1 = Mock()
-        mock_para2_1.text = "Data 1"
-        mock_cell2_1.paragraphs = [mock_para2_1]
-
-        mock_para2_2 = Mock()
-        mock_para2_2.text = "Data 2"
-        mock_cell2_2.paragraphs = [mock_para2_2]
-
-        result = DocxTableExtractor.extract_table_as_text(mock_table)
-
-        lines = result.split("\n")
-        assert len(lines) == 3
-        assert lines[0] == "Header 1 | Header 2"
-        assert lines[1].startswith("-")  # Separator line
-        assert lines[2] == "Data 1 | Data 2"
+    def _create_mock_cell(self, text_content):
+        """Helper method to create a mock cell with text content."""
+        mock_cell = Mock()
+        mock_para = Mock()
+        mock_para.text = text_content
+        mock_cell.paragraphs = [mock_para]
+        return mock_cell
 
 
 class TestDocxHeaderFooterExtractor:
@@ -266,6 +311,30 @@ class TestDocxHeaderFooterExtractor:
 
         assert len(footers) == 1
         assert footers[0] == "Footer: Footer Text"
+
+    def test_extract_headers_no_sections(self):
+        """Test header extraction when document has no sections."""
+        mock_doc = Mock()
+        mock_doc.sections = []
+
+        headers = DocxHeaderFooterExtractor.extract_headers(
+            mock_doc, extract_headers=True
+        )
+
+        assert isinstance(headers, list)
+        assert len(headers) == 0
+
+    def test_extract_footers_no_sections(self):
+        """Test footer extraction when document has no sections."""
+        mock_doc = Mock()
+        mock_doc.sections = []
+
+        footers = DocxHeaderFooterExtractor.extract_footers(
+            mock_doc, extract_footers=True
+        )
+
+        assert isinstance(footers, list)
+        assert len(footers) == 0
 
 
 class TestDocxParser_LlamaIndex:
@@ -363,6 +432,30 @@ class TestDocxParser_LlamaIndex:
 
         assert isinstance(result, list)
         # Should return empty list when dependencies are not available
+        assert len(result) == 0
+
+    def test_parse_blob_invalid_docx_data(self):
+        """Test parse_blob with invalid/corrupted DOCX bytes."""
+        parser = DocxParser_LlamaIndex()
+
+        # Test with completely invalid data
+        invalid_data = b"This is not a DOCX file at all"
+        result = parser.parse_blob(invalid_data)
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+        # Test with partially corrupted data
+        corrupted_data = b"PK\x03\x04" + b"corrupted docx data" * 100
+        result = parser.parse_blob(corrupted_data)
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_parse_blob_empty_data(self):
+        """Test parse_blob with empty byte input."""
+        parser = DocxParser_LlamaIndex()
+
+        result = parser.parse_blob(b"")
+        assert isinstance(result, list)
         assert len(result) == 0
 
 
@@ -473,6 +566,30 @@ class TestDocxParser_PythonDocx:
         # Should return empty list when docx is not available
         assert len(result) == 0
 
+    def test_parse_blob_invalid_docx_data(self):
+        """Test parse_blob with invalid/corrupted DOCX bytes."""
+        parser = DocxParser_PythonDocx()
+
+        # Test with completely invalid data
+        invalid_data = b"This is not a DOCX file at all"
+        result = parser.parse_blob(invalid_data)
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+        # Test with partially corrupted data
+        corrupted_data = b"PK\x03\x04" + b"corrupted docx data" * 100
+        result = parser.parse_blob(corrupted_data)
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_parse_blob_empty_data(self):
+        """Test parse_blob with empty byte input."""
+        parser = DocxParser_PythonDocx()
+
+        result = parser.parse_blob(b"")
+        assert isinstance(result, list)
+        assert len(result) == 0
+
 
 class TestDocxParsersIntegration:
     """Integration tests for DOCX parsers with various strategies."""
@@ -494,17 +611,19 @@ class TestDocxParsersIntegration:
         assert para_chunks != char_chunks
 
         # Paragraph chunks should respect paragraph boundaries
-        for chunk in para_chunks:
-            # Each chunk should either be a complete paragraph or start with overlap
-            assert not chunk.endswith("with some")  # Shouldn't cut mid-word
+        # Verify no chunks end with partial words (example check)
+        problematic_chunks = [
+            chunk for chunk in para_chunks if chunk.endswith("with some")
+        ]
+        assert len(problematic_chunks) == 0, "Chunks should not cut mid-word"
 
         # Character chunks may cut anywhere
         combined_char_text = "".join(char_chunks)
         combined_para_text = "\n\n".join(para_chunks)
 
         # Both should contain the same content (allowing for different formatting)
-        assert len(combined_char_text.replace(" ", "")) > 0
-        assert len(combined_para_text.replace(" ", "")) > 0
+        assert combined_char_text.replace(" ", "") != ""
+        assert combined_para_text.replace(" ", "") != ""
 
     def test_overlap_consistency(self):
         """Test that overlap chunking is consistent."""
@@ -520,18 +639,20 @@ class TestDocxParsersIntegration:
         # Verify overlap exists
         if len(chunks1) > 1:
             # Check that there's actual overlap between consecutive chunks
-            for i in range(1, len(chunks1)):
-                prev_chunk = chunks1[i - 1]
-                curr_chunk = chunks1[i]
+            self._verify_chunk_overlaps(chunks1)
 
-                # Current chunk should start with some text from previous chunk
-                overlap_found = False
-                for tail_len in range(1, min(10, len(prev_chunk))):
-                    if curr_chunk.startswith(prev_chunk[-tail_len:]):
-                        overlap_found = True
-                        break
+    def _verify_chunk_overlaps(self, chunks):
+        """Helper method to verify overlap between consecutive chunks."""
+        for i in range(1, len(chunks)):
+            prev_chunk = chunks[i - 1]
+            curr_chunk = chunks[i]
 
-                assert overlap_found, f"No overlap found between chunks {i - 1} and {i}"
+            # Current chunk should start with some text from previous chunk
+            overlap_found = any(
+                curr_chunk.startswith(prev_chunk[-tail_len:])
+                for tail_len in range(1, min(10, len(prev_chunk)))
+            )
+            assert overlap_found, f"No overlap found between chunks {i - 1} and {i}"
 
     def test_parser_metadata_consistency(self):
         """Test that both parsers produce consistent metadata."""
@@ -564,6 +685,40 @@ class TestDocxParsersIntegration:
         assert len(python_result.documents) == 0
         assert len(llama_result.errors) > 0
         assert len(python_result.errors) > 0
+
+    def test_parse_blob_integration(self):
+        """Integration tests for parse_blob in both parsers."""
+        llama_parser = DocxParser_LlamaIndex()
+        python_parser = DocxParser_PythonDocx()
+
+        # Test with invalid data - both should handle gracefully
+        invalid_data = b"Not a DOCX file"
+
+        llama_result = llama_parser.parse_blob(invalid_data)
+        python_result = python_parser.parse_blob(invalid_data)
+
+        assert isinstance(llama_result, list)
+        assert isinstance(python_result, list)
+        assert len(llama_result) == 0
+        assert len(python_result) == 0
+
+        # Test with empty data
+        empty_result_llama = llama_parser.parse_blob(b"")
+        empty_result_python = python_parser.parse_blob(b"")
+
+        assert isinstance(empty_result_llama, list)
+        assert isinstance(empty_result_python, list)
+        assert len(empty_result_llama) == 0
+        assert len(empty_result_python) == 0
+
+        # Test with metadata
+        metadata = {"filename": "test.docx", "author": "Test User"}
+
+        llama_meta_result = llama_parser.parse_blob(invalid_data, metadata)
+        python_meta_result = python_parser.parse_blob(invalid_data, metadata)
+
+        assert isinstance(llama_meta_result, list)
+        assert isinstance(python_meta_result, list)
 
 
 if __name__ == "__main__":

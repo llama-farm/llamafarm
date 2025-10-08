@@ -83,7 +83,7 @@ class DocxChunker:
                 chunks.append("\n\n".join(current_chunk))
 
                 # Start new chunk with overlap
-                if chunk_overlap > 0 and current_chunk:
+                if chunk_overlap > 0:
                     # Get the tail of the previous chunk for overlap
                     prev_chunk_text = "\n\n".join(current_chunk)
                     overlap_text = (
@@ -160,6 +160,61 @@ class DocxDocumentFactory:
         )
 
 
+class DocxBlobProcessor:
+    """Shared processor for DOCX blob parsing to eliminate duplication."""
+
+    @staticmethod
+    def extract_content_from_doc(doc, extract_tables: bool = True) -> list[str]:
+        """Extract content parts from a python-docx Document object."""
+        content_parts = []
+
+        # Extract paragraphs and tables in order
+        for element in DocxBlobProcessor._iter_block_items(doc):
+            if hasattr(element, "text"):  # Paragraph
+                text = element.text.strip()
+                if text:
+                    # Check if it's a heading
+                    if (
+                        hasattr(element, "style")
+                        and element.style
+                        and element.style.name
+                        and "Heading" in element.style.name
+                    ):
+                        content_parts.append(f"\n## {text}\n")
+                    else:
+                        content_parts.append(text)
+
+            elif hasattr(element, "rows") and extract_tables:  # Table
+                if table_text := DocxTableExtractor.extract_table_as_text(element):
+                    content_parts.append(f"\n{table_text}\n")
+
+        return content_parts
+
+    @staticmethod
+    def _iter_block_items(parent):
+        """Iterate through document elements in order."""
+        try:
+            import docx
+
+            if isinstance(parent, docx.document.Document):
+                parent_elm = parent.element.body
+            else:
+                raise ValueError("Unsupported parent type")
+
+            for child in parent_elm.iterchildren():
+                if hasattr(docx.oxml.text.paragraph, "CT_P") and isinstance(
+                    child, docx.oxml.text.paragraph.CT_P
+                ):
+                    yield docx.text.paragraph.Paragraph(child, parent)
+                elif hasattr(docx.oxml.table, "CT_Tbl") and isinstance(
+                    child, docx.oxml.table.CT_Tbl
+                ):
+                    yield docx.table.Table(child, parent)
+        except ImportError:
+            # Fallback to simple paragraph iteration if docx not available
+            yield from parent.paragraphs
+
+
 class DocxTempFileHandler:
     """Context manager for handling temporary DOCX files."""
 
@@ -197,7 +252,6 @@ class DocxTableExtractor:
         if rows and len(rows) > 1:
             rows.insert(1, "-" * len(rows[0]))
 
-
         return "\n".join(rows)
 
 
@@ -212,12 +266,10 @@ class DocxHeaderFooterExtractor:
 
         headers = []
         for section in doc.sections:
-            header = section.header
-            if header:
-                header_text = "\n".join(
+            if header := section.header:
+                if header_text := "\n".join(
                     p.text for p in header.paragraphs if p.text.strip()
-                )
-                if header_text:
+                ):
                     headers.append(f"Header: {header_text}")
         return headers
 
@@ -229,11 +281,9 @@ class DocxHeaderFooterExtractor:
 
         footers = []
         for section in doc.sections:
-            footer = section.footer
-            if footer:
-                footer_text = "\n".join(
+            if footer := section.footer:
+                if footer_text := "\n".join(
                     p.text for p in footer.paragraphs if p.text.strip()
-                )
-                if footer_text:
+                ):
                     footers.append(f"Footer: {footer_text}")
         return footers

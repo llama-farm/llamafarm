@@ -7,11 +7,11 @@ import docx
 
 from components.parsers.base.base_parser import BaseParser, ParserConfig
 from components.parsers.docx.docx_utils import (
+    DocxBlobProcessor,
     DocxChunker,
     DocxDocumentFactory,
     DocxHeaderFooterExtractor,
     DocxMetadataExtractor,
-    DocxTableExtractor,
     DocxTempFileHandler,
 )
 from core.base import ProcessingResult
@@ -84,33 +84,14 @@ class DocxParser_PythonDocx(BaseParser):
             )
 
         try:
-            # Load document
             doc = docx.Document(source)
 
-            # Extract text content
-            content_parts = []
+            # Extract content using shared processor
+            content_parts = DocxBlobProcessor.extract_content_from_doc(
+                doc, self.extract_tables
+            )
 
-            # Extract paragraphs and tables in order
-            for element in self._iter_block_items(doc):
-                if isinstance(element, docx.text.paragraph.Paragraph):
-                    text = element.text.strip()
-                    if text:
-                        # Check if it's a heading
-                        if (
-                            element.style
-                            and element.style.name
-                            and "Heading" in element.style.name
-                        ):
-                            content_parts.append(f"\n## {text}\n")
-                        else:
-                            content_parts.append(text)
-
-                elif isinstance(element, docx.table.Table) and self.extract_tables:
-                    table_text = DocxTableExtractor.extract_table_as_text(element)
-                    if table_text:
-                        content_parts.append(f"\n{table_text}\n")
-
-            # Extract headers and footers using shared utilities
+            # Extract headers and footers
             headers = DocxHeaderFooterExtractor.extract_headers(
                 doc, self.extract_headers
             )
@@ -118,11 +99,9 @@ class DocxParser_PythonDocx(BaseParser):
                 doc, self.extract_footers
             )
 
-            # Add headers at the beginning
-            content_parts = headers + content_parts + footers
-
-            # Join all content
-            full_text = "\n\n".join(content_parts)
+            # Combine all content
+            all_content = headers + content_parts + footers
+            full_text = "\n\n".join(all_content)
 
             if not full_text.strip():
                 return ProcessingResult(
@@ -132,46 +111,11 @@ class DocxParser_PythonDocx(BaseParser):
                     ],
                 )
 
-            # Extract metadata
-            metadata = {
-                "source": str(path),
-                "file_name": path.name,
-                "parser": self.name,
-                "tool": "python-docx",
-                "paragraphs": len(doc.paragraphs),
-                "tables": len(doc.tables) if self.extract_tables else 0,
-            }
+            # Build metadata
+            metadata = self._build_metadata(doc, path)
 
-            if self.extract_metadata:
-                metadata = DocxMetadataExtractor.extract_document_properties(
-                    doc, metadata
-                )
-
-            documents = []
-
-            # Apply chunking if needed
-            if self.chunk_size and self.chunk_size > 0:
-                if self.chunk_strategy == "paragraphs":
-                    chunks = DocxChunker.chunk_by_paragraphs(
-                        full_text, self.chunk_size, self.chunk_overlap
-                    )
-                elif self.chunk_strategy == "characters":
-                    chunks = DocxChunker.chunk_by_characters(full_text, self.chunk_size)
-                else:
-                    # Default to paragraph chunking for unknown strategies
-                    chunks = DocxChunker.chunk_by_paragraphs(
-                        full_text, self.chunk_size, self.chunk_overlap
-                    )
-
-                documents = DocxDocumentFactory.create_documents_from_chunks(
-                    chunks, metadata, str(path), self.chunk_strategy
-                )
-            else:
-                documents.append(
-                    DocxDocumentFactory.create_single_document(
-                        full_text, metadata, str(path)
-                    )
-                )
+            # Create documents with chunking if needed
+            documents = self._create_documents(full_text, metadata, str(path))
 
             return ProcessingResult(
                 documents=documents,
@@ -188,6 +132,50 @@ class DocxParser_PythonDocx(BaseParser):
             return ProcessingResult(
                 documents=[], errors=[{"error": str(e), "source": source}]
             )
+
+    def _build_metadata(self, doc, path: Path) -> dict[str, Any]:
+        """Build metadata dictionary for the document."""
+        metadata = {
+            "source": str(path),
+            "file_name": path.name,
+            "parser": self.name,
+            "tool": "python-docx",
+            "paragraphs": len(doc.paragraphs),
+            "tables": len(doc.tables) if self.extract_tables else 0,
+        }
+
+        if self.extract_metadata:
+            metadata = DocxMetadataExtractor.extract_document_properties(doc, metadata)
+
+        return metadata
+
+    def _create_documents(
+        self, full_text: str, metadata: dict[str, Any], source_path: str
+    ) -> list:
+        """Create documents with optional chunking."""
+        if not (self.chunk_size and self.chunk_size > 0):
+            return [
+                DocxDocumentFactory.create_single_document(
+                    full_text, metadata, source_path
+                )
+            ]
+
+        # Apply chunking strategy
+        if self.chunk_strategy == "paragraphs":
+            chunks = DocxChunker.chunk_by_paragraphs(
+                full_text, self.chunk_size, self.chunk_overlap
+            )
+        elif self.chunk_strategy == "characters":
+            chunks = DocxChunker.chunk_by_characters(full_text, self.chunk_size)
+        else:
+            # Default to paragraph chunking for unknown strategies
+            chunks = DocxChunker.chunk_by_paragraphs(
+                full_text, self.chunk_size, self.chunk_overlap
+            )
+
+        return DocxDocumentFactory.create_documents_from_chunks(
+            chunks, metadata, source_path, self.chunk_strategy
+        )
 
     def _iter_block_items(self, parent):
         """Iterate through document elements in order."""
@@ -208,34 +196,14 @@ class DocxParser_PythonDocx(BaseParser):
         try:
             # python-docx needs a file on disk, so write temporarily
             with DocxTempFileHandler(data) as tmp_path:
-                # Load document
                 doc = docx.Document(tmp_path)
 
-                # Extract text content
-                content_parts = []
+                # Extract content using shared processor
+                content_parts = DocxBlobProcessor.extract_content_from_doc(
+                    doc, self.extract_tables
+                )
 
-                # Extract paragraphs and tables in order
-                for element in self._iter_block_items(doc):
-                    if isinstance(element, docx.text.paragraph.Paragraph):
-                        text = element.text.strip()
-                        if text:
-                            # Check if it's a heading
-                            if (
-                                element.style
-                                and element.style.name
-                                and "Heading" in element.style.name
-                            ):
-                                content_parts.append(f"\n## {text}\n")
-                            else:
-                                content_parts.append(text)
-
-                    elif isinstance(element, docx.table.Table) and self.extract_tables:
-                        if table_text := DocxTableExtractor.extract_table_as_text(
-                            element
-                        ):
-                            content_parts.append(f"\n{table_text}\n")
-
-                # Extract headers and footers using shared utilities
+                # Extract headers and footers
                 headers = DocxHeaderFooterExtractor.extract_headers(
                     doc, self.extract_headers
                 )
@@ -243,70 +211,49 @@ class DocxParser_PythonDocx(BaseParser):
                     doc, self.extract_footers
                 )
 
-                # Add headers at the beginning
-                content_parts = headers + content_parts + footers
-
-                # Join all content
-                full_text = "\n\n".join(content_parts)
+                # Combine all content
+                all_content = headers + content_parts + footers
+                full_text = "\n\n".join(all_content)
 
                 if not full_text.strip():
                     logger.warning("No text extracted from DOCX blob")
                     return []
 
-                # Extract metadata
+                # Build metadata for blob
                 filename = (
                     metadata.get("filename", "document.docx")
                     if metadata
                     else "document.docx"
                 )
-                base_metadata = {
-                    "source": filename,
-                    "file_name": filename,
-                    "parser": self.name,
-                    "tool": "python-docx",
-                    "paragraphs": len(doc.paragraphs),
-                    "tables": len(doc.tables) if self.extract_tables else 0,
-                }
+                base_metadata = self._build_blob_metadata(doc, filename, metadata)
 
-                # Add provided metadata
-                if metadata:
-                    base_metadata |= metadata
-
-                if self.extract_metadata:
-                    base_metadata = DocxMetadataExtractor.extract_document_properties(
-                        doc, base_metadata
-                    )
-
-                documents = []
-
-                # Apply chunking if needed
-                if self.chunk_size and self.chunk_size > 0:
-                    if self.chunk_strategy == "paragraphs":
-                        chunks = DocxChunker.chunk_by_paragraphs(
-                            full_text, self.chunk_size, self.chunk_overlap
-                        )
-                    elif self.chunk_strategy == "characters":
-                        chunks = DocxChunker.chunk_by_characters(
-                            full_text, self.chunk_size
-                        )
-                    else:
-                        # Default to paragraph chunking for unknown strategies
-                        chunks = DocxChunker.chunk_by_paragraphs(
-                            full_text, self.chunk_size, self.chunk_overlap
-                        )
-
-                    documents = DocxDocumentFactory.create_documents_from_chunks(
-                        chunks, base_metadata, filename, self.chunk_strategy
-                    )
-                else:
-                    documents.append(
-                        DocxDocumentFactory.create_single_document(
-                            full_text, base_metadata, filename
-                        )
-                    )
-
-                return documents
+                # Create documents with chunking if needed
+                return self._create_documents(full_text, base_metadata, filename)
 
         except Exception as e:
             logger.error(f"Failed to parse DOCX blob: {e}")
             return []
+
+    def _build_blob_metadata(
+        self, doc, filename: str, provided_metadata: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        """Build metadata dictionary for blob parsing."""
+        base_metadata = {
+            "source": filename,
+            "file_name": filename,
+            "parser": self.name,
+            "tool": "python-docx",
+            "paragraphs": len(doc.paragraphs),
+            "tables": len(doc.tables) if self.extract_tables else 0,
+        }
+
+        # Add provided metadata
+        if provided_metadata:
+            base_metadata |= provided_metadata
+
+        if self.extract_metadata:
+            base_metadata = DocxMetadataExtractor.extract_document_properties(
+                doc, base_metadata
+            )
+
+        return base_metadata

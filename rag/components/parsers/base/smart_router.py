@@ -1,9 +1,8 @@
 """Smart router for intelligent file type detection and parser selection."""
 
-import os
-from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
 import mimetypes
+from pathlib import Path
+from typing import Any, Optional
 
 from core.logging import RAGStructLogger
 
@@ -38,13 +37,13 @@ class SmartRouter:
         else:
             self.magic = None
 
-    def _build_mime_mapping(self) -> Dict[str, str]:
+    def _build_mime_mapping(self) -> dict[str, str]:
         """Build MIME type to parser mapping.
 
         Returns:
             Dictionary mapping MIME types to parser names
         """
-        mapping = {
+        return {
             "application/pdf": "pdf",
             "text/plain": "text",
             "text/csv": "csv_excel",
@@ -56,15 +55,14 @@ class SmartRouter:
             "text/html": "web",
             "application/xhtml+xml": "web",
         }
-        return mapping
 
-    def _build_extension_mapping(self) -> Dict[str, str]:
+    def _build_extension_mapping(self) -> dict[str, str]:
         """Build file extension to parser mapping.
 
         Returns:
             Dictionary mapping extensions to parser names
         """
-        mapping = {
+        return {
             ".pdf": "pdf",
             ".txt": "text",
             ".text": "text",
@@ -80,9 +78,8 @@ class SmartRouter:
             ".htm": "web",
             ".xhtml": "web",
         }
-        return mapping
 
-    def detect_file_type(self, file_path: str) -> Tuple[str, float]:
+    def detect_file_type(self, file_path: str) -> tuple[str, float]:
         """Detect file type using multiple methods.
 
         Args:
@@ -101,30 +98,26 @@ class SmartRouter:
         # Method 1: Content-based detection (most reliable)
         if self.magic and MAGIC_AVAILABLE:
             try:
-                mime_type = self.magic.from_file(str(file_path))
-                if mime_type and mime_type != "application/octet-stream":
-                    parser_type = self.mime_to_parser.get(mime_type)
-                    if parser_type:
+                if (
+                    mime_type := self.magic.from_file(file_path)
+                ) and mime_type != "application/octet-stream":
+                    if parser_type := self.mime_to_parser.get(mime_type):
                         return (parser_type, 0.9)
             except Exception as e:
                 logger.debug(f"Magic detection failed: {e}")
 
         # Method 2: Content analysis (for files without clear MIME)
-        content_type = self._analyze_content(file_path)
-        if content_type:
+        if content_type := self._analyze_content(file_path):
             return (content_type, 0.8)
 
         # Method 3: Extension-based (fallback)
         if path.suffix:
-            parser_type = self.ext_to_parser.get(path.suffix.lower())
-            if parser_type:
+            if parser_type := self.ext_to_parser.get(path.suffix.lower()):
                 return (parser_type, 0.7)
 
         # Method 4: MIME type guess from extension
-        mime_type, _ = mimetypes.guess_type(str(file_path))
-        if mime_type:
-            parser_type = self.mime_to_parser.get(mime_type)
-            if parser_type:
+        if mime_type := mimetypes.guess_type(file_path)[0]:
+            if parser_type := self.mime_to_parser.get(mime_type):
                 return (parser_type, 0.6)
 
         # Default to text parser for unknown files
@@ -246,7 +239,7 @@ class SmartRouter:
             if pattern_count >= 3:  # At least 3 different Markdown patterns
                 return True
 
-        except:
+        except Exception:
             pass
 
         return False
@@ -271,7 +264,7 @@ class SmartRouter:
 
         return None
 
-    def route_files(self, file_paths: List[str]) -> Dict[str, List[str]]:
+    def route_files(self, file_paths: list[str]) -> dict[str, list[str]]:
         """Route multiple files to appropriate parsers.
 
         Args:
@@ -280,7 +273,7 @@ class SmartRouter:
         Returns:
             Dictionary mapping parser types to file lists
         """
-        routing = {}
+        routing: dict[str, list[str]] = {}
 
         for file_path in file_paths:
             parser_type, _ = self.detect_file_type(file_path)

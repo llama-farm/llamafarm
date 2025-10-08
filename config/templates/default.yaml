@@ -114,7 +114,7 @@ rag:
 
         # Word Document Parser
         - type: "DocxParser_LlamaIndex"
-          file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
+          file_include_patterns: ["*.docx", "*.DOCX"]
           priority: 10
           config:
             chunk_size: 500
