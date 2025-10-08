@@ -531,7 +531,10 @@ async def list_models(namespace: str, project_id: str):
     return ListModelsResponse(
         total=len(models),
         models=[
-            ModelResponse(model=model, default=model.name == default_model)
+            ModelResponse(
+                **model.model_dump(mode="json", exclude_none=True),
+                default=model.name == default_model,
+            )
             for model in models
         ],
     )
