@@ -379,8 +379,8 @@ jobs:
             echo "Current service status:"
             docker compose -f docker-compose.yml ps
             
-            # Check if server service is healthy by looking for "healthy" in the output
-            if docker compose -f docker-compose.yml ps | grep -q "healthy"; then
+            # Check if server service is healthy by looking for "(healthy)" status explicitly
+            if docker compose -f docker-compose.yml ps | grep -q "(healthy)"; then
               echo "✅ At least one service is healthy, checking all..."
               break
             fi

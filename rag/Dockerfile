@@ -34,7 +34,7 @@ COPY rag/ ./rag/
 
 # Install each package with its own dependencies
 RUN ls -la config
-RUN cd config && uv sync --locked  --verbose
+RUN cd config && uv sync --locked --all-extras --verbose
 RUN cd rag && uv sync --locked  --verbose
 
 # Generate config schema and datamodel types

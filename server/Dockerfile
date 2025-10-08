@@ -32,9 +32,9 @@ WORKDIR /app
 COPY config/ ./config/
 COPY rag/schema.yaml ./rag/schema.yaml
 
-# Install config dependencies only (server no longer needs RAG/models)
+# Install config dependencies including dev dependencies for datamodel generation
 RUN ls -la config
-RUN cd config && uv sync --locked  --verbose
+RUN cd config && uv sync --locked --all-extras --verbose
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh

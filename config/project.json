@@ -43,7 +43,8 @@
       ],
       "outputs": [
         "{projectRoot}/datamodel.py",
-        "{projectRoot}/schema.deref.yaml"
+        "{projectRoot}/schema.deref.yaml",
+        "{workspaceRoot}/cli/cmd/config/schema.yaml"
       ]
     }
   }
