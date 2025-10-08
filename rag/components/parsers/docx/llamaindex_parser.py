@@ -132,68 +132,70 @@ class DocxParser_LlamaIndex(BaseParser):
                     except Exception as e:
                         logger.debug(f"Failed to extract enhanced metadata: {e}")
 
-            # Apply chunking if needed
-            if self.chunk_size:
-                if self.chunk_strategy == "sentences":
-                    splitter = SentenceSplitter(
-                        chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
-                    )
-                elif self.chunk_strategy == "paragraphs":
-                    # For paragraph-based chunking, try to use the document structure
-                    try:
-                        doc = docx.Document(str(path))
-
-                        # Extract full text first
-                        paragraphs = [
-                            para.text.strip()
-                            for para in doc.paragraphs
-                            if para.text.strip()
-                        ]
-                        full_text = "\n\n".join(paragraphs)
-
-                        # Use shared chunking utility
-                        chunks = DocxChunker.chunk_by_paragraphs(
-                            full_text, self.chunk_size, self.chunk_overlap
+                # Apply chunking if needed
+                if self.chunk_size:
+                    if self.chunk_strategy == "sentences":
+                        splitter = SentenceSplitter(
+                            chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
                         )
+                    elif self.chunk_strategy == "paragraphs":
+                        # For paragraph-based chunking, try to use the document structure
+                        try:
+                            doc = docx.Document(str(path))
 
-                        # Create documents from chunks using shared factory
-                        documents = DocxDocumentFactory.create_documents_from_chunks(
-                            chunks, metadata, str(path), "paragraphs"
-                        )
+                            # Extract full text first
+                            paragraphs = [
+                                para.text.strip()
+                                for para in doc.paragraphs
+                                if para.text.strip()
+                            ]
+                            full_text = "\n\n".join(paragraphs)
 
-                        return ProcessingResult(
-                            documents=documents, errors=[]
-                        )  # Wrap in ProcessingResult
+                            # Use shared chunking utility
+                            chunks = DocxChunker.chunk_by_paragraphs(
+                                full_text, self.chunk_size, self.chunk_overlap
+                            )
 
-                    except ImportError:
-                        # Fall back to token-based chunking
+                            # Create documents from chunks using shared factory
+                            documents = (
+                                DocxDocumentFactory.create_documents_from_chunks(
+                                    chunks, metadata, str(path), "paragraphs"
+                                )
+                            )
+
+                            return ProcessingResult(
+                                documents=documents, errors=[]
+                            )  # Wrap in ProcessingResult
+
+                        except ImportError:
+                            # Fall back to token-based chunking
+                            splitter = TokenTextSplitter(
+                                chunk_size=self.chunk_size,
+                                chunk_overlap=self.chunk_overlap,
+                            )
+                    else:  # characters or tokens
                         splitter = TokenTextSplitter(
-                            chunk_size=self.chunk_size,
-                            chunk_overlap=self.chunk_overlap,
+                            chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
                         )
-                else:  # characters or tokens
-                    splitter = TokenTextSplitter(
-                        chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
-                    )
 
-                # Apply splitter if we didn't do paragraph chunking
-                if not documents:
-                    nodes = splitter.get_nodes_from_documents([llama_doc])
+                    # Apply splitter if we didn't do paragraph chunking
+                    if not documents:
+                        nodes = splitter.get_nodes_from_documents([llama_doc])
 
-                    chunks = [
-                        node.text if hasattr(node, "text") else str(node)
-                        for node in nodes
-                    ]
-                    documents = DocxDocumentFactory.create_documents_from_chunks(
-                        chunks, metadata, str(path), self.chunk_strategy
+                        chunks = [
+                            node.text if hasattr(node, "text") else str(node)
+                            for node in nodes
+                        ]
+                        documents = DocxDocumentFactory.create_documents_from_chunks(
+                            chunks, metadata, str(path), self.chunk_strategy
+                        )
+                else:
+                    # Single document
+                    documents.append(
+                        DocxDocumentFactory.create_single_document(
+                            content, metadata, str(path)
+                        )
                     )
-            else:
-                # Single document
-                documents.append(
-                    DocxDocumentFactory.create_single_document(
-                        content, metadata, str(path)
-                    )
-                )
 
             return ProcessingResult(documents=documents, errors=[])
 
