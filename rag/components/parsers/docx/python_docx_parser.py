@@ -162,7 +162,14 @@ class DocxParser_PythonDocx(BaseParser):
 
             # Apply chunking if needed
             if self.chunk_size and self.chunk_size > 0:
-                chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+                if self.chunk_strategy == "paragraphs":
+                    chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+                elif self.chunk_strategy == "characters":
+                    chunks = DocxChunker.chunk_by_characters(full_text, self.chunk_size)
+                else:
+                    # Default to paragraph chunking for unknown strategies
+                    chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+
                 documents = DocxDocumentFactory.create_documents_from_chunks(
                     chunks, metadata, str(path), self.chunk_strategy
                 )
@@ -291,7 +298,20 @@ class DocxParser_PythonDocx(BaseParser):
 
                 # Apply chunking if needed
                 if self.chunk_size and self.chunk_size > 0:
-                    chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+                    if self.chunk_strategy == "paragraphs":
+                        chunks = DocxChunker.chunk_by_paragraphs(
+                            full_text, self.chunk_size
+                        )
+                    elif self.chunk_strategy == "characters":
+                        chunks = DocxChunker.chunk_by_characters(
+                            full_text, self.chunk_size
+                        )
+                    else:
+                        # Default to paragraph chunking for unknown strategies
+                        chunks = DocxChunker.chunk_by_paragraphs(
+                            full_text, self.chunk_size
+                        )
+
                     documents = DocxDocumentFactory.create_documents_from_chunks(
                         chunks, base_metadata, filename, self.chunk_strategy
                     )

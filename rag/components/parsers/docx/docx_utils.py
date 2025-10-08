@@ -90,7 +90,13 @@ class DocxChunker:
 
                 # Start new chunk with overlap
                 if chunk_overlap > 0 and current_chunk:
-                    overlap_text = current_chunk[-1][:chunk_overlap]
+                    # Get the tail of the previous chunk for overlap
+                    prev_chunk_text = "\n\n".join(current_chunk)
+                    overlap_text = (
+                        prev_chunk_text[-chunk_overlap:]
+                        if len(prev_chunk_text) > chunk_overlap
+                        else prev_chunk_text
+                    )
                     current_chunk = [overlap_text, para_text]
                     current_size = len(overlap_text) + para_size
                 else:

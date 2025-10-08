@@ -81,7 +81,7 @@ class DocxParser_LlamaIndex(BaseParser):
         """Validate configuration."""
         return True
 
-    def parse(self, source: str, **kwargs):
+    def parse(self, source: str, **kwargs) -> ProcessingResult:
         """Parse DOCX/DOC using LlamaIndex."""
         path = Path(source)
         if not path.exists():
@@ -161,7 +161,9 @@ class DocxParser_LlamaIndex(BaseParser):
                             chunks, metadata, str(path), "paragraphs"
                         )
 
-                        return documents  # Return early if paragraph chunking succeeded
+                        return ProcessingResult(
+                            documents=documents, errors=[]
+                        )  # Wrap in ProcessingResult
 
                     except ImportError:
                         # Fall back to token-based chunking
