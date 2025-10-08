@@ -306,7 +306,7 @@ async def chat(
                 agent_sessions.pop(key, None)
                 record = None
 
-            if record is None:
+            if record is None or record.agent.model_name != request.model:
                 # Create new agent and enable persistence
                 agent = ProjectChatOrchestratorAgentFactory.create_agent(
                     project_config,
