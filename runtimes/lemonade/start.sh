@@ -35,6 +35,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# If --model-name was provided, propagate it to LF_MODEL_NAME (CLI arg should take precedence over env)
+if [ -n "$lf_model_name" ]; then
+    LF_MODEL_NAME="$lf_model_name"
+fi
+
 # Search for llamafarm.yaml in multiple locations
 if [ -z "$LF_CONFIG_FILE" ]; then
     # Try current directory first
@@ -67,7 +72,7 @@ if [ -n "$LF_CONFIG_FILE" ]; then
     if [ -n "$LF_MODEL_NAME" ]; then
         CONFIG_MODEL=$(uv run python -c "
 import yaml
-config = yaml.safe_load(open('$CONFIG_FILE'))
+config = yaml.safe_load(open('$LF_CONFIG_FILE'))
 models = config.get('runtime', {}).get('models', [])
 for model_config in models:
     if model_config.get('provider') == 'lemonade' and model_config.get('name') == '$LF_MODEL_NAME':
