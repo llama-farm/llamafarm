@@ -120,7 +120,7 @@ prompts:
 
 > **Note:** Currently, Lemonade must be manually started. In the future, it will run as a container and be auto-started by the LlamaFarm server.
 
-See [Lemonade Quickstart](../../runtimes/lemonade/QUICKSTART.md) for detailed setup.
+See [Lemonade Quickstart](../models#quick-setup) for detailed setup.
 
 ## vLLM Gateway with Structured Output
 

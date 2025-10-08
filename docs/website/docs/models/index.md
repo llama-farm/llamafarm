@@ -162,8 +162,8 @@ LEMONADE_MODEL=user.Qwen3-8B LEMONADE_PORT=11535 nx start lemonade
 ### More Information
 
 For detailed setup instructions, model recommendations, and troubleshooting, see:
-- [Lemonade Quickstart Guide](../../runtimes/lemonade/QUICKSTART.md)
-- [Lemonade README](../../runtimes/lemonade/README.md)
+- [Lemonade Quickstart](#quick-setup)
+- [Lemonade Runtime overview](#lemonade-runtime)
 
 ## Extending Provider Support
 
