@@ -27,11 +27,14 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
 - [Ollama](https://ollama.com/download) *(local runtime; additional options coming soon)*
 
 1. **Install the CLI**
-   ```bash
-   # macOS / Linux
-   curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 
-   # Windows (via winget)
+   macOS / Linux
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
+   ```
+
+   Windows (via winget)
+   ```
    winget install LlamaFarm.CLI
    ```
 
