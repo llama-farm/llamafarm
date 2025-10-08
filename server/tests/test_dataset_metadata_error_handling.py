@@ -15,6 +15,7 @@ from config.datamodel import (
     Provider,
     Runtime,
     Version,
+    Model,
 )
 
 from services.data_service import MetadataFileContent
@@ -117,13 +118,18 @@ class TestDatasetMetadataErrorHandling:
                 ),
             ],
             runtime=Runtime(
-                provider=Provider.openai,
-                model="llama3.1:8b",
-                api_key="ollama",
-                base_url="http://localhost:11434/v1",
-                model_api_parameters={
-                    "temperature": 0.5,
-                },
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.openai,
+                        model="llama3.1:8b",
+                        api_key="ollama",
+                        base_url="http://localhost:11434/v1",
+                        model_api_parameters={
+                            "temperature": 0.5,
+                        },
+                    )
+                ]
             ),
         )
 
@@ -405,13 +411,18 @@ class TestDatasetMetadataErrorHandling:
                 ),
             ],
             runtime=Runtime(
-                provider=Provider.openai,
-                model="llama3.1:8b",
-                api_key="ollama",
-                base_url="http://localhost:11434/v1",
-                model_api_parameters={
-                    "temperature": 0.5,
-                },
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.openai,
+                        model="llama3.1:8b",
+                        api_key="ollama",
+                        base_url="http://localhost:11434/v1",
+                        model_api_parameters={
+                            "temperature": 0.5,
+                        },
+                    )
+                ]
             ),
         )
 
@@ -553,13 +564,18 @@ class TestDatasetMetadataErrorHandling:
                 ),
             ],
             runtime=Runtime(
-                provider=Provider.openai,
-                model="llama3.1:8b",
-                api_key="ollama",
-                base_url="http://localhost:11434/v1",
-                model_api_parameters={
-                    "temperature": 0.5,
-                },
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.openai,
+                        model="llama3.1:8b",
+                        api_key="ollama",
+                        base_url="http://localhost:11434/v1",
+                        model_api_parameters={
+                            "temperature": 0.5,
+                        },
+                    )
+                ]
             ),
         )
 
@@ -665,13 +681,18 @@ class TestDatasetMetadataErrorHandling:
                 ),
             ],
             runtime=Runtime(
-                provider=Provider.openai,
-                model="llama3.1:8b",
-                api_key="ollama",
-                base_url="http://localhost:11434/v1",
-                model_api_parameters={
-                    "temperature": 0.5,
-                },
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.openai,
+                        model="llama3.1:8b",
+                        api_key="ollama",
+                        base_url="http://localhost:11434/v1",
+                        model_api_parameters={
+                            "temperature": 0.5,
+                        },
+                    )
+                ]
             ),
         )
 
@@ -799,13 +820,18 @@ class TestErrorHandlingIntegration:
                 ),
             ],
             runtime=Runtime(
-                provider=Provider.openai,
-                model="llama3.1:8b",
-                api_key="ollama",
-                base_url="http://localhost:11434/v1",
-                model_api_parameters={
-                    "temperature": 0.5,
-                },
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.openai,
+                        model="llama3.1:8b",
+                        api_key="ollama",
+                        base_url="http://localhost:11434/v1",
+                        model_api_parameters={
+                            "temperature": 0.5,
+                        },
+                    )
+                ]
             ),
         )
 

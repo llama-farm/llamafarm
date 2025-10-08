@@ -1,0 +1,11 @@
+# Model cache and downloaded models
+models/
+*.gguf
+*.onnx
+
+# Logs
+*.log
+
+# Python cache
+__pycache__/
+*.pyc

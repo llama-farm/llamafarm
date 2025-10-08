@@ -1,0 +1,30 @@
+version: v1
+name: lemonade-example
+namespace: default
+
+runtime:
+  models:
+  - name: lemonade-onnx
+    description: "Lemonade with ONNX backend"
+    provider: lemonade
+    model: "Phi-3-mini-4k-instruct-onnx"  # Example ONNX model
+    default: true
+    prompt_format: structured  # structured | unstructured
+    # instructor_mode: md_json  # Optional: override instructor mode
+    lemonade:
+      backend: onnx  # onnx (default, all systems) | llamacpp (GGUF) | transformers (PyTorch)
+      port: 11534
+      # model_path: ~/.cache/lemonade/models  # Optional: custom model storage
+
+prompts:
+  - role: system
+    content: "You are a helpful AI assistant powered by Lemonade."
+
+# RAG configuration (optional)
+# rag:
+#   databases:
+#     - name: main_db
+#       # ... database config
+
+# Datasets (optional)
+# datasets: []

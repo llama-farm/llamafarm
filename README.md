@@ -24,7 +24,7 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
 **Prerequisites:**
 
 - [Docker](https://www.docker.com/get-started/)
-- [Ollama](https://ollama.com/download) *(local runtime; additional options coming soon)*
+- [Ollama](https://ollama.com/download) *(local runtime)* **OR** [Lemonade](runtimes/lemonade/QUICKSTART.md) *(local GGUF models with NPU/GPU acceleration)*
 
 1. **Install the CLI**
 
@@ -102,6 +102,8 @@ Open another terminal to run `lf` commands (installed or built from source). Thi
 | Initialize a project | `lf init my-project` | Creates `llamafarm.yaml` from server template. |
 | Start dev stack + chat TUI | `lf start` | Spins up server, rag worker, monitors Ollama/vLLM. |
 | Interactive project chat | `lf chat` | Opens TUI using project from `llamafarm.yaml`. |
+| List available models | `lf models list` | Shows all configured models (Ollama, Lemonade, OpenAI, etc.). |
+| Use specific model | `lf chat --model powerful "question"` | Switch between models in multi-model configs. |
 | Send single prompt | `lf chat "Explain retrieval augmented generation"` | Uses RAG by default; add `--no-rag` for pure LLM. |
 | Preview REST call | `lf chat --curl "What models are configured?"` | Prints sanitized `curl` command. |
 | Create dataset | `lf datasets create -s pdf_ingest -b main_db research-notes` | Validates strategy/database against project config. |
@@ -172,17 +174,36 @@ See the complete [API Reference](docs/website/docs/api/index.md) for all endpoin
 
 `llamafarm.yaml` is the source of truth for each project. The schema enforces required fields and documents every extension point.
 
+### Multi-Model Configuration (Recommended)
+
 ```yaml
 version: v1
 name: fda-assistant
 namespace: default
 
 runtime:
-  provider: openai                   # "openai" for any OpenAI-compatible host, "ollama" for local Ollama
-  model: qwen2.5:7b
-  base_url: http://localhost:8000/v1 # Point to vLLM, Together, etc.
-  api_key: sk-local-placeholder
-  instructor_mode: tools             # Optional: json, md_json, tools, etc.
+  default_model: fast                # Which model to use by default
+
+  models:
+    fast:
+      description: "Fast Ollama model"
+      provider: ollama
+      model: gemma3:1b
+
+    powerful:
+      description: "More capable Ollama model"
+      provider: ollama
+      model: qwen3:8b
+
+    lemon:
+      description: "Lemonade local model with NPU/GPU"
+      provider: lemonade
+      model: user.Qwen3-4B
+      base_url: "http://127.0.0.1:11534/v1"
+      lemonade:
+        backend: llamacpp
+        port: 11534
+        context_size: 32768
 
 prompts:
   - role: system
@@ -221,6 +242,16 @@ datasets:
     data_processing_strategy: pdf_ingest
     database: main_db
 ```
+
+**Using your models:**
+```bash
+lf models list                              # See all configured models
+lf chat "Question"                          # Uses default model (fast)
+lf chat --model powerful "Complex question" # Use specific model
+lf chat --model lemon "Local GGUF model"    # Use Lemonade model
+```
+
+> **Note:** Lemonade models require manual startup via `nx start lemonade` from the project root. The `nx start lemonade` command automatically picks up configuration from your `llamafarm.yaml`. In the future, Lemonade will run as a container and be auto-started. See [Lemonade Quickstart](runtimes/lemonade/QUICKSTART.md) for setup.
 
 Configuration reference: [Configuration Guide](docs/website/docs/configuration/index.md) • [Extending LlamaFarm](docs/website/docs/extending/index.md)
 

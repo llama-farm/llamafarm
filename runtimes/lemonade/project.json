@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/nx-project",
+  "name": "lemonade",
+  "projectType": "application",
+  "targets": {
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cd config && bash ../runtimes/lemonade/start-all.sh",
+        "cwd": "{projectRoot}/../.."
+      }
+    }
+  }
+}

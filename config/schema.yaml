@@ -74,30 +74,53 @@ properties:
 
   runtime:
     type: object
-    required:
-      - provider
-      - model
     properties:
-      provider:
+      default_model:
         type: string
-        enum: [openai, ollama]
-        default: openai
-      model:
-        type: string
-        description: Model name or ID
-      base_url:
-        type: ["string", "null"]
-        description: Base URL for the provider
-      api_key:
-        type: ["string", "null"]
-        description: API key for the provider (optional, not required for Ollama)
-      instructor_mode:
-        type: ["string", "null"]
-        description: Instructor mode to use for structured output (e.g., tools, json, md_json, anthropic_tools, gemini_json, etc.)
-      prompt_format:
-        type: string
-        description: Selects prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)
-        enum: [structured, unstructured]
-      model_api_parameters:
-        description: Additional parameters passed to the API provider
-        additionalProperties: true
+        description: "Name of the default model to use (references a model name in the models list). If not specified, uses first model."
+
+      models:
+        type: array
+        description: "List of model configurations for multi-model support"
+        items:
+          type: object
+          required:
+            - name
+            - provider
+            - model
+          properties:
+            name:
+              type: string
+              description: "Model identifier (unique name)"
+            description:
+              type: string
+              description: "Human-readable description of this model configuration"
+            provider:
+              type: string
+              enum: [openai, ollama, lemonade]
+              description: "Runtime provider for this model"
+            model:
+              type: string
+              description: "Model name or ID"
+            base_url:
+              type: string
+              description: "Base URL for the provider"
+            api_key:
+              type: string
+              description: "API key for the provider"
+            instructor_mode:
+              type: string
+              description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
+            prompt_format:
+              type: string
+              enum: [structured, unstructured]
+              description: "Prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)"
+            model_api_parameters:
+              type: object
+              description: "Additional parameters passed to the API provider"
+              additionalProperties: true
+            provider_config:
+              type: object
+              description: "Provider-specific configuration (e.g., lemonade settings, ollama options)"
+              default: {}
+              additionalProperties: true

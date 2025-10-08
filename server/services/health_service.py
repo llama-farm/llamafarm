@@ -4,9 +4,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-import requests  # type: ignore
+from config.datamodel import Model, Provider
 
 from core.settings import settings
+from services import runtime_service
+from services.model_service import ModelService
 
 
 def _now_ms() -> int:
@@ -68,118 +70,105 @@ def _check_storage() -> dict:
         }
 
 
-def _load_seed_runtime_model() -> tuple[str | None, str]:
-    """Return (model, message). Reads the project seed YAML and extracts runtime.model.
-
-    If missing or invalid, returns (None, reason).
-    """
-    try:
-        import yaml  # type: ignore
-    except Exception:  # pragma: no cover - environment specific
-        return None, "PyYAML not installed"
-
-    seed_path = (
-        Path(__file__).resolve().parents[1]
-        / "seeds"
-        / "project_seed"
-        / "llamafarm.yaml"
-    )
-    if not seed_path.exists():
-        return None, f"Seed file not found at {seed_path}"
-
-    try:
-        data = yaml.safe_load(seed_path.read_text(encoding="utf-8")) or {}
-        runtime = (data or {}).get("runtime") or {}
-        model = (runtime or {}).get("model")
-        if not model or not isinstance(model, str):
-            return None, "runtime.model missing in seed"
-        return model, "ok"
-    except Exception as e:
-        return None, f"Failed to parse seed YAML: {e}"
-
-
 def _check_ollama() -> dict:
-    start = _now_ms()
-    base = settings.ollama_host.rstrip("/")
-    url = f"{base}/api/tags"
-    try:
-        resp = requests.get(url, timeout=1.0)
-        if 200 <= resp.status_code < 300:
-            return {
-                "name": "ollama",
-                "status": "healthy",
-                "message": f"{base} reachable",
-                "latency_ms": _now_ms() - start,
-                "details": {"host": base},
-            }
-        return {
-            "name": "ollama",
-            "status": "unhealthy",
-            "message": f"{base} returned {resp.status_code}",
-            "latency_ms": _now_ms() - start,
-            "details": {"host": base},
-        }
-    except Exception as e:
-        return {
-            "name": "ollama",
-            "status": "unhealthy",
-            "message": f"{base} unreachable: {e}",
-            "latency_ms": _now_ms() - start,
-            "details": {"host": base},
-        }
+    """Check Ollama runtime health using provider registry."""
+    # Create minimal config with one model for health check
+    model_config_dict = {
+        "name": "ollama-health",
+        "provider": Provider.ollama,
+        "model": "health-check",
+    }
+    model_config = Model.model_validate(model_config_dict)
+
+    provider = runtime_service.get_provider(Provider.ollama, model_config)
+    result = provider.check_health()
+    return result.to_dict()
 
 
 def _check_seed_project() -> dict:
-    """Validate the project seed runtime: Ollama is reachable and model is present."""
+    """Validate the project seed runtime is reachable and model is present using provider registry."""
     start = _now_ms()
-    model, reason = _load_seed_runtime_model()
-    base = settings.ollama_host.rstrip("/")
-    url = f"{base}/api/tags"
 
-    if model is None:
-        return {
-            "name": "project",
-            "status": "unhealthy",
-            "message": reason,
-            "latency_ms": _now_ms() - start,
-            "runtime": {"host": base, "model": None},
-        }
-
-    # check tags for model
+    # Load seed project config for ModelService
     try:
-        resp = requests.get(url, timeout=1.5)
-        ok = 200 <= resp.status_code < 300
-        if not ok:
+        import yaml
+
+        seed_path = (
+            Path(__file__).resolve().parents[1]
+            / "seeds"
+            / "project_seed"
+            / "llamafarm.yaml"
+        )
+
+        if not seed_path.exists():
             return {
                 "name": "project",
                 "status": "unhealthy",
-                "message": f"Ollama tags returned {resp.status_code}",
+                "message": f"Seed file not found at {seed_path}",
                 "latency_ms": _now_ms() - start,
-                "runtime": {"host": base, "model": model},
+                "runtime": {"provider": None, "model": None},
             }
-        data = resp.json() if resp.content else {}
-        tags = {item.get("name") for item in (data.get("models") or [])}
-        present = model in tags
-        status = "healthy" if present else "unhealthy"
-        message = (
-            "Model available"
-            if present
-            else f"Model '{model}' not found; run: ollama pull {model}"
+
+        project_config_data = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
+        from config.datamodel import LlamaFarmConfig
+
+        project_config = LlamaFarmConfig(**project_config_data)
+
+        # Use ModelService to get the correct model config
+        model_config = ModelService.get_model(project_config, model_name=None)
+
+        # Get provider and check health
+        provider_impl = runtime_service.get_provider(
+            model_config.provider, model_config
         )
+        health_result = provider_impl.check_health()
+
+        # Enhance with model validation for Ollama
+        if (
+            model_config.provider == Provider.ollama
+            and health_result.status == "healthy"
+        ):
+            models = health_result.details.get("models", [])
+            present = model_config.model in models
+            status = "healthy" if present else "unhealthy"
+            message = (
+                "Model available"
+                if present
+                else f"Model '{model_config.model}' not found; run: ollama pull {model_config.model}"
+            )
+
+            return {
+                "name": "project",
+                "status": status,
+                "message": message,
+                "latency_ms": _now_ms() - start,
+                "runtime": {
+                    "provider": model_config.provider.value,
+                    "host": health_result.details.get("host"),
+                    "model": model_config.model,
+                },
+            }
+
+        # For other providers, use health check result directly
         return {
             "name": "seed:project",
-            "status": status,
-            "message": message,
+            "status": health_result.status,
+            "message": health_result.message,
             "latency_ms": _now_ms() - start,
-            "runtime": {"host": base, "model": model},
+            "runtime": {
+                "provider": model_config.provider.value,
+                "model": model_config.model,
+                **health_result.details,
+            },
         }
+
     except Exception as e:
         return {
             "name": "project",
             "status": "unhealthy",
-            "message": f"Failed to query Ollama tags: {e}",
+            "message": f"Failed to check provider health: {e}",
             "latency_ms": _now_ms() - start,
-            "runtime": {"host": base, "model": model},
+            "runtime": {"provider": None, "model": None},
         }
 
 

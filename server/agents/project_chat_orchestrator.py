@@ -13,15 +13,15 @@ from openai import AsyncOpenAI
 
 from agents.agent import LFAgent, LFAgentConfig
 from context_providers.docs_context_provider import DocsContextProvider
-from core.settings import settings
+from services import runtime_service
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 from config.datamodel import (  # noqa: E402
     LlamaFarmConfig,
+    Model,
     Prompt,
     PromptFormat,
-    Provider,
 )
 
 from core.logging import FastAPIStructLogger  # noqa: E402
@@ -51,19 +51,37 @@ class ProjectChatOrchestratorAgent(LFAgent):
         self,
         project_config: LlamaFarmConfig,
         project_dir: str,
+        model_name: str | None = None,
     ):
+        # Resolve model configuration
+        from services.model_service import ModelService
+
+        logger.info(
+            "Creating ProjectChatOrchestratorAgent",
+            model_name=model_name,
+            project=project_config.name,
+        )
+        model_config = ModelService.get_model(project_config, model_name)
+        logger.info(
+            "Resolved model configuration",
+            model_name=model_config.name,
+            provider=model_config.provider.value,
+            model=model_config.model,
+            base_url=model_config.base_url,
+        )
+
         # Build base history from config
         history = _get_history(project_config)
-        client = _get_client(project_config)
+        client = _get_client_for_model(model_config)
 
         lf_config = LFAgentConfig(
             client=client,
-            model=project_config.runtime.model,
+            model=model_config.model,
             history=history,
             system_prompt_generator=LFSystemPromptGenerator(
                 project_config=project_config
             ),
-            model_api_parameters=project_config.runtime.model_api_parameters,
+            model_api_parameters=model_config.model_api_parameters,
         )
 
         super().__init__(config=lf_config)
@@ -73,6 +91,8 @@ class ProjectChatOrchestratorAgent(LFAgent):
         self._project_id = project_config.name
         self._project_dir = project_dir
         self._persist_enabled = False
+
+        self.model_name = model_config.model  # Store model name for API responses
 
         # Register docs context provider
         self.docs_context_provider = DocsContextProvider(title="Relevant Documentation")
@@ -254,73 +274,50 @@ def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
     return history
 
 
-def _get_client(
-    project_config: LlamaFarmConfig,
-) -> instructor.client.AsyncInstructor | AsyncOpenAI:
-    mode = _determine_instructor_mode(project_config)
+def _get_client_for_model(
+    model_config: Model,
+) -> AsyncOpenAI | instructor.client.AsyncInstructor:
+    """Get client for a specific model configuration using provider registry.
 
-    if project_config.runtime.provider == Provider.openai:
-        openaiClient = AsyncOpenAI(
-            api_key=project_config.runtime.api_key,
-            base_url=project_config.runtime.base_url,
-        )
-        if project_config.runtime.prompt_format == PromptFormat.structured:
-            return instructor.from_openai(openaiClient, mode=mode)
-        else:
-            return openaiClient
+    Args:
+        model_config: ModelConfig instance from ModelService
 
-    if project_config.runtime.provider == Provider.ollama:
-        openaiClient = AsyncOpenAI(
-            api_key=project_config.runtime.api_key or settings.ollama_api_key,
-            base_url=project_config.runtime.base_url or f"{settings.ollama_host}/v1",
-        )
-        if project_config.runtime.prompt_format == PromptFormat.structured:
-            return instructor.from_openai(openaiClient, mode=mode)
-        else:
-            return openaiClient
-
-    else:
-        raise ValueError(f"Unsupported provider: {project_config.runtime.provider}")
-
-
-def _determine_instructor_mode(project_config: LlamaFarmConfig) -> instructor.Mode:
-    # Use the configured instructor mode or default based on provider
-    if project_config.runtime.instructor_mode is not None:
-        # It's a string value
-        mode_str = project_config.runtime.instructor_mode
-
-        # Map the configured mode string to instructor.Mode
-        try:
-            mode = instructor.mode.Mode[mode_str.upper()]
-            logger.debug(f"Using configured instructor mode: {mode}")
-        except KeyError as e:
-            # Invalid mode specified
-            raise ValueError(
-                f"Invalid instructor_mode '{mode_str}'. "
-                f"Common modes include: tools, json, md_json, anthropic_tools, gemini_json. "
-                f"See instructor documentation for full list of supported modes."
-            ) from e
-    elif project_config.runtime.provider == Provider.ollama:
-        # Default to MD_JSON for Ollama as it's most compatible
-        mode = instructor.Mode.MD_JSON
-        logger.debug("Using MD_JSON mode for Ollama provider (default)")
-    else:
-        mode = instructor.Mode.TOOLS
-        logger.debug("Using TOOLS mode (default for non-Ollama)")
-
-    logger.debug(f"Instructor mode: {mode}")
-    return mode
+    Returns:
+        AsyncOpenAI client (possibly instructor-wrapped)
+    """
+    provider = runtime_service.get_provider(model_config.provider, model_config)
+    return provider.get_client()
 
 
 class ProjectChatOrchestratorAgentFactory:
     @staticmethod
     def create_agent(
-        project_config: LlamaFarmConfig, project_dir: str, session_id: str | None = None
+        project_config: LlamaFarmConfig,
+        project_dir: str,
+        model_name: str | None = None,
+        session_id: str | None = None,
     ) -> ProjectChatOrchestratorAgent:
-        runtime = project_config.runtime
-        pf = runtime.prompt_format or PromptFormat.unstructured
-        logger.info("Creating chat agent", prompt_format=pf.value, model=runtime.model)
-        agent = ProjectChatOrchestratorAgent(project_config, project_dir=project_dir)
+        from services.model_service import ModelService
+
+        # Get model config for logging
+        model_config = ModelService.get_model(project_config, model_name)
+        pf = model_config.prompt_format or PromptFormat.unstructured
+        selected_name = model_config.name
+
+        logger.info(
+            "Creating chat agent",
+            prompt_format=pf.value if pf else "unstructured",
+            model=model_config.model,
+            model_name=selected_name,
+            provider=model_config.provider.value,
+        )
+
+        agent = ProjectChatOrchestratorAgent(
+            project_config, project_dir=project_dir, model_name=model_name
+        )
+
+        # Enable session persistence if session_id provided
         if session_id:
             agent.enable_persistence(session_id=session_id)
+
         return agent

@@ -30,13 +30,14 @@ dependencies = [
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
-  "jsonref>=1.1.0",             # Can be removed since it's now in config
+  "jsonref>=1.1.0", # Can be removed since it's now in config
   "celery>=5.5.3",
   # Configuration parsing
   "pyyaml>=6.0.0", # Can be removed since it's now in config
   # Fix dotenv parsing
   "python-dotenv>=1.0.0",
   "llamafarm-config",
+  "types-requests>=2.31.0.6",
 ]
 
 [project.optional-dependencies]

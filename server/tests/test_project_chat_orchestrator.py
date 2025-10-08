@@ -8,6 +8,7 @@ from config.datamodel import (
     Provider,
     Runtime,
     Version,
+    Model,
 )
 
 from agents.project_chat_orchestrator import (
@@ -46,13 +47,18 @@ def make_config(
         name="demo",
         namespace="default",
         runtime=Runtime(
-            provider=Provider.ollama,
-            model=model,
-            base_url="http://localhost:11434/v1",
-            prompt_format=prompt_format,
-            api_key="ollama",
-            instructor_mode="tools",
-            model_api_parameters={},
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.ollama,
+                    model=model,
+                    base_url="http://localhost:11434/v1",
+                    prompt_format=prompt_format,
+                    api_key="ollama",
+                    instructor_mode="tools",
+                    model_api_parameters={},
+                )
+            ]
         ),
         prompts=[Prompt(role="system", content="You are a helpful assistant.")],
         rag=None,  # Don't set RAG if not needed, avoids validation errors

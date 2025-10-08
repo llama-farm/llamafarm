@@ -13,6 +13,43 @@ This document summarizes everything an automated collaborator needs to get Llama
    - Windows: download `lf.exe` from the latest release and add it to PATH.
 4. **Adjust Ollama context window** – open Ollama → Settings → Advanced → set context window size (e.g., 100k tokens) to match production expectations.
 
+### Optional: Lemonade Runtime Setup
+Lemonade provides local LLM inference with NPU/GPU acceleration. It's optional but provides additional model options.
+
+**Installation:**
+```bash
+# Install via pip (automatic via LlamaFarm on first use)
+uv pip install lemonade-sdk
+```
+
+**Key Details:**
+- **Package name:** `lemonade-sdk` (NOT `lemonade-server-dev`)
+- **Command:** `lemonade-server-dev` (when installed via PyPI)
+- **Base URL format:** `http://localhost:{port}/api/v1` (note the `/api/v1` suffix)
+- **Default port:** 8000 (configure different port via `lemonade.port` in config)
+- **Backends:** `llamacpp` (recommended), `transformers`, `onnx`
+- **Auto-starts:** via `nx start lemonade` when configured
+
+**Configuration in llamafarm.yaml:**
+```yaml
+runtime:
+  models:
+    lemon:
+      provider: lemonade
+      model: Qwen3-0.6B-GGUF  # Any GGUF model from Lemonade's library
+      huggingface_token: hf_xxxxx  # Optional, for gated models
+      lemonade:
+        backend: llamacpp      # llamacpp | transformers | onnx
+        port: 11534           # Different from default to avoid conflicts
+        context_size: 32768   # Context window size
+```
+
+**Important Notes:**
+- Lemonade SDK auto-installs on first `nx start lemonade` if not present
+- Hardware detection is automatic (Metal on macOS, CUDA/Vulkan on Linux, CPU fallback)
+- Each Lemonade model instance requires its own port
+- Models are pulled from HuggingFace on first use
+
 ### First Run
 ```bash
 lf init my-project        # generates llamafarm.yaml via server template
@@ -52,10 +89,54 @@ Schema files:
 Required sections:
 - `version` – currently `v1`.
 - `name`, `namespace` – identify the project/tenant.
-- `runtime` – must include `provider`, `model`, and for non-default hosts, `base_url`/`api_key`.
+- `runtime` – **supports two formats:**
+  - **Multi-model (recommended):** `runtime.models` dict + `runtime.default_model`
+  - **Legacy (deprecated):** `runtime.provider`, `runtime.model`, `runtime.base_url`
 - `prompts` – list of `{role, content}` messages.
 - `rag` – `databases` + `data_processing_strategies` definitions.
 - `datasets` (optional) – keep dataset metadata in sync.
+
+### Multi-Model Configuration (NEW)
+The new multi-model format allows switching between different models via API or CLI:
+
+```yaml
+runtime:
+  default_model: fast  # Which model to use by default
+
+  models:
+    fast:
+      description: "Fast Ollama model for quick responses"
+      provider: ollama
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1  # Note: /v1 suffix required for Ollama
+      prompt_format: unstructured
+
+    powerful:
+      description: "More capable model"
+      provider: ollama
+      model: qwen3:8b
+      base_url: http://localhost:11434/v1
+
+    lemon:
+      description: "Lemonade runtime with local GGUF model"
+      provider: lemonade
+      model: Qwen3-0.6B-GGUF
+      lemonade:
+        backend: llamacpp
+        port: 11534
+        context_size: 32768
+```
+
+**Using multi-model:**
+- CLI: `lf chat --model powerful "your question"`
+- CLI: `lf models list` (shows all available models)
+- API: `POST /v1/projects/{ns}/{id}/chat/completions` with `{"model": "powerful", ...}`
+- API: `GET /v1/projects/{ns}/{id}/models` (lists all models)
+
+**Backward Compatibility:**
+- Legacy single-model configs are auto-converted to multi-model format internally
+- No breaking changes for existing configurations
+- ModelService.normalize_config() handles conversion automatically
 
 Reference docs: `docs/website/docs/configuration/index.md` and `docs/website/docs/configuration/example-configs.md`.
 

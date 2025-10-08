@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import llama_farm_api
-from config.datamodel import LlamaFarmConfig, Prompt, Provider, Runtime
+from config.datamodel import LlamaFarmConfig, Prompt, Provider, Runtime, Model
 from services.project_chat_service import FALLBACK_ECHO_RESPONSE
 
 
@@ -30,14 +30,30 @@ def app_client(mocker):
         prompts=[
             Prompt(role="system", content="You are the default project assistant.")
         ],
-        runtime=Runtime(provider=Provider.ollama, model="dummy-model"),
+        runtime=Runtime(
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.ollama,
+                    model="dummy-model",
+                )
+            ]
+        ),
     )
     seed_config = LlamaFarmConfig(
         version="v1",
         name="project_seed",
         namespace="llamafarm",
         prompts=[Prompt(role="system", content="You are the seed project assistant.")],
-        runtime=Runtime(provider=Provider.ollama, model="dummy-model"),
+        runtime=Runtime(
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.ollama,
+                    model="dummy-model",
+                )
+            ]
+        ),
     )
 
     def load_config(namespace: str, project_id: str):
@@ -59,6 +75,7 @@ def app_client(mocker):
     class StubAgent:
         def __init__(self, tag: str):
             self.tag = tag
+            self.model_name = "stub-model"
             self.context_providers = {}
             self.history = []
             self._persist_enabled = False
@@ -87,10 +104,16 @@ def app_client(mocker):
                 yield SimpleNamespace(chat_message=input_schema.chat_message)
 
     def make_agent(
-        project_config: LlamaFarmConfig, project_dir: str, session_id: str | None = None
+        project_config: LlamaFarmConfig,
+        project_dir: str,
+        model_name: str | None = None,
+        session_id: str | None = None,
     ):
         tag = f"{project_config.namespace}/{project_config.name}"
-        return StubAgent(tag)
+        agent = StubAgent(tag)
+        # Add model_name attribute for fallback testing
+        agent.model_name = model_name or "test-model"
+        return agent
 
     mocker.patch(
         "api.routers.projects.projects.ProjectChatOrchestratorAgentFactory.create_agent",

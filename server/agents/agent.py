@@ -139,6 +139,7 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         if user_input:
             self.history.initialize_turn()
             self.current_user_input = user_input
+
             self.history.add_message("user", user_input)
 
         self._prepare_messages()

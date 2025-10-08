@@ -17,7 +17,9 @@ var (
 	runRAGTopK           int
 	runNoRAG             bool
 	runRAGScoreThreshold float64
+	runModel             string
 	dryRun               bool
+
 )
 
 // chatCmd represents the `lf chat` command
@@ -48,8 +50,12 @@ Examples:
   # Chat with custom retrieval strategy and top-k
   lf chat --retrieval-strategy filtered_search --rag-top-k 10 "How do neural networks work?"
 
-  # Chat *without* RAG (LLM only)
-  lf chat --no-rag "What is machine learning?"`,
+  # Run WITHOUT RAG (LLM only)
+  lf chat --no-rag "What is machine learning?"
+
+  # Select specific model
+  lf chat --model fast "What is machine learning?"`,
+
 	Args: func(cmd *cobra.Command, args []string) error {
 		// Valid forms:
 		// 1) chat <ns>/<proj> <input>
@@ -148,6 +154,7 @@ Examples:
 			Temperature:      temperature,
 			MaxTokens:        maxTokens,
 			HTTPClient:       getHTTPClient(),
+			Model:            runModel,
 			// RAG settings - RAG is enabled by default unless --no-rag is used
 			RAGEnabled:           !runNoRAG,
 			RAGDatabase:          runRAGDatabase,
@@ -191,6 +198,7 @@ Examples:
 func init() {
 	chatCmd.Flags().StringVarP(&runInputFile, "file", "f", "", "path to file containing input text")
 
+	chatCmd.Flags().StringVar(&runModel, "model", "", "Model to use for the request (default: from config)")
 	chatCmd.Flags().BoolVar(&runNoRAG, "no-rag", false, "Disable RAG (use LLM only without document retrieval)")
 	chatCmd.Flags().StringVar(&runRAGDatabase, "database", "", "Database to use for RAG (default: from config)")
 	chatCmd.Flags().StringVar(&runRetrievalStrategy, "retrieval-strategy", "", "Retrieval strategy to use (default: from database config)")

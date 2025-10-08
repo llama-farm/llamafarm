@@ -61,7 +61,7 @@ class SchemaHandler:
 
         try:
             # Use the common config loader instead of direct YAML loading
-            config = load_config(config_path=self.config_source, validate=False)
+            config = load_config(config_path=self.config_source, validate=True)
 
             # Check if this is a global config (has 'rag' section) or direct RAG config
             if config.rag:

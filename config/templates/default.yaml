@@ -6,12 +6,110 @@ namespace: default
 # RUNTIME CONFIGURATION (required - most important)
 # =============================================================================
 runtime:
-  provider: ollama
-  model: gemma3:1b
-  temperature: 0.7
-  # instructor_mode: json
-  # api_key: optional, not needed for ollama
-  # model_api_parameters: optional additional parameters
+  models:
+  - name: default
+    description: "Default Ollama model"
+    provider: ollama
+    model: gemma3:1b
+    default: true
+    prompt_format: unstructured
+    # instructor_mode: json
+    # api_key: optional, not needed for ollama
+    # model_api_parameters: optional additional parameters
+
+  # ---------------------------------------------------------------------------
+  # LEMONADE RUNTIME - Local models with Universal NPU/GPU acceleration
+  # ---------------------------------------------------------------------------
+  # Lemonade provides high-performance local inference with hardware acceleration.
+  # It's an alternative to Ollama with better performance on some hardware.
+  #
+  # SETUP INSTRUCTIONS:
+  # 1. Install Lemonade SDK:
+  #    uv pip install lemonade-sdk
+  #
+  # 2. Download a model (examples below - choose one or more):
+  #
+  #    # Small & Fast (< 1GB) - Good for quick responses
+  #    uv run lemonade-server-dev pull user.Qwen3-0.6B \
+  #      --checkpoint unsloth/Qwen3-0.6B-GGUF \
+  #      --recipe llamacpp
+  #
+  #    # Balanced (4B) - Recommended for most use cases
+  #    uv run lemonade-server-dev pull user.Qwen3-4B \
+  #      --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M \
+  #      --recipe llamacpp
+  #
+  #    # Powerful (8B) - High-quality reasoning
+  #    uv run lemonade-server-dev pull user.Qwen3-8B \
+  #      --checkpoint unsloth/Qwen3-8B-GGUF:Q4_K_M \
+  #      --recipe llamacpp
+  #
+  #    # Coding Specialist
+  #    uv run lemonade-server-dev pull user.Qwen2.5-Coder-32B \
+  #      --checkpoint unsloth/Qwen2.5-Coder-32B-Instruct-GGUF:Q4_K_M \
+  #      --recipe llamacpp
+  #
+  # 3. Check downloaded models:
+  #    uv run lemonade-server-dev list
+  #
+  # 4. Start Lemonade server:
+  #    LEMONADE_MODEL=user.Qwen3-4B nx start lemonade
+  #
+  # 5. Uncomment the model configuration below and update your config
+  #
+  # For multiple models, run separate Lemonade instances on different ports:
+  #    # Terminal 1:
+  #    LEMONADE_MODEL=user.Qwen3-0.6B LEMONADE_PORT=11534 nx start lemonade
+  #    # Terminal 2:
+  #    LEMONADE_MODEL=user.Qwen3-8B LEMONADE_PORT=11535 nx start lemonade
+  #
+  # More info: runtimes/lemonade/QUICKSTART.md
+  # ---------------------------------------------------------------------------
+
+  # EXAMPLE: Small fast Lemonade model
+  # - name: lemon-fast
+  #   description: "Lemonade - fast local model with NPU/GPU acceleration"
+  #   provider: lemonade
+  #   model: user.Qwen3-0.6B  # Must match downloaded model name
+  #   base_url: "http://127.0.0.1:11534/v1"
+  #   prompt_format: unstructured
+  #   provider_config:
+  #     backend: llamacpp  # llamacpp (GGUF), onnx, or transformers
+  #     port: 11534
+  #     context_size: 32768
+
+  # EXAMPLE: Balanced Lemonade model
+  # - name: lemon-balanced
+  #   description: "Lemonade - balanced 4B model"
+  #   provider: lemonade
+  #   model: user.Qwen3-4B
+  #   base_url: "http://127.0.0.1:11534/v1"
+  #   default: true  # Make this the default model
+  #   provider_config:
+  #     backend: llamacpp
+  #     port: 11534
+  #     context_size: 32768
+
+  # EXAMPLE: Powerful Lemonade model (separate instance)
+  # - name: lemon-powerful
+  #   description: "Lemonade - powerful 8B reasoning model"
+  #   provider: lemonade
+  #   model: user.Qwen3-8B
+  #   provider_config:
+  #     backend: llamacpp
+  #     port: 11535 # Different port!
+  #     context_size: 65536
+
+  # EXAMPLE: Coding specialist
+  # - name: lemon-coder
+  #   description: "Lemonade - coding specialist model"
+  #   provider: lemonade
+  #   model: user.Qwen2.5-Coder-32B-Instruct
+  #   provider_config:
+  #     backend: llamacpp
+  #     port: 11536 # Different port!
+  #     context_size: 32768
+
 
 # =============================================================================
 # PROMPTS CONFIGURATION
@@ -29,7 +127,6 @@ prompts:
       When RAG context is provided, use it to enhance your answers.
       When no context is available, use your general knowledge.
 
-      Remember: Your response must be different from the user's input.
 
 # =============================================================================
 # DATASETS CONFIGURATION

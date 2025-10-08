@@ -28,6 +28,9 @@ class Settings(BaseSettings, env_file=".env"):
     ollama_model: str = "qwen3:8b"
     ollama_api_key: str = "ollama"
 
+    # HuggingFace Configuration
+    huggingface_token: str = ""  # HF_TOKEN environment variable
+
     # Celery Broker Override Configuration
     # If set, these will override the default filesystem broker
     celery_broker_url: str = (
@@ -38,6 +41,11 @@ class Settings(BaseSettings, env_file=".env"):
     # Dev mode settings
     lf_dev_mode_docs_enabled: bool = True
     lf_dev_mode_greeting_enabled: bool = True
+
+    # Lemonade Configuration
+    lemonade_port: int = 11534
+    lemonade_host: str = "127.0.0.1"
+    lemonade_api_key: str = "lemonade"
 
 
 settings = Settings()
