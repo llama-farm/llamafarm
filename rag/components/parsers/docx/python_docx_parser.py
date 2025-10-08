@@ -4,6 +4,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 from components.parsers.base.base_parser import BaseParser, ParserConfig
+from components.parsers.docx.docx_utils import (
+    DocxChunker,
+    DocxDocumentFactory,
+    DocxHeaderFooterExtractor,
+    DocxMetadataExtractor,
+    DocxTableExtractor,
+    DocxTempFileHandler,
+)
 from core.logging import RAGStructLogger
 
 logger = RAGStructLogger("rag.components.parsers.docx.python_docx_parser")
@@ -64,7 +72,7 @@ class DocxParser_PythonDocx(BaseParser):
 
     def parse(self, source: str, **kwargs):
         """Parse DOCX using python-docx."""
-        from core.base import Document, ProcessingResult
+        from core.base import ProcessingResult
 
         try:
             import docx
@@ -109,31 +117,20 @@ class DocxParser_PythonDocx(BaseParser):
                             content_parts.append(text)
 
                 elif isinstance(element, docx.table.Table) and self.extract_tables:
-                    table_text = self._extract_table(element)
+                    table_text = DocxTableExtractor.extract_table_as_text(element)
                     if table_text:
                         content_parts.append(f"\n{table_text}\n")
 
-            # Extract headers if configured
-            if self.extract_headers:
-                for section in doc.sections:
-                    header = section.header
-                    if header:
-                        header_text = "\n".join(
-                            p.text for p in header.paragraphs if p.text.strip()
-                        )
-                        if header_text:
-                            content_parts.insert(0, f"Header: {header_text}")
+            # Extract headers and footers using shared utilities
+            headers = DocxHeaderFooterExtractor.extract_headers(
+                doc, self.extract_headers
+            )
+            footers = DocxHeaderFooterExtractor.extract_footers(
+                doc, self.extract_footers
+            )
 
-            # Extract footers if configured
-            if self.extract_footers:
-                for section in doc.sections:
-                    footer = section.footer
-                    if footer:
-                        footer_text = "\n".join(
-                            p.text for p in footer.paragraphs if p.text.strip()
-                        )
-                        if footer_text:
-                            content_parts.append(f"Footer: {footer_text}")
+            # Add headers at the beginning
+            content_parts = headers + content_parts + footers
 
             # Join all content
             full_text = "\n\n".join(content_parts)
@@ -157,50 +154,24 @@ class DocxParser_PythonDocx(BaseParser):
             }
 
             if self.extract_metadata:
-                # Extract document properties
-                props = doc.core_properties
-                if props:
-                    metadata.update(
-                        {
-                            "title": props.title,
-                            "author": props.author,
-                            "subject": props.subject,
-                            "keywords": props.keywords,
-                            "created": str(props.created) if props.created else None,
-                            "modified": str(props.modified) if props.modified else None,
-                            "revision": props.revision,
-                        }
-                    )
-                    # Remove None values
-                    metadata = {k: v for k, v in metadata.items() if v is not None}
+                metadata = DocxMetadataExtractor.extract_document_properties(
+                    doc, metadata
+                )
 
             documents = []
 
             # Apply chunking if needed
             if self.chunk_size and self.chunk_size > 0:
-                chunks = self._chunk_text(full_text)
-                for i, chunk in enumerate(chunks):
-                    chunk_metadata = metadata.copy()
-                    chunk_metadata.update(
-                        {
-                            "chunk_index": i,
-                            "total_chunks": len(chunks),
-                            "chunk_strategy": self.chunk_strategy,
-                        }
-                    )
-
-                    doc = Document(
-                        content=chunk,
-                        metadata=chunk_metadata,
-                        id=f"{path.stem}_chunk_{i + 1}",
-                        source=str(path),
-                    )
-                    documents.append(doc)
-            else:
-                doc = Document(
-                    content=full_text, metadata=metadata, id=path.stem, source=str(path)
+                chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+                documents = DocxDocumentFactory.create_documents_from_chunks(
+                    chunks, metadata, str(path), self.chunk_strategy
                 )
-                documents.append(doc)
+            else:
+                documents.append(
+                    DocxDocumentFactory.create_single_document(
+                        full_text, metadata, str(path)
+                    )
+                )
 
             return ProcessingResult(
                 documents=documents,
@@ -233,57 +204,8 @@ class DocxParser_PythonDocx(BaseParser):
             elif isinstance(child, docx.oxml.table.CT_Tbl):
                 yield docx.table.Table(child, parent)
 
-    def _extract_table(self, table) -> str:
-        """Extract table as formatted text."""
-        rows = []
-        for row in table.rows:
-            row_text = []
-            for cell in row.cells:
-                cell_text = " ".join(p.text for p in cell.paragraphs).strip()
-                row_text.append(cell_text)
-            rows.append(" | ".join(row_text))
-
-        if rows:
-            # Add separator after header row
-            if len(rows) > 1:
-                rows.insert(1, "-" * len(rows[0]))
-
-        return "\n".join(rows)
-
-    def _chunk_text(self, text: str) -> list[str]:
-        """Chunk text based on strategy."""
-        if self.chunk_strategy == "paragraphs":
-            paragraphs = text.split("\n\n")
-            chunks = []
-            current_chunk = ""
-
-            for para in paragraphs:
-                if len(current_chunk) + len(para) + 2 <= self.chunk_size:
-                    current_chunk += para + "\n\n"
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk.strip())
-                    current_chunk = para + "\n\n"
-
-            if current_chunk:
-                chunks.append(current_chunk.strip())
-
-            return chunks
-        else:
-            # Character-based chunking
-            chunks = []
-            for i in range(0, len(text), self.chunk_size):
-                chunk = text[i : i + self.chunk_size]
-                if chunk.strip():
-                    chunks.append(chunk)
-            return chunks
-
     def parse_blob(self, data: bytes, metadata: dict[str, Any] | None = None) -> list:
         """Parse DOCX from raw bytes using in-memory buffer."""
-        import os
-        import tempfile
-
-        from core.base import Document
 
         try:
             import docx
@@ -295,11 +217,7 @@ class DocxParser_PythonDocx(BaseParser):
 
         try:
             # python-docx needs a file on disk, so write temporarily
-            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_file:
-                tmp_file.write(data)
-                tmp_path = tmp_file.name
-
-            try:
+            with DocxTempFileHandler(data) as tmp_path:
                 # Load document
                 doc = docx.Document(tmp_path)
 
@@ -322,26 +240,21 @@ class DocxParser_PythonDocx(BaseParser):
                                 content_parts.append(text)
 
                     elif isinstance(element, docx.table.Table) and self.extract_tables:
-                        if table_text := self._extract_table(element):
+                        if table_text := DocxTableExtractor.extract_table_as_text(
+                            element
+                        ):
                             content_parts.append(f"\n{table_text}\n")
 
-                # Extract headers if configured
-                if self.extract_headers:
-                    for section in doc.sections:
-                        if header := section.header:
-                            if header_text := "\n".join(
-                                p.text for p in header.paragraphs if p.text.strip()
-                            ):
-                                content_parts.insert(0, f"Header: {header_text}")
+                # Extract headers and footers using shared utilities
+                headers = DocxHeaderFooterExtractor.extract_headers(
+                    doc, self.extract_headers
+                )
+                footers = DocxHeaderFooterExtractor.extract_footers(
+                    doc, self.extract_footers
+                )
 
-                # Extract footers if configured
-                if self.extract_footers:
-                    for section in doc.sections:
-                        if footer := section.footer:
-                            if footer_text := "\n".join(
-                                p.text for p in footer.paragraphs if p.text.strip()
-                            ):
-                                content_parts.append(f"Footer: {footer_text}")
+                # Add headers at the beginning
+                content_parts = headers + content_parts + footers
 
                 # Join all content
                 full_text = "\n\n".join(content_parts)
@@ -370,63 +283,26 @@ class DocxParser_PythonDocx(BaseParser):
                     base_metadata |= metadata
 
                 if self.extract_metadata:
-                    # Extract document properties
-                    props = doc.core_properties
-                    if props:
-                        base_metadata.update(
-                            {
-                                "title": props.title,
-                                "author": props.author,
-                                "subject": props.subject,
-                                "keywords": props.keywords,
-                                "created": str(props.created)
-                                if props.created
-                                else None,
-                                "modified": str(props.modified)
-                                if props.modified
-                                else None,
-                                "revision": props.revision,
-                            }
-                        )
-                        # Remove None values
-                        base_metadata = {
-                            k: v for k, v in base_metadata.items() if v is not None
-                        }
+                    base_metadata = DocxMetadataExtractor.extract_document_properties(
+                        doc, base_metadata
+                    )
 
                 documents = []
 
                 # Apply chunking if needed
                 if self.chunk_size and self.chunk_size > 0:
-                    chunks = self._chunk_text(full_text)
-                    for i, chunk in enumerate(chunks):
-                        chunk_metadata = base_metadata | {
-                            "chunk_index": i,
-                            "total_chunks": len(chunks),
-                            "chunk_strategy": self.chunk_strategy,
-                        }
-
-                        doc = Document(
-                            content=chunk,
-                            metadata=chunk_metadata,
-                            id=f"{Path(filename).stem}_chunk_{i + 1}",
-                            source=filename,
-                        )
-                        documents.append(doc)
-                else:
-                    doc = Document(
-                        content=full_text,
-                        metadata=base_metadata,
-                        id=Path(filename).stem,
-                        source=filename,
+                    chunks = DocxChunker.chunk_by_paragraphs(full_text, self.chunk_size)
+                    documents = DocxDocumentFactory.create_documents_from_chunks(
+                        chunks, base_metadata, filename, self.chunk_strategy
                     )
-                    documents.append(doc)
+                else:
+                    documents.append(
+                        DocxDocumentFactory.create_single_document(
+                            full_text, base_metadata, filename
+                        )
+                    )
 
                 return documents
-
-            finally:
-                # Clean up temp file
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
 
         except Exception as e:
             logger.error(f"Failed to parse DOCX blob: {e}")

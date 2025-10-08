@@ -1,7 +1,5 @@
 """DOCX parser using LlamaIndex."""
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
@@ -10,7 +8,13 @@ from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
 from llama_index.readers.file import DocxReader
 
 from components.parsers.base.base_parser import BaseParser, ParserConfig
-from core.base import Document, ProcessingResult
+from components.parsers.docx.docx_utils import (
+    DocxChunker,
+    DocxDocumentFactory,
+    DocxMetadataExtractor,
+    DocxTempFileHandler,
+)
+from core.base import ProcessingResult
 from core.logging import RAGStructLogger
 
 logger = RAGStructLogger("rag.components.parsers.docx.llamaindex_parser")
@@ -114,32 +118,9 @@ class DocxParser_LlamaIndex(BaseParser):
                 if self.extract_metadata:
                     try:
                         doc = docx.Document(str(path))
-
-                        # Document properties
-                        if (
-                            hasattr(doc.core_properties, "title")
-                            and doc.core_properties.title
-                        ):
-                            metadata["title"] = doc.core_properties.title
-                        if (
-                            hasattr(doc.core_properties, "author")
-                            and doc.core_properties.author
-                        ):
-                            metadata["author"] = doc.core_properties.author
-                        if (
-                            hasattr(doc.core_properties, "created")
-                            and doc.core_properties.created
-                        ):
-                            metadata["created"] = str(doc.core_properties.created)
-                        if (
-                            hasattr(doc.core_properties, "modified")
-                            and doc.core_properties.modified
-                        ):
-                            metadata["modified"] = str(doc.core_properties.modified)
-
-                        # Document statistics
-                        metadata["paragraph_count"] = len(doc.paragraphs)
-                        metadata["section_count"] = len(doc.sections)
+                        metadata = DocxMetadataExtractor.extract_document_properties(
+                            doc, metadata
+                        )
 
                         if self.extract_tables:
                             metadata["table_count"] = len(doc.tables)
@@ -162,57 +143,23 @@ class DocxParser_LlamaIndex(BaseParser):
                     try:
                         doc = docx.Document(str(path))
 
-                        # Group paragraphs into chunks
-                        chunks = []
-                        current_chunk: list[str] = []
-                        current_size = 0
+                        # Extract full text first
+                        paragraphs = [
+                            para.text.strip()
+                            for para in doc.paragraphs
+                            if para.text.strip()
+                        ]
+                        full_text = "\n\n".join(paragraphs)
 
-                        for para in doc.paragraphs:
-                            para_text = para.text.strip()
-                            if not para_text:
-                                continue
+                        # Use shared chunking utility
+                        chunks = DocxChunker.chunk_by_paragraphs(
+                            full_text, self.chunk_size, self.chunk_overlap
+                        )
 
-                            para_size = len(para_text)
-
-                            if (
-                                current_size + para_size > self.chunk_size
-                                and current_chunk
-                            ):
-                                # Save current chunk
-                                chunks.append("\n\n".join(current_chunk))
-                                # Start new chunk with overlap
-                                if self.chunk_overlap > 0 and current_chunk:
-                                    overlap_text = current_chunk[-1][
-                                        : self.chunk_overlap
-                                    ]
-                                    current_chunk = [overlap_text, para_text]
-                                    current_size = len(overlap_text) + para_size
-                                else:
-                                    current_chunk = [para_text]
-                                    current_size = para_size
-                            else:
-                                current_chunk.append(para_text)
-                                current_size += para_size
-
-                        # Add last chunk
-                        if current_chunk:
-                            chunks.append("\n\n".join(current_chunk))
-
-                        # Create documents from chunks
-                        for i, chunk_content in enumerate(chunks):
-                            chunk_metadata = metadata | {
-                                "chunk_index": i,
-                                "total_chunks": len(chunks),
-                                "chunk_strategy": "paragraphs",
-                            }
-
-                            doc = Document(
-                                content=chunk_content,
-                                metadata=chunk_metadata,
-                                id=f"{path.stem}_chunk_{i + 1}",
-                                source=str(path),
-                            )
-                            documents.append(doc)
+                        # Create documents from chunks using shared factory
+                        documents = DocxDocumentFactory.create_documents_from_chunks(
+                            chunks, metadata, str(path), "paragraphs"
+                        )
 
                         return documents  # Return early if paragraph chunking succeeded
 
@@ -231,29 +178,20 @@ class DocxParser_LlamaIndex(BaseParser):
                 if not documents:
                     nodes = splitter.get_nodes_from_documents([llama_doc])
 
-                    for i, node in enumerate(nodes):
-                        chunk_metadata = metadata | {
-                            "chunk_index": i,
-                            "total_chunks": len(nodes),
-                            "chunk_strategy": self.chunk_strategy,
-                        }
-
-                        doc = Document(
-                            content=node.text if hasattr(node, "text") else str(node),
-                            metadata=chunk_metadata,
-                            id=f"{path.stem}_chunk_{i + 1}",
-                            source=str(path),
-                        )
-                        documents.append(doc)
-                else:
-                    # Single document
-                    doc = Document(
-                        content=content,
-                        metadata=metadata,
-                        id=path.stem,
-                        source=str(path),
+                    chunks = [
+                        node.text if hasattr(node, "text") else str(node)
+                        for node in nodes
+                    ]
+                    documents = DocxDocumentFactory.create_documents_from_chunks(
+                        chunks, metadata, str(path), self.chunk_strategy
                     )
-                    documents.append(doc)
+            else:
+                # Single document
+                documents.append(
+                    DocxDocumentFactory.create_single_document(
+                        content, metadata, str(path)
+                    )
+                )
 
             return ProcessingResult(documents=documents, errors=[])
 
@@ -268,11 +206,7 @@ class DocxParser_LlamaIndex(BaseParser):
 
         try:
             # LlamaIndex DocxReader needs a file on disk, so write temporarily
-            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_file:
-                tmp_file.write(data)
-                tmp_path = tmp_file.name
-
-            try:
+            with DocxTempFileHandler(data) as tmp_path:
                 # Use LlamaIndex DocxReader
                 reader = DocxReader()
                 llama_docs = reader.load_data(file=Path(tmp_path))
@@ -308,36 +242,11 @@ class DocxParser_LlamaIndex(BaseParser):
                     if self.extract_metadata:
                         try:
                             doc = docx.Document(tmp_path)
-
-                            # Document properties
-                            if (
-                                hasattr(doc.core_properties, "title")
-                                and doc.core_properties.title
-                            ):
-                                base_metadata["title"] = doc.core_properties.title
-                            if (
-                                hasattr(doc.core_properties, "author")
-                                and doc.core_properties.author
-                            ):
-                                base_metadata["author"] = doc.core_properties.author
-                            if (
-                                hasattr(doc.core_properties, "created")
-                                and doc.core_properties.created
-                            ):
-                                base_metadata["created"] = str(
-                                    doc.core_properties.created
+                            base_metadata = (
+                                DocxMetadataExtractor.extract_document_properties(
+                                    doc, base_metadata
                                 )
-                            if (
-                                hasattr(doc.core_properties, "modified")
-                                and doc.core_properties.modified
-                            ):
-                                base_metadata["modified"] = str(
-                                    doc.core_properties.modified
-                                )
-
-                            # Document statistics
-                            base_metadata["paragraph_count"] = len(doc.paragraphs)
-                            base_metadata["section_count"] = len(doc.sections)
+                            )
 
                             if self.extract_tables:
                                 base_metadata["table_count"] = len(doc.tables)
@@ -361,57 +270,25 @@ class DocxParser_LlamaIndex(BaseParser):
                             try:
                                 doc = docx.Document(tmp_path)
 
-                                # Group paragraphs into chunks
-                                chunks = []
-                                current_chunk: list[str] = []
-                                current_size = 0
+                                # Extract full text first
+                                paragraphs = [
+                                    para.text.strip()
+                                    for para in doc.paragraphs
+                                    if para.text.strip()
+                                ]
+                                full_text = "\n\n".join(paragraphs)
 
-                                for para in doc.paragraphs:
-                                    para_text = para.text.strip()
-                                    if not para_text:
-                                        continue
+                                # Use shared chunking utility
+                                chunks = DocxChunker.chunk_by_paragraphs(
+                                    full_text, self.chunk_size, self.chunk_overlap
+                                )
 
-                                    para_size = len(para_text)
-
-                                    if (
-                                        current_size + para_size > self.chunk_size
-                                        and current_chunk
-                                    ):
-                                        # Save current chunk
-                                        chunks.append("\n\n".join(current_chunk))
-                                        # Start new chunk with overlap
-                                        if self.chunk_overlap > 0 and current_chunk:
-                                            overlap_text = current_chunk[-1][
-                                                : self.chunk_overlap
-                                            ]
-                                            current_chunk = [overlap_text, para_text]
-                                            current_size = len(overlap_text) + para_size
-                                        else:
-                                            current_chunk = [para_text]
-                                            current_size = para_size
-                                    else:
-                                        current_chunk.append(para_text)
-                                        current_size += para_size
-
-                                # Add last chunk
-                                if current_chunk:
-                                    chunks.append("\n\n".join(current_chunk))
-
-                                # Create documents from chunks
-                                for i, chunk_content in enumerate(chunks):
-                                    chunk_metadata = base_metadata | {
-                                        "chunk_index": i,
-                                        "total_chunks": len(chunks),
-                                        "chunk_strategy": "paragraphs",
-                                    }
-
-                                    doc = Document(
-                                        content=chunk_content,
-                                        metadata=chunk_metadata,
-                                        id=f"{Path(filename).stem}_chunk_{i + 1}",
-                                        source=filename,
+                                # Create documents from chunks using shared factory
+                                documents = (
+                                    DocxDocumentFactory.create_documents_from_chunks(
+                                        chunks, base_metadata, filename, "paragraphs"
                                     )
-                                    documents.append(doc)
+                                )
 
                                 return documents  # Return early if paragraph chunking succeeded
 
@@ -430,38 +307,22 @@ class DocxParser_LlamaIndex(BaseParser):
                         # Apply splitter if we didn't do paragraph chunking
                         nodes = splitter.get_nodes_from_documents([llama_doc])
 
-                        for i, node in enumerate(nodes):
-                            chunk_metadata = base_metadata | {
-                                "chunk_index": i,
-                                "total_chunks": len(nodes),
-                                "chunk_strategy": self.chunk_strategy,
-                            }
-
-                            doc = Document(
-                                content=node.text
-                                if hasattr(node, "text")
-                                else str(node),
-                                metadata=chunk_metadata,
-                                id=f"{Path(filename).stem}_chunk_{i + 1}",
-                                source=filename,
-                            )
-                            documents.append(doc)
+                        chunks = [
+                            node.text if hasattr(node, "text") else str(node)
+                            for node in nodes
+                        ]
+                        documents = DocxDocumentFactory.create_documents_from_chunks(
+                            chunks, base_metadata, filename, self.chunk_strategy
+                        )
                     else:
                         # Single document
-                        doc = Document(
-                            content=content,
-                            metadata=base_metadata,
-                            id=Path(filename).stem,
-                            source=filename,
+                        documents.append(
+                            DocxDocumentFactory.create_single_document(
+                                content, base_metadata, filename
+                            )
                         )
-                        documents.append(doc)
 
                 return documents
-
-            finally:
-                # Clean up temp file
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
 
         except Exception as e:
             logger.error(f"Failed to parse DOCX blob: {e}")
