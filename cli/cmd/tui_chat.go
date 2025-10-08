@@ -302,12 +302,12 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 			// Find default model or use first
 			for _, m := range availableModels {
 				if m.IsDefault {
-					currentModel = m.ID
+					currentModel = m.Name
 					break
 				}
 			}
 			if currentModel == "" {
-				currentModel = availableModels[0].ID
+				currentModel = availableModels[0].Name
 			}
 		}
 	}
@@ -481,9 +481,9 @@ func (m *chatModel) getNextModel() string {
 		return m.currentModel
 	}
 	for i, model := range m.availableModels {
-		if model.ID == m.currentModel {
+		if model.Name == m.currentModel {
 			nextIdx := (i + 1) % len(m.availableModels)
-			return m.availableModels[nextIdx].ID
+			return m.availableModels[nextIdx].Name
 		}
 	}
 	return m.currentModel
@@ -492,7 +492,7 @@ func (m *chatModel) getNextModel() string {
 // isValidModel checks if a model name exists in available models
 func (m *chatModel) isValidModel(name string) bool {
 	for _, model := range m.availableModels {
-		if model.ID == name {
+		if model.Name == name {
 			return true
 		}
 	}
@@ -502,11 +502,11 @@ func (m *chatModel) isValidModel(name string) bool {
 // getModelInfo returns model info for a given name
 func (m *chatModel) getModelInfo(name string) ModelInfo {
 	for _, model := range m.availableModels {
-		if model.ID == name {
+		if model.Name == name {
 			return model
 		}
 	}
-	return ModelInfo{ID: name}
+	return ModelInfo{Name: name}
 }
 
 func (m chatModel) Init() tea.Cmd {
@@ -688,10 +688,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						msg.WriteString(fmt.Sprintf("Current model: %s\n\nAvailable models:", m.currentModel))
 						for _, model := range m.availableModels {
 							marker := ""
-							if model.ID == m.currentModel {
+							if model.Name == m.currentModel {
 								marker = " (current)"
 							}
-							msg.WriteString(fmt.Sprintf("\n  • %s - %s%s", model.ID, model.Description, marker))
+							msg.WriteString(fmt.Sprintf("\n  • %s - %s%s", model.Name, model.Description, marker))
 						}
 						msg.WriteString("\n\nUsage: /model <name> or press Ctrl+K to cycle")
 						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
@@ -1087,7 +1087,7 @@ func renderInfoBar(m chatModel) string {
 		// Find model details
 		var modelDetails string
 		for _, model := range m.availableModels {
-			if model.ID == m.currentModel {
+			if model.Name == m.currentModel {
 				modelDetails = model.Model
 				break
 			}

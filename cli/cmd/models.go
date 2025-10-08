@@ -80,7 +80,7 @@ Examples:
 			if m.IsDefault {
 				defaultMarker = " (default)"
 			}
-			fmt.Printf("  • %s%s\n", m.ID, defaultMarker)
+			fmt.Printf("  • %s%s\n", m.Name, defaultMarker)
 			if m.Description != "" {
 				fmt.Printf("    %s\n", m.Description)
 			}

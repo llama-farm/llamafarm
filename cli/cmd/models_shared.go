@@ -11,11 +11,11 @@ import (
 
 // ModelInfo represents a model configuration
 type ModelInfo struct {
-	ID          string `json:"name"` // API returns "name", we store it as ID internally
+	Name        string `json:"name"`
 	Description string `json:"description"`
 	Provider    string `json:"provider"`
 	Model       string `json:"model"`
-	IsDefault   bool   `json:"default"` // API returns "default", we store it as IsDefault internally
+	IsDefault   bool   `json:"default"`
 }
 
 // fetchAvailableModels fetches the list of available models for a project
