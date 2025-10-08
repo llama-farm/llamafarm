@@ -50,7 +50,16 @@ func (co *ContainerOrchestrator) startRAGContainer() error {
 		},
 		Env: make(map[string]string),
 		Volumes: []string{
-			fmt.Sprintf("%s:%s", convertToDockerPath(filepath.Join(homeDir, ".llamafarm")), "/var/lib/llamafarm"),
+			func() string {
+				homeLlamaFarmPath := filepath.Join(homeDir, ".llamafarm")
+				dockerPath := convertToDockerPath(homeLlamaFarmPath)
+				volumeMount := fmt.Sprintf("%s:%s", dockerPath, "/var/lib/llamafarm")
+
+				// Debug logging for RAG home directory volume mount
+				logDebug(fmt.Sprintf("RAG home volume mount: %s", volumeMount))
+
+				return volumeMount
+			}(),
 		},
 		Labels: map[string]string{
 			"llamafarm.component": "rag",
