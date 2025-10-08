@@ -210,7 +210,7 @@ class SmartRouter:
             ):  # At least 2 delimiters per line average
                 return True
 
-        except:
+        except Exception:
             pass
 
         return False
