@@ -72,6 +72,14 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Industry Use Cases',
+      link: { type: 'doc', id: 'use-cases/index' },
+      items: [
+        { type: 'doc', id: 'use-cases/pharmaceutical-fda', label: 'Pharmaceutical & FDA' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Examples',
       link: { type: 'doc', id: 'examples/index' },
       items: [],
