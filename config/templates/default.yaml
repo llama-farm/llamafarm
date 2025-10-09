@@ -141,6 +141,10 @@ datasets:
 # RAG CONFIGURATION
 # =============================================================================
 rag:
+  # Default database for RAG queries (optional)
+  # If not specified, uses the first database in the databases array
+  default_database: main_database
+
   # =============================================================================
   # DATABASE CONFIGURATIONS
   # =============================================================================

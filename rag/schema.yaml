@@ -5,6 +5,10 @@ description: Schema for RAG system strategy configurations
 type: object
 additionalProperties: false
 properties:
+  default_database:
+    type: string
+    description: "Name of the default database to use for RAG queries. If not specified, uses the first database in the databases array."
+    example: main_database
   databases:
     type: array
     title: Database Configurations

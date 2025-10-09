@@ -93,6 +93,7 @@ class ProjectChatService:
         message: str,
         top_k: int = 5,
         database: str | None = None,
+        retrieval_strategy: str | None = None,
     ) -> list[Any]:
         """Perform RAG search using the project's RAG configuration.
 
@@ -108,16 +109,21 @@ class ProjectChatService:
 
         # Find the database configuration
         if not database:
-            # Use the first database as default
-            if project_config.rag.databases:
+            # Check for explicit default_database first, then fall back to first database
+            if project_config.rag.default_database:
+                database = str(project_config.rag.default_database)
+                logger.info(f"Using configured default database: {database}")
+            elif project_config.rag.databases:
                 database = str(project_config.rag.databases[0].name)
-                logger.info(f"Using default database: {database}")
+                logger.info(f"Using first database as default: {database}")
             else:
                 logger.error("No databases found in project config")
                 return []
 
         # Use shared helper to run RAG search on database
-        results = search_with_rag(project_dir, database, message, top_k=top_k)
+        results = search_with_rag(
+            project_dir, database, message, top_k=top_k, retrieval_strategy=retrieval_strategy
+        )
         if results is None:
             results = []
 
@@ -156,6 +162,7 @@ class ProjectChatService:
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
+        retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> ChatCompletion:
@@ -207,6 +214,7 @@ class ProjectChatService:
                 message,
                 top_k=rag_top_k or 5,
                 database=database,
+                retrieval_strategy=retrieval_strategy,
             )
 
         for idx, result in enumerate(rag_results):
@@ -275,6 +283,7 @@ class ProjectChatService:
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
+        retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[str, None]:
@@ -321,6 +330,7 @@ class ProjectChatService:
                 message,
                 top_k=rag_top_k or 5,
                 database=database,
+                retrieval_strategy=retrieval_strategy,
             )
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(
