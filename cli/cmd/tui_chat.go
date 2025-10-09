@@ -121,11 +121,13 @@ const (
 )
 
 type ModeContext struct {
-	Mode      ChatMode
-	SessionID string
-	Messages  []Message
-	History   []string
-	Model     string // Currently selected model name
+	Mode             ChatMode
+	SessionID        string
+	Messages         []Message
+	History          []string
+	Model            string // Currently selected model name
+	Database         string // Currently selected database
+	RetrievalStrategy string // Currently selected retrieval strategy
 }
 
 // ModelInfo is now defined in models_shared.go
@@ -157,6 +159,14 @@ type chatModel struct {
 	// Model switching state
 	availableModels []ModelInfo
 	currentModel    string
+	// RAG database/strategy state
+	availableDatabases *DatabasesResponse
+	currentDatabase    string
+	currentStrategy    string
+	// Menu state
+	menuVisible        bool
+	menuSelectedIndex  int  // Index of selected database in menu
+	menuFocusOnStrategy bool // Whether we're navigating strategies (true) or databases (false)
 }
 
 type (
@@ -293,10 +303,15 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	// Add server status to project messages as well
 	projectMessages = append(projectMessages, Message{Role: "client", Content: renderServerStatusProblems(serverHealth)})
 
-	// Fetch available models for project mode
+	// Fetch available models and databases for project mode
 	var availableModels []ModelInfo
+	var availableDatabases *DatabasesResponse
 	var currentModel string
+	var currentDatabase string
+	var currentStrategy string
+
 	if projectInfo != nil {
+		// Fetch models
 		availableModels = fetchAvailableModels(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project)
 		if len(availableModels) > 0 {
 			// Find default model or use first
@@ -310,14 +325,42 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 				currentModel = availableModels[0].Name
 			}
 		}
+
+		// Fetch databases and retrieval strategies
+		availableDatabases = fetchAvailableDatabases(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project)
+		if availableDatabases != nil && len(availableDatabases.Databases) > 0 {
+			// Find default database
+			for _, db := range availableDatabases.Databases {
+				if db.IsDefault {
+					currentDatabase = db.Name
+					// Find default strategy for this database
+					for _, strategy := range db.RetrievalStrategies {
+						if strategy.IsDefault {
+							currentStrategy = strategy.Name
+							break
+						}
+					}
+					break
+				}
+			}
+			// Fallback to first database/strategy if no default
+			if currentDatabase == "" {
+				currentDatabase = availableDatabases.Databases[0].Name
+				if len(availableDatabases.Databases[0].RetrievalStrategies) > 0 {
+					currentStrategy = availableDatabases.Databases[0].RetrievalStrategies[0].Name
+				}
+			}
+		}
 	}
 
 	projectCtx := &ModeContext{
-		Mode:      ModeProject,
-		SessionID: projectSessionID,
-		Messages:  projectMessages,
-		History:   projectHistory,
-		Model:     currentModel,
+		Mode:             ModeProject,
+		SessionID:        projectSessionID,
+		Messages:         projectMessages,
+		History:          projectHistory,
+		Model:            currentModel,
+		Database:         currentDatabase,
+		RetrievalStrategy: currentStrategy,
 	}
 
 	// Choose initial mode and state
@@ -334,23 +377,26 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	vp.SetContent(renderChatContent(chatModel{messages: initialMessages}))
 
 	return chatModel{
-		serverHealth:    serverHealth,
-		projectInfo:     projectInfo,
-		spin:            s,
-		messages:        initialMessages,
-		thinking:        false,
-		printing:        false,
-		history:         initialHistory,
-		histIndex:       len(initialHistory),
-		designerStatus:  "starting…",
-		textarea:        ta,
-		viewport:        vp,
-		width:           width,
-		currentMode:     initialMode,
-		devModeCtx:      devCtx,
-		projectModeCtx:  projectCtx,
-		availableModels: availableModels,
-		currentModel:    currentModel,
+		serverHealth:       serverHealth,
+		projectInfo:        projectInfo,
+		spin:               s,
+		messages:           initialMessages,
+		thinking:           false,
+		printing:           false,
+		history:            initialHistory,
+		histIndex:          len(initialHistory),
+		designerStatus:     "starting…",
+		textarea:           ta,
+		viewport:           vp,
+		width:              width,
+		currentMode:        initialMode,
+		devModeCtx:         devCtx,
+		projectModeCtx:     projectCtx,
+		availableModels:    availableModels,
+		currentModel:       currentModel,
+		availableDatabases: availableDatabases,
+		currentDatabase:    currentDatabase,
+		currentStrategy:    currentStrategy,
 	}
 }
 
@@ -359,6 +405,8 @@ func (m *chatModel) saveCurrentModeState() {
 	ctx := m.getCurrentModeContext()
 	ctx.Messages = m.messages
 	ctx.History = m.history
+	ctx.Database = m.currentDatabase
+	ctx.RetrievalStrategy = m.currentStrategy
 }
 
 func (m *chatModel) getCurrentModeContext() *ModeContext {
@@ -378,6 +426,8 @@ func (m *chatModel) restoreModeState(mode ChatMode) {
 
 	m.messages = ctx.Messages
 	m.history = ctx.History
+	m.currentDatabase = ctx.Database
+	m.currentStrategy = ctx.RetrievalStrategy
 	m.histIndex = len(ctx.History)
 }
 
@@ -506,7 +556,86 @@ func (m *chatModel) getModelInfo(name string) ModelInfo {
 			return model
 		}
 	}
-	return ModelInfo{Name: name}
+	return ModelInfo{}
+}
+
+// Database/Strategy switching methods
+func (m *chatModel) switchDatabase(newDatabase string) {
+	oldDatabase := m.currentDatabase
+	m.currentDatabase = newDatabase
+
+	// Update the mode context
+	m.projectModeCtx.Database = newDatabase
+
+	// Reset strategy to default for new database
+	if m.availableDatabases != nil {
+		for _, db := range m.availableDatabases.Databases {
+			if db.Name == newDatabase {
+				// Find default strategy for this database
+				for _, strategy := range db.RetrievalStrategies {
+					if strategy.IsDefault {
+						m.currentStrategy = strategy.Name
+						m.projectModeCtx.RetrievalStrategy = strategy.Name
+						break
+					}
+				}
+				// If no default, use first strategy
+				if m.currentStrategy == "" && len(db.RetrievalStrategies) > 0 {
+					m.currentStrategy = db.RetrievalStrategies[0].Name
+					m.projectModeCtx.RetrievalStrategy = m.currentStrategy
+				}
+				break
+			}
+		}
+	}
+
+	m.messages = append(m.messages, Message{
+		Role:    "client",
+		Content: fmt.Sprintf("Switched from database '%s' to '%s' with strategy '%s'", oldDatabase, newDatabase, m.currentStrategy),
+	})
+}
+
+func (m *chatModel) switchStrategy(newStrategy string) {
+	oldStrategy := m.currentStrategy
+	m.currentStrategy = newStrategy
+
+	// Update the mode context
+	m.projectModeCtx.RetrievalStrategy = newStrategy
+
+	m.messages = append(m.messages, Message{
+		Role:    "client",
+		Content: fmt.Sprintf("Switched retrieval strategy from '%s' to '%s'", oldStrategy, newStrategy),
+	})
+}
+
+func (m *chatModel) isValidDatabase(name string) bool {
+	if m.availableDatabases == nil {
+		return false
+	}
+	for _, db := range m.availableDatabases.Databases {
+		if db.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *chatModel) isValidStrategy(name string) bool {
+	if m.availableDatabases == nil {
+		return false
+	}
+	// Check if strategy exists in current database
+	for _, db := range m.availableDatabases.Databases {
+		if db.Name == m.currentDatabase {
+			for _, strategy := range db.RetrievalStrategies {
+				if strategy.Name == name {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
 }
 
 func (m chatModel) Init() tea.Cmd {
@@ -611,7 +740,38 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case "ctrl+r":
+			// Toggle RAG configuration menu
+			if m.currentMode == ModeProject {
+				m.menuVisible = !m.menuVisible
+			}
+			return m, nil
+
+		case "esc":
+			// Close menu if open
+			if m.menuVisible {
+				m.menuVisible = false
+			}
+			return m, nil
+
 		case "up":
+			// If menu is visible, navigate menu
+			if m.menuVisible {
+				if m.menuFocusOnStrategy {
+					// Navigate strategies
+					if m.menuSelectedIndex > 0 {
+						m.menuSelectedIndex--
+					}
+				} else {
+					// Navigate databases
+					if m.menuSelectedIndex > 0 {
+						m.menuSelectedIndex--
+					}
+				}
+				return m, nil
+			}
+
+			// Otherwise, navigate history
 			logDebug(fmt.Sprintf("Up arrow pressed. Current history: %+v", m.history))
 			if m.histIndex > 0 {
 				m.histIndex--
@@ -620,6 +780,32 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "down":
+			// If menu is visible, navigate menu
+			if m.menuVisible {
+				if m.menuFocusOnStrategy {
+					// Navigate strategies
+					var maxIndex int
+					if m.availableDatabases != nil {
+						for _, db := range m.availableDatabases.Databases {
+							if db.Name == m.currentDatabase {
+								maxIndex = len(db.RetrievalStrategies) - 1
+								break
+							}
+						}
+					}
+					if m.menuSelectedIndex < maxIndex {
+						m.menuSelectedIndex++
+					}
+				} else {
+					// Navigate databases
+					if m.availableDatabases != nil && m.menuSelectedIndex < len(m.availableDatabases.Databases)-1 {
+						m.menuSelectedIndex++
+					}
+				}
+				return m, nil
+			}
+
+			// Otherwise, navigate history
 			if m.histIndex < len(m.history)-1 {
 				m.histIndex++
 				m.textarea.SetValue(m.history[m.histIndex])
@@ -629,7 +815,44 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.SetValue("")
 			}
 
+		case "tab":
+			// Toggle between database and strategy focus when menu is visible
+			if m.menuVisible {
+				m.menuFocusOnStrategy = !m.menuFocusOnStrategy
+				m.menuSelectedIndex = 0 // Reset selection when switching focus
+				return m, nil
+			}
+
 		case "enter":
+			// If menu is visible, apply selection
+			if m.menuVisible {
+				if m.menuFocusOnStrategy {
+					// Select strategy
+					if m.availableDatabases != nil {
+						for _, db := range m.availableDatabases.Databases {
+							if db.Name == m.currentDatabase {
+								if m.menuSelectedIndex < len(db.RetrievalStrategies) {
+									strategyName := db.RetrievalStrategies[m.menuSelectedIndex].Name
+									m.switchStrategy(strategyName)
+									m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+									m.viewport.GotoBottom()
+								}
+								break
+							}
+						}
+					}
+				} else {
+					// Select database
+					if m.availableDatabases != nil && m.menuSelectedIndex < len(m.availableDatabases.Databases) {
+						dbName := m.availableDatabases.Databases[m.menuSelectedIndex].Name
+						m.switchDatabase(dbName)
+						m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+						m.viewport.GotoBottom()
+					}
+				}
+				return m, nil
+			}
+
 			m.err = nil
 			msg := strings.TrimSpace(m.textarea.Value())
 			if msg == "" || m.thinking {
@@ -643,7 +866,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := fields[0]
 				switch cmd {
 				case "/help":
-					m.messages = append(m.messages, Message{Role: "client", Content: "Commands: /help, /mode [dev|project], /clear, /launch designer, /exit\nPress Ctrl+T to toggle between DEV and PROJECT modes"})
+					m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /menu - Toggle RAG configuration menu (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /exit - Exit\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models\n  Ctrl+R - Toggle RAG menu"})
 					m.textarea.SetValue("")
 				case "/mode":
 					if len(fields) < 2 {
@@ -790,6 +1013,138 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 					m.thinking = false
 					m.printing = false
+				case "/menu":
+					// Toggle RAG configuration menu
+					if m.currentMode != ModeProject {
+						m.messages = append(m.messages, Message{
+							Role:    "client",
+							Content: "RAG menu only available in PROJECT mode. Use Ctrl+T to switch.",
+						})
+						m.textarea.SetValue("")
+						break
+					}
+					m.menuVisible = !m.menuVisible
+					m.textarea.SetValue("")
+				case "/database":
+					if m.currentMode != ModeProject {
+						m.messages = append(m.messages, Message{
+							Role:    "client",
+							Content: "Database switching only available in PROJECT mode. Use Ctrl+T to switch.",
+						})
+						m.textarea.SetValue("")
+						break
+					}
+
+					if len(fields) < 2 {
+						// Show available databases
+						var msg strings.Builder
+						msg.WriteString("Current database: ")
+						if m.currentDatabase != "" {
+							msg.WriteString(m.currentDatabase)
+						} else {
+							msg.WriteString("(none)")
+						}
+						msg.WriteString("\n\nAvailable databases:")
+
+						if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
+							for _, db := range m.availableDatabases.Databases {
+								marker := ""
+								if db.Name == m.currentDatabase {
+									marker = " (current)"
+								} else if db.IsDefault {
+									marker = " (default)"
+								}
+								msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", db.Name, db.Type, marker))
+							}
+							msg.WriteString("\n\nUsage: /database <name> or press Ctrl+M to open menu")
+						} else {
+							msg.WriteString("\n  No databases configured")
+						}
+
+						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+						m.textarea.SetValue("")
+						break
+					}
+
+					dbName := fields[1]
+					if !m.isValidDatabase(dbName) {
+						m.messages = append(m.messages, Message{
+							Role:    "client",
+							Content: fmt.Sprintf("Unknown database '%s'. Type '/database' to see available databases.", dbName),
+						})
+						m.textarea.SetValue("")
+						break
+					}
+
+					m.switchDatabase(dbName)
+					m.textarea.SetValue("")
+					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+					m.viewport.GotoBottom()
+
+				case "/strategy":
+					if m.currentMode != ModeProject {
+						m.messages = append(m.messages, Message{
+							Role:    "client",
+							Content: "Strategy switching only available in PROJECT mode. Use Ctrl+T to switch.",
+						})
+						m.textarea.SetValue("")
+						break
+					}
+
+					if len(fields) < 2 {
+						// Show available strategies for current database
+						var msg strings.Builder
+						msg.WriteString("Current strategy: ")
+						if m.currentStrategy != "" {
+							msg.WriteString(m.currentStrategy)
+						} else {
+							msg.WriteString("(none)")
+						}
+						msg.WriteString(fmt.Sprintf("\nDatabase: %s", m.currentDatabase))
+						msg.WriteString("\n\nAvailable strategies:")
+
+						if m.availableDatabases != nil {
+							for _, db := range m.availableDatabases.Databases {
+								if db.Name == m.currentDatabase {
+									if len(db.RetrievalStrategies) > 0 {
+										for _, strategy := range db.RetrievalStrategies {
+											marker := ""
+											if strategy.Name == m.currentStrategy {
+												marker = " (current)"
+											} else if strategy.IsDefault {
+												marker = " (default)"
+											}
+											msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", strategy.Name, strategy.Type, marker))
+										}
+										msg.WriteString("\n\nUsage: /strategy <name> or press Ctrl+M to open menu")
+									} else {
+										msg.WriteString("\n  No strategies configured for this database")
+									}
+									break
+								}
+							}
+						}
+
+						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+						m.textarea.SetValue("")
+						break
+					}
+
+					strategyName := fields[1]
+					if !m.isValidStrategy(strategyName) {
+						m.messages = append(m.messages, Message{
+							Role:    "client",
+							Content: fmt.Sprintf("Unknown strategy '%s' for database '%s'. Type '/strategy' to see available strategies.", strategyName, m.currentDatabase),
+						})
+						m.textarea.SetValue("")
+						break
+					}
+
+					m.switchStrategy(strategyName)
+					m.textarea.SetValue("")
+					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+					m.viewport.GotoBottom()
+
 				default:
 					m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. All commands must start with '/'. Type '/help' for available commands.", cmd)})
 					m.textarea.SetValue("")
@@ -803,9 +1158,18 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue("")
 			m.thinking = true
 			m.printing = true
-			// Update chatCtx with current model selection (PROJECT mode)
-			if m.currentMode == ModeProject && m.currentModel != "" {
-				chatCtx.Model = m.currentModel
+			// Update chatCtx with current selections (PROJECT mode)
+			if m.currentMode == ModeProject {
+				if m.currentModel != "" {
+					chatCtx.Model = m.currentModel
+				}
+				if m.currentDatabase != "" {
+					chatCtx.RAGDatabase = m.currentDatabase
+					chatCtx.RAGEnabled = true
+				}
+				if m.currentStrategy != "" {
+					chatCtx.RAGRetrievalStrategy = m.currentStrategy
+				}
 			}
 			// Start channel-based streaming - important for showing progress
 			chunks, errs, _ := startChatStream(m.messages, chatCtx)
@@ -1150,11 +1514,142 @@ func renderInfoBar(m chatModel) string {
 	return style.Render(statusLine)
 }
 
-func (m chatModel) View() string {
+func renderMenuPanel(m chatModel) string {
+	if !m.menuVisible {
+		return ""
+	}
+
 	var b strings.Builder
 
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	currentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	highlightStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Background(lipgloss.Color("237"))
+
+	borderStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("12")).
+		Padding(0, 1)
+
+	// Menu header
+	b.WriteString(titleStyle.Render("RAG Configuration"))
+	b.WriteString(labelStyle.Render(" (↑↓: navigate, Tab: switch db/strategy, Enter: select, Esc: close)"))
+	b.WriteString("\n")
+
+	// Current selections
+	b.WriteString(labelStyle.Render("Active: "))
+	b.WriteString(currentStyle.Render(m.currentDatabase))
+	b.WriteString(labelStyle.Render(" / "))
+	b.WriteString(currentStyle.Render(m.currentStrategy))
+	b.WriteString("\n\n")
+
+	// Two-column layout: Databases | Strategies
+	if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
+		// Databases column
+		var dbCol strings.Builder
+		dbCol.WriteString(titleStyle.Render("Databases"))
+		dbCol.WriteString("\n")
+
+		for i, db := range m.availableDatabases.Databases {
+			line := ""
+			if i == m.menuSelectedIndex && !m.menuFocusOnStrategy {
+				// This database is highlighted in menu
+				line = highlightStyle.Render(fmt.Sprintf("► %s", db.Name))
+			} else if db.Name == m.currentDatabase {
+				// This database is currently active
+				line = currentStyle.Render(fmt.Sprintf("• %s", db.Name))
+			} else {
+				line = labelStyle.Render(fmt.Sprintf("  %s", db.Name))
+			}
+			dbCol.WriteString(line)
+			dbCol.WriteString("\n")
+		}
+
+		// Strategies column (for selected database)
+		var stratCol strings.Builder
+		stratCol.WriteString(titleStyle.Render("Strategies"))
+		stratCol.WriteString("\n")
+
+		// Find the database to show strategies for
+		var targetDB *DatabaseInfo
+		if m.menuFocusOnStrategy {
+			// When focused on strategies, show strategies for currently highlighted database
+			if m.menuSelectedIndex < len(m.availableDatabases.Databases) {
+				targetDB = &m.availableDatabases.Databases[m.menuSelectedIndex]
+			}
+		} else {
+			// When focused on databases, show strategies for current database
+			for _, db := range m.availableDatabases.Databases {
+				if db.Name == m.currentDatabase {
+					targetDB = &db
+					break
+				}
+			}
+		}
+
+		if targetDB != nil && len(targetDB.RetrievalStrategies) > 0 {
+			for i, strategy := range targetDB.RetrievalStrategies {
+				line := ""
+				if m.menuFocusOnStrategy && i == m.menuSelectedIndex {
+					// This strategy is highlighted in menu
+					line = highlightStyle.Render(fmt.Sprintf("► %s", strategy.Name))
+				} else if strategy.Name == m.currentStrategy {
+					// This strategy is currently active
+					line = currentStyle.Render(fmt.Sprintf("• %s", strategy.Name))
+				} else {
+					line = labelStyle.Render(fmt.Sprintf("  %s", strategy.Name))
+				}
+				stratCol.WriteString(line)
+				stratCol.WriteString("\n")
+			}
+		} else {
+			stratCol.WriteString(labelStyle.Render("  (no strategies)"))
+			stratCol.WriteString("\n")
+		}
+
+		// Combine columns side by side
+		dbLines := strings.Split(strings.TrimRight(dbCol.String(), "\n"), "\n")
+		stratLines := strings.Split(strings.TrimRight(stratCol.String(), "\n"), "\n")
+
+		maxLines := len(dbLines)
+		if len(stratLines) > maxLines {
+			maxLines = len(stratLines)
+		}
+
+		for i := 0; i < maxLines; i++ {
+			dbLine := ""
+			if i < len(dbLines) {
+				dbLine = dbLines[i]
+			}
+			stratLine := ""
+			if i < len(stratLines) {
+				stratLine = stratLines[i]
+			}
+
+			// Pad to align columns
+			b.WriteString(fmt.Sprintf("%-30s  %s\n", dbLine, stratLine))
+		}
+	} else {
+		b.WriteString(labelStyle.Render("No databases configured"))
+		b.WriteString("\n")
+	}
+
+	return borderStyle.Render(b.String())
+}
+
+func (m chatModel) View() string {
+	var b strings.Builder
 	b.WriteString(m.viewport.View())
 	b.WriteString(renderChatInput(m))
+
+	// Show menu panel below chat input if visible
+	menuPanel := renderMenuPanel(m)
+	if menuPanel != "" {
+		b.WriteString("\n")
+		b.WriteString(menuPanel)
+		b.WriteString("\n")
+	}
+
 	b.WriteString(renderInfoBar(m))
 
 	return b.String()

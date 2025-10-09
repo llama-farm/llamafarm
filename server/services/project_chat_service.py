@@ -219,13 +219,23 @@ class ProjectChatService:
                     if strategy.name == retrieval_strategy:
                         # Get top_k from strategy config if not provided
                         if rag_top_k is None and strategy.config:
-                            if hasattr(strategy.config, "top_k"):
+                            # Config can be dict or object, handle both
+                            if isinstance(strategy.config, dict):
+                                if "top_k" in strategy.config:
+                                    rag_top_k = strategy.config["top_k"]
+                                    logger.info(f"Using top_k from strategy '{retrieval_strategy}': {rag_top_k}")
+                            elif hasattr(strategy.config, "top_k"):
                                 rag_top_k = strategy.config.top_k
                                 logger.info(f"Using top_k from strategy '{retrieval_strategy}': {rag_top_k}")
 
                         # Get score_threshold from strategy config if not provided
                         if rag_score_threshold is None and strategy.config:
-                            if hasattr(strategy.config, "score_threshold"):
+                            # Config can be dict or object, handle both
+                            if isinstance(strategy.config, dict):
+                                if "score_threshold" in strategy.config:
+                                    rag_score_threshold = strategy.config["score_threshold"]
+                                    logger.info(f"Using score_threshold from strategy '{retrieval_strategy}': {rag_score_threshold}")
+                            elif hasattr(strategy.config, "score_threshold"):
                                 rag_score_threshold = strategy.config.score_threshold
                                 logger.info(f"Using score_threshold from strategy '{retrieval_strategy}': {rag_score_threshold}")
                         break
@@ -373,13 +383,23 @@ class ProjectChatService:
                     if strategy.name == retrieval_strategy:
                         # Get top_k from strategy config if not provided
                         if rag_top_k is None and strategy.config:
-                            if hasattr(strategy.config, "top_k"):
+                            # Config can be dict or object, handle both
+                            if isinstance(strategy.config, dict):
+                                if "top_k" in strategy.config:
+                                    rag_top_k = strategy.config["top_k"]
+                                    logger.info(f"Using top_k from strategy '{retrieval_strategy}': {rag_top_k}")
+                            elif hasattr(strategy.config, "top_k"):
                                 rag_top_k = strategy.config.top_k
                                 logger.info(f"Using top_k from strategy '{retrieval_strategy}': {rag_top_k}")
 
                         # Get score_threshold from strategy config if not provided
                         if rag_score_threshold is None and strategy.config:
-                            if hasattr(strategy.config, "score_threshold"):
+                            # Config can be dict or object, handle both
+                            if isinstance(strategy.config, dict):
+                                if "score_threshold" in strategy.config:
+                                    rag_score_threshold = strategy.config["score_threshold"]
+                                    logger.info(f"Using score_threshold from strategy '{retrieval_strategy}': {rag_score_threshold}")
+                            elif hasattr(strategy.config, "score_threshold"):
                                 rag_score_threshold = strategy.config.score_threshold
                                 logger.info(f"Using score_threshold from strategy '{retrieval_strategy}': {rag_score_threshold}")
                         break
