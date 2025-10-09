@@ -170,40 +170,73 @@ class ProjectChatService:
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        # Use config defaults if not explicitly provided
+        # Intelligent parameter resolution with cascading defaults
         # If rag_enabled is None, check if RAG is configured
         if rag_enabled is None:
             rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
                 logger.info("RAG enabled by default based on project configuration")
 
-        # Use config defaults for other parameters if not provided
+        # Resolve RAG parameters with intelligent cascading defaults
         if rag_enabled and project_config.rag:
-            # If no database specified, use the first database
-            if database is None and project_config.rag.databases:
-                database = project_config.rag.databases[0].name
-                logger.info(f"Using default database from config: {database}")
+            # Step 1: Resolve database (request > default_database > first database)
+            if database is None:
+                if project_config.rag.default_database:
+                    database = str(project_config.rag.default_database)
+                    logger.info(f"Using configured default_database: {database}")
+                elif project_config.rag.databases:
+                    database = str(project_config.rag.databases[0].name)
+                    logger.info(f"Using first database as default: {database}")
 
-            # If no top_k specified, check if there's a default in retrieval strategies
-            if rag_top_k is None:
-                # Look for default retrieval strategy's top_k
-                if project_config.rag.databases:
-                    for db in project_config.rag.databases:
-                        if db.name == database:
-                            for strategy in db.retrieval_strategies or []:
-                                if strategy.default:
-                                    rag_top_k = (
-                                        strategy.config.top_k
-                                        if (
-                                            strategy.config
-                                            and hasattr(strategy.config, "top_k")
-                                        )
-                                        else 5
-                                    )
-                                    break
+            # Step 2: Find the database configuration
+            db_config = None
+            if database and project_config.rag.databases:
+                for db in project_config.rag.databases:
+                    if db.name == database:
+                        db_config = db
+                        break
+
+            # Step 3: Resolve retrieval strategy (request > default_retrieval_strategy > first strategy)
+            if db_config and retrieval_strategy is None:
+                if db_config.default_retrieval_strategy:
+                    retrieval_strategy = str(db_config.default_retrieval_strategy)
+                    logger.info(f"Using default_retrieval_strategy: {retrieval_strategy}")
+                elif db_config.retrieval_strategies:
+                    # Check for strategy marked as default
+                    for strategy in db_config.retrieval_strategies:
+                        if strategy.default:
+                            retrieval_strategy = str(strategy.name)
+                            logger.info(f"Using default-marked strategy: {retrieval_strategy}")
                             break
-                if rag_top_k is None:
-                    rag_top_k = 5  # Fallback default
+                    # If no default marked, use first strategy
+                    if retrieval_strategy is None and db_config.retrieval_strategies:
+                        retrieval_strategy = str(db_config.retrieval_strategies[0].name)
+                        logger.info(f"Using first strategy as default: {retrieval_strategy}")
+
+            # Step 4: Resolve parameters from strategy config (only if not explicitly provided)
+            if db_config and retrieval_strategy:
+                for strategy in db_config.retrieval_strategies or []:
+                    if strategy.name == retrieval_strategy:
+                        # Get top_k from strategy config if not provided
+                        if rag_top_k is None and strategy.config:
+                            if hasattr(strategy.config, "top_k"):
+                                rag_top_k = strategy.config.top_k
+                                logger.info(f"Using top_k from strategy '{retrieval_strategy}': {rag_top_k}")
+
+                        # Get score_threshold from strategy config if not provided
+                        if rag_score_threshold is None and strategy.config:
+                            if hasattr(strategy.config, "score_threshold"):
+                                rag_score_threshold = strategy.config.score_threshold
+                                logger.info(f"Using score_threshold from strategy '{retrieval_strategy}': {rag_score_threshold}")
+                        break
+
+            # Step 5: Final fallback defaults if still None
+            if rag_top_k is None:
+                rag_top_k = 5
+                logger.info("Using fallback default top_k: 5")
+            if rag_score_threshold is None:
+                rag_score_threshold = 0.0
+                logger.info("Using fallback default score_threshold: 0.0")
 
         # Use the RAG subsystem to perform RAG based on the project config
         rag_results = []
@@ -292,35 +325,72 @@ class ProjectChatService:
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        # Use config defaults if not explicitly provided (same logic as chat method)
+        # Intelligent parameter resolution with cascading defaults (same as chat method)
         if rag_enabled is None:
             rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
                 logger.info("RAG enabled by default based on project configuration")
 
+        # Resolve RAG parameters with intelligent cascading defaults
         if rag_enabled and project_config.rag:
-            if database is None and project_config.rag.databases:
-                database = project_config.rag.databases[0].name
-                logger.info(f"Using default database from config: {database}")
+            # Step 1: Resolve database (request > default_database > first database)
+            if database is None:
+                if project_config.rag.default_database:
+                    database = str(project_config.rag.default_database)
+                    logger.info(f"Using configured default_database: {database}")
+                elif project_config.rag.databases:
+                    database = str(project_config.rag.databases[0].name)
+                    logger.info(f"Using first database as default: {database}")
 
-            if rag_top_k is None:
-                if project_config.rag.databases:
-                    for db in project_config.rag.databases:
-                        if db.name == database:
-                            for strategy in db.retrieval_strategies or []:
-                                if strategy.default:
-                                    rag_top_k = (
-                                        strategy.config.top_k
-                                        if (
-                                            strategy.config
-                                            and hasattr(strategy.config, "top_k")
-                                        )
-                                        else 5
-                                    )
-                                    break
+            # Step 2: Find the database configuration
+            db_config = None
+            if database and project_config.rag.databases:
+                for db in project_config.rag.databases:
+                    if db.name == database:
+                        db_config = db
+                        break
+
+            # Step 3: Resolve retrieval strategy (request > default_retrieval_strategy > first strategy)
+            if db_config and retrieval_strategy is None:
+                if db_config.default_retrieval_strategy:
+                    retrieval_strategy = str(db_config.default_retrieval_strategy)
+                    logger.info(f"Using default_retrieval_strategy: {retrieval_strategy}")
+                elif db_config.retrieval_strategies:
+                    # Check for strategy marked as default
+                    for strategy in db_config.retrieval_strategies:
+                        if strategy.default:
+                            retrieval_strategy = str(strategy.name)
+                            logger.info(f"Using default-marked strategy: {retrieval_strategy}")
                             break
-                if rag_top_k is None:
-                    rag_top_k = 5
+                    # If no default marked, use first strategy
+                    if retrieval_strategy is None and db_config.retrieval_strategies:
+                        retrieval_strategy = str(db_config.retrieval_strategies[0].name)
+                        logger.info(f"Using first strategy as default: {retrieval_strategy}")
+
+            # Step 4: Resolve parameters from strategy config (only if not explicitly provided)
+            if db_config and retrieval_strategy:
+                for strategy in db_config.retrieval_strategies or []:
+                    if strategy.name == retrieval_strategy:
+                        # Get top_k from strategy config if not provided
+                        if rag_top_k is None and strategy.config:
+                            if hasattr(strategy.config, "top_k"):
+                                rag_top_k = strategy.config.top_k
+                                logger.info(f"Using top_k from strategy '{retrieval_strategy}': {rag_top_k}")
+
+                        # Get score_threshold from strategy config if not provided
+                        if rag_score_threshold is None and strategy.config:
+                            if hasattr(strategy.config, "score_threshold"):
+                                rag_score_threshold = strategy.config.score_threshold
+                                logger.info(f"Using score_threshold from strategy '{retrieval_strategy}': {rag_score_threshold}")
+                        break
+
+            # Step 5: Final fallback defaults if still None
+            if rag_top_k is None:
+                rag_top_k = 5
+                logger.info("Using fallback default top_k: 5")
+            if rag_score_threshold is None:
+                rag_score_threshold = 0.0
+                logger.info("Using fallback default score_threshold: 0.0")
 
         rag_results = []
         if rag_enabled:
