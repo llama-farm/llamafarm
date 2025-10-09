@@ -1,5 +1,3 @@
-from typing import Any
-
 from config.datamodel import Dataset
 from pydantic import BaseModel
 

@@ -1,11 +1,10 @@
 import re
-import sys
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
 from typing import Any
 
+from config.datamodel import LlamaFarmConfig  # noqa: E402
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
@@ -19,11 +18,6 @@ from context_providers.project_chat_context_provider import (
 )
 from core.logging import FastAPIStructLogger
 from services.rag_service import search_with_rag
-
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 logger = FastAPIStructLogger()
 
@@ -39,7 +33,9 @@ FALLBACK_ECHO_RESPONSE = (
 MIN_LENGTH_RATIO = 0.3  # Minimum length ratio (candidate/input) to avoid echo detection
 LENGTH_EXTENSION_FACTOR = 1.2  # Factor by which candidate must exceed input length
 SIMILARITY_THRESHOLD = 0.8  # Minimum word similarity ratio to trigger echo detection
-SIMILARITY_LENGTH_FACTOR = 1.5  # Maximum length multiplier for similarity-based echo detection
+SIMILARITY_LENGTH_FACTOR = (
+    1.5  # Maximum length multiplier for similarity-based echo detection
+)
 
 
 class ProjectChatService:
@@ -241,7 +237,9 @@ class ProjectChatService:
             # Instead of clearing entire history, just remove the problematic response
             # to prevent the model from learning bad behavior while preserving context
             if hasattr(chat_agent, "history"):
-                logger.info("Removing problematic response from history due to echo detection")
+                logger.info(
+                    "Removing problematic response from history due to echo detection"
+                )
                 _remove_echo_response_from_history(chat_agent)
 
             # Generate a fallback response
@@ -403,18 +401,31 @@ def _is_echo(user_input: str, candidate: str) -> bool:
     normalized_input = _normalize_text(user_input)
     normalized_candidate = _normalize_text(candidate)
 
-    if normalized_candidate.startswith(normalized_input) and len(candidate) > len(user_input) * LENGTH_EXTENSION_FACTOR:
+    if (
+        normalized_candidate.startswith(normalized_input)
+        and len(candidate) > len(user_input) * LENGTH_EXTENSION_FACTOR
+    ):
         return False
 
-    similarity_ratio = len(set(normalized_candidate.split()) & set(normalized_input.split())) / len(set(normalized_input.split())) if normalized_input.split() else 0
+    similarity_ratio = (
+        len(set(normalized_candidate.split()) & set(normalized_input.split()))
+        / len(set(normalized_input.split()))
+        if normalized_input.split()
+        else 0
+    )
 
-    if similarity_ratio >= SIMILARITY_THRESHOLD and len(candidate) <= len(user_input) * SIMILARITY_LENGTH_FACTOR:
+    if (
+        similarity_ratio >= SIMILARITY_THRESHOLD
+        and len(candidate) <= len(user_input) * SIMILARITY_LENGTH_FACTOR
+    ):
         return True
 
     return False
 
 
-def _remove_echo_response_from_history(chat_agent: ProjectChatOrchestratorAgent) -> None:
+def _remove_echo_response_from_history(
+    chat_agent: ProjectChatOrchestratorAgent,
+) -> None:
     history = getattr(chat_agent, "history", None)
     if not history:
         return
@@ -424,7 +435,9 @@ def _remove_echo_response_from_history(chat_agent: ProjectChatOrchestratorAgent)
             messages = history.history
             for i in range(len(messages) - 1, -1, -1):
                 msg = messages[i]
-                role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
+                role = getattr(msg, "role", None) or (
+                    msg.get("role") if isinstance(msg, dict) else None
+                )
                 if role == "assistant":
                     messages.pop(i)
                     logger.info(f"Removed assistant message at index {i} from history")

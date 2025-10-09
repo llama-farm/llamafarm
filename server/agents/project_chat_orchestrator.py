@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 from pathlib import Path
 
 import instructor
@@ -9,22 +8,18 @@ from atomic_agents.agents.atomic_agent import (  # type: ignore
     ChatHistory,
     SystemPromptGenerator,
 )
-from openai import AsyncOpenAI
-
-from agents.agent import LFAgent, LFAgentConfig
-from context_providers.docs_context_provider import DocsContextProvider
-from services import runtime_service
-
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
 from config.datamodel import (  # noqa: E402
     LlamaFarmConfig,
     Model,
     Prompt,
     PromptFormat,
 )
+from openai import AsyncOpenAI
 
+from agents.agent import LFAgent, LFAgentConfig
+from context_providers.docs_context_provider import DocsContextProvider
 from core.logging import FastAPIStructLogger  # noqa: E402
+from services import runtime_service
 
 logger = FastAPIStructLogger(__name__)
 

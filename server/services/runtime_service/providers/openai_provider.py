@@ -1,6 +1,5 @@
 """OpenAI runtime provider implementation."""
 
-import sys
 import time
 from pathlib import Path
 
@@ -10,10 +9,6 @@ from openai import AsyncOpenAI
 
 from .base import RuntimeProvider
 from .health import HealthCheckResult
-
-# Add repo root to path for config imports
-repo_root = Path(__file__).parent.parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
 
 from config.datamodel import PromptFormat  # noqa: E402
 

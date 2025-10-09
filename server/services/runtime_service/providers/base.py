@@ -1,6 +1,5 @@
 """Base class for runtime providers."""
 
-import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -8,10 +7,6 @@ import instructor
 from openai import AsyncOpenAI
 
 from .health import HealthCheckResult
-
-# Add repo root to path for config imports
-repo_root = Path(__file__).parent.parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
 
 from config.datamodel import Model  # noqa: E402
 
