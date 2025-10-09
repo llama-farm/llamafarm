@@ -948,7 +948,6 @@ func setupWorkdirVolumeMount(spec *ContainerRunSpec) error {
 	// Convert to Docker-compatible path
 	dockerPath := convertToDockerPath(cwd)
 
-	// Create volume mount without explicit mode to test original issue
 	volumeMount := fmt.Sprintf("%s:%s", dockerPath, dockerPath)
 	spec.Volumes = append(spec.Volumes, volumeMount)
 
