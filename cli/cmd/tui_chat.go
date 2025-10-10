@@ -572,26 +572,41 @@ func (m *chatModel) switchDatabase(newDatabase string) {
 	// Update the mode context
 	m.projectModeCtx.Database = newDatabase
 
-	// Reset strategy to prevent retaining old database's strategy
-	m.currentStrategy = ""
-	m.projectModeCtx.RetrievalStrategy = ""
+	// Check if current strategy is valid for new database before resetting
+	oldStrategy := m.currentStrategy
+	strategyValidForNewDB := false
 
-	// Find default strategy for new database
 	if m.availableDatabases != nil {
 		for _, db := range m.availableDatabases.Databases {
 			if db.Name == newDatabase {
-				// Find default strategy for this database
-				for _, strategy := range db.RetrievalStrategies {
-					if strategy.IsDefault {
-						m.currentStrategy = strategy.Name
-						m.projectModeCtx.RetrievalStrategy = strategy.Name
-						break
+				// Check if current strategy exists in new database
+				if oldStrategy != "" {
+					for _, strategy := range db.RetrievalStrategies {
+						if strategy.Name == oldStrategy {
+							strategyValidForNewDB = true
+							break
+						}
 					}
 				}
-				// If no default, use first strategy
-				if m.currentStrategy == "" && len(db.RetrievalStrategies) > 0 {
-					m.currentStrategy = db.RetrievalStrategies[0].Name
-					m.projectModeCtx.RetrievalStrategy = m.currentStrategy
+
+				// If old strategy isn't valid for new database, find a new one
+				if !strategyValidForNewDB {
+					m.currentStrategy = ""
+					m.projectModeCtx.RetrievalStrategy = ""
+
+					// Find default strategy for this database
+					for _, strategy := range db.RetrievalStrategies {
+						if strategy.IsDefault {
+							m.currentStrategy = strategy.Name
+							m.projectModeCtx.RetrievalStrategy = strategy.Name
+							break
+						}
+					}
+					// If no default, use first strategy
+					if m.currentStrategy == "" && len(db.RetrievalStrategies) > 0 {
+						m.currentStrategy = db.RetrievalStrategies[0].Name
+						m.projectModeCtx.RetrievalStrategy = m.currentStrategy
+					}
 				}
 				break
 			}

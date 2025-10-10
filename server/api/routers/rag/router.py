@@ -129,7 +129,7 @@ async def get_rag_databases(namespace: str, project: str):
 
             strategies.append(RetrievalStrategyInfo(
                 name=str(strategy.name),
-                type=str(strategy.type),
+                type=strategy.type.value if hasattr(strategy.type, 'value') else str(strategy.type),
                 is_default=is_default
             ))
 
@@ -143,7 +143,7 @@ async def get_rag_databases(namespace: str, project: str):
 
         databases.append(DatabaseInfo(
             name=str(db.name),
-            type=str(db.type),
+            type=db.type.value if hasattr(db.type, 'value') else str(db.type),
             is_default=is_default_db,
             retrieval_strategies=strategies
         ))
