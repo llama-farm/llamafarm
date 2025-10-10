@@ -2,19 +2,48 @@ version: v1
 name: lemonade-example
 namespace: default
 
+# To download models (run these commands before starting):
+# lemonade-server-dev models download Qwen/Qwen2.5-0.5B-Instruct-GGUF
+# lemonade-server-dev models download Qwen/Qwen2.5-3B-Instruct-GGUF
+# lemonade-server-dev models download Qwen/Qwen2.5-7B-Instruct-GGUF
+
 runtime:
   models:
-  - name: lemonade-onnx
-    description: "Lemonade with ONNX backend"
+  - name: lemon-tiny
+    description: "Fast Lemonade model for quick responses (0.5B)"
     provider: lemonade
-    model: "Phi-3-mini-4k-instruct-onnx"  # Example ONNX model
+    model: "Qwen2.5-0.5B-Instruct-GGUF"
     default: true
     prompt_format: structured  # structured | unstructured
-    # instructor_mode: md_json  # Optional: override instructor mode
     lemonade:
-      backend: onnx  # onnx (default, all systems) | llamacpp (GGUF) | transformers (PyTorch)
+      backend: llamacpp  # llamacpp for GGUF models
       port: 11534
-      # model_path: ~/.cache/lemonade/models  # Optional: custom model storage
+      context_size: 32768
+      auto_download: false  # Set to true to auto-download on first use
+
+  - name: lemon-balanced
+    description: "Balanced Lemonade model for quality responses (3B)"
+    provider: lemonade
+    model: "Qwen2.5-3B-Instruct-GGUF"
+    default: false
+    prompt_format: structured
+    lemonade:
+      backend: llamacpp
+      port: 11535  # Different port for each model instance
+      context_size: 32768
+      auto_download: false
+
+  - name: lemon-powerful
+    description: "High-quality Lemonade model for complex tasks (7B)"
+    provider: lemonade
+    model: "Qwen2.5-7B-Instruct-GGUF"
+    default: false
+    prompt_format: structured
+    lemonade:
+      backend: llamacpp
+      port: 11536  # Different port for each model instance
+      context_size: 32768
+      auto_download: false
 
 prompts:
   - role: system
