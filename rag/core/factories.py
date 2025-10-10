@@ -1,34 +1,38 @@
 """Factory classes for creating RAG system components."""
 
 from pathlib import Path
-from typing import Any, Dict, Type
+from typing import Any
 
+# Import the unified parser system
 from components.parsers import (
+    ToolAwareParserFactory,
     DirectoryParser,
-    LlamaIndexCSVExcelParser,
-    LlamaIndexDocxParser,
-    LlamaIndexMarkdownParser,
-    LlamaIndexPDFParser,
-    LlamaIndexTextParser,
-    LlamaIndexWebParser,
-)
-
-# Import parsers using the new modular system
-from components.parsers import (
-    ParserFactory as NewParserFactory,
 )
 from core.base import Embedder, Parser, VectorStore
 from core.logging import RAGStructLogger
 
-# Create aliases for backward compatibility
-PlainTextParser = LlamaIndexTextParser
-PDFParser = LlamaIndexPDFParser
-CSVParser = LlamaIndexCSVExcelParser
-DocxParser = LlamaIndexDocxParser
-MarkdownParser = LlamaIndexMarkdownParser
-HTMLParser = LlamaIndexWebParser
-ExcelParser = LlamaIndexCSVExcelParser
-CustomerSupportCSVParser = LlamaIndexCSVExcelParser
+
+# Create parser factory functions for backward compatibility
+def _create_parser_factory(parser_name: str):
+    """Create a parser factory function for a specific parser type."""
+
+    def parser_factory(*args, **kwargs):
+        return ToolAwareParserFactory.create_parser(
+            parser_name=parser_name, config=kwargs.get("config")
+        )
+
+    return parser_factory
+
+
+# Legacy parser factory functions
+PlainTextParser = _create_parser_factory("TextParser_Python")
+PDFParser = _create_parser_factory("PDFParser_LlamaIndex")
+CSVParser = _create_parser_factory("CSVParser_Pandas")
+DocxParser = _create_parser_factory("DocxParser_LlamaIndex")
+MarkdownParser = _create_parser_factory("MarkdownParser_LlamaIndex")
+HTMLParser = _create_parser_factory("TextParser_LlamaIndex")  # Web fallback to text
+ExcelParser = _create_parser_factory("ExcelParser_Pandas")
+CustomerSupportCSVParser = _create_parser_factory("CSVParser_Pandas")
 
 PDF_AVAILABLE = True  # Always available through fallback
 
@@ -170,7 +174,9 @@ class ParserFactoryWrapper(ComponentFactory):
         Note: project_dir is accepted for API compatibility but not used by parsers.
         """
         # Use the new ParserFactory from components.parsers
-        return NewParserFactory.create_parser(component_type, config)
+        return ToolAwareParserFactory.create_parser(
+            parser_name=component_type, config=config
+        )
 
     @classmethod
     def list_available(cls):
@@ -279,12 +285,12 @@ def create_component_from_config(
     return factory_class.create(component_type, config, project_dir)
 
 
-def create_embedder_from_config(embedder_config: Dict[str, Any]) -> Embedder:
+def create_embedder_from_config(embedder_config: dict[str, Any]) -> Embedder:
     """Create an embedder from configuration."""
     return create_component_from_config(embedder_config, EmbedderFactory)
 
 
-def create_parser_from_config(parser_config: Dict[str, Any]) -> Parser:
+def create_parser_from_config(parser_config: dict[str, Any]) -> Parser:
     """Create a parser from configuration."""
     return create_component_from_config(parser_config, ParserFactory)
 
@@ -296,11 +302,11 @@ def create_vector_store_from_config(
     return create_component_from_config(store_config, VectorStoreFactory, project_dir)
 
 
-def create_extractor_from_config(extractor_config: Dict[str, Any]):
+def create_extractor_from_config(extractor_config: dict[str, Any]):
     """Create an extractor from configuration."""
     return create_component_from_config(extractor_config, ExtractorFactory)
 
 
-def create_retrieval_strategy_from_config(strategy_config: Dict[str, Any]):
+def create_retrieval_strategy_from_config(strategy_config: dict[str, Any]):
     """Create a retrieval strategy from configuration."""
     return create_component_from_config(strategy_config, RetrievalStrategyFactory)

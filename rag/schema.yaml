@@ -30,24 +30,8 @@ definitions:
     properties:
       type:
         type: string
-        enum:
-          # Auto-detection
-          - auto
-          # Tool-specific parsers from registry
-          - PDFParser_PyPDF2
-          - PDFParser_LlamaIndex
-          - CSVParser_Pandas
-          - CSVParser_Python
-          - CSVParser_LlamaIndex
-          - ExcelParser_OpenPyXL
-          - ExcelParser_Pandas
-          - ExcelParser_LlamaIndex
-          - DocxParser_PythonDocx
-          - DocxParser_LlamaIndex
-          - MarkdownParser_Python
-          - MarkdownParser_LlamaIndex
-          - TextParser_Python
-          - TextParser_LlamaIndex
+        pattern: "^auto$|^[A-Za-z][A-Za-z0-9_]*Parser[A-Za-z0-9_]*$"
+        description: Parser type identifier - 'auto' for auto-detection or specific parser name (e.g., PDFParser_PyPDF2)
       config:
         type: object
         oneOf:
@@ -68,6 +52,7 @@ definitions:
           - $ref: "#/definitions/parsers/markdownParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/textParserPythonConfig"
           - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
+          - $ref: "#/definitions/parsers/msgParserExtractMsgConfig"
   parsers:
     # Auto-detection parser configuration
     autoParserConfig:
@@ -674,6 +659,56 @@ definitions:
           type: boolean
           default: true
           description: Preserve heading hierarchy
+    msgParserExtractMsgConfig:
+      type: object
+      title: MSG Parser (extract-msg) Configuration
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks
+        chunk_strategy:
+          type: string
+          enum: [sentences, paragraphs, characters, email_sections]
+          default: sentences
+          description: Chunking strategy
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract metadata
+        extract_attachments:
+          type: boolean
+          default: true
+          description: Extract attachments
+        extract_headers:
+          type: boolean
+          default: true
+          description: Extract headers
+        include_attachment_content:
+          type: boolean
+          default: false
+          description: Include attachment content
+        clean_text:
+          type: boolean
+          default: true
+          description: Clean text
+        preserve_formatting:
+          type: boolean
+          default: false
+          description: Preserve formatting
+        encoding:
+          type: string
+          default: utf-8
+          description: Encoding
   extractorConfig:
     type: object
     title: Extractor Configuration
@@ -1930,25 +1965,8 @@ definitions:
           properties:
             type:
               type: string
-              enum:
-                [
-                  CSVParser_LlamaIndex,
-                  CSVParser_Pandas,
-                  CSVParser_Python,
-                  DirectoryParser,
-                  DocxParser_LlamaIndex,
-                  DocxParser_PythonDocx,
-                  ExcelParser_LlamaIndex,
-                  ExcelParser_OpenPyXL,
-                  ExcelParser_Pandas,
-                  MarkdownParser_LlamaIndex,
-                  MarkdownParser_Python,
-                  PDFParser_LlamaIndex,
-                  PDFParser_PyPDF2,
-                  TextParser_LlamaIndex,
-                  TextParser_Python,
-                ]
-              description: Parser type
+              pattern: "^[A-Za-z][A-Za-z0-9_]*Parser[A-Za-z0-9_]*$|^DirectoryParser$"
+              description: Parser type identifier (e.g., PDFParser_PyPDF2, TextParser_LlamaIndex)
             config:
               type: object
               description: Parser configuration

@@ -210,11 +210,13 @@ class IngestHandler:
         )
 
         # Print file info
-        print(f"\n{'=' * 60}")
-        print(f"📁 FILE: {filename}")
-        print(f"   Size: {file_size:,} bytes ({file_size / 1024:.1f} KB)")
-        print(f"   Type: {metadata.get('content_type', 'unknown')}")
-        print(f"{'=' * 60}")
+        logger.info(
+            f"\n{'=' * 60}\n"
+            f"📁 FILE: {filename}\n"
+            f"   Size: {file_size:,} bytes ({file_size / 1024:.1f} KB)\n"
+            f"   Type: {metadata.get('content_type', 'unknown')}\n"
+            f"{'=' * 60}"
+        )
 
         try:
             # Process the blob with the blob processor
@@ -252,10 +254,10 @@ class IngestHandler:
                 if embedding and len(embedding) > 0:
                     doc.embeddings = embedding[0]  # Get first embedding from list
                     if i == 0:  # Print embedding info only once
-                        print(
+                        logger.info(
                             f"\n🧠 Embedding with {self.embedder.__class__.__name__}:"
                         )
-                        print(f"   └─ Dimensions: {len(doc.embeddings)}")
+                        logger.info(f"   └─ Dimensions: {len(doc.embeddings)}")
                 embedded_documents.append(doc)
 
             # Store documents in vector store with duplicate detection
@@ -279,14 +281,14 @@ class IngestHandler:
 
                         if stored_count == len(embedded_documents):
                             logger.info(f"Stored all {stored_count} documents")
-                            print(
+                            logger.info(
                                 f"[STORED] All {stored_count} documents embedded and stored"
                             )
                         else:
                             logger.info(
                                 f"Stored {stored_count} documents, skipped {skipped_count} duplicates"
                             )
-                            print(
+                            logger.info(
                                 f"[PARTIAL] Stored {stored_count} new documents, skipped {skipped_count} duplicates"
                             )
                     else:
@@ -295,7 +297,7 @@ class IngestHandler:
                         logger.info(
                             f"All {skipped_count} documents were duplicates - skipped"
                         )
-                        print(
+                        logger.info(
                             f"[DUPLICATE] All {skipped_count} documents already in database - skipped"
                         )
 
@@ -329,18 +331,22 @@ class IngestHandler:
                             doc_ids.extend(result)
                             stored_count += 1
                             logger.info(f"Stored document {doc.id}")
-                            print(f"[STORED] Document {doc.id} embedded and stored")
+                            logger.info(
+                                f"[STORED] Document {doc.id} embedded and stored"
+                            )
                         elif isinstance(result, list) and len(result) == 0:
                             # Empty list means duplicate
                             skipped_count += 1
                             logger.info(f"Document {doc.id} is duplicate - skipped")
-                            print(
+                            logger.info(
                                 f"[DUPLICATE] Document {doc.id} already in database - skipped"
                             )
                         elif result is False:
                             # Database error
                             logger.error(f"Database error storing document {doc.id}")
-                            print(f"[ERROR] Database error storing document {doc.id}")
+                            logger.error(
+                                f"[ERROR] Database error storing document {doc.id}"
+                            )
                             raise Exception(f"Database error storing document {doc.id}")
                         else:
                             # Unexpected return
@@ -352,7 +358,9 @@ class IngestHandler:
                             )
                     except Exception as doc_e:
                         logger.error(f"Failed to store document {doc.id}: {doc_e}")
-                        print(f"[ERROR] Failed to store document {doc.id}: {doc_e}")
+                        logger.error(
+                            f"[ERROR] Failed to store document {doc.id}: {doc_e}"
+                        )
                         # Re-raise to ensure error is not silently ignored
                         raise
 
@@ -360,29 +368,35 @@ class IngestHandler:
             elapsed_time = time.time() - start_time
 
             # Output storage details
-            print(f"\n💾 Database Storage ({self.vector_store.__class__.__name__}):")
+            logger.info(
+                f"\n💾 Database Storage ({self.vector_store.__class__.__name__}):"
+            )
             if stored_count > 0:
-                print(f"   ✅ Stored: {stored_count} new chunks")
+                logger.info(f"   ✅ Stored: {stored_count} new chunks")
             if skipped_count > 0:
-                print(f"   ⏭️  Skipped: {skipped_count} duplicate chunks")
+                logger.info(f"   ⏭️  Skipped: {skipped_count} duplicate chunks")
 
             # Summary
-            print(f"\n📈 Processing Summary:")
-            print(f"   ⏱️  Total time: {elapsed_time:.2f} seconds")
+            summary_lines = [
+                "\n📈 Processing Summary:",
+                f"  ⏱️  Total time: {elapsed_time:.2f} seconds",
+            ]
             if stored_count > 0:
-                print(
+                summary_lines.append(
                     f"   ✅ Status: SUCCESS - {stored_count}/{len(documents)} chunks stored"
                 )
             elif skipped_count > 0:
-                print(
+                summary_lines.append(
                     f"   ⚠️  Status: DUPLICATE - All {skipped_count} chunks already in database"
                 )
             else:
-                print(f"   ❌ Status: FAILED")
+                summary_lines.append("   ❌ Status: FAILED")
 
-            logger.info(
+            summary_lines.append(
                 f"Ingestion complete: {stored_count} stored, {skipped_count} skipped from {filename}"
             )
+
+            logger.info("\n".join(summary_lines))
 
             # Extract parser names safely
             parser_names = []
@@ -398,7 +412,7 @@ class IngestHandler:
                 # All chunks were duplicates
                 status = "skipped"
                 reason = "duplicate"
-                print(
+                logger.warning(
                     f"\n⚠️ FILE ALREADY PROCESSED - All {skipped_count} chunks already exist in database"
                 )
             else:

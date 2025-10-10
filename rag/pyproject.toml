@@ -69,7 +69,6 @@ dependencies = [
   "pytest-mock>=3.14.1",
   "python-magic>=0.4.27",
   "llama-index>=0.13.6",
-  # Celery for task queue processing
   "celery>=5.5.3",
   "structlog>=25.4.0",
   "psutil>=7.0.0",
@@ -77,6 +76,7 @@ dependencies = [
   "llamafarm-config",
   "docx2txt>=0.9",
   "spacy>=3.8.7",
+  "msg-parser[rtf]>=1.2.0",
 ]
 
 [project.optional-dependencies]

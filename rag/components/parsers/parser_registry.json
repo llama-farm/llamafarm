@@ -1,6 +1,52 @@
 {
   "version": "1.0",
   "parsers": {
+    "MsgParser_ExtractMsg": {
+      "name": "MsgParser_ExtractMsg",
+      "display_name": "MSG Parser (extract-msg)",
+      "tool": "extract-msg",
+      "version": "1.0.0",
+      "description": "Microsoft Outlook MSG file parser using extract-msg library",
+      "supported_extensions": [
+        ".msg"
+      ],
+      "mime_types": [
+        "application/vnd.ms-outlook",
+        "application/octet-stream"
+      ],
+      "capabilities": [
+        "text_extraction",
+        "metadata_extraction",
+        "attachment_extraction",
+        "chunking",
+        "email_parsing",
+        "header_extraction",
+        "body_extraction"
+      ],
+      "dependencies": {
+        "required": [
+          "extract-msg"
+        ],
+        "optional": [
+          "chardet",
+          "python-magic"
+        ]
+      },
+      "default_config": {
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "email_sections",
+        "extract_metadata": true,
+        "extract_attachments": true,
+        "extract_headers": true,
+        "include_attachment_content": false,
+        "clean_text": true,
+        "preserve_formatting": false,
+        "encoding": "utf-8"
+      },
+      "parser_type": "msg",
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/msg"
+    },
     "MarkdownParser_Python": {
       "name": "MarkdownParser_Python",
       "display_name": "Markdown Parser (Python)",
@@ -38,7 +84,7 @@
         "extract_links": true
       },
       "parser_type": "markdown",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/markdown"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/markdown"
     },
     "MarkdownParser_LlamaIndex": {
       "name": "MarkdownParser_LlamaIndex",
@@ -90,7 +136,7 @@
         "preserve_formatting": false
       },
       "parser_type": "markdown",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/markdown"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/markdown"
     },
     "ExcelParser_OpenPyXL": {
       "name": "ExcelParser_OpenPyXL",
@@ -130,7 +176,7 @@
         "data_only": true
       },
       "parser_type": "excel",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/excel"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/excel"
     },
     "ExcelParser_Pandas": {
       "name": "ExcelParser_Pandas",
@@ -178,7 +224,7 @@
         ]
       },
       "parser_type": "excel",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/excel"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/excel"
     },
     "ExcelParser_LlamaIndex": {
       "name": "ExcelParser_LlamaIndex",
@@ -236,7 +282,7 @@
         ]
       },
       "parser_type": "excel",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/excel"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/excel"
     },
     "PDFParser_PyPDF2": {
       "name": "PDFParser_PyPDF2",
@@ -266,10 +312,10 @@
         "rotation_handling"
       ],
       "dependencies": {
-        "required": [
+        "required": [],
+        "optional": [
           "PyPDF2"
-        ],
-        "optional": []
+        ]
       },
       "default_config": {
         "chunk_size": 1000,
@@ -287,7 +333,7 @@
         "clean_text": true
       },
       "parser_type": "pdf",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/pdf"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/pdf"
     },
     "PDFParser_LlamaIndex": {
       "name": "PDFParser_LlamaIndex",
@@ -341,7 +387,7 @@
         ]
       },
       "parser_type": "pdf",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/pdf"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/pdf"
     },
     "CSVParser_Pandas": {
       "name": "CSVParser_Pandas",
@@ -389,7 +435,7 @@
         ]
       },
       "parser_type": "csv",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/csv"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/csv"
     },
     "CSVParser_Python": {
       "name": "CSVParser_Python",
@@ -421,7 +467,7 @@
         "quotechar": "\""
       },
       "parser_type": "csv",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/csv"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/csv"
     },
     "CSVParser_LlamaIndex": {
       "name": "CSVParser_LlamaIndex",
@@ -477,7 +523,7 @@
         ]
       },
       "parser_type": "csv",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/csv"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/csv"
     },
     "TextParser_Python": {
       "name": "TextParser_Python",
@@ -534,7 +580,7 @@
         "extract_metadata": true
       },
       "parser_type": "text",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/text"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/text"
     },
     "TextParser_LlamaIndex": {
       "name": "TextParser_LlamaIndex",
@@ -637,7 +683,7 @@
         "include_prev_next_rel": true
       },
       "parser_type": "text",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/text"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/text"
     },
     "DocxParser_PythonDocx": {
       "name": "DocxParser_PythonDocx",
@@ -678,7 +724,7 @@
         "extract_comments": false
       },
       "parser_type": "docx",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/docx"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/docx"
     },
     "DocxParser_LlamaIndex": {
       "name": "DocxParser_LlamaIndex",
@@ -724,10 +770,17 @@
         "preserve_formatting": false
       },
       "parser_type": "docx",
-      "implementation_dir": "/Users/robthelen/llamafarm-1/rag/components/parsers/docx"
+      "implementation_dir": "/Users/mhamann/projects/llamafarm/llamafarm/rag/components/parsers/docx"
     }
   },
   "file_extensions": {
+    ".msg": [
+      {
+        "parser": "MsgParser_ExtractMsg",
+        "tool": "extract-msg",
+        "priority": 0
+      }
+    ],
     ".md": [
       {
         "parser": "MarkdownParser_Python",
@@ -1242,6 +1295,18 @@
     ]
   },
   "mime_types": {
+    "application/vnd.ms-outlook": [
+      {
+        "parser": "MsgParser_ExtractMsg",
+        "tool": "extract-msg"
+      }
+    ],
+    "application/octet-stream": [
+      {
+        "parser": "MsgParser_ExtractMsg",
+        "tool": "extract-msg"
+      }
+    ],
     "text/markdown": [
       {
         "parser": "MarkdownParser_Python",
@@ -1498,6 +1563,21 @@
     ]
   },
   "tools": {
+    "extract-msg": [
+      {
+        "parser": "MsgParser_ExtractMsg",
+        "type": "msg",
+        "capabilities": [
+          "text_extraction",
+          "metadata_extraction",
+          "attachment_extraction",
+          "chunking",
+          "email_parsing",
+          "header_extraction",
+          "body_extraction"
+        ]
+      }
+    ],
     "Python": [
       {
         "parser": "MarkdownParser_Python",
