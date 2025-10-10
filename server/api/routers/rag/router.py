@@ -100,22 +100,32 @@ async def get_rag_databases(namespace: str, project: str):
         # Get retrieval strategies for this database
         strategies = []
         default_strategy_name = None
+        found_default = False
 
-        # Determine default strategy
+        # Determine default strategy (priority: default_retrieval_strategy > strategy.default > first)
         if hasattr(db, 'default_retrieval_strategy') and db.default_retrieval_strategy:
             default_strategy_name = str(db.default_retrieval_strategy)
 
+        # First pass: check if any strategy is explicitly marked as default
+        if not default_strategy_name:
+            for strategy in db.retrieval_strategies or []:
+                if hasattr(strategy, 'default') and strategy.default:
+                    default_strategy_name = str(strategy.name)
+                    break
+
+        # Second pass: build strategy list with exactly one default
         for strategy in db.retrieval_strategies or []:
             is_default = False
 
-            # Check if this is the default strategy
-            if default_strategy_name and strategy.name == default_strategy_name:
-                is_default = True
-            elif not default_strategy_name and hasattr(strategy, 'default') and strategy.default:
-                is_default = True
-            elif not default_strategy_name and not strategies:
-                # First strategy is default if no explicit default
-                is_default = True
+            # Mark as default based on priority order, ensuring only one default
+            if not found_default:
+                if default_strategy_name and strategy.name == default_strategy_name:
+                    is_default = True
+                    found_default = True
+                elif not default_strategy_name and not strategies:
+                    # First strategy is default if no explicit default found
+                    is_default = True
+                    found_default = True
 
             strategies.append(RetrievalStrategyInfo(
                 name=str(strategy.name),

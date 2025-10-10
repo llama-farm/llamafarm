@@ -163,10 +163,15 @@ type chatModel struct {
 	availableDatabases *DatabasesResponse
 	currentDatabase    string
 	currentStrategy    string
-	// Menu state
-	menuVisible        bool
-	menuSelectedIndex  int  // Index of selected database in menu
-	menuFocusOnStrategy bool // Whether we're navigating strategies (true) or databases (false)
+	// Menu state (extracted for maintainability)
+	menu RAGMenuState
+}
+
+// RAGMenuState encapsulates the state for the RAG database/strategy selection menu
+type RAGMenuState struct {
+	visible        bool
+	selectedIndex  int  // Index of selected item in current column
+	focusOnStrategy bool // Whether we're navigating strategies (true) or databases (false)
 }
 
 type (
@@ -567,7 +572,11 @@ func (m *chatModel) switchDatabase(newDatabase string) {
 	// Update the mode context
 	m.projectModeCtx.Database = newDatabase
 
-	// Reset strategy to default for new database
+	// Reset strategy to prevent retaining old database's strategy
+	m.currentStrategy = ""
+	m.projectModeCtx.RetrievalStrategy = ""
+
+	// Find default strategy for new database
 	if m.availableDatabases != nil {
 		for _, db := range m.availableDatabases.Databases {
 			if db.Name == newDatabase {
@@ -743,29 +752,29 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+r":
 			// Toggle RAG configuration menu
 			if m.currentMode == ModeProject {
-				m.menuVisible = !m.menuVisible
+				m.menu.visible = !m.menu.visible
 			}
 			return m, nil
 
 		case "esc":
 			// Close menu if open
-			if m.menuVisible {
-				m.menuVisible = false
+			if m.menu.visible {
+				m.menu.visible = false
 			}
 			return m, nil
 
 		case "up":
 			// If menu is visible, navigate menu
-			if m.menuVisible {
-				if m.menuFocusOnStrategy {
+			if m.menu.visible {
+				if m.menu.focusOnStrategy {
 					// Navigate strategies
-					if m.menuSelectedIndex > 0 {
-						m.menuSelectedIndex--
+					if m.menu.selectedIndex > 0 {
+						m.menu.selectedIndex--
 					}
 				} else {
 					// Navigate databases
-					if m.menuSelectedIndex > 0 {
-						m.menuSelectedIndex--
+					if m.menu.selectedIndex > 0 {
+						m.menu.selectedIndex--
 					}
 				}
 				return m, nil
@@ -781,8 +790,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "down":
 			// If menu is visible, navigate menu
-			if m.menuVisible {
-				if m.menuFocusOnStrategy {
+			if m.menu.visible {
+				if m.menu.focusOnStrategy {
 					// Navigate strategies
 					var maxIndex int
 					if m.availableDatabases != nil {
@@ -793,13 +802,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-					if m.menuSelectedIndex < maxIndex {
-						m.menuSelectedIndex++
+					if m.menu.selectedIndex < maxIndex {
+						m.menu.selectedIndex++
 					}
 				} else {
 					// Navigate databases
-					if m.availableDatabases != nil && m.menuSelectedIndex < len(m.availableDatabases.Databases)-1 {
-						m.menuSelectedIndex++
+					if m.availableDatabases != nil && m.menu.selectedIndex < len(m.availableDatabases.Databases)-1 {
+						m.menu.selectedIndex++
 					}
 				}
 				return m, nil
@@ -817,22 +826,22 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "tab":
 			// Toggle between database and strategy focus when menu is visible
-			if m.menuVisible {
-				m.menuFocusOnStrategy = !m.menuFocusOnStrategy
-				m.menuSelectedIndex = 0 // Reset selection when switching focus
+			if m.menu.visible {
+				m.menu.focusOnStrategy = !m.menu.focusOnStrategy
+				m.menu.selectedIndex = 0 // Reset selection when switching focus
 				return m, nil
 			}
 
 		case "enter":
 			// If menu is visible, apply selection
-			if m.menuVisible {
-				if m.menuFocusOnStrategy {
+			if m.menu.visible {
+				if m.menu.focusOnStrategy {
 					// Select strategy
 					if m.availableDatabases != nil {
 						for _, db := range m.availableDatabases.Databases {
 							if db.Name == m.currentDatabase {
-								if m.menuSelectedIndex < len(db.RetrievalStrategies) {
-									strategyName := db.RetrievalStrategies[m.menuSelectedIndex].Name
+								if m.menu.selectedIndex < len(db.RetrievalStrategies) {
+									strategyName := db.RetrievalStrategies[m.menu.selectedIndex].Name
 									m.switchStrategy(strategyName)
 									m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 									m.viewport.GotoBottom()
@@ -843,8 +852,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				} else {
 					// Select database
-					if m.availableDatabases != nil && m.menuSelectedIndex < len(m.availableDatabases.Databases) {
-						dbName := m.availableDatabases.Databases[m.menuSelectedIndex].Name
+					if m.availableDatabases != nil && m.menu.selectedIndex < len(m.availableDatabases.Databases) {
+						dbName := m.availableDatabases.Databases[m.menu.selectedIndex].Name
 						m.switchDatabase(dbName)
 						m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
 						m.viewport.GotoBottom()
@@ -1023,7 +1032,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.textarea.SetValue("")
 						break
 					}
-					m.menuVisible = !m.menuVisible
+					m.menu.visible = !m.menu.visible
 					m.textarea.SetValue("")
 				case "/database":
 					if m.currentMode != ModeProject {
@@ -1515,7 +1524,7 @@ func renderInfoBar(m chatModel) string {
 }
 
 func renderMenuPanel(m chatModel) string {
-	if !m.menuVisible {
+	if !m.menu.visible {
 		return ""
 	}
 
@@ -1552,7 +1561,7 @@ func renderMenuPanel(m chatModel) string {
 
 		for i, db := range m.availableDatabases.Databases {
 			line := ""
-			if i == m.menuSelectedIndex && !m.menuFocusOnStrategy {
+			if i == m.menu.selectedIndex && !m.menu.focusOnStrategy {
 				// This database is highlighted in menu
 				line = highlightStyle.Render(fmt.Sprintf("► %s", db.Name))
 			} else if db.Name == m.currentDatabase {
@@ -1572,10 +1581,10 @@ func renderMenuPanel(m chatModel) string {
 
 		// Find the database to show strategies for
 		var targetDB *DatabaseInfo
-		if m.menuFocusOnStrategy {
+		if m.menu.focusOnStrategy {
 			// When focused on strategies, show strategies for currently highlighted database
-			if m.menuSelectedIndex < len(m.availableDatabases.Databases) {
-				targetDB = &m.availableDatabases.Databases[m.menuSelectedIndex]
+			if m.menu.selectedIndex < len(m.availableDatabases.Databases) {
+				targetDB = &m.availableDatabases.Databases[m.menu.selectedIndex]
 			}
 		} else {
 			// When focused on databases, show strategies for current database
@@ -1590,7 +1599,7 @@ func renderMenuPanel(m chatModel) string {
 		if targetDB != nil && len(targetDB.RetrievalStrategies) > 0 {
 			for i, strategy := range targetDB.RetrievalStrategies {
 				line := ""
-				if m.menuFocusOnStrategy && i == m.menuSelectedIndex {
+				if m.menu.focusOnStrategy && i == m.menu.selectedIndex {
 					// This strategy is highlighted in menu
 					line = highlightStyle.Render(fmt.Sprintf("► %s", strategy.Name))
 				} else if strategy.Name == m.currentStrategy {
