@@ -3,11 +3,17 @@ name: raleigh-udo-demo
 namespace: default
 
 runtime:
-  provider: ollama
-  model: llama3.1:8b
-  base_url: http://localhost:11434/v1
-  temperature: 0.2
-  agent_handler: simple_rag
+  default_model: udo-chat
+  models:
+    - name: udo-chat
+      description: "Primary model for UDO municipal ordinance queries"
+      provider: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434/v1
+      default: true
+      prompt_format: unstructured
+      model_api_parameters:
+        temperature: 0.2
 
 prompts:
   - role: system
