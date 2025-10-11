@@ -476,28 +476,27 @@ class MsgParser(BaseParser):
             # Try to get content from multiple property names
             content = self._get_attachment_property(attachment, content_props)
 
-            if content is not None and filename:
-                # Check if this is a text-based attachment that we should extract content from
-                if self._is_text_attachment(str(filename), content_type):
-                    try:
-                        # Handle different content formats
-                        if isinstance(content, bytes):
-                            content_str = content.decode("utf-8", errors="ignore")
-                        elif hasattr(content, "decode"):  # bytes-like object
-                            content_str = content.decode("utf-8", errors="ignore")
-                        else:
-                            content_str = str(content)
+            if content is not None and filename and self._is_text_attachment(str(filename), content_type):
+                try:
+                    # Handle different content formats
+                    if isinstance(content, bytes):
+                        content_str = content.decode("utf-8", errors="ignore")
+                    elif hasattr(content, "decode"):  # bytes-like object
+                        content_str = content.decode("utf-8", errors="ignore")
+                    else:
+                        content_str = str(content)
 
-                        if content_str and content_str.strip():
-                            # Limit content length to prevent overwhelming output
-                            max_content_length = 1000
-                            if len(content_str) > max_content_length:
-                                content_str = content_str[:max_content_length] + "..."
-                            attachment_info.append(f"Content:\n{content_str}")
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to extract content from attachment {filename}: {e}"
-                        )
+                    if content_str and content_str.strip():
+                        # Limit content length to prevent overwhelming output
+                        max_content_length = 1000
+                        if len(content_str) > max_content_length:
+                            content_str = content_str[:max_content_length] + "..."
+                        attachment_info.append(f"Content:\n{content_str}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to extract content from attachment {filename}: {e}"
+                    )
+
 
         if attachment_info:
             return (f"attachment_{index}", "\n".join(attachment_info))
