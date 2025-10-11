@@ -127,12 +127,13 @@ class BlobProcessor:
         from components.parsers.parser_factory import ToolAwareParserFactory
 
         # Use the enhanced factory to load the parser class
-        parser_class = ToolAwareParserFactory.load_parser_class(parser_type)
-
-        if parser_class:
+        if parser_class := ToolAwareParserFactory.load_parser_class(parser_type):
             return parser_class
 
-        logger.error(f"Parser {parser_type} not found")
+        logger.error(f"Parser {parser_type} not found - falling back to mock parser")
+        logger.warning(
+            f"Mock parser fallback may cause silent processing failures for {parser_type}"
+        )
         return ToolAwareParserFactory.create_mock_parser(parser_type)
 
     def _get_extractor_class(self, extractor_type: str) -> type:
@@ -288,7 +289,7 @@ class BlobProcessor:
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
         logger.debug(
-            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type if p[0].type else None for p in matching_parsers]}"
+            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type or None for p in matching_parsers]}"
         )
 
         if not matching_parsers:

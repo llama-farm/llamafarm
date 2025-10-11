@@ -5,10 +5,11 @@ Saves detailed processing logs to project folder for debugging and audit.
 
 import json
 import logging
-import os
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class ProcessingLogger:
@@ -43,8 +44,7 @@ class ProcessingLogger:
 
             safe_dataset_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", dataset_name)
             # Remove any leading/trailing underscores
-            safe_dataset_name = safe_dataset_name.strip("_")
-            if safe_dataset_name:
+            if safe_dataset_name := safe_dataset_name.strip("_"):
                 log_filename += f"_{safe_dataset_name}"
         log_filename += ".log"
 
@@ -54,7 +54,14 @@ class ProcessingLogger:
         self.json_log_file = self.logs_dir / log_filename.replace(".log", ".json")
 
         # Initialize JSON log structure
-        self.processing_events = []
+        self.processing_events: list[dict[str, Any]] = []
+
+        # Batching configuration
+        self.batch_size = 10  # Write JSON after this many events
+        self.batch_timeout = 30  # Write JSON after this many seconds
+        self.last_write_time = time.time()
+        self._write_lock = threading.Lock()
+        self._dirty = False  # Track if we have unsaved events
 
         # Setup file handler for standard logging
         self.logger = logging.getLogger(f"ProcessingLogger_{self.session_timestamp}")
@@ -77,7 +84,26 @@ class ProcessingLogger:
         if dataset_name:
             self.logger.info(f"Dataset: {dataset_name}")
 
-    def log_file_processing(self, file_path: str, status: str, details: Dict[str, Any]):
+    def _should_write_json(self) -> bool:
+        """Check if we should write the JSON log based on batch size or timeout."""
+        current_time = time.time()
+        return len(self.processing_events) >= self.batch_size or (
+            self._dirty and current_time - self.last_write_time >= self.batch_timeout
+        )
+
+    def _maybe_write_json(self):
+        """Write JSON log if batching conditions are met."""
+        if self._should_write_json():
+            self._save_json_log()
+
+    def _add_event(self, event: dict[str, Any]):
+        """Add an event and potentially trigger a batched write."""
+        with self._write_lock:
+            self.processing_events.append(event)
+            self._dirty = True
+            self._maybe_write_json()
+
+    def log_file_processing(self, file_path: str, status: str, details: dict[str, Any]):
         """
         Log a file processing event.
 
@@ -94,19 +120,17 @@ class ProcessingLogger:
             "details": details,
         }
 
-        self.processing_events.append(event)
-
         # Log to standard logger
         self.logger.info(f"File: {file_path} | Status: {status}")
         if details:
             for key, value in details.items():
                 self.logger.debug(f"  {key}: {value}")
 
-        # Save JSON log after each event
-        self._save_json_log()
+        # Add to events with batched writing
+        self._add_event(event)
 
     def log_chunk_processing(
-        self, chunk_id: str, status: str, metadata: Dict[str, Any]
+        self, chunk_id: str, status: str, metadata: dict[str, Any]
     ):
         """
         Log a chunk processing event.
@@ -124,14 +148,11 @@ class ProcessingLogger:
             "metadata": metadata,
         }
 
-        self.processing_events.append(event)
-
         # Log to standard logger
         self.logger.debug(f"Chunk: {chunk_id} | Status: {status}")
 
-        # Save JSON log periodically (every 10 chunks)
-        if len(self.processing_events) % 10 == 0:
-            self._save_json_log()
+        # Add to events with batched writing
+        self._add_event(event)
 
     def log_duplicate_detection(self, file_hash: str, chunk_count: int, action: str):
         """
@@ -150,18 +171,18 @@ class ProcessingLogger:
             "action": action,
         }
 
-        self.processing_events.append(event)
-
         self.logger.warning(
             f"Duplicate detected: {file_hash[:8]}... | Chunks: {chunk_count} | Action: {action}"
         )
-        self._save_json_log()
+
+        # Add to events with batched writing
+        self._add_event(event)
 
     def log_error(
         self,
         error_type: str,
         error_message: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
     ):
         """
         Log an error event.
@@ -179,8 +200,6 @@ class ProcessingLogger:
             "context": context or {},
         }
 
-        self.processing_events.append(event)
-
         self.logger.error(f"{error_type}: {error_message}")
         if context:
             try:
@@ -191,9 +210,10 @@ class ProcessingLogger:
                 self.logger.warning(f"Could not JSON serialize context: {e}")
             self.logger.error(f"Context: {context_str}")
 
-        self._save_json_log()
+        # Add to events with batched writing
+        self._add_event(event)
 
-    def log_summary(self, summary: Dict[str, Any]):
+    def log_summary(self, summary: dict[str, Any]):
         """
         Log a processing summary.
 
@@ -206,8 +226,6 @@ class ProcessingLogger:
             "data": summary,
         }
 
-        self.processing_events.append(event)
-
         self.logger.info("=" * 60)
         self.logger.info("PROCESSING SUMMARY")
         self.logger.info("=" * 60)
@@ -215,7 +233,10 @@ class ProcessingLogger:
             self.logger.info(f"{key}: {value}")
         self.logger.info("=" * 60)
 
-        self._save_json_log()
+        # Add to events and force immediate write for summaries
+        with self._write_lock:
+            self.processing_events.append(event)
+            self._save_json_log()  # Force write for summaries
 
     def _save_json_log(self):
         """Save the current events to JSON log file."""
@@ -235,10 +256,26 @@ class ProcessingLogger:
                     default=str,
                     ensure_ascii=False,
                 )
+            # Update tracking variables
+            self.last_write_time = time.time()
+            self._dirty = False
         except Exception as e:
             self.logger.error(f"Failed to save JSON log: {e}")
 
-    def get_log_files(self) -> Dict[str, str]:
+    def flush(self):
+        """Force write any pending events to disk."""
+        with self._write_lock:
+            if self._dirty:
+                self._save_json_log()
+
+    def __del__(self):
+        """Ensure any pending events are written when the logger is destroyed."""
+        try:
+            self.flush()
+        except Exception:
+            pass  # Ignore errors during cleanup
+
+    def get_log_files(self) -> dict[str, str]:
         """
         Get paths to log files.
 

@@ -11,10 +11,4 @@ try:
 except ImportError:
     LlamaIndexParser = None
 
-try:
-    from .smart_router import SmartRouter, ParserRegistry
-except ImportError:
-    SmartRouter = None
-    ParserRegistry = None
-
-__all__ = ['BaseParser', 'ParserConfig', 'LlamaIndexParser', 'SmartRouter', 'ParserRegistry']
+__all__ = ["BaseParser", "ParserConfig", "LlamaIndexParser"]

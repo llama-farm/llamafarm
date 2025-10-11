@@ -75,7 +75,50 @@ class MsgParser(BaseParser):
 
     def can_parse(self, file_path: str) -> bool:
         """Check if this parser can handle the given file."""
-        return file_path.lower().endswith(".msg")
+        path = Path(file_path)
+
+        # First check file extension
+        if not path.name.lower().endswith(".msg"):
+            return False
+
+        # Check if file exists and is readable
+        if not path.exists() or not path.is_file():
+            return False
+
+        try:
+            # Check file size - MSG files should not be empty and not excessively large
+            file_size = path.stat().st_size
+            if file_size == 0:
+                return False
+            if file_size > 100 * 1024 * 1024:  # 100MB limit for safety
+                logger.warning(
+                    f"MSG file {file_path} is very large ({file_size} bytes), may cause memory issues"
+                )
+
+            # Try to read the first few bytes to check for MSG file signature
+            with open(path, "rb") as f:
+                header = f.read(8)
+                # MSG files typically start with specific OLE compound document signatures
+                # Check for OLE compound document signature (MSG files are OLE documents)
+                if len(header) >= 8:
+                    # OLE signature: D0CF11E0A1B11AE1
+                    ole_signature = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+                    if header == ole_signature:
+                        return True
+                    # Sometimes MSG files might have different headers, so we'll be more permissive
+                    # but still check for reasonable binary content
+                    if header.startswith(b"\xd0\xcf") or b"\x00" in header[:4]:
+                        return True
+
+        except (OSError, PermissionError) as e:
+            logger.debug(f"Cannot access file {file_path} for validation: {e}")
+            return False
+
+        # Fallback to extension-only check if header validation is inconclusive
+        logger.debug(
+            f"MSG file {file_path} header validation inconclusive, relying on extension"
+        )
+        return True
 
     def validate_config(self) -> bool:
         """Validate configuration."""
@@ -91,95 +134,14 @@ class MsgParser(BaseParser):
             )
 
         try:
-            # Import msg_parser
-            try:
-                from msg_parser import MsOxMessage
-            except ImportError:
-                return ProcessingResult(
-                    documents=[],
-                    errors=[
-                        {
-                            "error": "msg_parser library not installed. Install with: pip install msg_parser[rtf]",
-                            "source": source,
-                        }
-                    ],
-                )
+            msg = self._load_msg_file(str(path))
+            if isinstance(msg, ProcessingResult):  # Error case
+                return msg
 
-            # Parse MSG file
-            msg = MsOxMessage(str(path))
-
-            # Extract content and metadata
-            content_parts = []
-            metadata = {
-                "source": str(path),
-                "file_name": path.name,
-                "parser": "MsgParser_MsgParser",
-                "tool": "msg_parser",
-                "file_size": path.stat().st_size,
-            }
-
-            # Get message properties
-            msg_properties = msg.get_properties()
-            logger.info(f"Message properties: {msg_properties}")
-
-            # Extract email metadata if enabled
-            if self.extract_metadata:
-                metadata = self._extract_metadata_from_properties(
-                    msg_properties, metadata
-                )
-
-            # Extract headers if enabled
-            if self.extract_headers:
-                headers_content = self._extract_headers_from_properties(msg_properties)
-                if headers_content:
-                    content_parts.append(("headers", headers_content))
-
-            # Extract body content
-            body_content = self._extract_body_content_from_properties(msg_properties)
-            if body_content:
-                content_parts.append(("body", body_content))
-
-            # Extract attachments if enabled
-            if self.extract_attachments:
-                attachments_content = self._extract_attachments_from_properties(
-                    msg_properties
-                )
-                if attachments_content:
-                    content_parts.extend(attachments_content)
-
-            # Apply chunking based on strategy
-            documents = []
-            if self.chunk_size and content_parts:
-                if self.chunk_strategy == "email_sections":
-                    # Chunk by email sections (headers, body, attachments)
-                    documents = MsgChunker.chunk_by_email_sections(
-                        content_parts, metadata, self.chunk_size, self.chunk_overlap
-                    )
-                else:
-                    # Combine all content and use standard chunking
-                    full_content = "\n\n".join(
-                        [content for _, content in content_parts]
-                    )
-                    if SentenceSplitter is None or TokenTextSplitter is None:
-                        # Fallback chunking if LlamaIndex not available
-                        chunks = MsgChunker._split_text_into_chunks(
-                            full_content, self.chunk_size, self.chunk_overlap
-                        )
-                        documents = MsgDocumentFactory.create_documents_from_chunks(
-                            chunks, metadata, str(path), self.chunk_strategy
-                        )
-                    else:
-                        documents = self._apply_standard_chunking(
-                            full_content, metadata, str(path)
-                        )
-            else:
-                # Single document with all content
-                full_content = "\n\n".join([content for _, content in content_parts])
-                documents = [
-                    MsgDocumentFactory.create_single_document(
-                        full_content, metadata, str(path)
-                    )
-                ]
+            content_parts, metadata = self._extract_msg_content(msg, path)
+            documents = self._create_documents_from_content(
+                content_parts, metadata, str(path)
+            )
 
             return ProcessingResult(documents=documents, errors=[])
 
@@ -188,6 +150,104 @@ class MsgParser(BaseParser):
             return ProcessingResult(
                 documents=[], errors=[{"error": str(e), "source": source}]
             )
+
+    def _load_msg_file(self, file_path: str):
+        """Load MSG file using msg_parser library."""
+        try:
+            from msg_parser import MsOxMessage
+        except ImportError:
+            return ProcessingResult(
+                documents=[],
+                errors=[
+                    {
+                        "error": "msg_parser library not installed. Install with: pip install msg_parser[rtf]",
+                        "source": file_path,
+                    }
+                ],
+            )
+
+        return MsOxMessage(file_path)
+
+    def _extract_msg_content(
+        self, msg, path: Path
+    ) -> tuple[list[tuple[str, str]], dict]:
+        """Extract content and metadata from MSG file."""
+        content_parts = []
+        metadata = {
+            "source": str(path),
+            "file_name": path.name,
+            "parser": "MsgParser_MsgParser",
+            "tool": "msg_parser",
+            "file_size": path.stat().st_size,
+        }
+
+        # Get message properties
+        msg_properties = msg.get_properties()
+        logger.info(f"Message properties: {msg_properties}")
+
+        # Extract email metadata if enabled
+        if self.extract_metadata:
+            metadata = self._extract_metadata_from_properties(msg_properties, metadata)
+
+        # Extract headers if enabled
+        if self.extract_headers:
+            if headers_content := self._extract_headers_from_properties(msg_properties):
+                content_parts.append(("headers", headers_content))
+
+        # Extract body content
+        if body_content := self._extract_body_content_from_properties(msg_properties):
+            content_parts.append(("body", body_content))
+
+        # Extract attachments if enabled
+        if self.extract_attachments:
+            if attachments_content := self._extract_attachments_from_properties(
+                msg_properties
+            ):
+                content_parts.extend(attachments_content)
+
+        return content_parts, metadata
+
+    def _create_documents_from_content(
+        self, content_parts: list[tuple[str, str]], metadata: dict, source: str
+    ) -> list:
+        """Create documents from extracted content parts."""
+        if not content_parts:
+            return []
+
+        # Apply chunking based on strategy
+        if self.chunk_size:
+            if self.chunk_strategy == "email_sections":
+                # Chunk by email sections (headers, body, attachments)
+                return MsgChunker.chunk_by_email_sections(
+                    content_parts, metadata, self.chunk_size, self.chunk_overlap
+                )
+            else:
+                # Combine all content and use standard chunking
+                full_content = "\n\n".join([content for _, content in content_parts])
+                return self._apply_chunking_strategy(full_content, metadata, source)
+        else:
+            # Single document with all content
+            full_content = "\n\n".join([content for _, content in content_parts])
+            return [
+                MsgDocumentFactory.create_single_document(
+                    full_content, metadata, source
+                )
+            ]
+
+    def _apply_chunking_strategy(
+        self, content: str, metadata: dict, source: str
+    ) -> list:
+        """Apply the configured chunking strategy to content."""
+        if SentenceSplitter is None or TokenTextSplitter is None:
+            # Fallback chunking if LlamaIndex not available
+            chunks = MsgChunker._split_text_into_chunks(
+                content, self.chunk_size, self.chunk_overlap
+            )
+            return MsgDocumentFactory.create_documents_from_chunks(
+                chunks, metadata, source, self.chunk_strategy
+            )
+        else:
+            return self._apply_standard_chunking(content, metadata, source)
 
     def parse_blob(self, data: bytes, metadata: dict[str, Any] | None = None) -> list:
         """Parse MSG from raw bytes using temporary file."""
@@ -281,8 +341,7 @@ class MsgParser(BaseParser):
         for header_name, possible_keys in header_fields.items():
             for key in possible_keys:
                 if key in msg_properties and msg_properties[key] is not None:
-                    value = msg_properties[key]
-                    if value:
+                    if value := msg_properties[key]:
                         headers_parts.append(f"{header_name}: {value}")
                     break
 
@@ -320,15 +379,16 @@ class MsgParser(BaseParser):
         attachments_content = []
 
         # msg_parser provides attachments information
-        attachments_key = None
-        for key in ["Attachments", "attachments", "attachment_list"]:
-            if key in msg_properties:
-                attachments_key = key
-                break
+        attachments_key = next(
+            (
+                key
+                for key in ["Attachments", "attachments", "attachment_list"]
+                if key in msg_properties
+            ),
+            None,
+        )
 
-        if attachments_key and msg_properties[attachments_key]:
-            attachments = msg_properties[attachments_key]
-
+        if attachments_key and (attachments := msg_properties[attachments_key]):
             # Handle different attachment formats that msg_parser might provide
             if isinstance(attachments, list):
                 for i, attachment in enumerate(attachments):
@@ -425,7 +485,33 @@ class MsgParser(BaseParser):
         """Process a single attachment and return attachment info."""
         attachment_info = []
 
-        # Define property name variations to try (case-insensitive)
+        # Extract basic attachment properties
+        filename = self._extract_attachment_filename(attachment)
+        if filename:
+            attachment_info.append(f"Filename: {filename}")
+
+        # Extract size information
+        if size_info := self._extract_attachment_size(attachment):
+            attachment_info.append(size_info)
+
+        # Extract content type
+        content_type = self._extract_attachment_content_type(attachment, filename)
+        if content_type:
+            attachment_info.append(f"Type: {content_type}")
+
+        # Extract content if enabled
+        if self.include_attachment_content:
+            if content_info := self._extract_attachment_content(
+                attachment, filename, content_type
+            ):
+                attachment_info.append(content_info)
+
+        if attachment_info:
+            return (f"attachment_{index}", "\n".join(attachment_info))
+        return None
+
+    def _extract_attachment_filename(self, attachment: Any) -> str | None:
+        """Extract filename from attachment."""
         filename_props = [
             "filename",
             "Filename",
@@ -436,7 +522,25 @@ class MsgParser(BaseParser):
             "longFilename",
             "LongFilename",
         ]
+        return self._get_attachment_property(attachment, filename_props)
+
+    def _extract_attachment_size(self, attachment: Any) -> str | None:
+        """Extract size information from attachment."""
         size_props = ["size", "Size", "filesize", "FileSize", "length", "Length"]
+        size = self._get_attachment_property(attachment, size_props)
+
+        if size is not None:
+            try:
+                size_val = size if isinstance(size, int) else int(size)
+                return f"Size: {size_val:,} bytes"
+            except (ValueError, TypeError):
+                return f"Size: {size}"
+        return None
+
+    def _extract_attachment_content_type(
+        self, attachment: Any, filename: str | None
+    ) -> str | None:
+        """Extract content type from attachment."""
         content_type_props = [
             "content_type",
             "ContentType",
@@ -445,61 +549,46 @@ class MsgParser(BaseParser):
             "type",
             "Type",
         ]
-        content_props = ["content", "Content", "data", "Data", "body", "Body"]
-
-        # Get filename (try multiple property names)
-        filename = self._get_attachment_property(attachment, filename_props)
-        if filename:
-            attachment_info.append(f"Filename: {filename}")
-
-        # Get size (try multiple property names)
-        size = self._get_attachment_property(attachment, size_props)
-        if size is not None:
-            try:
-                size_val = int(size) if not isinstance(size, int) else size
-                attachment_info.append(f"Size: {size_val:,} bytes")
-            except (ValueError, TypeError):
-                attachment_info.append(f"Size: {size}")
-
-        # Get content type (try multiple property names)
         content_type = self._get_attachment_property(attachment, content_type_props)
 
         # If no content type found but we have a filename, compute it from extension
         if not content_type and filename:
             content_type = self._get_mime_type_from_filename(str(filename))
 
-        if content_type:
-            attachment_info.append(f"Type: {content_type}")
+        return content_type
 
-        # Handle attachment content if enabled
-        if self.include_attachment_content:
-            # Try to get content from multiple property names
-            content = self._get_attachment_property(attachment, content_props)
+    def _extract_attachment_content(
+        self, attachment: Any, filename: str | None, content_type: str | None
+    ) -> str | None:
+        """Extract content from text-based attachments."""
+        content_props = ["content", "Content", "data", "Data", "body", "Body"]
+        content = self._get_attachment_property(attachment, content_props)
 
-            if content is not None and filename and self._is_text_attachment(str(filename), content_type):
-                try:
-                    # Handle different content formats
-                    if isinstance(content, bytes):
-                        content_str = content.decode("utf-8", errors="ignore")
-                    elif hasattr(content, "decode"):  # bytes-like object
-                        content_str = content.decode("utf-8", errors="ignore")
-                    else:
-                        content_str = str(content)
+        if (
+            content is not None
+            and filename
+            and self._is_text_attachment(str(filename), content_type)
+        ):
+            try:
+                # Handle different content formats
+                if isinstance(content, bytes):
+                    content_str = content.decode("utf-8", errors="ignore")
+                elif hasattr(content, "decode"):  # bytes-like object
+                    content_str = content.decode("utf-8", errors="ignore")
+                else:
+                    content_str = str(content)
 
-                    if content_str and content_str.strip():
-                        # Limit content length to prevent overwhelming output
-                        max_content_length = 1000
-                        if len(content_str) > max_content_length:
-                            content_str = content_str[:max_content_length] + "..."
-                        attachment_info.append(f"Content:\n{content_str}")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to extract content from attachment {filename}: {e}"
-                    )
+                if content_str and content_str.strip():
+                    # Limit content length to prevent overwhelming output
+                    max_content_length = 1000
+                    if len(content_str) > max_content_length:
+                        content_str = content_str[:max_content_length] + "..."
+                    return f"Content:\n{content_str}"
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract content from attachment {filename}: {e}"
+                )
 
-
-        if attachment_info:
-            return (f"attachment_{index}", "\n".join(attachment_info))
         return None
 
     def _apply_standard_chunking(

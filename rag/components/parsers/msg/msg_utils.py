@@ -3,8 +3,7 @@
 import tempfile
 import os
 from contextlib import contextmanager
-from typing import Any, List, Tuple
-from datetime import datetime
+from typing import Any
 
 from core.base import Document
 from core.logging import RAGStructLogger
@@ -132,11 +131,11 @@ class MsgChunker:
 
     @staticmethod
     def chunk_by_email_sections(
-        content_parts: List[Tuple[str, str]],
+        content_parts: list[tuple[str, str]],
         base_metadata: dict[str, Any],
         chunk_size: int,
         chunk_overlap: int,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Chunk content by email sections (headers, body, attachments)."""
         documents = []
 
@@ -173,7 +172,7 @@ class MsgChunker:
     @staticmethod
     def chunk_by_paragraphs(
         text: str, chunk_size: int, chunk_overlap: int
-    ) -> List[str]:
+    ) -> list[str]:
         """Chunk text by paragraphs, respecting chunk size limits."""
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
 
@@ -181,7 +180,7 @@ class MsgChunker:
             return []
 
         chunks = []
-        current_chunk: List[str] = []
+        current_chunk: list[str] = []
         current_size = 0
 
         for paragraph in paragraphs:
@@ -194,7 +193,7 @@ class MsgChunker:
                 chunks.append(chunk_text)
 
                 # Start new chunk with overlap
-                if chunk_overlap > 0 and current_chunk:
+                if chunk_overlap > 0:
                     # Calculate how much overlap to include
                     overlap_text = (
                         chunk_text[-chunk_overlap:]
@@ -222,7 +221,7 @@ class MsgChunker:
     @staticmethod
     def _split_text_into_chunks(
         text: str, chunk_size: int, chunk_overlap: int
-    ) -> List[str]:
+    ) -> list[str]:
         """Split text into chunks with overlap."""
         if len(text) <= chunk_size:
             return [text]
@@ -243,8 +242,7 @@ class MsgChunker:
                         end = end - i
                         break
 
-            chunk = text[start:end].strip()
-            if chunk:
+            if chunk := text[start:end].strip():
                 chunks.append(chunk)
 
             # Move start position with overlap
@@ -274,11 +272,11 @@ class MsgDocumentFactory:
 
     @staticmethod
     def create_documents_from_chunks(
-        chunks: List[str],
+        chunks: list[str],
         base_metadata: dict[str, Any],
         source: str,
         chunk_strategy: str,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Create documents from text chunks."""
         documents = []
 
@@ -286,15 +284,12 @@ class MsgDocumentFactory:
             if not chunk.strip():
                 continue
 
-            chunk_metadata = base_metadata.copy()
-            chunk_metadata.update(
-                {
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                    "chunk_strategy": chunk_strategy,
-                    "chunk_type": "chunk",
-                }
-            )
+            chunk_metadata = base_metadata.copy() | {
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+                "chunk_strategy": chunk_strategy,
+                "chunk_type": "chunk",
+            }
 
             documents.append(
                 Document(content=chunk, metadata=chunk_metadata, source=source)
@@ -325,11 +320,11 @@ def MsgTempFileHandler(data: bytes):
         if tmp_fd is not None:
             try:
                 os.close(tmp_fd)
-            except:
+            except Exception:
                 pass
 
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
-            except:
+            except Exception:
                 pass

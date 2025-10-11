@@ -188,12 +188,14 @@ class ToolAwareParserFactory:
 
         # Fallback to dynamic discovery using blob_processor logic
         logger.debug(f"Trying dynamic discovery for parser {parser_name}")
-        parser_class = cls._dynamic_parser_discovery(parser_name)
-        if parser_class:
+        if parser_class := cls._dynamic_parser_discovery(parser_name):
             cls._parser_classes[parser_name] = parser_class
             return parser_class
 
         logger.error(f"Could not find implementation for parser {parser_name}")
+        logger.warning(
+            f"Parser {parser_name} will fall back to mock implementation - this may cause silent failures"
+        )
         return None
 
     @classmethod
@@ -361,10 +363,26 @@ class ToolAwareParserFactory:
         Returns:
             Parser class or None
         """
-        import importlib
-        from pathlib import Path
+        parser_category, implementation = cls._parse_parser_type_name(parser_type)
+        potential_paths = cls._build_potential_module_paths(
+            parser_category, implementation, parser_type
+        )
 
-        # Parse the parser type name: {Type}Parser_{Implementation}
+        # Try to import from potential paths
+        for module_path in potential_paths:
+            if parser_class := cls._try_import_parser_from_module(
+                module_path, parser_type
+            ):
+                return parser_class
+
+        logger.warning(
+            f"Dynamic parser discovery failed for {parser_type} - no matching implementation found"
+        )
+        return None
+
+    @classmethod
+    def _parse_parser_type_name(cls, parser_type: str) -> tuple[str, str]:
+        """Parse parser type name into category and implementation."""
         if "_" in parser_type:
             parts = parser_type.split("_")
             # Handle both TypeParser_Implementation and Type_Parser_Implementation
@@ -382,6 +400,15 @@ class ToolAwareParserFactory:
             # No underscore, assume it's a simple parser name
             parser_category = parser_type.lower().replace("parser", "")
             implementation = "default"
+
+        return parser_category, implementation
+
+    @classmethod
+    def _build_potential_module_paths(
+        cls, parser_category: str, implementation: str, parser_type: str
+    ) -> list[str]:
+        """Build potential module paths to try for parser discovery."""
+        from pathlib import Path
 
         # Build potential module paths to try
         potential_paths = [
@@ -408,38 +435,44 @@ class ToolAwareParserFactory:
                             )
                             potential_paths.insert(0, module_name)
 
-        # Try to import from potential paths
-        for module_path in potential_paths:
-            try:
-                logger.debug(f"Trying to import parser from: {module_path}")
-                module = importlib.import_module(module_path)
+        return potential_paths
 
-                # Try to get the class with the exact name first
-                if hasattr(module, parser_type):
-                    parser_class = getattr(module, parser_type)
-                    logger.debug(
-                        f"Successfully loaded {parser_type} from {module_path}"
-                    )
+    @classmethod
+    def _try_import_parser_from_module(
+        cls, module_path: str, parser_type: str
+    ) -> Optional[type]:
+        """Try to import parser class from a specific module path."""
+        import importlib
+
+        try:
+            logger.debug(f"Trying to import parser from: {module_path}")
+            module = importlib.import_module(module_path)
+
+            # Try to get the class with the exact name first
+            if hasattr(module, parser_type):
+                parser_class = getattr(module, parser_type)
+                logger.debug(f"Successfully loaded {parser_type} from {module_path}")
+                return parser_class
+
+            # Try variations of the class name
+            for attr_name in dir(module):
+                if attr_name.lower() == parser_type.lower():
+                    parser_class = getattr(module, attr_name)
+                    logger.debug(f"Successfully loaded {attr_name} from {module_path}")
                     return parser_class
 
-                # Try variations of the class name
-                for attr_name in dir(module):
-                    if attr_name.lower() == parser_type.lower():
-                        parser_class = getattr(module, attr_name)
-                        logger.debug(
-                            f"Successfully loaded {attr_name} from {module_path}"
-                        )
-                        return parser_class
-
-            except (ImportError, AttributeError) as e:
-                logger.debug(f"Could not load from {module_path}: {e}")
-                continue
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"Could not load from {module_path}: {e}")
 
         return None
 
     @classmethod
     def create_mock_parser(cls, parser_type: str) -> type:
         """Create a mock parser for testing or fallback purposes."""
+        logger.warning(
+            f"Creating mock parser for {parser_type} - this indicates a missing parser implementation"
+        )
+
         from components.parsers.base.base_parser import BaseParser, ParserConfig
         from core.base import Document, ProcessingResult
 
