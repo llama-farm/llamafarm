@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"io"
 	"llamafarm-cli/cmd/config"
+	uitk "llamafarm-cli/internal/tui"
 	"net/http"
 	"os"
 	"os/exec"
@@ -163,16 +164,13 @@ type chatModel struct {
 	availableDatabases *DatabasesResponse
 	currentDatabase    string
 	currentStrategy    string
-	// Menu state (extracted for maintainability)
-	menu RAGMenuState
+    // Overlay menu and toast
+    quickMenu uitk.QuickMenuModel
+    toast     uitk.ToastModel
+	termHeight int
 }
 
-// RAGMenuState encapsulates the state for the RAG database/strategy selection menu
-type RAGMenuState struct {
-	visible        bool
-	selectedIndex  int  // Index of selected item in current column
-	focusOnStrategy bool // Whether we're navigating strategies (true) or databases (false)
-}
+// removed: old bottom menu state
 
 type (
 	streamDone struct{}
@@ -381,6 +379,15 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	// Initialize viewport content with initial mode messages
 	vp.SetContent(renderChatContent(chatModel{messages: initialMessages}))
 
+    // Initialize overlay Quick Menu and toast
+    menuCfg := &uitk.Config{}
+	if projectInfo != nil {
+		menuCfg.Name = projectInfo.Project
+		menuCfg.Namespace = projectInfo.Namespace
+	}
+    qm := uitk.NewQuickMenuModel(menuCfg)
+    toast := uitk.NewToastModel()
+
 	return chatModel{
 		serverHealth:       serverHealth,
 		projectInfo:        projectInfo,
@@ -402,6 +409,8 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		availableDatabases: availableDatabases,
 		currentDatabase:    currentDatabase,
 		currentStrategy:    currentStrategy,
+		quickMenu:          qm,
+		toast:              toast,
 	}
 }
 
@@ -704,6 +713,17 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.textarea, tiCmd = m.textarea.Update(msg)
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
+    // Route all messages to toast
+    m.toast, cmd = m.toast.Update(msg)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+    // Route messages to quick menu (it ignores most when inactive)
+    m.quickMenu, cmd = m.quickMenu.Update(msg)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Forward all messages to the spinner so it processes its own TickMsgs
 	m.spin, cmd = m.spin.Update(msg)
 
@@ -736,6 +756,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.textarea.SetWidth(newWidth)
 		m.width = msg.Width
+		m.termHeight = msg.Height
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -743,7 +764,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "👋 You have left the pasture. Safe travels, little llama!"
 			return m, tea.Quit
 
-		case "ctrl+t":
+        case "ctrl+t":
+            // If overlay is active, let overlay handle ctrl+t and return accumulated cmds
+            if m.quickMenu.IsActive() {
+                return m, tea.Batch(cmds...)
+            }
 			// Toggle between modes
 			newMode := ModeProject
 			if m.currentMode == ModeProject {
@@ -764,38 +789,33 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "ctrl+r":
-			// Toggle RAG configuration menu
-			if m.currentMode == ModeProject {
-				m.menu.visible = !m.menu.visible
-			}
-			return m, nil
-
-		case "esc":
-			// Close menu if open
-			if m.menu.visible {
-				m.menu.visible = false
-			}
-			return m, nil
-
-		case "up":
-			// If menu is visible, navigate menu
-			if m.menu.visible {
-				if m.menu.focusOnStrategy {
-					// Navigate strategies
-					if m.menu.selectedIndex > 0 {
-						m.menu.selectedIndex--
-					}
-				} else {
-					// Navigate databases
-					if m.menu.selectedIndex > 0 {
-						m.menu.selectedIndex--
-					}
+        case "tab":
+            // If overlay already active, let it handle Tab for tab switching
+            if m.quickMenu.IsActive() {
+                return m, tea.Batch(cmds...)
+            }
+			// Open overlay quick menu
+			m.quickMenu.Open()
+			// Ensure menu has current size for centering
+			if m.termHeight > 0 {
+				var setSize tea.Cmd
+				m.quickMenu, setSize = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: m.termHeight})
+				if setSize != nil {
+					cmds = append(cmds, setSize)
 				}
-				return m, nil
 			}
+			return m, nil
 
-			// Otherwise, navigate history
+        case "esc":
+            // No-op here; overlay handles its own ESC
+            return m, tea.Batch(cmds...)
+
+        case "up":
+            // If overlay is active, let it handle navigation
+            if m.quickMenu.IsActive() {
+                return m, tea.Batch(cmds...)
+            }
+			// Navigate history
 			logDebug(fmt.Sprintf("Up arrow pressed. Current history: %+v", m.history))
 			if m.histIndex > 0 {
 				m.histIndex--
@@ -803,33 +823,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.CursorEnd()
 			}
 
-		case "down":
-			// If menu is visible, navigate menu
-			if m.menu.visible {
-				if m.menu.focusOnStrategy {
-					// Navigate strategies
-					var maxIndex int
-					if m.availableDatabases != nil {
-						for _, db := range m.availableDatabases.Databases {
-							if db.Name == m.currentDatabase {
-								maxIndex = len(db.RetrievalStrategies) - 1
-								break
-							}
-						}
-					}
-					if m.menu.selectedIndex < maxIndex {
-						m.menu.selectedIndex++
-					}
-				} else {
-					// Navigate databases
-					if m.availableDatabases != nil && m.menu.selectedIndex < len(m.availableDatabases.Databases)-1 {
-						m.menu.selectedIndex++
-					}
-				}
-				return m, nil
-			}
-
-			// Otherwise, navigate history
+        case "down":
+            // If overlay is active, let it handle navigation
+            if m.quickMenu.IsActive() {
+                return m, tea.Batch(cmds...)
+            }
+			// Navigate history
 			if m.histIndex < len(m.history)-1 {
 				m.histIndex++
 				m.textarea.SetValue(m.history[m.histIndex])
@@ -838,45 +837,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.histIndex = len(m.history)
 				m.textarea.SetValue("")
 			}
-
-		case "tab":
-			// Toggle between database and strategy focus when menu is visible
-			if m.menu.visible {
-				m.menu.focusOnStrategy = !m.menu.focusOnStrategy
-				m.menu.selectedIndex = 0 // Reset selection when switching focus
-				return m, nil
-			}
-
-		case "enter":
-			// If menu is visible, apply selection
-			if m.menu.visible {
-				if m.menu.focusOnStrategy {
-					// Select strategy
-					if m.availableDatabases != nil {
-						for _, db := range m.availableDatabases.Databases {
-							if db.Name == m.currentDatabase {
-								if m.menu.selectedIndex < len(db.RetrievalStrategies) {
-									strategyName := db.RetrievalStrategies[m.menu.selectedIndex].Name
-									m.switchStrategy(strategyName)
-									m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
-									m.viewport.GotoBottom()
-								}
-								break
-							}
-						}
-					}
-				} else {
-					// Select database
-					if m.availableDatabases != nil && m.menu.selectedIndex < len(m.availableDatabases.Databases) {
-						dbName := m.availableDatabases.Databases[m.menu.selectedIndex].Name
-						m.switchDatabase(dbName)
-						m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
-						m.viewport.GotoBottom()
-					}
-				}
-				return m, nil
-			}
-
+        case "enter":
+            // If overlay is active, let it handle selection and return any commands it emitted
+            if m.quickMenu.IsActive() {
+                return m, tea.Batch(cmds...)
+            }
 			m.err = nil
 			msg := strings.TrimSpace(m.textarea.Value())
 			if msg == "" || m.thinking {
@@ -890,7 +855,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := fields[0]
 				switch cmd {
 				case "/help":
-					m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /menu - Toggle RAG configuration menu (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /exit - Exit\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models\n  Ctrl+R - Toggle RAG menu"})
+					m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /exit - Exit\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models\n  Tab - Open Quick Menu"})
 					m.textarea.SetValue("")
 				case "/mode":
 					if len(fields) < 2 {
@@ -1038,17 +1003,18 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.thinking = false
 					m.printing = false
 				case "/menu":
-					// Toggle RAG configuration menu
-					if m.currentMode != ModeProject {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: "RAG menu only available in PROJECT mode. Use Ctrl+T to switch.",
-						})
-						m.textarea.SetValue("")
-						break
+					// Back-compat: open the new overlay and hint about Tab
+					m.quickMenu.Open()
+					if m.termHeight > 0 {
+						var setSize tea.Cmd
+						m.quickMenu, setSize = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: m.termHeight})
+						if setSize != nil {
+							cmds = append(cmds, setSize)
+						}
 					}
-					m.menu.visible = !m.menu.visible
+					m.messages = append(m.messages, Message{Role: "client", Content: "Opening Quick Menu. Tip: press Tab next time."})
 					m.textarea.SetValue("")
+					return m, nil
 				case "/database":
 					if m.currentMode != ModeProject {
 						m.messages = append(m.messages, Message{
@@ -1070,7 +1036,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						msg.WriteString("\n\nAvailable databases:")
 
-						if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
+                if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
 							for _, db := range m.availableDatabases.Databases {
 								marker := ""
 								if db.Name == m.currentDatabase {
@@ -1080,7 +1046,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								}
 								msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", db.Name, db.Type, marker))
 							}
-							msg.WriteString("\n\nUsage: /database <name> or press Ctrl+M to open menu")
+                            msg.WriteString("\n\nUsage: /database <name> or press Tab to open Quick Menu")
 						} else {
 							msg.WriteString("\n  No databases configured")
 						}
@@ -1140,7 +1106,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 											}
 											msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", strategy.Name, strategy.Type, marker))
 										}
-										msg.WriteString("\n\nUsage: /strategy <name> or press Ctrl+M to open menu")
+                                        msg.WriteString("\n\nUsage: /strategy <name> or press Tab to open Quick Menu")
 									} else {
 										msg.WriteString("\n  No strategies configured for this database")
 									}
@@ -1284,6 +1250,55 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case serverHealthMsg:
 		m.serverHealth = msg.health
 
+    case uitk.SwitchModeMsg:
+		// Toggle between DEV and PROJECT based on devMode flag
+		if msg.DevMode {
+			if m.currentMode != ModeDev {
+				m.switchMode(ModeDev)
+				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+				m.viewport.GotoBottom()
+			}
+		} else {
+			if m.currentMode != ModeProject {
+				m.switchMode(ModeProject)
+				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+				m.viewport.GotoBottom()
+			}
+		}
+
+    case uitk.SwitchDatabaseMsg:
+        if m.currentMode == ModeProject && msg.DatabaseName != "" {
+            m.switchDatabase(msg.DatabaseName)
+            m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+            m.viewport.GotoBottom()
+        }
+
+    case uitk.SwitchModelMsg:
+        if m.currentMode == ModeProject && msg.ModelName != "" {
+            m.switchModel(msg.ModelName)
+            m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+            m.viewport.GotoBottom()
+        }
+
+    case uitk.SwitchProjectMsg:
+        // TODO: implement real project switch; for now, reflect in UI only
+        m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Selected project: %s/%s", msg.Namespace, msg.ProjectName)})
+
+    case uitk.SwitchStrategyMsg:
+        if m.currentMode == ModeProject && msg.StrategyName != "" {
+            m.switchStrategy(msg.StrategyName)
+            m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(renderChatContent(m)))
+            m.viewport.GotoBottom()
+        }
+
+    case uitk.ExecuteCommandMsg:
+        // For now, just echo the command and toast; future: wire to runner
+        m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("$ %s", msg.Command)})
+        cmds = append(cmds, tea.Printf("Executing: %s", msg.Command))
+        // Show toast confirmation
+        cmds = append(cmds, func() tea.Msg { return uitk.ShowToastMsg{Message: "Running: " + msg.Command} })
+        m.quickMenu.Close()
+
 		if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
 			// Schedule a non-blocking re-check after 5 seconds
 			cmds = append(cmds, tea.Tick(5*time.Second, func(time.Time) tea.Msg {
@@ -1401,7 +1416,7 @@ func computeTranscriptKey(m chatModel) string {
 func renderChatContent(m chatModel) string {
 	var b strings.Builder
 
-	b.WriteString(m.transcript)
+    b.WriteString(m.transcript)
 
 	if m.thinking {
 		dots := m.thinkFrame + 1
@@ -1409,6 +1424,8 @@ func renderChatContent(m chatModel) string {
 		wrappedThinking := lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Width(m.width - 2).Render(thinkingText)
 		b.WriteString(wrappedThinking + gap)
 	}
+
+    // Overlay is drawn from View() so it stays on top consistently
 
 	return b.String()
 }
@@ -1538,143 +1555,27 @@ func renderInfoBar(m chatModel) string {
 	return style.Render(statusLine)
 }
 
-func renderMenuPanel(m chatModel) string {
-	if !m.menu.visible {
-		return ""
-	}
-
-	var b strings.Builder
-
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	currentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	highlightStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Background(lipgloss.Color("237"))
-
-	borderStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("12")).
-		Padding(0, 1)
-
-	// Menu header
-	b.WriteString(titleStyle.Render("RAG Configuration"))
-	b.WriteString(labelStyle.Render(" (↑↓: navigate, Tab: switch db/strategy, Enter: select, Esc: close)"))
-	b.WriteString("\n")
-
-	// Current selections
-	b.WriteString(labelStyle.Render("Active: "))
-	b.WriteString(currentStyle.Render(m.currentDatabase))
-	b.WriteString(labelStyle.Render(" / "))
-	b.WriteString(currentStyle.Render(m.currentStrategy))
-	b.WriteString("\n\n")
-
-	// Two-column layout: Databases | Strategies
-	if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
-		// Databases column
-		var dbCol strings.Builder
-		dbCol.WriteString(titleStyle.Render("Databases"))
-		dbCol.WriteString("\n")
-
-		for i, db := range m.availableDatabases.Databases {
-			line := ""
-			if i == m.menu.selectedIndex && !m.menu.focusOnStrategy {
-				// This database is highlighted in menu
-				line = highlightStyle.Render(fmt.Sprintf("► %s", db.Name))
-			} else if db.Name == m.currentDatabase {
-				// This database is currently active
-				line = currentStyle.Render(fmt.Sprintf("• %s", db.Name))
-			} else {
-				line = labelStyle.Render(fmt.Sprintf("  %s", db.Name))
-			}
-			dbCol.WriteString(line)
-			dbCol.WriteString("\n")
-		}
-
-		// Strategies column (for selected database)
-		var stratCol strings.Builder
-		stratCol.WriteString(titleStyle.Render("Strategies"))
-		stratCol.WriteString("\n")
-
-		// Find the database to show strategies for
-		var targetDB *DatabaseInfo
-		if m.menu.focusOnStrategy {
-			// When focused on strategies, show strategies for currently highlighted database
-			if m.menu.selectedIndex < len(m.availableDatabases.Databases) {
-				targetDB = &m.availableDatabases.Databases[m.menu.selectedIndex]
-			}
-		} else {
-			// When focused on databases, show strategies for current database
-			for _, db := range m.availableDatabases.Databases {
-				if db.Name == m.currentDatabase {
-					targetDB = &db
-					break
-				}
-			}
-		}
-
-		if targetDB != nil && len(targetDB.RetrievalStrategies) > 0 {
-			for i, strategy := range targetDB.RetrievalStrategies {
-				line := ""
-				if m.menu.focusOnStrategy && i == m.menu.selectedIndex {
-					// This strategy is highlighted in menu
-					line = highlightStyle.Render(fmt.Sprintf("► %s", strategy.Name))
-				} else if strategy.Name == m.currentStrategy {
-					// This strategy is currently active
-					line = currentStyle.Render(fmt.Sprintf("• %s", strategy.Name))
-				} else {
-					line = labelStyle.Render(fmt.Sprintf("  %s", strategy.Name))
-				}
-				stratCol.WriteString(line)
-				stratCol.WriteString("\n")
-			}
-		} else {
-			stratCol.WriteString(labelStyle.Render("  (no strategies)"))
-			stratCol.WriteString("\n")
-		}
-
-		// Combine columns side by side
-		dbLines := strings.Split(strings.TrimRight(dbCol.String(), "\n"), "\n")
-		stratLines := strings.Split(strings.TrimRight(stratCol.String(), "\n"), "\n")
-
-		maxLines := len(dbLines)
-		if len(stratLines) > maxLines {
-			maxLines = len(stratLines)
-		}
-
-		for i := 0; i < maxLines; i++ {
-			dbLine := ""
-			if i < len(dbLines) {
-				dbLine = dbLines[i]
-			}
-			stratLine := ""
-			if i < len(stratLines) {
-				stratLine = stratLines[i]
-			}
-
-			// Pad to align columns
-			b.WriteString(fmt.Sprintf("%-30s  %s\n", dbLine, stratLine))
-		}
-	} else {
-		b.WriteString(labelStyle.Render("No databases configured"))
-		b.WriteString("\n")
-	}
-
-	return borderStyle.Render(b.String())
-}
+// removed: old bottom menu panel
 
 func (m chatModel) View() string {
-	var b strings.Builder
-	b.WriteString(m.viewport.View())
-	b.WriteString(renderChatInput(m))
+    var b strings.Builder
+    b.WriteString(m.viewport.View())
 
-	// Show menu panel below chat input if visible
-	menuPanel := renderMenuPanel(m)
-	if menuPanel != "" {
-		b.WriteString("\n")
-		b.WriteString(menuPanel)
-		b.WriteString("\n")
-	}
+    // Draw overlay above the input field (no vertical padding), centered horizontally
+    if m.quickMenu.IsActive() {
+        m.quickMenu, _ = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: 0})
+        b.WriteString("\n")
+        b.WriteString(m.quickMenu.View())
+    }
 
-	b.WriteString(renderInfoBar(m))
+    b.WriteString(renderChatInput(m))
+    b.WriteString(renderInfoBar(m))
+
+    // Toast on top-right
+    if v := m.toast.View(); v != "" {
+        b.WriteString("\n")
+        b.WriteString(v)
+    }
 
 	return b.String()
 }
