@@ -217,14 +217,21 @@ func (m QuickMenuModel) Update(msg tea.Msg) (QuickMenuModel, tea.Cmd) {
             m.cursorPos = 0
             return m, nil
         case "up", "k":
+            // Wrap-around navigation
+            maxPos := m.getMaxCursorPos()
             if m.cursorPos > 0 {
                 m.cursorPos--
+            } else {
+                m.cursorPos = maxPos
             }
             return m, nil
         case "down", "j":
+            // Wrap-around navigation
             maxPos := m.getMaxCursorPos()
             if m.cursorPos < maxPos {
                 m.cursorPos++
+            } else {
+                m.cursorPos = 0
             }
             return m, nil
         case "enter":
@@ -245,11 +252,15 @@ func (m QuickMenuModel) handleProjectSelection(msg tea.KeyMsg) (QuickMenuModel, 
     case "up", "k":
         if m.projectCursorPos > 0 {
             m.projectCursorPos--
+        } else if len(m.projects) > 0 {
+            m.projectCursorPos = len(m.projects) - 1
         }
         return m, nil
     case "down", "j":
         if m.projectCursorPos < len(m.projects)-1 {
             m.projectCursorPos++
+        } else if len(m.projects) > 0 {
+            m.projectCursorPos = 0
         }
         return m, nil
     case "enter":
@@ -269,7 +280,8 @@ func (m QuickMenuModel) getMaxCursorPos() int {
     case CommandsTab:
         return len(m.commands) - 1
     case ConfigTab:
-        return len(m.models) - 1
+        // Allow cursor to land on embedding model display row
+        return len(m.models)
     default:
         return 0
     }
@@ -397,18 +409,22 @@ func (m QuickMenuModel) renderContextTab() string {
     }
     var s strings.Builder
     itemIndex := 0
-    // PROJECT MODE line (informational)
+    // PROJECT MODE line (shows selected state when not in DEV)
     projCursor := "  "
     if m.cursorPos == itemIndex {
         projCursor = "→ "
     }
-    projLine := fmt.Sprintf("%s🤖 PROJECT MODE", projCursor)
-    if m.cursorPos == itemIndex {
-        projLine = m.focusedStyle.Render(projLine)
+    projActive := " "
+    if !m.devMode {
+        projActive = "✓"
     }
-    if m.devMode {
-        // When in DEV, show as unselected
-        projLine = lipgloss.NewStyle().Render(projLine)
+    projLine := fmt.Sprintf("%s%s 🤖 PROJECT MODE", projCursor, projActive)
+    if m.cursorPos == itemIndex {
+        // Cursor highlight takes precedence
+        projLine = m.focusedStyle.Render(projLine)
+    } else if !m.devMode {
+        // Visualize currently selected mode even when not focused
+        projLine = lipgloss.NewStyle().Foreground(m.activeColor).Bold(true).Render(projLine)
     }
     s.WriteString(projLine + "\n")
     itemIndex++
@@ -417,13 +433,16 @@ func (m QuickMenuModel) renderContextTab() string {
     if m.cursorPos == itemIndex {
         devCursor = "→ "
     }
-    devLine := fmt.Sprintf("%s🔧 DEV MODE", devCursor)
+    devActive := " "
+    if m.devMode {
+        devActive = "✓"
+    }
+    devLine := fmt.Sprintf("%s%s 🔧 DEV MODE", devCursor, devActive)
     if m.cursorPos == itemIndex {
         devLine = m.focusedStyle.Render(devLine)
-    }
-    if m.devMode {
-        // If already in DEV, make it clear it's selected
-        devLine = m.focusedStyle.Render("✓ " + strings.TrimSpace(devLine))
+    } else if m.devMode {
+        // Visualize currently selected mode even when not focused
+        devLine = lipgloss.NewStyle().Foreground(m.activeColor).Bold(true).Render(devLine)
     }
     s.WriteString(devLine + "\n\n")
     itemIndex++
@@ -471,7 +490,8 @@ func (m QuickMenuModel) renderContextTab() string {
     s.WriteString("Retrieval Strategy:\n")
     for idx, strategy := range m.strategies {
         cursor := "  "
-        stratIndex := 2 + len(m.databases) + idx
+        // Strategies start at cursor index 3 + len(databases)
+        stratIndex := 3 + len(m.databases) + idx
         if stratIndex == m.cursorPos {
             cursor = "→ "
         }
@@ -484,6 +504,9 @@ func (m QuickMenuModel) renderContextTab() string {
             name = lipgloss.NewStyle().Foreground(m.activeColor).Bold(true).Render(name)
         }
         line := fmt.Sprintf("%s%s %s", cursor, active, name)
+        if strategy.IsActive && stratIndex != m.cursorPos {
+            line = lipgloss.NewStyle().Foreground(m.activeColor).Bold(true).Render(line)
+        }
         if stratIndex == m.cursorPos {
             line = m.focusedStyle.Render(line)
         }
@@ -565,7 +588,19 @@ func (m QuickMenuModel) renderConfigTab() string {
     }
     s.WriteString("\n")
     s.WriteString("Embedding Model:\n")
-    s.WriteString("  ✓ nomic-embed-text\n")
+    // Show embedding model as selected styling to match inference model section
+    itemIndex := len(m.models) // embedding row index
+    embCursor := "  "
+    if m.cursorPos == itemIndex { // allow focus on this informational row
+        embCursor = "→ "
+    }
+    embLine := fmt.Sprintf("%s✓ nomic-embed-text", embCursor)
+    if m.cursorPos == itemIndex {
+        embLine = m.focusedStyle.Render(embLine)
+    } else {
+        embLine = lipgloss.NewStyle().Foreground(m.activeColor).Bold(true).Render(embLine)
+    }
+    s.WriteString(embLine + "\n")
     return s.String()
 }
 
