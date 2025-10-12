@@ -4,9 +4,25 @@ This directory contains Docker Compose configurations for running the LlamaFarm 
 
 ## Services
 
+- **chromadb-server**: ChromaDB vector database server
 - **server**: FastAPI backend server (Python)
+- **rag**: RAG service with Celery workers (Python)
 - **designer**: React frontend application (TypeScript/Vite)
-- **runtime**: Python runtime service
+
+## ChromaDB Server
+
+The `chromadb-server` service is required to prevent multi-process write conflicts that occur when multiple RAG workers try to write to the same ChromaDB persistent database simultaneously. This was causing "Failed to apply logs to the metadata segment" errors when processing multiple PDFs.
+
+**How it works:**
+- ChromaDB runs as a centralized server
+- All RAG workers connect as HTTP clients
+- Server handles concurrent writes safely
+- No more persistent client conflicts
+
+**Configuration:**
+- Server runs on port 8001 (mapped from internal 8000)
+- Data persists in `~/.llamafarm/chromadb` volume
+- RAG workers connect via `CHROMADB_HOST` and `CHROMADB_PORT` environment variables
 
 ## Quick Start
 
@@ -24,8 +40,9 @@ docker-compose down
 ```
 
 Services will be available at:
-- Frontend: http://localhost:3000
+- ChromaDB Server: http://localhost:8001
 - Backend API: http://localhost:8000
+- Frontend: http://localhost:3123
 
 ### Development
 
@@ -38,8 +55,9 @@ docker-compose -f docker-compose.dev.yml up server
 ```
 
 Development services:
-- Frontend: http://localhost:5173 (Vite dev server)
+- ChromaDB Server: http://localhost:8001
 - Backend API: http://localhost:8000 (with auto-reload)
+- Frontend: http://localhost:5173 (Vite dev server)
 
 ## Environment Variables
 
@@ -87,9 +105,51 @@ docker-compose exec designer sh
 ```bash
 # Build specific service
 docker-compose build server
+docker-compose build rag
 docker-compose build designer
-docker-compose build runtime
 
 # Force rebuild
 docker-compose build --no-cache
 ```
+
+## Verifying ChromaDB Server Fix (Issue #279)
+
+### Check ChromaDB Server Status
+```bash
+# Check if ChromaDB server is running
+curl http://localhost:8001/api/v1/heartbeat
+
+# View ChromaDB server logs
+docker-compose logs chromadb-server
+
+# Check collections
+curl http://localhost:8001/api/v1/collections
+```
+
+### Test Multi-PDF Processing
+```bash
+# Start the full stack
+docker-compose up -d
+
+# Create a test dataset with multiple PDFs
+lf datasets create -s pdf_ingest -b main_database test_multi_pdf
+lf datasets upload test_multi_pdf ./path/to/pdf1.pdf ./path/to/pdf2.pdf ./path/to/pdf3.pdf
+
+# Process all PDFs (this should now work without conflicts)
+lf datasets process test_multi_pdf
+
+# Check logs for HTTP client usage
+docker-compose logs rag | grep "ChromaDB HTTP client"
+```
+
+### Expected Log Messages
+When the fix is working correctly, you should see:
+- `Using ChromaDB HTTP client connecting to chromadb-server:8000`
+- No "Failed to apply logs to the metadata segment" errors
+- All PDFs process successfully
+
+### Troubleshooting
+If you still see persistent client warnings:
+1. Check that `host` and `port` are set in your `llamafarm.yaml`
+2. Verify `CHROMADB_HOST` and `CHROMADB_PORT` environment variables
+3. Ensure ChromaDB server is healthy: `docker-compose ps chromadb-server`

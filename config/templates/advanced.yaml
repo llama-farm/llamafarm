@@ -46,13 +46,19 @@ rag:
   # =============================================================================
   databases:
     # Main vector database for general documents
+    # Uses ChromaDB client-server mode to prevent multi-process write conflicts
+    # When running with Docker Compose, connects to the chromadb-server service
+    # For local development, you can use persist_directory instead of host/port
     - name: "main_database"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/chroma_db"
+        # Client-server mode (recommended for production/Docker)
+        host: "chromadb-server"  # Docker service name, or "localhost" for local server
+        port: 8000
+        # Persistent mode (for local development only - comment out host/port above)
+        # persist_directory: "./data/chroma_db"
         distance_function: "cosine"
         collection_name: "documents"
-        port: 8000
       # Default strategies for this database
       default_embedding_strategy: "default_embeddings"
       default_retrieval_strategy: "basic_search"
@@ -119,13 +125,17 @@ rag:
             normalize_scores: true
 
     # Specialized database for research papers
+    # Uses same ChromaDB server but different collection to isolate data
     - name: "research_database"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/research_db"
+        # Client-server mode (shares same ChromaDB server as main_database)
+        host: "chromadb-server"  # Docker service name, or "localhost" for local server
+        port: 8000
+        # Persistent mode (for local development only - comment out host/port above)
+        # persist_directory: "./data/research_db"
         distance_function: "cosine"
-        collection_name: "research_papers"
-        port: 8001
+        collection_name: "research_papers"  # Different collection name for isolation
       default_embedding_strategy: "research_embeddings"
       default_retrieval_strategy: "academic_search"
       embedding_strategies:
