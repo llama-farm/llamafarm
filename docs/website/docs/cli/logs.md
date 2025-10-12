@@ -33,3 +33,5 @@ lf debug logs -f -o .llamafarm/logs/dev-$(date +%Y%m%d-%H%M%S).log
 
 # Use a custom compose file
 lf debug logs --compose-file ./deployment/docker_compose/docker-compose.yml
+
+```bash

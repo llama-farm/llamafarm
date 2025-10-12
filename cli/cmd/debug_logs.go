@@ -268,8 +268,18 @@ func runDockerLogsFallback(ctx context.Context) error {
 			args = append(args, name)
 
 			c := exec.CommandContext(ctx, "docker", args...)
-			stdout, _ := c.StdoutPipe()
-			stderr, _ := c.StderrPipe()
+
+			stdout, err := c.StdoutPipe()
+			if err != nil {
+				errCh <- fmt.Errorf("docker logs %s: failed to get stdout pipe: %w", name, err)
+				return
+			}
+			stderr, err := c.StderrPipe()
+			if err != nil {
+				errCh <- fmt.Errorf("docker logs %s: failed to get stderr pipe: %w", name, err)
+				return
+			}
+
 			if err := c.Start(); err != nil {
 				errCh <- fmt.Errorf("docker logs %s: %w", name, err)
 				return
