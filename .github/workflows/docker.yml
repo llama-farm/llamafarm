@@ -352,10 +352,13 @@ jobs:
           echo "Tagged images:"
           docker images | grep "pr-${{ github.event.number }}"
 
-      - name: Ensure data dir exists for bind mount
+      - name: Prepare Docker environment
         run: |
+          # Create base data directory for main llamafarm volume
           mkdir -p "$HOME/.llamafarm"
           chmod 777 "$HOME/.llamafarm"
+          
+          # ChromaDB now uses Docker-managed volumes, no directory creation needed
 
       - name: Test services startup
         working-directory: deployment/docker_compose
@@ -372,9 +375,14 @@ jobs:
           docker compose -f docker-compose.yml ps
 
           # Basic health checks
+          docker compose -f docker-compose.yml logs chromadb-server
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
           docker compose -f docker-compose.yml logs rag
+          
+          # Test ChromaDB server connectivity
+          echo "Testing ChromaDB server connectivity..."
+          curl -f http://localhost:8001/api/v1/heartbeat || echo "ChromaDB server not responding"
 
       - name: Cleanup
         if: always()

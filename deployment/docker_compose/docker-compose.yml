@@ -114,12 +114,9 @@ volumes:
   
   # ChromaDB persistent data volume
   # Stores vector embeddings and metadata to survive container restarts
+  # Uses Docker-managed volume for better portability across environments
   chromadb_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${HOME}/.llamafarm/chromadb
     labels:
       - "llamafarm.managed=true"
       - "llamafarm.service=chromadb"

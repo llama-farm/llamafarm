@@ -21,8 +21,9 @@ The `chromadb-server` service is required to prevent multi-process write conflic
 
 **Configuration:**
 - Server runs on port 8001 (mapped from internal 8000)
-- Data persists in `~/.llamafarm/chromadb` volume
+- Data persists in Docker-managed volume `chromadb_data`
 - RAG workers connect via `CHROMADB_HOST` and `CHROMADB_PORT` environment variables
+- No manual directory creation required - Docker manages the volume automatically
 
 ## Quick Start
 

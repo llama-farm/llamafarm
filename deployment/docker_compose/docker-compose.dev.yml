@@ -119,6 +119,7 @@ volumes:
   
   # ChromaDB persistent data volume (Development)
   # Stores vector embeddings and metadata to survive container restarts
+  # Uses Docker-managed volume for better portability across environments
   llamafarm_dev_chromadb:
     driver: local
     labels:
