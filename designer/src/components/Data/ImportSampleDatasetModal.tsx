@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import {
@@ -9,10 +9,8 @@ import {
   DialogFooter,
 } from '../ui/dialog'
 import { Badge } from '../ui/badge'
-import {
-  sampleProjects,
-  type SuggestedDataset,
-} from '../../data/sampleProjects'
+import { type SuggestedDataset } from '../../data/sampleProjects'
+import { useExampleDatasets } from '../../hooks/useExamples'
 
 type Kind = NonNullable<SuggestedDataset['kind']>
 
@@ -58,29 +56,36 @@ const mapKindToStrategy = (kind?: Kind): string => {
 
 function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
   const [search, setSearch] = useState('')
-  const [kind, setKind] = useState<'all' | Kind>('all')
+  const [kind] = useState<'all' | Kind>('all')
   const [selected, setSelected] = useState<string>('')
   const [includeStrategy, setIncludeStrategy] = useState(true)
 
-  const allDatasets: FlattenedDataset[] = useMemo(() => {
-    const items: FlattenedDataset[] = []
-    for (const p of sampleProjects) {
-      for (const d of p.suggestedDatasets || []) {
-        const uid = `${p.id}:${d.id}`
-        items.push({
-          uid,
-          id: d.id,
-          name: d.name,
-          kind: d.kind,
-          size: (d as any).size as string | undefined,
-          projectId: p.id,
-          projectTitle: p.title,
-          defaultStrategy: mapKindToStrategy(d.kind),
-        })
-      }
+  // Reset transient state whenever the modal opens
+  useEffect(() => {
+    if (open) {
+      setSearch('')
+      setSelected('')
     }
-    return items
-  }, [])
+  }, [open])
+
+  const { data, isLoading, isError, refetch } = useExampleDatasets()
+
+  const allDatasets: FlattenedDataset[] = useMemo(() => {
+    const rows = (data?.datasets || []) as any[]
+    return rows.map(row => {
+      const kind = (row.kind || undefined) as Kind | undefined
+      return {
+        uid: `${row.example_id}:${row.name}`,
+        id: row.name,
+        name: row.name,
+        kind,
+        size: row.size_human,
+        projectId: row.example_id,
+        projectTitle: row.example_title || row.example_id,
+        defaultStrategy: row.strategy || mapKindToStrategy(kind),
+      }
+    })
+  }, [data])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -104,51 +109,44 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-3xl -translate-y-[50%] md:-translate-y-[55%] h-[100dvh] sm:h-auto max-h-[100vh] md:max-h-[85vh] overflow-hidden"
+        className="sm:max-w-3xl lg:max-w-4xl -translate-y-[50%] md:-translate-y-[55%] h-[100dvh] sm:h-auto max-h-[100vh] md:max-h-[85vh] overflow-hidden grid grid-rows-[auto_1fr_auto]"
         onOpenAutoFocus={e => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>Import sample dataset</DialogTitle>
         </DialogHeader>
-        {/* Use grid rows so the scroll region can grow properly inside DialogContent's inherent grid */}
+        {/* Middle scrollable region */}
         <div className="grid grid-rows-[auto_1fr] gap-3 min-h-0">
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search datasets or projects"
             aria-label="Search datasets or projects"
-            className="text-sm"
+            className="text-sm focus-visible:ring-1 focus-visible:ring-primary"
           />
-          <div className="flex flex-wrap items-center gap-2">
-            {(
-              [
-                'all',
-                'pdf',
-                'csv',
-                'markdown',
-                'images',
-                'json',
-                'timeseries',
-              ] as const
-            ).map(k => (
-              <button
-                key={k}
-                type="button"
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-xs transition-colors ${
-                  kind === k
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background text-foreground border-input hover:bg-accent/30'
-                }`}
-                onClick={() => setKind(k as any)}
-              >
-                <span>{k === 'all' ? 'All types' : k}</span>
-              </button>
-            ))}
-          </div>
-          {/* Scroll region */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 overflow-auto">
-            {filtered.length === 0 ? (
+          {/* Filters temporarily hidden */}
+          <div className="hidden" aria-hidden="true" />
+          {/* Scroll region: always reserve scrollbar space to avoid layout jump */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 overflow-y-scroll items-stretch">
+            {isLoading ? (
               <div className="col-span-full text-sm text-muted-foreground p-2">
+                Loading sample datasets…
+              </div>
+            ) : isError ? (
+              <div className="col-span-full text-sm text-muted-foreground p-2">
+                Could not load sample datasets. Ensure the server is running.
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-md border border-input hover:bg-accent/30"
+                    onClick={() => refetch()}
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="col-span-full text-sm text-muted-foreground p-2 self-start">
                 No datasets match your search.
               </div>
             ) : (
@@ -158,7 +156,7 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
                   <button
                     key={ds.uid}
                     type="button"
-                    className={`w-full text-left rounded-md border p-3 transition-colors ${
+                    className={`w-full h-28 text-left rounded-md border p-3 transition-colors flex flex-col ${
                       isSelected
                         ? 'border-primary bg-accent/30'
                         : 'border-input bg-card hover:bg-accent/20'
@@ -176,7 +174,7 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
                     <div className="mt-1 text-xs text-muted-foreground">
                       From {ds.projectTitle}
                     </div>
-                    <div className="mt-2 text-xs text-foreground/80 flex items-center gap-2">
+                    <div className="mt-auto pt-1 text-xs text-foreground/80 flex items-center gap-2">
                       <span className="font-mono">{ds.size || '—'}</span>
                       <span className="text-muted-foreground">•</span>
                       <span>Default strategy: {ds.defaultStrategy}</span>
@@ -187,8 +185,8 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
             )}
           </div>
         </div>
-        <DialogFooter className="sticky bottom-0 bg-card pt-2 flex-col gap-3">
-          <div className="flex items-center justify-between w-full">
+        <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -204,7 +202,7 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
               </div>
             ) : null}
           </div>
-          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 w-full">
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 justify-end sm:justify-start w-full sm:w-auto mt-2 sm:mt-0">
             <Button
               variant="secondary"
               onClick={() => onOpenChange(false)}

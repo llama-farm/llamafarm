@@ -45,6 +45,14 @@ lint.select = ["E", "F", "I", "B", "UP", "SIM"]
 # Exclude some files
 exclude = ["migrations", ".venv", "venv", "build", "dist", "datamodel.py"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", ".."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
 [tool.mypy]
 python_version = "3.8"
 warn_return_any = true

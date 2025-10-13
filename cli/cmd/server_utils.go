@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -752,7 +753,16 @@ func startLocalServerViaDocker(serverURL string) error {
 		},
 		Env: make(map[string]string),
 		Volumes: []string{
-			fmt.Sprintf("%s:%s", convertToDockerPath(filepath.Join(homeDir, ".llamafarm")), "/var/lib/llamafarm"),
+			func() string {
+				homeLlamaFarmPath := filepath.Join(homeDir, ".llamafarm")
+				dockerPath := convertToDockerPath(homeLlamaFarmPath)
+				volumeMount := fmt.Sprintf("%s:%s", dockerPath, "/var/lib/llamafarm")
+
+				// Debug logging for home directory volume mount
+				OutputDebug("Home volume mount: %s\n", volumeMount)
+
+				return volumeMount
+			}(),
 		},
 		Labels: map[string]string{
 			"llamafarm.component": "server",
@@ -894,7 +904,18 @@ func findRAGComponent(hr *HealthPayload) *Component {
 
 // convertToDockerPath normalizes a host path to use forward slashes which Docker accepts across platforms.
 func convertToDockerPath(hostPath string) string {
-	return filepath.ToSlash(hostPath)
+	converted := filepath.ToSlash(hostPath)
+
+	// Handle Windows drive letters for Docker Desktop (WSL2 backend)
+	if runtime.GOOS == "windows" && len(converted) >= 2 && converted[1] == ':' {
+		driveLetter := strings.ToLower(string(converted[0]))
+		pathWithoutDrive := converted[2:]                // Remove "C:"
+		converted = "/" + driveLetter + pathWithoutDrive // Single slash: /c/path
+
+		OutputDebug("Converted Windows path '%s' to Docker format '%s'\n", hostPath, converted)
+	}
+
+	return converted
 }
 
 // validateDockerVolumePath checks if a path can be safely mounted as a Docker volume
@@ -926,10 +947,11 @@ func setupWorkdirVolumeMount(spec *ContainerRunSpec) error {
 
 	// Convert to Docker-compatible path
 	dockerPath := convertToDockerPath(cwd)
+
 	volumeMount := fmt.Sprintf("%s:%s", dockerPath, dockerPath)
 	spec.Volumes = append(spec.Volumes, volumeMount)
 
-	OutputDebug("Mounting volume: %s\n", volumeMount)
+	OutputDebug("Working directory volume mount: %s\n", volumeMount)
 
 	return nil
 }

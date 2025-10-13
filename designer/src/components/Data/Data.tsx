@@ -20,6 +20,7 @@ import {
 } from '../ui/dialog'
 import { Button } from '../ui/button'
 import ImportSampleDatasetModal from './ImportSampleDatasetModal'
+import { useImportExampleDataset } from '../../hooks/useExamples'
 import PageActions from '../common/PageActions'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
@@ -69,6 +70,7 @@ const Data = () => {
   )
   const createDatasetMutation = useCreateDataset()
   const deleteDatasetMutation = useDeleteDataset()
+  const importExampleDataset = useImportExampleDataset()
 
   // Local demo datasets change counter (forces recompute when we mutate localStorage)
   const [localDatasetsVersion, setLocalDatasetsVersion] = useState(0)
@@ -594,7 +596,7 @@ const Data = () => {
       <ImportSampleDatasetModal
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
-        onImport={async ({ name, rag_strategy }) => {
+        onImport={async ({ name, sourceProjectId }) => {
           try {
             if (!activeProject?.namespace || !activeProject?.project) {
               toast({
@@ -603,18 +605,32 @@ const Data = () => {
               })
               return
             }
-            await createDatasetMutation.mutateAsync({
+            await importExampleDataset.mutateAsync({
+              exampleId: sourceProjectId,
               namespace: activeProject.namespace,
               project: activeProject.project,
-              name,
-              data_processing_strategy: rag_strategy || 'default',
-              database: 'default',
+              dataset: name,
+              include_strategies: true,
+              process: true,
             })
-            toast({ message: `Dataset "${name}" imported`, variant: 'default' })
+            toast({
+              message: `Dataset "${name}" importing…`,
+              variant: 'default',
+            })
             setIsImportOpen(false)
             navigate(`/chat/data/${name}`)
-          } catch (error) {
+          } catch (error: any) {
             console.error('Import failed', error)
+            try {
+              const serverMessage =
+                (error?.response?.data?.detail as string) ||
+                (error?.message as string) ||
+                'Unknown error'
+              toast({
+                message: `Failed to import dataset: ${serverMessage}`,
+                variant: 'destructive',
+              })
+            } catch {}
             // Local fallback to make import work without server: persist into demo datasets
             try {
               const raw = localStorage.getItem('lf_demo_datasets')

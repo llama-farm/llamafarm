@@ -1,127 +1,139 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import FontIcon from '../../../common/FontIcon'
 import { Button } from '../../ui/button'
-import PromptModal, { PromptModalMode } from './PromptModal'
 import { useActiveProject } from '../../../hooks/useActiveProject'
+import { useProject } from '../../../hooks/useProjects'
+import projectService from '../../../api/projectService'
+import PromptModal, { PromptModalMode } from './PromptModal'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../ui/dialog'
+import { useToast } from '../../ui/toast'
 
 interface PromptRow {
-  version: string
-  status: 'Active' | 'Draft'
+  role?: string
   preview: string
-  settings: string
 }
 
 const Prompts = () => {
   const activeProject = useActiveProject()
-  const storageKey = `lf_prompts_rows:${activeProject?.namespace || 'default'}:${activeProject?.project || 'default'}`
+  const { data: projectResponse, refetch } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject?.namespace && !!activeProject?.project
+  )
+  const { toast } = useToast()
 
-  const defaultRows: PromptRow[] = [
-    {
-      version: '1.0',
-      status: 'Active',
-      preview:
-        'You are an experienced aircraft maintenance technician with 15+ years of experience working on military and commercial aircraft. You specialize in...',
-      settings: '[ ]',
-    },
-    {
-      version: '1.1',
-      status: 'Active',
-      preview:
-        'You are a senior aircraft maintenance specialist focused on rapid diagnosis and...',
-      settings: '[ ]',
-    },
-    {
-      version: '1.2',
-      status: 'Active',
-      preview:
-        'You are an aircraft maintenance worker focused on diagnosis and error handling...',
-      settings: '[ ]',
-    },
-  ]
+  const rows: PromptRow[] = useMemo(() => {
+    const prompts = projectResponse?.project?.config?.prompts as
+      | Array<{ role?: string; content: string }>
+      | undefined
+    if (!prompts || prompts.length === 0) return []
+    return prompts.map(p => ({ role: p.role, preview: p.content }))
+  }, [projectResponse])
 
-  const [rows, setRows] = useState<PromptRow[]>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) return parsed
-      }
-    } catch {}
-    return defaultRows
-  })
+  // Add prompt modal state
   const [isOpen, setIsOpen] = useState(false)
-  const [mode, setMode] = useState<PromptModalMode>('edit')
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  const [initialVersion, setInitialVersion] = useState('')
+  const [mode, setMode] = useState<PromptModalMode>('create')
   const [initialText, setInitialText] = useState('')
+  const [initialRole, setInitialRole] = useState<
+    'system' | 'assistant' | 'user'
+  >('system')
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
+  const [editIndex, setEditIndex] = useState<number | null>(null)
 
-  // Track which key we've loaded rows for to avoid saving under the wrong key
-  const [loadedKey, setLoadedKey] = useState<string | null>(null)
-
-  // Reload rows whenever the storage key changes (project/namespace change)
-  useEffect(() => {
-    try {
-      const key = storageKey
-      const raw = localStorage.getItem(key)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) {
-          setRows(parsed)
-          setLoadedKey(key)
-          return
-        }
-      }
-    } catch {}
-    setRows(defaultRows)
-    setLoadedKey(storageKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey])
-
-  // Persist rows when they change, but only after we've loaded for this key
-  useEffect(() => {
-    if (loadedKey !== storageKey) return
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(rows))
-    } catch {}
-  }, [rows, storageKey, loadedKey])
-
-  const openCreate = () => {
-    setMode('create')
-    setEditingIndex(null)
-    setInitialVersion('')
-    setInitialText('')
-    setIsOpen(true)
-  }
-
-  const openEdit = (idx: number) => {
-    const r = rows[idx]
-    setMode('edit')
-    setEditingIndex(idx)
-    setInitialVersion(r.version)
-    setInitialText(r.preview)
-    setIsOpen(true)
-  }
-
-  const handleSave = (version: string, text: string) => {
-    if (mode === 'create') {
-      setRows(prev => [
-        { version, status: 'Draft', preview: text, settings: '[ ]' },
-        ...prev,
-      ])
-    } else if (editingIndex !== null) {
-      setRows(prev =>
-        prev.map((r, i) =>
-          i === editingIndex ? { ...r, version, preview: text } : r
-        )
-      )
+  const handleSavePrompt = async (
+    text: string,
+    role: 'system' | 'assistant' | 'user'
+  ) => {
+    if (!activeProject || !projectResponse?.project?.config) return
+    const { config } = projectResponse.project
+    const prompts = Array.isArray(config.prompts) ? [...config.prompts] : []
+    if (
+      mode === 'edit' &&
+      editIndex != null &&
+      editIndex >= 0 &&
+      editIndex < prompts.length
+    ) {
+      const existing = prompts[editIndex] as any
+      prompts[editIndex] = { ...existing, role, content: text }
+    } else {
+      prompts.unshift({ role, content: text })
     }
-    setIsOpen(false)
+    const request = { config: { ...config, prompts } }
+    try {
+      await projectService.updateProject(
+        activeProject.namespace,
+        activeProject.project,
+        request
+      )
+      await refetch()
+      setIsOpen(false)
+      setEditIndex(null)
+      toast({ message: 'Prompt saved', variant: 'default' })
+    } catch (e) {
+      console.error('Failed to save prompt', e)
+      toast({ message: 'Failed to save prompt', variant: 'destructive' })
+    }
   }
 
-  const handleDelete = () => {
-    if (editingIndex === null) return
-    setRows(prev => prev.filter((_, i) => i !== editingIndex))
-    setIsOpen(false)
+  const openCreatePrompt = () => {
+    setMode('create')
+    setInitialText('')
+    setInitialRole('system')
+    setEditIndex(null)
+    setIsOpen(true)
+  }
+
+  const openEditPrompt = (index: number) => {
+    const item = rows[index]
+    setMode('edit')
+    setEditIndex(index)
+    setInitialText(item?.preview || '')
+    setInitialRole((item?.role as 'system' | 'assistant' | 'user') || 'system')
+    setIsOpen(true)
+  }
+
+  const performDeletePrompt = async (index: number): Promise<boolean> => {
+    if (!activeProject || !projectResponse?.project?.config) return false
+    const { config } = projectResponse.project
+    const prompts = Array.isArray(config.prompts) ? [...config.prompts] : []
+    if (index < 0 || index >= prompts.length) return false
+    prompts.splice(index, 1)
+    const request = { config: { ...config, prompts } }
+    try {
+      await projectService.updateProject(
+        activeProject.namespace,
+        activeProject.project,
+        request
+      )
+      await refetch()
+      toast({ message: 'Prompt deleted', variant: 'default' })
+      return true
+    } catch (e) {
+      console.error('Failed to delete prompt', e)
+      toast({ message: 'Failed to delete prompt', variant: 'destructive' })
+      return false
+    }
+  }
+
+  const openDeletePrompt = (index: number) => {
+    setDeleteIndex(index)
+    setIsDeleteOpen(true)
+  }
+
+  const confirmDeletePrompt = async () => {
+    if (deleteIndex == null) return
+    const success = await performDeletePrompt(deleteIndex)
+    if (success) {
+      setIsDeleteOpen(false)
+      setDeleteIndex(null)
+    }
   }
 
   return (
@@ -130,10 +142,10 @@ const Prompts = () => {
         <p className="text-sm text-muted-foreground w-full">
           Prompts are instructions that tell your model how to behave. The
           following prompts have been saved for this project so far. You can
-          edit, adjust, or create new ones.
+          view the prompts defined in your project configuration.
         </p>
         <Button
-          onClick={openCreate}
+          onClick={openCreatePrompt}
           className="whitespace-nowrap w-full sm:w-auto"
         >
           New prompt
@@ -142,13 +154,9 @@ const Prompts = () => {
       <table className="w-full">
         <thead className="bg-white dark:bg-blue-600 font-normal">
           <tr>
-            <th className="text-left w-[10%] py-2 px-3 font-normal">Version</th>
-            <th className="text-left w-[10%] py-2 px-3 font-normal">Status</th>
-            <th className="text-left w-[50%] py-2 px-3 font-normal">Preview</th>
-            <th className="text-left w-[10%] py-2 px-3 font-normal">
-              Settings
-            </th>
-            <th className="text-left w-[10%] py-2 px-3 font-normal">Actions</th>
+            <th className="text-left w-[15%] py-2 px-3 font-normal">Role</th>
+            <th className="text-left py-2 px-3 font-normal">Preview</th>
+            <th className="text-right w-[1%] py-2 px-3 font-normal">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -159,40 +167,84 @@ const Prompts = () => {
                 index === rows.length - 1 ? 'border-b-0' : 'border-b'
               }`}
             >
-              <td className="align-top p-3">{prompt.version}</td>
-              <td className="align-top p-3">
-                <FontIcon
-                  type="checkmark-outline"
-                  className="w-6 h-6 text-blue-100 dark:text-green-100"
-                />
-              </td>
+              <td className="align-top p-3">{prompt.role || '—'}</td>
               <td className="align-top p-3">
                 <div className="whitespace-pre-line break-words line-clamp-6">
                   {prompt.preview}
                 </div>
               </td>
-              <td className="align-top p-3">{prompt.settings}</td>
-              <td className="flex flex-row gap-4 align-top p-3">
+              <td className="align-top p-3 text-right whitespace-nowrap">
                 <FontIcon
                   type="edit"
-                  className="w-6 h-6 text-blue-100"
                   isButton
-                  handleOnClick={() => openEdit(index)}
+                  className="w-4 h-4 text-muted-foreground inline-block mr-3"
+                  handleOnClick={() => openEditPrompt(index)}
+                />
+                <FontIcon
+                  type="trashcan"
+                  isButton
+                  className="w-4 h-4 text-muted-foreground inline-block"
+                  handleOnClick={() => openDeletePrompt(index)}
                 />
               </td>
             </tr>
           ))}
+          {rows.length === 0 && (
+            <tr>
+              <td
+                colSpan={3}
+                className="align-top p-3 text-sm text-muted-foreground"
+              >
+                No prompts found in project configuration.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
       <PromptModal
         isOpen={isOpen}
         mode={mode}
-        initialVersion={initialVersion}
         initialText={initialText}
+        initialRole={initialRole}
         onClose={() => setIsOpen(false)}
-        onSave={handleSave}
-        onDelete={handleDelete}
+        onSave={handleSavePrompt}
       />
+
+      <Dialog
+        open={isDeleteOpen}
+        onOpenChange={v => (!v ? setIsDeleteOpen(false) : undefined)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg text-foreground">
+              Delete prompt
+            </DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            This will remove the prompt from your project configuration. This
+            action cannot be undone.
+          </div>
+          <DialogFooter className="flex flex-row items-center justify-between sm:justify-between gap-2">
+            <div />
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                onClick={() => setIsDeleteOpen(false)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+                onClick={confirmDeletePrompt}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
