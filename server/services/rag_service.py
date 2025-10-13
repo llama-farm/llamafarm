@@ -32,6 +32,7 @@ def search_with_rag(
     query: str,
     top_k: int = 5,
     retrieval_strategy: str | None = None,
+    score_threshold: float | None = None,
 ) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
@@ -53,6 +54,7 @@ def search_with_rag(
         query=query[:100] + "..." if len(query) > 100 else query,
         top_k=top_k,
         retrieval_strategy=retrieval_strategy,
+        score_threshold=score_threshold,
     )
 
     try:
@@ -62,6 +64,7 @@ def search_with_rag(
             query=query,
             top_k=top_k,
             retrieval_strategy=retrieval_strategy,
+            score_threshold=score_threshold,
         )
 
         logger.info(

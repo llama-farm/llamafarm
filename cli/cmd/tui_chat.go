@@ -570,7 +570,8 @@ func (m *chatModel) getModelInfo(name string) ModelInfo {
 			return model
 		}
 	}
-	return ModelInfo{}
+    // Fallback to preserve label when model details aren't found
+    return ModelInfo{Name: name}
 }
 
 // Database/Strategy switching methods
@@ -585,9 +586,13 @@ func (m *chatModel) switchDatabase(newDatabase string) {
 	oldStrategy := m.currentStrategy
 	strategyValidForNewDB := false
 
-	if m.availableDatabases != nil {
+    noStrategiesForDB := false
+    if m.availableDatabases != nil {
 		for _, db := range m.availableDatabases.Databases {
 			if db.Name == newDatabase {
+                if len(db.RetrievalStrategies) == 0 {
+                    noStrategiesForDB = true
+                }
 				// Check if current strategy exists in new database
 				if oldStrategy != "" {
 					for _, strategy := range db.RetrievalStrategies {
@@ -626,6 +631,11 @@ func (m *chatModel) switchDatabase(newDatabase string) {
 		Role:    "client",
 		Content: fmt.Sprintf("Switched from database '%s' to '%s' with strategy '%s'", oldDatabase, newDatabase, m.currentStrategy),
 	})
+
+    // Notify if the selected database has no retrieval strategies
+    if noStrategiesForDB {
+        m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Database '%s' has no retrieval strategies configured.", newDatabase)})
+    }
 }
 
 func (m *chatModel) switchStrategy(newStrategy string) {

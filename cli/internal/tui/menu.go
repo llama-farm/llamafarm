@@ -161,6 +161,29 @@ func (m QuickMenuModel) Update(msg tea.Msg) (QuickMenuModel, tea.Cmd) {
         case tea.WindowSizeMsg:
             m.width = msg.Width
             m.height = msg.Height
+        case SwitchModeMsg:
+            m.devMode = msg.DevMode
+        case SwitchDatabaseMsg:
+            m.currentDB = msg.DatabaseName
+            for i := range m.databases {
+                m.databases[i].IsActive = (m.databases[i].Name == msg.DatabaseName)
+            }
+        case SwitchModelMsg:
+            m.currentModel = msg.ModelName
+            for i := range m.models {
+                m.models[i].IsActive = (m.models[i].Name == msg.ModelName)
+            }
+        case SwitchProjectMsg:
+            m.currentProject = msg.ProjectName
+            m.currentNamespace = msg.Namespace
+            for i := range m.projects {
+                m.projects[i].IsActive = (m.projects[i].Name == msg.ProjectName && m.projects[i].Namespace == msg.Namespace)
+            }
+        case SwitchStrategyMsg:
+            m.currentStrategy = msg.StrategyName
+            for i := range m.strategies {
+                m.strategies[i].IsActive = (m.strategies[i].Name == msg.StrategyName)
+            }
         }
         return m, nil
     }
@@ -306,27 +329,34 @@ func (m QuickMenuModel) handleSelection() tea.Cmd {
             }
             return nil
         }
+        if m.cursorPos == 2 {
+            // Enter project selection state
+            m.menuState = ProjectSelectState
+            // Initialize cursor to current project
+            m.projectCursorPos = m.findCurrentProjectIndex()
+            return nil
+        }
         // Databases start at cursor index 3
         dbIndex := m.cursorPos - 3
-        if dbIndex >= 0 && dbIndex < len(m.databases) {
+        if dbIndex >= 0 && len(m.databases) > 0 && dbIndex < len(m.databases) {
             selectedDB := m.databases[dbIndex]
             return switchDatabaseCmd(selectedDB.Name)
         }
         // Strategy selection follows databases
         // Strategies start at cursor index 3+len(dbs)
         stratIndex := m.cursorPos - (3 + len(m.databases))
-        if stratIndex >= 0 && stratIndex < len(m.strategies) {
+        if stratIndex >= 0 && len(m.strategies) > 0 && stratIndex < len(m.strategies) {
             selected := m.strategies[stratIndex]
             return switchStrategyCmd(selected.Name)
         }
     case CommandsTab:
-        if m.cursorPos < len(m.commands) {
+        if len(m.commands) > 0 && m.cursorPos < len(m.commands) {
             cmd := m.commands[m.cursorPos].Command
             clipboard.WriteAll(cmd)
             return showToastCmd("Copied: " + cmd)
         }
     case ConfigTab:
-        if m.cursorPos < len(m.models) {
+        if len(m.models) > 0 && m.cursorPos < len(m.models) {
             selectedModel := m.models[m.cursorPos]
             return switchModelCmd(selectedModel.Name)
         }
@@ -450,7 +480,11 @@ func (m QuickMenuModel) renderContextTab() string {
     if m.cursorPos == itemIndex {
         projCursor2 = "→ "
     }
-    projectLine := fmt.Sprintf("%sProject:  %s", projCursor2, m.currentProject)
+    currentProjectText := m.currentProject
+    if len(m.projects) == 0 {
+        currentProjectText = "(none)"
+    }
+    projectLine := fmt.Sprintf("%sProject:  %s", projCursor2, currentProjectText)
     if len(m.projects) > 1 {
         projectLine += "    [▼]"
     }
@@ -458,9 +492,16 @@ func (m QuickMenuModel) renderContextTab() string {
         projectLine = m.focusedStyle.Render(projectLine)
     }
     s.WriteString(projectLine + "\n")
-    s.WriteString(fmt.Sprintf("  Namespace: %s\n\n", m.currentNamespace))
+    nsText := m.currentNamespace
+    if nsText == "" {
+        nsText = "(none)"
+    }
+    s.WriteString(fmt.Sprintf("  Namespace: %s\n\n", nsText))
     itemIndex++
     s.WriteString("Database:\n")
+    if len(m.databases) == 0 {
+        s.WriteString("  (no databases)\n")
+    }
     for _, db := range m.databases {
         cursor := "  "
         if itemIndex == m.cursorPos {
@@ -488,6 +529,9 @@ func (m QuickMenuModel) renderContextTab() string {
     }
     s.WriteString("\n")
     s.WriteString("Retrieval Strategy:\n")
+    if len(m.strategies) == 0 {
+        s.WriteString("  (no strategies)\n")
+    }
     for idx, strategy := range m.strategies {
         cursor := "  "
         // Strategies start at cursor index 3 + len(databases)

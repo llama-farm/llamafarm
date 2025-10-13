@@ -226,6 +226,7 @@ class ProjectChatService:
         top_k: int = 5,
         database: str | None = None,
         retrieval_strategy: str | None = None,
+        score_threshold: float | None = None,
     ) -> list[Any]:
         """Perform RAG search using the project's RAG configuration.
 
@@ -254,7 +255,12 @@ class ProjectChatService:
 
         # Use shared helper to run RAG search on database
         results = search_with_rag(
-            project_dir, database, message, top_k=top_k, retrieval_strategy=retrieval_strategy
+            project_dir,
+            database,
+            message,
+            top_k=top_k,
+            retrieval_strategy=retrieval_strategy,
+            score_threshold=score_threshold,
         )
         if results is None:
             results = []
@@ -322,6 +328,7 @@ class ProjectChatService:
                 top_k=rag_params.rag_top_k or 5,
                 database=rag_params.database,
                 retrieval_strategy=rag_params.retrieval_strategy,
+                score_threshold=rag_params.rag_score_threshold,
             )
 
         for idx, result in enumerate(rag_results):

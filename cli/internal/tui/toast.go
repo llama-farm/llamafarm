@@ -14,7 +14,7 @@ type ToastModel struct {
     width     int
 }
 
-type HideToastMsg struct{}
+type HideToastMsg struct{ shownAt time.Time }
 
 func NewToastModel() ToastModel { return ToastModel{visible: false} }
 
@@ -24,9 +24,13 @@ func (m ToastModel) Update(msg tea.Msg) (ToastModel, tea.Cmd) {
         m.message = msg.Message
         m.visible = true
         m.timestamp = time.Now()
-        return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg { return HideToastMsg{} })
+        shownAt := m.timestamp
+        return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg { return HideToastMsg{shownAt: shownAt} })
     case HideToastMsg:
-        m.visible = false
+        // Ignore stale hide events if a newer toast was shown since this hide was scheduled
+        if msg.shownAt.IsZero() || msg.shownAt.Equal(m.timestamp) {
+            m.visible = false
+        }
         return m, nil
     case tea.WindowSizeMsg:
         m.width = msg.Width
@@ -40,6 +44,10 @@ func (m ToastModel) View() string {
     toastStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("86")).Padding(0, 2).MarginRight(2).Bold(true)
     toast := toastStyle.Render(m.message)
     _ = toast // width computed below
+    // Handle zero width gracefully: return inline toast without placement
+    if m.width <= 0 {
+        return toast
+    }
     return lipgloss.PlaceHorizontal(m.width, lipgloss.Right, toast)
 }
 

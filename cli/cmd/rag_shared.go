@@ -40,27 +40,27 @@ func fetchAvailableDatabases(serverURL, namespace, projectID string) *DatabasesR
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+    req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		logDebug(fmt.Sprintf("Error creating databases request: %v", err))
+        OutputWarning("Failed to build request for databases endpoint: %v", err)
 		return nil
 	}
 
-	resp, err := getHTTPClient().Do(req)
+    resp, err := getHTTPClient().Do(req)
 	if err != nil {
-		logDebug(fmt.Sprintf("Error fetching databases: %v", err))
+        OutputWarning("Unable to fetch databases from server: %v", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		logDebug(fmt.Sprintf("Error response from databases endpoint: %d", resp.StatusCode))
+    if resp.StatusCode != http.StatusOK {
+        OutputWarning("Databases endpoint returned status %d", resp.StatusCode)
 		return nil
 	}
 
 	var result DatabasesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		logDebug(fmt.Sprintf("Error decoding databases response: %v", err))
+    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+        OutputWarning("Failed to decode databases response: %v", err)
 		return nil
 	}
 
