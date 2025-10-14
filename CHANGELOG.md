@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.0.8](https://github.com/llama-farm/llamafarm/compare/v0.0.7...v0.0.8) (2025-10-13)
+
+
+### Features
+
+* add multi-model runtime support with API and CLI integration ([#263](https://github.com/llama-farm/llamafarm/issues/263)) ([9630ed3](https://github.com/llama-farm/llamafarm/commit/9630ed3f6b76a4a18f2394ce6fdccea682c95480))
+* auto generate datamodel ([#278](https://github.com/llama-farm/llamafarm/issues/278)) ([f1d3a10](https://github.com/llama-farm/llamafarm/commit/f1d3a102628d59c1ca56c03e8123ba4bd183381e))
+* **designer:** add working one liner for entire project (CLI and designer) upgrade to new version ([6c72a79](https://github.com/llama-farm/llamafarm/commit/6c72a79e6cfad3b57040bfdc2370c98d7bb069c4))
+* **designer:** allow prompts to read and write to config, allow edit/add/delete from designer ([97943c7](https://github.com/llama-farm/llamafarm/commit/97943c7270f9db0fe134a4fb120d14abe57ad254))
+* **designer:** chat switcher for small screens ([76ca599](https://github.com/llama-farm/llamafarm/commit/76ca599c5969f7b4e18e1dc01f5b869d5ff92755))
+* **designer:** connect prompts to pull in project config prompts to prompts page ([befbb19](https://github.com/llama-farm/llamafarm/commit/befbb195aff30d6fdf197d88cc3d247d4b036573))
+* **designer:** Fix responsiveness issues ([a83f8a3](https://github.com/llama-farm/llamafarm/commit/a83f8a365a3a608efbde4ebcc77669994d090a95))
+* **designer:** Hook up prompts from config ([c3dc4bf](https://github.com/llama-farm/llamafarm/commit/c3dc4bfeac45f3a59de0ac87cfcb2ea9199f791f))
+* **designer:** Hook up upgrade api to designer UI ([44457be](https://github.com/llama-farm/llamafarm/commit/44457bee7cc45ce15142c2277ea586416b326b8d))
+* **designer:** update current version modal to fir new upgrade exp ([5d020e1](https://github.com/llama-farm/llamafarm/commit/5d020e179881d3b3d6ec11d6851c9d219b3afedf))
+* **designer:** update update modal to show success state and view release notes ([a4faa9b](https://github.com/llama-farm/llamafarm/commit/a4faa9b92e8c50ac568a3916cc573403e62cecbc))
+
+
+### Bug Fixes
+
+* **cli:** windows path for docker ([#300](https://github.com/llama-farm/llamafarm/issues/300)) ([4d35090](https://github.com/llama-farm/llamafarm/commit/4d3509071a5c5d5dafa085991435a9cf25a51c81))
+* **designer:** add helper text to prompts modal ([2ac2420](https://github.com/llama-farm/llamafarm/commit/2ac24205f805b8eb905411284617cd328be1f995))
+* **designer:** addressing comments, addressing problems fixing comments created, adding bug fix to expandable chat window ([041c58a](https://github.com/llama-farm/llamafarm/commit/041c58a13c9c48346876c58b804dc909f43808eb))
+* **designer:** addressing cubic and cursor comments ([90746bd](https://github.com/llama-farm/llamafarm/commit/90746bd70bc650c27020faeb288133f2ce02b5c0))
+* **designer:** addressing sourcery comments ([38ca807](https://github.com/llama-farm/llamafarm/commit/38ca807feaf7720f21f5e74e3540eda6850091c9))
+* **designer:** addressing sourcery comments ([30a20aa](https://github.com/llama-farm/llamafarm/commit/30a20aaebfa9c13a6cd0fc392ad4cfc74fd7f2a5))
+* **designer:** addressing sourecery comments ([9fc3bf9](https://github.com/llama-farm/llamafarm/commit/9fc3bf9b2433b4ccc22ae711e8e1087205ca71de))
+* **designer:** button padding final bug I hope ([7bea713](https://github.com/llama-farm/llamafarm/commit/7bea713d628f9267e97714784480093fc602d596))
+* **designer:** collapse icon broke again ([14e3a0c](https://github.com/llama-farm/llamafarm/commit/14e3a0c582f73a99e3d820c99f79cc92b8215fa8))
+* **designer:** cubic and cursor comments ([d34e804](https://github.com/llama-farm/llamafarm/commit/d34e8044d75588dde3d1012c485c2bfc84094d1d))
+* **designer:** dashboard responsivness ([2ffebb3](https://github.com/llama-farm/llamafarm/commit/2ffebb36ec4923303a3bcbe18fb11c5350e09635))
+* **designer:** hook up example datasets to import sample dataset flow ([3c8cee0](https://github.com/llama-farm/llamafarm/commit/3c8cee069a5f68c3e51184e4980d6f805dd26f37))
+* **designer:** hook up example datasets to import sample dataset flow ([b7b25de](https://github.com/llama-farm/llamafarm/commit/b7b25ded236ecf994cd2ef8285698816800949ab))
+* **designer:** nav responsivness ([d74c21a](https://github.com/llama-farm/llamafarm/commit/d74c21aacf22b1aa57e36ee6f8a37ca70d5db526))
+* **designer:** one more comment ([0d93ac8](https://github.com/llama-farm/llamafarm/commit/0d93ac86bd07ccc66c6db918d68297cf42c73050))
+* **designer:** remove unused variables to resolve TS6133 in Data and ImportSampleDatasetModal ([185b3f9](https://github.com/llama-farm/llamafarm/commit/185b3f97f9ba381b6b6bcaaee585b435aa10eeda))
+* **designer:** responsive issues are never ending - fixed edit project modal and sample projects ([71ae6d1](https://github.com/llama-farm/llamafarm/commit/71ae6d183e146f6ac70d59995682da00913711ee))
+* **designer:** responsivness on other project pages (prompts, data, models, rag) and modals and breadcrumb pages ... ([bbf4b50](https://github.com/llama-farm/llamafarm/commit/bbf4b50da55e9c93e7d9245dac63da24cf990953))
+* **rag:** docx parser fails due to missing parse_blob ([#293](https://github.com/llama-farm/llamafarm/issues/293)) ([2a7c04d](https://github.com/llama-farm/llamafarm/commit/2a7c04dbe265def6ed8b7d2ca6587d404c0b94f9))
+
+
+### Miscellaneous Chores
+
+* release 0.0.8 ([30d7f89](https://github.com/llama-farm/llamafarm/commit/30d7f89f4e0bfbcd998820a1b699aef954457348))
+
 ## [0.0.7](https://github.com/llama-farm/llamafarm/compare/v0.0.6...v0.0.7) (2025-10-07)
 
 

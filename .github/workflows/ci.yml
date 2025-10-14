@@ -43,6 +43,28 @@ jobs:
           mkdir -p cli/cmd/config
           cp config/schema.yaml cli/cmd/config/
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Generate Python datamodels
+        working-directory: config
+        run: |
+          echo "Generating datamodels from schema..."
+          ./generate-types.sh
+          echo "✓ Datamodel generation complete"
+
+      - name: Validate datamodel generation
+        working-directory: config
+        run: |
+          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
+            echo "❌ Error: datamodel.py not generated or is empty"
+            exit 1
+          fi
+          echo "✓ Datamodel validation passed"
+
       - name: Build CLI
         working-directory: cli
         run: go build -v ./...
@@ -115,6 +137,22 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
 
+      - name: Generate Python datamodels (required for all components)
+        working-directory: config
+        run: |
+          echo "Generating datamodels for ${{ matrix.component }} component tests..."
+          ./generate-types.sh
+          echo "✓ Datamodel generation complete"
+
+      - name: Verify datamodel was generated
+        run: |
+          echo "Checking for datamodel.py..."
+          ls -lh config/datamodel.py || echo "❌ datamodel.py not found!"
+          echo "Attempting import test..."
+          cd config && python -c "from datamodel import LlamaFarmConfig; print('✓ Direct import successful')" || echo "❌ Direct import failed!"
+          echo "Attempting module import test..."
+          python -c "from config.datamodel import LlamaFarmConfig; print('✓ Module import successful')" || echo "❌ Module import failed!"
+
       - name: Check if component has tests
         id: check-tests
         working-directory: ${{ matrix.component }}
@@ -161,6 +199,8 @@ jobs:
       - name: Run tests
         if: steps.check-tests.outputs.has_tests == 'true'
         working-directory: ${{ matrix.component }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           uv run pytest -v --cov=. --cov-report=term-missing
 

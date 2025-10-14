@@ -42,7 +42,9 @@ class ProjectsTool(BaseTool[ProjectsToolInput, ProjectsToolOutput]):
                 {
                     "namespace": project.namespace,
                     "project_id": project.name,
-                    "path": ProjectService.get_project_dir(project.namespace, project.name)
+                    "path": ProjectService.get_project_dir(
+                        project.namespace, project.name
+                    )
                 }
                 for project in projects
             ]
@@ -58,7 +60,10 @@ class ProjectsTool(BaseTool[ProjectsToolInput, ProjectsToolOutput]):
             if os.path.exists(project_dir):
                 return {
                     "success": False,
-                    "message": f"Project '{project_id}' already exists in namespace '{namespace}'"
+                    "message": (
+                        f"Project '{project_id}' already exists in namespace "
+                        f"'{namespace}'"
+                    )
                 }
             
             # Create the project using the project service
@@ -66,7 +71,10 @@ class ProjectsTool(BaseTool[ProjectsToolInput, ProjectsToolOutput]):
             
             return {
                 "success": True,
-                "message": f"Project '{project_id}' created successfully in namespace '{namespace}'",
+                "message": (
+                    f"Project '{project_id}' created successfully in namespace "
+                    f"'{namespace}'"
+                ),
                 "project": {
                     "namespace": namespace,
                     "project_id": project_id,
@@ -96,7 +104,10 @@ class ProjectsTool(BaseTool[ProjectsToolInput, ProjectsToolOutput]):
                 )
                 return ProjectsToolOutput(
                     success=True,
-                    message=f"Found {len(projects)} projects in namespace '{input.namespace}'",
+                    message=(
+                        f"Found {len(projects)} projects in namespace "
+                        f"'{input.namespace}'"
+                    ),
                     projects=projects,
                     total=len(projects)
                 )
@@ -104,7 +115,8 @@ class ProjectsTool(BaseTool[ProjectsToolInput, ProjectsToolOutput]):
             elif input.action == "create":
                 if not input.project_id:
                     logger.warning(
-                        f"Create action attempted without project_id - namespace: {input.namespace}"
+                        f"Create action attempted without project_id - "
+                        f"namespace: {input.namespace}"
                     )
                     return ProjectsToolOutput(
                         success=False,
@@ -145,7 +157,8 @@ class ProjectsTool(BaseTool[ProjectsToolInput, ProjectsToolOutput]):
                 
         except Exception as e:
             logger.exception(
-                f"Unexpected error in projects tool execution - action: {input.action}, "
+                f"Unexpected error in projects tool execution - "
+                f"action: {input.action}, "
                 f"namespace: {input.namespace}, "
                 f"project_id: {getattr(input, 'project_id', None)}, error: {str(e)}"
             )
@@ -164,5 +177,7 @@ if __name__ == "__main__":
     logger.info(f"List result: {result.message}")
     
     # Example: Create project
-    result = tool.run(ProjectsToolInput(action="create", namespace="test", project_id="new_project"))
+    result = tool.run(
+        ProjectsToolInput(action="create", namespace="test", project_id="new_project")
+    )
     logger.info(f"Create result: {result.message}")

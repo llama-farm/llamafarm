@@ -1,4 +1,4 @@
-# 🦙 LlamaFarm
+# 🦙 LlamaFarm - Run your own AI anywhere
 
 > Build powerful AI locally, extend anywhere.
 

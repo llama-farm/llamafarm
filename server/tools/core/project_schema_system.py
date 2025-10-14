@@ -110,14 +110,18 @@ class ProjectSchemaIntrospector:
 
         return fields
 
-    def _analyze_field(self, name: str, field_info: FieldInfo, path: str) -> ConfigFieldInfo:
+    def _analyze_field(
+        self, name: str, field_info: FieldInfo, path: str
+    ) -> ConfigFieldInfo:
         """Analyze a single Pydantic field to extract comprehensive information"""
 
         # Extract basic information
         field_type = str(field_info.annotation) if field_info.annotation else "Any"
         description = field_info.description or f"Configuration field: {name}"
         required = field_info.is_required()
-        default_value = field_info.default if field_info.default is not Ellipsis else None
+        default_value = (
+            field_info.default if field_info.default is not Ellipsis else None
+        )
 
         # Extract examples from field info
         examples = []
@@ -135,7 +139,9 @@ class ProjectSchemaIntrospector:
             enum_values = list(field_info.annotation.__members__.keys())
 
         # Generate LLM guidance
-        llm_guidance = self._generate_llm_guidance(name, field_type, description, constraints, enum_values)
+        llm_guidance = self._generate_llm_guidance(
+            name, field_type, description, constraints, enum_values
+        )
 
         return ConfigFieldInfo(
             name=name,
@@ -150,7 +156,8 @@ class ProjectSchemaIntrospector:
         )
 
     def _generate_llm_guidance(self, name: str, field_type: str, description: str,
-                             constraints: Dict[str, Any], enum_values: Optional[List[str]]) -> str:
+                             constraints: Dict[str, Any],
+                             enum_values: Optional[List[str]]) -> str:
         """Generate specific guidance for LLMs on how to handle this field"""
 
         guidance_parts: list[str] = [f"Field '{name}': {description}"]
@@ -172,13 +179,31 @@ class ProjectSchemaIntrospector:
 
         # Add field-specific guidance
         guidance_map = {
-            'name': "Should be a valid project identifier without spaces or special characters",
-            'namespace': "Should be a valid namespace identifier, typically organization or team name",
+            'name': (
+                "Should be a valid project identifier without spaces or "
+                "special characters"
+            ),
+            'namespace': (
+                "Should be a valid namespace identifier, typically "
+                "organization or team name"
+            ),
             'version': "Must always be 'v1' for current config version",
-            'prompts': "List of prompt configurations. Each prompt needs a name and either sections or raw_text",
-            'rag': "RAG system configuration. Contains strategies, parsers, embedders, vector stores, and retrieval strategies",
-            'datasets': "List of dataset configurations. Each dataset needs a name and list of file hashes",
-            'runtime': "Runtime configuration specifying the AI provider (openai/ollama) and model details"
+            'prompts': (
+                "List of prompt configurations. Each prompt needs a name and "
+                "either sections or raw_text"
+            ),
+            'rag': (
+                "RAG system configuration. Contains strategies, parsers, "
+                "embedders, vector stores, and retrieval strategies"
+            ),
+            'datasets': (
+                "List of dataset configurations. Each dataset needs a name "
+                "and list of file hashes"
+            ),
+            'runtime': (
+                "Runtime configuration specifying the AI provider "
+                "(openai/ollama) and model details"
+            )
         }
 
         if name in guidance_map:
@@ -220,7 +245,9 @@ class ProjectSchemaIntrospector:
             }
 
             if field_info.enum_values:
-                schema["sections"][field_name]["allowed_values"] = field_info.enum_values
+                schema["sections"][field_name]["allowed_values"] = (
+                    field_info.enum_values
+                )
 
             schema["field_guidance"][field_name] = field_info.llm_guidance
 
@@ -241,20 +268,26 @@ class ProjectConfigManipulator:
     def load_config(self) -> LlamaFarmConfig:
         """Load the current project configuration"""
         try:
-            self._original_config = ProjectService.load_config(self.namespace, self.project_id)
+            self._original_config = ProjectService.load_config(
+                self.namespace, self.project_id
+            )
             self._current_config = deepcopy(self._original_config)
             if self._current_config is None:
                 raise ValueError("Failed to load configuration")
             return self._current_config
         except Exception as e:
-            logger.error(f"Failed to load config for {self.namespace}/{self.project_id}: {e}")
+            logger.error(
+                f"Failed to load config for {self.namespace}/{self.project_id}: {e}"
+            )
             raise
 
     def get_current_config(self) -> Optional[LlamaFarmConfig]:
         """Get the current configuration (with any pending changes)"""
         return self._current_config
 
-    def validate_change(self, field_path: str, new_value: Any) -> Tuple[bool, Optional[str]]:
+    def validate_change(
+        self, field_path: str, new_value: Any
+    ) -> Tuple[bool, Optional[str]]:
         """Validate a proposed configuration change"""
         if self._current_config is None:
             return False, "Configuration not loaded"
@@ -273,7 +306,9 @@ class ProjectConfigManipulator:
         except Exception as e:
             return False, f"Validation failed: {str(e)}"
 
-    def apply_change(self, field_path: str, new_value: Any, description: str = "") -> ConfigChange:
+    def apply_change(
+        self, field_path: str, new_value: Any, description: str = ""
+    ) -> ConfigChange:
         """Apply a configuration change with validation and tracking"""
         if self._current_config is None:
             raise ValueError("Configuration not loaded")
@@ -284,7 +319,9 @@ class ProjectConfigManipulator:
             raise ValueError(f"Invalid configuration change: {error}")
 
         # Get the old value
-        old_value = self._get_nested_field(self._current_config.model_dump(), field_path)
+        old_value = self._get_nested_field(
+            self._current_config.model_dump(), field_path
+        )
 
         # Apply the change
         config_dict = self._current_config.model_dump()
@@ -392,7 +429,9 @@ class ProjectConfigManipulator:
         if isinstance(current, dict):
             current[keys[-1]] = value
 
-    def _find_changes(self, original: Any, current: Any, path: str, changes: List[ConfigChange]):
+    def _find_changes(
+        self, original: Any, current: Any, path: str, changes: List[ConfigChange]
+    ):
         """Recursively find changes between original and current configurations"""
         if isinstance(original, dict) and isinstance(current, dict):
             # Handle dictionary changes
@@ -460,14 +499,20 @@ class LLMConfigurationAssistant:
             ])
 
             if section_info.get('allowed_values'):
-                doc_parts.append(f"**Allowed Values:** {', '.join(section_info['allowed_values'])}")
+                doc_parts.append(
+                    f"**Allowed Values:** {', '.join(section_info['allowed_values'])}"
+                )
 
             if section_info.get('examples'):
-                doc_parts.append(f"**Examples:** {', '.join(map(str, section_info['examples']))}")
+                doc_parts.append(
+                    f"**Examples:** {', '.join(map(str, section_info['examples']))}"
+                )
 
             # Add LLM guidance
             if section_name in schema["field_guidance"]:
-                doc_parts.append(f"**Guidance:** {schema['field_guidance'][section_name]}")
+                doc_parts.append(
+                    f"**Guidance:** {schema['field_guidance'][section_name]}"
+                )
 
             doc_parts.append("")
 
@@ -502,11 +547,15 @@ class LLMConfigurationAssistant:
                 # Analyze section completeness
                 if section_name == "prompts" and len(section_value) == 0:
                     analysis["sections_empty"].append("prompts")
-                    analysis["potential_improvements"].append("Consider adding custom prompts for better AI responses")
+                    analysis["potential_improvements"].append(
+                        "Consider adding custom prompts for better AI responses"
+                    )
 
                 if section_name == "datasets" and len(section_value) == 0:
                     analysis["sections_empty"].append("datasets")
-                    analysis["potential_improvements"].append("Add datasets to enable RAG functionality")
+                    analysis["potential_improvements"].append(
+                        "Add datasets to enable RAG functionality"
+                    )
 
             else:
                 analysis["sections_empty"].append(section_name)
@@ -552,7 +601,9 @@ class LLMConfigurationAssistant:
 
         return suggestions
 
-    def apply_user_changes(self, user_intent: str, changes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def apply_user_changes(
+        self, user_intent: str, changes: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """Apply user-requested changes with full tracking"""
 
         changeset = ConfigChangeSet(

@@ -142,7 +142,10 @@ class ProjectContextAnalyzer:
             for prompt in config.prompts:
                 existing_prompts.append({
                     "name": prompt.name,
-                    "sections": [{"title": s.title, "content": s.content} for s in prompt.sections] if prompt.sections else [],
+                    "sections": [
+                        {"title": s.title, "content": s.content}
+                        for s in prompt.sections
+                    ] if prompt.sections else [],
                     "raw_text": prompt.raw_text
                 })
 
@@ -237,7 +240,9 @@ class PromptConversationManager:
 
         return opening_message, opening_questions
 
-    def continue_conversation(self, user_response: str, question_answered: str) -> Tuple[str, List[str], bool]:
+    def continue_conversation(
+        self, user_response: str, question_answered: str
+    ) -> Tuple[str, List[str], bool]:
         """Continue the conversation with follow-up questions"""
         # Record the response
         self.conversation_state.user_responses[question_answered] = user_response
@@ -273,7 +278,10 @@ class PromptConversationManager:
         # Detect intent
         if any(word in input_lower for word in ["customer", "support", "help desk"]):
             analysis["intent"] = "customer_support"
-        elif any(word in input_lower for word in ["technical", "documentation", "explain"]):
+        elif any(
+            word in input_lower
+            for word in ["technical", "documentation", "explain"]
+        ):
             analysis["intent"] = "technical_writing"
         elif any(word in input_lower for word in ["creative", "content", "marketing"]):
             analysis["intent"] = "content_creation"
@@ -291,14 +299,19 @@ class PromptConversationManager:
         # Detect tone preferences
         if any(word in input_lower for word in ["professional", "formal"]):
             analysis["tone_hints"].append("professional")
-        elif any(word in input_lower for word in ["casual", "friendly", "conversational"]):
+        elif any(
+            word in input_lower
+            for word in ["casual", "friendly", "conversational"]
+        ):
             analysis["tone_hints"].append("casual")
         elif any(word in input_lower for word in ["technical", "precise", "detailed"]):
             analysis["tone_hints"].append("technical")
 
         return analysis
 
-    def _generate_opening_questions(self, initial_analysis: Dict[str, Any]) -> List[str]:
+    def _generate_opening_questions(
+        self, initial_analysis: Dict[str, Any]
+    ) -> List[str]:
         """Generate opening questions based on initial analysis"""
         questions = []
 
@@ -306,7 +319,8 @@ class PromptConversationManager:
         if initial_analysis["intent"] == "general":
             questions.append(
                 "What is the primary use case for your AI application? "
-                "(e.g., customer support, content creation, data analysis, technical documentation)"
+                "(e.g., customer support, content creation, data analysis, "
+                "technical documentation)"
             )
 
         # Ask about target audience
@@ -319,21 +333,26 @@ class PromptConversationManager:
         if not initial_analysis["tone_hints"]:
             questions.append(
                 "What tone and style should your AI use? "
-                "(e.g., professional and formal, friendly and conversational, technical and precise)"
+                "(e.g., professional and formal, friendly and conversational, "
+                "technical and precise)"
             )
 
         # Ask about specific tasks if project has RAG
         if self.project_context.rag_enabled:
             questions.append(
-                "I see your project has RAG (document search) enabled. How should the AI use "
-                "information from your documents? Should it cite sources, summarize findings, "
+                "I see your project has RAG (document search) enabled. "
+                "How should the AI use "
+                "information from your documents? Should it cite sources, "
+                "summarize findings, "
                 "or provide detailed explanations?"
             )
 
         # Ask about constraints
         questions.append(
-            "Are there any important constraints or guidelines the AI should always follow? "
-            "(e.g., never give medical advice, always ask for clarification, stay within company policy)"
+            "Are there any important constraints or guidelines the AI should "
+            "always follow? "
+            "(e.g., never give medical advice, always ask for clarification, "
+            "stay within company policy)"
         )
 
         return questions[:3]  # Limit to 3 initial questions
@@ -349,10 +368,16 @@ class PromptConversationManager:
             parts.append(f"I can see this is a {self.project_context.domain} project.")
 
         if self.project_context.ai_provider != AIProvider.GENERIC:
-            parts.append(f"I'll optimize the prompts for {self.project_context.ai_provider.value}.")
+            parts.append(
+                f"I'll optimize the prompts for "
+                f"{self.project_context.ai_provider.value}."
+            )
 
         if self.project_context.existing_prompts:
-            parts.append(f"I noticed you have {len(self.project_context.existing_prompts)} existing prompts - I can help improve or expand on those.")
+            parts.append(
+                f"I noticed you have {len(self.project_context.existing_prompts)} "
+                f"existing prompts - I can help improve or expand on those."
+            )
 
         parts.append("Let me ask a few questions to understand your needs better:")
 
@@ -377,7 +402,10 @@ class PromptConversationManager:
         elif "tone" in question_answered.lower():
             self.project_context.tone = user_response
 
-        elif "constraints" in question_answered.lower() or "guidelines" in question_answered.lower():
+        elif (
+            "constraints" in question_answered.lower()
+            or "guidelines" in question_answered.lower()
+        ):
             self.project_context.constraints.append(user_response)
 
         # Update completion percentage
@@ -399,7 +427,8 @@ class PromptConversationManager:
             elif self.project_context.domain == "content_creation":
                 questions.append(
                     "What type of content should the AI create? "
-                    "(e.g., blog posts, social media, email campaigns, product descriptions)"
+                    "(e.g., blog posts, social media, email campaigns, "
+                    "product descriptions)"
                 )
             else:
                 questions.append(
@@ -409,17 +438,23 @@ class PromptConversationManager:
         elif len(responses) == 2:
             # Third round - ask about examples and edge cases
             questions.append(
-                "Can you provide an example of an ideal interaction or output you'd want from the AI?"
+                "Can you provide an example of an ideal interaction or output "
+                "you'd want from the AI?"
             )
             questions.append(
-                "What are some challenging scenarios or edge cases the AI should handle well?"
+                "What are some challenging scenarios or edge cases the AI "
+                "should handle well?"
             )
 
         elif len(responses) >= 3:
             # Final questions - refinement
-            if not any("example" in q.lower() for q in self.conversation_state.questions_asked):
+            if not any(
+                "example" in q.lower()
+                for q in self.conversation_state.questions_asked
+            ):
                 questions.append(
-                    "Should I include specific examples in the prompts to guide the AI's behavior?"
+                    "Should I include specific examples in the prompts to guide "
+                    "the AI's behavior?"
                 )
 
         return questions[:2]  # Limit to 2 questions at a time
@@ -429,15 +464,22 @@ class PromptConversationManager:
         responses = self.conversation_state.user_responses
 
         # Need at least basic information
-        has_use_case = any("use case" in q.lower() for q in responses.keys()) or self.project_context.domain
+        has_use_case = (
+            any("use case" in q.lower() for q in responses.keys())
+            or self.project_context.domain
+        )
         has_audience = self.project_context.target_audience is not None
         has_tone = self.project_context.tone is not None
 
         # Basic completion criteria
-        basic_complete = len(responses) >= 3 and has_use_case and (has_audience or has_tone)
+        basic_complete = (
+            len(responses) >= 3 and has_use_case and (has_audience or has_tone)
+        )
 
         # Advanced completion criteria
-        advanced_complete = len(responses) >= 4 and has_use_case and has_audience and has_tone
+        advanced_complete = (
+            len(responses) >= 4 and has_use_case and has_audience and has_tone
+        )
 
         return advanced_complete or (basic_complete and len(responses) >= 5)
 
@@ -445,14 +487,18 @@ class PromptConversationManager:
         """Update the completion percentage"""
         total_questions = 5  # Estimated total questions needed
         answered = len(self.conversation_state.user_responses)
-        self.conversation_state.completion_percentage = min(answered / total_questions * 100, 100)
+        self.conversation_state.completion_percentage = min(
+            answered / total_questions * 100, 100
+        )
 
     def _generate_response_message(self, is_complete: bool) -> str:
         """Generate response message based on conversation state"""
         if is_complete:
             return (
-                "Perfect! I have enough information to generate optimized prompts for you. "
-                f"Based on our conversation, I'll create prompts for {self.project_context.domain or 'your use case'} "
+                "Perfect! I have enough information to generate optimized "
+                "prompts for you. "
+                f"Based on our conversation, I'll create prompts for "
+                f"{self.project_context.domain or 'your use case'} "
                 f"with a {self.project_context.tone or 'appropriate'} tone. "
                 "Let me generate some options for you!"
             )
@@ -471,7 +517,9 @@ class PromptGenerator:
     def __init__(self):
         self.prompt_templates = self._load_prompt_templates()
 
-    def generate_prompts(self, conversation_state: ConversationState) -> List[GeneratedPrompt]:
+    def generate_prompts(
+        self, conversation_state: ConversationState
+    ) -> List[GeneratedPrompt]:
         """Generate prompts based on conversation state"""
         context = conversation_state.project_context
         prompts = []
@@ -488,7 +536,9 @@ class PromptGenerator:
 
         # Generate few-shot prompt if examples were mentioned
         if self._should_generate_few_shot(conversation_state):
-            few_shot_prompt = self._generate_few_shot_prompt(context, conversation_state)
+            few_shot_prompt = self._generate_few_shot_prompt(
+                context, conversation_state
+            )
             prompts.append(few_shot_prompt)
 
         # Generate constraint prompt if many constraints
@@ -498,7 +548,9 @@ class PromptGenerator:
 
         return prompts
 
-    def _generate_system_prompt(self, context: ProjectContext, conv_state: ConversationState) -> GeneratedPrompt:
+    def _generate_system_prompt(
+        self, context: ProjectContext, conv_state: ConversationState
+    ) -> GeneratedPrompt:
         """Generate a comprehensive system prompt"""
         sections = {}
 
@@ -516,7 +568,9 @@ class PromptGenerator:
                 "legal": "You are a legal research assistant",
                 "research": "You are a research assistant"
             }
-            identity_parts.append(domain_identity.get(context.domain, "You are an AI assistant"))
+            identity_parts.append(
+                domain_identity.get(context.domain, "You are an AI assistant")
+            )
         else:
             identity_parts.append("You are an AI assistant")
 
@@ -547,12 +601,16 @@ class PromptGenerator:
         capability_parts = []
         if context.rag_enabled:
             capability_parts.append(
-                "You have access to relevant documents and information through the knowledge base. "
+                "You have access to relevant documents and information "
+                "through the knowledge base. "
                 "Use this information to provide accurate, source-based responses."
             )
 
         if context.datasets:
-            capability_parts.append(f"You can reference information from these datasets: {', '.join(context.datasets)}")
+            capability_parts.append(
+                f"You can reference information from these datasets: "
+                f"{', '.join(context.datasets)}"
+            )
 
         if capability_parts:
             sections["CAPABILITIES"] = " ".join(capability_parts)
@@ -593,7 +651,9 @@ class PromptGenerator:
             metadata={"generated_from": "conversation", "context": context.domain}
         )
 
-    def _generate_task_prompt(self, context: ProjectContext, use_case: str) -> GeneratedPrompt:
+    def _generate_task_prompt(
+        self, context: ProjectContext, use_case: str
+    ) -> GeneratedPrompt:
         """Generate a task-specific prompt"""
         task_name = f"{use_case.lower().replace(' ', '_')}_assistant"
 
@@ -607,7 +667,10 @@ class PromptGenerator:
                     "Escalate complex issues when appropriate",
                     "Maintain empathy and professionalism"
                 ],
-                "format": "Always acknowledge the customer's concern, provide a clear solution or next steps, and offer additional help"
+                "format": (
+                    "Always acknowledge the customer's concern, provide a clear "
+                    "solution or next steps, and offer additional help"
+                )
             },
             "technical_writing": {
                 "identity": "You are a technical documentation expert",
@@ -617,7 +680,10 @@ class PromptGenerator:
                     "Use appropriate technical terminology",
                     "Include relevant examples and code snippets"
                 ],
-                "format": "Structure responses with clear headings, numbered steps where appropriate, and practical examples"
+                "format": (
+                    "Structure responses with clear headings, numbered steps "
+                    "where appropriate, and practical examples"
+                )
             }
         }
 
@@ -629,7 +695,10 @@ class PromptGenerator:
                 "Provide accurate and helpful responses",
                 "Ask clarifying questions when needed"
             ],
-            "format": "Provide clear, structured responses that directly address the user's needs"
+            "format": (
+                "Provide clear, structured responses that directly address "
+                "the user's needs"
+            )
         }
 
         template = task_templates.get(use_case.lower(), default_template)
@@ -648,7 +717,9 @@ class PromptGenerator:
                 "content": [content]
             })
 
-        raw_text = "\n\n".join([f"## {title}\n{content}" for title, content in sections.items()])
+        raw_text = "\n\n".join([
+            f"## {title}\n{content}" for title, content in sections.items()
+        ])
 
         return GeneratedPrompt(
             name=task_name,
@@ -663,7 +734,9 @@ class PromptGenerator:
             metadata={"use_case": use_case, "task_specific": True}
         )
 
-    def _generate_few_shot_prompt(self, context: ProjectContext, conv_state: ConversationState) -> GeneratedPrompt:
+    def _generate_few_shot_prompt(
+        self, context: ProjectContext, conv_state: ConversationState
+    ) -> GeneratedPrompt:
         """Generate a few-shot prompt with examples"""
         # Look for examples in user responses
         examples = []
@@ -676,7 +749,10 @@ class PromptGenerator:
             "Here are examples of ideal interactions:\n\n" +
             "\n\n".join([f"Example {i+1}: {ex}" for i, ex in enumerate(examples)])
         )
-        sections["INSTRUCTION"] = "Follow these examples as a guide for your responses. Match the style, depth, and approach shown above."
+        sections["INSTRUCTION"] = (
+            "Follow these examples as a guide for your responses. Match the "
+            "style, depth, and approach shown above."
+        )
 
         content_sections = []
         for title, content in sections.items():
@@ -685,7 +761,9 @@ class PromptGenerator:
                 "content": [content]
             })
 
-        raw_text = "\n\n".join([f"## {title}\n{content}" for title, content in sections.items()])
+        raw_text = "\n\n".join([
+            f"## {title}\n{content}" for title, content in sections.items()
+        ])
 
         return GeneratedPrompt(
             name="few_shot_examples",
@@ -708,8 +786,14 @@ class PromptGenerator:
         for i, constraint in enumerate(context.constraints, 1):
             constraints_list.append(f"{i}. {constraint}")
 
-        sections["IMPORTANT CONSTRAINTS"] = "You must always follow these guidelines:\n\n" + "\n".join(constraints_list)
-        sections["COMPLIANCE"] = "Before responding, mentally check that your response complies with all constraints above."
+        sections["IMPORTANT CONSTRAINTS"] = (
+            "You must always follow these guidelines:\n\n" +
+            "\n".join(constraints_list)
+        )
+        sections["COMPLIANCE"] = (
+            "Before responding, mentally check that your response complies "
+            "with all constraints above."
+        )
 
         content_sections = []
         for title, content in sections.items():
@@ -718,7 +802,9 @@ class PromptGenerator:
                 "content": [content]
             })
 
-        raw_text = "\n\n".join([f"## {title}\n{content}" for title, content in sections.items()])
+        raw_text = "\n\n".join([
+            f"## {title}\n{content}" for title, content in sections.items()
+        ])
 
         return GeneratedPrompt(
             name="constraints_guide",
@@ -751,7 +837,10 @@ class PromptGenerator:
 class PromptOptimizer:
     """Optimizes prompts for specific AI providers and models"""
 
-    def optimize_for_provider(self, prompt: GeneratedPrompt, provider: AIProvider, model: Optional[str] = None) -> GeneratedPrompt:
+    def optimize_for_provider(
+        self, prompt: GeneratedPrompt, provider: AIProvider,
+        model: Optional[str] = None
+    ) -> GeneratedPrompt:
         """Optimize a prompt for a specific provider and model"""
         optimized_prompt = GeneratedPrompt(
             name=prompt.name,
@@ -775,7 +864,9 @@ class PromptOptimizer:
 
         return optimized_prompt
 
-    def _optimize_for_openai(self, prompt: GeneratedPrompt, model: Optional[str] = None) -> GeneratedPrompt:
+    def _optimize_for_openai(
+        self, prompt: GeneratedPrompt, model: Optional[str] = None
+    ) -> GeneratedPrompt:
         """Optimize prompt for OpenAI models"""
         # OpenAI models work well with structured prompts
         if prompt.prompt_type == PromptType.SYSTEM:
@@ -786,25 +877,36 @@ class PromptOptimizer:
                     prompt.sections["IDENTITY AND PURPOSE"] = f"You are {identity}"
 
         # OpenAI models benefit from explicit output format instructions
-        if "RESPONSE FORMAT" not in prompt.sections and prompt.prompt_type != PromptType.FEW_SHOT:
+        if (
+            "RESPONSE FORMAT" not in prompt.sections
+            and prompt.prompt_type != PromptType.FEW_SHOT
+        ):
             prompt.sections["RESPONSE FORMAT"] = (
-                "Provide clear, well-structured responses. Use markdown formatting where appropriate. "
+                "Provide clear, well-structured responses. Use markdown "
+                "formatting where appropriate. "
                 "Be concise but comprehensive."
             )
 
         # Rebuild raw text
-        prompt.raw_text = "\n\n".join([f"## {title}\n{content}" for title, content in prompt.sections.items()])
+        prompt.raw_text = "\n\n".join([
+            f"## {title}\n{content}" for title, content in prompt.sections.items()
+        ])
         prompt.estimated_tokens = int(len(prompt.raw_text.split()) * 1.3)
         prompt.quality_score += 0.05  # Slight boost for optimization
 
         return prompt
 
-    def _optimize_for_ollama(self, prompt: GeneratedPrompt, model: Optional[str] = None) -> GeneratedPrompt:
+    def _optimize_for_ollama(
+        self, prompt: GeneratedPrompt, model: Optional[str] = None
+    ) -> GeneratedPrompt:
         """Optimize prompt for Ollama/local models"""
         # Ollama models often benefit from clearer, more explicit instructions
 
         # Add more explicit role definition
-        if prompt.prompt_type == PromptType.SYSTEM and "IDENTITY AND PURPOSE" in prompt.sections:
+        if (
+            prompt.prompt_type == PromptType.SYSTEM
+            and "IDENTITY AND PURPOSE" in prompt.sections
+        ):
             identity = prompt.sections["IDENTITY AND PURPOSE"]
             # Make role more explicit for local models
             if not "assistant" in identity.lower():
@@ -819,13 +921,17 @@ class PromptOptimizer:
             )
 
         # Rebuild raw text
-        prompt.raw_text = "\n\n".join([f"## {title}\n{content}" for title, content in prompt.sections.items()])
+        prompt.raw_text = "\n\n".join([
+            f"## {title}\n{content}" for title, content in prompt.sections.items()
+        ])
         prompt.estimated_tokens = int(len(prompt.raw_text.split()) * 1.3)
         prompt.quality_score += 0.03  # Slight boost for optimization
 
         return prompt
 
-    def _optimize_for_anthropic(self, prompt: GeneratedPrompt, model: Optional[str] = None) -> GeneratedPrompt:
+    def _optimize_for_anthropic(
+        self, prompt: GeneratedPrompt, model: Optional[str] = None
+    ) -> GeneratedPrompt:
         """Optimize prompt for Anthropic models"""
         # Anthropic models work well with conversational, human-like prompts
 
@@ -834,7 +940,10 @@ class PromptOptimizer:
             for section_title, content in prompt.sections.items():
                 if section_title == "IDENTITY AND PURPOSE":
                     # Make it more conversational
-                    content = content.replace("You are an AI assistant", "I'm here to help as your AI assistant")
+                    content = content.replace(
+                        "You are an AI assistant",
+                        "I'm here to help as your AI assistant"
+                    )
                     prompt.sections[section_title] = content
 
         # Claude models appreciate politeness and consideration
@@ -845,7 +954,9 @@ class PromptOptimizer:
             prompt.sections["COMMUNICATION STYLE"] = style
 
         # Rebuild raw text
-        prompt.raw_text = "\n\n".join([f"## {title}\n{content}" for title, content in prompt.sections.items()])
+        prompt.raw_text = "\n\n".join([
+            f"## {title}\n{content}" for title, content in prompt.sections.items()
+        ])
         prompt.estimated_tokens = int(len(prompt.raw_text.split()) * 1.3)
         prompt.quality_score += 0.04  # Slight boost for optimization
 
@@ -873,7 +984,9 @@ class PromptEngineeringCore:
         self.conversation_manager = PromptConversationManager(context)
 
         # Start conversation
-        opening_message, questions = self.conversation_manager.start_conversation(user_input)
+        opening_message, questions = (
+            self.conversation_manager.start_conversation(user_input)
+        )
 
         return {
             "success": True,
@@ -888,12 +1001,18 @@ class PromptEngineeringCore:
             }
         }
 
-    def continue_conversation(self, user_response: str, question_answered: str) -> Dict[str, Any]:
+    def continue_conversation(
+        self, user_response: str, question_answered: str
+    ) -> Dict[str, Any]:
         """Continue the prompt engineering conversation"""
         if not self.conversation_manager:
             return {"success": False, "error": "Conversation not started"}
 
-        response_message, next_questions, is_complete = self.conversation_manager.continue_conversation(
+        (
+            response_message,
+            next_questions,
+            is_complete
+        ) = self.conversation_manager.continue_conversation(
             user_response, question_answered
         )
 
@@ -902,7 +1021,9 @@ class PromptEngineeringCore:
             "message": response_message,
             "questions": next_questions,
             "is_complete": is_complete,
-            "completion_percentage": self.conversation_manager.conversation_state.completion_percentage
+            "completion_percentage": (
+                self.conversation_manager.conversation_state.completion_percentage
+            )
         }
 
         if is_complete:
@@ -956,7 +1077,13 @@ class PromptEngineeringCore:
                     "estimated_tokens": p.estimated_tokens,
                     "quality_score": p.quality_score,
                     "sections": p.sections,
-                    "raw_text": (p.raw_text[:200] + "..." if p.raw_text and len(p.raw_text) > 200 else p.raw_text) if p.raw_text else ""  # Preview
+                    "raw_text": (
+                        (
+                            p.raw_text[:200] + "..." if len(p.raw_text) > 200
+                            else p.raw_text
+                        )
+                        if p.raw_text else ""
+                    )  # Preview
                 }
                 for p in optimized_prompts
             ],
@@ -964,9 +1091,14 @@ class PromptEngineeringCore:
             "_full_configs": prompt_configs  # For internal use
         }
 
-    def save_prompts_to_project(self, generated_prompts_result: Dict[str, Any]) -> Dict[str, Any]:
+    def save_prompts_to_project(
+        self, generated_prompts_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Save generated prompts to the project configuration"""
-        if not generated_prompts_result.get("success") or not generated_prompts_result.get("_full_configs"):
+        if (
+            not generated_prompts_result.get("success")
+            or not generated_prompts_result.get("_full_configs")
+        ):
             return {"success": False, "error": "No valid prompts to save"}
 
         try:
@@ -986,7 +1118,10 @@ class PromptEngineeringCore:
 
             return {
                 "success": True,
-                "message": f"Successfully saved {len(prompt_configs)} prompts to your project configuration",
+                "message": (
+                    f"Successfully saved {len(prompt_configs)} prompts to your "
+                    f"project configuration"
+                ),
                 "prompts_saved": len(prompt_configs),
                 "change_details": {
                     "field_path": change.field_path,

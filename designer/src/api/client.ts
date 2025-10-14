@@ -96,3 +96,30 @@ apiClient.interceptors.response.use(
 
 // Export the configured client as default as well for convenience
 export default apiClient
+
+// Convenience helpers for examples endpoints (typed lightly here)
+export const examplesApi = {
+  async listAllDatasets() {
+    const { data } = await apiClient.get('/examples/datasets')
+    return data as { datasets: any[] }
+  },
+  async listExampleDatasets(exampleId: string) {
+    const { data } = await apiClient.get(
+      `/examples/${encodeURIComponent(exampleId)}/datasets`
+    )
+    return data as { datasets: any[] }
+  },
+  async importExampleDataset(exampleId: string, body: any) {
+    const { data } = await apiClient.post(
+      `/examples/${encodeURIComponent(exampleId)}/import-dataset`,
+      body
+    )
+    return data as {
+      project: string
+      namespace: string
+      dataset: string
+      file_count: number
+      task_id?: string
+    }
+  },
+}
