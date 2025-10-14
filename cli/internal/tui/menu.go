@@ -46,6 +46,9 @@ type QuickMenuModel struct {
     models     []ModelItem
     commands   []CommandItem
 
+    // Map of database name to its strategies
+    databaseStrategies map[string][]StrategyItem
+
     projectCursorPos int
 
     baseStyle      lipgloss.Style
@@ -131,25 +134,12 @@ func NewQuickMenuModel(config *Config) QuickMenuModel {
         {Command: "lf version", Description: "Print CLI version/build info"},
     }
 
-    m.databases = []DatabaseItem{
-        {Name: "main_database", DocCount: 10, IsActive: true},
-        {Name: "secondary_database", DocCount: 5, IsActive: false},
-        {Name: "archive_database", DocCount: 500, IsActive: false},
-    }
-
-    m.strategies = []StrategyItem{
-        {Name: "basic_search", IsActive: true},
-        {Name: "filtered_search", IsActive: false},
-    }
-
-    m.models = []ModelItem{
-        {Name: "gemma3:1b", Provider: "ollama", IsActive: true},
-        {Name: "llama3:8b", Provider: "ollama", IsActive: false},
-        {Name: "mistral:7b", Provider: "ollama", IsActive: false},
-    }
-
+    // Initialize with empty slices - will be populated via UpdateData method
+    m.databases = []DatabaseItem{}
+    m.strategies = []StrategyItem{}
+    m.models = []ModelItem{}
     m.projects = []ProjectItem{
-        {Name: "personal-assistant-115", Namespace: "default", IsActive: true},
+        {Name: config.Name, Namespace: config.Namespace, IsActive: true},
     }
 
     return m
@@ -167,6 +157,13 @@ func (m QuickMenuModel) Update(msg tea.Msg) (QuickMenuModel, tea.Cmd) {
             m.currentDB = msg.DatabaseName
             for i := range m.databases {
                 m.databases[i].IsActive = (m.databases[i].Name == msg.DatabaseName)
+            }
+            // Update strategies to show only those for the selected database
+            m.updateStrategiesForCurrentDatabase()
+            // Reset strategy selection to the default for the new database
+            if len(m.strategies) > 0 {
+                m.currentStrategy = m.strategies[0].Name
+                m.strategies[0].IsActive = true
             }
         case SwitchModelMsg:
             m.currentModel = msg.ModelName
@@ -200,6 +197,13 @@ func (m QuickMenuModel) Update(msg tea.Msg) (QuickMenuModel, tea.Cmd) {
         m.currentDB = msg.DatabaseName
         for i := range m.databases {
             m.databases[i].IsActive = (m.databases[i].Name == msg.DatabaseName)
+        }
+        // Update strategies to show only those for the selected database
+        m.updateStrategiesForCurrentDatabase()
+        // Reset strategy selection to the default for the new database
+        if len(m.strategies) > 0 {
+            m.currentStrategy = m.strategies[0].Name
+            m.strategies[0].IsActive = true
         }
         return m, nil
     case SwitchModelMsg:
@@ -751,5 +755,38 @@ func (m *QuickMenuModel) Toggle() { m.active = !m.active; if m.active { m.active
 func (m *QuickMenuModel) Open()   { m.active = true; m.activeTab = ContextTab; m.cursorPos = 0; m.menuState = NormalState }
 func (m *QuickMenuModel) Close()  { m.active = false; m.menuState = NormalState }
 func (m QuickMenuModel) IsActive() bool { return m.active }
+
+// UpdateMenuDataMsg is sent when menu data needs to be refreshed from configuration
+type UpdateMenuDataMsg struct {
+	Models     []ModelItem
+	Databases  []DatabaseItem
+	Strategies []StrategyItem
+}
+
+// SetData updates the menu with real configuration data
+func (m *QuickMenuModel) SetData(models []ModelItem, databases []DatabaseItem, databaseStrategies map[string][]StrategyItem, currentModel, currentDB, currentStrategy string) {
+	m.models = models
+	m.databases = databases
+	m.databaseStrategies = databaseStrategies
+	m.currentModel = currentModel
+	m.currentDB = currentDB
+	m.currentStrategy = currentStrategy
+
+	// Update strategies to show only those for the current database
+	m.updateStrategiesForCurrentDatabase()
+}
+
+// updateStrategiesForCurrentDatabase updates the strategies slice to only show strategies for the current database
+func (m *QuickMenuModel) updateStrategiesForCurrentDatabase() {
+	if m.databaseStrategies != nil && m.currentDB != "" {
+		if strategies, ok := m.databaseStrategies[m.currentDB]; ok {
+			m.strategies = strategies
+		} else {
+			m.strategies = []StrategyItem{}
+		}
+	} else {
+		m.strategies = []StrategyItem{}
+	}
+}
 
 

@@ -386,6 +386,47 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		menuCfg.Namespace = projectInfo.Namespace
 	}
     qm := uitk.NewQuickMenuModel(menuCfg)
+
+    // Populate menu with real configuration data
+    if projectInfo != nil {
+    	// Convert models to menu format
+    	menuModels := make([]uitk.ModelItem, 0, len(availableModels))
+    	for _, m := range availableModels {
+    		menuModels = append(menuModels, uitk.ModelItem{
+    			Name:     m.Name,
+    			Provider: m.Provider,
+    			IsActive: m.Name == currentModel,
+    		})
+    	}
+
+    	// Convert databases and strategies to menu format
+    	menuDatabases := []uitk.DatabaseItem{}
+    	databaseStrategies := make(map[string][]uitk.StrategyItem)
+
+    	if availableDatabases != nil {
+    		for _, db := range availableDatabases.Databases {
+    			// For now, show doc count as 0 - would need separate API call for actual counts
+    			menuDatabases = append(menuDatabases, uitk.DatabaseItem{
+    				Name:     db.Name,
+    				DocCount: 0,
+    				IsActive: db.Name == currentDatabase,
+    			})
+
+    			// Build strategy list for this specific database
+    			dbStrategies := []uitk.StrategyItem{}
+    			for _, strat := range db.RetrievalStrategies {
+    				dbStrategies = append(dbStrategies, uitk.StrategyItem{
+    					Name:     strat.Name,
+    					IsActive: (db.Name == currentDatabase && strat.Name == currentStrategy),
+    				})
+    			}
+    			databaseStrategies[db.Name] = dbStrategies
+    		}
+    	}
+
+    	qm.SetData(menuModels, menuDatabases, databaseStrategies, currentModel, currentDatabase, currentStrategy)
+    }
+
     toast := uitk.NewToastModel()
 
 	return chatModel{
