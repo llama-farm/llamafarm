@@ -174,9 +174,9 @@ prompts:
         # Add 100 prompts
         for i in range(100):
             large_config += f"""  - name: "prompt_{i}"
-    content: "This is prompt number {i} with some content."
-    prompt: "This is prompt number {i} with some content."
-    description: "Description for prompt {i}"
+    messages:
+      - role: "system"
+        content: "This is prompt number {i} with some content."
 """
 
         large_config += "\nmodels:\n"
@@ -200,11 +200,9 @@ namespace: test
 
 prompts:
   - name: "multilingual_support"
-    content: "你好, こんにちは, Здравствуйте, مرحبا"
-    sections:
-      - title: "default"
-        content:
-          - "你好, こんにちは, Здравствуйте, مرحبا"
+    messages:
+      - role: "system"
+        content: "你好, こんにちは, Здравствуйте, مرحبا"
 
 rag:
   databases:
@@ -254,9 +252,10 @@ datasets:
         temp_path = temp_config_file(unicode_config, ".yaml")
 
         config = load_config_dict(config_path=temp_path)
-        # Prompts are role/content items; ensure unicode preserved
+        # Prompts have messages with role/content; ensure unicode preserved
         prompt0 = config["prompts"][0]
-        assert "你好" in prompt0.get("content", "")
+        assert "messages" in prompt0
+        assert "你好" in prompt0["messages"][0]["content"]
         # Vector store config validated via schema; skip unicode assertion under strict schema
 
     def test_deeply_nested_paths(self, temp_config_file):
@@ -312,11 +311,9 @@ datasets:
 
 prompts:
   - name: "deep_path_prompt"
-    content: "This is a prompt with a deep path."
-    sections:
-      - title: "default"
-        content:
-          - "This is a prompt with a deep path."
+    messages:
+      - role: "system"
+        content: "This is a prompt with a deep path."
 """
 
         temp_path = temp_config_file(deep_path_config, ".yaml")
@@ -333,11 +330,9 @@ namespace: test
 
 prompts:
   - name: "special_chars"
-    content: "Handle chars: @#$%^&*()_+-=[]{}|;',./<>?"
-    sections:
-      - title: "default"
-        content:
-          - "Handle chars: @#$%^&*()_+-=[]{}|;',./<>?"
+    messages:
+      - role: "system"
+        content: "Handle chars: @#$%^&*()_+-=[]{}|;',./<>?"
 
 rag:
   databases:
@@ -388,7 +383,8 @@ datasets:
 
         config = load_config_dict(config_path=temp_path)
         prompt0 = config["prompts"][0]
-        assert "@#$%^&*" in prompt0.get("content", "")
+        assert "messages" in prompt0
+        assert "@#$%^&*" in prompt0["messages"][0]["content"]
         # Under strict schema, embedders are nested under strategies; skip model string assertion
 
     @pytest.mark.skip(

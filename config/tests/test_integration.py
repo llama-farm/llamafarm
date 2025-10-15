@@ -72,11 +72,15 @@ class TestModuleIntegration:
         config_path = sample_config_dir / "sample_config.yaml"
         config = load_config_dict(config_path=config_path)
 
-        # Handle prompts: list of role/content objects
+        # Handle prompts: list of prompts with name and messages
         prompts = config.get("prompts", [])
         if prompts:
-            first = prompts[0]
-            assert "content" in first
+            first_prompt = prompts[0]
+            assert "name" in first_prompt
+            assert "messages" in first_prompt
+            if first_prompt["messages"]:
+                first_message = first_prompt["messages"][0]
+                assert "content" in first_message
 
     def test_configuration_validation_service(self, sample_config_dir):
         """Test how a configuration validation service would use the module."""
@@ -183,8 +187,10 @@ datasets:
     database: "dev_db"
 
 prompts:
-  - role: "system"
-    content: "This is a dev prompt."
+  - name: "default"
+    messages:
+      - role: "system"
+        content: "This is a dev prompt."
 """
 
         # Production config
@@ -242,8 +248,10 @@ datasets:
     database: "prod_db"
 
 prompts:
-  - role: "system"
-    content: "This is a prod prompt."
+  - name: "default"
+    messages:
+      - role: "system"
+        content: "This is a prod prompt."
 """
 
         dev_path = temp_config_file(dev_config, ".yaml")
@@ -362,11 +370,15 @@ def test_cross_module_config_sharing():
     assert embedder_type == "OllamaEmbedder"
     assert collection_type == "ChromaStore"
 
-    # Typed prompts don't carry names in the new schema; validate first prompt content
+    # Typed prompts have name and messages in the new schema; validate first prompt
     if prompt_service.prompts:
-        cs_prompt = prompt_service.prompts[0]
-        assert hasattr(cs_prompt, "content") and isinstance(cs_prompt.content, str)
-        assert "assistant" in cs_prompt.content.lower()
+        first_prompt = prompt_service.prompts[0]
+        assert hasattr(first_prompt, "name")
+        assert hasattr(first_prompt, "messages") and isinstance(first_prompt.messages, list)
+        assert len(first_prompt.messages) > 0
+        first_message = first_prompt.messages[0]
+        assert hasattr(first_message, "content") and isinstance(first_message.content, str)
+        assert "assistant" in first_message.content.lower()
 
     # Test that all services are working with the same config version
     assert getattr(shared_config.version, "value", shared_config.version) == "v1"
