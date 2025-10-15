@@ -118,13 +118,13 @@ docker-compose build --no-cache
 ### Check ChromaDB Server Status
 ```bash
 # Check if ChromaDB server is running
-curl http://localhost:8001/api/v1/heartbeat
+curl http://localhost:8001/api/v2/heartbeat
 
 # View ChromaDB server logs
 docker-compose logs chromadb-server
 
 # Check collections
-curl http://localhost:8001/api/v1/collections
+curl http://localhost:8001/api/v2/collections
 ```
 
 ### Test Multi-PDF Processing
@@ -161,8 +161,8 @@ docker-compose logs chromadb-server
 docker-compose ps chromadb-server
 
 # Test connectivity manually
-curl http://localhost:8001/api/v1/heartbeat
-curl http://localhost:8001/api/v1/collections
+curl http://localhost:8001/api/v2/heartbeat
+curl http://localhost:8001/api/v2/collections
 ```
 
 #### Configuration Issues
