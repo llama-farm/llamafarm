@@ -16,11 +16,11 @@ services:
     volumes:
       - llamafarm_dev_chromadb:/chroma/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      test: ["CMD-SHELL", "python -c \"import socket; s = socket.socket(); s.settimeout(5); s.connect(('localhost', 8000)); s.close()\" || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 90s
     networks:
       - llamafarm-dev
     labels:

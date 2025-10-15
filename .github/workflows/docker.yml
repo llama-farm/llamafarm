@@ -368,8 +368,13 @@ jobs:
           # Start services and check they come up healthy
           docker compose -f docker-compose.yml up -d
 
-          # Wait for services to be ready
-          sleep 30
+          # Wait for services to be ready (ChromaDB needs more time to initialize)
+          echo "Waiting for services to start..."
+          sleep 60
+          
+          # Check ChromaDB server specifically
+          echo "Checking ChromaDB server status..."
+          docker compose -f docker-compose.yml logs chromadb-server | tail -20
 
           # Check if services are running
           docker compose -f docker-compose.yml ps
@@ -382,7 +387,14 @@ jobs:
           
           # Test ChromaDB server connectivity
           echo "Testing ChromaDB server connectivity..."
-          curl -f http://localhost:8001/api/v1/heartbeat || echo "ChromaDB server not responding"
+          echo "Trying heartbeat endpoint..."
+          curl -f http://localhost:8001/api/v1/heartbeat || echo "Heartbeat endpoint failed"
+          
+          echo "Trying root endpoint..."
+          curl -f http://localhost:8001/ || echo "Root endpoint failed"
+          
+          echo "Trying collections endpoint..."
+          curl -f http://localhost:8001/api/v1/collections || echo "Collections endpoint failed"
 
       - name: Cleanup
         if: always()

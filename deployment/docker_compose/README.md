@@ -150,7 +150,28 @@ When the fix is working correctly, you should see:
 - All PDFs process successfully
 
 ### Troubleshooting
+
+#### ChromaDB Server Issues
+If ChromaDB server fails to start or reports as unhealthy:
+```bash
+# Check ChromaDB server logs
+docker-compose logs chromadb-server
+
+# Check service status
+docker-compose ps chromadb-server
+
+# Test connectivity manually
+curl http://localhost:8001/api/v1/heartbeat
+curl http://localhost:8001/api/v1/collections
+```
+
+#### Configuration Issues
 If you still see persistent client warnings:
 1. Check that `host` and `port` are set in your `llamafarm.yaml`
 2. Verify `CHROMADB_HOST` and `CHROMADB_PORT` environment variables
 3. Ensure ChromaDB server is healthy: `docker-compose ps chromadb-server`
+
+#### Common ChromaDB Server Problems
+- **Slow startup**: ChromaDB needs 60-90 seconds to fully initialize
+- **Health check failures**: The server may be running but not responding to health checks
+- **Port conflicts**: Ensure port 8001 is not in use by other services

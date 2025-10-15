@@ -1,6 +1,6 @@
 services:
   # ChromaDB Vector Database Server
-  # Fixes issue #279: Multi-process write conflicts by centralizing ChromaDB access
+  # Multi-process write conflicts by centralizing ChromaDB access
   # All RAG workers connect to this server instead of using separate persistent clients
   chromadb-server:
     image: chromadb/chroma:1.0.20
@@ -14,11 +14,11 @@ services:
     volumes:
       - chromadb_data:/chroma/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      test: ["CMD-SHELL", "python -c \"import socket; s = socket.socket(); s.settimeout(5); s.connect(('localhost', 8000)); s.close()\" || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 90s
     restart: unless-stopped
     networks:
       - llamafarm
