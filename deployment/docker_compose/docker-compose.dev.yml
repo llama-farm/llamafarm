@@ -44,6 +44,8 @@ services:
       - ../../server:/app/server
       - ../../config:/app/config
       - llamafarm_dev_data:/var/lib/llamafarm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s
