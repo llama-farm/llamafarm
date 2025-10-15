@@ -7,15 +7,15 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from api.routers.rag.rag_query import QueryResponse
 import celery.result  # type: ignore
 from atomic_agents import AtomicAgent  # type: ignore
+from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 from fastapi import APIRouter, Header, HTTPException, Response
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
 from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
-from api.errors import ErrorResponse, NotFoundError
+from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
 
 # RAG imports moved to function level to avoid circular imports
@@ -31,8 +31,6 @@ from services.project_chat_service import (
     project_chat_service,
 )
 from services.project_service import ProjectService
-
-from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 
 
 class Project(BaseModel):
@@ -289,7 +287,7 @@ async def chat(
 
     if stateless:
         # Stateless mode: create throwaway agent without session or persistence
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(
+        agent = await ProjectChatOrchestratorAgentFactory.create_agent(
             project_config, project_dir=project_dir, model_name=request.model
         )
     else:
@@ -310,7 +308,7 @@ async def chat(
 
             if record is None or record.agent.model_name != request.model:
                 # Create new agent and enable persistence
-                agent = ProjectChatOrchestratorAgentFactory.create_agent(
+                agent = await ProjectChatOrchestratorAgentFactory.create_agent(
                     project_config,
                     project_dir=project_dir,
                     model_name=request.model,

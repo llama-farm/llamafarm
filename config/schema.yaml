@@ -124,3 +124,50 @@ properties:
               description: "Provider-specific configuration (e.g., lemonade settings, ollama options)"
               default: {}
               additionalProperties: true
+
+  mcp:
+    type: object
+    description: Model Context Protocol (MCP) client configuration
+    properties:
+      servers:
+        type: array
+        description: List of MCP Servers available to the project during inference
+        items:
+          type: object
+          required:
+            - name
+            - transport
+          properties:
+            name:
+              type: string
+              description: MCP server identifier
+            transport:
+              type: string
+              enum: ["stdio", "http"]
+              description: Connection transport to the MCP server
+            # stdio transport
+            command:
+              type: string
+              description: Command/binary to launch the MCP server (stdio)
+            args:
+              type: array
+              description: Optional args for the stdio command
+              items:
+                type: string
+            env:
+              type: object
+              description: Environment variables for the stdio command
+              additionalProperties:
+                type: string
+            # http transport
+            base_url:
+              type: string
+              description: Base URL of the MCP server (http)
+            headers:
+              type: object
+              description: HTTP headers for the MCP server
+              additionalProperties:
+                type: string
+              example:
+                Authorization: Bearer ${env:MCP_SERVER_TOKEN}
+

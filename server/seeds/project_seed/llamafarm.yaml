@@ -57,3 +57,19 @@ prompts:
       - Configuration: editing `llamafarm.yaml`
 
       Ask me anything about LlamaFarm, or type `/help` for chat commands!
+
+# Example MCP configuration (disabled by default)
+# Uncomment and adjust to enable MCP tool-calling
+# mcp:
+#   servers:
+#     - name: local-example
+#       transport: stdio
+#       command: "/usr/local/bin/example-mcp-server"
+#       args: ["--port", "8081"]
+#       env:
+#         EXAMPLE_TOKEN: ${env:EXAMPLE_TOKEN}
+#     - name: http-example
+#       transport: http
+#       base_url: "http://localhost:8082"
+#       headers:
+#         Authorization: "Bearer ${env:HTTP_MCP_TOKEN}"

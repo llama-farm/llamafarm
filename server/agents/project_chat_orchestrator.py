@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import instructor
 from atomic_agents import BaseIOSchema  # type: ignore
@@ -8,17 +9,24 @@ from atomic_agents.agents.atomic_agent import (  # type: ignore
     ChatHistory,
     SystemPromptGenerator,
 )
-from config.datamodel import (  # noqa: E402
+from config.datamodel import (
     LlamaFarmConfig,
     Model,
     Prompt,
     PromptFormat,
 )
 from openai import AsyncOpenAI
+from pydantic import Field
 
 from agents.agent import LFAgent, LFAgentConfig
+from agents.mcp_orchestrator import (
+    FinalResponseSchema,
+    MCPOrchestrator,
+    MCPOrchestratorFactory,
+)
 from context_providers.docs_context_provider import DocsContextProvider
-from core.logging import FastAPIStructLogger  # noqa: E402
+from context_providers.mcp_tools_context_provider import MCPToolsContextProvider
+from core.logging import FastAPIStructLogger
 from services import runtime_service
 
 logger = FastAPIStructLogger(__name__)
@@ -33,15 +41,58 @@ class ProjectChatOrchestratorAgentInputSchema(BaseIOSchema):
 
 
 class ProjectChatOrchestratorAgentOutputSchema(BaseIOSchema):
-    """
-    Output schema for the project chat orchestrator agent.
-    This schema is intentionally simple to ensure compatibility with Ollama's JSON parsing.
+    """Output schema for the project chat orchestrator agent.
+
+    This schema is intentionally simple to ensure compatibility
+    with Ollama's JSON parsing.
     """
 
     chat_message: str
 
 
+class ToolCallDecision(BaseIOSchema):
+    """Decision about whether to call a tool and which one."""
+
+    should_call_tool: bool = Field(
+        default=False,
+        description="Whether a tool should be called to answer the user's query",
+    )
+    tool_name: str | None = Field(
+        default=None,
+        description="Name of the tool to call (if should_call_tool is True)",
+    )
+    tool_arguments: dict[str, Any] | None = Field(
+        default=None,
+        description="Arguments to pass to the tool (if should_call_tool is True)",
+    )
+    reasoning: str | None = Field(
+        default=None,
+        description="Brief explanation of why this tool was chosen",
+    )
+
+
+class OrchestratorOutputSchema(BaseIOSchema):
+    """Output schema for orchestrator mode with MCP tools.
+
+    The agent decides whether to call a tool or respond directly.
+    """
+
+    tool_call: ToolCallDecision | None = Field(
+        default=None,
+        description="Tool call decision (if agent wants to use a tool)",
+    )
+    chat_message: str = Field(
+        default="",
+        description=(
+            "Direct response to user (if not calling a tool), or "
+            "explanation of tool results (after tool execution)"
+        ),
+    )
+
+
 class ProjectChatOrchestratorAgent(LFAgent):
+    """Project chat orchestrator agent that uses MCP tools with atomic-agents orchestrator pattern."""
+
     def __init__(
         self,
         project_config: LlamaFarmConfig,
@@ -86,6 +137,7 @@ class ProjectChatOrchestratorAgent(LFAgent):
         self._project_id = project_config.name
         self._project_dir = project_dir
         self._persist_enabled = False
+        self._project_config = project_config
 
         self.model_name = model_config.model  # Store model name for API responses
 
@@ -163,7 +215,8 @@ class ProjectChatOrchestratorAgent(LFAgent):
                 elif role == "assistant":
                     content_instance = self.output_schema.model_validate_json(content)
                 else:
-                    # Skip system or unknown roles; system prompts are handled separately
+                    # Skip system or unknown roles;
+                    # system prompts are handled separately
                     continue
                 self.history.add_message(role, content_instance)
             except Exception:
@@ -191,6 +244,53 @@ class ProjectChatOrchestratorAgent(LFAgent):
 
     # -------------------- Execution overrides --------------------
     async def run_async(self, user_input):
+        """Run with orchestrator pattern if MCP tools are loaded."""
+
+        if self._project_config.mcp and self._project_config.mcp.servers:
+            # Create orchestrator with same config as this agent
+            orchestrator_config = LFAgentConfig(
+                client=self.client,
+                model=self.model,
+                history=self.history,
+                system_prompt_generator=self.system_prompt_generator,
+                model_api_parameters=self.model_api_parameters,
+            )
+
+            mcp_orchestrator = await MCPOrchestratorFactory.create_agent(
+                config=orchestrator_config,
+                project_config=(self._project_config),
+            )
+
+            # Run orchestrator and convert result to our output schema
+            orchestrator_result = await mcp_orchestrator.run_async(user_input)
+
+            # Convert FinalResponseSchema to our output schema
+            if isinstance(orchestrator_result, FinalResponseSchema):
+                response = ProjectChatOrchestratorAgentOutputSchema(
+                    chat_message=orchestrator_result.chat_message
+                )
+            else:
+                # Fallback: extract chat_message if available
+                chat_msg = getattr(
+                    orchestrator_result,
+                    "chat_message",
+                    str(orchestrator_result),
+                )
+                response = ProjectChatOrchestratorAgentOutputSchema(
+                    chat_message=chat_msg
+                )
+
+            try:
+                self._persist_history()
+            except Exception:
+                logger.warning(
+                    "History persistence failed after orchestrator run",
+                    exc_info=True,
+                )
+
+            return response
+
+        # No MCP tools - use normal flow
         response = await super().run_async(user_input)
         try:
             self._persist_history()
@@ -199,6 +299,54 @@ class ProjectChatOrchestratorAgent(LFAgent):
         return response
 
     async def run_async_stream(self, user_input):
+        """Stream with orchestrator pattern if MCP tools are loaded."""
+        # For now, MCPOrchestrator agent doesn't support streaming
+        # Fall back to non-streaming execution and yield the final result
+        if self._project_config.mcp and self._project_config.mcp.servers:
+            # Create orchestrator with same config as this agent
+            orchestrator_config = LFAgentConfig(
+                client=self.client,
+                model=self.model,
+                history=self.history,
+                system_prompt_generator=self.system_prompt_generator,
+                model_api_parameters=self.model_api_parameters,
+            )
+
+            mcp_orchestrator = await MCPOrchestratorFactory.create_agent(
+                config=orchestrator_config,
+                project_config=(self._project_config),
+            )
+
+            # Run orchestrator and convert result
+            orchestrator_result = await mcp_orchestrator.run_async(user_input)
+
+            # Convert to our output schema
+            if isinstance(orchestrator_result, FinalResponseSchema):
+                response = ProjectChatOrchestratorAgentOutputSchema(
+                    chat_message=orchestrator_result.chat_message
+                )
+            else:
+                chat_msg = getattr(
+                    orchestrator_result,
+                    "chat_message",
+                    str(orchestrator_result),
+                )
+                response = ProjectChatOrchestratorAgentOutputSchema(
+                    chat_message=chat_msg
+                )
+
+            try:
+                self._persist_history()
+            except Exception:
+                logger.warning(
+                    "History persistence failed after orchestrator stream",
+                    exc_info=True,
+                )
+
+            yield response
+            return
+
+        # No MCP tools - use normal streaming
         async for chunk in super().run_async_stream(user_input):
             yield chunk
         try:
@@ -220,7 +368,8 @@ class LFSystemPromptGenerator(SystemPromptGenerator):
         super().__init__()
 
     def generate_prompt(self) -> str:
-        # return "\nYou are a helpful assistant that can answer questions and help with tasks."
+        # return "\nYou are a helpful assistant that can answer "
+        # "questions and help with tasks."
         prompt_parts = []
         for prompt in self.system_prompts:
             prompt_parts.append(prompt.content)
@@ -286,7 +435,7 @@ def _get_client_for_model(
 
 class ProjectChatOrchestratorAgentFactory:
     @staticmethod
-    def create_agent(
+    async def create_agent(
         project_config: LlamaFarmConfig,
         project_dir: str,
         model_name: str | None = None,
