@@ -16,11 +16,11 @@ services:
     volumes:
       - llamafarm_dev_chromadb:/chroma/data
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s = socket.socket(); s.settimeout(5); s.connect(('localhost', 8000)); s.close()\" || exit 1"]
-      interval: 30s
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8000' || exit 1"]
+      interval: 10s
       timeout: 10s
       retries: 5
-      start_period: 90s
+      start_period: 60s
     networks:
       - llamafarm-dev
     labels:

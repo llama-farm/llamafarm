@@ -175,3 +175,32 @@ If you still see persistent client warnings:
 - **Slow startup**: ChromaDB needs 60-90 seconds to fully initialize
 - **Health check failures**: The server may be running but not responding to health checks
 - **Port conflicts**: Ensure port 8001 is not in use by other services
+- **API version mismatch**: ChromaDB 1.0.20+ uses v2 API endpoints (not v1)
+
+#### CI/CD Integration
+For automated testing and deployment:
+
+```bash
+# Use the provided wait script to ensure ChromaDB is ready
+./scripts/wait-for-chromadb.sh
+
+# Or run the comprehensive CI test
+./scripts/ci-chromadb-test.sh
+```
+
+The healthcheck now uses a TCP connection test that doesn't require external tools:
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8000' || exit 1"]
+  interval: 10s
+  timeout: 10s
+  retries: 5
+  start_period: 60s
+```
+
+#### ChromaDB API Endpoints (v2)
+- Heartbeat: `http://localhost:8001/api/v2/heartbeat`
+- Version: `http://localhost:8001/api/v2/version`
+- Collections: `http://localhost:8001/api/v2/collections`
+
+Note: v1 API endpoints are deprecated in ChromaDB 1.0.20+
