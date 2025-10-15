@@ -184,11 +184,14 @@ datasets:
       - 5100de44585d21787cf90d6ee7532e1c7dd77baa23144e850282e94b1c77fb37
       - db3c0b7021a4add05e501174f04ef624f01758fad224da0eb23967ee5bcabc49
 runtime:
-  provider: ollama
-  model: gemma3:1b
-  base_url: http://localhost:11434/v1
-  model_api_parameters:
-    temperature: 0.1
-    top_p: 0.7
-    # max_tokens: 2048
-    # num_ctx: 128000
+  models:
+    - description: Default model
+      name: default
+      provider: ollama
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1
+      model_api_parameters:
+        temperature: 0.1
+        top_p: 0.7
+        # max_tokens: 2048
+        # num_ctx: 128000

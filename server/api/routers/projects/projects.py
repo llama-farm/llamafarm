@@ -331,16 +331,59 @@ async def chat(
 
         set_session_header(response, session_id)
 
-    # Extract the latest user message
+    # Extract the latest user message and handle multimodal content
     latest_user_message = None
+    has_multimodal = False
+    multimodal_messages = []
+
+    # Build multimodal messages if any exist
+    for message in request.messages:
+        if isinstance(message.content, list):
+            has_multimodal = True
+            # Convert to dict format for OpenAI API
+            content_parts = []
+            for part in message.content:
+                if part.type == "text":
+                    content_parts.append({"type": "text", "text": part.text})
+                elif part.type == "image_url" and part.image_url:
+                    content_parts.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": part.image_url.url,
+                                "detail": part.image_url.detail,
+                            },
+                        }
+                    )
+            multimodal_messages.append({"role": message.role, "content": content_parts})
+        else:
+            multimodal_messages.append(
+                {"role": message.role, "content": message.content}
+            )
+
+    # Extract text for the input schema
     for msg in reversed(request.messages):
         if msg.role == "user" and msg.content:
-            latest_user_message = msg.content
+            if isinstance(msg.content, str):
+                latest_user_message = msg.content
+            elif isinstance(msg.content, list):
+                # Multimodal message - extract text parts
+                text_parts = []
+                for part in msg.content:
+                    if part.type == "text" and part.text:
+                        text_parts.append(part.text)
+                latest_user_message = (
+                    " ".join(text_parts) if text_parts else "Describe this image."
+                )
             break
 
     # If no user message, check if this is a greeting request (new session)
     if latest_user_message is None:
         raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
+
+    # If we have multimodal messages, inject them into the agent
+    if has_multimodal and hasattr(agent, "set_multimodal_messages"):
+        agent.set_multimodal_messages(multimodal_messages)
 
     # Inject relevant documentation based on user query (dev mode only)
     if (

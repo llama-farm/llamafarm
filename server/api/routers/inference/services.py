@@ -143,6 +143,36 @@ class ChatProcessor:
 
         logger.info("Incoming chat message", messages=request.messages)
 
+        # Check if we have multimodal messages (images, etc.)
+        has_multimodal = False
+        multimodal_messages = []
+
+        for message in request.messages:
+            if isinstance(message.content, list):
+                has_multimodal = True
+                # Convert to dict format for OpenAI API
+                content_parts = []
+                for part in message.content:
+                    if part.type == "text":
+                        content_parts.append({"type": "text", "text": part.text})
+                    elif part.type == "image_url" and part.image_url:
+                        content_parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": part.image_url.url,
+                                    "detail": part.image_url.detail,
+                                },
+                            }
+                        )
+                multimodal_messages.append(
+                    {"role": message.role, "content": content_parts}
+                )
+            else:
+                multimodal_messages.append(
+                    {"role": message.role, "content": message.content}
+                )
+
         latest_user_message: str | None = None
         for message in reversed(request.messages):
             if (
@@ -150,7 +180,18 @@ class ChatProcessor:
                 and message.role == "user"
                 and message.content
             ):
-                latest_user_message = message.content
+                # Extract text from either simple string or multimodal content
+                if isinstance(message.content, str):
+                    latest_user_message = message.content
+                elif isinstance(message.content, list):
+                    # Multimodal message - extract text parts
+                    text_parts = []
+                    for part in message.content:
+                        if part.type == "text" and part.text:
+                            text_parts.append(part.text)
+                    latest_user_message = (
+                        " ".join(text_parts) if text_parts else "Describe this image."
+                    )
                 break
         if latest_user_message is None:
             # yield an error and end
@@ -158,7 +199,16 @@ class ChatProcessor:
             return
 
         logger.info("Latest user message", latest_user_message=latest_user_message)
-        input_schema = BasicChatInputSchema(chat_message=latest_user_message)
+
+        # If we have multimodal messages, inject them into the agent and handle specially
+        if has_multimodal and hasattr(agent, "set_multimodal_messages"):
+            logger.info("Setting multimodal messages on agent")
+            agent.set_multimodal_messages(multimodal_messages)
+            # For multimodal, we still need to pass a text input for the schema,
+            # but the actual messages will come from the multimodal_messages
+            input_schema = BasicChatInputSchema(chat_message=latest_user_message)
+        else:
+            input_schema = BasicChatInputSchema(chat_message=latest_user_message)
 
         try:
             # Stream narrated response from JSON-mode agent (no tools)

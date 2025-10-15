@@ -1,0 +1,24 @@
+version: v1
+name: image-vision-demo
+namespace: examples
+
+runtime:
+  models:
+    - name: vision-local
+      provider: ollama
+      model: llava-phi3:latest
+      base_url: http://localhost:11434/v1
+      prompt_format: unstructured
+
+prompts:
+  - role: system
+    content: |
+      You are a helpful vision assistant that can analyze and describe images.
+
+      When analyzing images:
+      - Describe what you see clearly and concisely
+      - Identify key objects, people, and scenes
+      - Note colors, composition, and lighting
+      - Provide context when relevant
+
+      Be accurate and objective in your descriptions.

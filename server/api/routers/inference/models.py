@@ -1,14 +1,30 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field
+
+
+# OpenAI-compatible multimodal message content
+class ImageURLContent(BaseModel):
+    """Image URL content for multimodal messages."""
+
+    url: str
+    detail: Literal["auto", "low", "high"] = "auto"
+
+
+class MessageContentPart(BaseModel):
+    """Part of a multimodal message content."""
+
+    type: Literal["text", "image_url"]
+    text: str | None = None
+    image_url: ImageURLContent | None = None
 
 
 # OpenAI-compatible chat message
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
-    content: str
+    content: Union[str, list[MessageContentPart]]
 
 
 # OpenAI-compatible chat completion request

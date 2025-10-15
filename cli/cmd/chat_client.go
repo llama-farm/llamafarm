@@ -16,10 +16,24 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// ImageURLContent represents an image URL in a message
+type ImageURLContent struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// MessageContentPart represents a part of multimodal message content
+type MessageContentPart struct {
+	Type     string            `json:"type"` // "text" or "image_url"
+	Text     string            `json:"text,omitempty"`
+	ImageURL *ImageURLContent  `json:"image_url,omitempty"`
+}
+
 // Message represents a single chat message
+// Content can be either a string (for simple messages) or []MessageContentPart (for multimodal)
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string      `json:"role"`
+	Content interface{} `json:"content"`
 }
 
 // ChatRequest represents the request payload for the chat API

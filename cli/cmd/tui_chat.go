@@ -48,6 +48,31 @@ func renderMarkdown(content string, width int) string {
 	return content
 }
 
+// getMessageContentString extracts the string content from a Message
+// Handles both simple string content and multimodal content
+func getMessageContentString(msg Message) string {
+	// Try to convert to string first
+	if str, ok := msg.Content.(string); ok {
+		return str
+	}
+
+	// Handle multimodal content ([]MessageContentPart)
+	if parts, ok := msg.Content.([]MessageContentPart); ok {
+		var textParts []string
+		for _, part := range parts {
+			if part.Type == "text" && part.Text != "" {
+				textParts = append(textParts, part.Text)
+			} else if part.Type == "image_url" {
+				textParts = append(textParts, "[Image]")
+			}
+		}
+		return strings.Join(textParts, " ")
+	}
+
+	// Fallback: convert to string
+	return fmt.Sprintf("%v", msg.Content)
+}
+
 const gap = "\n\n"
 
 // overrides provided by dev command
@@ -1367,13 +1392,14 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// This keeps progress updates always visible at the bottom of the chat
 			foundProgressIdx := -1
 
-			// Search backwards through all messages to find the most recent progress message
-			for i := len(m.messages) - 1; i >= 0; i-- {
-				if m.messages[i].Role == "client" && strings.HasPrefix(m.messages[i].Content, "🔄") {
-					foundProgressIdx = i
-					break
-				}
+		// Search backwards through all messages to find the most recent progress message
+		for i := len(m.messages) - 1; i >= 0; i-- {
+			content := getMessageContentString(m.messages[i])
+			if m.messages[i].Role == "client" && strings.HasPrefix(content, "🔄") {
+				foundProgressIdx = i
+				break
 			}
+		}
 
 			if foundProgressIdx >= 0 {
 				// Remove the old progress message by slicing it out
@@ -1427,26 +1453,27 @@ func computeTranscript(m chatModel) string {
 		b.WriteString(m.transcript)
 	} else {
 		baseStyle := lipgloss.NewStyle()
-		for _, message := range m.messages {
-			var line string
-			switch message.Role {
-			case "assistant":
-				// Render Markdown content with ANSI styling
-				renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
-				// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
-				labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
-				line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
-			case "user":
-				style := baseStyle.Foreground(lipgloss.Color("#ccc"))
-				line = style.Bold(true).Render("> ") + style.Render(message.Content)
-			case "error":
-				line = baseStyle.Foreground(lipgloss.Color("9")).Render(message.Content)
-			case "client":
-				line = baseStyle.Foreground(lipgloss.Color("#666666")).Render(message.Content)
-			}
-
-			b.WriteString(line + "\n")
+	for _, message := range m.messages {
+		var line string
+		content := getMessageContentString(message)
+		switch message.Role {
+		case "assistant":
+			// Render Markdown content with ANSI styling
+			renderedContent := renderMarkdown(content, m.width-len(m.getAssistantLabel())-4)
+			// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
+			labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
+			line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
+		case "user":
+			style := baseStyle.Foreground(lipgloss.Color("#ccc"))
+			line = style.Bold(true).Render("> ") + style.Render(content)
+		case "error":
+			line = baseStyle.Foreground(lipgloss.Color("9")).Render(content)
+		case "client":
+			line = baseStyle.Foreground(lipgloss.Color("#666666")).Render(content)
 		}
+
+		b.WriteString(line + "\n")
+	}
 		lastTranscriptKey = key
 	}
 
@@ -1460,7 +1487,7 @@ func computeTranscriptKey(m chatModel) string {
 	}
 	msg := m.messages[len(m.messages)-1]
 	io.WriteString(h, msg.Role)
-	io.WriteString(h, msg.Content)
+	io.WriteString(h, getMessageContentString(msg))
 	return fmt.Sprintf("%x", h.Sum64())
 }
 

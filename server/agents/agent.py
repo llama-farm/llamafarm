@@ -74,6 +74,17 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         )
         super().__init__(config=atomic_agent_config)
 
+        # Store for multimodal messages (images, etc.)
+        self._multimodal_messages: list[dict] = []
+
+    def set_multimodal_messages(self, messages: list[dict]) -> None:
+        """Set multimodal messages (e.g., with images) to be used in the next request.
+
+        Args:
+            messages: List of OpenAI-format messages with multimodal content
+        """
+        self._multimodal_messages = messages
+
     def _prepare_messages(self):
         """Prepare messages for the model.
 
@@ -94,6 +105,13 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
                 self.messages.append(
                     {"role": self.system_role, "content": system_prompt}
                 )
+
+        # If multimodal messages are set, use them directly (for vision, etc.)
+        if self._multimodal_messages:
+            self.messages.extend(self._multimodal_messages)
+            # Clear multimodal messages after using them
+            self._multimodal_messages = []
+            return
 
         # Add history messages as plain text
         for msg in self.history.get_history():
@@ -139,8 +157,10 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         if user_input:
             self.history.initialize_turn()
             self.current_user_input = user_input
-
-            self.history.add_message("user", user_input)
+            # Only add to history if we don't have multimodal messages
+            # (multimodal messages bypass history and are used directly)
+            if not self._multimodal_messages:
+                self.history.add_message("user", user_input)
 
         self._prepare_messages()
 
@@ -168,7 +188,10 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         if user_input:
             self.history.initialize_turn()
             self.current_user_input = user_input
-            self.history.add_message("user", user_input)
+            # Only add to history if we don't have multimodal messages
+            # (multimodal messages bypass history and are used directly)
+            if not self._multimodal_messages:
+                self.history.add_message("user", user_input)
 
         self._prepare_messages()
 

@@ -68,10 +68,18 @@ Examples:
 			return nil
 		}
 
-		if strings.Contains(args[0], "/") {
-			// Explicit project provided
-			if strings.Count(args[0], "/") != 1 {
-				return fmt.Errorf("project must be in format 'namespace/project', got: %s", args[0])
+		// Check if first arg looks like namespace/project (not a file path)
+		// File paths start with /, ./, ../ or contain file extensions
+		firstArg := args[0]
+		isFilePath := strings.HasPrefix(firstArg, "/") ||
+					  strings.HasPrefix(firstArg, "./") ||
+					  strings.HasPrefix(firstArg, "../") ||
+					  strings.Contains(firstArg, ".")  // Has file extension
+
+		if strings.Contains(firstArg, "/") && !isFilePath {
+			// Looks like explicit project provided (namespace/project format)
+			if strings.Count(firstArg, "/") != 1 {
+				return fmt.Errorf("project must be in format 'namespace/project', got: %s", firstArg)
 			}
 			// If no file, require inline input as second arg
 			if runInputFile == "" && len(args) < 2 {
@@ -84,8 +92,8 @@ Examples:
 			return nil
 		}
 
-		// No explicit project; first arg is the inline input.
-		// If a file is also provided, it's ambiguous/invalid.
+		// No explicit project; first arg is the inline input (or file path).
+		// If a file is also provided via --file flag, it's ambiguous/invalid.
 		if runInputFile != "" {
 			return fmt.Errorf("specify either --file or an inline input, not both")
 		}
@@ -105,13 +113,20 @@ Examples:
 			}
 			input = string(data)
 		} else if len(args) >= 1 {
-			if strings.Contains(args[0], "/") {
+			// Check if first arg is namespace/project (not a file path)
+			firstArg := args[0]
+			isFilePath := strings.HasPrefix(firstArg, "/") ||
+						  strings.HasPrefix(firstArg, "./") ||
+						  strings.HasPrefix(firstArg, "../") ||
+						  strings.Contains(firstArg, ".")
+
+			if strings.Contains(firstArg, "/") && !isFilePath {
 				// Explicit project, inline input follows
 				if len(args) >= 2 {
 					input = args[1]
 				}
 			} else {
-				// No explicit project, first arg is inline input
+				// No explicit project, first arg is inline input (or file path)
 				input = args[0]
 			}
 		}
@@ -123,10 +138,18 @@ Examples:
 		}
 
 		// Parse explicit project if provided
-		if len(args) >= 1 && strings.Contains(args[0], "/") {
-			parts := strings.SplitN(args[0], "/", 2)
-			ns = strings.TrimSpace(parts[0])
-			proj = strings.TrimSpace(parts[1])
+		if len(args) >= 1 {
+			firstArg := args[0]
+			isFilePath := strings.HasPrefix(firstArg, "/") ||
+						  strings.HasPrefix(firstArg, "./") ||
+						  strings.HasPrefix(firstArg, "../") ||
+						  strings.Contains(firstArg, ".")
+
+			if strings.Contains(firstArg, "/") && !isFilePath {
+				parts := strings.SplitN(firstArg, "/", 2)
+				ns = strings.TrimSpace(parts[0])
+				proj = strings.TrimSpace(parts[1])
+			}
 		}
 
 		cwd := getEffectiveCWD()
@@ -163,7 +186,34 @@ Examples:
 			RAGScoreThreshold:    runRAGScoreThreshold,
 		}
 
-		messages := []Message{{Role: "user", Content: input}}
+		// Check if input contains or is a file
+		var messages []Message
+		hasFile, filePath, fileType, remainingText := detectFileInInput(input)
+
+		if hasFile {
+			// Build message with file
+			msg, err := buildMultimodalMessage("user", remainingText, []string{filePath})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error processing file: %v\n", err)
+				os.Exit(1)
+			}
+			messages = []Message{msg}
+
+			// Show appropriate icon based on file type
+			switch fileType {
+			case FileTypeImage:
+				fmt.Fprintf(os.Stderr, "📸 Sending image: %s\n", filePath)
+			case FileTypeVideo:
+				fmt.Fprintf(os.Stderr, "🎥 Sending video: %s\n", filePath)
+			case FileTypeAudio:
+				fmt.Fprintf(os.Stderr, "🎵 Sending audio: %s\n", filePath)
+			case FileTypeText:
+				fmt.Fprintf(os.Stderr, "📄 Sending text file: %s\n", filePath)
+			}
+		} else {
+			// Simple text message
+			messages = []Message{{Role: "user", Content: input}}
+		}
 
 		if dryRun {
 			if err := printRunCurlCommand(messages, ctx); err != nil {
@@ -190,7 +240,33 @@ Examples:
 		if resp == "" {
 			fmt.Printf("No response received\n")
 		} else {
-			fmt.Printf("%s\n", resp)
+			// Check if response contains media (image/video/audio)
+			hasMedia, mediaData, mimeType, textOnly := extractBase64Media(resp)
+			if hasMedia {
+				// Save the media file
+				filename, err := saveMediaFromBase64(mediaData, mimeType)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Failed to save media: %v\n", err)
+					fmt.Printf("%s\n", resp)
+				} else {
+					fmt.Printf("%s\n", textOnly)
+
+					// Show appropriate icon based on MIME type
+					var icon string
+					if strings.HasPrefix(mimeType, "image/") {
+						icon = "💾 Image"
+					} else if strings.HasPrefix(mimeType, "video/") {
+						icon = "💾 Video"
+					} else if strings.HasPrefix(mimeType, "audio/") {
+						icon = "💾 Audio"
+					} else {
+						icon = "💾 Media"
+					}
+					fmt.Printf("\n%s saved to: %s\n", icon, filename)
+				}
+			} else {
+				fmt.Printf("%s\n", resp)
+			}
 		}
 	},
 }
