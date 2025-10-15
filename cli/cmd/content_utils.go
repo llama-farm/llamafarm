@@ -3,53 +3,11 @@ package cmd
 import (
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 )
-
-// File type categories and their MIME types
-var imageExtensions = map[string]string{
-	".jpg":  "image/jpeg",
-	".jpeg": "image/jpeg",
-	".png":  "image/png",
-	".gif":  "image/gif",
-	".webp": "image/webp",
-	".bmp":  "image/bmp",
-	".tiff": "image/tiff",
-	".tif":  "image/tiff",
-}
-
-var videoExtensions = map[string]string{
-	".mp4":  "video/mp4",
-	".mov":  "video/quicktime",
-	".avi":  "video/x-msvideo",
-	".mkv":  "video/x-matroska",
-	".webm": "video/webm",
-	".flv":  "video/x-flv",
-	".wmv":  "video/x-ms-wmv",
-}
-
-var audioExtensions = map[string]string{
-	".mp3":  "audio/mpeg",
-	".wav":  "audio/wav",
-	".ogg":  "audio/ogg",
-	".m4a":  "audio/mp4",
-	".flac": "audio/flac",
-	".aac":  "audio/aac",
-}
-
-var textExtensions = map[string]string{
-	".txt":  "text/plain",
-	".md":   "text/markdown",
-	".json": "application/json",
-	".xml":  "application/xml",
-	".yaml": "text/yaml",
-	".yml":  "text/yaml",
-	".toml": "text/toml",
-	".csv":  "text/csv",
-	".log":  "text/plain",
-}
 
 // FileType represents the category of a file
 type FileType int
@@ -62,29 +20,39 @@ const (
 	FileTypeText
 )
 
-// getFileType determines the type of file based on extension
+// getFileType determines the type of file by reading its content (magic bytes)
 func getFileType(path string) FileType {
-	ext := strings.ToLower(filepath.Ext(path))
+	file, err := os.Open(path)
+	if err != nil {
+		return FileTypeUnknown
+	}
+	defer file.Close()
 
-	if _, ok := imageExtensions[ext]; ok {
+	// Read first 512 bytes for MIME detection
+	buffer := make([]byte, 512)
+	n, err := file.Read(buffer)
+	if err != nil || n == 0 {
+		return FileTypeUnknown
+	}
+
+	// Detect MIME type from content
+	mimeType := http.DetectContentType(buffer[:n])
+
+	// Categorize by MIME type prefix
+	if strings.HasPrefix(mimeType, "image/") {
 		return FileTypeImage
 	}
-	if _, ok := videoExtensions[ext]; ok {
+	if strings.HasPrefix(mimeType, "video/") {
 		return FileTypeVideo
 	}
-	if _, ok := audioExtensions[ext]; ok {
+	if strings.HasPrefix(mimeType, "audio/") {
 		return FileTypeAudio
 	}
-	if _, ok := textExtensions[ext]; ok {
+	if strings.HasPrefix(mimeType, "text/") {
 		return FileTypeText
 	}
 
 	return FileTypeUnknown
-}
-
-// isImageFile checks if a file path has an image extension
-func isImageFile(path string) bool {
-	return getFileType(path) == FileTypeImage
 }
 
 // isMediaFile checks if a file is image, video, or audio (requires base64 encoding)
@@ -98,24 +66,23 @@ func isTextFile(path string) bool {
 	return getFileType(path) == FileTypeText
 }
 
-// getMimeType returns the MIME type for a file
+// getMimeType returns the MIME type for a file by reading its content
 func getMimeType(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
+	file, err := os.Open(path)
+	if err != nil {
+		return "application/octet-stream"
+	}
+	defer file.Close()
 
-	if mimeType, ok := imageExtensions[ext]; ok {
-		return mimeType
-	}
-	if mimeType, ok := videoExtensions[ext]; ok {
-		return mimeType
-	}
-	if mimeType, ok := audioExtensions[ext]; ok {
-		return mimeType
-	}
-	if mimeType, ok := textExtensions[ext]; ok {
-		return mimeType
+	// Read first 512 bytes for MIME detection
+	buffer := make([]byte, 512)
+	n, err := file.Read(buffer)
+	if err != nil || n == 0 {
+		return "application/octet-stream"
 	}
 
-	return "application/octet-stream"
+	// Detect and return MIME type from content
+	return http.DetectContentType(buffer[:n])
 }
 
 // encodeMediaToBase64 reads a media file (image/video/audio) and returns a base64-encoded data URL
