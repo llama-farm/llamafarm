@@ -20,7 +20,7 @@ sys.path.insert(0, str(repo_root))
 from config.datamodel import (  # noqa: E402
     LlamaFarmConfig,
     Model,
-    Prompt,
+    Message,
     PromptFormat,
 )
 
@@ -70,8 +70,8 @@ class ProjectChatOrchestratorAgent(LFAgent):
             base_url=model_config.base_url,
         )
 
-        # Build base history from config
-        history = _get_history(project_config)
+        # Build base history from config using resolved prompts for this model
+        history = _get_history(project_config, model_config)
         client = _get_client_for_model(model_config)
 
         lf_config = LFAgentConfig(
@@ -79,7 +79,7 @@ class ProjectChatOrchestratorAgent(LFAgent):
             model=model_config.model,
             history=history,
             system_prompt_generator=LFSystemPromptGenerator(
-                project_config=project_config
+                project_config=project_config, model=model_config
             ),
             model_api_parameters=model_config.model_api_parameters,
         )
@@ -215,12 +215,13 @@ class ProjectChatOrchestratorAgent(LFAgent):
 
 
 class LFSystemPromptGenerator(SystemPromptGenerator):
-    def __init__(self, project_config: LlamaFarmConfig):
+    def __init__(self, project_config: LlamaFarmConfig, model: Model):
+        from services.prompt_service import PromptService
+
         logger.info(f"Project config: {project_config}")
+        resolved_prompts = PromptService.resolve_prompts_for_model(project_config, model)
         self.system_prompts = [
-            prompt
-            for prompt in (project_config.prompts or [])
-            if prompt.role == "system"
+            prompt for prompt in resolved_prompts if prompt.role == "system"
         ]
         super().__init__()
 
@@ -243,7 +244,7 @@ class LFSystemPromptGenerator(SystemPromptGenerator):
         return "\n".join(prompt_parts)
 
 
-def _prompt_to_content_schema(prompt: Prompt) -> BaseIOSchema:
+def _prompt_to_content_schema(prompt: Message) -> BaseIOSchema:
     if prompt.role == "assistant":
         return ProjectChatOrchestratorAgentOutputSchema(
             chat_message=prompt.content,
@@ -257,9 +258,10 @@ def _prompt_to_content_schema(prompt: Prompt) -> BaseIOSchema:
 
 
 def _populate_history_with_non_system_prompts(
-    history: ChatHistory, project_config: LlamaFarmConfig
+    history: ChatHistory, resolved_prompts: list[Message]
 ):
-    for prompt in project_config.prompts or []:
+    """Populate history with non-system prompts from resolved prompt messages."""
+    for prompt in resolved_prompts:
         # Only add non-system prompts to the history
         if prompt.role != "system":
             history.add_message(
@@ -268,9 +270,13 @@ def _populate_history_with_non_system_prompts(
             )
 
 
-def _get_history(project_config: LlamaFarmConfig) -> ChatHistory:
+def _get_history(project_config: LlamaFarmConfig, model: Model) -> ChatHistory:
+    """Build chat history from resolved prompts for the given model."""
+    from services.prompt_service import PromptService
+
     history = ChatHistory()
-    _populate_history_with_non_system_prompts(history, project_config)
+    resolved_prompts = PromptService.resolve_prompts_for_model(project_config, model)
+    _populate_history_with_non_system_prompts(history, resolved_prompts)
     return history
 
 

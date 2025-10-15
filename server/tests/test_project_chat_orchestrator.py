@@ -5,6 +5,7 @@ from config.datamodel import (
     PromptFormat,
     LlamaFarmConfig,
     Prompt,
+    Message,
     Provider,
     Runtime,
     Version,
@@ -60,7 +61,7 @@ def make_config(
                 )
             ]
         ),
-        prompts=[Prompt(role="system", content="You are a helpful assistant.")],
+        prompts=[Prompt(name="default", messages=[Message(role="system", content="You are a helpful assistant.")])],
         rag=None,  # Don't set RAG if not needed, avoids validation errors
         datasets=[],
     )

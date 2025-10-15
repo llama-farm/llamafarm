@@ -1,7 +1,20 @@
 version: v1
 name: llamafarm-1
 namespace: default
-prompts: []
+
+runtime:
+  models:
+    - name: default
+      description: "Default Ollama model"
+      provider: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434
+      default: true
+      prompt_format: unstructured
+
+prompts:
+  - name: default
+    messages: []
 rag:
   databases:
   - name: main_database
@@ -286,7 +299,3 @@ datasets:
   - 41b3de4d5258cae9805eb881088cc61f8f099a93552716ab9a157e822c00bb4b
   - 33ad512e4f3acba6cf074d857be89cfbd5376e54e76fa6b1abc229c69c4ece50
   - 1d58f9207b989d7a34100b8e4f998ab1be9f5402b7cef62103a97c6d0dec1a06
-runtime:
-  provider: ollama
-  model: llama3.1:8b
-  base_url: http://localhost:11434

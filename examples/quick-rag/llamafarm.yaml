@@ -1,12 +1,15 @@
 version: v1
 name: quick-rag-demo
 namespace: default
-prompts:
-- role: system
-  content: 'You are a concise engineering assistant. Answer in short paragraphs and
-    cite file names when possible.
 
-    '
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: 'You are a concise engineering assistant. Answer in short paragraphs and
+          cite file names when possible.
+
+          '
 rag:
   databases:
   - name: quick_rag_db

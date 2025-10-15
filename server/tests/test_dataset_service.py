@@ -12,6 +12,7 @@ from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
     Prompt,
+    Message,
     Provider,
     Runtime,
     Version,
@@ -34,8 +35,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -112,8 +113,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -208,8 +209,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -437,8 +438,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag=None,
@@ -475,8 +476,8 @@ class TestDatasetService:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -576,8 +577,13 @@ class TestDatasetServiceIntegration:
                     namespace=namespace,
                     prompts=[
                         Prompt(
-                            role="system",
-                            content="You are a helpful assistant.",
+                            name="default",
+                            messages=[
+                                Message(
+                                    role="system",
+                                    content="You are a helpful assistant.",
+                                )
+                            ],
                         )
                     ],
                     rag={

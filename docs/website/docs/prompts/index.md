@@ -11,15 +11,19 @@ Prompts in LlamaFarm are simple but powerful: you define static instructions in 
 
 ```yaml
 prompts:
-  - role: system
-    content: >-
-      You are a regulatory assistant. Provide concise answers and cite sources by title.
-  - role: user
-    content: "Use bullet points by default."
+  - name: default
+    messages:
+      - role: system
+        content: >-
+          You are a regulatory assistant. Provide concise answers and cite sources by title.
+      - role: user
+        content: "Use bullet points by default."
 ```
 
-- The array is preserved in order and prepended to each conversation.
+- Prompts are named sets that can be selectively applied to models.
+- Messages within each prompt set are preserved in order and prepended to conversations.
 - Roles should match what your provider understands (`system`, `user`, `assistant`).
+- Models can specify which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Combine with RAG by including instructions explaining how to use context snippets (the server injects them automatically).
 
 ## Best Practices
