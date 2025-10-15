@@ -5,6 +5,7 @@ supporting named prompt sets with per-model selection.
 """
 
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 from core.logging import FastAPIStructLogger
@@ -45,6 +46,16 @@ class PromptService:
         1. If model.prompts is set (list of names), merge those sets in order
         2. Otherwise, stack all prompts in definition order
 
+        Note on caching: This method is intentionally NOT cached using @lru_cache because:
+        1. Message objects are Pydantic models and not hashable
+        2. The operation is lightweight (dict lookup + list concatenation)
+        3. Config objects are already cached at the project level
+        4. Caching would require serializing/deserializing Message objects, which is slower
+           than the actual operation
+
+        For performance optimization, consider caching at the ProjectChatOrchestrator level
+        where agent instances are reused across requests.
+
         Args:
             config: Project configuration
             model: Model configuration
@@ -77,11 +88,18 @@ class PromptService:
                     )
                     merged.extend(messages_in_set)
                 else:
-                    logger.warning(
+                    available_sets = ', '.join(sorted(prompt_sets.keys()))
+                    error_msg = (
+                        f"Model '{model.name}' references non-existent prompt set '{pset_name}'. "
+                        f"Available prompt sets: {available_sets}"
+                    )
+                    logger.error(
                         "Prompt set not found",
                         model=model.name,
                         prompt_name=pset_name,
+                        available_sets=available_sets,
                     )
+                    raise ValueError(error_msg)
             logger.info(
                 "Prompt resolution complete",
                 model=model.name,
