@@ -42,8 +42,11 @@ async def chat(
                 sid,
             )
 
-        # Non-streaming path
-        return build_chat_response(request.model, stream_iter)
+        # Non-streaming path: consume the entire async generator
+        full_response = ""
+        async for chunk in stream_iter:
+            full_response += chunk
+        return build_chat_response(request.model, full_response)
 
     except Exception as e:
         raise HTTPException(
