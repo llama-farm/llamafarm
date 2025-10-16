@@ -3,11 +3,24 @@ name: fda-chat-demo
 namespace: default
 
 runtime:
-  provider: ollama
-  model: llama3.1:8b
-  base_url: http://localhost:11434/v1
-  temperature: 0.2
-  agent_handler: simple_rag
+  default_model: fda-chat
+  models:
+    - name: fda-chat
+      description: "Primary model for FDA document analysis"
+      provider: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434/v1
+      prompt_format: unstructured
+      model_api_parameters:
+        temperature: 0.2
+    - name: fda-fast
+      description: "Faster model for quick FDA queries"
+      provider: ollama
+      model: gemma2:2b
+      base_url: http://localhost:11434/v1
+      prompt_format: unstructured
+      model_api_parameters:
+        temperature: 0.1
 
 prompts:
   - role: system
@@ -43,6 +56,35 @@ rag:
             distance_metric: cosine
             top_k: 8
           default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: targeted_letters
+    - name: fda_archive_db
+      type: ChromaStore
+      config:
+        collection_name: fda_archive
+        distance_function: cosine
+        persist_directory: ./data/fda_archive_db
+        port: 8000
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            auto_pull: true
+            base_url: http://localhost:11434
+            batch_size: 16
+            dimension: 768
+            model: nomic-embed-text
+            timeout: 60
+          priority: 0
+      retrieval_strategies:
+        - name: archive_search
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 10
+          default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: archive_search
   data_processing_strategies:
     - name: fda_pdf_processor
       description: Parser tuned for FDA correspondence PDFs

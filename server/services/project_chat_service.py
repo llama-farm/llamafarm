@@ -42,7 +42,139 @@ SIMILARITY_THRESHOLD = 0.8  # Minimum word similarity ratio to trigger echo dete
 SIMILARITY_LENGTH_FACTOR = 1.5  # Maximum length multiplier for similarity-based echo detection
 
 
+class RAGParameters:
+    """Container for resolved RAG parameters."""
+    def __init__(
+        self,
+        rag_enabled: bool = False,
+        database: str | None = None,
+        retrieval_strategy: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
+    ):
+        self.rag_enabled = rag_enabled
+        self.database = database
+        self.retrieval_strategy = retrieval_strategy
+        self.rag_top_k = rag_top_k
+        self.rag_score_threshold = rag_score_threshold
+
+
 class ProjectChatService:
+    def _resolve_rag_parameters(
+        self,
+        project_config: LlamaFarmConfig,
+        rag_enabled: bool | None = None,
+        database: str | None = None,
+        retrieval_strategy: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
+    ) -> RAGParameters:
+        """
+        Resolve RAG parameters with intelligent cascading defaults.
+
+        Priority order for each parameter:
+        1. Explicit request parameters (highest priority)
+        2. Database defaults from config
+        3. Strategy defaults from config
+        4. Strategy config values (top_k, score_threshold)
+        5. Hardcoded fallbacks (lowest priority)
+
+        Returns:
+            RAGParameters object with all resolved values
+        """
+        # Step 0: Determine if RAG is enabled
+        if rag_enabled is None:
+            rag_enabled = bool(project_config.rag and project_config.rag.databases)
+            if rag_enabled:
+                logger.info("RAG enabled by default based on project configuration")
+
+        if not rag_enabled or not project_config.rag:
+            return RAGParameters(rag_enabled=False)
+
+        # Step 1: Resolve database (request > default_database > first database)
+        if database is None:
+            if project_config.rag.default_database:
+                database = str(project_config.rag.default_database)
+                logger.info(f"Using configured default_database: {database}")
+            elif project_config.rag.databases:
+                database = str(project_config.rag.databases[0].name)
+                logger.info(f"Using first database as default: {database}")
+
+        # Step 2: Find the database configuration
+        db_config = None
+        if database and project_config.rag.databases:
+            for db in project_config.rag.databases:
+                if db.name == database:
+                    db_config = db
+                    break
+
+        if not db_config:
+            logger.warning(f"Database '{database}' not found in configuration")
+            return RAGParameters(rag_enabled=False)
+
+        # Step 3: Resolve retrieval strategy (request > default_retrieval_strategy > first strategy)
+        if retrieval_strategy is None:
+            if db_config.default_retrieval_strategy:
+                retrieval_strategy = str(db_config.default_retrieval_strategy)
+                logger.info(f"Using default_retrieval_strategy: {retrieval_strategy}")
+            elif db_config.retrieval_strategies:
+                # Check for strategy marked as default
+                for strategy in db_config.retrieval_strategies:
+                    if hasattr(strategy, 'default') and strategy.default:
+                        retrieval_strategy = str(strategy.name)
+                        logger.info(f"Using default-marked strategy: {retrieval_strategy}")
+                        break
+                # If no default marked, use first strategy
+                if retrieval_strategy is None:
+                    retrieval_strategy = str(db_config.retrieval_strategies[0].name)
+                    logger.info(f"Using first strategy as default: {retrieval_strategy}")
+            else:
+                logger.warning(f"No retrieval strategies defined for database '{database}'")
+                return RAGParameters(rag_enabled=False)
+
+        # Step 4: Resolve parameters from strategy config (only if not explicitly provided)
+        if retrieval_strategy and db_config.retrieval_strategies:
+            for strategy in db_config.retrieval_strategies:
+                if strategy.name == retrieval_strategy:
+                    # Get top_k from strategy config if not provided
+                    if rag_top_k is None and strategy.config:
+                        rag_top_k = self._extract_config_value(strategy.config, "top_k", retrieval_strategy)
+
+                    # Get score_threshold from strategy config if not provided
+                    if rag_score_threshold is None and strategy.config:
+                        rag_score_threshold = self._extract_config_value(
+                            strategy.config, "score_threshold", retrieval_strategy
+                        )
+                    break
+
+        # Step 5: Final fallback defaults if still None
+        if rag_top_k is None:
+            rag_top_k = 5
+            logger.info("Using fallback default top_k: 5")
+        if rag_score_threshold is None:
+            rag_score_threshold = 0.0
+            logger.info("Using fallback default score_threshold: 0.0")
+
+        return RAGParameters(
+            rag_enabled=True,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
+
+    def _extract_config_value(self, config: dict | Any, key: str, strategy_name: str) -> Any:
+        """Extract a value from strategy config, handling both dict and object types."""
+        value = None
+        if isinstance(config, dict):
+            if key in config:
+                value = config[key]
+                logger.info(f"Using {key} from strategy '{strategy_name}': {value}")
+        elif hasattr(config, key):
+            value = getattr(config, key)
+            logger.info(f"Using {key} from strategy '{strategy_name}': {value}")
+        return value
+
     def _create_rag_config_from_strategy(self, strategy) -> dict[str, Any]:
         """Convert LlamaFarm strategy config to RAG API compatible config."""
         components = strategy.components
@@ -93,6 +225,8 @@ class ProjectChatService:
         message: str,
         top_k: int = 5,
         database: str | None = None,
+        retrieval_strategy: str | None = None,
+        score_threshold: float | None = None,
     ) -> list[Any]:
         """Perform RAG search using the project's RAG configuration.
 
@@ -108,16 +242,26 @@ class ProjectChatService:
 
         # Find the database configuration
         if not database:
-            # Use the first database as default
-            if project_config.rag.databases:
+            # Check for explicit default_database first, then fall back to first database
+            if project_config.rag.default_database:
+                database = str(project_config.rag.default_database)
+                logger.info(f"Using configured default database: {database}")
+            elif project_config.rag.databases:
                 database = str(project_config.rag.databases[0].name)
-                logger.info(f"Using default database: {database}")
+                logger.info(f"Using first database as default: {database}")
             else:
                 logger.error("No databases found in project config")
                 return []
 
         # Use shared helper to run RAG search on database
-        results = search_with_rag(project_dir, database, message, top_k=top_k)
+        results = search_with_rag(
+            project_dir,
+            database,
+            message,
+            top_k=top_k,
+            retrieval_strategy=retrieval_strategy,
+            score_threshold=score_threshold,
+        )
         if results is None:
             results = []
 
@@ -156,6 +300,7 @@ class ProjectChatService:
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
+        retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> ChatCompletion:
@@ -163,50 +308,27 @@ class ProjectChatService:
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        # Use config defaults if not explicitly provided
-        # If rag_enabled is None, check if RAG is configured
-        if rag_enabled is None:
-            rag_enabled = bool(project_config.rag and project_config.rag.databases)
-            if rag_enabled:
-                logger.info("RAG enabled by default based on project configuration")
-
-        # Use config defaults for other parameters if not provided
-        if rag_enabled and project_config.rag:
-            # If no database specified, use the first database
-            if database is None and project_config.rag.databases:
-                database = project_config.rag.databases[0].name
-                logger.info(f"Using default database from config: {database}")
-
-            # If no top_k specified, check if there's a default in retrieval strategies
-            if rag_top_k is None:
-                # Look for default retrieval strategy's top_k
-                if project_config.rag.databases:
-                    for db in project_config.rag.databases:
-                        if db.name == database:
-                            for strategy in db.retrieval_strategies or []:
-                                if strategy.default:
-                                    rag_top_k = (
-                                        strategy.config.top_k
-                                        if (
-                                            strategy.config
-                                            and hasattr(strategy.config, "top_k")
-                                        )
-                                        else 5
-                                    )
-                                    break
-                            break
-                if rag_top_k is None:
-                    rag_top_k = 5  # Fallback default
+        # Resolve RAG parameters using shared helper
+        rag_params = self._resolve_rag_parameters(
+            project_config,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
 
         # Use the RAG subsystem to perform RAG based on the project config
         rag_results = []
-        if rag_enabled:
+        if rag_params.rag_enabled:
             rag_results = self._perform_rag_search(
                 project_dir,
                 project_config,
                 message,
-                top_k=rag_top_k or 5,
-                database=database,
+                top_k=rag_params.rag_top_k or 5,
+                database=rag_params.database,
+                retrieval_strategy=rag_params.retrieval_strategy,
+                score_threshold=rag_params.rag_score_threshold,
             )
 
         for idx, result in enumerate(rag_results):
@@ -275,6 +397,7 @@ class ProjectChatService:
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
+        retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[str, None]:
@@ -283,44 +406,25 @@ class ProjectChatService:
         context_provider = ProjectChatContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
-        # Use config defaults if not explicitly provided (same logic as chat method)
-        if rag_enabled is None:
-            rag_enabled = bool(project_config.rag and project_config.rag.databases)
-            if rag_enabled:
-                logger.info("RAG enabled by default based on project configuration")
-
-        if rag_enabled and project_config.rag:
-            if database is None and project_config.rag.databases:
-                database = project_config.rag.databases[0].name
-                logger.info(f"Using default database from config: {database}")
-
-            if rag_top_k is None:
-                if project_config.rag.databases:
-                    for db in project_config.rag.databases:
-                        if db.name == database:
-                            for strategy in db.retrieval_strategies or []:
-                                if strategy.default:
-                                    rag_top_k = (
-                                        strategy.config.top_k
-                                        if (
-                                            strategy.config
-                                            and hasattr(strategy.config, "top_k")
-                                        )
-                                        else 5
-                                    )
-                                    break
-                            break
-                if rag_top_k is None:
-                    rag_top_k = 5
+        # Resolve RAG parameters using shared helper
+        rag_params = self._resolve_rag_parameters(
+            project_config,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
 
         rag_results = []
-        if rag_enabled:
+        if rag_params.rag_enabled:
             rag_results = self._perform_rag_search(
                 project_dir,
                 project_config,
                 message,
-                top_k=rag_top_k or 5,
-                database=database,
+                top_k=rag_params.rag_top_k or 5,
+                database=rag_params.database,
+                retrieval_strategy=rag_params.retrieval_strategy,
             )
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(
