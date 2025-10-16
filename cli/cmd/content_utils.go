@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // FileType represents the category of a file
@@ -334,7 +335,7 @@ func saveMediaFromBase64(base64Data, mimeType string) (string, error) {
 
 	// Generate filename with timestamp
 	filename := fmt.Sprintf("output_%s%s", strings.ReplaceAll(strings.ReplaceAll(
-		fmt.Sprintf("%d", os.Getpid()), " ", "_"), ":", ""), ext)
+		fmt.Sprintf("%d", time.Now().Unix()), ":", ""), " ", "_"), ext)
 
 	// Write to current directory
 	err = os.WriteFile(filename, mediaData, 0644)

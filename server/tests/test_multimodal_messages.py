@@ -1,9 +1,9 @@
 """Tests for multimodal message handling in the server."""
 
 import base64
+
 import pytest
 from pydantic import ValidationError
-
 from server.api.routers.inference.models import (
     AudioURLContent,
     ChatMessage,
