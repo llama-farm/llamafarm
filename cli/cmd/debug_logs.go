@@ -4,7 +4,6 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,8 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
+	
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
@@ -62,9 +63,9 @@ By default shows the last 200 lines from all services. Use --follow for live tai
 	return cmd
 }
 
-
 func init() {
-	debugCmd.AddCommand(NewCmdDebugLogs)
+	// ✅ must call the function, not pass the symbol
+	debugCmd.AddCommand(NewCmdDebugLogs())
 }
 
 func runDebugLogs(cmd *cobra.Command, args []string) error {
@@ -84,25 +85,20 @@ func runDebugLogs(cmd *cobra.Command, args []string) error {
 		return runComposeLogs(ctx, composeFile)
 	}
 
-	// Fallback: gather docker ps and use docker logs per container
+	// Fallback: use Docker SDK directly
 	return runDockerLogsFallback(ctx)
 }
 
 func resolveComposeFile(flagPath string) (string, bool) {
-	// Priority: flag > common repo path > env > none
-	if flagPath != "" {
-		if fileExists(flagPath) {
-			return flagPath, true
-		}
+	if flagPath != "" && fileExists(flagPath) {
+		return flagPath, true
 	}
 
-	// Try repo path (works when run from repo root)
 	defaultRepoPath := filepath.Join(".", "deployment", "docker_compose", "docker-compose.yml")
 	if fileExists(defaultRepoPath) {
 		return defaultRepoPath, true
 	}
 
-	// Env override (for advanced setups)
 	if p := os.Getenv("LF_COMPOSE_FILE"); p != "" && fileExists(p) {
 		return p, true
 	}
@@ -121,7 +117,6 @@ func fileExists(p string) bool {
 func runComposeLogs(ctx context.Context, composeFile string) error {
 	args := []string{"compose", "-f", composeFile, "logs"}
 
-	// flags (compose supports --since, --tail, --follow, --no-log-prefix)
 	if logsFollow {
 		args = append(args, "--follow")
 	}
@@ -134,7 +129,6 @@ func runComposeLogs(ctx context.Context, composeFile string) error {
 	if logsTail >= 0 {
 		args = append(args, "--tail", fmt.Sprintf("%d", logsTail))
 	}
-	// services (optional)
 	args = append(args, logsServices...)
 
 	c := exec.CommandContext(ctx, "docker", args...)
@@ -147,19 +141,11 @@ func runComposeLogs(ctx context.Context, composeFile string) error {
 		return err
 	}
 
-	var writer io.Writer = os.Stdout
-	var f *os.File
-	if logsOut != "" {
-		if err := os.MkdirAll(filepath.Dir(logsOut), 0o755); err != nil {
-			return fmt.Errorf("creating log output dir: %w", err)
-		}
-		f, err = os.Create(logsOut)
-		if err != nil {
-			return fmt.Errorf("creating log output file: %w", err)
-		}
-		defer f.Close()
-		writer = io.MultiWriter(os.Stdout, f)
+	writer, cleanup, err := setupOutputWriter(logsOut)
+	if err != nil {
+		return err
 	}
+	defer cleanup()
 
 	if err := c.Start(); err != nil {
 		return fmt.Errorf("docker compose logs: %w", err)
@@ -173,8 +159,6 @@ func runComposeLogs(ctx context.Context, composeFile string) error {
 	err = c.Wait()
 	wg.Wait()
 
-	// Compose returns exit code 0 when logs stream ends or process is killed (Ctrl-C).
-	// If follow is false, a non-zero here should be surfaced.
 	if !logsFollow && err != nil {
 		return err
 	}
@@ -190,127 +174,92 @@ func pump(r io.Reader, w io.Writer, wg *sync.WaitGroup) {
 }
 
 func runDockerLogsFallback(ctx context.Context) error {
-	// List containers whose name hints they belong to LlamaFarm
-	// Conservative match: names containing "llamafarm" OR service name filters if provided.
-	psArgs := []string{"ps", "--format", "{{.ID}} {{.Names}}"}
-	out, err := exec.CommandContext(ctx, "docker", psArgs...).Output()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return fmt.Errorf("docker ps failed: %w", err)
+		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	var targets []string // container names
+	defer cli.Close()
 
-	include := func(name string) bool {
-		if len(logsServices) == 0 {
-			return strings.Contains(strings.ToLower(name), "llamafarm")
-		}
-		low := strings.ToLower(name)
-		for _, s := range logsServices {
-			if strings.Contains(low, strings.ToLower(s)) {
-				return true
+	containers, err := cli.ContainerList(ctx, container.ListOptions{All: false})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	var targets []string
+	for _, c := range containers {
+		include := false
+		for _, name := range c.Names {
+			name = strings.TrimPrefix(name, "/")
+			if len(logsServices) == 0 && strings.Contains(name, "llamafarm") {
+				include = true
+				break
+			}
+			for _, s := range logsServices {
+				if strings.Contains(strings.ToLower(name), strings.ToLower(s)) {
+					include = true
+					break
+				}
 			}
 		}
-		return false
+		if include {
+			targets = append(targets, c.ID)
+		}
 	}
 
-	for _, ln := range lines {
-		if ln == "" {
-			continue
-		}
-		parts := strings.SplitN(ln, " ", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		name := strings.TrimSpace(parts[1])
-		if include(name) {
-			targets = append(targets, name)
-		}
-	}
 	if len(targets) == 0 {
-		return errors.New("no matching running containers found (try --compose-file or check that lf start is running)")
+		return fmt.Errorf("no matching containers found (try --compose-file or run lf start)")
 	}
 
-	// Stream each container's logs concurrently, prefixing container name unless --no-prefix
-	var writers []io.Writer
-	writers = append(writers, os.Stdout)
-	var f *os.File
-	if logsOut != "" {
-		if err := os.MkdirAll(filepath.Dir(logsOut), 0o755); err != nil {
-			return fmt.Errorf("creating log output dir: %w", err)
-		}
-		f, err = os.Create(logsOut)
-		if err != nil {
-			return fmt.Errorf("creating log output file: %w", err)
-		}
-		defer f.Close()
-		writers = append(writers, f)
+	writer, cleanup, err := setupOutputWriter(logsOut)
+	if err != nil {
+		return err
 	}
-	writer := io.MultiWriter(writers...)
+	defer cleanup()
 
 	wg := &sync.WaitGroup{}
 	errCh := make(chan error, len(targets))
 
-	for _, name := range targets {
-		name := name
+	for _, id := range targets {
+		id := id
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			args := []string{"logs"}
-			if logsFollow {
-				args = append(args, "--follow")
-			}
-			if logsSince != "" {
-				args = append(args, "--since", logsSince)
-			}
-			if logsTail >= 0 {
-				args = append(args, "--tail", fmt.Sprintf("%d", logsTail))
-			}
-			args = append(args, name)
 
-			c := exec.CommandContext(ctx, "docker", args...)
-
-			stdout, err := c.StdoutPipe()
+			reader, err := cli.ContainerLogs(ctx, id, container.LogsOptions{
+				ShowStdout: true,
+				ShowStderr: true,
+				Follow:     logsFollow,
+				Tail:       fmt.Sprintf("%d", logsTail),
+				Since:      logsSince,
+				Timestamps: false,
+			})
 			if err != nil {
-				errCh <- fmt.Errorf("docker logs %s: failed to get stdout pipe: %w", name, err)
+				errCh <- fmt.Errorf("failed to stream logs for container %s: %w", id[:12], err)
 				return
 			}
-			stderr, err := c.StderrPipe()
-			if err != nil {
-				errCh <- fmt.Errorf("docker logs %s: failed to get stderr pipe: %w", name, err)
-				return
-			}
+			defer reader.Close()
 
-			if err := c.Start(); err != nil {
-				errCh <- fmt.Errorf("docker logs %s: %w", name, err)
-				return
-			}
-
-			p := func(r io.Reader) {
-				sc := bufio.NewScanner(r)
-				for sc.Scan() {
-					line := sc.Text()
-					if logsNoPrefix {
-						fmt.Fprintln(writer, line)
-					} else {
-						now := time.Now().Format(time.RFC3339)
-						fmt.Fprintf(writer, "[%s] [%s] %s\n", now, name, line)
-					}
+			buf := make([]byte, 4096)
+			for {
+				n, readErr := reader.Read(buf)
+				if n > 0 {
+					line := string(buf[:n])
+					fmt.Fprint(writer, formatLogLine(id[:12], line))
 				}
-			}
-			done := make(chan struct{})
-			go func() { p(stdout); close(done) }()
-			p(stderr)
-			<-done
-
-			if err := c.Wait(); err != nil && !logsFollow {
-				errCh <- fmt.Errorf("docker logs %s finished with error: %w", name, err)
-				return
+				if readErr == io.EOF {
+					break
+				}
+				if readErr != nil {
+					errCh <- fmt.Errorf("log read error (%s): %w", id[:12], readErr)
+					return
+				}
 			}
 		}()
 	}
 
 	wg.Wait()
 	close(errCh)
+
 	var combined error
 	for e := range errCh {
 		if combined == nil {
@@ -320,4 +269,26 @@ func runDockerLogsFallback(ctx context.Context) error {
 		}
 	}
 	return combined
+}
+
+func setupOutputWriter(path string) (io.Writer, func(), error) {
+	if path == "" {
+		return os.Stdout, func() {}, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, func() {}, fmt.Errorf("creating output dir: %w", err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("creating output file: %w", err)
+	}
+	cleanup := func() { _ = f.Close() }
+	return io.MultiWriter(os.Stdout, f), cleanup, nil
+}
+
+func formatLogLine(service, line string) string {
+	if logsNoPrefix {
+		return line
+	}
+	return fmt.Sprintf("[%s] %s", service, line)
 }
