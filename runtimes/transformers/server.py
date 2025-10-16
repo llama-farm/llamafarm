@@ -377,25 +377,27 @@ async def edit_images(request: ImageEditRequest):
 
         model = await load_image_model(model_id)
 
-        # Decode input image
-        if request.image.startswith("data:"):
-            # Base64 data URL
-            img_data = request.image.split(",")[1]
+        # Decode input image (supports file paths, base64, or data URLs)
+        image_b64 = encode_image_to_base64(request.image)
+
+        if image_b64.startswith("data:"):
+            img_data = image_b64.split(",")[1]
             img_bytes = base64.b64decode(img_data)
         else:
-            # Assume base64
-            img_bytes = base64.b64decode(request.image)
+            img_bytes = base64.b64decode(image_b64)
 
         input_image = Image.open(io.BytesIO(img_bytes))
 
-        # Decode mask if provided
+        # Decode mask if provided (supports file paths, base64, or data URLs)
         mask_image = None
         if request.mask:
-            if request.mask.startswith("data:"):
-                mask_data = request.mask.split(",")[1]
+            mask_b64 = encode_image_to_base64(request.mask)
+
+            if mask_b64.startswith("data:"):
+                mask_data = mask_b64.split(",")[1]
                 mask_bytes = base64.b64decode(mask_data)
             else:
-                mask_bytes = base64.b64decode(request.mask)
+                mask_bytes = base64.b64decode(mask_b64)
             mask_image = Image.open(io.BytesIO(mask_bytes))
 
         # Generate edited images
@@ -460,12 +462,14 @@ async def create_variations(request: ImageEditRequest):
 
         model = await load_image_model(model_id)
 
-        # Decode input image
-        if request.image.startswith("data:"):
-            img_data = request.image.split(",")[1]
+        # Decode input image (supports file paths, base64, or data URLs)
+        image_b64 = encode_image_to_base64(request.image)
+
+        if image_b64.startswith("data:"):
+            img_data = image_b64.split(",")[1]
             img_bytes = base64.b64decode(img_data)
         else:
-            img_bytes = base64.b64decode(request.image)
+            img_bytes = base64.b64decode(image_b64)
 
         input_image = Image.open(io.BytesIO(img_bytes))
 
