@@ -695,7 +695,7 @@ definitions:
           description: Extract headers
         include_attachment_content:
           type: boolean
-          default: false
+          default: true
           description: Include attachment content
         clean_text:
           type: boolean
