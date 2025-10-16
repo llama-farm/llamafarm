@@ -11,8 +11,9 @@ All endpoints are compatible with OpenAI's Python SDK and API specification.
 """
 
 import sys
+import base64
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
@@ -131,6 +132,65 @@ router = APIRouter(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+def encode_image_to_base64(image_source: Union[str, Path, bytes, UploadFile]) -> str:
+    """
+    Encode an image to base64 string from various input types.
+
+    Args:
+        image_source: Can be:
+            - File path (str or Path)
+            - Raw bytes
+            - UploadFile from FastAPI
+            - Already base64-encoded string (returns as-is)
+
+    Returns:
+        Base64-encoded string of the image
+
+    Raises:
+        HTTPException: If file not found or encoding fails
+    """
+    try:
+        # If already base64 string, return as-is
+        if isinstance(image_source, str):
+            # Check if it's a file path
+            if Path(image_source).exists():
+                with open(image_source, "rb") as f:
+                    image_bytes = f.read()
+                return base64.b64encode(image_bytes).decode('utf-8')
+            # Assume it's already base64
+            return image_source
+
+        # If Path object
+        if isinstance(image_source, Path):
+            if not image_source.exists():
+                raise HTTPException(status_code=404, detail=f"Image file not found: {image_source}")
+            with open(image_source, "rb") as f:
+                image_bytes = f.read()
+            return base64.b64encode(image_bytes).decode('utf-8')
+
+        # If bytes
+        if isinstance(image_source, bytes):
+            return base64.b64encode(image_source).decode('utf-8')
+
+        # If UploadFile
+        if isinstance(image_source, UploadFile):
+            image_bytes = image_source.file.read()
+            return base64.b64encode(image_bytes).decode('utf-8')
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported image source type: {type(image_source)}"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to encode image: {str(e)}"
+        )
+
 
 def get_model_config(config: LlamaFarmConfig, model_name: Optional[str] = None):
     """
