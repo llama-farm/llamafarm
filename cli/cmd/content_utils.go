@@ -334,8 +334,7 @@ func saveMediaFromBase64(base64Data, mimeType string) (string, error) {
 	}
 
 	// Generate filename with timestamp
-	filename := fmt.Sprintf("output_%s%s", strings.ReplaceAll(strings.ReplaceAll(
-		fmt.Sprintf("%d", time.Now().Unix()), ":", ""), " ", "_"), ext)
+	filename := fmt.Sprintf("output_%d%s", time.Now().Unix(), ext)
 
 	// Write to current directory
 	err = os.WriteFile(filename, mediaData, 0644)

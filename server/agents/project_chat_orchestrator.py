@@ -161,14 +161,32 @@ class ProjectChatOrchestratorAgent(LFAgent):
             try:
                 role = item.get("role")
                 content = item.get("content", "")
-                if not role or not isinstance(content, str):
+                if not role:
                     continue
-                if role == "user":
-                    content_instance = self.input_schema.model_validate_json(content)
-                elif role == "assistant":
-                    content_instance = self.output_schema.model_validate_json(content)
+                # Handle both string and dict/list content (multimodal messages)
+                if isinstance(content, str):
+                    # String content - parse as JSON
+                    if role == "user":
+                        content_instance = self.input_schema.model_validate_json(
+                            content
+                        )
+                    elif role == "assistant":
+                        content_instance = self.output_schema.model_validate_json(
+                            content
+                        )
+                    else:
+                        # Skip system or unknown roles; system prompts are handled separately
+                        continue
+                elif isinstance(content, (dict, list)):
+                    # Already parsed content (e.g., multimodal messages)
+                    if role == "user":
+                        content_instance = self.input_schema.model_validate(content)
+                    elif role == "assistant":
+                        content_instance = self.output_schema.model_validate(content)
+                    else:
+                        continue
                 else:
-                    # Skip system or unknown roles; system prompts are handled separately
+                    # Unknown content type, skip
                     continue
                 self.history.add_message(role, content_instance)
             except Exception:

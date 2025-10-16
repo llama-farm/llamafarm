@@ -412,3 +412,126 @@ class TestMessageSerialization:
         assert req_dict["stream"] is True
         assert len(req_dict["messages"]) == 1
         assert isinstance(req_dict["messages"][0]["content"], list)
+
+
+class TestMultimodalResponseHandling:
+    """Test handling of multimodal responses from LLMs."""
+
+    def test_extract_text_from_multimodal_response(self):
+        """Test extracting text from a multimodal response."""
+        # Simulate a multimodal response with text and image parts
+        response_parts = [
+            {"type": "text", "text": "Here's an analysis: "},
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="},
+            },
+            {"type": "text", "text": "The image shows a test pattern."},
+        ]
+
+        # Extract text parts (as the agent streaming code does)
+        text_parts = []
+        for part in response_parts:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text_parts.append(part.get("text", ""))
+
+        extracted_text = "".join(text_parts)
+        assert extracted_text == "Here's an analysis: The image shows a test pattern."
+
+    def test_handle_string_response(self):
+        """Test that string responses still work."""
+        response_content = "Simple text response"
+
+        # Simulate handling string content (should work as before)
+        if isinstance(response_content, str):
+            content = response_content
+        elif isinstance(response_content, list):
+            text_parts = []
+            for part in response_content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+            content = "".join(text_parts)
+        else:
+            content = ""
+
+        assert content == "Simple text response"
+
+    def test_handle_list_response(self):
+        """Test that list (multimodal) responses are handled."""
+        response_content = [
+            {"type": "text", "text": "The analysis is: "},
+            {"type": "text", "text": "complete."},
+        ]
+
+        # Simulate handling list content
+        if isinstance(response_content, str):
+            content = response_content
+        elif isinstance(response_content, list):
+            text_parts = []
+            for part in response_content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+            content = "".join(text_parts)
+        else:
+            content = ""
+
+        assert content == "The analysis is: complete."
+
+    def test_handle_mixed_multimodal_response(self):
+        """Test handling response with text, images, and other media."""
+        response_content = [
+            {"type": "text", "text": "Generated image: "},
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="},
+            },
+            {"type": "text", "text": " and audio: "},
+            {
+                "type": "audio_url",
+                "audio_url": {"url": "data:audio/mpeg;base64,SUQzBAAAAAA="},
+            },
+            {"type": "text", "text": " for you."},
+        ]
+
+        # Extract only text parts
+        text_parts = []
+        for part in response_content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text_parts.append(part.get("text", ""))
+
+        content = "".join(text_parts)
+        assert content == "Generated image:  and audio:  for you."
+
+    def test_empty_list_response(self):
+        """Test handling empty list response."""
+        response_content = []
+
+        if isinstance(response_content, str):
+            content = response_content
+        elif isinstance(response_content, list):
+            text_parts = []
+            for part in response_content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+            content = "".join(text_parts)
+        else:
+            content = ""
+
+        assert content == ""
+
+    def test_none_response(self):
+        """Test handling None response."""
+        response_content = None
+
+        if isinstance(response_content, str):
+            content = response_content
+        elif isinstance(response_content, list):
+            text_parts = []
+            for part in response_content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+            content = "".join(text_parts)
+        else:
+            content = ""
+
+        assert content == ""

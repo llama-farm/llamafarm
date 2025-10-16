@@ -174,7 +174,19 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
         content = ""
         try:
             if completion.choices and completion.choices[0].message:
-                content = completion.choices[0].message.content or ""
+                msg_content = completion.choices[0].message.content
+                # Handle both string and list (multimodal) content
+                if isinstance(msg_content, str):
+                    content = msg_content or ""
+                elif isinstance(msg_content, list):
+                    # Extract text from multimodal parts
+                    text_parts = []
+                    for part in msg_content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                    content = "".join(text_parts)
+                else:
+                    content = ""
         except Exception:
             content = ""
 
@@ -213,15 +225,29 @@ class LFAgent[InputSchema: BasicChatInputSchema, OutputSchema: BasicChatOutputSc
                     and choice.delta
                     and hasattr(choice.delta, "content")
                 ):
-                    delta_content = choice.delta.content or ""
-                    content += delta_content
+                    delta_content = choice.delta.content
+                    # Handle both string and list (multimodal) content
+                    if isinstance(delta_content, str):
+                        content += delta_content
+                    elif isinstance(delta_content, list):
+                        # Extract text from multimodal parts
+                        for part in delta_content:
+                            if isinstance(part, dict) and part.get("type") == "text":
+                                content += part.get("text", "")
                 elif (
                     hasattr(choice, "message")
                     and choice.message
                     and hasattr(choice.message, "content")
                 ):
                     # Some APIs may use message.content in streaming
-                    content += choice.message.content or ""
+                    msg_content = choice.message.content
+                    if isinstance(msg_content, str):
+                        content += msg_content or ""
+                    elif isinstance(msg_content, list):
+                        # Extract text from multimodal parts
+                        for part in msg_content:
+                            if isinstance(part, dict) and part.get("type") == "text":
+                                content += part.get("text", "")
 
             # Yield the current accumulated content as output schema
             output = self.output_schema(chat_message=content)
