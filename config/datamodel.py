@@ -279,11 +279,11 @@ class LlamaFarmConfig(BaseModel):
     version: Version = Field(..., description='Config version, must be "v1"')
     name: str = Field(..., description="Project name", examples=["my-project"])
     namespace: str = Field(..., description="Project namespace", examples=["my-namespace"])
-    prompts: Optional[list[Prompt]] = Field([], description="List of named prompt sets")
+    prompts: Optional[list[Prompt]] = Field(default_factory=list, description="List of named prompt sets")
     rag: Optional[Rag] = Field(
         None,
         description="Schema for RAG system strategy configurations",
         title="RAG Strategy Configuration Schema",
     )
-    datasets: Optional[list[Dataset]] = Field([], description="List of dataset configurations")
+    datasets: Optional[list[Dataset]] = Field(default_factory=list, description="List of dataset configurations")
     runtime: Runtime
