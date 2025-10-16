@@ -24,20 +24,32 @@ properties:
     example: my-namespace
   prompts:
     type: array
+    description: List of named prompt sets
     items:
       type: object
       required:
-        - content
+        - name
+        - messages
       properties:
-        role:
+        name:
           type: string
-          description: Prompt role (e.g., "system", "user", "assistant")
-        content:
-          type: string
-          description: Prompt content (e.g., "You are a helpful assistant.")
-      example:
-        role: system
-        content: You are a helpful assistant that can answer questions and help with tasks.
+          pattern: "^[a-z][a-z0-9_]*$"
+          description: "Unique prompt set identifier"
+        messages:
+          type: array
+          description: "List of messages in this prompt set"
+          items:
+            type: object
+            required:
+              - content
+            properties:
+              role:
+                type: string
+                description: 'Message role (e.g., "system", "user", "assistant")'
+              content:
+                type: string
+                description: "Message content"
+          default: []
     default: []
 
   rag:
@@ -97,7 +109,7 @@ properties:
               description: "Human-readable description of this model configuration"
             provider:
               type: string
-              enum: [openai, ollama, lemonade]
+              enum: [openai, ollama, lemonade, transformers]
               description: "Runtime provider for this model"
             model:
               type: string
@@ -124,3 +136,61 @@ properties:
               description: "Provider-specific configuration (e.g., lemonade settings, ollama options)"
               default: {}
               additionalProperties: true
+            transformers:
+              type: object
+              description: "Transformers runtime specific configuration (when provider is 'transformers')"
+              properties:
+                device:
+                  type: string
+                  enum: [auto, cuda, mps, cpu]
+                  default: auto
+                  description: "Device to use for model inference"
+                torch_dtype:
+                  type: string
+                  enum: [auto, float16, float32, bfloat16]
+                  default: auto
+                  description: "PyTorch dtype for model weights"
+                trust_remote_code:
+                  type: boolean
+                  default: true
+                  description: "Allow loading models with custom code from HuggingFace"
+                model_type:
+                  type: string
+                  enum: [text, image]
+                  description: "Type of model (text generation or image generation)"
+            diffusion:
+              type: object
+              description: "Diffusion model configuration (for image generation models)"
+              properties:
+                default_steps:
+                  type: integer
+                  minimum: 1
+                  maximum: 150
+                  default: 50
+                  description: "Default number of denoising steps"
+                default_guidance:
+                  type: number
+                  minimum: 1.0
+                  maximum: 20.0
+                  default: 7.5
+                  description: "Default guidance scale (how closely to follow the prompt)"
+                default_size:
+                  type: string
+                  enum: ["256x256", "512x512", "768x768", "1024x1024", "1280x1280", "1792x1024", "1024x1792"]
+                  default: "1024x1024"
+                  description: "Default image size"
+                scheduler:
+                  type: string
+                  enum: [auto, ddim, pndm, lms, euler, euler_a, dpm++]
+                  default: auto
+                  description: "Diffusion scheduler to use"
+                enable_optimizations:
+                  type: boolean
+                  default: true
+                  description: "Enable platform-specific optimizations (attention slicing, xformers, etc.)"
+            prompts:
+              type: array
+              description: "List of prompt set names to use for this model (merged in order)"
+              items:
+                type: string
+              default: []

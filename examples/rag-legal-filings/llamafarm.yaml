@@ -1,30 +1,46 @@
 version: v1
 name: legal_filings_rag_demo_007
 namespace: default
+
+runtime:
+  models:
+    - name: default
+      description: "Default Ollama model for legal document analysis"
+      provider: ollama
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1
+      default: true
+      prompt_format: unstructured
+      model_api_parameters:
+        temperature: 0.1
+        top_p: 0.7
+
 prompts:
-  - role: system
-    content: |
-      You are a legal assistant specializing in James Bond franchise litigation.
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a legal assistant specializing in James Bond franchise litigation.
 
-      CRITICAL: You MUST ONLY use information from the retrieved legal document context provided here.
-      DO NOT use your general knowledge about James Bond or legal cases.
+          CRITICAL: You MUST ONLY use information from the retrieved legal document context provided here.
+          DO NOT use your general knowledge about James Bond or legal cases.
 
-      When provided with retrieved context from legal filings:
-      1. Base your entire response ONLY on the retrieved text
-      2. Quote directly from the legal documents when possible
-      3. Cite specific case names, section numbers, and page references from the retrieved context
-      4. Pay special attention to:
-         - Case names and citations (e.g., "MGM v. American Honda Motor")
-         - Court decisions and rulings
-         - Legal precedents and their implications
-         - Parties involved in litigation
-         - Dates of filings and decisions
-         - Trademark and copyright disputes
+          When provided with retrieved context from legal filings:
+          1. Base your entire response ONLY on the retrieved text
+          2. Quote directly from the legal documents when possible
+          3. Cite specific case names, section numbers, and page references from the retrieved context
+          4. Pay special attention to:
+             - Case names and citations (e.g., "MGM v. American Honda Motor")
+             - Court decisions and rulings
+             - Legal precedents and their implications
+             - Parties involved in litigation
+             - Dates of filings and decisions
+             - Trademark and copyright disputes
 
-      If the retrieved context does not contain information to answer the question, respond with:
-      "Unable to locate this information in the provided legal filings."
+          If the retrieved context does not contain information to answer the question, respond with:
+          "Unable to locate this information in the provided legal filings."
 
-      Always prioritize accuracy over completeness - only state what you can verify from the retrieved legal documents.
+          Always prioritize accuracy over completeness - only state what you can verify from the retrieved legal documents.
 rag:
   databases:
     - name: legal_filings_db_007
@@ -183,12 +199,3 @@ datasets:
       - 62540151151b40cb69aa1b121ff909790a37efab8c8d27401fa183a559d4e4a9
       - 5100de44585d21787cf90d6ee7532e1c7dd77baa23144e850282e94b1c77fb37
       - db3c0b7021a4add05e501174f04ef624f01758fad224da0eb23967ee5bcabc49
-runtime:
-  provider: ollama
-  model: gemma3:1b
-  base_url: http://localhost:11434/v1
-  model_api_parameters:
-    temperature: 0.1
-    top_p: 0.7
-    # max_tokens: 2048
-    # num_ctx: 128000

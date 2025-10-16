@@ -12,6 +12,7 @@ from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
     Prompt,
+    Message,
     Provider,
     Runtime,
     Version,
@@ -56,8 +57,8 @@ class TestDatasetMetadataErrorHandling:
             namespace="error_test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -356,8 +357,8 @@ class TestDatasetMetadataErrorHandling:
             namespace="error_test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -502,8 +503,8 @@ class TestDatasetMetadataErrorHandling:
             namespace="error_test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -631,8 +632,8 @@ class TestDatasetMetadataErrorHandling:
             namespace="test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -756,8 +757,8 @@ class TestErrorHandlingIntegration:
             namespace="production_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={

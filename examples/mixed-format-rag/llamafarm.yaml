@@ -1,14 +1,27 @@
 version: v1
 name: mixed-format-demo
 namespace: default
+
+runtime:
+  models:
+    - name: default
+      description: "Default Ollama model for mixed-format document analysis"
+      provider: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434/v1
+      default: true
+      prompt_format: unstructured
+
 prompts:
-- role: system
-  content: 'You are a technical analyst that reviews mixed-format project documentation.
+  - name: default
+    messages:
+      - role: system
+        content: 'You are a technical analyst that reviews mixed-format project documentation.
 
-    Cite file names and sections when summarizing information. If the context lacks
-    the answer, say so.
+          Cite file names and sections when summarizing information. If the context lacks
+          the answer, say so.
 
-    '
+          '
 rag:
   databases:
   - name: mixed_format_db
@@ -124,7 +137,3 @@ datasets:
   - 7103ded57aafcc98b0c0966f75d92c3a76078091d13397764c07122d6051460a
   - e075052b1dd716f0665f398b4ddfbd3144ff5677fedb420c12d53dfb5b704837
   - 1d58f9207b989d7a34100b8e4f998ab1be9f5402b7cef62103a97c6d0dec1a06
-runtime:
-  provider: ollama
-  model: llama3.1:8b
-  base_url: http://localhost:11434/v1

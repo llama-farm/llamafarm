@@ -71,12 +71,14 @@ namespace: default
 
 # System prompts for RAG-aware responses
 prompts:
-  - role: system
-    content: |
-      You are a helpful AI assistant with access to a knowledge base through RAG (Retrieval-Augmented Generation).
-      When context is provided from the knowledge base, use it to provide accurate and detailed answers.
-      If relevant context is available, cite or reference it in your response.
-      If no relevant context is provided, answer based on your general knowledge while noting that you don't have specific information from the knowledge base.
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a helpful AI assistant with access to a knowledge base through RAG (Retrieval-Augmented Generation).
+          When context is provided from the knowledge base, use it to provide accurate and detailed answers.
+          If relevant context is available, cite or reference it in your response.
+          If no relevant context is provided, answer based on your general knowledge while noting that you don't have specific information from the knowledge base.
 
 # Runtime configuration
 runtime:
@@ -500,11 +502,13 @@ version: v1
 name: docs-assistant
 namespace: default
 prompts:
-  - role: system
-    content: |
-      You are a technical documentation assistant.
-      Use the provided context to give accurate, detailed answers.
-      Always cite the source document when possible.
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a technical documentation assistant.
+          Use the provided context to give accurate, detailed answers.
+          Always cite the source document when possible.
 runtime:
   provider: ollama
   model: llama3.1:8b

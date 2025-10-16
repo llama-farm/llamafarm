@@ -1,0 +1,30 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "transformers",
+  "projectType": "application",
+  "sourceRoot": "runtimes/transformers",
+  "targets": {
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash start.sh",
+        "cwd": "runtimes/transformers"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run pytest tests/",
+        "cwd": "runtimes/transformers"
+      }
+    },
+    "sync": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv sync",
+        "cwd": "runtimes/transformers"
+      }
+    }
+  },
+  "tags": ["runtime", "python", "transformers"]
+}

@@ -4,20 +4,22 @@ name = "sample_config"
 namespace = "test"
 
 [[prompts]]
+name = "default"
+[[prompts.messages]]
 role = "system"
 content = "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
 
 [[prompts]]
 name = "technical_documentation"
+[[prompts.messages]]
+role = "system"
 content = "You are a technical documentation assistant. Provide clear, accurate, and detailed explanations of technical concepts."
-prompt = "You are a technical documentation assistant. Provide clear, accurate, and detailed explanations of technical concepts."
-description = "Prompt for generating technical documentation and explanations"
 
 [[prompts]]
 name = "code_review"
+[[prompts.messages]]
+role = "system"
 content = "You are a code review assistant. Analyze code for best practices, potential bugs, and improvements."
-prompt = "You are a code review assistant. Analyze code for best practices, potential bugs, and improvements."
-description = "Prompt for conducting code reviews and providing feedback"
 
 [rag]
 

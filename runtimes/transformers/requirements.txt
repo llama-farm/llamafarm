@@ -1,0 +1,19 @@
+# Core dependencies
+torch>=2.0.0
+transformers>=4.35.0
+diffusers>=0.25.0
+accelerate>=0.25.0
+
+# Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# Image processing
+pillow>=10.0.0
+
+# Optimizations
+xformers>=0.0.22; platform_system != "Darwin"
+
+# Utilities
+python-multipart

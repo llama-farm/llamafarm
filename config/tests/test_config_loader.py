@@ -34,12 +34,13 @@ class TestConfigLoader:
         assert "rag" in config
         assert "prompts" in config
 
-        # Verify prompts match strict schema (list of role/content objects)
+        # Verify prompts match strict schema (list of prompt objects with name and messages)
         if "prompts" in config:
             assert isinstance(config["prompts"], list)
             if config["prompts"]:
                 first_prompt = config["prompts"][0]
-                assert "content" in first_prompt
+                assert "name" in first_prompt
+                assert "messages" in first_prompt
 
         # Verify RAG configuration
         rag = config["rag"]
@@ -109,11 +110,12 @@ class TestConfigLoader:
 
         assert config["version"] == "v1"
 
-        # Prompts optional list; when present, objects have role/content
+        # Prompts optional list; when present, objects have name and messages
         assert "prompts" in config
         assert isinstance(config["prompts"], list)
         if config["prompts"]:
-            assert "content" in config["prompts"][0]
+            assert "name" in config["prompts"][0]
+            assert "messages" in config["prompts"][0]
 
         # RAG should be properly configured
         strat = config["rag"]["data_processing_strategies"][0]
@@ -289,8 +291,12 @@ def test_integration_usage():
 
     # Test accessing prompts (common use case)
     if config.get("prompts"):
-        first = config["prompts"][0]
-        assert "content" in first
+        first_prompt = config["prompts"][0]
+        assert "name" in first_prompt
+        assert "messages" in first_prompt
+        if first_prompt["messages"]:
+            first_message = first_prompt["messages"][0]
+            assert "content" in first_message
 
 
 if __name__ == "__main__":

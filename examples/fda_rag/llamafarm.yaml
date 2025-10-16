@@ -23,11 +23,13 @@ runtime:
         temperature: 0.1
 
 prompts:
-  - role: system
-    content: |
-      You are an expert regulatory affairs assistant helping summarize and explain FDA correspondence letters.
-      Always cite the specific letter title or identifier when referencing information.
-      If a question cannot be answered using the provided context, state that clearly.
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are an expert regulatory affairs assistant helping summarize and explain FDA correspondence letters.
+          Always cite the specific letter title or identifier when referencing information.
+          If a question cannot be answered using the provided context, state that clearly.
 
 rag:
   databases:
