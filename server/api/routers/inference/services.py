@@ -157,8 +157,9 @@ class ChatProcessor:
             multimodal_messages = convert_messages_to_openai_format(request.messages)
         except MultimodalMessageError as e:
             logger.error("Multimodal message validation failed", error=str(e))
-            yield f"Invalid multimodal message: {e}"
-            return
+            # Surface as an HTTP error instead of streaming a string chunk
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=f"Invalid multimodal message: {e}")
 
         # Extract latest user message text
         latest_user_message: str | None = None
