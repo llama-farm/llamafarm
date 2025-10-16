@@ -679,7 +679,7 @@ definitions:
         chunk_strategy:
           type: string
           enum: [sentences, paragraphs, characters, email_sections]
-          default: sentences
+          default: email_sections
           description: Chunking strategy
         extract_metadata:
           type: boolean
