@@ -31,6 +31,12 @@ from services.project_chat_service import (
 )
 from services.project_service import ProjectService
 from services.docs_context_service import get_docs_service
+from utils.multimodal import (
+    MultimodalMessageError,
+    convert_messages_to_openai_format,
+    extract_text_from_message,
+    has_multimodal_content,
+)
 
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
@@ -267,6 +273,113 @@ def _delete_all_sessions(namespace: str, project_id: str) -> int:
     return len(to_delete)
 
 
+def _get_or_create_agent(
+    namespace: str,
+    project_id: str,
+    project_config: LlamaFarmConfig,
+    project_dir: Path,
+    session_id: str | None,
+    model_name: str | None,
+    stateless: bool,
+) -> tuple[AtomicAgent, str | None]:
+    """Get or create a chat agent for the session.
+
+    Args:
+        namespace: Project namespace
+        project_id: Project ID
+        project_config: Project configuration
+        project_dir: Project directory path
+        session_id: Session ID (None for stateless)
+        model_name: Model to use
+        stateless: Whether to use stateless mode
+
+    Returns:
+        Tuple of (agent, session_id)
+    """
+    now = time.time()
+
+    if stateless:
+        # Stateless mode: create throwaway agent without session or persistence
+        agent = ProjectChatOrchestratorAgentFactory.create_agent(
+            project_config, project_dir=project_dir, model_name=model_name
+        )
+        return agent, None
+
+    # Stateful mode: use or create cached agent with disk-persisted history
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    key = _session_key(namespace, project_id, session_id)
+    with _agent_sessions_lock:
+        # Clean up expired sessions before checking cache
+        _cleanup_expired_sessions(now)
+
+        record = agent_sessions.get(key)
+        if record is not None and (now - record.last_used > SESSION_TTL_SECONDS):
+            # Session expired, remove it and create fresh
+            agent_sessions.pop(key, None)
+            record = None
+
+        if record is None or record.agent.model_name != model_name:
+            # Create new agent and enable persistence
+            agent = ProjectChatOrchestratorAgentFactory.create_agent(
+                project_config,
+                project_dir=project_dir,
+                model_name=model_name,
+                session_id=session_id,
+            )
+            # Cache the agent in memory
+            agent_sessions[key] = SessionRecord(
+                namespace=namespace,
+                project_id=project_id,
+                agent=agent,
+                created_at=now,
+                last_used=now,
+                request_count=1,
+            )
+        else:
+            # Reuse cached agent and update stats
+            record.last_used = now
+            record.request_count += 1
+            agent = record.agent
+
+    return agent, session_id
+
+
+def _process_multimodal_messages(
+    messages: list, has_multimodal: bool, agent: AtomicAgent
+) -> None:
+    """Process and inject multimodal messages into the agent if present.
+
+    Args:
+        messages: List of messages in OpenAI format
+        has_multimodal: Whether any message contains multimodal content
+        agent: The agent to inject messages into
+    """
+    if has_multimodal and hasattr(agent, "set_multimodal_messages"):
+        agent.set_multimodal_messages(messages)
+
+
+def _inject_docs_context(
+    project_id: str, agent: AtomicAgent, user_message: str
+) -> None:
+    """Inject relevant documentation context into agent if in dev mode.
+
+    Args:
+        project_id: Project ID
+        agent: The agent to inject docs into
+        user_message: User message to match docs against
+    """
+    if (
+        settings.lf_dev_mode_docs_enabled
+        and project_id == "project_seed"
+        and hasattr(agent, "docs_context_provider")
+    ):
+        docs_service = get_docs_service()
+        matched_docs = docs_service.match_docs_for_query(user_message)
+        agent.docs_context_provider.set_docs(matched_docs)
+
+
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
 )
@@ -282,118 +395,46 @@ async def chat(
     project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
 
-    now = time.time()
     stateless = x_no_session is not None
 
-    if stateless:
-        # Stateless mode: create throwaway agent without session or persistence
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(
-            project_config, project_dir=project_dir, model_name=request.model
-        )
-    else:
-        # Stateful mode: use or create cached agent with disk-persisted history
-        if not session_id:
-            session_id = str(uuid.uuid4())
+    # Get or create agent
+    agent, session_id = _get_or_create_agent(
+        namespace=namespace,
+        project_id=project_id,
+        project_config=project_config,
+        project_dir=project_dir,
+        session_id=session_id,
+        model_name=request.model,
+        stateless=stateless,
+    )
 
-        key = _session_key(namespace, project_id, session_id)
-        with _agent_sessions_lock:
-            # Clean up expired sessions before checking cache
-            _cleanup_expired_sessions(now)
-
-            record = agent_sessions.get(key)
-            if record is not None and (now - record.last_used > SESSION_TTL_SECONDS):
-                # Session expired, remove it and create fresh
-                agent_sessions.pop(key, None)
-                record = None
-
-            if record is None or record.agent.model_name != request.model:
-                # Create new agent and enable persistence
-                agent = ProjectChatOrchestratorAgentFactory.create_agent(
-                    project_config,
-                    project_dir=project_dir,
-                    model_name=request.model,
-                    session_id=session_id,
-                )
-                # Cache the agent in memory
-                agent_sessions[key] = SessionRecord(
-                    namespace=namespace,
-                    project_id=project_id,
-                    agent=agent,
-                    created_at=now,
-                    last_used=now,
-                    request_count=1,
-                )
-            else:
-                # Reuse cached agent and update stats
-                record.last_used = now
-                record.request_count += 1
-                agent = record.agent
-
+    if not stateless:
         set_session_header(response, session_id)
 
-    # Extract the latest user message and handle multimodal content
+    # Convert messages to OpenAI format with validation
+    try:
+        has_multimodal = has_multimodal_content(request.messages)
+        multimodal_messages = convert_messages_to_openai_format(request.messages)
+    except MultimodalMessageError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid multimodal message: {e}"
+        ) from e
+
+    # Extract latest user message text
     latest_user_message = None
-    has_multimodal = False
-    multimodal_messages = []
-
-    # Build multimodal messages if any exist
-    for message in request.messages:
-        if isinstance(message.content, list):
-            has_multimodal = True
-            # Convert to dict format for OpenAI API
-            content_parts = []
-            for part in message.content:
-                if part.type == "text":
-                    content_parts.append({"type": "text", "text": part.text})
-                elif part.type == "image_url" and part.image_url:
-                    content_parts.append(
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": part.image_url.url,
-                                "detail": part.image_url.detail,
-                            },
-                        }
-                    )
-            multimodal_messages.append({"role": message.role, "content": content_parts})
-        else:
-            multimodal_messages.append(
-                {"role": message.role, "content": message.content}
-            )
-
-    # Extract text for the input schema
     for msg in reversed(request.messages):
         if msg.role == "user" and msg.content:
-            if isinstance(msg.content, str):
-                latest_user_message = msg.content
-            elif isinstance(msg.content, list):
-                # Multimodal message - extract text parts
-                text_parts = []
-                for part in msg.content:
-                    if part.type == "text" and part.text:
-                        text_parts.append(part.text)
-                latest_user_message = (
-                    " ".join(text_parts) if text_parts else "Describe this image."
-                )
+            latest_user_message = extract_text_from_message(msg)
             break
 
-    # If no user message, check if this is a greeting request (new session)
     if latest_user_message is None:
-        raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
+        raise HTTPException(status_code=400, detail="No user message provided")
 
-    # If we have multimodal messages, inject them into the agent
-    if has_multimodal and hasattr(agent, "set_multimodal_messages"):
-        agent.set_multimodal_messages(multimodal_messages)
+    # Process multimodal messages if present
+    _process_multimodal_messages(multimodal_messages, has_multimodal, agent)
 
-    # Inject relevant documentation based on user query (dev mode only)
-    if (
-        settings.lf_dev_mode_docs_enabled
-        and project_id == "project_seed"
-        and hasattr(agent, "docs_context_provider")
-    ):
-        docs_service = get_docs_service()
-        matched_docs = docs_service.match_docs_for_query(latest_user_message)
-        agent.docs_context_provider.set_docs(matched_docs)
+    # Inject documentation context if in dev mode
+    _inject_docs_context(project_id, agent, latest_user_message)
 
     if request.stream:
         return create_streaming_response_from_iterator(

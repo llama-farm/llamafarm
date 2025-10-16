@@ -278,6 +278,14 @@ func isWhitespaceOrDelimiter(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '"' || c == '\'' || c == ')' || c == ']' || c == '}'
 }
 
+// isFilePath checks if a string looks like a file path
+func isFilePath(s string) bool {
+	return strings.HasPrefix(s, "/") ||
+		strings.HasPrefix(s, "./") ||
+		strings.HasPrefix(s, "../") ||
+		strings.Contains(s, ".")
+}
+
 // saveMediaFromBase64 decodes base64 media data and saves it to a file
 func saveMediaFromBase64(base64Data, mimeType string) (string, error) {
 	// Decode base64

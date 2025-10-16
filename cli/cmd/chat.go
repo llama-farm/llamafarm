@@ -10,6 +10,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// parseProjectAndInput parses command arguments to extract project (ns/proj) and input text
+// Returns (namespace, project, input, isProjectExplicit)
+func parseProjectAndInput(args []string, inputFile string) (string, string, string, bool) {
+	var ns, proj, input string
+	isProjectExplicit := false
+
+	// Resolve input from file or args
+	if inputFile != "" {
+		data, err := os.ReadFile(inputFile)
+		if err != nil {
+			return "", "", "", false
+		}
+		input = string(data)
+	} else if len(args) >= 1 {
+		// Check if first arg is namespace/project (not a file path)
+		firstArg := args[0]
+		if strings.Contains(firstArg, "/") && !isFilePath(firstArg) {
+			// Explicit project, inline input follows
+			parts := strings.SplitN(firstArg, "/", 2)
+			ns = strings.TrimSpace(parts[0])
+			proj = strings.TrimSpace(parts[1])
+			isProjectExplicit = true
+			if len(args) >= 2 {
+				input = args[1]
+			}
+		} else {
+			// No explicit project, first arg is inline input (or file path)
+			input = args[0]
+		}
+	}
+
+	return ns, proj, input, isProjectExplicit
+}
+
 var (
 	runInputFile         string
 	runRAGDatabase       string
@@ -69,14 +103,8 @@ Examples:
 		}
 
 		// Check if first arg looks like namespace/project (not a file path)
-		// File paths start with /, ./, ../ or contain file extensions
 		firstArg := args[0]
-		isFilePath := strings.HasPrefix(firstArg, "/") ||
-					  strings.HasPrefix(firstArg, "./") ||
-					  strings.HasPrefix(firstArg, "../") ||
-					  strings.Contains(firstArg, ".")  // Has file extension
-
-		if strings.Contains(firstArg, "/") && !isFilePath {
+		if strings.Contains(firstArg, "/") && !isFilePath(firstArg) {
 			// Looks like explicit project provided (namespace/project format)
 			if strings.Count(firstArg, "/") != 1 {
 				return fmt.Errorf("project must be in format 'namespace/project', got: %s", firstArg)
@@ -100,56 +128,13 @@ Examples:
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Resolve project and input according to args pattern
-		var ns, proj string
-
-		// Resolve input
-		var input string
-		if runInputFile != "" {
-			data, err := os.ReadFile(runInputFile)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading file '%s': %v\n", runInputFile, err)
-				os.Exit(1)
-			}
-			input = string(data)
-		} else if len(args) >= 1 {
-			// Check if first arg is namespace/project (not a file path)
-			firstArg := args[0]
-			isFilePath := strings.HasPrefix(firstArg, "/") ||
-						  strings.HasPrefix(firstArg, "./") ||
-						  strings.HasPrefix(firstArg, "../") ||
-						  strings.Contains(firstArg, ".")
-
-			if strings.Contains(firstArg, "/") && !isFilePath {
-				// Explicit project, inline input follows
-				if len(args) >= 2 {
-					input = args[1]
-				}
-			} else {
-				// No explicit project, first arg is inline input (or file path)
-				input = args[0]
-			}
-		}
+		// Parse project and input from args
+		ns, proj, input, _ := parseProjectAndInput(args, runInputFile)
 
 		// Start an interactive chat session if no input is provided
 		if input == "" {
 			start(SessionModeProject)
 			return
-		}
-
-		// Parse explicit project if provided
-		if len(args) >= 1 {
-			firstArg := args[0]
-			isFilePath := strings.HasPrefix(firstArg, "/") ||
-						  strings.HasPrefix(firstArg, "./") ||
-						  strings.HasPrefix(firstArg, "../") ||
-						  strings.Contains(firstArg, ".")
-
-			if strings.Contains(firstArg, "/") && !isFilePath {
-				parts := strings.SplitN(firstArg, "/", 2)
-				ns = strings.TrimSpace(parts[0])
-				proj = strings.TrimSpace(parts[1])
-			}
 		}
 
 		cwd := getEffectiveCWD()

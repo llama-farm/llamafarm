@@ -143,36 +143,24 @@ class ChatProcessor:
 
         logger.info("Incoming chat message", messages=request.messages)
 
-        # Check if we have multimodal messages (images, etc.)
-        has_multimodal = False
-        multimodal_messages = []
+        # Import multimodal utilities
+        from utils.multimodal import (
+            MultimodalMessageError,
+            convert_messages_to_openai_format,
+            extract_text_from_message,
+            has_multimodal_content,
+        )
 
-        for message in request.messages:
-            if isinstance(message.content, list):
-                has_multimodal = True
-                # Convert to dict format for OpenAI API
-                content_parts = []
-                for part in message.content:
-                    if part.type == "text":
-                        content_parts.append({"type": "text", "text": part.text})
-                    elif part.type == "image_url" and part.image_url:
-                        content_parts.append(
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": part.image_url.url,
-                                    "detail": part.image_url.detail,
-                                },
-                            }
-                        )
-                multimodal_messages.append(
-                    {"role": message.role, "content": content_parts}
-                )
-            else:
-                multimodal_messages.append(
-                    {"role": message.role, "content": message.content}
-                )
+        # Convert messages to OpenAI format with validation
+        try:
+            has_multimodal = has_multimodal_content(request.messages)
+            multimodal_messages = convert_messages_to_openai_format(request.messages)
+        except MultimodalMessageError as e:
+            logger.error("Multimodal message validation failed", error=str(e))
+            yield f"Invalid multimodal message: {e}"
+            return
 
+        # Extract latest user message text
         latest_user_message: str | None = None
         for message in reversed(request.messages):
             if (
@@ -180,18 +168,7 @@ class ChatProcessor:
                 and message.role == "user"
                 and message.content
             ):
-                # Extract text from either simple string or multimodal content
-                if isinstance(message.content, str):
-                    latest_user_message = message.content
-                elif isinstance(message.content, list):
-                    # Multimodal message - extract text parts
-                    text_parts = []
-                    for part in message.content:
-                        if part.type == "text" and part.text:
-                            text_parts.append(part.text)
-                    latest_user_message = (
-                        " ".join(text_parts) if text_parts else "Describe this image."
-                    )
+                latest_user_message = extract_text_from_message(message)
                 break
         if latest_user_message is None:
             # yield an error and end

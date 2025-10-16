@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # OpenAI-compatible multimodal message content
@@ -13,18 +13,67 @@ class ImageURLContent(BaseModel):
     detail: Literal["auto", "low", "high"] = "auto"
 
 
-class MessageContentPart(BaseModel):
-    """Part of a multimodal message content."""
+class AudioURLContent(BaseModel):
+    """Audio URL content for multimodal messages."""
 
-    type: Literal["text", "image_url"]
+    url: str
+
+
+class VideoURLContent(BaseModel):
+    """Video URL content for multimodal messages."""
+
+    url: str
+
+
+class MessageContentPart(BaseModel):
+    """Part of a multimodal message content.
+
+    Supports text, images, audio, and video content.
+    """
+
+    type: Literal["text", "image_url", "audio_url", "video_url"]
     text: str | None = None
     image_url: ImageURLContent | None = None
+    audio_url: AudioURLContent | None = None
+    video_url: VideoURLContent | None = None
+
+    @model_validator(mode="after")
+    def validate_content_type(self) -> "MessageContentPart":
+        """Ensure the appropriate field is set for each content type."""
+        if self.type == "text" and self.text is None:
+            raise ValueError("text content part must have 'text' field set")
+        if self.type == "image_url" and self.image_url is None:
+            raise ValueError("image_url content part must have 'image_url' field set")
+        if self.type == "audio_url" and self.audio_url is None:
+            raise ValueError("audio_url content part must have 'audio_url' field set")
+        if self.type == "video_url" and self.video_url is None:
+            raise ValueError("video_url content part must have 'video_url' field set")
+        return self
 
 
 # OpenAI-compatible chat message
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
     content: Union[str, list[MessageContentPart]]
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "ChatMessage":
+        """Validate content field for reliable serialization.
+
+        Ensures that:
+        - If content is a list, it's not empty
+        - All list items are valid MessageContentPart instances
+        """
+        if isinstance(self.content, list):
+            if not self.content:
+                raise ValueError("content list cannot be empty")
+            # Pydantic already validates each part, but we ensure type safety
+            for i, part in enumerate(self.content):
+                if not isinstance(part, MessageContentPart):
+                    raise ValueError(
+                        f"content[{i}] must be a MessageContentPart instance"
+                    )
+        return self
 
 
 # OpenAI-compatible chat completion request
