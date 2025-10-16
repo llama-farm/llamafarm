@@ -86,8 +86,11 @@ class ImageVariationRequest(BaseModel):
     OpenAI-compatible image variation request.
 
     Spec: https://platform.openai.com/docs/api-reference/images/createVariation
+
+    Extended with prompt and other parameters for img2img functionality.
     """
-    image: str = Field(..., description="The image to use as the basis for variations (base64 encoded)")
+    image: str = Field(..., description="The image to use as the basis for variations (base64 encoded or file path)")
+    prompt: Optional[str] = Field(None, description="Text prompt describing the desired variation")
     model: Optional[str] = Field(None, description="The model to use for generating variations")
     n: Optional[int] = Field(1, ge=1, le=10, description="The number of images to generate")
     response_format: Optional[Literal["url", "b64_json"]] = Field("url", description="The format of the generated images")
@@ -96,6 +99,13 @@ class ImageVariationRequest(BaseModel):
         description="The size of the generated images"
     )
     user: Optional[str] = Field(None, description="A unique identifier representing your end-user")
+
+    # Extended parameters for img2img
+    strength: Optional[float] = Field(0.75, ge=0.0, le=1.0, description="How much to transform the image (0.0 = no change, 1.0 = complete remake)")
+    negative_prompt: Optional[str] = Field(None, description="Text describing what to avoid")
+    num_inference_steps: Optional[int] = Field(None, ge=1, le=150, description="Number of denoising steps")
+    guidance_scale: Optional[float] = Field(None, ge=1.0, le=20.0, description="How closely to follow the prompt")
+    seed: Optional[int] = Field(None, description="Seed for reproducible generation")
 
 
 class ImageObject(BaseModel):
@@ -496,6 +506,10 @@ async def create_image_variation(
     # Prepare request data - replace friendly model name with actual model ID
     request_data = request.dict(exclude_none=True)
     request_data['model'] = model_config.model
+
+    # Encode image to base64 if it's a file path
+    if request.image:
+        request_data['image'] = encode_image_to_base64(request.image)
 
     # Proxy to transformers runtime
     response_data = await proxy_to_transformers_runtime(
