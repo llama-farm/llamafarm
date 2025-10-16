@@ -53,6 +53,7 @@ type ServiceOrchestrationConfig struct {
 	ServiceNeeds    map[string]ServiceRequirement
 	DefaultTimeout  time.Duration
 	ServiceTimeouts map[string]time.Duration
+	NoAutoStart     bool
 }
 
 func (config *ServiceOrchestrationConfig) isLocalhost() bool {
@@ -365,6 +366,19 @@ func (so *ServiceOrchestrator) ensureService(serviceName string, requirement Ser
 		}
 	}
 
+	// Check if auto-start is disabled
+	if so.config.NoAutoStart {
+		if so.config.PrintStatus {
+			OutputError("Service '%s' is not running and auto-start is disabled (--no-auto-start).\n", serviceName)
+			fmt.Fprintf(os.Stderr, "\nTo start services manually, run:\n  lf start\n\nOr remove the --no-auto-start flag to allow automatic startup.\n")
+		}
+		return &ServiceState{
+			Name:   serviceName,
+			Status: StatusFailed,
+			Error:  fmt.Errorf("service '%s' is not running and auto-start is disabled (--no-auto-start)", serviceName),
+		}
+	}
+
 	// Start the service
 	if so.config.PrintStatus {
 		OutputProgress("Starting %s service...\n", serviceName)
@@ -491,7 +505,7 @@ func (so *ServiceOrchestrator) getServiceTimeout(serviceName string, serviceDef 
 // Command-Specific Configuration Factories
 
 // StartCommandConfig creates config for lf start - Server required, RAG optional (background)
-func StartCommandConfig(serverURL string) *ServiceOrchestrationConfig {
+func StartCommandConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true, // Show progress for lf start so users see what's happening
@@ -500,11 +514,12 @@ func StartCommandConfig(serverURL string) *ServiceOrchestrationConfig {
 			"rag":    ServiceOptional, // Start async, don't wait
 		},
 		DefaultTimeout: 45 * time.Second,
+		NoAutoStart:    noAutoStart,
 	}
 }
 
 // RAGCommandConfig creates config for RAG commands - Both server and RAG required
-func RAGCommandConfig(serverURL string) *ServiceOrchestrationConfig {
+func RAGCommandConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
@@ -513,11 +528,12 @@ func RAGCommandConfig(serverURL string) *ServiceOrchestrationConfig {
 			"rag":    ServiceRequired, // Wait for both
 		},
 		DefaultTimeout: 45 * time.Second,
+		NoAutoStart:    noAutoStart,
 	}
 }
 
 // ChatNoRAGConfig creates config for lf chat --no-rag - Only server
-func ChatNoRAGConfig(serverURL string) *ServiceOrchestrationConfig {
+func ChatNoRAGConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
@@ -526,11 +542,12 @@ func ChatNoRAGConfig(serverURL string) *ServiceOrchestrationConfig {
 			// RAG not mentioned = ServiceIgnored
 		},
 		DefaultTimeout: 45 * time.Second,
+		NoAutoStart:    noAutoStart,
 	}
 }
 
 // ServerOnlyConfig creates config for server-only commands - Server required, RAG optional (background)
-func ServerOnlyConfig(serverURL string) *ServiceOrchestrationConfig {
+func ServerOnlyConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
@@ -539,6 +556,7 @@ func ServerOnlyConfig(serverURL string) *ServiceOrchestrationConfig {
 			"rag":    ServiceOptional, // Start async, don't wait
 		},
 		DefaultTimeout: 45 * time.Second,
+		NoAutoStart:    noAutoStart,
 	}
 }
 

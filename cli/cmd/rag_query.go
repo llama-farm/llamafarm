@@ -79,7 +79,7 @@ Examples:
 		StartConfigWatcherForCommand()
 
 		// Ensure server and RAG are available
-		config := RAGCommandConfig(serverCfg.URL)
+		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		// Build the request

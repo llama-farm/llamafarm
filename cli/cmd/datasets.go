@@ -91,7 +91,7 @@ var datasetsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		config := ServerOnlyConfig(serverCfg.URL)
+		config := ServerOnlyConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=false", serverCfg.Namespace, serverCfg.Project))
@@ -171,7 +171,7 @@ Examples:
 		}
 
 		// 2) Validate strategies and databases exist in project config
-		config := ServerOnlyConfig(serverCfg.URL)
+		config := ServerOnlyConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -261,7 +261,7 @@ var datasetsDeleteCommand = &cobra.Command{
 		}
 		datasetName := args[0]
 		// Ensure server is up
-		config := ServerOnlyConfig(serverCfg.URL)
+		config := ServerOnlyConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
@@ -340,7 +340,7 @@ Examples:
 		fmt.Printf("Found %d files to upload\n", len(files))
 
 		// Ensure server is up
-		config := ServerOnlyConfig(serverCfg.URL)
+		config := ServerOnlyConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		// Upload in batches with progress display
@@ -408,7 +408,7 @@ var datasetsProcessCmd = &cobra.Command{
 		datasetName := args[0]
 
 		// Ensure server and RAG are up (process command needs RAG for ingestion)
-		config := RAGCommandConfig(serverCfg.URL)
+		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		// Call the process endpoint

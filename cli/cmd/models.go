@@ -59,7 +59,7 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up
-		config := ChatNoRAGConfig(serverURL) // Server only, no need for RAG
+		config := ChatNoRAGConfig(serverURL, noAutoStart) // Server only, no need for RAG
 		EnsureServicesWithConfig(config)
 
 		// Fetch models using shared function

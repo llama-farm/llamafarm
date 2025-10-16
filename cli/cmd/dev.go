@@ -61,7 +61,7 @@ func start(mode SessionMode) {
 	serverURL = serverInfo.URL
 
 	// Use new service orchestrator for development
-	config := StartCommandConfig(serverURL)
+	config := StartCommandConfig(serverURL, noAutoStart)
 	serverHealth, _ := EnsureServicesWithConfigAndResult(config)
 
 	// Filter health status to avoid alarming messages for optional services (like RAG)

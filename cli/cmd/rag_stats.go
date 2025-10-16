@@ -48,7 +48,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
+		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		stats, err := fetchRAGStats(serverCfg, statsDatabase)
@@ -85,7 +85,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
+		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		health, err := fetchRAGHealth(serverCfg, statsDatabase)
@@ -124,7 +124,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
+		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		docs, err := fetchRAGDocuments(serverCfg, statsDatabase, listLimit, metadataFilters)
@@ -158,7 +158,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
+		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		fmt.Println("🔧 Starting database compaction...")
@@ -193,7 +193,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
+		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		fmt.Println("🔄 Starting reindexing...")

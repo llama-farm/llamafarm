@@ -70,7 +70,7 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		config := ServerOnlyConfig(serverURL)
+		config := ServerOnlyConfig(serverURL, noAutoStart)
 		EnsureServicesWithConfig(config)
 
 		// Build request

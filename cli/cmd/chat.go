@@ -19,7 +19,6 @@ var (
 	runRAGScoreThreshold float64
 	runModel             string
 	dryRun               bool
-
 )
 
 // chatCmd represents the `lf chat` command
@@ -176,9 +175,9 @@ Examples:
 		// Ensure server is up (auto-start locally if needed)
 		var config *ServiceOrchestrationConfig
 		if runNoRAG {
-			config = ChatNoRAGConfig(serverURL) // Server only, completely ignore RAG
+			config = ChatNoRAGConfig(serverURL, noAutoStart) // Server only, completely ignore RAG
 		} else {
-			config = RAGCommandConfig(serverURL) // Wait for both server and RAG
+			config = RAGCommandConfig(serverURL, noAutoStart) // Wait for both server and RAG
 		}
 		// Ensure health checks reflect project context before contacting server
 		EnsureServicesWithConfig(config)

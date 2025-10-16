@@ -111,6 +111,27 @@ Open another terminal to run `lf` commands (installed or built from source). Thi
 | Process dataset | `lf datasets process research-notes` | Streams heartbeat dots during long processing. |
 | Semantic query | `lf rag query --database main_db "What did the 2024 FDA letters require?"` | Use `--filter`, `--include-metadata`, etc. |
 
+### Global Flags
+
+All `lf` commands support these global flags:
+
+| Flag | Description | Use Case |
+| ---- | ----------- | -------- |
+| `--no-auto-start` | Skip automatic service startup | CI/CD pipelines, manual service management, debugging |
+| `--server-url <url>` | Connect to a specific server | Remote deployments, custom ports |
+| `--debug` | Enable verbose debug output | Troubleshooting, development |
+| `--cwd <path>` | Override working directory | Scripting, automation |
+
+**Example: Manual Service Management**
+```bash
+# Start services manually
+lf start
+
+# In another terminal, run commands without auto-start
+lf chat --no-auto-start "What is LlamaFarm?"
+lf datasets list --no-auto-start
+```
+
 See the [CLI reference](docs/website/docs/cli/index.md) for full command details and troubleshooting advice.
 
 ---
