@@ -74,7 +74,7 @@ class MsgMetadataExtractor:
                 metadata["message_size"] = msg.size
 
             # Content type information
-            has_html = hasattr(msg, "htmlBody") and msg.htmlBody
+            has_html = bool(getattr(msg, "htmlBody", None))
             has_text = hasattr(msg, "body") and msg.body
             metadata["has_html_body"] = has_html
             metadata["has_text_body"] = has_text
