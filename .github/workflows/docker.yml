@@ -352,10 +352,13 @@ jobs:
           echo "Tagged images:"
           docker images | grep "pr-${{ github.event.number }}"
 
-      - name: Ensure data dir exists for bind mount
+      - name: Prepare Docker environment
         run: |
+          # Create base data directory for main llamafarm volume
           mkdir -p "$HOME/.llamafarm"
           chmod 777 "$HOME/.llamafarm"
+          
+          # ChromaDB now uses Docker-managed volumes, no directory creation needed
 
       - name: Test services startup
         working-directory: deployment/docker_compose
@@ -365,16 +368,33 @@ jobs:
           # Start services and check they come up healthy
           docker compose -f docker-compose.yml up -d
 
-          # Wait for services to be ready
-          sleep 30
+          # Wait for services to be ready (ChromaDB needs more time to initialize)
+          echo "Waiting for services to start..."
+          sleep 60
+          
+          # Check ChromaDB server specifically
+          echo "Checking ChromaDB server status..."
+          docker compose -f docker-compose.yml logs chromadb-server | tail -20
 
           # Check if services are running
           docker compose -f docker-compose.yml ps
 
           # Basic health checks
+          docker compose -f docker-compose.yml logs chromadb-server
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
           docker compose -f docker-compose.yml logs rag
+          
+          # Test ChromaDB server connectivity
+          echo "Testing ChromaDB server connectivity..."
+          echo "Trying heartbeat endpoint..."
+          curl -f http://localhost:8001/api/v2/heartbeat || echo "Heartbeat endpoint failed"
+          
+          echo "Trying version endpoint..."
+          curl -f http://localhost:8001/api/v2/version || echo "Version endpoint failed"
+          
+          echo "Trying collections endpoint..."
+          curl -f http://localhost:8001/api/v2/collections || echo "Collections endpoint failed"
 
       - name: Cleanup
         if: always()

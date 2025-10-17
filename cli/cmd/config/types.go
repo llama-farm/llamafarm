@@ -37,8 +37,13 @@ type PromptMessage struct {
 
 // Prompt represents a named prompt set configuration
 type Prompt struct {
-	Name     string          `yaml:"name" toml:"name" json:"name"`
 	Messages []PromptMessage `yaml:"messages" toml:"messages" json:"messages"`
+	Name    string `yaml:"name,omitempty" toml:"name,omitempty"`
+	Role    string `yaml:"role,omitempty" toml:"role,omitempty"`
+	Content string `yaml:"content,omitempty" toml:"content,omitempty"`
+	// Back-compat: some configs may use `prompt` instead of `content`.
+	// When both `content` and `prompt` are present, `content` takes precedence.
+	Description string `yaml:"description,omitempty" toml:"description,omitempty"`
 }
 
 // RAGConfig represents the RAG configuration
