@@ -5,6 +5,37 @@ sidebar_position: 10
 
 # Example Workflows
 
+## 🌟 Featured: Personal Medical Assistant
+
+**A privacy-first, 100% local medical records helper** that lets you understand your health data using AI and evidence-based medical knowledge.
+
+<div style={{position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden', maxWidth: '100%', marginBottom: '2rem'}}>
+  <iframe
+    style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%'}}
+    src="https://www.youtube.com/embed/H6WKKzYPLlQ"
+    title="Personal Medical Assistant Demo"
+    frameBorder="0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowFullScreen>
+  </iframe>
+</div>
+
+### ✨ Highlights
+
+- 🔒 **Complete Privacy** – All PDF processing in browser, no uploads, PHI stays on device
+- 🤖 **Multi-Hop Agentic RAG** – AI orchestrates query generation and knowledge synthesis
+- 📚 **125,830 Medical Knowledge Chunks** – From 18 authoritative textbooks (MedRAG dataset)
+- ⚡ **Two-Tier AI** – Fast model for queries, capable model for responses
+- 💬 **Streaming Chat** – Real-time responses with transparent reasoning
+
+Built with Next.js and LlamaFarm, this example demonstrates how to build privacy-first healthcare applications that keep sensitive data completely local while delivering intelligent, evidence-based insights.
+
+**[📖 Read the Full Guide →](./medical-records-helper.md)**
+
+---
+
+## CLI-Based RAG Examples
+
 The repository ships with interactive demos that highlight different retrieval scenarios. Each example lives under `examples/<folder>` and provides a configuration, sample data, and a script that uses the newest CLI commands (e.g., `lf datasets create`, `lf chat`).
 
 | Folder | Use Case | Highlights |
