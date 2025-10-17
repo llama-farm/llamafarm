@@ -453,13 +453,15 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		if len(availablePrompts) > 0 {
 			pr := make([]uitk.PromptItem, 0, len(availablePrompts))
 			for _, p := range availablePrompts {
-				// Prefer Content, fallback to Prompt (back-compat)
-				content := p.Content
-				if strings.TrimSpace(content) == "" {
-					content = p.Prompt
+				// Use first message from the prompt set
+				if len(p.Messages) == 0 {
+					continue // Skip prompts with no messages
 				}
-				// First line: role (not truncated); default to "system" if missing
-				role := p.Role
+
+				content := p.Messages[0].Content
+				role := p.Messages[0].Role
+
+				// Default to "system" if missing
 				if strings.TrimSpace(role) == "" {
 					role = "system"
 				}
