@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 import json
 import os
 from pathlib import Path
@@ -61,6 +62,26 @@ class ChatOrchestratorAgent(LFAgent):
         )
 
         super().__init__(config=config)
+
+    async def run_async(self, user_input: LFAgentChatMessage | None = None) -> str:
+        response = await super().run_async(user_input=user_input)
+        try:
+            self._persist_history()
+        except Exception:
+            logger.warning("History persistence failed after run_async", exc_info=True)
+        return response
+
+    async def run_async_stream(
+        self, user_input: LFAgentChatMessage | None = None
+    ) -> AsyncGenerator[str, None]:
+        async for chunk in super().run_async_stream(user_input=user_input):
+            yield chunk
+        try:
+            self._persist_history()
+        except Exception:
+            logger.warning(
+                "History persistence failed after run_async_stream", exc_info=True
+            )
 
     def enable_persistence(
         self,
