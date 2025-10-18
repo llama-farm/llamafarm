@@ -1,27 +1,35 @@
-from typing import get_type_hints
+from typing import Literal, get_type_hints
 
-from atomic_agents import BaseIOSchema, BaseTool, BasicChatOutputSchema  # type: ignore
+from atomic_agents import BaseIOSchema, BasicChatOutputSchema  # type: ignore
 from atomic_agents.connectors.mcp import create_mcp_orchestrator_schema  # type: ignore
-from context_providers.mcp_tools_context_provider import MCPToolsContextProvider
-from mcp import ClientSession
-from mcp.client.sse import sse_client
+from config.datamodel import LlamaFarmConfig
 from pydantic import Field
 
 from agents.agent import LFAgent, LFAgentConfig
+from context_providers.mcp_tools_context_provider import MCPToolsContextProvider
 from core.logging import FastAPIStructLogger
 from services.mcp_service import MCPService
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
-from config.datamodel import LlamaFarmConfig
-
 logger = FastAPIStructLogger(__name__)
 
 
-class FinalResponseSchema(BasicChatOutputSchema):
-    """Final response schema for when no more tools need to be called."""
+class FinalResponseSchema(BaseIOSchema):
+    """Final response tool - use when you have enough info to answer.
 
-    __doc__ = BasicChatOutputSchema.__doc__
-    pass
+    This is a special tool that signals you are done calling tools
+    and ready to provide the final answer.
+
+    Use this when:
+    - You have gathered all necessary information from tools
+    - You can directly answer the user's question
+    - No additional tool calls are needed
+    """
+
+    chat_message: str = Field(
+        ...,
+        description="Your complete final answer to the user's question. Be clear, concise, and helpful.",
+    )
 
 
 class MCPOrchestrator(LFAgent):
@@ -34,7 +42,6 @@ class MCPOrchestrator(LFAgent):
     _mcp_tools_loaded: bool = False
     _mcp_tools: list = []  # List of MCP tool classes (Type[BaseTool])
     _mcp_tool_factory: MCPToolFactory
-    _mcp_session: ClientSession | None = None
 
     def __init__(
         self,
@@ -109,15 +116,30 @@ class MCPOrchestrator(LFAgent):
         type_hints = get_type_hints(orchestrator_schema)
         tool_params_type = type_hints.get("tool_parameters")
 
-        # Build the output schema with tool_parameters union
-        class MCPOrchestratorOutputSchema(BaseIOSchema):
-            """Output schema for orchestrator with tool parameters."""
+        # Add FinalResponseSchema to union so LLM can choose to stop
+        # This is critical - without it, orchestrator loops forever
+        extended_tool_params_type = (
+            tool_params_type | FinalResponseSchema  # type: ignore
+        )
 
-            tool_parameters: tool_params_type = Field(  # type: ignore
+        # Build output schema with tool_parameters or FinalResponseSchema
+        class MCPOrchestratorOutputSchema(BaseIOSchema):
+            """Output schema for orchestrator with tool or final response.
+
+            Choose the appropriate tool_name based on what you need:
+            - Set tool_name='final_response' when ready to provide the final answer
+            - Set tool_name to a specific tool name when you need more information
+            """
+
+            tool_parameters: extended_tool_params_type = Field(  # type: ignore
                 ...,
                 description=(
-                    "The parameters for the selected tool, "
-                    "matching its specific schema (includes 'tool_name')."
+                    "The tool to use, identified by tool_name:\n"
+                    "- tool_name='final_response': Use when you have enough information "
+                    "to answer. Include your answer in 'chat_message' field.\n"
+                    "- tool_name='<specific_tool>': Use when you need to call a tool. "
+                    "Include the tool's required parameters.\n\n"
+                    "The tool_name field determines which schema to use."
                 ),
             )
 
@@ -125,6 +147,19 @@ class MCPOrchestrator(LFAgent):
 
         # Store the orchestrator output schema
         self._orchestrator_output_schema = MCPOrchestratorOutputSchema
+
+        # DEBUG: Log the schema to verify FinalResponseSchema is included
+        try:
+            schema_dict = MCPOrchestratorOutputSchema.model_json_schema()
+            logger.info(
+                "Orchestrator schema created",
+                schema_keys=list(schema_dict.keys()),
+                tool_parameters_def=schema_dict.get("properties", {}).get(
+                    "tool_parameters"
+                ),
+            )
+        except Exception as e:
+            logger.warning("Failed to log schema", error=str(e))
 
     async def run_async(self, user_input):
         """Run with orchestrator pattern using MCP tools."""
@@ -139,6 +174,15 @@ class MCPOrchestrator(LFAgent):
         """
         final_response = await self._run_with_tools(user_input)
         yield final_response
+
+    async def cleanup(self) -> None:
+        """Clean up resources, including persistent MCP sessions.
+
+        Should be called when the orchestrator is no longer needed.
+        """
+        if self._mcp_service:
+            await self._mcp_service.close_all_persistent_sessions()
+            logger.info("Cleaned up MCP orchestrator resources")
 
     async def _run_with_tools(self, user_input):
         """Execute orchestrator pattern: LLM decides tool, execute in loop.
@@ -159,7 +203,7 @@ class MCPOrchestrator(LFAgent):
                 lambda s: self._orchestrator_output_schema
             )
 
-            max_iterations = 10  # Prevent infinite loops
+            max_iterations = 3  # Prevent infinite loops
             iteration = 0
 
             while iteration < max_iterations:
@@ -171,19 +215,26 @@ class MCPOrchestrator(LFAgent):
                 )
 
                 # Get LLM decision
-                if self._use_structured_output:
-                    # Structured mode: instructor will parse to orchestrator schema
-                    orchestrator_output = await super().run_async(user_input)
-                else:
-                    # Unstructured mode: manually parse response
-                    # For now, doesn't support tool orchestration
-                    # Fall back to direct response
-                    logger.warning(
-                        "Orchestrator pattern not fully supported in "
-                        "unstructured mode; returning direct response"
-                    )
-                    response = await super().run_async(user_input)
-                    return FinalResponseSchema(chat_message=response.chat_message)
+                # if self._use_structured_output:
+                # DEBUG: Log what we're about to ask the LLM
+                logger.info(
+                    "Calling LLM with orchestrator schema",
+                    iteration=iteration,
+                    input_preview=str(user_input)[:200],
+                    output_schema=self._orchestrator_output_schema.__name__,
+                )
+                # Structured mode: instructor will parse to orchestrator schema
+                orchestrator_output = await super().run_async(user_input)
+                # else:
+                #     # Unstructured mode: manually parse response
+                #     # For now, doesn't support tool orchestration
+                #     # Fall back to direct response
+                #     logger.warning(
+                #         "Orchestrator pattern not fully supported in "
+                #         "unstructured mode; returning direct response"
+                #     )
+                #     response = await super().run_async(user_input)
+                #     return FinalResponseSchema(chat_message=response.chat_message)
 
                 # Extract tool_parameters from orchestrator output
                 if not hasattr(orchestrator_output, "tool_parameters"):
@@ -191,22 +242,34 @@ class MCPOrchestrator(LFAgent):
                     return FinalResponseSchema(
                         chat_message=(
                             "I apologize, I couldn't process that request properly."
-                        )
+                        ),
                     )
 
                 tool_params = orchestrator_output.tool_parameters
 
+                # DEBUG: Log what the LLM chose
+                logger.info(
+                    "LLM response received",
+                    tool_params_type=type(tool_params).__name__,
+                    tool_params_dict=tool_params.model_dump()
+                    if hasattr(tool_params, "model_dump")
+                    else str(tool_params),
+                )
+
+                # Extract tool name to determine action
+                tool_name = getattr(tool_params, "tool_name", None)
+
                 # Check if it's the final response
                 if isinstance(tool_params, FinalResponseSchema):
-                    logger.info("Orchestrator selected FinalResponseSchema")
-                    return tool_params
-
-                # Extract tool name and find matching tool class
-                tool_name = getattr(tool_params, "tool_name", None)
+                    logger.info("Orchestrator selected final_response")
+                    # Return the final response with chat_message
+                    return FinalResponseSchema(
+                        chat_message=tool_params.chat_message,
+                    )
                 if not tool_name:
                     logger.warning("No tool_name in tool_parameters")
                     return FinalResponseSchema(
-                        chat_message="I couldn't determine which tool to use."
+                        chat_message="I couldn't determine which tool to use.",
                     )
 
                 # Find the tool class
@@ -222,7 +285,7 @@ class MCPOrchestrator(LFAgent):
                 if not tool_class:
                     logger.warning("Tool not found", tool_name=tool_name)
                     return FinalResponseSchema(
-                        chat_message=f"Tool '{tool_name}' not found."
+                        chat_message=f"Tool '{tool_name}' not found.",
                     )
 
                 # Execute the tool
@@ -233,19 +296,27 @@ class MCPOrchestrator(LFAgent):
 
                     # Format tool result as user message for next iteration
                     result_content = getattr(tool_result, "result", str(tool_result))
-                    user_input = self.input_schema(
+                    message = BasicChatOutputSchema(
                         chat_message=(
-                            f"Tool '{tool_name}' returned: {result_content}"
-                            "\n\nPlease interpret this result and provide "
-                            "a response to the user."
+                            f"Tool '{tool_name}' returned: {result_content}\n\n"
+                            "Now decide your next action:\n"
+                            "1. If you have enough information to fully answer the user's question:\n"
+                            "   Set tool_name='final_response' and provide your complete answer in chat_message\n"
+                            "2. If you need more information:\n"
+                            "   Set tool_name to the specific tool you need (e.g., 'get_weather') "
+                            "with the appropriate parameters\n\n"
+                            "Think carefully: Do you have all the information needed to answer now?"
                         )
                     )
+                    self.history.add_message("assistant", message)
 
                     logger.info(
                         "Tool execution successful",
                         tool_name=tool_name,
                         result_preview=str(result_content)[:200],
                     )
+
+                    user_input.chat_message = f"Answer this user's prompt based on the existing tool results. {user_input.chat_message}"
 
                 except Exception as e:
                     logger.error(
@@ -255,7 +326,7 @@ class MCPOrchestrator(LFAgent):
                         exc_info=True,
                     )
                     return FinalResponseSchema(
-                        chat_message=f"Error executing tool '{tool_name}': {str(e)}"
+                        chat_message=f"Error executing tool '{tool_name}': {str(e)}",
                     )
 
             # Max iterations reached
@@ -264,7 +335,7 @@ class MCPOrchestrator(LFAgent):
                 chat_message=(
                     "I've reached the maximum number of tool calls. "
                     "Please try rephrasing your request."
-                )
+                ),
             )
 
         finally:

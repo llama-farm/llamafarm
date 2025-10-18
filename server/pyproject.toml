@@ -42,6 +42,7 @@ dependencies = [
   "types-requests>=2.31.0.6",
   "fastapi-mcp>=0.4.0",
   "mcp>=1.2.0",
+  "ollama>=0.6.0",
 ]
 
 [project.optional-dependencies]

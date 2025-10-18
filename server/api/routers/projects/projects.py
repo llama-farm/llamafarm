@@ -8,13 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import celery.result  # type: ignore
-from atomic_agents import AtomicAgent  # type: ignore
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 from fastapi import APIRouter, Header, HTTPException, Response
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
-from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
+from agents.chat_orchestrator import ChatOrchestratorAgent, ChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
 
@@ -218,7 +217,7 @@ SESSION_TTL_SECONDS = 30 * 60
 class SessionRecord:
     namespace: str
     project_id: str
-    agent: AtomicAgent
+    agent: ChatOrchestratorAgent
     created_at: float
     last_used: float
     request_count: int
@@ -286,9 +285,10 @@ async def chat(
     stateless = x_no_session is not None
 
     if stateless:
-        # Stateless mode: create throwaway agent without session or persistence
-        agent = await ProjectChatOrchestratorAgentFactory.create_agent(
-            project_config, project_dir=project_dir, model_name=request.model
+        agent = ChatOrchestratorAgentFactory.create_agent(
+            project_config=project_config,
+            project_dir=project_dir,
+            model_name=request.model,
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -306,10 +306,9 @@ async def chat(
                 agent_sessions.pop(key, None)
                 record = None
 
-            if record is None or record.agent.model_name != request.model:
-                # Create new agent and enable persistence
-                agent = await ProjectChatOrchestratorAgentFactory.create_agent(
-                    project_config,
+            if record is None or request.model != record.agent.model_name:
+                agent = ChatOrchestratorAgentFactory.create_agent(
+                    project_config=project_config,
                     project_dir=project_dir,
                     model_name=request.model,
                     session_id=session_id,
@@ -455,8 +454,10 @@ async def get_chat_session_history(namespace: str, project_id: str, session_id: 
         project_dir = ProjectService.get_project_dir(namespace, project_id)
         project_config = ProjectService.load_config(namespace, project_id)
 
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(
-            project_config, project_dir=project_dir, session_id=session_id
+        agent = ChatOrchestratorAgentFactory.create_agent(
+            project_config=project_config,
+            project_dir=project_dir,
+            session_id=session_id,
         )
         history = agent.history.get_history()
 

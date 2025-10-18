@@ -11,8 +11,6 @@ from atomic_agents.connectors.mcp import (  # type: ignore
     fetch_mcp_tools_async,
 )
 from config.datamodel import Server, Transport
-from mcp import ClientSession
-from mcp.client.sse import sse_client
 
 from core.logging import FastAPIStructLogger  # type: ignore
 from services.mcp_service import MCPService  # type: ignore
@@ -21,7 +19,7 @@ logger = FastAPIStructLogger(__name__)
 
 
 class MCPToolFactory:
-    """Factory for creating dynamic MCP tools using atomic-agents' native MCP support."""
+    """Factory for creating dynamic MCP tools with atomic-agents."""
 
     def __init__(self, mcp_service: MCPService):
         self._mcp_service = mcp_service
@@ -73,6 +71,9 @@ class MCPToolFactory:
 
         Uses atomic-agents' native fetch_mcp_tools_async to create
         properly structured tools that work with the orchestrator pattern.
+
+        The tools will use a persistent session from MCPService that remains
+        open for the lifetime of the service, avoiding connection errors.
         """
         try:
             # Get server configuration
@@ -90,25 +91,29 @@ class MCPToolFactory:
             mcp_endpoint = self._get_mcp_endpoint(server_config)
 
             logger.info(
-                "Creating MCP tools using atomic-agents",
+                "Creating MCP tools using atomic-agents with persistent session",
                 server_name=server_name,
                 transport=transport_type.value,
                 endpoint=mcp_endpoint,
             )
 
-            async with sse_client(mcp_endpoint) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    # Fetch tools using the session
-                    tools = await fetch_mcp_tools_async(
-                        mcp_endpoint=mcp_endpoint,
-                        transport_type=transport_type,
-                        client_session=session,
-                    )
+            # Get or create persistent session for this server
+            # Session remains open for the lifetime of the service
+            persistent_session = (
+                await self._mcp_service.get_or_create_persistent_session(server_name)
+            )
+
+            # Fetch tools using the persistent session
+            # The tools will hold a reference to this session for future calls
+            tools = await fetch_mcp_tools_async(
+                mcp_endpoint=mcp_endpoint,
+                transport_type=transport_type,
+                client_session=persistent_session,
+            )
 
             tool_names = [getattr(t, "mcp_tool_name", t.__name__) for t in tools]
             logger.info(
-                "Created MCP tools",
+                "Created MCP tools with persistent session",
                 server_name=server_name,
                 tool_count=len(tools),
                 tool_names=tool_names,

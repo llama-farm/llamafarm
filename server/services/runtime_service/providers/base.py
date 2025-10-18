@@ -1,14 +1,13 @@
 """Base class for runtime providers."""
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 
-import instructor
-from openai import AsyncOpenAI
+from config.datamodel import LlamaFarmConfig, Model
+
+from agents.llamagent.clients.client import LlamAgentClient
+from services.model_service import ModelService
 
 from .health import HealthCheckResult
-
-from config.datamodel import Model  # noqa: E402
 
 
 class RuntimeProvider(ABC):
@@ -22,19 +21,18 @@ class RuntimeProvider(ABC):
     5. Check the health of the provider's runtime
     """
 
-    def __init__(self, model_config: Model) -> None:
-        self._model_config: Model = model_config
+    def __init__(self, *, model_config: Model) -> None:
+        self._model_config = model_config
 
     @abstractmethod
-    def get_client(self) -> instructor.client.AsyncInstructor | AsyncOpenAI:
-        """Get OpenAI-compatible client for this provider.
+    def get_client(self) -> LlamAgentClient:
+        """Get compatible client for this provider.
 
         Args:
             config: LlamaFarm configuration containing runtime settings
 
         Returns:
-            Either an instructor-wrapped AsyncOpenAI client (for structured output)
-            or a plain AsyncOpenAI client
+            A compatible client for this provider
         """
         pass
 
@@ -50,22 +48,3 @@ class RuntimeProvider(ABC):
             HealthCheckResult with status, message, latency, and details
         """
         pass
-
-    @property
-    @abstractmethod
-    def _default_instructor_mode(self) -> instructor.Mode:
-        """Return the default instructor mode for this runtime."""
-        pass
-
-    @property
-    def _instructor_mode(self) -> instructor.Mode:
-        """Get instructor mode for this runtime."""
-        mode = self._model_config.instructor_mode
-        try:
-            return (
-                instructor.mode.Mode[mode.upper()]
-                if mode
-                else self._default_instructor_mode
-            )
-        except (KeyError, TypeError):
-            return self._default_instructor_mode

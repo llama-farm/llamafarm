@@ -1,5 +1,5 @@
-from atomic_agents import BaseTool
-from atomic_agents.context import BaseDynamicContextProvider
+from atomic_agents import BaseTool  # type: ignore
+from atomic_agents.context import BaseDynamicContextProvider  # type: ignore
 
 
 class MCPToolsContextProvider(BaseDynamicContextProvider):

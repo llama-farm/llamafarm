@@ -1,14 +1,13 @@
 import tempfile
 
-import pytest
 from config.datamodel import (
-    PromptFormat,
     LlamaFarmConfig,
+    Model,
     Prompt,
+    PromptFormat,
     Provider,
     Runtime,
     Version,
-    Model,
 )
 
 from agents.project_chat_orchestrator import (
@@ -16,9 +15,9 @@ from agents.project_chat_orchestrator import (
     ProjectChatOrchestratorAgentFactory,
     ProjectChatOrchestratorAgentInputSchema,
 )
-from context_providers.project_chat_context_provider import (
+from context_providers.rag_context_provider import (
     ChunkItem,
-    ProjectChatContextProvider,
+    RAGContextProvider,
 )
 
 
@@ -126,7 +125,7 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
         agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
     assert isinstance(agent, ProjectChatOrchestratorAgent)
 
-    provider = ProjectChatContextProvider(title="Context")
+    provider = RAGContextProvider(title="Context")
     provider.chunks.append(
         ChunkItem(content="Important note", metadata={"source": "doc"})
     )

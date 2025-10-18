@@ -1,26 +1,19 @@
 """Ollama runtime provider implementation."""
 
 import time
-from pathlib import Path
 
-import instructor
 import requests
-from openai import AsyncOpenAI
 
+from agents.llamagent.clients.client import LlamAgentClient
+from agents.llamagent.clients.ollama import LlamAgentClientOllama
 from core.settings import settings
 
 from .base import RuntimeProvider
 from .health import HealthCheckResult
 
-from config.datamodel import PromptFormat  # noqa: E402
-
 
 class OllamaProvider(RuntimeProvider):
     """Ollama local runtime provider implementation."""
-
-    @property
-    def _default_instructor_mode(self) -> instructor.Mode:
-        return instructor.Mode.MD_JSON
 
     @property
     def _base_url(self) -> str:
@@ -32,16 +25,15 @@ class OllamaProvider(RuntimeProvider):
         """Get API key for Ollama (usually not required)."""
         return self._model_config.api_key or settings.ollama_api_key
 
-    def get_client(self) -> instructor.client.AsyncInstructor | AsyncOpenAI:
+    def get_client(self) -> LlamAgentClient:
         """Get Ollama client with optional instructor wrapping."""
-        client = AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
+        if not self._model_config.base_url:
+            self._model_config.base_url = self._base_url
+        if not self._model_config.api_key:
+            self._model_config.api_key = self._api_key
+        client = LlamAgentClientOllama(
+            model_config=self._model_config,
         )
-
-        if self._model_config.prompt_format == PromptFormat.structured:
-            mode = self._instructor_mode
-            return instructor.from_openai(client, mode=mode)
         return client
 
     def check_health(self) -> HealthCheckResult:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -27,6 +28,7 @@ class MCPService:
     """Manage MCP client sessions and tool calls based on project config.
 
     Uses the official Python MCP SDK for communication with MCP servers.
+    Maintains persistent sessions for each server to avoid connection overhead.
     """
 
     def __init__(self, config: LlamaFarmConfig) -> None:
@@ -37,6 +39,14 @@ class MCPService:
         self._tool_cache: dict[str, list[ToolSchema]] = {}
         self._cache_ttl = 300  # 5 minutes
         self._last_cache_update: dict[str, float] = {}
+
+        # Persistent session management
+        # Note: Sessions are kept alive for the lifetime of the service
+        # to avoid ClosedResourceError when tools are invoked
+        self._persistent_sessions: dict[str, ClientSession] = {}
+        self._session_tasks: dict[str, asyncio.Task] = {}  # Background tasks
+        self._cleanup_lock = asyncio.Lock()
+
         logger.info("MCPService initialized", server_count=len(self._servers))
 
     def list_servers(self) -> list[str]:
@@ -103,6 +113,149 @@ class MCPService:
         if server_name not in self._last_cache_update:
             return False
         return time.time() - self._last_cache_update[server_name] < self._cache_ttl
+
+    async def get_or_create_persistent_session(self, server_name: str) -> ClientSession:
+        """Get or create a persistent session for the specified server.
+
+        This session will remain open for the lifetime of the service,
+        allowing MCP tools to reuse the same connection.
+
+        The session is kept alive by a background task that maintains
+        the context managers, avoiding cancel scope issues.
+
+        Args:
+            server_name: Name of the MCP server
+
+        Returns:
+            ClientSession that will persist across tool calls
+
+        Raises:
+            ValueError: If server not found or misconfigured
+        """
+        if server_name not in self._servers:
+            raise ValueError(f"Server '{server_name}' not found")
+
+        # Return existing session if available
+        if server_name in self._persistent_sessions:
+            return self._persistent_sessions[server_name]
+
+        server_config = self._servers[server_name]
+
+        logger.info(
+            "Creating persistent MCP session in background task",
+            server_name=server_name,
+            transport=server_config.transport.value,
+        )
+
+        # Create an event to signal when session is ready
+        session_ready = asyncio.Event()
+        session_container = {}
+        error_container = {}
+
+        async def maintain_session():
+            """Background task that keeps the session context alive."""
+            try:
+                if server_config.transport == Transport.stdio:
+                    if not server_config.command:
+                        raise ValueError(
+                            f"STDIO server '{server_config.name}' has no command"
+                        )
+
+                    server_params = StdioServerParameters(
+                        command=server_config.command,
+                        args=server_config.args or [],
+                        env=server_config.env,
+                    )
+
+                    # Keep context alive in this task
+                    async with stdio_client(server_params) as (read, write):
+                        async with ClientSession(read, write) as session:
+                            await session.initialize()
+                            session_container["session"] = session
+                            session_ready.set()
+
+                            # Keep task alive indefinitely
+                            await asyncio.Event().wait()
+
+                elif server_config.transport == Transport.http:
+                    if not server_config.base_url:
+                        raise ValueError(
+                            f"HTTP server '{server_config.name}' has no base_url"
+                        )
+
+                    # Keep context alive in this task
+                    async with sse_client(server_config.base_url) as (read, write):
+                        async with ClientSession(read, write) as session:
+                            await session.initialize()
+                            session_container["session"] = session
+                            session_ready.set()
+
+                            # Keep task alive indefinitely
+                            await asyncio.Event().wait()
+                else:
+                    raise ValueError(
+                        f"Unsupported transport: {server_config.transport}"
+                    )
+
+            except Exception as e:
+                error_container["error"] = e
+                session_ready.set()
+
+        # Start background task
+        task = asyncio.create_task(maintain_session())
+        self._session_tasks[server_name] = task
+
+        # Wait for session to be ready
+        await session_ready.wait()
+
+        # Check for errors
+        if "error" in error_container:
+            error = error_container["error"]
+            logger.error(
+                "Failed to create persistent MCP session",
+                server_name=server_name,
+                error=str(error),
+                error_type=type(error).__name__,
+            )
+            raise error
+
+        # Get the session
+        session = session_container["session"]
+        self._persistent_sessions[server_name] = session
+
+        logger.info(
+            "Persistent MCP session created in background task",
+            server_name=server_name,
+        )
+
+        return session
+
+    async def close_persistent_session(self, server_name: str) -> None:
+        """Close a persistent session for the specified server.
+
+        Note: Due to asyncio context manager constraints, explicit cleanup
+        is not performed. Sessions will be cleaned up when the process exits.
+
+        Args:
+            server_name: Name of the MCP server
+        """
+        logger.info(
+            "Session cleanup requested (sessions persist for process lifetime)",
+            server_name=server_name,
+        )
+
+    async def close_all_persistent_sessions(self) -> None:
+        """Close all persistent sessions.
+
+        Note: Due to asyncio context manager constraints with sse_client/stdio_client,
+        explicit cleanup is not performed. Sessions will be cleaned up when the
+        process exits. This avoids "cancel scope in different task" errors.
+        """
+        logger.info(
+            "Session cleanup requested for all servers "
+            "(sessions persist for process lifetime)",
+            session_count=len(self._persistent_sessions),
+        )
 
     @asynccontextmanager
     async def _get_client_session(self, server_config: Server):

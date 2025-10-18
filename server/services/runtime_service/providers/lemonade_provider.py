@@ -1,28 +1,19 @@
 """Lemonade runtime provider implementation."""
 
 import time
-from pathlib import Path
 
-import instructor
 import requests
-from openai import AsyncOpenAI
 
+from agents.llamagent.clients.client import LlamAgentClient
+from agents.llamagent.clients.openai import LlamAgentClientOpenAI
 from core.settings import settings
 
 from .base import RuntimeProvider
 from .health import HealthCheckResult
 
-from config.datamodel import PromptFormat  # noqa: E402
-
-default_instructor_mode = instructor.Mode.MD_JSON
-
 
 class LemonadeProvider(RuntimeProvider):
     """Lemonade local runtime provider implementation."""
-
-    @property
-    def _default_instructor_mode(self) -> instructor.Mode:
-        return instructor.Mode.MD_JSON
 
     @property
     def _base_url(self) -> str:
@@ -38,16 +29,15 @@ class LemonadeProvider(RuntimeProvider):
         """Get API key for Lemonade (uses 'lemonade' as default)."""
         return self._model_config.api_key or settings.lemonade_api_key
 
-    def get_client(self) -> instructor.client.AsyncInstructor | AsyncOpenAI:
+    def get_client(self) -> LlamAgentClient:
         """Get Lemonade client with optional instructor wrapping."""
-        client = AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
+        if not self._model_config.base_url:
+            self._model_config.base_url = self._base_url
+        if not self._model_config.api_key:
+            self._model_config.api_key = self._api_key
+        client = LlamAgentClientOpenAI(
+            model_config=self._model_config,
         )
-
-        if self._model_config.prompt_format == PromptFormat.structured:
-            mode = self._instructor_mode
-            return instructor.from_openai(client, mode=mode)
         return client
 
     def check_health(self) -> HealthCheckResult:
