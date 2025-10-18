@@ -18,16 +18,42 @@ class MCPToolsContextProvider(BaseDynamicContextProvider):
         if not self.tools:
             return ""
 
-        lines = [
-            "STEPS TO PERFORM WHEN USING MCP TOOLS:",
-            "1. Analyze the user's query to determine if one or more MCP tools could help.",
-            "2. Choose the appropriate tool and set tool_parameters with the tool_name and required arguments.",
-            "3. For complex queries, break them down into smaller tasks using sequential tool calls.",
-            "4. When you have all the information needed, respond with FinalResponseSchema.",
-            "5. Always provide clear reasoning for your tool selection.",
-            "",
-            "AVAILABLE MCP TOOLS:",
-        ]
+        lines = """
+            STEPS TO PERFORM WHEN USING MCP TOOLS:
+            1. Analyze the user's query to determine if one or more
+               MCP tools could help.
+            2. Choose the appropriate tool and respond with the tool
+               calling schema. If you are unsure about values for the
+               tool parameters, ask the user for clarification.
+            3. For complex queries, break them down into smaller tasks
+               using sequential tool calls.
+            4. When you have all the information needed, respond with
+               FinalResponseSchema.
+            5. Always provide clear reasoning for your tool selection.
+            
+            TOOL CALLING JSON SCHEMA WHEN REQUESTING A TOOL CALL:
+            ```json
+            {
+              "type": "object",
+              "properties": {
+                  "tool_name": {
+                      "type": "string",
+                      "description": "The name of the tool to call.",
+                  },
+                  "tool_parameters": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "Parameters for the tool. See the
+                                      tool's input schema below.",
+                  }
+              },
+            },
+            ```
+            
+            AVAILABLE MCP TOOLS:
+        """
+
+        import json
 
         for tool in self.tools:
             # Get tool name and description
@@ -39,27 +65,37 @@ class MCPToolsContextProvider(BaseDynamicContextProvider):
             if not tool_name:
                 tool_name = tool.__class__.__name__
 
-            # Try to get input schema information
+            # Try to get input schema as JSON schema
             input_schema_class = getattr(tool, "input_schema", None)
             if input_schema_class:
                 try:
-                    # Get field names from the input schema
-                    if hasattr(input_schema_class, "model_fields"):
-                        fields = input_schema_class.model_fields
-                        # Exclude tool_name from the argument list as it's the discriminator
-                        arg_names = [
-                            name for name in fields.keys() if name != "tool_name"
-                        ]
-                        arg_list = ", ".join(arg_names)
+                    # Get the JSON schema from the Pydantic model
+                    if hasattr(input_schema_class, "model_json_schema"):
+                        schema = input_schema_class.model_json_schema()
+                        # Remove tool_name from properties if it exists
+                        # (it's the discriminator)
+                        props = schema.get("properties", {})
+                        if "tool_name" in props:
+                            schema_copy = schema.copy()
+                            schema_copy["properties"] = {
+                                k: v for k, v in props.items() if k != "tool_name"
+                            }
+                            if "required" in schema_copy:
+                                schema_copy["required"] = [
+                                    r
+                                    for r in schema_copy["required"]
+                                    if r != "tool_name"
+                                ]
+                            schema = schema_copy
+                        schema_str = json.dumps(schema, indent=2)
                     else:
-                        arg_list = "unknown"
-                except Exception:
-                    arg_list = "unknown"
+                        schema_str = "Schema not available"
+                except Exception as e:
+                    schema_str = f"Error getting schema: {e}"
             else:
-                arg_list = "unknown"
+                schema_str = "No input schema defined"
 
-            lines.append(
-                f"\n- **{tool_name}**: {tool_description}\n  Arguments: {arg_list}"
-            )
+            lines += f"\n\n- **{tool_name}**: {tool_description}\n"
+            lines += f"  Input Schema (JSON):\n```json\n{schema_str}\n```"
 
-        return "\n".join(lines)
+        return lines

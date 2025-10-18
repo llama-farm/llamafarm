@@ -1,19 +1,20 @@
-from collections.abc import AsyncGenerator
 import json
 import os
+from collections.abc import AsyncGenerator
 from pathlib import Path
-
-from services.runtime_service.runtime_service import RuntimeService
 
 from config.datamodel import LlamaFarmConfig, Provider
 
 from agents.llamagent.agent import LFAgent, LFAgentConfig
-from agents.llamagent.clients.client import LFAgentClient
 from agents.llamagent.clients.openai import LFAgentClientOpenAI
 from agents.llamagent.history import LFAgentChatMessage, LFAgentHistory
 from agents.llamagent.system_prompt_generator import LFAgentSystemPromptGenerator
+from context_providers.mcp_tools_context_provider import MCPToolsContextProvider
 from core.logging import FastAPIStructLogger
+from services.mcp_service import MCPService
 from services.model_service import ModelService
+from services.runtime_service.runtime_service import RuntimeService
+from tools.mcp_tool.tool.mcp_tool_factory import BaseTool, MCPToolFactory
 
 logger = FastAPIStructLogger(__name__)
 
@@ -30,6 +31,10 @@ class ChatOrchestratorAgent(LFAgent):
     _project_config: LlamaFarmConfig
     model_name: str
     _session_id: str | None = None
+    _mcp_enabled: bool = False
+    _mcp_service: MCPService | None = None
+    _mcp_tool_factory: MCPToolFactory | None = None
+    _mcp_tools: list[BaseTool] = []
 
     def __init__(
         self,
@@ -64,16 +69,145 @@ class ChatOrchestratorAgent(LFAgent):
         super().__init__(config=config)
 
     async def run_async(self, user_input: LFAgentChatMessage | None = None) -> str:
-        response = await super().run_async(user_input=user_input)
+        """Run the agent with MCP tool calling support.
+
+        The agent will:
+        1. Get response from LLM
+        2. Check if response requests a tool call
+        3. Execute the tool and feed result back to LLM
+        4. Repeat until LLM provides final answer
+        """
+        max_iterations = 10
+        iteration = 0
+
+        while iteration < max_iterations:
+            iteration += 1
+
+            try:
+                # Get LLM response
+                response = await super().run_async(user_input=user_input)
+
+                # Try to parse as JSON to check for tool calls
+                try:
+                    response_data = json.loads(response)
+                except (json.JSONDecodeError, TypeError):
+                    # Not JSON, treat as final response
+                    try:
+                        self._persist_history()
+                    except Exception:
+                        logger.warning("History persistence failed", exc_info=True)
+                    return response
+
+                # Check if this is a tool call request
+                tool_name = response_data.get("tool_name")
+                tool_parameters = response_data.get("tool_parameters", {})
+
+                if not tool_name:
+                    # No tool requested, this is the final response
+                    # Extract the actual message if present
+                    final_message = response_data.get("message") or response
+                    try:
+                        self._persist_history()
+                    except Exception:
+                        logger.warning("History persistence failed", exc_info=True)
+                    return final_message
+
+                # Execute the tool
+                logger.info(
+                    "Executing MCP tool",
+                    tool_name=tool_name,
+                    iteration=iteration,
+                )
+
+                # Find the tool in our loaded tools
+                tool_class = next(
+                    (
+                        t
+                        for t in self._mcp_tools
+                        if getattr(t, "mcp_tool_name", None) == tool_name
+                    ),
+                    None,
+                )
+
+                if not tool_class:
+                    error_msg = f"Tool '{tool_name}' not found"
+                    logger.warning(error_msg)
+                    # Feed error back to LLM
+                    user_input = LFAgentChatMessage(
+                        role="user",
+                        content=(
+                            f"Error: {error_msg}. Please try again or "
+                            "provide a direct answer."
+                        ),
+                    )
+                    continue
+
+                # Call the tool
+                try:
+                    tool_instance = tool_class()
+                    # Create input schema instance with parameters
+                    input_schema_class = tool_class.input_schema
+                    tool_input = input_schema_class(
+                        tool_name=tool_name, **tool_parameters
+                    )
+                    tool_result = await tool_instance.arun(tool_input)
+
+                    # Extract result content
+                    result_content = getattr(tool_result, "result", str(tool_result))
+
+                    logger.info(
+                        "Tool execution successful",
+                        tool_name=tool_name,
+                        result_preview=str(result_content)[:200],
+                    )
+
+                    # Feed result back to LLM for next iteration
+                    user_input = LFAgentChatMessage(
+                        role="user",
+                        content=(
+                            f"Tool '{tool_name}' returned: {result_content}\n\n"
+                            "Based on this result, provide your final answer "
+                            "or call another tool if needed."
+                        ),
+                    )
+
+                except Exception as e:
+                    error_msg = f"Error executing tool '{tool_name}': {str(e)}"
+                    logger.error(error_msg, exc_info=True)
+                    # Feed error back to LLM
+                    user_input = LFAgentChatMessage(
+                        role="user",
+                        content=(
+                            f"{error_msg}. Please try again or provide a direct answer."
+                        ),
+                    )
+                    continue
+
+            except Exception as e:
+                logger.error("Error in orchestrator loop", exc_info=True)
+                raise e
+
+        # Max iterations reached
+        logger.warning("Max iterations reached in orchestrator")
+        final_response = (
+            "I've reached the maximum number of tool calls. "
+            "Please try rephrasing your request."
+        )
         try:
             self._persist_history()
         except Exception:
-            logger.warning("History persistence failed after run_async", exc_info=True)
-        return response
+            logger.warning("History persistence failed", exc_info=True)
+        return final_response
 
     async def run_async_stream(
         self, user_input: LFAgentChatMessage | None = None
     ) -> AsyncGenerator[str, None]:
+        # If MCP is enabled, we can't stream the response
+        if self._mcp_enabled:
+            response = await self.run_async(user_input=user_input)
+            yield response
+            return
+
         async for chunk in super().run_async_stream(user_input=user_input):
             yield chunk
         try:
@@ -100,6 +234,22 @@ class ChatOrchestratorAgent(LFAgent):
 
         except Exception:
             logger.warning("Failed to enable persistence", exc_info=True)
+
+    async def enable_mcp(self):
+        if self._mcp_enabled:
+            return
+        self._mcp_service = MCPService(self._project_config)
+        self._mcp_tool_factory = MCPToolFactory(self._mcp_service)
+        mcp_context_provider = MCPToolsContextProvider(title="MCP Tools")
+        self.register_context_provider("mcp", mcp_context_provider)
+        self._mcp_enabled = True
+        await self._load_mcp_tools()
+
+    async def _load_mcp_tools(self):
+        if not self._mcp_enabled:
+            await self.enable_mcp()
+        self._mcp_tools = await self._mcp_tool_factory.create_all_tools()
+        self.get_context_provider("mcp").set_tools(self._mcp_tools)
 
     def reset_history(self):
         super().reset_history()
@@ -204,7 +354,7 @@ class ChatOrchestratorAgent(LFAgent):
 
 class ChatOrchestratorAgentFactory:
     @staticmethod
-    def create_agent(
+    async def create_agent(
         *,
         project_config: LlamaFarmConfig,
         project_dir: str,
@@ -219,5 +369,7 @@ class ChatOrchestratorAgentFactory:
         if session_id:
             agent.enable_persistence(session_id=session_id)
 
-        # TODO: If project config contains an MCP server, enable tools.
+        if project_config.mcp and project_config.mcp.servers:
+            await agent.enable_mcp()
+
         return agent

@@ -7,9 +7,9 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-import celery.result  # type: ignore
+import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
-from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import APIRouter, Header, HTTPException, Path as FastAPIPath, Response
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
@@ -103,7 +103,12 @@ router = APIRouter(
         200: {"model": ListProjectsResponse},
     },
 )
-async def list_projects(namespace: str):
+async def list_projects(
+    namespace: str = FastAPIPath(
+        ...,
+        description='The namespace to list projects for. Use "default" for the default namespace.',
+    ),
+):
     projects = ProjectService.list_projects(namespace)
     return ListProjectsResponse(
         total=len(projects),
@@ -285,7 +290,7 @@ async def chat(
     stateless = x_no_session is not None
 
     if stateless:
-        agent = ChatOrchestratorAgentFactory.create_agent(
+        agent = await ChatOrchestratorAgentFactory.create_agent(
             project_config=project_config,
             project_dir=project_dir,
             model_name=request.model,
@@ -307,7 +312,7 @@ async def chat(
                 record = None
 
             if record is None or request.model != record.agent.model_name:
-                agent = ChatOrchestratorAgentFactory.create_agent(
+                agent = await ChatOrchestratorAgentFactory.create_agent(
                     project_config=project_config,
                     project_dir=project_dir,
                     model_name=request.model,
