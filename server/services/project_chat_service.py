@@ -8,8 +8,8 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
 from agents.chat_orchestrator import ChatOrchestratorAgent
-from agents.llamagent.agent import LlamAgent
-from agents.llamagent.history import LlamAgentChatMessage
+from agents.llamagent.agent import LFAgent
+from agents.llamagent.history import LFAgentChatMessage
 from context_providers.rag_context_provider import (
     ChunkItem,
     RAGContextProvider,
@@ -130,7 +130,7 @@ class ProjectChatService:
         logger.info(f"RAG search returned {len(normalized)} results")
         return normalized
 
-    def _clear_rag_context_provider(self, chat_agent: LlamAgent) -> None:
+    def _clear_rag_context_provider(self, chat_agent: LFAgent) -> None:
         try:
             chat_agent.remove_context_provider("project_chat_context")
         except Exception:
@@ -184,7 +184,7 @@ class ProjectChatService:
         *,
         project_dir: str,
         project_config: LlamaFarmConfig,
-        chat_agent: LlamAgent,
+        chat_agent: LFAgent,
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
@@ -248,7 +248,7 @@ class ProjectChatService:
             )
             context_provider.chunks.append(chunk_item)
 
-        user_input = LlamAgentChatMessage(role="user", content=message)
+        user_input = LFAgentChatMessage(role="user", content=message)
         try:
             logger.info("Running async stream")
             previous_response = ""

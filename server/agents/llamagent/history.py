@@ -3,21 +3,21 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class LlamAgentChatMessage(BaseModel):
+class LFAgentChatMessage(BaseModel):
     role: Literal["system", "user", "assistant", "tool", "developer", "function"] = (
         Field(..., description="The role of the message")
     )
     content: str = Field(..., description="The content of the message")
 
 
-class LlamAgentHistory:
-    history: list[LlamAgentChatMessage]
+class LFAgentHistory:
+    history: list[LFAgentChatMessage]
 
     def __init__(self):
         self.history = []
 
-    def add_message(self, message: LlamAgentChatMessage):
+    def add_message(self, message: LFAgentChatMessage):
         self.history.append(message)
 
-    def get_history(self) -> list[LlamAgentChatMessage]:
+    def get_history(self) -> list[LFAgentChatMessage]:
         return self.history

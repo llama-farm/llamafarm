@@ -4,8 +4,8 @@ import time
 
 import requests
 
-from agents.llamagent.clients.client import LlamAgentClient
-from agents.llamagent.clients.ollama import LlamAgentClientOllama
+from agents.llamagent.clients.client import LFAgentClient
+from agents.llamagent.clients.ollama import LFAgentClientOllama
 from core.settings import settings
 
 from .base import RuntimeProvider
@@ -25,13 +25,13 @@ class OllamaProvider(RuntimeProvider):
         """Get API key for Ollama (usually not required)."""
         return self._model_config.api_key or settings.ollama_api_key
 
-    def get_client(self) -> LlamAgentClient:
+    def get_client(self) -> LFAgentClient:
         """Get Ollama client with optional instructor wrapping."""
         if not self._model_config.base_url:
             self._model_config.base_url = self._base_url
         if not self._model_config.api_key:
             self._model_config.api_key = self._api_key
-        client = LlamAgentClientOllama(
+        client = LFAgentClientOllama(
             model_config=self._model_config,
         )
         return client

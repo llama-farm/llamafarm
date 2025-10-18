@@ -2,31 +2,31 @@ from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agents.llamagent.clients.client import LlamAgentClient
+from agents.llamagent.clients.client import LFAgentClient
 from core.logging import FastAPIStructLogger
 
-from .context_provider import LlamAgentContextProvider
-from .history import LlamAgentChatMessage, LlamAgentHistory
-from .system_prompt_generator import LlamAgentSystemPromptGenerator
+from .context_provider import LFAgentContextProvider
+from .history import LFAgentChatMessage, LFAgentHistory
+from .system_prompt_generator import LFAgentSystemPromptGenerator
 
 logger = FastAPIStructLogger(__name__)
 
 
-class LlamAgentConfig(BaseModel):
-    client: LlamAgentClient = Field(..., description="The client for the agent")
-    history: LlamAgentHistory = Field(..., description="The history of the agent")
-    system_prompt_generator: LlamAgentSystemPromptGenerator = Field(
+class LFAgentConfig(BaseModel):
+    client: LFAgentClient = Field(..., description="The client for the agent")
+    history: LFAgentHistory = Field(..., description="The history of the agent")
+    system_prompt_generator: LFAgentSystemPromptGenerator = Field(
         ..., description="The system prompt generator for the agent"
     )
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-class LlamAgent:
-    history: LlamAgentHistory
-    _system_prompt_generator: LlamAgentSystemPromptGenerator
-    _client: LlamAgentClient
+class LFAgent:
+    history: LFAgentHistory
+    _system_prompt_generator: LFAgentSystemPromptGenerator
+    _client: LFAgentClient
 
-    def __init__(self, config: LlamAgentConfig):
+    def __init__(self, config: LFAgentConfig):
         self.history = config.history
         self._system_prompt_generator = config.system_prompt_generator
         self._client = config.client
@@ -34,7 +34,7 @@ class LlamAgent:
     async def run_async(
         self,
         *,
-        user_input: LlamAgentChatMessage | None = None,
+        user_input: LFAgentChatMessage | None = None,
     ) -> str:
         if user_input:
             self.history.add_message(user_input)
@@ -45,7 +45,7 @@ class LlamAgent:
     async def run_async_stream(
         self,
         *,
-        user_input: LlamAgentChatMessage | None = None,
+        user_input: LFAgentChatMessage | None = None,
     ) -> AsyncGenerator[str, None]:
         if user_input:
             self.history.add_message(user_input)
@@ -55,27 +55,27 @@ class LlamAgent:
             yield chunk
 
     def register_context_provider(
-        self, title: str, context_provider: LlamAgentContextProvider
+        self, title: str, context_provider: LFAgentContextProvider
     ):
         if self._system_prompt_generator.context_providers.get(title):
             raise ValueError(f"Context provider already registered: {title}")
         self._system_prompt_generator.context_providers[title] = context_provider
 
-    def get_context_provider(self, title: str) -> LlamAgentContextProvider | None:
+    def get_context_provider(self, title: str) -> LFAgentContextProvider | None:
         return self._system_prompt_generator.context_providers.get(title, None)
 
     def remove_context_provider(self, title: str):
         self._system_prompt_generator.context_providers.pop(title, None)
 
-    def _prepare_messages(self) -> list[LlamAgentChatMessage]:
-        messages: list[LlamAgentChatMessage] = []
+    def _prepare_messages(self) -> list[LFAgentChatMessage]:
+        messages: list[LFAgentChatMessage] = []
         system_prompt = self._system_prompt_generator.generate_prompt()
         if system_prompt:
-            messages.append(LlamAgentChatMessage(role="system", content=system_prompt))
+            messages.append(LFAgentChatMessage(role="system", content=system_prompt))
 
         for message in self.history.get_history():
             messages.append(
-                LlamAgentChatMessage(role=message.role, content=message.content)
+                LFAgentChatMessage(role=message.role, content=message.content)
             )
 
         return messages

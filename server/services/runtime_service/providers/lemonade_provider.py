@@ -4,8 +4,8 @@ import time
 
 import requests
 
-from agents.llamagent.clients.client import LlamAgentClient
-from agents.llamagent.clients.openai import LlamAgentClientOpenAI
+from agents.llamagent.clients.client import LFAgentClient
+from agents.llamagent.clients.openai import LFAgentClientOpenAI
 from core.settings import settings
 
 from .base import RuntimeProvider
@@ -29,13 +29,13 @@ class LemonadeProvider(RuntimeProvider):
         """Get API key for Lemonade (uses 'lemonade' as default)."""
         return self._model_config.api_key or settings.lemonade_api_key
 
-    def get_client(self) -> LlamAgentClient:
+    def get_client(self) -> LFAgentClient:
         """Get Lemonade client with optional instructor wrapping."""
         if not self._model_config.base_url:
             self._model_config.base_url = self._base_url
         if not self._model_config.api_key:
             self._model_config.api_key = self._api_key
-        client = LlamAgentClientOpenAI(
+        client = LFAgentClientOpenAI(
             model_config=self._model_config,
         )
         return client

@@ -6,24 +6,24 @@ from services.runtime_service.runtime_service import RuntimeService
 
 from config.datamodel import LlamaFarmConfig, Provider
 
-from agents.llamagent.agent import LlamAgent, LlamAgentConfig
-from agents.llamagent.clients.client import LlamAgentClient
-from agents.llamagent.clients.openai import LlamAgentClientOpenAI
-from agents.llamagent.history import LlamAgentChatMessage, LlamAgentHistory
-from agents.llamagent.system_prompt_generator import LlamAgentSystemPromptGenerator
+from agents.llamagent.agent import LFAgent, LFAgentConfig
+from agents.llamagent.clients.client import LFAgentClient
+from agents.llamagent.clients.openai import LFAgentClientOpenAI
+from agents.llamagent.history import LFAgentChatMessage, LFAgentHistory
+from agents.llamagent.system_prompt_generator import LFAgentSystemPromptGenerator
 from core.logging import FastAPIStructLogger
 from services.model_service import ModelService
 
 logger = FastAPIStructLogger(__name__)
 
 CLIENT_CLASSES = {
-    Provider.openai: LlamAgentClientOpenAI,
-    Provider.ollama: LlamAgentClientOpenAI,
-    Provider.lemonade: LlamAgentClientOpenAI,
+    Provider.openai: LFAgentClientOpenAI,
+    Provider.ollama: LFAgentClientOpenAI,
+    Provider.lemonade: LFAgentClientOpenAI,
 }
 
 
-class ChatOrchestratorAgent(LlamAgent):
+class ChatOrchestratorAgent(LFAgent):
     _persist_enabled: bool
     _project_dir: str
     _project_config: LlamaFarmConfig
@@ -51,10 +51,10 @@ class ChatOrchestratorAgent(LlamAgent):
         provider = RuntimeService.get_provider(model_config)
         client = provider.get_client()
 
-        system_prompt_generator = LlamAgentSystemPromptGenerator(
+        system_prompt_generator = LFAgentSystemPromptGenerator(
             prompts=self._get_prompts_for_model(self.model_name)
         )
-        config = LlamAgentConfig(
+        config = LFAgentConfig(
             history=history,
             system_prompt_generator=system_prompt_generator,
             client=client,
@@ -88,7 +88,7 @@ class ChatOrchestratorAgent(LlamAgent):
             path.unlink(missing_ok=True)
 
     def _populate_history_with_non_system_prompts(
-        self, history: LlamAgentHistory, project_config: LlamaFarmConfig
+        self, history: LFAgentHistory, project_config: LlamaFarmConfig
     ):
         prompts = self._get_prompts_for_model(self.model_name)
         for prompt in prompts:
@@ -96,12 +96,12 @@ class ChatOrchestratorAgent(LlamAgent):
             if prompt.role != "system":
                 history.add_message(prompt)
 
-    def _get_history(self, project_config: LlamaFarmConfig) -> LlamAgentHistory:
-        history = LlamAgentHistory()
+    def _get_history(self, project_config: LlamaFarmConfig) -> LFAgentHistory:
+        history = LFAgentHistory()
         self._populate_history_with_non_system_prompts(history, project_config)
         return history
 
-    def _get_prompts_for_model(self, model_name: str) -> list[LlamAgentChatMessage]:
+    def _get_prompts_for_model(self, model_name: str) -> list[LFAgentChatMessage]:
         model_config = ModelService.get_model(self._project_config, model_name)
         provider = RuntimeService.get_provider(model_config)
         Client = provider.get_client().__class__
@@ -152,7 +152,7 @@ class ChatOrchestratorAgent(LlamAgent):
                 if not role or not isinstance(content, str):
                     continue
                 self.history.add_message(
-                    message=LlamAgentChatMessage(
+                    message=LFAgentChatMessage(
                         role=role,
                         content=content,
                     )
@@ -189,7 +189,7 @@ class ChatOrchestratorAgentFactory:
         project_dir: str,
         model_name: str | None = None,
         session_id: str | None = None,
-    ) -> LlamAgent:
+    ) -> LFAgent:
         agent = ChatOrchestratorAgent(
             project_config=project_config,
             project_dir=project_dir,

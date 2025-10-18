@@ -3,10 +3,10 @@ from collections.abc import AsyncGenerator
 
 from config.datamodel import Model, Prompt
 
-from agents.llamagent.history import LlamAgentChatMessage
+from agents.llamagent.history import LFAgentChatMessage
 
 
-class LlamAgentClient(ABC):
+class LFAgentClient(ABC):
     _model_name: str
     _model_config: Model
 
@@ -20,19 +20,19 @@ class LlamAgentClient(ABC):
 
     @staticmethod
     @abstractmethod
-    def prompt_to_message(prompt: Prompt) -> LlamAgentChatMessage:
+    def prompt_to_message(prompt: Prompt) -> LFAgentChatMessage:
         """
-        Converts a llamafarm Prompt to a LlamAgentChatMessage.
+        Converts a llamafarm Prompt to a LFAgentChatMessage.
         """
         pass
 
     @abstractmethod
-    async def chat(self, *, messages: list[LlamAgentChatMessage]) -> str:
+    async def chat(self, *, messages: list[LFAgentChatMessage]) -> str:
         pass
 
     @abstractmethod
     async def stream_chat(
-        self, *, messages: list[LlamAgentChatMessage]
+        self, *, messages: list[LFAgentChatMessage]
     ) -> AsyncGenerator[str, None]:
         ...
         # Async generator - implementations should use async def with yield

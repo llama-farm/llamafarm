@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class LlamAgentContextProvider(ABC):
+class LFAgentContextProvider(ABC):
     title: str
 
     def __init__(self, title: str):

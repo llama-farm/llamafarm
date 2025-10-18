@@ -4,8 +4,8 @@ import time
 
 import requests
 
-from agents.llamagent.clients.client import LlamAgentClient
-from agents.llamagent.clients.openai import LlamAgentClientOpenAI
+from agents.llamagent.clients.client import LFAgentClient
+from agents.llamagent.clients.openai import LFAgentClientOpenAI
 
 from .base import RuntimeProvider
 from .health import HealthCheckResult
@@ -27,13 +27,13 @@ class OpenAIProvider(RuntimeProvider):
         """Get API key for OpenAI."""
         return self._model_config.api_key or ""
 
-    def get_client(self) -> LlamAgentClient:
+    def get_client(self) -> LFAgentClient:
         """Get OpenAI client with optional instructor wrapping."""
         if not self._model_config.base_url:
             self._model_config.base_url = self._base_url
         if not self._model_config.api_key:
             self._model_config.api_key = self._api_key
-        client = LlamAgentClientOpenAI(
+        client = LFAgentClientOpenAI(
             model_config=self._model_config,
         )
 

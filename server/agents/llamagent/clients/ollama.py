@@ -4,19 +4,19 @@ from collections.abc import AsyncGenerator
 from config.datamodel import Prompt
 from ollama import AsyncClient, Message
 
-from ..history import LlamAgentChatMessage
-from ..tool import LlamAgentToolDefinition
-from .client import LlamAgentClient
+from ..history import LFAgentChatMessage
+from ..tool import LFAgentToolDefinition
+from .client import LFAgentClient
 
 
 class ABCToolsProvider(ABC):
     @abstractmethod
-    def get_tool_definitions(self) -> list[LlamAgentToolDefinition]:
+    def get_tool_definitions(self) -> list[LFAgentToolDefinition]:
         pass
 
 
-class LlamAgentClientOllama(LlamAgentClient):
-    async def chat(self, *, messages: list[LlamAgentChatMessage]) -> str:
+class LFAgentClientOllama(LFAgentClient):
+    async def chat(self, *, messages: list[LFAgentChatMessage]) -> str:
         # Call the existing stream_chat and return the accumulated content
         content = ""
         async for chunk in self.stream_chat(messages=messages):
@@ -24,7 +24,7 @@ class LlamAgentClientOllama(LlamAgentClient):
         return content
 
     async def stream_chat(  # type: ignore[override]
-        self, *, messages: list[LlamAgentChatMessage]
+        self, *, messages: list[LFAgentChatMessage]
     ) -> AsyncGenerator[str, None]:
         client = AsyncClient(
             host=(
@@ -47,10 +47,10 @@ class LlamAgentClientOllama(LlamAgentClient):
                 yield message_content
 
     @staticmethod
-    def prompt_to_message(prompt: Prompt) -> LlamAgentChatMessage:
-        return LlamAgentChatMessage(role="system", content=prompt.content)
+    def prompt_to_message(prompt: Prompt) -> LFAgentChatMessage:
+        return LFAgentChatMessage(role="system", content=prompt.content)
 
-    def _message_to_openai_message(self, message: LlamAgentChatMessage) -> Message:
+    def _message_to_openai_message(self, message: LFAgentChatMessage) -> Message:
         match message.role:
             case "system":
                 return Message(role="system", content=message.content)

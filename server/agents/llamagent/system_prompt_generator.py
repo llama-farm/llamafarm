@@ -1,25 +1,25 @@
 from pydantic import BaseModel, Field
 
-from agents.llamagent.context_provider import LlamAgentContextProvider
-from agents.llamagent.history import LlamAgentChatMessage
+from agents.llamagent.context_provider import LFAgentContextProvider
+from agents.llamagent.history import LFAgentChatMessage
 
 
-class LlamAgentPrompt(BaseModel):
+class LFAgentPrompt(BaseModel):
     role: str = Field(..., description="The role of the prompt")
     content: str = Field(..., description="The content of the prompt")
 
 
-class LlamAgentSystemPromptGenerator:
-    system_prompts: list[LlamAgentPrompt]
-    context_providers: dict[str, LlamAgentContextProvider]
+class LFAgentSystemPromptGenerator:
+    system_prompts: list[LFAgentPrompt]
+    context_providers: dict[str, LFAgentContextProvider]
 
     def __init__(
         self,
-        prompts: list[LlamAgentChatMessage],
-        context_providers: dict[str, LlamAgentContextProvider] | None = None,
+        prompts: list[LFAgentChatMessage],
+        context_providers: dict[str, LFAgentContextProvider] | None = None,
     ):
         self.system_prompts = [
-            LlamAgentPrompt(role="system", content=prompt.content)
+            LFAgentPrompt(role="system", content=prompt.content)
             for prompt in (prompts or [])
             if prompt.role == "system"
         ]

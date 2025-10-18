@@ -1,5 +1,5 @@
 from pydantic import BaseModel
 
 
-class LlamAgentToolDefinition(BaseModel):
+class LFAgentToolDefinition(BaseModel):
     pass

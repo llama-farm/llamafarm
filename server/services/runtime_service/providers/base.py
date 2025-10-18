@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from config.datamodel import LlamaFarmConfig, Model
 
-from agents.llamagent.clients.client import LlamAgentClient
+from agents.llamagent.clients.client import LFAgentClient
 from services.model_service import ModelService
 
 from .health import HealthCheckResult
@@ -25,7 +25,7 @@ class RuntimeProvider(ABC):
         self._model_config = model_config
 
     @abstractmethod
-    def get_client(self) -> LlamAgentClient:
+    def get_client(self) -> LFAgentClient:
         """Get compatible client for this provider.
 
         Args:
