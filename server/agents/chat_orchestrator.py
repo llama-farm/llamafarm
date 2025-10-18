@@ -9,7 +9,7 @@ from agents.llamagent.agent import LFAgent, LFAgentConfig
 from agents.llamagent.clients.openai import LFAgentClientOpenAI
 from agents.llamagent.history import LFAgentChatMessage, LFAgentHistory
 from agents.llamagent.system_prompt_generator import LFAgentSystemPromptGenerator
-from context_providers.mcp_tools_context_provider import MCPToolsContextProvider
+from agents.llamagent.types import ToolDefinition
 from core.logging import FastAPIStructLogger
 from services.mcp_service import MCPService
 from services.model_service import ModelService
@@ -202,20 +202,100 @@ class ChatOrchestratorAgent(LFAgent):
     async def run_async_stream(
         self, user_input: LFAgentChatMessage | None = None
     ) -> AsyncGenerator[str, None]:
-        # If MCP is enabled, we can't stream the response
-        if self._mcp_enabled:
-            response = await self.run_async(user_input=user_input)
-            yield response
+        """Stream chat with MCP tool execution support."""
+
+        if not self._mcp_enabled or not self._mcp_tools:
+            # No MCP tools, use standard streaming
+            async for chunk in super().run_async_stream(user_input=user_input):
+                yield chunk
+            try:
+                self._persist_history()
+            except Exception:
+                logger.warning(
+                    "History persistence failed after run_async_stream", exc_info=True
+                )
             return
 
-        async for chunk in super().run_async_stream(user_input=user_input):
-            yield chunk
+        # Convert MCP tools to ToolDefinition format
+        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
+
+        max_iterations = 10
+        iteration = 0
+        current_input = user_input
+
+        while iteration < max_iterations:
+            iteration += 1
+
+            logger.info("Starting tool calling iteration", iteration=iteration)
+
+            # Stream chat with tools
+            tool_call_made = False
+
+            async for event in self.stream_chat_with_tools(
+                user_input=current_input, tools=tools
+            ):
+                if event.is_content():
+                    # Stream content to user
+                    if event.content:
+                        yield event.content
+
+                elif event.is_tool_call():
+                    # Execute the tool
+                    tool_call_made = True
+                    tool_call = event.tool_call
+
+                    if not tool_call:
+                        continue
+
+                    logger.info(
+                        "Executing MCP tool",
+                        tool_name=tool_call.name,
+                        iteration=iteration,
+                    )
+
+                    yield f"\n\n🔧 Calling {tool_call.name}...\n"
+
+                    # Execute the MCP tool
+                    result = await self._execute_mcp_tool(
+                        tool_call.name, tool_call.arguments
+                    )
+
+                    result_preview = (
+                        result[:100] + "..." if len(result) > 100 else result
+                    )
+                    yield f"✅ Result: {result_preview}\n\n"
+
+                    # Add tool call and result to history
+                    self.history.add_message(
+                        LFAgentChatMessage(
+                            role="assistant",
+                            content=f"[Called tool: {tool_call.name}]",
+                        )
+                    )
+                    self.history.add_message(
+                        LFAgentChatMessage(
+                            role="tool", content=f"Tool result: {result}"
+                        )
+                    )
+
+                    # Prepare for next iteration
+                    current_input = None  # History already updated
+                    break  # Exit event loop, continue while loop
+
+            # If no tool was called, we're done
+            if not tool_call_made:
+                logger.info("No tool call made, conversation complete")
+                break
+
+        # Save history
+        if iteration >= max_iterations:
+            logger.warning("Max iterations reached", max_iterations=max_iterations)
+            yield "\n\n⚠️ Maximum tool calls reached.\n"
+
         try:
             self._persist_history()
         except Exception:
-            logger.warning(
-                "History persistence failed after run_async_stream", exc_info=True
-            )
+            logger.warning("History persistence failed", exc_info=True)
 
     def enable_persistence(
         self,
@@ -236,20 +316,83 @@ class ChatOrchestratorAgent(LFAgent):
             logger.warning("Failed to enable persistence", exc_info=True)
 
     async def enable_mcp(self):
+        """Enable MCP tool calling support."""
         if self._mcp_enabled:
             return
         self._mcp_service = MCPService(self._project_config)
         self._mcp_tool_factory = MCPToolFactory(self._mcp_service)
-        mcp_context_provider = MCPToolsContextProvider(title="MCP Tools")
-        self.register_context_provider("mcp", mcp_context_provider)
         self._mcp_enabled = True
         await self._load_mcp_tools()
 
     async def _load_mcp_tools(self):
+        """Load MCP tools from configured servers."""
         if not self._mcp_enabled:
             await self.enable_mcp()
         self._mcp_tools = await self._mcp_tool_factory.create_all_tools()
-        self.get_context_provider("mcp").set_tools(self._mcp_tools)
+        logger.info(
+            "MCP tools loaded",
+            tool_count=len(self._mcp_tools),
+            tool_names=[
+                getattr(t, "mcp_tool_name", t.__name__) for t in self._mcp_tools
+            ],
+        )
+
+    async def _execute_mcp_tool(self, tool_name: str, arguments: dict) -> str:
+        """Execute an MCP tool and return the result.
+
+        Args:
+            tool_name: Name of the tool to execute
+            arguments: Tool parameters
+
+        Returns:
+            Tool result as string
+        """
+        # Find the tool class
+        tool_class = next(
+            (
+                t
+                for t in self._mcp_tools
+                if getattr(t, "mcp_tool_name", None) == tool_name
+            ),
+            None,
+        )
+
+        if not tool_class:
+            error_msg = f"Tool '{tool_name}' not found"
+            logger.error(
+                error_msg,
+                available_tools=[
+                    getattr(t, "mcp_tool_name", t.__name__) for t in self._mcp_tools
+                ],
+            )
+            return f"Error: {error_msg}"
+
+        try:
+            # Instantiate and execute tool
+            tool_instance = tool_class()
+            input_schema_class = tool_class.input_schema
+
+            # Create input with tool_name discriminator
+            tool_input = input_schema_class(tool_name=tool_name, **arguments)
+
+            # Execute tool
+            result = await tool_instance.arun(tool_input)
+
+            # Extract result content
+            result_content = getattr(result, "result", str(result))
+
+            logger.info(
+                "Tool execution successful",
+                tool_name=tool_name,
+                result_length=len(str(result_content)),
+            )
+
+            return str(result_content)
+
+        except Exception as e:
+            error_msg = f"Error executing tool '{tool_name}': {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return error_msg
 
     def reset_history(self):
         super().reset_history()

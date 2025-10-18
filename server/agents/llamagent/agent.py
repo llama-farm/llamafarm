@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.llamagent.clients.client import LFAgentClient
+from agents.llamagent.types import StreamEvent, ToolDefinition
 from core.logging import FastAPIStructLogger
 
 from .context_provider import LFAgentContextProvider
@@ -40,7 +41,7 @@ class LFAgent:
             self.history.add_message(user_input)
 
         messages = self._prepare_messages()
-        return await self._client.chat(messages=messages)
+        return await self._client.chat(messages=messages)  # type: ignore[attr-defined]
 
     async def run_async_stream(
         self,
@@ -51,8 +52,41 @@ class LFAgent:
             self.history.add_message(user_input)
         messages = self._prepare_messages()
 
-        async for chunk in self._client.stream_chat(messages=messages):
+        async for chunk in self._client.stream_chat(  # type: ignore[attr-defined]
+            messages=messages
+        ):
             yield chunk
+
+    async def stream_chat_with_tools(
+        self,
+        *,
+        user_input: LFAgentChatMessage | None = None,
+        tools: list[ToolDefinition],
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream chat with tool calling support.
+
+        This method is provider-agnostic. The client handles:
+        - How tools are injected (API param vs system prompt)
+        - How tool calls are detected (native vs JSON)
+
+        Args:
+            user_input: Optional user message to add to history
+            tools: Available tools for the LLM to use
+
+        Yields:
+            StreamEvent: Content chunks or tool call requests
+        """
+        if user_input:
+            self.history.add_message(user_input)
+
+        # Prepare messages (system prompt + history)
+        messages = self._prepare_messages()
+
+        # Delegate to client - it handles provider-specific logic
+        async for event in self._client.stream_chat_with_tools(
+            messages=messages, tools=tools
+        ):
+            yield event
 
     def register_context_provider(
         self, title: str, context_provider: LFAgentContextProvider
