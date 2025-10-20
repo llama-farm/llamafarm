@@ -1,6 +1,33 @@
 version: "3.8"
 
 services:
+  # ChromaDB Vector Database Server (Development)
+  # Multi-process write conflicts by centralizing ChromaDB access
+  # All RAG workers connect to this server instead of using separate persistent clients
+  chromadb-server:
+    image: chromadb/chroma:1.0.20
+    ports:
+      - "8001:8000"  # Expose on 8001 to avoid conflict with server
+    environment:
+      - PERSIST_DIRECTORY=/chroma/data
+      - IS_PERSISTENT=TRUE
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+    volumes:
+      - llamafarm_dev_chromadb:/chroma/data
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8000' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - llamafarm-dev
+    labels:
+      - "llamafarm.service=chromadb"
+      - "llamafarm.env=development"
+      - "llamafarm.issue=279"
+
   # FastAPI Backend Server (Development - Lightweight)
   server:
     build:
@@ -17,6 +44,8 @@ services:
       - ../../server:/app/server
       - ../../config:/app/config
       - llamafarm_dev_data:/var/lib/llamafarm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
       interval: 30s
@@ -34,6 +63,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LF_DATA_DIR=/var/lib/llamafarm
+      - CHROMADB_HOST=chromadb-server
+      - CHROMADB_PORT=8000
     volumes:
       - ../../rag:/app/rag
       - ../../config:/app/config
@@ -41,6 +72,8 @@ services:
       - llamafarm_dev_data:/var/lib/llamafarm
     depends_on:
       server:
+        condition: service_healthy
+      chromadb-server:
         condition: service_healthy
     healthcheck:
       test:
@@ -85,3 +118,13 @@ volumes:
     labels:
       - "llamafarm.managed=true"
       - "llamafarm.env=development"
+  
+  # ChromaDB persistent data volume (Development)
+  # Stores vector embeddings and metadata to survive container restarts
+  # Uses Docker-managed volume for better portability across environments
+  llamafarm_dev_chromadb:
+    driver: local
+    labels:
+      - "llamafarm.managed=true"
+      - "llamafarm.env=development"
+      - "llamafarm.service=chromadb"

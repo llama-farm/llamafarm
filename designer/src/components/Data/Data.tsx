@@ -9,6 +9,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '../ui/dropdown-menu'
+import { defaultStrategies } from '../Rag/strategies'
+import type { RagStrategy } from '../Rag/strategies'
+import { getStoredSet, setStoredSet } from '../../utils/storage'
 import {
   Dialog,
   DialogContent,
@@ -81,6 +84,19 @@ const Data = () => {
       id: dataset.name,
       name: dataset.name,
       // No rag_strategy on datasets; server provides data_processing_strategy/database
+      database: (dataset as any).database,
+      processingStrategy: (() => {
+        const strategy = (dataset as any).data_processing_strategy
+        if (!strategy) {
+          try {
+            console.warn(
+              `Warning: 'data_processing_strategy' is missing for dataset '${dataset.name}'. Defaulting to 'default'.`
+            )
+          } catch {}
+          return 'default'
+        }
+        return strategy
+      })(),
       files: Array.isArray((dataset as any).details?.files_metadata)
         ? (dataset as any).details.files_metadata
         : (dataset as any).files,
@@ -120,6 +136,8 @@ const Data = () => {
         {
           id: 'demo-arxiv',
           name: 'arxiv-papers',
+          database: 'main_database',
+          processingStrategy: 'universal_processor',
           files: [],
           lastRun: new Date(),
           embedModel: 'text-embedding-3-large',
@@ -131,6 +149,8 @@ const Data = () => {
         {
           id: 'demo-handbook',
           name: 'company-handbook',
+          database: 'main_database',
+          processingStrategy: 'universal_processor',
           files: [],
           lastRun: new Date(),
           embedModel: 'text-embedding-3-large',
@@ -177,6 +197,155 @@ const Data = () => {
       return {}
     }
   })
+
+  // Processing strategies state management ----------------------------------
+  const [metaTick, setMetaTick] = useState(0)
+  const [strategyEditOpen, setStrategyEditOpen] = useState(false)
+  const [strategyEditId, setStrategyEditId] = useState<string>('')
+  const [strategyEditName, setStrategyEditName] = useState('')
+  const [strategyEditDescription, setStrategyEditDescription] = useState('')
+  const [strategyCreateOpen, setStrategyCreateOpen] = useState(false)
+  const [strategyCreateName, setStrategyCreateName] = useState('')
+  const [strategyCreateDescription, setStrategyCreateDescription] = useState('')
+  const [strategyCopyFromId, setStrategyCopyFromId] = useState('')
+
+  // Validate that an object is a well-formed RagStrategy
+  const isValidRagStrategy = (s: any): s is RagStrategy => {
+    return (
+      !!s &&
+      typeof s.id === 'string' &&
+      typeof s.name === 'string' &&
+      typeof s.description === 'string' &&
+      typeof s.isDefault === 'boolean' &&
+      typeof s.datasetsUsing === 'number'
+    )
+  }
+
+  const getCustomStrategies = (): RagStrategy[] => {
+    try {
+      const raw = localStorage.getItem('lf_custom_strategies')
+      if (!raw) return []
+      const arr = JSON.parse(raw) as RagStrategy[]
+      if (!Array.isArray(arr)) return []
+      return arr.filter(isValidRagStrategy)
+    } catch {
+      return []
+    }
+  }
+
+  const saveCustomStrategies = (list: RagStrategy[]) => {
+    try {
+      localStorage.setItem('lf_custom_strategies', JSON.stringify(list))
+    } catch {}
+  }
+
+  const addCustomStrategy = (s: RagStrategy) => {
+    const list = getCustomStrategies()
+    const exists = list.some(x => x.id === s.id)
+    if (exists) {
+      toast({ message: 'Strategy id already exists', variant: 'destructive' })
+      return
+    }
+    list.push(s)
+    saveCustomStrategies(list)
+    setMetaTick(t => t + 1)
+  }
+
+  const removeCustomStrategy = (id: string) => {
+    const list = getCustomStrategies().filter(s => s.id !== id)
+    saveCustomStrategies(list)
+  }
+
+  const getDeletedSet = (): Set<string> => getStoredSet('lf_strategy_deleted')
+  const saveDeletedSet = (s: Set<string>) =>
+    setStoredSet('lf_strategy_deleted', s)
+
+  const markDeleted = (id: string) => {
+    const set = getDeletedSet()
+    set.add(id)
+    saveDeletedSet(set)
+    setMetaTick(t => t + 1)
+  }
+
+  // Derive display strategies with local overrides
+  const displayStrategies = useMemo(() => {
+    const deleted = getDeletedSet()
+    const all = [...defaultStrategies, ...getCustomStrategies()]
+    return all
+      .filter(s => !deleted.has(s.id))
+      .map(s => {
+        let { name, description } = s
+        try {
+          const n = localStorage.getItem(`lf_strategy_name_override_${s.id}`)
+          if (typeof n === 'string' && n.trim().length > 0) {
+            name = n.trim()
+          }
+          const d = localStorage.getItem(`lf_strategy_description_${s.id}`)
+          if (typeof d === 'string' && d.trim().length > 0) {
+            description = d.trim()
+          }
+        } catch {}
+        return { ...s, name, description }
+      })
+  }, [metaTick])
+
+  // Build mapping of strategy name -> dataset names
+  const datasetsByStrategyName = useMemo(() => {
+    const map = new Map<string, string[]>()
+
+    // Use the datasets from the useMemo above
+    for (const d of datasets) {
+      const strategyName = (d as any).processingStrategy
+      const datasetName = d.name
+      if (typeof strategyName === 'string' && typeof datasetName === 'string') {
+        const arr = map.get(strategyName) || []
+        arr.push(datasetName)
+        map.set(strategyName, arr)
+      }
+    }
+
+    return map
+  }, [datasets, metaTick])
+
+  const getParsersCount = (sid: string): number => {
+    try {
+      const raw = localStorage.getItem(`lf_strategy_parsers_${sid}`)
+      if (!raw) return 7 // default seed
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr.length : 7
+    } catch {
+      return 7
+    }
+  }
+
+  const getExtractorsCount = (sid: string): number => {
+    try {
+      const raw = localStorage.getItem(`lf_strategy_extractors_${sid}`)
+      if (!raw) return 8 // default seed
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr.length : 8
+    } catch {
+      return 8
+    }
+  }
+
+  // Refresh on processing changes (parsers/extractors add/edit/delete)
+  useEffect(() => {
+    const handler = (_e: Event) => {
+      setMetaTick(t => t + 1)
+    }
+    try {
+      window.addEventListener('lf:processingUpdated', handler as EventListener)
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener(
+          'lf:processingUpdated',
+          handler as EventListener
+        )
+      } catch {}
+    }
+  }, [])
 
   // (initial state is loaded from localStorage)
 
@@ -353,105 +522,270 @@ const Data = () => {
       />
       <div className="w-full flex flex-col flex-1 min-h-0">
         {mode === 'designer' && (
-          <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
-            <div>Datasets</div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsImportOpen(true)}
-              >
-                Import sample dataset
-              </Button>
-              <Dialog
-                open={isCreateOpen}
-                onOpenChange={open => {
-                  // Prevent closing dialog during mutation
-                  if (!createDatasetMutation.isPending) {
-                    setIsCreateOpen(open)
-                  }
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button variant="default" size="sm">
-                    Create new
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>New dataset</DialogTitle>
-                  </DialogHeader>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">
-                        Name
-                      </label>
-                      <Input
-                        autoFocus
-                        value={newDatasetName}
-                        onChange={e => setNewDatasetName(e.target.value)}
-                        placeholder="Enter dataset name"
-                      />
+          <>
+            {/* Processing strategies section */}
+            <div className="flex items-center justify-between mt-0 mb-3">
+              <div>
+                <div className="font-medium">Processing strategies</div>
+                <div className="h-1" />
+                <div className="text-xs text-muted-foreground">
+                  Processing strategies are applied to datasets.
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setStrategyCreateName('')
+                    setStrategyCreateDescription('')
+                    setStrategyCopyFromId('')
+                    setStrategyCreateOpen(true)
+                  }}
+                >
+                  Create new
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-8">
+              {displayStrategies.map(s => {
+                const assigned = datasetsByStrategyName.get(s.name) || []
+                return (
+                  <div
+                    key={s.id}
+                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${displayStrategies.length === 1 ? 'md:col-span-2' : ''}`}
+                    onClick={() => navigate(`/chat/data/strategies/${s.id}`)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        navigate(`/chat/data/strategies/${s.id}`)
+                      }
+                    }}
+                  >
+                    <div className="absolute top-2 right-2">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <FontIcon type="overflow" className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="min-w-[12rem] w-[12rem]"
+                        >
+                          <DropdownMenuItem
+                            onClick={e => {
+                              e.stopPropagation()
+                              setStrategyEditId(s.id)
+                              setStrategyEditName(s.name)
+                              setStrategyEditDescription(s.description)
+                              setStrategyEditOpen(true)
+                            }}
+                          >
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={e => {
+                              e.stopPropagation()
+                              setStrategyCreateName(`${s.name} (copy)`)
+                              setStrategyCreateDescription(s.description)
+                              setStrategyCopyFromId(s.id)
+                              setStrategyCreateOpen(true)
+                            }}
+                          >
+                            Duplicate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={e => {
+                              e.stopPropagation()
+                              const ok = confirm(
+                                'Delete this processing strategy?'
+                              )
+                              if (!ok) return
+                              try {
+                                removeCustomStrategy(s.id)
+                                const set = getDeletedSet()
+                                set.add(s.id)
+                                saveDeletedSet(set)
+                                setMetaTick(t => t + 1)
+                              } catch {}
+                            }}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">
-                        Description
-                      </label>
-                      <Textarea
-                        value={newDatasetDescription}
-                        onChange={e => setNewDatasetDescription(e.target.value)}
-                        placeholder="Optional description"
-                        rows={3}
-                      />
+
+                    <div className="text-sm font-medium">{s.name}</div>
+                    <div className="text-xs text-primary text-left w-fit">
+                      {s.description ||
+                        'Unified processor for PDFs, Word docs, CSVs, Markdown, and text files.'}
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">
-                        Data Processing Strategy
-                      </label>
-                      <Input
-                        value={newDatasetDataProcessingStrategy}
-                        onChange={e =>
-                          setNewDatasetDataProcessingStrategy(e.target.value)
-                        }
-                        placeholder="e.g., PDF Simple, Markdown"
-                      />
+                    <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                      {assigned.slice(0, 4).map(name => (
+                        <Badge
+                          key={name}
+                          variant="default"
+                          size="sm"
+                          className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                        >
+                          {name}
+                        </Badge>
+                      ))}
+                      {assigned.length > 4 ? (
+                        <Badge
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-xl"
+                        >
+                          +{assigned.length - 4}
+                        </Badge>
+                      ) : null}
+                      {assigned.length === 0 ? (
+                        <Badge
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-xl"
+                        >
+                          No datasets yet
+                        </Badge>
+                      ) : null}
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">
-                        Database
-                      </label>
-                      <Input
-                        value={newDatasetDatabase}
-                        onChange={e => setNewDatasetDatabase(e.target.value)}
-                        placeholder="e.g., default_db"
-                      />
+                    <div className="flex items-center justify-between mt-1">
+                      <div className="text-xs text-muted-foreground">
+                        {getParsersCount(s.id)} parsers •{' '}
+                        {getExtractorsCount(s.id)} extractors
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="px-3 h-7"
+                        onClick={e => {
+                          e.stopPropagation()
+                          navigate(`/chat/data/strategies/${s.id}`)
+                        }}
+                      >
+                        Configure
+                      </Button>
                     </div>
                   </div>
-                  <DialogFooter>
-                    <DialogClose
-                      asChild
-                      disabled={createDatasetMutation.isPending}
-                    >
-                      <Button variant="secondary">Cancel</Button>
-                    </DialogClose>
-                    <Button
-                      onClick={handleCreateDataset}
-                      disabled={
-                        !newDatasetName.trim() ||
-                        !newDatasetDataProcessingStrategy.trim() ||
-                        !newDatasetDatabase.trim() ||
-                        createDatasetMutation.isPending
-                      }
-                    >
-                      {createDatasetMutation.isPending
-                        ? 'Creating...'
-                        : 'Create'}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                )
+              })}
             </div>
-          </div>
+            {/* End processing strategies section */}
+
+            {/* Divider */}
+            <div className="border-t border-border mb-6"></div>
+
+            {/* Datasets section */}
+            <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
+              <div className="font-medium">Datasets</div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsImportOpen(true)}
+                >
+                  Import sample dataset
+                </Button>
+                <Dialog
+                  open={isCreateOpen}
+                  onOpenChange={open => {
+                    // Prevent closing dialog during mutation
+                    if (!createDatasetMutation.isPending) {
+                      setIsCreateOpen(open)
+                    }
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button variant="default" size="sm">
+                      Create new
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>New dataset</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">
+                          Name
+                        </label>
+                        <Input
+                          autoFocus
+                          value={newDatasetName}
+                          onChange={e => setNewDatasetName(e.target.value)}
+                          placeholder="Enter dataset name"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">
+                          Description
+                        </label>
+                        <Textarea
+                          value={newDatasetDescription}
+                          onChange={e =>
+                            setNewDatasetDescription(e.target.value)
+                          }
+                          placeholder="Optional description"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">
+                          Data Processing Strategy
+                        </label>
+                        <Input
+                          value={newDatasetDataProcessingStrategy}
+                          onChange={e =>
+                            setNewDatasetDataProcessingStrategy(e.target.value)
+                          }
+                          placeholder="e.g., PDF Simple, Markdown"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">
+                          Database
+                        </label>
+                        <Input
+                          value={newDatasetDatabase}
+                          onChange={e => setNewDatasetDatabase(e.target.value)}
+                          placeholder="e.g., default_db"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <DialogClose
+                        asChild
+                        disabled={createDatasetMutation.isPending}
+                      >
+                        <Button variant="secondary">Cancel</Button>
+                      </DialogClose>
+                      <Button
+                        onClick={handleCreateDataset}
+                        disabled={
+                          !newDatasetName.trim() ||
+                          !newDatasetDataProcessingStrategy.trim() ||
+                          !newDatasetDatabase.trim() ||
+                          createDatasetMutation.isPending
+                        }
+                      >
+                        {createDatasetMutation.isPending
+                          ? 'Creating...'
+                          : 'Create'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+          </>
         )}
         {mode !== 'designer' ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-6">
@@ -566,13 +900,22 @@ const Data = () => {
                           <div className="text-xs text-muted-foreground">
                             Last run on {formatLastRun(ds.lastRun)}
                           </div>
-                          <div className="flex flex-row gap-2 items-center">
+                          <div className="flex flex-row gap-2 items-center flex-wrap">
+                            {(ds as any).database && (
+                              <Badge
+                                variant="default"
+                                size="sm"
+                                className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                              >
+                                {(ds as any).database}
+                              </Badge>
+                            )}
                             <Badge
                               variant="default"
                               size="sm"
                               className="rounded-xl"
                             >
-                              {ds.embedModel}
+                              {(ds as any).processingStrategy || 'default'}
                             </Badge>
                           </div>
                           <div className="text-xs text-muted-foreground">
@@ -803,6 +1146,234 @@ const Data = () => {
               Save
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Strategy Modal */}
+      <Dialog open={strategyEditOpen} onOpenChange={setStrategyEditOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg text-foreground">
+              Edit strategy
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-1">
+            <div>
+              <label className="text-xs text-muted-foreground">
+                Strategy name
+              </label>
+              <input
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                placeholder="Enter name"
+                value={strategyEditName}
+                onChange={e => setStrategyEditName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">
+                Description
+              </label>
+              <textarea
+                rows={4}
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                placeholder="Add a brief description"
+                value={strategyEditDescription}
+                onChange={e => setStrategyEditDescription(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex items-center justify-between gap-2">
+            <button
+              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
+              onClick={() => {
+                if (!strategyEditId) return
+                const ok = confirm(
+                  'Are you sure you want to delete this strategy?'
+                )
+                if (ok) {
+                  try {
+                    localStorage.removeItem(
+                      `lf_strategy_name_override_${strategyEditId}`
+                    )
+                    localStorage.removeItem(
+                      `lf_strategy_description_${strategyEditId}`
+                    )
+                  } catch {}
+                  removeCustomStrategy(strategyEditId)
+                  markDeleted(strategyEditId)
+                  setStrategyEditOpen(false)
+                  toast({ message: 'Strategy deleted', variant: 'default' })
+                }
+              }}
+              type="button"
+            >
+              Delete
+            </button>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                onClick={() => setStrategyEditOpen(false)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className={`px-3 py-2 rounded-md text-sm ${strategyEditName.trim().length > 0 ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
+                onClick={() => {
+                  if (!strategyEditId || strategyEditName.trim().length === 0)
+                    return
+                  try {
+                    localStorage.setItem(
+                      `lf_strategy_name_override_${strategyEditId}`,
+                      strategyEditName.trim()
+                    )
+                    localStorage.setItem(
+                      `lf_strategy_description_${strategyEditId}`,
+                      strategyEditDescription
+                    )
+                  } catch {}
+                  setStrategyEditOpen(false)
+                  setMetaTick(t => t + 1)
+                }}
+                disabled={strategyEditName.trim().length === 0}
+                type="button"
+              >
+                Save
+              </button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Strategy Modal */}
+      <Dialog
+        open={strategyCreateOpen}
+        onOpenChange={open => {
+          setStrategyCreateOpen(open)
+          if (!open) {
+            setStrategyCreateName('')
+            setStrategyCreateDescription('')
+            setStrategyCopyFromId('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg text-foreground">
+              Create new processing strategy
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-1">
+            <div>
+              <label className="text-xs text-muted-foreground">
+                Strategy name
+              </label>
+              <input
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                placeholder="Enter name"
+                value={strategyCreateName}
+                onChange={e => setStrategyCreateName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">
+                Copy from existing
+              </label>
+              <select
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                value={strategyCopyFromId}
+                onChange={e => {
+                  const v = e.target.value
+                  setStrategyCopyFromId(v)
+                  const found = displayStrategies.find(x => x.id === v)
+                  if (found) {
+                    setStrategyCreateDescription(found.description || '')
+                    if (strategyCreateName.trim().length === 0) {
+                      setStrategyCreateName(`${found.name} (copy)`)
+                    }
+                  }
+                }}
+              >
+                <option value="">None</option>
+                {displayStrategies.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">
+                Description
+              </label>
+              <textarea
+                rows={4}
+                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                placeholder="Add a brief description"
+                value={strategyCreateDescription}
+                onChange={e => setStrategyCreateDescription(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex items-center justify-between gap-2">
+            <button
+              className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+              onClick={() => setStrategyCreateOpen(false)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className={`px-3 py-2 rounded-md text-sm ${strategyCreateName.trim().length > 0 ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
+              onClick={() => {
+                const name = strategyCreateName.trim()
+                if (name.length === 0) return
+                const slugify = (str: string) =>
+                  str
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/^-+|-+$/g, '')
+                const baseId = `custom-${slugify(name)}`
+                const existingIds = new Set(
+                  [...defaultStrategies, ...getCustomStrategies()].map(
+                    s => s.id
+                  )
+                )
+                let newId = baseId
+                if (existingIds.has(newId)) {
+                  newId = `${baseId}-${Date.now()}`
+                }
+                const newStrategy: RagStrategy = {
+                  id: newId,
+                  name,
+                  description: strategyCreateDescription,
+                  isDefault: false,
+                  datasetsUsing: 0,
+                }
+                addCustomStrategy(newStrategy)
+                try {
+                  localStorage.setItem(
+                    `lf_strategy_name_override_${newId}`,
+                    name
+                  )
+                  localStorage.setItem(
+                    `lf_strategy_description_${newId}`,
+                    strategyCreateDescription
+                  )
+                } catch {}
+                setStrategyCreateOpen(false)
+                setStrategyCreateName('')
+                setStrategyCreateDescription('')
+                setStrategyCopyFromId('')
+                setMetaTick(t => t + 1)
+                toast({ message: 'Strategy created', variant: 'default' })
+              }}
+              disabled={strategyCreateName.trim().length === 0}
+              type="button"
+            >
+              Create
+            </button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

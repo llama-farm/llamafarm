@@ -740,6 +740,36 @@ function DatasetView() {
             </div>
           </div>
 
+          {/* Connected database card */}
+          {(currentApiDataset as any)?.database && (
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-sm font-medium">Connected database</h3>
+                  <p className="text-xs text-muted-foreground">
+                    This dataset is connected to the following database
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="default"
+                    size="sm"
+                    className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                  >
+                    {(currentApiDataset as any).database}
+                  </Badge>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate('/chat/databases')}
+                  >
+                    Go to database
+                  </Button>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Processing Strategy card */}
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-3">
@@ -748,7 +778,9 @@ function DatasetView() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => navigate(`/chat/rag/${strategyId}`)}
+                  onClick={() =>
+                    navigate(`/chat/data/strategies/${strategyId}`)
+                  }
                 >
                   Configure
                 </Button>
@@ -797,7 +829,9 @@ function DatasetView() {
                                       variant="outline"
                                       size="sm"
                                       onClick={() =>
-                                        navigate(`/chat/rag/${s.id}`)
+                                        navigate(
+                                          `/chat/data/strategies/${s.id}`
+                                        )
                                       }
                                     >
                                       Configure

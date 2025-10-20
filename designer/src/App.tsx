@@ -1,4 +1,10 @@
-import { Routes, Route, useLocation } from 'react-router-dom'
+import {
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useParams,
+} from 'react-router-dom'
 import Header from './components/Header'
 import { ToastProvider } from './components/ui/toast'
 import ProjectModal from './components/Project/ProjectModal'
@@ -15,7 +21,7 @@ import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
 import Versions from './components/Dashboard/Versions'
 import Models from './components/Models/Models'
-import Rag from './components/Rag/Rag'
+import Databases from './components/Rag/Databases'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
 import SampleProjects from './components/Samples/SampleProjects'
@@ -29,6 +35,13 @@ import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
 import { MobileViewProvider } from './contexts/MobileViewContext'
+
+// Redirect component for dynamic routes from /rag to /databases
+function RagRedirect({ path }: { path: string }) {
+  const params = useParams()
+  const newPath = path.replace(':strategyId', params.strategyId || '')
+  return <Navigate to={newPath} replace />
+}
 
 function ProjectModalRoot() {
   const modal = useProjectModalContext()
@@ -74,30 +87,69 @@ function App() {
                 <Route path="/projects" element={<Home />} />
                 <Route path="/samples" element={<SampleProjects />} />
                 <Route path="/chat" element={<Chat />}>
+                  <Route
+                    index
+                    element={<Navigate to="/chat/dashboard" replace />}
+                  />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="versions" element={<Versions />} />
                   <Route path="data" element={<Data />} />
                   <Route path="data/:datasetId" element={<DatasetView />} />
+                  {/* Processing strategies routes - now under data */}
+                  <Route
+                    path="data/strategies/processing"
+                    element={<StrategyView />}
+                  />
+                  <Route
+                    path="data/strategies/:strategyId"
+                    element={<StrategyView />}
+                  />
                   <Route path="models" element={<Models />} />
-                  <Route path="rag" element={<Rag />} />
-                  {/* Project-level pages */}
+                  {/* Redirect old /rag routes to /databases */}
+                  <Route
+                    path="rag"
+                    element={<Navigate to="/chat/databases" replace />}
+                  />
                   <Route
                     path="rag/add-embedding"
-                    element={<AddEmbeddingStrategy />}
+                    element={
+                      <Navigate to="/chat/databases/add-embedding" replace />
+                    }
                   />
                   <Route
                     path="rag/add-retrieval"
-                    element={<AddRetrievalStrategy />}
+                    element={
+                      <Navigate to="/chat/databases/add-retrieval" replace />
+                    }
                   />
-                  <Route path="rag/processing" element={<StrategyView />} />
-                  <Route path="rag/:strategyId" element={<StrategyView />} />
                   <Route
                     path="rag/:strategyId/change-embedding"
-                    element={<ChangeEmbeddingModel />}
+                    element={
+                      <RagRedirect path="/chat/databases/:strategyId/change-embedding" />
+                    }
                   />
-                  {/* Legacy routes above remain; new entries reuse same components */}
                   <Route
                     path="rag/:strategyId/retrieval"
+                    element={
+                      <RagRedirect path="/chat/databases/:strategyId/retrieval" />
+                    }
+                  />
+                  <Route path="databases" element={<Databases />} />
+                  {/* Database-level embedding and retrieval strategy pages */}
+                  <Route
+                    path="databases/add-embedding"
+                    element={<AddEmbeddingStrategy />}
+                  />
+                  <Route
+                    path="databases/add-retrieval"
+                    element={<AddRetrievalStrategy />}
+                  />
+                  <Route
+                    path="databases/:strategyId/change-embedding"
+                    element={<ChangeEmbeddingModel />}
+                  />
+                  <Route
+                    path="databases/:strategyId/retrieval"
                     element={<RetrievalMethod />}
                   />
                   <Route path="prompt" element={<Prompt />} />

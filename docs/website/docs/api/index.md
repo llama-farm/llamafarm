@@ -111,6 +111,7 @@ Common HTTP status codes:
 - `GET /v1/projects/{namespace}/{project}/chat/sessions/{session_id}/history` - Get chat history
 - `DELETE /v1/projects/{namespace}/{project}/chat/sessions/{session_id}` - Delete chat session
 - `DELETE /v1/projects/{namespace}/{project}/chat/sessions` - Delete all sessions
+- `GET /v1/projects/{namespace}/{project}/models` - List available models
 
 ### Datasets
 - `GET /v1/projects/{namespace}/{project}/datasets` - List datasets
@@ -530,6 +531,46 @@ Delete all chat sessions for a project.
 curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions
 ```
 
+### List Available Models
+
+List all configured models for a project.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/models`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Response:**
+```json
+{
+  "total": 2,
+  "models": [
+    {
+      "name": "fast-model",
+      "provider": "ollama",
+      "model": "llama3.2:3b",
+      "base_url": "http://localhost:11434/v1",
+      "default": true,
+      "description": "Fast model for quick responses"
+    },
+    {
+      "name": "smart-model",
+      "provider": "ollama",
+      "model": "llama3.2:70b",
+      "base_url": "http://localhost:11434/v1",
+      "default": false,
+      "description": "Larger model for complex tasks"
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/models
+```
+
 ---
 
 ## Datasets API
@@ -881,22 +922,44 @@ Get health status of the RAG system and databases.
 **Parameters:**
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
-- `database` (query, optional): Specific database to check
+- `database` (query, optional): Specific database to check (uses default if not specified)
 
 **Response:**
 ```json
 {
   "status": "healthy",
-  "databases": [
-    {
-      "name": "main_db",
+  "database": "main_db",
+  "components": {
+    "vector_store": {
+      "name": "vector_store",
       "status": "healthy",
-      "document_count": 150,
-      "size_bytes": 10485760
+      "latency": 15.2,
+      "message": "Vector store operational"
+    },
+    "embeddings": {
+      "name": "embeddings",
+      "status": "healthy",
+      "latency": 8.5,
+      "message": "Embedding service operational"
     }
-  ]
+  },
+  "last_check": "2024-01-15T10:30:00Z",
+  "issues": null
 }
 ```
+
+**Response Fields:**
+- `status`: Overall health status (`healthy`, `degraded`, `unhealthy`)
+- `database`: Database that was checked
+- `components`: Individual component health checks
+- `last_check`: Timestamp of the health check
+- `issues`: Array of issues if any problems detected
+
+**Component Health:**
+- `name`: Component identifier
+- `status`: Component status (`healthy`, `degraded`, `unhealthy`)
+- `latency`: Response time in milliseconds
+- `message`: Optional status message
 
 **Example:**
 ```bash

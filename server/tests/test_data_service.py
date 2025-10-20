@@ -14,6 +14,7 @@ from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
     Prompt,
+    Message,
     Provider,
     Runtime,
     Version,
@@ -62,8 +63,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -326,8 +327,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -426,8 +427,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -525,8 +526,8 @@ class TestDataService:
             namespace=self.test_namespace,
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={

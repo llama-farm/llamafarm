@@ -26,9 +26,11 @@ runtime:
       default: true
 
 prompts:
-  - role: system
-    content: >-
-      You are a friendly assistant. Reference document titles when possible.
+  - name: default
+    messages:
+      - role: system
+        content: >-
+          You are a friendly assistant. Reference document titles when possible.
 
 rag:
   databases:
@@ -106,9 +108,11 @@ runtime:
         context_size: 65536
 
 prompts:
-  - role: system
-    content: >-
-      You are a helpful assistant with access to local models.
+  - name: default
+    messages:
+      - role: system
+        content: >-
+          You are a helpful assistant with access to local models.
 ```
 
 **Setup:**
@@ -145,9 +149,11 @@ runtime:
         temperature: 0.1
 
 prompts:
-  - role: system
-    content: >-
-      You are a compliance assistant returning JSON with fields: `summary`, `citations`.
+  - name: default
+    messages:
+      - role: system
+        content: >-
+          You are a compliance assistant returning JSON with fields: `summary`, `citations`.
 
 rag:
   databases:
@@ -238,9 +244,11 @@ runtime:
         context_size: 32768
 
 prompts:
-  - role: system
-    content: >-
-      You are a helpful assistant. Use the appropriate model for the task.
+  - name: default
+    messages:
+      - role: system
+        content: >-
+          You are a helpful assistant. Use the appropriate model for the task.
 ```
 
 **Usage:**

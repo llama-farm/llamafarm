@@ -25,8 +25,13 @@ class TestConfigWriter:
             "namespace": "test",
             "prompts": [
                 {
-                    "role": "system",
-                    "content": "This is a test prompt for configuration testing.",
+                    "name": "default",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "This is a test prompt for configuration testing.",
+                        }
+                    ],
                 }
             ],
             "rag": {

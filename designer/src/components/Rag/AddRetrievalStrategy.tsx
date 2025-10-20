@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
+import { useActiveProject } from '../../hooks/useActiveProject'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 // removed unused imports
@@ -8,40 +9,25 @@ import {
   getDefaultConfigForRetrieval,
   parseWeightsList,
 } from '../../utils/retrievalUtils'
-
-// Strategy options (keep in sync with RetrievalMethod)
-const STRATEGY_TYPES = [
-  'BasicSimilarityStrategy',
-  'MetadataFilteredStrategy',
-  'MultiQueryStrategy',
-  'RerankedStrategy',
-  'HybridUniversalStrategy',
-] as const
-type StrategyType = (typeof STRATEGY_TYPES)[number]
-
-const STRATEGY_LABELS: Record<StrategyType, string> = {
-  BasicSimilarityStrategy: 'Basic similarity',
-  MetadataFilteredStrategy: 'Metadata-filtered',
-  MultiQueryStrategy: 'Multi-query',
-  RerankedStrategy: 'Reranked',
-  HybridUniversalStrategy: 'Hybrid universal',
-}
-
-const STRATEGY_DESCRIPTIONS: Record<StrategyType, string> = {
-  BasicSimilarityStrategy:
-    'Simple, fast vector search. Returns the top matches by similarity (you set how many and the distance metric). Optionally filter out weak hits with a score threshold.',
-  MetadataFilteredStrategy:
-    'Search with filters like source, type, date, or tags. Choose whether filters apply before or after retrieval, and automatically widen results when post-filtering removes too much.',
-  MultiQueryStrategy:
-    'Ask the question several ways at once. We create multiple query variations and merge their results so you catch relevant content even when phrased differently.',
-  RerankedStrategy:
-    'Pull a larger candidate set first, then sort by quality. Tune weights for similarity, recency, length, and metadata; optionally normalize scores for fair comparisons.',
-  HybridUniversalStrategy:
-    'Blend multiple strategies into one result set. Combine with weighted average, rank fusion, or score fusion, then keep the best K.',
-}
+import {
+  STRATEGY_TYPES,
+  STRATEGY_LABELS,
+  STRATEGY_DESCRIPTIONS,
+  type StrategyType,
+} from '../../utils/strategyCatalog'
 
 function AddRetrievalStrategy() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const activeProject = useActiveProject()
+  const projectKey = useMemo(() => {
+    const ns = activeProject?.namespace || 'global'
+    const proj = activeProject?.project || 'global'
+    return `${ns}__${proj}`
+  }, [activeProject?.namespace, activeProject?.project])
+
+  // Get the database from URL query params (defaults to main_database if not provided)
+  const database = searchParams.get('database') || 'main_database'
 
   // New retrieval name and default toggle
   const [name, setName] = useState('New retrieval strategy')
@@ -188,11 +174,13 @@ function AddRetrievalStrategy() {
   // Ensure default checked when first retrieval
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('lf_project_retrievals')
+      const raw = localStorage.getItem(
+        `lf_ui_${projectKey}_db_${database}_retrievals`
+      )
       const list = raw ? JSON.parse(raw) : []
       if (!Array.isArray(list) || list.length === 0) setMakeDefault(true)
     } catch {}
-  }, [])
+  }, [projectKey, database])
 
   // Save handler
   const onSave = () => {
@@ -203,7 +191,9 @@ function AddRetrievalStrategy() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
     const baseId = `ret-${slug || Date.now()}`
-    const raw = localStorage.getItem('lf_project_retrievals')
+    const raw = localStorage.getItem(
+      `lf_ui_${projectKey}_db_${database}_retrievals`
+    )
     const list = raw ? JSON.parse(raw) : []
     const exists =
       Array.isArray(list) && list.some((e: any) => e?.id === baseId)
@@ -221,7 +211,10 @@ function AddRetrievalStrategy() {
     const finalList = makeDefault
       ? nextList.map((r: any) => ({ ...r, isDefault: r.id === id }))
       : nextList
-    localStorage.setItem('lf_project_retrievals', JSON.stringify(finalList))
+    localStorage.setItem(
+      `lf_ui_${projectKey}_db_${database}_retrievals`,
+      JSON.stringify(finalList)
+    )
 
     // Build config from current state like the edit page
     let config: Record<string, unknown> = {}
@@ -294,9 +287,12 @@ function AddRetrievalStrategy() {
       }
     }
     const payload = { type: selectedType, config }
-    localStorage.setItem(`lf_strategy_retrieval_${id}`, JSON.stringify(payload))
+    localStorage.setItem(
+      `lf_ui_${projectKey}_db_${database}_retrieval_${id}`,
+      JSON.stringify(payload)
+    )
 
-    navigate('/chat/rag')
+    navigate('/chat/databases')
   }
 
   return (
@@ -306,9 +302,9 @@ function AddRetrievalStrategy() {
         <nav className="text-sm md:text-base flex items-center gap-1.5">
           <button
             className="text-teal-600 dark:text-teal-400 hover:underline"
-            onClick={() => navigate('/chat/rag')}
+            onClick={() => navigate('/chat/databases')}
           >
-            RAG
+            Databases
           </button>
           <span className="text-muted-foreground px-1">/</span>
           <span className="text-foreground">New retrieval strategy</span>
@@ -317,7 +313,7 @@ function AddRetrievalStrategy() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate('/chat/rag')}
+            onClick={() => navigate('/chat/databases')}
           >
             Cancel
           </Button>

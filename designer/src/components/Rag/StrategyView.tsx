@@ -1118,9 +1118,9 @@ function StrategyView() {
             <nav className="text-sm md:text-base flex items-center gap-1.5">
               <button
                 className="text-teal-600 dark:text-teal-400 hover:underline"
-                onClick={() => navigate('/chat/rag')}
+                onClick={() => navigate('/chat/data')}
               >
-                RAG
+                Data
               </button>
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground hidden sm:inline">

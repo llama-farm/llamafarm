@@ -1,6 +1,7 @@
 """ChromaDB vector store implementation."""
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,8 +26,11 @@ class ChromaStore(VectorStore):
         super().__init__(name, config, project_dir)  # type: ignore
         config = config or {}
         self.collection_name = config.get("collection_name", "documents")
-        self.host = config.get("host")
-        self.port = config.get("port")
+        # Support environment variable override for Docker deployment
+        # This allows docker-compose to set CHROMADB_HOST and CHROMADB_PORT
+        # to connect to the chromadb-server service
+        self.host = config.get("host") or os.getenv("CHROMADB_HOST")
+        self.port = config.get("port") or (int(os.getenv("CHROMADB_PORT")) if os.getenv("CHROMADB_PORT") else None)
         self.embedding_dimension = max(
             config.get("embedding_dimension", 768), 1
         )  # Ensure positive
@@ -44,12 +48,21 @@ class ChromaStore(VectorStore):
 
         # Initialize ChromaDB client
         if self.host and self.port:
-            # HTTP client
+            # HTTP client - connects to ChromaDB server (recommended for production)
+            # This prevents multi-process write conflicts (issue #279)
+            logger.info(
+                f"Using ChromaDB HTTP client connecting to {self.host}:{self.port}"
+            )
             self.client = chromadb.HttpClient(host=self.host, port=self.port)
         else:
-            # Persistent client
+            # Persistent client - for local development only
+            # WARNING: Multiple processes writing to the same persistent client can cause conflicts
             logger.info(
                 f"Using ChromaDB persistent client with persist_directory: {self.persist_directory}"
+            )
+            logger.warning(
+                "Persistent client mode: ensure only one process writes to ChromaDB at a time. "
+                "For production, use client-server mode with host/port configuration."
             )
             self.client = chromadb.PersistentClient(path=self.persist_directory)
 

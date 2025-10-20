@@ -170,8 +170,10 @@ runtime:
         context_size: 32768
 
 prompts:
-  - role: system
-    content: "You are a helpful assistant."
+  - name: default
+    messages:
+      - role: system
+        content: "You are a helpful assistant."
 ```
 
 ## API Endpoints

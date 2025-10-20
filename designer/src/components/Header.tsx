@@ -80,7 +80,7 @@ function Header({ currentVersion }: HeaderProps) {
     },
     prompt: { label: 'Prompts', icon: 'prompt', path: '/chat/prompt' },
     data: { label: 'Data', icon: 'data', path: '/chat/data' },
-    rag: { label: 'RAG', icon: 'rag', path: '/chat/rag' },
+    databases: { label: 'Databases', icon: 'rag', path: '/chat/databases' },
     models: { label: 'Models', icon: 'model', path: '/chat/models' },
     test: { label: 'Test', icon: 'test', path: '/chat/test' },
   }
@@ -336,14 +336,14 @@ function Header({ currentVersion }: HeaderProps) {
             </button>
             <button
               className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                isSelected === 'rag'
+                isSelected === 'databases'
                   ? 'bg-primary text-primary-foreground'
                   : 'text-foreground hover:bg-secondary/80'
               }`}
-              onClick={() => navigate('/chat/rag')}
+              onClick={() => navigate('/chat/databases')}
             >
               <FontIcon type="rag" className="w-6 h-6 shrink-0" />
-              <span className="hidden lg:inline">RAG</span>
+              <span className="hidden lg:inline">Databases</span>
             </button>
             <button
               className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${

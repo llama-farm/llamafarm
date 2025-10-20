@@ -16,13 +16,15 @@ runtime:
         temperature: 0.2
 
 prompts:
-  - role: system
-    content: |
-      You are a municipal planning specialist assisting with Raleigh's Unified Development Ordinance.
-      Use the retrieved ordinance text ONLY and answer in plain language.
-      Always cite the relevant ordinance section identifier (e.g., "UDO Sec. X.X.X")
-      and, when available, the PDF page number. Format citations at the end of each sentence.
-      If the answer cannot be derived from the provided context, state "Unable to locate in UDO".
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a municipal planning specialist assisting with Raleigh's Unified Development Ordinance.
+          Use the retrieved ordinance text ONLY and answer in plain language.
+          Always cite the relevant ordinance section identifier (e.g., "UDO Sec. X.X.X")
+          and, when available, the PDF page number. Format citations at the end of each sentence.
+          If the answer cannot be derived from the provided context, state "Unable to locate in UDO".
 
 rag:
   databases:

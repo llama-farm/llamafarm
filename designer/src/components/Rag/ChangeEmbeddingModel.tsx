@@ -552,9 +552,9 @@ function ChangeEmbeddingModel() {
             <nav className="text-sm md:text-base flex items-center gap-1.5">
               <button
                 className="text-teal-600 dark:text-teal-400 hover:underline"
-                onClick={() => navigate('/chat/rag')}
+                onClick={() => navigate('/chat/databases')}
               >
-                RAG
+                Databases
               </button>
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground">Edit strategy</span>
