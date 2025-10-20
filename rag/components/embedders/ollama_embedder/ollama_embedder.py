@@ -32,6 +32,7 @@ class OllamaEmbedder(Embedder):
             "base_url", settings.OLLAMA_HOST
         )
         self.base_url = self.api_base  # Alias for compatibility
+        self.dimension = config.get("dimension", 768)  # Read from config
         self.batch_size = max(
             config.get("batch_size", 32), 1
         )  # Ensure positive batch size
@@ -106,18 +107,8 @@ class OllamaEmbedder(Embedder):
 
     def get_embedding_dimension(self) -> int:
         """Get the dimension of embeddings produced by this model."""
-        # Default dimensions for common models (avoid test embedding during tests)
-        dimension_map = {
-            "nomic-embed-text": 768,
-            "all-minilm": 384,
-            "sentence-transformers": 384,
-        }
-
-        for model_name, dim in dimension_map.items():
-            if model_name in self.model:
-                return dim
-
-        return 768  # Default
+        # Return the configured dimension from llamafarm.yaml
+        return self.dimension
 
     def _call_ollama_api(self, text: str) -> Dict[str, Any]:
         """Call Ollama API for a single text."""
