@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.0.8](https://github.com/llama-farm/llamafarm/compare/v0.0.8...v0.0.8) (2025-10-20)
+
+
+### Features
+
+* **cli:** Cli TUI redesign, multi-database coverage in CLI, API ([#312](https://github.com/llama-farm/llamafarm/issues/312)) ([ed59d9e](https://github.com/llama-farm/llamafarm/commit/ed59d9e437d666792b7f3566bec90f71d313c604))
+* **cli:** make cli resonsive, reorganzie commands add a whole bunch of stuff ([035c9b7](https://github.com/llama-farm/llamafarm/commit/035c9b76d05b95f242f19d00ce1d35cb16752d60))
+* **designer:** hook up db to designer ([aa84d44](https://github.com/llama-farm/llamafarm/commit/aa84d444bb2b6694942bee62afeed42ee8a79898))
+* **designer:** intro databases - replace rag tab with databases pt 2 ([2df55ed](https://github.com/llama-farm/llamafarm/commit/2df55edde29e09ec4c9d2b5514bb5c90390fde62))
+* **designer:** move processing strat to data tab pt 1 ([585c087](https://github.com/llama-farm/llamafarm/commit/585c0877e477a63ce3ef030f1a6b14e0f6e681ab))
+* Implement named prompt sets with per-model selection ([#324](https://github.com/llama-farm/llamafarm/issues/324)) ([5f59f03](https://github.com/llama-farm/llamafarm/commit/5f59f03108cdfeeb62dcdad85aef1b40f65b4404))
+* Multi-model examples and Lemonade runtime config ([#310](https://github.com/llama-farm/llamafarm/issues/310)) ([ead2453](https://github.com/llama-farm/llamafarm/commit/ead245379274aaa46f4e13254543119b2d7d9c72))
+
+
+### Bug Fixes
+
+* **build:** .dockerignore file matching ([#316](https://github.com/llama-farm/llamafarm/issues/316)) ([4c26b27](https://github.com/llama-farm/llamafarm/commit/4c26b271be3f010d7288b2c4ad6ad875cfd1d895))
+* **cli:** address scourcery comments, cubic, quodo, build issues ([33ba216](https://github.com/llama-farm/llamafarm/commit/33ba216269c18db50087598ee412e55a116e5b3a))
+* **cli:** attempt code cleanup ([1920a02](https://github.com/llama-farm/llamafarm/commit/1920a024760ee11dd90d2f65f2a89860a0a55a38))
+* **cli:** make health check real not hardcoded ([413245e](https://github.com/llama-farm/llamafarm/commit/413245e624116ee8167f0d29cba21b9ba3cedf8e))
+* **cli:** menu polish commands and ux ([78f8c9c](https://github.com/llama-farm/llamafarm/commit/78f8c9c61ab89ad503606981b681c1e83f7b4a25))
+* **cli:** menu update cmnd k portion ([67d1e07](https://github.com/llama-farm/llamafarm/commit/67d1e0715cce09761f8c6897578bed63dbc4e8ec))
+* **designer:** cubic sourcery and quodo comments and build errors ([39b98a1](https://github.com/llama-farm/llamafarm/commit/39b98a1387c1a6ec6e82bcb8ea505f709654d00c))
+* **designer:** fix build error ([4c600f9](https://github.com/llama-farm/llamafarm/commit/4c600f9d656886d52588986c95d56ed30f0da29f))
+* **designer:** new embedding and retrival strats can be added to db ([5e53da5](https://github.com/llama-farm/llamafarm/commit/5e53da50fc0ce67da80bf61acb9c25a028d32343))
+* update database configuration ([#313](https://github.com/llama-farm/llamafarm/issues/313)) ([80a980c](https://github.com/llama-farm/llamafarm/commit/80a980c1d7946cc3a096a1e9a4c6d7afef5a79d7))
+
+
+### Miscellaneous Chores
+
+* release 0.0.8 ([984da25](https://github.com/llama-farm/llamafarm/commit/984da2503de85875e85b70a52be347ac20942263))
+
 ## [0.0.8](https://github.com/llama-farm/llamafarm/compare/v0.0.7...v0.0.8) (2025-10-13)
 
 
