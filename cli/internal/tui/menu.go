@@ -182,6 +182,7 @@ func NewQuickMenuModel(config *Config) QuickMenuModel {
 		{Label: "/launch designer - Open designer", Command: "/launch designer"},
 		{Label: "/menu - Open Quick Menu (you're here already)", Command: "", NeedsInput: false},
 		{Label: "/exit - Exit", Command: "/exit"},
+		{Label: "To upgrade run \"lf version upgrade\"", Command: ""},
 		{Label: "", Command: ""},
 		{Label: "Hotkeys:", Command: ""},
 		{Label: "Ctrl+T - Toggle DEV/PROJECT mode", Action: "ctrl+t"},
