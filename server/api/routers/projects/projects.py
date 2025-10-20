@@ -459,7 +459,7 @@ async def get_chat_session_history(namespace: str, project_id: str, session_id: 
         project_dir = ProjectService.get_project_dir(namespace, project_id)
         project_config = ProjectService.load_config(namespace, project_id)
 
-        agent = ChatOrchestratorAgentFactory.create_agent(
+        agent = await ChatOrchestratorAgentFactory.create_agent(
             project_config=project_config,
             project_dir=project_dir,
             session_id=session_id,
