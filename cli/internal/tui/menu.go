@@ -182,7 +182,7 @@ func NewQuickMenuModel(config *Config) QuickMenuModel {
 		{Label: "/launch designer - Open designer", Command: "/launch designer"},
 		{Label: "/menu - Open Quick Menu (you're here already)", Command: "", NeedsInput: false},
 		{Label: "/exit - Exit", Command: "/exit"},
-		{Label: "To upgrade run \"lf version upgrade\"", Command: ""},
+		{Label: "To upgrade run \"lf version upgrade\"", Command: "lf version upgrade", Action: "copy"},
 		{Label: "", Command: ""},
 		{Label: "Hotkeys:", Command: ""},
 		{Label: "Ctrl+T - Toggle DEV/PROJECT mode", Action: "ctrl+t"},
@@ -1181,6 +1181,13 @@ func (m *QuickMenuModel) handleHelpSelection() tea.Cmd {
 	}
 	if item.Action == "refresh-health" {
 		return showToastCmd("Refreshing health...")
+	}
+	if item.Action == "copy" {
+		if item.Command != "" {
+			clipboard.WriteAll(item.Command)
+			return showToastCmd("Copied: " + item.Command)
+		}
+		return nil
 	}
 	if item.NeedsInput {
 		// Ensure correct mode and insert template, then close
