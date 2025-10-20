@@ -113,8 +113,94 @@ func TestEnsureServerAvailable_LocalhostUp(t *testing.T) {
 	defer ts.Close()
 
 	// EnsureServicesWithConfig should return without error for a healthy localhost server
-	config := ServerOnlyConfig(ts.URL)
+	config := ServerOnlyConfig(ts.URL, false)
 	EnsureServicesWithConfig(config)
+}
+
+// TestNoAutoStartIntegration tests the --no-auto-start flag behavior end-to-end
+func TestNoAutoStartIntegration(t *testing.T) {
+	t.Run("NoAutoStart prevents service start when service down", func(t *testing.T) {
+		// Create a test server that returns unhealthy status
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/health" {
+				w.WriteHeader(200)
+				_, _ = w.Write([]byte(`{"status":"unhealthy","summary":"not ready"}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer ts.Close()
+
+		// Create config with NoAutoStart=true
+		config := &ServiceOrchestrationConfig{
+			ServerURL:   ts.URL,
+			PrintStatus: false, // Disable output for cleaner test
+			ServiceNeeds: map[string]ServiceRequirement{
+				"server": ServiceRequired,
+			},
+			NoAutoStart: true,
+		}
+
+		orchestrator := NewServiceOrchestrator(config)
+		result := orchestrator.EnsureServices()
+
+		// Verify service failed
+		serverState, exists := result.Services["server"]
+		if !exists {
+			t.Fatal("Expected server state in results")
+		}
+
+		// Check status is Failed
+		if serverState.Status != StatusFailed {
+			t.Errorf("Expected StatusFailed, got %v", serverState.Status)
+		}
+
+		// Check error message mentions auto-start disabled
+		if serverState.Error == nil {
+			t.Error("Expected error when NoAutoStart=true and service unhealthy")
+		} else if !strings.Contains(serverState.Error.Error(), "auto-start is disabled") {
+			t.Errorf("Expected error to mention 'auto-start is disabled', got: %v", serverState.Error)
+		}
+	})
+
+	t.Run("NoAutoStart succeeds when service already healthy", func(t *testing.T) {
+		// Create a test server that IS healthy
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/health" {
+				w.WriteHeader(200)
+				_, _ = w.Write([]byte(`{"status":"healthy","summary":"all good","components":[{"name":"server","status":"healthy"}]}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer ts.Close()
+
+		config := &ServiceOrchestrationConfig{
+			ServerURL:   ts.URL,
+			PrintStatus: false,
+			ServiceNeeds: map[string]ServiceRequirement{
+				"server": ServiceRequired,
+			},
+			NoAutoStart: true,
+		}
+
+		orchestrator := NewServiceOrchestrator(config)
+		result := orchestrator.EnsureServices()
+
+		// Verify service succeeded
+		serverState, exists := result.Services["server"]
+		if !exists {
+			t.Fatal("Expected server state in results")
+		}
+
+		if serverState.Status != StatusHealthy {
+			t.Errorf("Expected StatusHealthy when service already running, got %v", serverState.Status)
+		}
+
+		if serverState.Error != nil {
+			t.Errorf("Expected no error when service already healthy, got: %v", serverState.Error)
+		}
+	})
 }
 
 // dummy HTTP client used to test VerboseHTTPClient behavior

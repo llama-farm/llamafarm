@@ -132,6 +132,76 @@ lf chat --no-auto-start "What is LlamaFarm?"
 lf datasets list --no-auto-start
 ```
 
+### Common Scenarios
+
+**CI/CD Pipeline (GitHub Actions)**
+```yaml
+# .github/workflows/test.yml
+- name: Start LlamaFarm services
+  run: |
+    docker-compose up -d llamafarm-server llamafarm-rag-worker
+    
+- name: Wait for services
+  run: |
+    timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+    
+- name: Run tests with --no-auto-start
+  run: |
+    lf datasets create --no-auto-start -s pdf_ingest -b main_db test-data
+    lf datasets upload --no-auto-start test-data ./test-files/*.pdf
+    lf datasets process --no-auto-start test-data
+    lf rag query --no-auto-start "test query"
+```
+
+**Development Workflow (Two Terminal Setup)**
+```bash
+# Terminal 1: Start and monitor services
+lf start
+# This keeps services running and shows logs
+
+# Terminal 2: Run commands without triggering restarts
+lf chat --no-auto-start "Develop with stable services"
+lf datasets list --no-auto-start
+lf rag stats --no-auto-start
+
+# Benefits:
+# - Services stay up between commands
+# - Faster command execution (no health checks/restarts)
+# - Easier to debug service issues
+```
+
+**Troubleshooting Tips**
+
+If you see: `Service 'server' is not running and auto-start is disabled`
+
+1. **Check if services are running:**
+   ```bash
+   docker ps | grep llamafarm
+   curl http://localhost:8000/health
+   ```
+
+2. **Start services manually:**
+   ```bash
+   lf start
+   # Or with Docker Compose:
+   docker-compose up -d
+   ```
+
+3. **Remove the flag to enable auto-start:**
+   ```bash
+   # Instead of:
+   lf chat --no-auto-start "query"
+   
+   # Use:
+   lf chat "query"  # Auto-starts if needed
+   ```
+
+4. **Check service logs:**
+   ```bash
+   docker logs llamafarm-server
+   docker logs llamafarm-rag-worker
+   ```
+
 See the [CLI reference](docs/website/docs/cli/index.md) for full command details and troubleshooting advice.
 
 ---
