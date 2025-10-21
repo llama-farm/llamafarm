@@ -182,11 +182,13 @@ func NewQuickMenuModel(config *Config) QuickMenuModel {
 		{Label: "/launch designer - Open designer", Command: "/launch designer"},
 		{Label: "/menu - Open Quick Menu (you're here already)", Command: "", NeedsInput: false},
 		{Label: "/exit - Exit", Command: "/exit"},
-		{Label: "To upgrade run \"lf version upgrade\"", Command: "lf version upgrade", Action: "copy"},
 		{Label: "", Command: ""},
 		{Label: "Hotkeys:", Command: ""},
 		{Label: "Ctrl+T - Toggle DEV/PROJECT mode", Action: "ctrl+t"},
 		{Label: "Ctrl+K - Cycle models", Action: "ctrl+k"},
+		{Label: "", Command: ""},
+		{Label: "Updates:", Command: ""},
+		{Label: "Upgrade to latest version (press Enter to begin)", Command: "lf version upgrade", Action: "run-cmd"},
 		{Label: "Refresh RAG Health", Action: "refresh-health"},
 	}
 
@@ -1186,6 +1188,14 @@ func (m *QuickMenuModel) handleHelpSelection() tea.Cmd {
 		if item.Command != "" {
 			clipboard.WriteAll(item.Command)
 			return showToastCmd("Copied: " + item.Command)
+		}
+		return nil
+	}
+	if item.Action == "run-cmd" {
+		if item.Command != "" {
+			// Close menu and execute command via parent
+			m.active = false
+			return executeCommandCmd(item.Command)
 		}
 		return nil
 	}
