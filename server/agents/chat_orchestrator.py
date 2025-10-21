@@ -11,6 +11,7 @@ from agents.llamagent.history import LFAgentChatMessage, LFAgentHistory
 from agents.llamagent.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.llamagent.types import ToolDefinition
 from core.logging import FastAPIStructLogger
+from core.mcp_registry import register_mcp_service
 from services.mcp_service import MCPService
 from services.model_service import ModelService
 from services.runtime_service.runtime_service import RuntimeService
@@ -321,6 +322,8 @@ class ChatOrchestratorAgent(LFAgent):
             return
         self._mcp_service = MCPService(self._project_config)
         self._mcp_tool_factory = MCPToolFactory(self._mcp_service)
+        # Register for cleanup on shutdown
+        register_mcp_service(self._mcp_service)
         self._mcp_enabled = True
         await self._load_mcp_tools()
 

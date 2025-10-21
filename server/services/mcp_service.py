@@ -45,6 +45,7 @@ class MCPService:
         # to avoid ClosedResourceError when tools are invoked
         self._persistent_sessions: dict[str, ClientSession] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}  # Background tasks
+        self._shutdown_events: dict[str, asyncio.Event] = {}  # For graceful shutdown
         self._cleanup_lock = asyncio.Lock()
 
         logger.info("MCPService initialized", server_count=len(self._servers))
@@ -149,8 +150,12 @@ class MCPService:
 
         # Create an event to signal when session is ready
         session_ready = asyncio.Event()
+        shutdown_event = asyncio.Event()
         session_container = {}
         error_container = {}
+
+        # Store shutdown event for this server
+        self._shutdown_events[server_name] = shutdown_event
 
         async def maintain_session():
             """Background task that keeps the session context alive."""
@@ -174,8 +179,8 @@ class MCPService:
                             session_container["session"] = session
                             session_ready.set()
 
-                            # Keep task alive indefinitely
-                            await asyncio.Event().wait()
+                            # Wait for shutdown signal
+                            await shutdown_event.wait()
 
                 elif server_config.transport == Transport.http:
                     if not server_config.base_url:
@@ -190,13 +195,19 @@ class MCPService:
                             session_container["session"] = session
                             session_ready.set()
 
-                            # Keep task alive indefinitely
-                            await asyncio.Event().wait()
+                            # Wait for shutdown signal
+                            await shutdown_event.wait()
                 else:
                     raise ValueError(
                         f"Unsupported transport: {server_config.transport}"
                     )
 
+            except asyncio.CancelledError:
+                logger.info(
+                    "MCP session task cancelled (shutting down)",
+                    server_name=server_name,
+                )
+                raise
             except Exception as e:
                 error_container["error"] = e
                 session_ready.set()
@@ -233,29 +244,60 @@ class MCPService:
     async def close_persistent_session(self, server_name: str) -> None:
         """Close a persistent session for the specified server.
 
-        Note: Due to asyncio context manager constraints, explicit cleanup
-        is not performed. Sessions will be cleaned up when the process exits.
-
         Args:
             server_name: Name of the MCP server
         """
-        logger.info(
-            "Session cleanup requested (sessions persist for process lifetime)",
-            server_name=server_name,
-        )
+        async with self._cleanup_lock:
+            if server_name in self._shutdown_events:
+                logger.info("Closing MCP session", server_name=server_name)
+                # Signal the background task to shutdown
+                self._shutdown_events[server_name].set()
+
+                # Wait for task to complete (with timeout)
+                if server_name in self._session_tasks:
+                    task = self._session_tasks[server_name]
+                    try:
+                        await asyncio.wait_for(task, timeout=5.0)
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "MCP session task did not complete, cancelling",
+                            server_name=server_name,
+                        )
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+
+                # Cleanup
+                self._persistent_sessions.pop(server_name, None)
+                self._session_tasks.pop(server_name, None)
+                self._shutdown_events.pop(server_name, None)
+
+                logger.info("MCP session closed", server_name=server_name)
 
     async def close_all_persistent_sessions(self) -> None:
-        """Close all persistent sessions.
-
-        Note: Due to asyncio context manager constraints with sse_client/stdio_client,
-        explicit cleanup is not performed. Sessions will be cleaned up when the
-        process exits. This avoids "cancel scope in different task" errors.
-        """
+        """Close all persistent sessions gracefully."""
         logger.info(
-            "Session cleanup requested for all servers "
-            "(sessions persist for process lifetime)",
-            session_count=len(self._persistent_sessions),
+            "Closing all persistent MCP sessions", count=len(self._persistent_sessions)
         )
+
+        # Get all server names to avoid dict modification during iteration
+        server_names = list(self._persistent_sessions.keys())
+
+        # Close all sessions
+        for server_name in server_names:
+            try:
+                await self.close_persistent_session(server_name)
+            except Exception as e:
+                logger.error(
+                    "Error closing MCP session",
+                    server_name=server_name,
+                    error=str(e),
+                    exc_info=True,
+                )
+
+        logger.info("All MCP sessions closed")
 
     @asynccontextmanager
     async def _get_client_session(self, server_config: Server):
