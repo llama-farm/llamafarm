@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+from atomic_agents import AtomicAgent
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.llamagent.clients.client import LFAgentClient
@@ -107,7 +108,7 @@ class LFAgent:
         if system_prompt:
             messages.append(LFAgentChatMessage(role="system", content=system_prompt))
 
-        for message in self.history.get_history():
+        for message in self.history.history:
             messages.append(
                 LFAgentChatMessage(role=message.role, content=message.content)
             )

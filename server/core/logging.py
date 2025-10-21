@@ -69,7 +69,10 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     if json_logs:
         log_renderer = structlog.processors.JSONRenderer()
     else:
-        log_renderer = structlog.dev.ConsoleRenderer()
+        log_renderer = structlog.dev.ConsoleRenderer(
+            # exception_formatter=structlog.dev.rich_traceback
+            exception_formatter=structlog.dev.plain_traceback
+        )
 
     formatter = structlog.stdlib.ProcessorFormatter(
         # These run ONLY on `logging` entries that do NOT originate within

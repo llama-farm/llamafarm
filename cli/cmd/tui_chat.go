@@ -220,9 +220,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 			devHistory = fetchSessionHistory(chatCtx.ServerURL, "llamafarm", "project_seed", devSessionID)
 			for _, msg := range devHistory.Messages {
 				if msg.Role == "user" {
-					devUserChatMessages = append(devUserChatMessages, msg.Content.ChatMessage)
+					devUserChatMessages = append(devUserChatMessages, msg.Content)
 				}
-				devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content.ChatMessage})
+				devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content})
 			}
 			logDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
 		}
@@ -278,9 +278,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		projHist := fetchSessionHistory(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project, projectSessionID)
 		for _, msg := range projHist.Messages {
 			if msg.Role == "user" {
-				projectHistory = append(projectHistory, msg.Content.ChatMessage)
+				projectHistory = append(projectHistory, msg.Content)
 			}
-			projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content.ChatMessage})
+			projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content})
 		}
 	} else {
 		// No project info, still create a session ID for future use

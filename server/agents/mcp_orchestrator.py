@@ -203,7 +203,7 @@ class MCPOrchestrator(LFAgent):
                 lambda s: self._orchestrator_output_schema
             )
 
-            max_iterations = 3  # Prevent infinite loops
+            max_iterations = 5  # Allow up to 5 tool calls before stopping
             iteration = 0
 
             while iteration < max_iterations:
@@ -294,21 +294,8 @@ class MCPOrchestrator(LFAgent):
                     tool_instance = tool_class()
                     tool_result = await tool_instance.arun(tool_params)
 
-                    # Format tool result as user message for next iteration
+                    # Format tool result as a clear new instruction
                     result_content = getattr(tool_result, "result", str(tool_result))
-                    message = BasicChatOutputSchema(
-                        chat_message=(
-                            f"Tool '{tool_name}' returned: {result_content}\n\n"
-                            "Now decide your next action:\n"
-                            "1. If you have enough information to fully answer the user's question:\n"
-                            "   Set tool_name='final_response' and provide your complete answer in chat_message\n"
-                            "2. If you need more information:\n"
-                            "   Set tool_name to the specific tool you need (e.g., 'get_weather') "
-                            "with the appropriate parameters\n\n"
-                            "Think carefully: Do you have all the information needed to answer now?"
-                        )
-                    )
-                    self.history.add_message("assistant", message)
 
                     logger.info(
                         "Tool execution successful",
@@ -316,7 +303,23 @@ class MCPOrchestrator(LFAgent):
                         result_preview=str(result_content)[:200],
                     )
 
-                    user_input.chat_message = f"Answer this user's prompt based on the existing tool results. {user_input.chat_message}"
+                    # Store original question before reassignment
+                    original_question = user_input.chat_message
+
+                    # Create a NEW input that tells LLM to synthesize the answer
+                    # Don't add to history yet - let the LLM decide what to do next
+                    user_input = self.input_schema(
+                        chat_message=(
+                            f"The tool '{tool_name}' was called and returned this result:\n\n"
+                            f"{result_content}\n\n"
+                            f"Based on this tool result, you should now:\n"
+                            f"1. Use tool_name='final_response' and provide a complete, "
+                            f"helpful answer to the user in the chat_message field\n"
+                            f"2. Only call another tool if you genuinely need MORE information\n\n"
+                            f"The user's original question was: {original_question}\n\n"
+                            f"What is your response?"
+                        )
+                    )
 
                 except Exception as e:
                     logger.error(

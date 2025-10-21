@@ -25,6 +25,12 @@ CLIENT_CLASSES = {
     Provider.lemonade: LFAgentClientOpenAI,
 }
 
+# Constants for orchestration loop
+MAX_TOOL_ITERATIONS = 10
+MAX_ITERATIONS_MESSAGE = (
+    "I've reached the maximum number of tool calls. Please try rephrasing your request."
+)
+
 
 class ChatOrchestratorAgent(LFAgent):
     _persist_enabled: bool
@@ -69,6 +75,51 @@ class ChatOrchestratorAgent(LFAgent):
 
         super().__init__(config=config)
 
+    def _create_tool_result_guidance_message(
+        self, tool_name: str, result_content: str
+    ) -> str:
+        """Create guidance message to send after tool execution."""
+        return (
+            f"Tool '{tool_name}' returned: {result_content}\n\n"
+            "Based on this tool result, please provide your "
+            "complete final answer to my original question. "
+            "Do not call the same tool again unless you need "
+            "additional different information."
+        )
+
+    def _add_tool_result_to_history(self, tool_name: str, result_content: str) -> None:
+        """Add tool call and result to history with guidance message."""
+        # self.history.add_message(
+        #     LFAgentChatMessage(
+        #         role="assistant",
+        #         content=f"[Called tool: {tool_name}]",
+        #     )
+        # )
+        self.history.add_message(
+            LFAgentChatMessage(
+                role="tool",
+                content=f"Tool result: {result_content}",
+            )
+        )
+        self.history.add_message(
+            LFAgentChatMessage(
+                role="user",
+                content=(
+                    "Based on the tool result above, please provide "
+                    "your complete final answer to my original question. "
+                    "Do not call the same tool again unless you need "
+                    "additional different information."
+                ),
+            )
+        )
+
+    def _persist_history_safe(self) -> None:
+        """Safely persist history with error handling."""
+        try:
+            self._persist_history()
+        except Exception:
+            logger.warning("History persistence failed", exc_info=True)
+
     async def run_async(self, user_input: LFAgentChatMessage | None = None) -> str:
         """Run the agent with MCP tool calling support.
 
@@ -78,10 +129,9 @@ class ChatOrchestratorAgent(LFAgent):
         3. Execute the tool and feed result back to LLM
         4. Repeat until LLM provides final answer
         """
-        max_iterations = 10
         iteration = 0
 
-        while iteration < max_iterations:
+        while iteration < MAX_TOOL_ITERATIONS:
             iteration += 1
 
             try:
@@ -93,10 +143,7 @@ class ChatOrchestratorAgent(LFAgent):
                     response_data = json.loads(response)
                 except (json.JSONDecodeError, TypeError):
                     # Not JSON, treat as final response
-                    try:
-                        self._persist_history()
-                    except Exception:
-                        logger.warning("History persistence failed", exc_info=True)
+                    self._persist_history_safe()
                     return response
 
                 # Check if this is a tool call request
@@ -107,10 +154,7 @@ class ChatOrchestratorAgent(LFAgent):
                     # No tool requested, this is the final response
                     # Extract the actual message if present
                     final_message = response_data.get("message") or response
-                    try:
-                        self._persist_history()
-                    except Exception:
-                        logger.warning("History persistence failed", exc_info=True)
+                    self._persist_history_safe()
                     return final_message
 
                 # Execute the tool
@@ -162,13 +206,11 @@ class ChatOrchestratorAgent(LFAgent):
                         result_preview=str(result_content)[:200],
                     )
 
-                    # Feed result back to LLM for next iteration
+                    # Feed result back to LLM with clear instruction
                     user_input = LFAgentChatMessage(
                         role="user",
-                        content=(
-                            f"Tool '{tool_name}' returned: {result_content}\n\n"
-                            "Based on this result, provide your final answer "
-                            "or call another tool if needed."
+                        content=self._create_tool_result_guidance_message(
+                            tool_name, result_content
                         ),
                     )
 
@@ -190,15 +232,8 @@ class ChatOrchestratorAgent(LFAgent):
 
         # Max iterations reached
         logger.warning("Max iterations reached in orchestrator")
-        final_response = (
-            "I've reached the maximum number of tool calls. "
-            "Please try rephrasing your request."
-        )
-        try:
-            self._persist_history()
-        except Exception:
-            logger.warning("History persistence failed", exc_info=True)
-        return final_response
+        self._persist_history_safe()
+        return MAX_ITERATIONS_MESSAGE
 
     async def run_async_stream(
         self, user_input: LFAgentChatMessage | None = None
@@ -209,22 +244,16 @@ class ChatOrchestratorAgent(LFAgent):
             # No MCP tools, use standard streaming
             async for chunk in super().run_async_stream(user_input=user_input):
                 yield chunk
-            try:
-                self._persist_history()
-            except Exception:
-                logger.warning(
-                    "History persistence failed after run_async_stream", exc_info=True
-                )
+            self._persist_history_safe()
             return
 
         # Convert MCP tools to ToolDefinition format
         tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
 
-        max_iterations = 10
         iteration = 0
         current_input = user_input
 
-        while iteration < max_iterations:
+        while iteration < MAX_TOOL_ITERATIONS:
             iteration += 1
 
             logger.info("Starting tool calling iteration", iteration=iteration)
@@ -239,6 +268,12 @@ class ChatOrchestratorAgent(LFAgent):
                     # Stream content to user
                     if event.content:
                         yield event.content
+                        self.history.add_message(
+                            LFAgentChatMessage(
+                                role="assistant",
+                                content=event.content,
+                            )
+                        )
 
                 elif event.is_tool_call():
                     # Execute the tool
@@ -261,23 +296,10 @@ class ChatOrchestratorAgent(LFAgent):
                         tool_call.name, tool_call.arguments
                     )
 
-                    result_preview = (
-                        result[:100] + "..." if len(result) > 100 else result
-                    )
-                    yield f"✅ Result: {result_preview}\n\n"
+                    yield f"Result: {result}\n\n"
 
-                    # Add tool call and result to history
-                    self.history.add_message(
-                        LFAgentChatMessage(
-                            role="assistant",
-                            content=f"[Called tool: {tool_call.name}]",
-                        )
-                    )
-                    self.history.add_message(
-                        LFAgentChatMessage(
-                            role="tool", content=f"Tool result: {result}"
-                        )
-                    )
+                    # Add tool call and result to history with guidance
+                    self._add_tool_result_to_history(tool_call.name, result)
 
                     # Prepare for next iteration
                     current_input = None  # History already updated
@@ -289,14 +311,11 @@ class ChatOrchestratorAgent(LFAgent):
                 break
 
         # Save history
-        if iteration >= max_iterations:
-            logger.warning("Max iterations reached", max_iterations=max_iterations)
-            yield "\n\n⚠️ Maximum tool calls reached.\n"
+        if iteration >= MAX_TOOL_ITERATIONS:
+            logger.warning("Max iterations reached", max_iterations=MAX_TOOL_ITERATIONS)
+            yield f"\n\n{MAX_ITERATIONS_MESSAGE}\n"
 
-        try:
-            self._persist_history()
-        except Exception:
-            logger.warning("History persistence failed", exc_info=True)
+        self._persist_history_safe()
 
     def enable_persistence(
         self,

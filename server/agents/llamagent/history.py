@@ -19,5 +19,5 @@ class LFAgentHistory:
     def add_message(self, message: LFAgentChatMessage):
         self.history.append(message)
 
-    def get_history(self) -> list[LFAgentChatMessage]:
-        return self.history
+    def get_history(self) -> list[dict]:
+        return [{"role": msg.role, "content": msg.content} for msg in self.history]
