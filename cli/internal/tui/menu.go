@@ -1,12 +1,13 @@
 package tui
 
 import (
-	"fmt"
-	"strings"
+    "fmt"
+    "os"
+    "strings"
 
-	"github.com/atotto/clipboard"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+    "github.com/atotto/clipboard"
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/charmbracelet/lipgloss"
 )
 
 type MenuTab int
@@ -1195,6 +1196,8 @@ func (m *QuickMenuModel) handleHelpSelection() tea.Cmd {
 		if item.Command != "" {
 			// Close menu and execute command via parent
 			m.active = false
+			// Ask parent to restart after upgrade by setting an env var
+			os.Setenv("LF_RESTART_AFTER_UPGRADE", "1")
 			return executeCommandCmd(item.Command)
 		}
 		return nil

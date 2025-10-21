@@ -1,12 +1,14 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
+    "fmt"
+    "os"
+    "path/filepath"
+    "runtime"
+    "strings"
+    "syscall"
 
-	"github.com/spf13/cobra"
+    "github.com/spf13/cobra"
 )
 
 // Version will be set by build flags during release builds
@@ -280,7 +282,7 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "✅ Upgrade completed successfully!\n")
-	fmt.Printf("\nRun 'lf version' to confirm the new version.\n")
+    fmt.Printf("\nRun 'lf version' to confirm the new version.\n")
 
 	// Show PATH warning if needed
 	if flags.installDir != "" && flags.installDir != filepath.Dir(currentBinary) {
@@ -288,7 +290,25 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Make sure this directory is in your PATH.\n")
 	}
 
-	return nil
+    // If requested (e.g., from TUI), restart into the updated binary
+    if os.Getenv("LF_RESTART_AFTER_UPGRADE") == "1" {
+        // Avoid looping if we were invoked as `lf version upgrade`
+        argsToUse := os.Args[1:]
+        if len(argsToUse) >= 2 && argsToUse[0] == "version" && argsToUse[1] == "upgrade" {
+            argsToUse = []string{}
+        }
+        fmt.Fprintf(os.Stderr, "\n🔁 Restarting CLI...\n")
+        if runtime.GOOS == "windows" {
+            // On Windows, fall back to manual restart
+            fmt.Fprintf(os.Stderr, "Restart is not automated on Windows. Please relaunch the CLI.\n")
+            return nil
+        }
+        // Re-exec the new binary in-place
+        _ = syscall.Exec(finalBinaryPath, append([]string{finalBinaryPath}, argsToUse...), os.Environ())
+        // If Exec returns, show a hint
+        fmt.Fprintf(os.Stderr, "\n⚠️  Restart failed. Please exit and relaunch the CLI.\n")
+    }
+    return nil
 }
 
 // showManualInstructions displays manual installation instructions as fallback
