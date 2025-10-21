@@ -1428,11 +1428,30 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case uitk.ExecuteCommandMsg:
-		// For now, just echo the command and toast; future: wire to runner
-		m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("$ %s", msg.Command)})
-		cmds = append(cmds, tea.Printf("Executing: %s", msg.Command))
-		// Show toast confirmation
-		cmds = append(cmds, func() tea.Msg { return uitk.ShowToastMsg{Message: "Running: " + msg.Command} })
+		// Echo the command in the chat
+		commandStr := strings.TrimSpace(msg.Command)
+		m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("$ %s", commandStr)})
+
+		// Special-case: run upgrade inside the current process
+		if strings.HasPrefix(commandStr, "lf version upgrade") {
+			// Extract any args after 'lf version upgrade'
+			fields := strings.Fields(commandStr)
+			args := []string{}
+			if len(fields) > 3 {
+				args = fields[3:]
+			}
+			cmds = append(cmds, func() tea.Msg {
+				if err := performUpgrade(upgradeCmd, args); err != nil {
+					return uitk.ShowToastMsg{Message: "Upgrade failed: " + err.Error()}
+				}
+				return uitk.ShowToastMsg{Message: "Upgrade completed successfully"}
+			})
+			break
+		}
+
+		// Default: just show a toast for now
+		cmds = append(cmds, tea.Printf("Executing: %s", commandStr))
+		cmds = append(cmds, func() tea.Msg { return uitk.ShowToastMsg{Message: "Running: " + commandStr} })
 		m.quickMenu.Close()
 
 		if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
