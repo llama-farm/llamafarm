@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'darwin'",
@@ -2503,7 +2503,7 @@ requires-dist = [
     { name = "tabula-py", marker = "extra == 'llamaindex'", specifier = ">=2.8.0" },
     { name = "torch", marker = "extra == 'embeddings'", specifier = ">=2.0.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
-    { name = "transformers", marker = "extra == 'embeddings'", specifier = ">=4.35.0" },
+    { name = "transformers", marker = "extra == 'embeddings'", specifier = ">=4.53.0" },
     { name = "weaviate-client", marker = "extra == 'vector-dbs'", specifier = ">=3.24.0" },
     { name = "xlrd", specifier = ">=2.0.1" },
 ]
