@@ -10,6 +10,7 @@ runtime:
     description: "Default Ollama model for LlamaFarm"
     provider: ollama
     model: gemma3:1b
+    base_url: http://localhost:11434/v1
     prompt_format: unstructured
 
 

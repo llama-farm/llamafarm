@@ -91,7 +91,7 @@ def _check_seed_project() -> dict:
 
     # Load seed project config for ModelService
     try:
-        import yaml
+        from config.helpers.loader import load_config
 
         seed_path = (
             Path(__file__).resolve().parents[1]
@@ -109,10 +109,8 @@ def _check_seed_project() -> dict:
                 "runtime": {"provider": None, "model": None},
             }
 
-        project_config_data = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
-        from config.datamodel import LlamaFarmConfig
-
-        project_config = LlamaFarmConfig(**project_config_data)
+        # Use the proper config loader that includes URL rewriting for Docker
+        project_config = load_config(config_path=seed_path, validate=False)
 
         # Use ModelService to get the correct model config
         model_config = ModelService.get_model(project_config, model_name=None)
