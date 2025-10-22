@@ -65,6 +65,7 @@ var chatCtx = &ChatSessionContext{
 	Temperature:      temperature,
 	MaxTokens:        maxTokens,
 	HTTPClient:       getHTTPClient(),
+	RAGEnabled:       true, // RAG is enabled by default
 }
 
 // fetchAvailableModels is now defined in models_shared.go

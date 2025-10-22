@@ -54,6 +54,9 @@ func TestNewDefaultContextFromGlobals(t *testing.T) {
 	if ctx.SessionNamespace != namespace || ctx.SessionProject != projectID {
 		t.Fatalf("expected session namespace/project to mirror globals")
 	}
+	if !ctx.RAGEnabled {
+		t.Fatalf("expected RAGEnabled to be true by default, got false")
+	}
 }
 
 func TestWriteSessionContext(t *testing.T) {

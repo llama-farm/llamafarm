@@ -87,32 +87,6 @@ class ChatOrchestratorAgent(LFAgent):
             "additional different information."
         )
 
-    def _add_tool_result_to_history(self, tool_name: str, result_content: str) -> None:
-        """Add tool call and result to history with guidance message."""
-        # self.history.add_message(
-        #     LFAgentChatMessage(
-        #         role="assistant",
-        #         content=f"[Called tool: {tool_name}]",
-        #     )
-        # )
-        self.history.add_message(
-            LFAgentChatMessage(
-                role="tool",
-                content=f"Tool result: {result_content}",
-            )
-        )
-        self.history.add_message(
-            LFAgentChatMessage(
-                role="user",
-                content=(
-                    "Based on the tool result above, please provide "
-                    "your complete final answer to my original question. "
-                    "Do not call the same tool again unless you need "
-                    "additional different information."
-                ),
-            )
-        )
-
     def _persist_history_safe(self) -> None:
         """Safely persist history with error handling."""
         try:
@@ -242,8 +216,20 @@ class ChatOrchestratorAgent(LFAgent):
 
         if not self._mcp_enabled or not self._mcp_tools:
             # No MCP tools, use standard streaming
+            accumulated_content = ""
             async for chunk in super().run_async_stream(user_input=user_input):
                 yield chunk
+                accumulated_content += chunk
+
+            # Add complete assistant response to history
+            if accumulated_content:
+                self.history.add_message(
+                    LFAgentChatMessage(
+                        role="assistant",
+                        content=accumulated_content,
+                    )
+                )
+
             self._persist_history_safe()
             return
 
@@ -260,6 +246,7 @@ class ChatOrchestratorAgent(LFAgent):
 
             # Stream chat with tools
             tool_call_made = False
+            accumulated_content = ""  # Accumulate chunks for history
 
             async for event in self.stream_chat_with_tools(
                 user_input=current_input, tools=tools
@@ -268,14 +255,18 @@ class ChatOrchestratorAgent(LFAgent):
                     # Stream content to user
                     if event.content:
                         yield event.content
+                        accumulated_content += event.content
+
+                elif event.is_tool_call():
+                    # Add accumulated content to history before tool call
+                    if accumulated_content:
                         self.history.add_message(
                             LFAgentChatMessage(
                                 role="assistant",
-                                content=event.content,
+                                content=accumulated_content,
                             )
                         )
 
-                elif event.is_tool_call():
                     # Execute the tool
                     tool_call_made = True
                     tool_call = event.tool_call
@@ -289,17 +280,31 @@ class ChatOrchestratorAgent(LFAgent):
                         iteration=iteration,
                     )
 
-                    yield f"\n\n🔧 Calling {tool_call.name}...\n"
+                    yield f"\n\n🔧 Calling {tool_call.name}...\nParameters: {tool_call.arguments}\n"
 
                     # Execute the MCP tool
                     result = await self._execute_mcp_tool(
                         tool_call.name, tool_call.arguments
                     )
 
-                    yield f"Result: {result}\n\n"
-
                     # Add tool call and result to history with guidance
-                    self._add_tool_result_to_history(tool_call.name, result)
+                    self.history.add_message(
+                        LFAgentChatMessage(
+                            role="tool",
+                            content=result,
+                        )
+                    )
+                    self.history.add_message(
+                        LFAgentChatMessage(
+                            role="assistant",
+                            content=(
+                                "Based on the tool result above, I should now provide "
+                                "my complete final answer to the user's original question. "
+                                "I should not call the same tool again unless I need "
+                                "additional different information..."
+                            ),
+                        )
+                    )
 
                     # Prepare for next iteration
                     current_input = None  # History already updated
@@ -307,6 +312,14 @@ class ChatOrchestratorAgent(LFAgent):
 
             # If no tool was called, we're done
             if not tool_call_made:
+                # Add final accumulated content to history
+                if accumulated_content:
+                    self.history.add_message(
+                        LFAgentChatMessage(
+                            role="assistant",
+                            content=accumulated_content,
+                        )
+                    )
                 logger.info("No tool call made, conversation complete")
                 break
 

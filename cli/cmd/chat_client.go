@@ -108,6 +108,7 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
 		MaxTokens:        maxTokens,
 		Streaming:        streaming,
 		HTTPClient:       getHTTPClient(),
+		RAGEnabled:       true, // RAG is enabled by default
 	}
 }
 
