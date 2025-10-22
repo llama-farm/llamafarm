@@ -115,17 +115,19 @@ runtime:
 # PROMPTS CONFIGURATION
 # =============================================================================
 prompts:
-  - role: system
-    content: |
-      You are a helpful AI assistant.
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a helpful AI assistant.
 
-      CRITICAL RULES:
-      1. NEVER repeat the user's question as your answer
-      2. ALWAYS provide a substantive, helpful response
-      3. If you don't know something, say so clearly rather than repeating the question
+          CRITICAL RULES:
+          1. NEVER repeat the user's question as your answer
+          2. ALWAYS provide a substantive, helpful response
+          3. If you don't know something, say so clearly rather than repeating the question
 
-      When RAG context is provided, use it to enhance your answers.
-      When no context is available, use your general knowledge.
+          When RAG context is provided, use it to enhance your answers.
+          When no context is available, use your general knowledge.
 
 
 # =============================================================================
@@ -141,17 +143,28 @@ datasets:
 # RAG CONFIGURATION
 # =============================================================================
 rag:
+  # Default database for RAG queries (optional)
+  # If not specified, uses the first database in the databases array
+  default_database: main_database
+
   # =============================================================================
   # DATABASE CONFIGURATIONS
   # =============================================================================
   databases:
     # Main vector database for general documents
+    # Uses ChromaDB client-server mode to prevent multi-process write conflicts
+    # When running with Docker Compose, connects to the chromadb-server service
+    # For local development, you can use persist_directory instead of host/port
     - name: "main_database"
       type: "ChromaStore"
       config:
+        # Client-server mode (recommended for production/Docker)
+        host: "chromadb-server"  # Docker service name, or "localhost" for local server
+        port: 8000
+        # Persistent mode (for local development only - comment out host/port above)
+        # persist_directory: "./data/chroma_db"
         distance_function: "cosine"
         collection_name: "documents"
-        port: 8000
       # Default strategies for this database
       default_embedding_strategy: "default_embeddings"
       default_retrieval_strategy: "basic_search"
@@ -211,7 +224,7 @@ rag:
 
         # Word Document Parser
         - type: "DocxParser_LlamaIndex"
-          file_include_patterns: ["*.docx", "*.DOCX", "*.doc", "*.DOC"]
+          file_include_patterns: ["*.docx", "*.DOCX"]
           priority: 10
           config:
             chunk_size: 500

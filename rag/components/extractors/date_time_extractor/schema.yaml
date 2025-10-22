@@ -1,7 +1,7 @@
 # DateTime Extractor Component Schema
 # JSON Schema draft-07 format
 $schema: http://json-schema.org/draft-07/schema#
-$id: components/extractors/datetime_extractor/schema.yaml
+$id: components/extractors/date_time_extractor/schema.yaml
 title: DateTime Extractor Configuration
 description: Extract dates and times
 type: object

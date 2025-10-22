@@ -30,7 +30,7 @@ rag/
 │   │   ├── link_extractor/     # URL/email/phone extraction
 │   │   ├── heading_extractor/  # Document structure
 │   │   ├── pattern_extractor/  # Regex-based patterns
-│   │   └── datetime_extractor/ # Date/time extraction
+│   │   └── date_time_extractor/ # Date/time extraction
 │   ├── parsers/                # Document format parsers
 │   │   ├── text_parser/        # Plain text documents
 │   │   ├── csv_parser/         # CSV with specialized variants
@@ -244,14 +244,14 @@ These documents provide rich, realistic content for testing and demonstration.
    # components/parsers/your_parser/your_parser.py
    from typing import List, Any, Dict
    from core.base import BaseParser, Document
-   
+
    class YourParser(BaseParser):
        """Parser for your specific format."""
-       
+
        def __init__(self, config: Dict[str, Any]):
            super().__init__(config)
            # Initialize format-specific settings
-       
+
        def parse(self, content: bytes, metadata: Dict[str, Any] = None) -> List[Document]:
            """Parse content into Document objects."""
            # Implement your parsing logic
@@ -263,7 +263,7 @@ These documents provide rich, realistic content for testing and demonstration.
    # components/parsers/your_parser/schema.py
    from pydantic import BaseModel, Field
    from typing import Optional
-   
+
    class YourParserConfig(BaseModel):
        """Configuration for YourParser."""
        option1: bool = Field(True, description="Enable option 1")
@@ -274,7 +274,7 @@ These documents provide rich, realistic content for testing and demonstration.
    ```python
    # Add to core/factories.py
    from components.parsers.your_parser.your_parser import YourParser
-   
+
    class ParserFactory(ComponentFactory):
        _registry = {
            # ... existing parsers
@@ -287,7 +287,7 @@ These documents provide rich, realistic content for testing and demonstration.
    # tests/components/parsers/test_your_parser.py
    import pytest
    from components.parsers.your_parser.your_parser import YourParser
-   
+
    class TestYourParser:
        def test_basic_parsing(self):
            parser = YourParser(name="YourParser", config={"option1": True})
@@ -309,10 +309,10 @@ These documents provide rich, realistic content for testing and demonstration.
    # components/extractors/your_extractor/your_extractor.py
    from typing import Dict, Any, List
    from core.base import BaseExtractor, Document
-   
+
    class YourExtractor(BaseExtractor):
        """Extract specific information from documents."""
-       
+
        def extract(self, document: Document) -> Dict[str, Any]:
            """Extract data and return as metadata."""
            extracted_data = {
@@ -338,15 +338,15 @@ These documents provide rich, realistic content for testing and demonstration.
    # components/stores/your_store/your_store.py
    from typing import List, Dict, Any, Optional
    from core.base import BaseVectorStore, Document
-   
+
    class YourStore(BaseVectorStore):
        """Vector store implementation for your database."""
-       
+
        def add_documents(self, documents: List[Document]) -> List[str]:
            """Add documents and return IDs."""
            # Implement storage logic
-           
-       def similarity_search(self, query: str, k: int = 4, 
+
+       def similarity_search(self, query: str, k: int = 4,
                            filter: Optional[Dict[str, Any]] = None) -> List[Document]:
            """Search for similar documents."""
            # Implement search logic
@@ -359,10 +359,10 @@ These documents provide rich, realistic content for testing and demonstration.
    # components/retrievers/your_strategy/your_strategy.py
    from typing import List, Dict, Any
    from core.base import BaseRetrievalStrategy, Document
-   
+
    class YourStrategy(BaseRetrievalStrategy):
        """Your custom retrieval strategy."""
-       
+
        def retrieve(self, query: str, vector_store, **kwargs) -> List[Document]:
            """Implement your retrieval logic."""
            # Custom retrieval implementation
@@ -412,18 +412,18 @@ class TestYourComponent:
     @pytest.fixture
     def config(self):
         return {"param": "value"}
-    
-    @pytest.fixture  
+
+    @pytest.fixture
     def component(self, config):
         return YourComponent(config)
-        
+
     def test_initialization(self, component):
         assert component is not None
-        
+
     def test_functionality(self, component):
         # Test core functionality
         pass
-        
+
     @patch('external.service')
     def test_external_dependencies(self, mock_service, component):
         # Mock external services

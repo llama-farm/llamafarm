@@ -15,8 +15,10 @@ datasets:
     database: "minimal_db"
 
 prompts:
-  - role: "system"
-    content: "This is a minimal prompt."
+  - name: "default"
+    messages:
+      - role: "system"
+        content: "This is a minimal prompt."
 
 runtime:
   provider: "openai"

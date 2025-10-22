@@ -366,6 +366,7 @@ async def chat(
                 message=latest_user_message,
                 rag_enabled=request.rag_enabled,
                 database=request.database,
+                retrieval_strategy=request.rag_retrieval_strategy,
                 rag_top_k=request.rag_top_k,
                 rag_score_threshold=request.rag_score_threshold,
             ),
@@ -381,6 +382,7 @@ async def chat(
             message=latest_user_message,
             rag_enabled=request.rag_enabled,
             database=request.database,
+            retrieval_strategy=request.rag_retrieval_strategy,
             rag_top_k=request.rag_top_k,
             rag_score_threshold=request.rag_score_threshold,
         )

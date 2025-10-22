@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -8,39 +8,43 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useUpgradeAvailability } from '@/hooks/useUpgradeAvailability'
+import { getInjectedImageTag } from '@/utils/versionUtils'
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onRequestUpgrade?: () => void
 }
 
-export function VersionDetailsDialog({ open, onOpenChange }: Props) {
-  const {
-    currentVersion,
-    latestVersion,
-    upgradeAvailable,
-    isLoading,
-    refreshLatest,
-    releasesUrl,
-  } = useUpgradeAvailability()
-  const [checking, setChecking] = useState(false)
+export function VersionDetailsDialog({
+  open,
+  onOpenChange,
+  onRequestUpgrade,
+}: Props) {
+  const { currentVersion, latestVersion, upgradeAvailable } =
+    useUpgradeAvailability()
+  const [effectiveVersion, setEffectiveVersion] = useState<string | null>(null)
 
-  const statusText = useMemo(() => {
-    if (checking || isLoading) return 'Checking for updates…'
-    if (!latestVersion) return 'Unable to determine latest version'
-    return upgradeAvailable
-      ? `New version available: v${latestVersion}`
-      : 'You’re on the latest version'
-  }, [checking, isLoading, latestVersion, upgradeAvailable])
-
-  const onCheck = async () => {
-    setChecking(true)
-    try {
-      await refreshLatest()
-    } finally {
-      setChecking(false)
+  useEffect(() => {
+    let isMounted = true
+    const tag = getInjectedImageTag()
+    if (isMounted) {
+      setEffectiveVersion(tag ? tag : null)
     }
-  }
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const status = useMemo(() => {
+    if (upgradeAvailable && latestVersion) {
+      return {
+        text: `New version available: v${latestVersion}`,
+        highlight: true,
+      }
+    }
+    return { text: 'You’re on the latest version', highlight: false }
+  }, [upgradeAvailable, latestVersion])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -48,30 +52,31 @@ export function VersionDetailsDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>LlamaFarm version</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2 text-sm">
+        <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Current</span>
-            <span className="font-mono text-foreground">v{currentVersion}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Latest</span>
             <span className="font-mono text-foreground">
-              {latestVersion ? `v${latestVersion}` : '—'}
+              v{effectiveVersion || currentVersion}
             </span>
           </div>
-          <div className="pt-2 text-foreground">{statusText}</div>
+          <div className="pt-1">
+            {status.highlight ? (
+              <span className="inline-flex items-center rounded-full border border-teal-500/40 bg-teal-500/10 text-teal-400 px-2.5 py-1 text-xs">
+                {status.text}
+              </span>
+            ) : (
+              <span className="text-foreground">{status.text}</span>
+            )}
+          </div>
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={onCheck}
-            disabled={checking || isLoading}
-          >
-            {checking || isLoading ? 'Checking…' : 'Check for updates'}
-          </Button>
-          <a href={releasesUrl} target="_blank" rel="noreferrer">
-            <Button>Open releases</Button>
-          </a>
+          {status.highlight ? (
+            <Button onClick={onRequestUpgrade}>Upgrade now</Button>
+          ) : (
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

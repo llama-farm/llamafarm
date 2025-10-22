@@ -552,9 +552,9 @@ function ChangeEmbeddingModel() {
             <nav className="text-sm md:text-base flex items-center gap-1.5">
               <button
                 className="text-teal-600 dark:text-teal-400 hover:underline"
-                onClick={() => navigate('/chat/rag')}
+                onClick={() => navigate('/chat/databases')}
               >
-                RAG
+                Databases
               </button>
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground">Edit strategy</span>
@@ -563,10 +563,29 @@ function ChangeEmbeddingModel() {
           </div>
 
           {/* Header */}
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg md:text-xl font-medium">Edit strategy</h2>
+          <div className="flex items-start justify-between mb-1 gap-2">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg md:text-xl font-medium">Edit strategy</h2>
+              <div className="text-xs text-muted-foreground max-w-[80vw] truncate md:hidden mt-1">
+                {summaryProvider && summaryModel ? (
+                  <>
+                    <span className="text-foreground">{summaryProvider}</span>
+                    <span className="mx-1">•</span>
+                    <span className="font-mono">{summaryModel}</span>
+                    {summaryLocation ? (
+                      <>
+                        <span className="mx-1">•</span>
+                        <span>{summaryLocation}</span>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  'No model selected yet'
+                )}
+              </div>
+            </div>
             <div className="flex items-center gap-3">
-              <div className="text-xs text-muted-foreground max-w-[50vw] truncate">
+              <div className="text-xs text-muted-foreground max-w-[50vw] truncate hidden md:block">
                 {summaryProvider && summaryModel ? (
                   <>
                     <span className="text-foreground">{summaryProvider}</span>

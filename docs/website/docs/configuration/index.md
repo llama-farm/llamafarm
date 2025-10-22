@@ -109,16 +109,20 @@ runtime:
 
 ### Prompts
 
-Prompts seed system/content instructions for each session.
+Prompts are named sets of messages that seed instructions for each session.
 
 ```yaml
 prompts:
-  - role: system
-    content: >-
-      You are a supportive assistant. Cite documents when relevant.
+  - name: default
+    messages:
+      - role: system
+        content: >-
+          You are a supportive assistant. Cite documents when relevant.
 ```
 
+- Each prompt has a `name` and a list of `messages` with `role` and `content`.
 - Roles can be `system`, `user`, or `assistant` (anything supported by the runtime).
+- Models can select which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Prompts are appended before user input; combine with RAG context via the RAG guide.
 
 ### RAG Configuration

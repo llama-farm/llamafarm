@@ -1,15 +1,25 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useUpgradeAvailability } from '@/hooks/useUpgradeAvailability'
+import UpgradeModal from '@/components/common/UpgradeModal'
 
 export function HomeUpgradeBanner() {
+  const [open, setOpen] = useState(false)
   const {
     upgradeAvailable,
     latestVersion,
     isDismissedFor,
     dismiss,
-    releasesUrl,
     _dismissCounter,
   } = useUpgradeAvailability()
+
+  // Auto-dismiss when user is up to date (e.g., after successful upgrade)
+  // Also close the modal if it's open.
+  useEffect(() => {
+    if (!upgradeAvailable) {
+      if (!isDismissedFor('home')) dismiss('home')
+      if (open) setOpen(false)
+    }
+  }, [upgradeAvailable, isDismissedFor, dismiss, open])
 
   const shouldShow = useMemo(() => {
     if (!upgradeAvailable) return false
@@ -25,24 +35,14 @@ export function HomeUpgradeBanner() {
           <div className="flex items-center gap-2 text-sm">
             <span className="font-medium">Upgrade available</span>
             <span className="font-mono">v{latestVersion}</span>
-            <a
-              href={releasesUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-teal-700 underline dark:text-teal-300"
-            >
-              Details
-            </a>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href={releasesUrl}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={() => setOpen(true)}
               className="px-3 py-1 rounded-md bg-teal-600 text-white hover:bg-teal-700 text-sm"
             >
               Upgrade to latest
-            </a>
+            </button>
             <button
               onClick={() => dismiss('home')}
               className="px-2 py-1 rounded-md border border-teal-200 dark:border-teal-800 text-sm hover:bg-teal-100 dark:hover:bg-teal-800/40"
@@ -52,6 +52,7 @@ export function HomeUpgradeBanner() {
           </div>
         </div>
       </div>
+      <UpgradeModal open={open} onOpenChange={setOpen} />
       {/* Spacer to offset fixed banner height */}
       <div aria-hidden className="w-full h-10" />
     </>
@@ -59,14 +60,23 @@ export function HomeUpgradeBanner() {
 }
 
 export function ProjectUpgradeBanner() {
+  const [open, setOpen] = useState(false)
   const {
     upgradeAvailable,
     latestVersion,
     isDismissedFor,
     dismiss,
-    releasesUrl,
     _dismissCounter,
   } = useUpgradeAvailability()
+
+  // Auto-dismiss when user is up to date (e.g., after successful upgrade)
+  // Also close the modal if it's open.
+  useEffect(() => {
+    if (!upgradeAvailable) {
+      if (!isDismissedFor('project')) dismiss('project')
+      if (open) setOpen(false)
+    }
+  }, [upgradeAvailable, isDismissedFor, dismiss, open])
 
   const shouldShow = useMemo(() => {
     if (!upgradeAvailable) return false
@@ -82,14 +92,12 @@ export function ProjectUpgradeBanner() {
           <span className="font-medium">Upgrade available</span>{' '}
           <span className="font-mono">v{latestVersion}</span>
         </div>
-        <a
-          href={releasesUrl}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          onClick={() => setOpen(true)}
           className="px-2 py-1 rounded-md bg-teal-600 text-white hover:bg-teal-700 text-xs"
         >
           Upgrade
-        </a>
+        </button>
         <button
           onClick={() => dismiss('project')}
           className="px-2 py-1 rounded-md text-xs border border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-800/40"
@@ -97,6 +105,7 @@ export function ProjectUpgradeBanner() {
           Dismiss
         </button>
       </div>
+      <UpgradeModal open={open} onOpenChange={setOpen} />
     </div>
   )
 }

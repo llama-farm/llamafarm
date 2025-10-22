@@ -1,8 +1,8 @@
 # Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
 .Python
 *.so
 .pytest_cache/
@@ -26,12 +26,12 @@ env/
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
+**/*.swp
+**/*.swo
 
 # OS
-.DS_Store
-Thumbs.db
+**/.DS_Store
+**/Thumbs.db
 
 # Build artifacts
 build/

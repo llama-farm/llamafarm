@@ -1118,12 +1118,15 @@ function StrategyView() {
             <nav className="text-sm md:text-base flex items-center gap-1.5">
               <button
                 className="text-teal-600 dark:text-teal-400 hover:underline"
-                onClick={() => navigate('/chat/rag')}
+                onClick={() => navigate('/chat/data')}
               >
-                RAG
+                Data
               </button>
               <span className="text-muted-foreground px-1">/</span>
-              <span className="text-foreground">Processing strategies</span>
+              <span className="text-foreground hidden sm:inline">
+                Processing strategies
+              </span>
+              <span className="text-foreground sm:hidden">…</span>
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground">{strategyName}</span>
             </nav>
@@ -1204,11 +1207,12 @@ function StrategyView() {
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-stretch gap-2 ml-auto w-full sm:w-auto basis-full sm:basis-auto flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsAddParserOpen(true)}
+                className="w-[48%] sm:w-auto"
               >
                 <Plus className="w-4 h-4" /> Add Parser
               </Button>
@@ -1216,13 +1220,14 @@ function StrategyView() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsAddExtractorOpen(true)}
+                className="w-[48%] sm:w-auto"
               >
                 <Plus className="w-4 h-4" /> Add Extractor
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className={`${
+                className={`w-[48%] sm:w-auto ${
                   canReprocess
                     ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
                     : ''
@@ -1268,6 +1273,7 @@ function StrategyView() {
                   variant="outline"
                   size="sm"
                   onClick={handleResetDefaults}
+                  className="w-[48%] sm:w-auto"
                 >
                   Reset to defaults
                 </Button>
@@ -1509,6 +1515,15 @@ function StrategyView() {
                         <div className="text-sm font-medium w-[280px] max-w-[38vw] truncate">
                           {getFriendlyParserName(row.name)}
                         </div>
+                        <div className="md:hidden">
+                          <Badge
+                            variant={getPriorityVariant(row.priority)}
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            Priority: {row.priority}
+                          </Badge>
+                        </div>
                         <div className="hidden md:block flex-1 min-w-[220px] text-left pr-4">
                           <span className="text-sm text-muted-foreground">
                             Good for:
@@ -1520,7 +1535,7 @@ function StrategyView() {
                         <Badge
                           variant={getPriorityVariant(row.priority)}
                           size="sm"
-                          className="rounded-xl mr-2 ml-6"
+                          className="rounded-xl mr-2 ml-6 hidden md:inline-flex"
                         >
                           Priority: {row.priority}
                         </Badge>
@@ -1604,6 +1619,15 @@ function StrategyView() {
                         <div className="text-sm font-medium w-[280px] max-w-[38vw] truncate">
                           {getFriendlyExtractorName(row.name)}
                         </div>
+                        <div className="md:hidden">
+                          <Badge
+                            variant={getPriorityVariant(row.priority)}
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            Priority: {row.priority}
+                          </Badge>
+                        </div>
                         <div className="hidden md:block flex-1 min-w-[220px] text-left pr-4">
                           <span className="text-sm text-muted-foreground">
                             Applies to:
@@ -1615,7 +1639,7 @@ function StrategyView() {
                         <Badge
                           variant={getPriorityVariant(row.priority)}
                           size="sm"
-                          className="rounded-xl mr-2 ml-6"
+                          className="rounded-xl mr-2 ml-6 hidden md:inline-flex"
                         >
                           Priority: {row.priority}
                         </Badge>
@@ -1680,8 +1704,8 @@ function StrategyView() {
 
           {/* Add Parser Modal */}
           <Dialog open={isAddParserOpen} onOpenChange={setIsAddParserOpen}>
-            <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0">
-              <div className="flex flex-col max-h-[80vh]">
+            <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0 h-[100dvh] sm:h-auto max-h-[100vh] md:max-h-[85vh] overflow-hidden flex flex-col">
+              <div className="flex flex-col flex-1 min-h-0">
                 <DialogHeader className="bg-background p-4 border-b">
                   <DialogTitle className="text-lg text-foreground">
                     Add parser
@@ -1811,16 +1835,16 @@ function StrategyView() {
                     </>
                   ) : null}
                 </div>
-                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
+                <DialogFooter className="sticky bottom-0 bg-background p-4 border-t flex-col sm:flex-row sm:justify-end gap-2">
                   <button
-                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline w-full sm:w-auto"
                     onClick={() => setIsAddParserOpen(false)}
                     type="button"
                   >
                     Cancel
                   </button>
                   <button
-                    className={`px-3 py-2 rounded-md text-sm ${
+                    className={`px-3 py-2 rounded-md text-sm w-full sm:w-auto ${
                       newParserType.trim().length > 0 && !newParserPriorityError
                         ? 'bg-primary text-primary-foreground hover:opacity-90'
                         : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
@@ -1842,10 +1866,10 @@ function StrategyView() {
           {/* Edit Parser Modal (config only) */}
           <Dialog open={isEditParserOpen} onOpenChange={setIsEditParserOpen}>
             <DialogContent
-              className="sm:max-w-3xl lg:max-w-4xl p-0"
+              className="sm:max-w-3xl lg:max-w-4xl p-0 h-[100dvh] sm:h-auto max-h-[100vh] md:max-h-[85vh] overflow-hidden flex flex-col"
               onOpenAutoFocus={e => e.preventDefault()}
             >
-              <div className="flex flex-col max-h-[80vh]">
+              <div className="flex flex-col flex-1 min-h-0">
                 <DialogHeader className="bg-background p-4 border-b">
                   <DialogTitle className="text-lg text-foreground">
                     Edit parser
@@ -1925,28 +1949,26 @@ function StrategyView() {
                     )
                   })()}
                 </div>
-                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
-                  <div className="mr-auto">
-                    <button
-                      className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
-                      onClick={() => {
-                        if (!editParserId) return
-                        openDeleteParser(editParserId)
-                      }}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
+                <DialogFooter className="sticky bottom-0 bg-background p-4 border-t flex-col sm:flex-row sm:justify-end gap-2">
                   <button
-                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm w-full sm:w-auto"
+                    onClick={() => {
+                      if (!editParserId) return
+                      openDeleteParser(editParserId)
+                    }}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline w-full sm:w-auto"
                     onClick={() => setIsEditParserOpen(false)}
                     type="button"
                   >
                     Cancel
                   </button>
                   <button
-                    className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 ${
+                    className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 w-full sm:w-auto ${
                       editParserPriorityError
                         ? 'opacity-50 cursor-not-allowed'
                         : ''
@@ -2001,8 +2023,8 @@ function StrategyView() {
             open={isAddExtractorOpen}
             onOpenChange={setIsAddExtractorOpen}
           >
-            <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0">
-              <div className="flex flex-col max-h-[80vh]">
+            <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0 h-[100dvh] sm:h-auto max-h-[100vh] md:max-h-[85vh] overflow-hidden flex flex-col">
+              <div className="flex flex-col flex-1 min-h-0">
                 <DialogHeader className="bg-background p-4 border-b">
                   <DialogTitle className="text-lg text-foreground">
                     Add extractor
@@ -2151,16 +2173,16 @@ function StrategyView() {
                     </>
                   ) : null}
                 </div>
-                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
+                <DialogFooter className="sticky bottom-0 bg-background p-4 border-t flex-col sm:flex-row sm:justify-end gap-2">
                   <button
-                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline w-full sm:w-auto"
                     onClick={() => setIsAddExtractorOpen(false)}
                     type="button"
                   >
                     Cancel
                   </button>
                   <button
-                    className={`px-3 py-2 rounded-md text-sm ${
+                    className={`px-3 py-2 rounded-md text-sm w-full sm:w-auto ${
                       newExtractorType.trim().length > 0 &&
                       !newExtractorPriorityError
                         ? 'bg-primary text-primary-foreground hover:opacity-90'
@@ -2186,10 +2208,10 @@ function StrategyView() {
             onOpenChange={setIsEditExtractorOpen}
           >
             <DialogContent
-              className="sm:max-w-3xl lg:max-w-4xl p-0"
+              className="sm:max-w-3xl lg:max-w-4xl p-0 h-[100dvh] sm:h-auto max-h-[100vh] md:max-h-[85vh] overflow-hidden flex flex-col"
               onOpenAutoFocus={e => e.preventDefault()}
             >
-              <div className="flex flex-col max-h-[80vh]">
+              <div className="flex flex-col flex-1 min-h-0">
                 <DialogHeader className="bg-background p-4 border-b">
                   <DialogTitle className="text-lg text-foreground">
                     Edit extractor
@@ -2267,29 +2289,27 @@ function StrategyView() {
                     )
                   })()}
                 </div>
-                <DialogFooter className="bg-background p-4 border-t flex items-center gap-2">
-                  <div className="mr-auto">
-                    <button
-                      className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
-                      onClick={() => {
-                        if (!editExtractorId) return
-                        setDeleteExtractorId(editExtractorId)
-                        setIsDeleteExtractorOpen(true)
-                      }}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
+                <DialogFooter className="sticky bottom-0 bg-background p-4 border-t flex-col sm:flex-row sm:justify-end gap-2">
                   <button
-                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
+                    className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm w-full sm:w-auto"
+                    onClick={() => {
+                      if (!editExtractorId) return
+                      setDeleteExtractorId(editExtractorId)
+                      setIsDeleteExtractorOpen(true)
+                    }}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline w-full sm:w-auto"
                     onClick={() => setIsEditExtractorOpen(false)}
                     type="button"
                   >
                     Cancel
                   </button>
                   <button
-                    className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 ${
+                    className={`px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 w-full sm:w-auto ${
                       editExtractorPriorityError
                         ? 'opacity-50 cursor-not-allowed'
                         : ''

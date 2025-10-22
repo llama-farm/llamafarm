@@ -8,7 +8,10 @@ from components.extractors.base import BaseExtractor
 from core.base import Document
 
 from core.logging import RAGStructLogger
-logger = RAGStructLogger("rag.components.extractors.datetime_extractor.datetime_extractor")
+
+logger = RAGStructLogger(
+    "rag.components.extractors.date_time_extractor.date_time_extractor"
+)
 
 
 class DateTimeExtractor(BaseExtractor):

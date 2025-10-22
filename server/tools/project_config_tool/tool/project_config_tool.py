@@ -49,7 +49,8 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
         try:
             logger.info(
                 f"Executing project config tool - action: {input_data.action}, "
-                f"namespace: {input_data.namespace}, project_id: {input_data.project_id}"
+                f"namespace: {input_data.namespace}, "
+                f"project_id: {input_data.project_id}"
             )
 
             if input_data.action == "get_schema":
@@ -74,7 +75,9 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
                 if not input_data.changes:
                     return ProjectConfigToolOutput(
                         success=False,
-                        message="changes parameter is required for modify_config action",
+                        message=(
+                            "changes parameter is required for modify_config action"
+                        ),
                         action=input_data.action,
                         errors=["Missing required parameter: changes"]
                     )
@@ -132,7 +135,9 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
                 errors=[str(e)]
             )
 
-    def _analyze_config(self, namespace: str, project_id: str) -> ProjectConfigToolOutput:
+    def _analyze_config(
+        self, namespace: str, project_id: str
+    ) -> ProjectConfigToolOutput:
         """Analyze the current project configuration."""
         try:
             assistant = LLMConfigurationAssistant(namespace, project_id)
@@ -148,7 +153,9 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
             ]
 
             if analysis['sections_empty']:
-                summary_parts.append(f"- Empty sections: {', '.join(analysis['sections_empty'])}")
+                summary_parts.append(
+                    f"- Empty sections: {', '.join(analysis['sections_empty'])}"
+                )
 
             if analysis['potential_improvements']:
                 summary_parts.append("- Potential improvements:")
@@ -173,7 +180,9 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
                 errors=[str(e)]
             )
 
-    def _suggest_changes(self, namespace: str, project_id: str, user_intent: str) -> ProjectConfigToolOutput:
+    def _suggest_changes(
+        self, namespace: str, project_id: str, user_intent: str
+    ) -> ProjectConfigToolOutput:
         """Suggest configuration changes based on user intent."""
         try:
             assistant = LLMConfigurationAssistant(namespace, project_id)
@@ -182,7 +191,10 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
             if not suggestions:
                 return ProjectConfigToolOutput(
                     success=True,
-                    message=f"No specific configuration changes suggested for: '{user_intent}'",
+                    message=(
+                        f"No specific configuration changes suggested for: "
+                        f"'{user_intent}'"
+                    ),
                     action="suggest_changes",
                     data={
                         "suggestions": [],
@@ -239,7 +251,8 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
                 assistant.manipulator.save_config()
 
                 summary_parts = [
-                    f"Successfully applied {result['changes_applied']} configuration changes:",
+                    f"Successfully applied {result['changes_applied']} "
+                    f"configuration changes:",
                     f"Intent: {user_intent}",
                 ]
 
@@ -252,7 +265,9 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
                         elif change['type'] == 'delete':
                             change_desc += f"removed '{change['old_value']}'"
                         else:
-                            change_desc += f"'{change['old_value']}' → '{change['new_value']}'"
+                            change_desc += (
+                                f"'{change['old_value']}' → '{change['new_value']}'"
+                            )
                         summary_parts.append(change_desc)
 
                 summary = "\n".join(summary_parts)
@@ -272,7 +287,10 @@ class ProjectConfigTool(BaseTool[ProjectConfigToolInput, ProjectConfigToolOutput
             else:
                 return ProjectConfigToolOutput(
                     success=False,
-                    message="Failed to apply configuration changes - validation errors occurred",
+                    message=(
+                        "Failed to apply configuration changes - "
+                        "validation errors occurred"
+                    ),
                     action="modify_config",
                     data=result,
                     errors=["Configuration validation failed"]

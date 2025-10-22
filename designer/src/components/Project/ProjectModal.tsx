@@ -139,7 +139,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
           <div className="flex flex-col gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">What are you building?</label>
+              <label className="text-xs text-muted-foreground">
+                What are you building?
+              </label>
               <textarea
                 rows={4}
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground min-h-[44px]"
@@ -149,7 +151,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">What do you hope to achieve?</label>
+              <label className="text-xs text-muted-foreground">
+                What do you hope to achieve?
+              </label>
               <textarea
                 rows={4}
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground min-h-[44px]"
@@ -159,7 +163,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Who will use this?</label>
+              <label className="text-xs text-muted-foreground">
+                Who will use this?
+              </label>
               <input
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
                 placeholder="Who will use this?"
@@ -170,7 +176,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="flex items-center justify-between sm:justify-between gap-2">
+        <DialogFooter className="flex flex-row items-center justify-between sm:justify-between gap-2">
           {mode === 'edit' ? (
             confirmingDelete ? (
               <div className="flex items-center gap-2">

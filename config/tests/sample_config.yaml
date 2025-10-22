@@ -4,8 +4,10 @@ name: sample_config
 namespace: test
 
 prompts:
-  - role: "system"
-    content: "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
+  - name: "default"
+    messages:
+      - role: "system"
+        content: "You are a helpful customer support assistant. Answer questions politely and accurately based on the provided context."
 
 rag:
   databases:

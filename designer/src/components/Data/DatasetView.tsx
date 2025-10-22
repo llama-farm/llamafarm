@@ -653,7 +653,7 @@ function DatasetView() {
           {/* Header row */}
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl md:text-2xl font-medium">
                     {datasetName}
@@ -667,6 +667,16 @@ function DatasetView() {
                     <FontIcon type="edit" className="w-4 h-4" />
                   </button>
                 </div>
+                <div className="sm:hidden mt-1 mb-2">
+                  <Badge
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-xl w-max"
+                  >
+                    {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
+                    {dataset?.processedPercent ?? 0}% processed
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground max-w-[640px]">
                   {dataset?.description && dataset.description.trim().length > 0
                     ? dataset.description
@@ -674,7 +684,12 @@ function DatasetView() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="secondary" size="sm" className="rounded-xl">
+                {/* Show status pill below title on small screens */}
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-xl w-max hidden sm:inline-flex"
+                >
                   {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
                   {dataset?.processedPercent ?? 0}% processed
                 </Badge>
@@ -725,6 +740,36 @@ function DatasetView() {
             </div>
           </div>
 
+          {/* Connected database card */}
+          {(currentApiDataset as any)?.database && (
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-sm font-medium">Connected database</h3>
+                  <p className="text-xs text-muted-foreground">
+                    This dataset is connected to the following database
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="default"
+                    size="sm"
+                    className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                  >
+                    {(currentApiDataset as any).database}
+                  </Badge>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate('/chat/databases')}
+                  >
+                    Go to database
+                  </Button>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Processing Strategy card */}
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-3">
@@ -733,7 +778,9 @@ function DatasetView() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => navigate(`/chat/rag/${strategyId}`)}
+                  onClick={() =>
+                    navigate(`/chat/data/strategies/${strategyId}`)
+                  }
                 >
                   Configure
                 </Button>
@@ -782,7 +829,9 @@ function DatasetView() {
                                       variant="outline"
                                       size="sm"
                                       onClick={() =>
-                                        navigate(`/chat/rag/${s.id}`)
+                                        navigate(
+                                          `/chat/data/strategies/${s.id}`
+                                        )
                                       }
                                     >
                                       Configure

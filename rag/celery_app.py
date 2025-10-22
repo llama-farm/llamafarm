@@ -6,11 +6,17 @@ It sets up the broker connection, task routing, and imports all RAG tasks.
 """
 
 import os
+import sys
+import multiprocessing
 
-from celery import Celery, signals  # type: ignore
+from celery import Celery, signals
 
 from core.logging import RAGStructLogger
 from core.settings import settings
+
+# Fix macOS fork safety issues by using spawn instead of fork
+if sys.platform == "darwin":  # macOS
+    multiprocessing.set_start_method("spawn", force=True)
 
 logger = RAGStructLogger("rag.celery")
 
@@ -95,8 +101,20 @@ def setup_celery_logging(**kwargs):
 
 def run_worker():
     try:
+        # For macOS development, use threads instead of processes to avoid fork issues
+        # Can also be forced with LF_CELERY_USE_THREADS=true
+        worker_args = ["worker", "-Q", "rag"]
+        use_threads = (
+            sys.platform == "darwin"
+            or os.getenv("LF_CELERY_USE_THREADS", "false").lower() == "true"
+        )
+
+        if use_threads:
+            worker_args.extend(["--pool=threads", "--concurrency=2"])
+            logger.info("Using thread-based worker pool for macOS compatibility")
+
         # Only consume from the 'rag' queue, not the 'celery' queue
-        app.worker_main(argv=["worker", "-Q", "rag"])
+        app.worker_main(argv=worker_args)
     except KeyboardInterrupt:
         logger.info("RAG worker shutting down due to keyboard interrupt")
     except Exception as e:

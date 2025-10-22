@@ -189,7 +189,7 @@ const Dashboard = () => {
       <div className="w-full h-full flex flex-col">
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl ">
+            <h2 className="text-2xl break-words ">
               {mode === 'designer' ? projectName : 'Config editor'}
             </h2>
             {mode === 'designer' && (
@@ -261,9 +261,9 @@ const Dashboard = () => {
               </div>
             </div>
             <DataCards />
-            <div className="w-full flex flex-row gap-4 mt-4">
+            <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               {/* Data (1/3) */}
-              <div className="w-1/3 flex flex-col">
+              <div className="flex flex-col min-w-0 overflow-hidden">
                 <div className="flex flex-row gap-2 items-center h-[40px] px-2 rounded-tl-lg rounded-tr-lg justify-between bg-card border-b border-border">
                   <div className="flex flex-row gap-2 items-center text-foreground">
                     <FontIcon type="data" className="w-4 h-4" />
@@ -276,7 +276,7 @@ const Dashboard = () => {
                     View and add
                   </button>
                 </div>
-                <div className="p-6 flex flex-col gap-2 rounded-b-lg bg-card min-h-[260px]">
+                <div className="p-4 md:p-6 flex flex-col gap-2 rounded-b-lg bg-card md:min-h-[260px]">
                   {isDatasetsLoading ? (
                     <div className="text-xs text-muted-foreground">
                       Loading…
@@ -290,17 +290,17 @@ const Dashboard = () => {
                       {datasets.slice(0, 8).map(d => (
                         <div
                           key={d.id}
-                          className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-secondary cursor-pointer hover:bg-accent/30"
+                          className="py-1 px-2 rounded-lg flex flex-row gap-2 items-center justify-between bg-secondary cursor-pointer hover:bg-accent/30 min-w-0 overflow-hidden"
                           onClick={() =>
                             navigate(`/chat/data/${encodeURIComponent(d.name)}`)
                           }
                           role="button"
                           aria-label={`Open dataset ${d.name}`}
                         >
-                          <div className="text-foreground truncate">
+                          <div className="text-foreground truncate min-w-0">
                             {d.name}
                           </div>
-                          <div className="text-xs text-muted-foreground whitespace-nowrap">
+                          <div className="text-xs text-muted-foreground whitespace-nowrap shrink-0 hidden lg:inline">
                             {(() => {
                               const dt = new Date(d.lastRun)
                               return `Updated ${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
@@ -314,14 +314,14 @@ const Dashboard = () => {
               </div>
 
               {/* Models (1/3) */}
-              <div className="w-1/3">
+              <div className="min-w-0 overflow-hidden">
                 <div className="h-[40px] px-2 flex items-center rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
                   <div className="flex flex-row gap-2 items-center text-foreground">
                     <FontIcon type="model" className="w-4 h-4" />
                     Models
                   </div>
                 </div>
-                <div className="p-6 flex flex-col min-h-[260px] justify-between rounded-b-lg bg-card">
+                <div className="p-4 md:p-6 flex flex-col justify-start md:justify-between rounded-b-lg bg-card md:min-h-[260px]">
                   <div className="flex flex-col gap-3">
                     <div>
                       <label className="text-xs text-muted-foreground flex items-center gap-2">
@@ -354,7 +354,7 @@ const Dashboard = () => {
               </div>
 
               {/* Project versions (1/3) */}
-              <div className="w-1/3">
+              <div className="min-w-0 overflow-hidden">
                 <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
                   <span className="text-foreground pl-2">Project versions</span>
                 </div>

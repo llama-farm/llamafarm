@@ -25,12 +25,21 @@ import {
   DialogTitle,
 } from '../ui/dialog'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import {
+  STRATEGY_TYPES,
+  STRATEGY_LABELS,
+  STRATEGY_SLUG,
+  STRATEGY_DESCRIPTIONS,
+  type StrategyType,
+} from '../../utils/strategyCatalog'
 
 function RetrievalMethod() {
   const navigate = useNavigate()
   const { strategyId } = useParams()
   const [mode, setMode] = useState<Mode>('designer')
   const [, setDefaultTick] = useState(0)
+  const activeProject = useActiveProject()
 
   // removed unused strategyName
 
@@ -89,45 +98,7 @@ function RetrievalMethod() {
 
   // removed unused Collapsible
 
-  // Strategy options from schema
-  const STRATEGY_TYPES = [
-    'BasicSimilarityStrategy',
-    'MetadataFilteredStrategy',
-    'MultiQueryStrategy',
-    'RerankedStrategy',
-    'HybridUniversalStrategy',
-  ] as const
-
-  type StrategyType = (typeof STRATEGY_TYPES)[number]
-
-  const STRATEGY_LABELS: Record<StrategyType, string> = {
-    BasicSimilarityStrategy: 'Basic similarity',
-    MetadataFilteredStrategy: 'Metadata-filtered',
-    MultiQueryStrategy: 'Multi-query',
-    RerankedStrategy: 'Reranked',
-    HybridUniversalStrategy: 'Hybrid universal',
-  }
-
-  const STRATEGY_SLUG: Record<StrategyType, string> = {
-    BasicSimilarityStrategy: 'basic-search',
-    MetadataFilteredStrategy: 'metadata-filtered',
-    MultiQueryStrategy: 'multi-query',
-    RerankedStrategy: 'reranked',
-    HybridUniversalStrategy: 'hybrid-universal',
-  }
-
-  const STRATEGY_DESCRIPTIONS: Record<StrategyType, string> = {
-    BasicSimilarityStrategy:
-      'Simple, fast vector search. Returns the top matches by similarity (you set how many and the distance metric). Optionally filter out weak hits with a score threshold.',
-    MetadataFilteredStrategy:
-      'Search with filters like source, type, date, or tags. Choose whether filters apply before or after retrieval, and automatically widen results when post-filtering removes too much.',
-    MultiQueryStrategy:
-      'Ask the question several ways at once. We create multiple query variations and merge their results so you catch relevant content even when phrased differently.',
-    RerankedStrategy:
-      'Pull a larger candidate set first, then sort by quality. Tune weights for similarity, recency, length, and metadata; optionally normalize scores for fair comparisons.',
-    HybridUniversalStrategy:
-      'Blend multiple strategies into one result set. Combine with weighted average, rank fusion, or score fusion, then keep the best K.',
-  }
+  // Strategy catalog (shared)
 
   const DISTANCE_OPTIONS = ['cosine', 'euclidean', 'manhattan', 'dot']
   const META_FILTER_MODE = ['pre', 'post']
@@ -185,8 +156,19 @@ function RetrievalMethod() {
     useState<string>('weighted_average')
   const [hybFinalK, setHybFinalK] = useState<string>('10')
 
-  // Retrieval list helpers for default handling
-  const RET_LIST_KEY = 'lf_project_retrievals'
+  // Retrieval list helpers for default handling (UI-only, namespaced)
+  const ns = useMemo(
+    () => activeProject?.namespace || 'global',
+    [activeProject?.namespace]
+  )
+  const proj = useMemo(
+    () => activeProject?.project || 'global',
+    [activeProject?.project]
+  )
+  const RET_LIST_KEY = useMemo(
+    () => `lf_ui_${ns}__${proj}_project_retrievals`,
+    [ns, proj]
+  )
   const getRetrievals = (): Array<{
     id: string
     name: string
@@ -444,9 +426,9 @@ function RetrievalMethod() {
             <nav className="text-sm md:text-base flex items-center gap-1.5">
               <button
                 className="text-teal-600 dark:text-teal-400 hover:underline"
-                onClick={() => navigate('/chat/rag')}
+                onClick={() => navigate('/chat/databases')}
               >
-                RAG
+                Databases
               </button>
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground">Edit retrieval strategy</span>
@@ -476,8 +458,8 @@ function RetrievalMethod() {
         <>
           {/* Strategy summary card */}
           <section className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex-1 min-w-0 order-1 sm:order-none">
                 <div className="text-xs text-muted-foreground mb-1">
                   Current strategy
                 </div>
@@ -488,7 +470,7 @@ function RetrievalMethod() {
                   {STRATEGY_DESCRIPTIONS[selectedStrategy]}
                 </div>
               </div>
-              <div className="ml-3 shrink-0 flex items-center gap-3">
+              <div className="ml-0 sm:ml-3 shrink-0 flex items-center gap-3 w-full sm:w-auto order-2">
                 {strategyId
                   ? (() => {
                       const list = getRetrievals()
@@ -516,6 +498,7 @@ function RetrievalMethod() {
                   variant="outline"
                   size="sm"
                   onClick={() => setIsChangeOpen(true)}
+                  className="ml-auto sm:ml-0"
                 >
                   Change
                 </Button>

@@ -12,8 +12,52 @@ const STORAGE_KEYS = {
 }
 
 export function getCurrentVersion(): string {
+  // Prefer runtime-provided image tag (dev/prod)
+  try {
+    const viteEnv = (import.meta as any)?.env?.VITE_APP_IMAGE_TAG as
+      | string
+      | undefined
+    if (viteEnv && typeof viteEnv === 'string' && viteEnv.trim() !== '') {
+      return viteEnv
+    }
+  } catch {}
+  try {
+    const winEnv = (window as any)?.ENV?.VITE_APP_IMAGE_TAG as
+      | string
+      | undefined
+    if (winEnv && typeof winEnv === 'string' && winEnv.trim() !== '') {
+      return winEnv
+    }
+  } catch {}
+
+  // Fallback to package version (source build)
   const raw = (pkg as any)?.version as string | undefined
   return raw || '0.0.0'
+}
+
+/**
+ * Returns the injected image tag if provided by the runtime via either
+ * import.meta.env.VITE_APP_IMAGE_TAG (Vite) or window.ENV.VITE_APP_IMAGE_TAG (injected at runtime).
+ * Returns null if not present.
+ */
+export function getInjectedImageTag(): string | null {
+  try {
+    const viteEnv = (import.meta as any)?.env?.VITE_APP_IMAGE_TAG as
+      | string
+      | undefined
+    if (viteEnv && typeof viteEnv === 'string' && viteEnv.trim() !== '') {
+      return viteEnv
+    }
+  } catch {}
+  try {
+    const winEnv = (window as any)?.ENV?.VITE_APP_IMAGE_TAG as
+      | string
+      | undefined
+    if (winEnv && typeof winEnv === 'string' && winEnv.trim() !== '') {
+      return winEnv
+    }
+  } catch {}
+  return null
 }
 
 export function normalizeVersion(version: string | null | undefined): string {

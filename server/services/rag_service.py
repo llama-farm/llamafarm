@@ -32,7 +32,6 @@ def search_with_rag(
     query: str,
     top_k: int = 5,
     retrieval_strategy: str | None = None,
-    *,
     score_threshold: float | None = None,
     metadata_filters: dict[str, Any] | None = None,
     distance_metric: str | None = None,

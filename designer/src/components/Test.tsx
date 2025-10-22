@@ -359,10 +359,10 @@ const Test = () => {
 
       {/* Settings bar (designer mode only) */}
       {mode === 'designer' && (
-        <div className="mb-4 flex items-start gap-3">
-          <div className="flex-1 rounded-xl bg-muted/30 border border-border h-11 px-4 flex items-center justify-between">
-            {/* Left: display toggles */}
-            <div className="flex items-center gap-3 text-xs">
+        <div className="mb-4 flex flex-col lg:flex-row lg:flex-wrap items-stretch lg:items-start gap-3">
+          <div className="flex-1 lg:min-w-[560px] rounded-xl bg-muted/30 border border-border px-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-2 lg:gap-0 h-auto lg:h-11 py-2 lg:py-0">
+            {/* Toggles group with wrapping; includes Allow ranking so it wraps on small screens */}
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 gap-y-2 text-xs min-w-0 w-full">
               <label className="inline-flex items-center gap-2">
                 <Checkbox
                   id="show-processed"
@@ -396,23 +396,22 @@ const Test = () => {
                 <span className="whitespace-nowrap">Show thinking steps</span>
               </label>
               {/* Show generation settings toggle moved into the drawer */}
-            </div>
-            {/* Right: allow ranking aligned to card edge */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground whitespace-nowrap">
-                Allow ranking
-              </span>
-              <Switch
-                checked={allowRanking}
-                onCheckedChange={(v: boolean) => setAllowRanking(Boolean(v))}
-                aria-label="Allow ranking"
-              />
-              <span className="text-muted-foreground whitespace-nowrap">
-                {allowRanking ? 'On' : 'Off'}
-              </span>
+              <div className="flex items-center gap-2 lg:ml-auto">
+                <span className="text-muted-foreground whitespace-nowrap">
+                  Allow ranking
+                </span>
+                <Switch
+                  checked={allowRanking}
+                  onCheckedChange={(v: boolean) => setAllowRanking(Boolean(v))}
+                  aria-label="Allow ranking"
+                />
+                <span className="text-muted-foreground whitespace-nowrap">
+                  {allowRanking ? 'On' : 'Off'}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="w-[640px] flex gap-2">
+          <div className="w-full lg:basis-[640px] lg:flex-none flex flex-col lg:flex-row gap-2">
             <div className="flex-1 relative">
               {isPanelOpen ? (
                 <button

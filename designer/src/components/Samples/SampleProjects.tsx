@@ -13,6 +13,7 @@ import ImportSampleProjectModal from './ImportSampleProjectModal'
 import ImportSampleDataModal from './ImportSampleDataModal'
 import { useProjectModalContext } from '../../contexts/ProjectModalContext'
 import { useToast } from '../ui/toast'
+import { Button } from '../ui/button'
 // import { useCreateProject } from '../../hooks/useProjects'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { setActiveProject } from '../../utils/projectUtils'
@@ -163,7 +164,7 @@ function SampleProjects() {
   return (
     <div className="w-full flex flex-col gap-3 pb-20 px-6 md:px-8 pt-16 md:pt-20 max-w-6xl mx-auto">
       {/* Breadcrumb + Actions */}
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-1">
         <nav className="text-sm md:text-base flex items-center gap-1.5">
           <button
             className="text-teal-600 dark:text-teal-400 hover:underline"
@@ -174,19 +175,13 @@ function SampleProjects() {
           <span className="text-muted-foreground px-1">/</span>
           <span className="text-foreground">Sample projects</span>
         </nav>
-        <div className="flex items-center gap-2">
-          <button
-            className="px-3 py-2 rounded-md bg-primary text-primary-foreground hover:opacity-90"
-            onClick={projectModal.openCreateModal}
-          >
+        <div className="flex items-center gap-2 md:self-auto">
+          <Button onClick={projectModal.openCreateModal}>
             New blank project
-          </button>
-          <button
-            className="px-3 py-2 rounded-md border border-input hover:bg-accent/30"
-            onClick={() => (navigate(-1), undefined)}
-          >
+          </Button>
+          <Button variant="outline" onClick={() => (navigate(-1), undefined)}>
             Back
-          </button>
+          </Button>
         </div>
       </div>
 

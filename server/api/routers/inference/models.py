@@ -30,6 +30,7 @@ class ChatRequest(BaseModel):
     # RAG parameters (None means use config defaults)
     rag_enabled: bool | None = None
     database: str | None = None
+    rag_retrieval_strategy: str | None = None
     rag_top_k: int | None = None
     rag_score_threshold: float | None = None
 

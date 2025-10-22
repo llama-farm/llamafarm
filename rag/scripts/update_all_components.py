@@ -639,7 +639,7 @@ def update_basic_similarity_retriever():
 def update_remaining_extractors():
     """Update remaining extractors with minimal config"""
     extractors = [
-        ("datetime_extractor", "DateTime Extractor", "Extract dates and times"),
+        ("date_time_extractor", "DateTime Extractor", "Extract dates and times"),
         ("heading_extractor", "Heading Extractor", "Extract document headings"),
         ("link_extractor", "Link Extractor", "Extract URLs and links"),
         ("path_extractor", "Path Extractor", "Extract file paths"),

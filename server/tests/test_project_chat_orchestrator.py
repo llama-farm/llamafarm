@@ -2,6 +2,7 @@ import tempfile
 
 from config.datamodel import (
     LlamaFarmConfig,
+    Message,
     Model,
     Prompt,
     PromptFormat,
@@ -59,7 +60,14 @@ def make_config(
                 )
             ]
         ),
-        prompts=[Prompt(role="system", content="You are a helpful assistant.")],
+        prompts=[
+            Prompt(
+                name="default",
+                messages=[
+                    Message(role="system", content="You are a helpful assistant.")
+                ],
+            )
+        ],
         rag=None,  # Don't set RAG if not needed, avoids validation errors
         datasets=[],
     )

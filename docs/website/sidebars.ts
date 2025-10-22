@@ -48,6 +48,12 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'API Reference',
+      link: { type: 'doc', id: 'api/index' },
+      items: [],
+    },
+    {
+      type: 'category',
       label: 'RAG',
       link: { type: 'doc', id: 'rag/index' },
       items: [],
@@ -74,7 +80,9 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Examples',
       link: { type: 'doc', id: 'examples/index' },
-      items: [],
+      items: [
+        { type: 'doc', id: 'examples/medical-records-helper', label: '🏥 Medical Records Helper' },
+      ],
     },
     {
       type: 'category',

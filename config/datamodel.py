@@ -12,11 +12,18 @@ class Version(Enum):
     v1 = "v1"
 
 
-class Prompt(BaseModel):
+class Message(BaseModel):
     role: Optional[str] = Field(
-        None, description='Prompt role (e.g., "system", "user", "assistant")'
+        None, description='Message role (e.g., "system", "user", "assistant")'
     )
-    content: str = Field(..., description='Prompt content (e.g., "You are a helpful assistant.")')
+    content: str = Field(..., description="Message content")
+
+
+class Prompt(BaseModel):
+    name: constr(pattern=r"^[a-z][a-z0-9_]*$") = Field(
+        ..., description="Unique prompt set identifier"
+    )
+    messages: list[Message] = Field(..., description="List of messages in this prompt set")
 
 
 class Type(Enum):
@@ -191,6 +198,11 @@ class Rag(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    default_database: Optional[constr(pattern=r"^[a-z][a-z0-9_]*$")] = Field(
+        None,
+        description="Name of the default database to use for RAG queries. If not specified, uses the first database in the databases array.",
+        examples=["main_database"],
+    )
     databases: Optional[list[Database]] = Field(
         None,
         description="Independent database definitions with their own embedding/retrieval strategies",
@@ -248,6 +260,9 @@ class Model(BaseModel):
     provider_config: Optional[dict[str, Any]] = Field(
         {}, description="Provider-specific configuration (e.g., lemonade settings, ollama options)"
     )
+    prompts: Optional[list[str]] = Field(
+        [], description="List of prompt set names to use for this model (merged in order)"
+    )
 
 
 class Runtime(BaseModel):
@@ -293,13 +308,13 @@ class LlamaFarmConfig(BaseModel):
     version: Version = Field(..., description='Config version, must be "v1"')
     name: str = Field(..., description="Project name", examples=["my-project"])
     namespace: str = Field(..., description="Project namespace", examples=["my-namespace"])
-    prompts: Optional[list[Prompt]] = []
+    prompts: Optional[list[Prompt]] = Field(default_factory=list, description="List of named prompt sets")
     rag: Optional[Rag] = Field(
         None,
         description="Schema for RAG system strategy configurations",
         title="RAG Strategy Configuration Schema",
     )
-    datasets: Optional[list[Dataset]] = Field([], description="List of dataset configurations")
+    datasets: Optional[list[Dataset]] = Field(default_factory=list, description="List of dataset configurations")
     runtime: Runtime
     mcp: Optional[Mcp] = Field(
         None, description="Model Context Protocol (MCP) client configuration"

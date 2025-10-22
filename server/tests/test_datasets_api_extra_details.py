@@ -13,6 +13,7 @@ from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
     Prompt,
+    Message,
     Provider,
     Runtime,
     Version,
@@ -69,8 +70,8 @@ class TestDatasetsAPIExtraDetails:
             namespace="api_test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -147,8 +148,8 @@ class TestDatasetsAPIExtraDetails:
             namespace="api_test_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={
@@ -602,8 +603,8 @@ class TestDatasetsAPIExtraDetailsIntegration:
             namespace="complex_api_namespace",
             prompts=[
                 Prompt(
-                    role="system",
-                    content="You are a helpful assistant.",
+                    name="default",
+                    messages=[Message(role="system", content="You are a helpful assistant.")]
                 )
             ],
             rag={

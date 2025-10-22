@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List
 from components.parsers.base.base_parser import BaseParser, ParserConfig
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.pdf.llamaindex_parser")
 
 
@@ -43,6 +44,7 @@ class PDFParser_LlamaIndex(BaseParser):
 
     def _load_metadata(self) -> ParserConfig:
         """Load parser metadata."""
+
         return ParserConfig(
             name="PDFParser_LlamaIndex",
             display_name="LlamaIndex PDF Parser",
@@ -163,7 +165,6 @@ class PDFParser_LlamaIndex(BaseParser):
 
     def _try_strategy(self, strategy: str, path: Path):
         """Try a specific parsing strategy."""
-        from core.base import Document, ProcessingResult
 
         try:
             if strategy == "llama_pdf_reader":

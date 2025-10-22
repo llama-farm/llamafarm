@@ -31,11 +31,30 @@ var versionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+.*`)
 
 // getCurrentUserGroup returns the current user:group string for Docker user mapping
 func getCurrentUserGroup() string {
+	// On Windows, Docker Desktop handles user mapping automatically
+	// We should not specify a user, as Windows SIDs are incompatible with Linux containers
+	if runtime.GOOS == "windows" {
+		logDebug("Windows detected: skipping user specification (Docker Desktop handles mapping)")
+		return "" // Empty string means don't set User field
+	}
+
+	// On Unix systems (Linux/macOS), get the numeric UID:GID
 	currentUser, err := user.Current()
 	if err != nil {
 		logDebug(fmt.Sprintf("Failed to get current user, using default: %v", err))
 		return ""
 	}
+
+	// Validate that we got numeric IDs (not SIDs or other non-numeric formats)
+	if _, err := strconv.Atoi(currentUser.Uid); err != nil {
+		logDebug(fmt.Sprintf("Non-numeric UID detected (%s), skipping user specification", currentUser.Uid))
+		return ""
+	}
+	if _, err := strconv.Atoi(currentUser.Gid); err != nil {
+		logDebug(fmt.Sprintf("Non-numeric GID detected (%s), skipping user specification", currentUser.Gid))
+		return ""
+	}
+
 	return fmt.Sprintf("%s:%s", currentUser.Uid, currentUser.Gid)
 }
 

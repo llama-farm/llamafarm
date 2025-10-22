@@ -1,4 +1,4 @@
-# 🦙 LlamaFarm
+# 🦙 LlamaFarm - Run your own AI anywhere
 
 > Build powerful AI locally, extend anywhere.
 
@@ -206,9 +206,11 @@ runtime:
         context_size: 32768
 
 prompts:
-  - role: system
-    content: >-
-      You are an FDA specialist. Answer using short paragraphs and cite document titles when available.
+  - name: default
+    messages:
+      - role: system
+        content: >-
+          You are an FDA specialist. Answer using short paragraphs and cite document titles when available.
 
 rag:
   databases:

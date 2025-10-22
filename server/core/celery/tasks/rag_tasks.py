@@ -20,7 +20,7 @@ def search_with_rag_database(
     query: str,
     top_k: int = 5,
     retrieval_strategy: str | None = None,
-    **extra_kwargs: Any,
+    score_threshold: float | None = None,
 ) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
@@ -36,16 +36,11 @@ def search_with_rag_database(
     Returns:
         List of search results as dictionaries
     """
-    kwargs: dict[str, Any] = {
-        "project_dir": project_dir,
-        "database": database,
-        "query": query,
-        "top_k": top_k,
-        "retrieval_strategy": retrieval_strategy,
-    }
-    # Include any optional tuning parameters passed by callers
-    kwargs.update(extra_kwargs)
-    task = signature("rag.search_with_database", kwargs=kwargs, app=app)
+    task = signature(
+        "rag.search_with_database",
+        args=[project_dir, database, query, top_k, retrieval_strategy, score_threshold],
+        app=app,
+    )
     result = task.apply_async()
 
     # Always use polling approach to avoid any result.get() issues

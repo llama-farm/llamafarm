@@ -671,7 +671,9 @@ function AddOrChangeModels({
           <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
             <div className="col-span-6">Model</div>
             <div className="col-span-3">Parameter size</div>
-            <div className="col-span-2 text-right pr-10">Download size</div>
+            <div className="col-span-2 text-right pr-4 sm:pr-10">
+              Download size
+            </div>
             <div className="col-span-1" />
           </div>
           {filteredGroups.map(group => {
@@ -696,8 +698,10 @@ function AddOrChangeModels({
                   <div className="col-span-3 text-xs">
                     {group.parameterSummary}
                   </div>
-                  <div className="col-span-2 text-xs text-right pr-10">
-                    {group.downloadSummary}
+                  <div className="col-span-2 text-xs text-right pr-4 sm:pr-10">
+                    <span className="inline-block min-w-[3.5rem] truncate">
+                      {group.downloadSummary}
+                    </span>
                   </div>
                   <div className="col-span-1" />
                 </div>
@@ -715,8 +719,8 @@ function AddOrChangeModels({
                         <div className="col-span-3 text-xs">
                           {variant.parameterSize}
                         </div>
-                        <div className="col-span-2 flex items-center justify-end pr-10">
-                          <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right">
+                        <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-10">
+                          <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right whitespace-nowrap">
                             {variant.downloadSize}
                           </div>
                         </div>

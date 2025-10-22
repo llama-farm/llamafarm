@@ -48,12 +48,6 @@ def search_with_rag_database_task(
     top_k: int = 5,
     retrieval_strategy: Optional[str] = None,
     score_threshold: Optional[float] = None,
-    metadata_filters: Optional[dict[str, Any]] = None,
-    distance_metric: Optional[str] = None,
-    hybrid_alpha: Optional[float] = None,
-    rerank_model: Optional[str] = None,
-    query_expansion: Optional[bool] = None,
-    max_tokens: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
@@ -77,6 +71,7 @@ def search_with_rag_database_task(
             "query": query[:100] + "..." if len(query) > 100 else query,
             "top_k": top_k,
             "retrieval_strategy": retrieval_strategy,
+            "score_threshold": score_threshold,
         },
     )
 
@@ -85,28 +80,12 @@ def search_with_rag_database_task(
         api = DatabaseSearchAPI(project_dir=project_dir, database=database)
 
         # Perform search
-        # Map to API parameters
-        api_kwargs: dict[str, Any] = {
-            "retrieval_strategy": retrieval_strategy,
-            "top_k": top_k,
-        }
-        if score_threshold is not None:
-            api_kwargs["min_score"] = score_threshold
-        if metadata_filters is not None:
-            api_kwargs["metadata_filter"] = metadata_filters
-        # Strategy-specific hints; passed through to strategy.retrieve(**kwargs)
-        if distance_metric is not None:
-            api_kwargs["distance_metric"] = distance_metric
-        if hybrid_alpha is not None:
-            api_kwargs["hybrid_alpha"] = hybrid_alpha
-        if rerank_model is not None:
-            api_kwargs["rerank_model"] = rerank_model
-        if query_expansion is not None:
-            api_kwargs["query_expansion"] = query_expansion
-        if max_tokens is not None:
-            api_kwargs["max_tokens"] = max_tokens
-
-        results = api.search(query=query, **api_kwargs)
+        results = api.search(
+            query=query,
+            top_k=top_k,
+            retrieval_strategy=retrieval_strategy,
+            min_score=score_threshold,
+        )
 
         # Convert results to dictionaries
         result_dicts = [r.to_dict() for r in results]

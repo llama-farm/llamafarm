@@ -34,7 +34,18 @@
       "options": {
         "cwd": "{workspaceRoot}/config",
         "command": "bash generate-types.sh"
-      }
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/schema.yaml",
+        "{projectRoot}/compile_schema.py",
+        "{workspaceRoot}/rag/schema.yaml"
+      ],
+      "outputs": [
+        "{projectRoot}/datamodel.py",
+        "{projectRoot}/schema.deref.yaml",
+        "{workspaceRoot}/cli/cmd/config/schema.yaml"
+      ]
     }
   }
 }
