@@ -59,6 +59,14 @@ func logHeaders(kind string, hdr http.Header) {
 	if len(hdr) == 0 {
 		return
 	}
+	// List of sensitive headers to redact, lower-case for comparison
+	sensitiveHeaders := map[string]struct{}{
+		"authorization": {},
+		"cookie": {},
+		"x-session-id": {},
+		"set-cookie": {},
+		// Add others as needed
+	}
 	keys := make([]string, 0, len(hdr))
 	for k := range hdr {
 		keys = append(keys, k)
@@ -66,8 +74,13 @@ func logHeaders(kind string, hdr http.Header) {
 	sort.Strings(keys)
 	for _, k := range keys {
 		vals := hdr.Values(k)
+		_, isSensitive := sensitiveHeaders[strings.ToLower(k)]
 		for _, v := range vals {
-			logDebug(fmt.Sprintf("  %s header: %s: %s", kind, k, v))
+			if isSensitive {
+				logDebug(fmt.Sprintf("  %s header: %s: [REDACTED]", kind, k))
+			} else {
+				logDebug(fmt.Sprintf("  %s header: %s: %s", kind, k, v))
+			}
 		}
 	}
 }
