@@ -27,6 +27,9 @@ export const useProjects = (namespace: string) => {
     queryKey: projectKeys.list(namespace),
     queryFn: () => projectService.listProjects(namespace),
     enabled: !!namespace, // Only run query if namespace is provided
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    retry: 1, // Only retry once on failure
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
   })
 }
 
@@ -95,9 +98,9 @@ export const useUpdateProject = () => {
         projectKeys.detail(variables.namespace, variables.projectId),
         { project: data.project }
       )
-      
-      // Invalidate projects list to ensure consistency
-      queryClient.invalidateQueries({ queryKey: projectKeys.list(variables.namespace) })
+
+      // Only invalidate the specific project detail, not the list
+      // The list invalidation was causing unnecessary API calls and 500 errors
     },
     onError: (error) => {
       console.error('Failed to update project:', error)

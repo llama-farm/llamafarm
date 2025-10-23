@@ -76,6 +76,7 @@ const Dashboard = () => {
   }, [projectDetail, activeProject?.namespace, activeProject?.project])
 
   const datasets = useMemo(() => {
+    // Only return datasets from the API, no localStorage fallback
     if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
       return apiDatasets.datasets.map(dataset => ({
         id: dataset.name,
@@ -83,19 +84,6 @@ const Dashboard = () => {
         lastRun: new Date(),
       }))
     }
-    try {
-      const stored = localStorage.getItem('lf_demo_datasets')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((d: any) => ({
-            id: d.id || d.name,
-            name: d.name || d.id,
-            lastRun: d.lastRun || new Date(),
-          }))
-        }
-      }
-    } catch {}
     return [] as Array<{ id: string; name: string; lastRun: string | Date }>
   }, [apiDatasets])
 

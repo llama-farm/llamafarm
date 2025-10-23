@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { Button } from '../ui/button'
-import type { ExtractorSchema, SchemaField } from './extractorSchemas'
+// Import schema types from generated file
+import type { ExtractorSchema, SchemaField } from './generated/ragTypes'
 
 type Props = {
   schema: ExtractorSchema

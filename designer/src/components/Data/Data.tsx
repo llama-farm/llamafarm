@@ -75,24 +75,19 @@ const Data = () => {
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
 
-  // Local demo datasets change counter (forces recompute when we mutate localStorage)
-  const [localDatasetsVersion, setLocalDatasetsVersion] = useState(0)
-
-  // Convert API datasets to UI format; provide demo fallback if none
+  // Convert API datasets to UI format - only show real datasets from the API
   const datasets = useMemo(() => {
-    const apiList = (apiDatasets?.datasets || []).map(dataset => ({
+    // Only return datasets from the API, no localStorage fallback or demo data
+    return (apiDatasets?.datasets || []).map(dataset => ({
       id: dataset.name,
       name: dataset.name,
-      // No rag_strategy on datasets; server provides data_processing_strategy/database
       database: (dataset as any).database,
       processingStrategy: (() => {
         const strategy = (dataset as any).data_processing_strategy
         if (!strategy) {
-          try {
-            console.warn(
-              `Warning: 'data_processing_strategy' is missing for dataset '${dataset.name}'. Defaulting to 'default'.`
-            )
-          } catch {}
+          console.warn(
+            `Warning: 'data_processing_strategy' is missing for dataset '${dataset.name}'. Defaulting to 'default'.`
+          )
           return 'default'
         }
         return strategy
@@ -120,59 +115,7 @@ const Data = () => {
       version: 'v1',
       description: '',
     }))
-
-    // Load locally persisted demo/imported datasets
-    let localList: any[] = []
-    try {
-      const stored = localStorage.getItem('lf_demo_datasets')
-      const parsed = stored ? JSON.parse(stored) : []
-      if (Array.isArray(parsed)) localList = parsed
-    } catch {}
-
-    // If no API datasets, fall back to local list or seed demo entries
-    if (apiList.length === 0) {
-      if (localList.length > 0) return localList
-      const demo = [
-        {
-          id: 'demo-arxiv',
-          name: 'arxiv-papers',
-          database: 'main_database',
-          processingStrategy: 'universal_processor',
-          files: [],
-          lastRun: new Date(),
-          embedModel: 'text-embedding-3-large',
-          numChunks: 12800,
-          processedPercent: 100,
-          version: 'v1',
-          description: 'Demo dataset of academic PDFs',
-        },
-        {
-          id: 'demo-handbook',
-          name: 'company-handbook',
-          database: 'main_database',
-          processingStrategy: 'universal_processor',
-          files: [],
-          lastRun: new Date(),
-          embedModel: 'text-embedding-3-large',
-          numChunks: 4200,
-          processedPercent: 100,
-          version: 'v2',
-          description: 'Demo employee handbook and policies',
-        },
-      ]
-      try {
-        localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
-      } catch {}
-      return demo
-    }
-
-    // Merge API and local lists when API returns entries, keeping API as source of truth
-    const mergedById = new Map<string, any>()
-    for (const ds of apiList) mergedById.set(ds.id, ds)
-    for (const ds of localList)
-      if (!mergedById.has(ds.id)) mergedById.set(ds.id, ds)
-    return Array.from(mergedById.values())
-  }, [apiDatasets, localDatasetsVersion])
+  }, [apiDatasets])
 
   // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
   const hasRedirectedFromQuery = useRef(false)
@@ -974,38 +917,11 @@ const Data = () => {
                 variant: 'destructive',
               })
             } catch {}
-            // Local fallback to make import work without server: persist into demo datasets
-            try {
-              const raw = localStorage.getItem('lf_demo_datasets')
-              const arr = raw ? JSON.parse(raw) : []
-              const newEntry = {
-                id: name,
-                name,
-                files: [],
-                lastRun: new Date(),
-                embedModel: 'text-embedding-3-large',
-                numChunks: 0,
-                processedPercent: 0,
-                version: 'v1',
-                description: 'Imported sample dataset (local)',
-              }
-              const exists =
-                Array.isArray(arr) && arr.some((d: any) => d.id === name)
-              const updated = exists ? arr : [...arr, newEntry]
-              localStorage.setItem('lf_demo_datasets', JSON.stringify(updated))
-              setLocalDatasetsVersion(v => v + 1)
-              setIsImportOpen(false)
-              toast({
-                message: `Dataset "${name}" imported (local)`,
-                variant: 'default',
-              })
-              navigate(`/chat/data?dataset=${encodeURIComponent(name)}`)
-            } catch {
-              toast({
-                message: 'Failed to import dataset',
-                variant: 'destructive',
-              })
-            }
+            // Import failed - show error (no localStorage fallback)
+            toast({
+              message: 'Failed to import dataset',
+              variant: 'destructive',
+            })
           }
         }}
       />
@@ -1031,28 +947,10 @@ const Data = () => {
                 setIsConfirmDeleteOpen(false)
                 if (!id) return
                 if (!activeProject?.namespace || !activeProject?.project) {
-                  // No active project: perform local deletion fallback
-                  try {
-                    const raw = localStorage.getItem('lf_demo_datasets')
-                    const arr = raw ? JSON.parse(raw) : []
-                    const updated = Array.isArray(arr)
-                      ? arr.filter((d: any) => d.id !== id)
-                      : []
-                    localStorage.setItem(
-                      'lf_demo_datasets',
-                      JSON.stringify(updated)
-                    )
-                    setLocalDatasetsVersion(v => v + 1)
-                    toast({
-                      message: 'Dataset deleted (local)',
-                      variant: 'default',
-                    })
-                  } catch {
-                    toast({
-                      message: 'Failed to delete dataset',
-                      variant: 'destructive',
-                    })
-                  }
+                  toast({
+                    message: 'No active project selected',
+                    variant: 'destructive',
+                  })
                   return
                 }
                 try {
@@ -1064,28 +962,10 @@ const Data = () => {
                   toast({ message: 'Dataset deleted', variant: 'default' })
                 } catch (err) {
                   console.error('Delete failed', err)
-                  // Local fallback removal
-                  try {
-                    const raw = localStorage.getItem('lf_demo_datasets')
-                    const arr = raw ? JSON.parse(raw) : []
-                    const updated = Array.isArray(arr)
-                      ? arr.filter((d: any) => d.id !== id)
-                      : []
-                    localStorage.setItem(
-                      'lf_demo_datasets',
-                      JSON.stringify(updated)
-                    )
-                    setLocalDatasetsVersion(v => v + 1)
-                    toast({
-                      message: 'Dataset deleted (local)',
-                      variant: 'default',
-                    })
-                  } catch {
-                    toast({
-                      message: 'Failed to delete dataset',
-                      variant: 'destructive',
-                    })
-                  }
+                  toast({
+                    message: 'Failed to delete dataset',
+                    variant: 'destructive',
+                  })
                 }
               }}
             >

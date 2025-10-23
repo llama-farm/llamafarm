@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { Button } from '../ui/button'
-import type { ParserSchema, SchemaField } from './parserSchemas'
+// Import schema types from generated file
+import type { ParserSchema, SchemaField } from './generated/ragTypes'
 
 type Props = {
   schema: ParserSchema
