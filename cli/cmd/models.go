@@ -59,7 +59,9 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up
-		config := ChatNoRAGConfig(serverURL, noAutoStart) // Server only, no need for RAG
+		// Using the factory pattern to automatically inherit CLI context
+		factory := GetServiceConfigFactory()
+		config := factory.ChatNoRAG(serverURL) // Server only, no need for RAG
 		EnsureServicesWithConfig(config)
 
 		// Fetch models using shared function

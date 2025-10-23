@@ -113,7 +113,8 @@ func TestEnsureServerAvailable_LocalhostUp(t *testing.T) {
 	defer ts.Close()
 
 	// EnsureServicesWithConfig should return without error for a healthy localhost server
-	config := ServerOnlyConfig(ts.URL, false)
+	factory := GetServiceConfigFactory()
+	config := factory.ServerOnly(ts.URL)
 	EnsureServicesWithConfig(config)
 }
 

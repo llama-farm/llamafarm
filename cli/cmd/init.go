@@ -65,7 +65,8 @@ var initCmd = &cobra.Command{
 		if base == "" {
 			base = "http://localhost:8000"
 		}
-		config := ServerOnlyConfig(base, noAutoStart)
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(base)
 		EnsureServicesWithConfig(config)
 
 		// Build URL
