@@ -3,6 +3,7 @@ import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+from atomic_agents import BaseTool  # type: ignore
 from config.datamodel import LlamaFarmConfig, Provider
 
 from agents.llamagent.agent import LFAgent, LFAgentConfig
@@ -15,7 +16,7 @@ from core.mcp_registry import register_mcp_service
 from services.mcp_service import MCPService
 from services.model_service import ModelService
 from services.runtime_service.runtime_service import RuntimeService
-from tools.mcp_tool.tool.mcp_tool_factory import BaseTool, MCPToolFactory
+from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
 logger = FastAPIStructLogger(__name__)
 

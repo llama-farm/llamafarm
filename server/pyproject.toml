@@ -28,7 +28,7 @@ dependencies = [
   "six>=1.16.0",
   "requests>=2.25.0",
   "httpx>=0.25.0",
-  "mcp>=1.0.0",
+  "mcp>=1.2.0",
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
