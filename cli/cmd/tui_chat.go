@@ -967,7 +967,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := fields[0]
 				switch cmd {
 				case "/help":
-					m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To upgrade run \"lf version upgrade\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models"})
+					m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models"})
 					m.textarea.SetValue("")
 				case "/mode":
 					if len(fields) < 2 {
@@ -1120,6 +1120,14 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.quickMenu, setSize = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: m.termHeight})
 						if setSize != nil {
 							// ignore setSize here; the menu will render with size in View()
+						}
+					}
+					// Check for updates and reflect status in the menu
+					if info, err := maybeCheckForUpgrade(true); err == nil && info != nil {
+						if info.UpdateAvailable {
+							m.quickMenu.SetUpdateAvailable(info.LatestVersion)
+						} else {
+							m.quickMenu.SetUpToDate()
 						}
 					}
 					m.messages = append(m.messages, Message{Role: "client", Content: "Opening Quick Menu."})
@@ -1446,6 +1454,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return uitk.ShowToastMsg{Message: "Upgrade completed successfully"}
 			})
+			// Ensure menu closes to avoid inconsistent UI state
+			m.quickMenu.Close()
 			break
 		}
 

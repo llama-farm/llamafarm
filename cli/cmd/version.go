@@ -301,10 +301,20 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 		if runtime.GOOS == "windows" {
 			// On Windows, fall back to manual restart
 			fmt.Fprintf(os.Stderr, "Restart is not automated on Windows. Please relaunch the CLI.\n")
+			// Unset the flag to avoid leaking into subsequent processes
+			_ = os.Unsetenv("LF_RESTART_AFTER_UPGRADE")
 			return nil
 		}
 		// Re-exec the new binary in-place
-		_ = syscall.Exec(finalBinaryPath, append([]string{finalBinaryPath}, argsToUse...), os.Environ())
+		if err := validateBinaryPath(finalBinaryPath); err != nil {
+			fmt.Fprintf(os.Stderr, "\n⚠️  Restart validation failed: %v\n", err)
+		} else {
+			// Use a minimal, controlled environment for restart and ensure the flag does not persist
+			_ = os.Unsetenv("LF_RESTART_AFTER_UPGRADE")
+			if execErr := syscall.Exec(finalBinaryPath, append([]string{finalBinaryPath}, argsToUse...), os.Environ()); execErr != nil {
+				fmt.Fprintf(os.Stderr, "\n⚠️  Restart exec failed: %v\n", execErr)
+			}
+		}
 		// If Exec returns, show a hint
 		fmt.Fprintf(os.Stderr, "\n⚠️  Restart failed. Please exit and relaunch the CLI.\n")
 	}

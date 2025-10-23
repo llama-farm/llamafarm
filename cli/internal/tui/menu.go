@@ -174,7 +174,6 @@ func NewQuickMenuModel(config *Config) QuickMenuModel {
 
 	// Build help entries
 	m.helpItems = []HelpItem{
-		{Label: "/help - Show this help", Command: "/help"},
 		{Label: "/mode [dev|project] - Switch mode", Action: "toggle-mode"},
 		{Label: "/model [name] - Switch model (PROJECT mode)", Command: "/model ", NeedsInput: true},
 		{Label: "/database [name] - Switch RAG database (PROJECT mode)", Command: "/database ", NeedsInput: true},
@@ -679,10 +678,10 @@ func (m QuickMenuModel) renderRule(width int) string {
 
 // renderHeaderLine builds the top header with title, version, and close hint.
 func (m QuickMenuModel) renderHeaderLine(menuWidth int) string {
-	header := m.headerStyle.Render("🦙 LlamaFarm Quick Menu")
+	header := m.headerStyle.Render("🦙 LlamaFarm")
 	leftHeader := header
 	if strings.TrimSpace(m.version) != "" {
-		versionText := m.hintStyle.Render(fmt.Sprintf("version: %s", m.version))
+		versionText := m.hintStyle.Render(m.version)
 		leftHeader = lipgloss.JoinHorizontal(lipgloss.Left, header, " ", versionText)
 	}
 	closeHint := m.hintStyle.Render("[ESC to close]")
@@ -691,6 +690,45 @@ func (m QuickMenuModel) renderHeaderLine(menuWidth int) string {
 		spaceCount = 0
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Left, leftHeader, strings.Repeat(" ", spaceCount), closeHint)
+}
+
+// SetUpdateAvailable updates the Help tab's Updates section to show an available version
+// and make it runnable via Enter.
+func (m *QuickMenuModel) SetUpdateAvailable(latest string) {
+	idx := -1
+	for i := range m.helpItems {
+		if m.helpItems[i].Label == "Updates:" {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return
+	}
+	// Ensure there is a following row to overwrite; if not, append placeholder
+	if idx+1 >= len(m.helpItems) {
+		m.helpItems = append(m.helpItems, HelpItem{})
+	}
+	label := fmt.Sprintf("Update available %s (press Enter to begin upgrade to %s)", latest, latest)
+	m.helpItems[idx+1] = HelpItem{Label: label, Command: fmt.Sprintf("lf version upgrade %s", strings.TrimSpace(latest)), Action: "run-cmd"}
+}
+
+// SetUpToDate updates the Help tab's Updates section to show latest state as informational.
+func (m *QuickMenuModel) SetUpToDate() {
+	idx := -1
+	for i := range m.helpItems {
+		if m.helpItems[i].Label == "Updates:" {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return
+	}
+	if idx+1 >= len(m.helpItems) {
+		m.helpItems = append(m.helpItems, HelpItem{})
+	}
+	m.helpItems[idx+1] = HelpItem{Label: "You are on the latest version"}
 }
 
 // toggleIndicatorForRow returns the [▶]/[▼] indicator for expandable rows.
