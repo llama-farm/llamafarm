@@ -20,7 +20,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of LlamaFarm CLI",
 	Long:  "Print the version number of LlamaFarm CLI",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("LlamaFarm CLI %s\n", formatVersionForDisplay(Version))
+		OutputInfo("LlamaFarm CLI %s", formatVersionForDisplay(Version))
 	},
 }
 
@@ -111,22 +111,22 @@ func determineTargetVersion(args []string) (string, *UpgradeInfo, error) {
 
 // showUpgradePlan displays the upgrade plan to the user
 func showUpgradePlan(info *UpgradeInfo, targetVersion, finalInstallDir string, strategy UpgradeStrategy, canUpgradeInPlace bool, installDir string) {
-	fmt.Printf("📋 Upgrade Plan:\n")
-	fmt.Printf("   Current version: %s\n", info.CurrentVersion)
-	fmt.Printf("   Target version:  %s\n", targetVersion)
-	fmt.Printf("   Install location: %s\n", finalInstallDir)
-	fmt.Printf("   Platform: %s\n", detectPlatform())
+	OutputInfo("📋 Upgrade Plan:")
+	OutputInfo("   Current version: %s", info.CurrentVersion)
+	OutputInfo("   Target version:  %s", targetVersion)
+	OutputInfo("   Install location: %s", finalInstallDir)
+	OutputInfo("   Platform: %s", detectPlatform())
 
 	requiresElevation := strategy.RequiresElevation(finalInstallDir)
 	if requiresElevation {
-		fmt.Printf("   ⚠️  Requires elevation (sudo/Administrator)\n")
+		OutputInfo("   ⚠️  Requires elevation (sudo/Administrator)")
 	}
 
 	if !canUpgradeInPlace && installDir == "" {
 		// Suggest fallback directory
 		fallbackDir, err := strategy.GetFallbackDir()
 		if err == nil {
-			fmt.Printf("   💡 Suggested fallback: %s\n", fallbackDir)
+			OutputInfo("   💡 Suggested fallback: %s", fallbackDir)
 		}
 	}
 }
@@ -142,36 +142,36 @@ func checkPermissions(canUpgradeInPlace bool, installDir, finalInstallDir string
 		return nil
 	}
 
-	fmt.Printf("\n❌ Cannot write to %s without elevation\n", finalInstallDir)
-	fmt.Printf("\nOptions:\n")
-	fmt.Printf("1. Run with elevation: sudo lf version upgrade\n")
+	OutputInfo("\n❌ Cannot write to %s without elevation", finalInstallDir)
+	OutputInfo("\nOptions:")
+	OutputInfo("1. Run with elevation: sudo lf version upgrade")
 
 	fallbackDir, err := strategy.GetFallbackDir()
 	if err == nil {
-		fmt.Printf("2. Install to user directory: lf version upgrade --install-dir %s\n", fallbackDir)
+		OutputInfo("2. Install to user directory: lf version upgrade --install-dir %s", fallbackDir)
 	}
 
-	fmt.Printf("3. Manual installation: curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash\n")
+	OutputInfo("3. Manual installation: curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash")
 	return fmt.Errorf("insufficient permissions for upgrade")
 }
 
 // downloadAndVerifyBinary downloads the binary and optionally verifies its checksum
 func downloadAndVerifyBinary(targetVersion, platform string, noVerify bool) (string, error) {
-	fmt.Fprintf(os.Stderr, "🔄 Downloading binary...\n")
+	OutputInfo("🔄 Downloading binary...")
 	tempBinary, err := downloadBinary(targetVersion, platform)
 	if err != nil {
 		return "", fmt.Errorf("failed to download binary: %w", err)
 	}
 
 	if !noVerify {
-		fmt.Fprintf(os.Stderr, "🔄 Verifying checksum...\n")
+		OutputInfo("🔄 Verifying checksum...")
 		err = verifyChecksum(tempBinary, targetVersion, platform)
 		if err != nil {
 			cleanupTempFiles([]string{tempBinary})
 			return "", fmt.Errorf("checksum verification failed: %w", err)
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "⚠️  Skipping checksum verification\n")
+		OutputInfo("⚠️  Skipping checksum verification")
 	}
 
 	return tempBinary, nil
@@ -209,7 +209,7 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to determine current binary location: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "🔍 Current binary: %s\n", currentBinary)
+	OutputInfo("🔍 Current binary: %s", currentBinary)
 
 	// Determine target version
 	targetVersion, info, err := determineTargetVersion(args)
@@ -219,7 +219,7 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 
 	// Check if upgrade is necessary
 	if !flags.force && !info.UpdateAvailable && targetVersion == info.CurrentVersionNormalized {
-		fmt.Printf("✅ Already running version %s\n", info.CurrentVersion)
+		OutputInfo("✅ Already running version %s", info.CurrentVersion)
 		return nil
 	}
 
@@ -241,7 +241,7 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 	showUpgradePlan(info, targetVersion, finalInstallDir, strategy, canUpgradeInPlace, flags.installDir)
 
 	if flags.dryRun {
-		fmt.Printf("\n🔍 Dry run mode - no changes will be made\n")
+		OutputInfo("\n🔍 Dry run mode - no changes will be made")
 		return nil
 	}
 
@@ -251,7 +251,7 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	// Confirm upgrade
-	fmt.Printf("\n🚀 Starting upgrade to %s...\n", targetVersion)
+	OutputInfo("\n🚀 Starting upgrade to %s...", targetVersion)
 
 	platform := detectPlatform()
 
@@ -269,25 +269,25 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	// Perform upgrade
-	fmt.Fprintf(os.Stderr, "🔄 Installing new version...\n")
+	OutputInfo("🔄 Installing new version...")
 	err = strategy.PerformUpgrade(finalBinaryPath, tempBinary)
 	if err != nil {
 		return fmt.Errorf("upgrade failed: %w", err)
 	}
 
 	// Verify installation
-	fmt.Fprintf(os.Stderr, "🔄 Verifying installation...\n")
+	OutputInfo("🔄 Verifying installation...")
 	if err := validateBinaryPath(finalBinaryPath); err != nil {
 		return fmt.Errorf("installation verification failed: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "✅ Upgrade completed successfully!\n")
-	fmt.Printf("\nRun 'lf version' to confirm the new version.\n")
+	OutputInfo("✅ Upgrade completed successfully!")
+	OutputInfo("\nRun 'lf version' to confirm the new version.")
 
 	// Show PATH warning if needed
 	if flags.installDir != "" && flags.installDir != filepath.Dir(currentBinary) {
-		fmt.Printf("\n💡 Binary installed to: %s\n", finalBinaryPath)
-		fmt.Printf("Make sure this directory is in your PATH.\n")
+		OutputInfo("\n💡 Binary installed to: %s", finalBinaryPath)
+		OutputInfo("Make sure this directory is in your PATH.")
 	}
 
 	// If requested (e.g., from TUI), restart into the updated binary
@@ -297,37 +297,37 @@ func performUpgrade(cmd *cobra.Command, args []string) error {
 		if len(argsToUse) >= 2 && argsToUse[0] == "version" && argsToUse[1] == "upgrade" {
 			argsToUse = []string{}
 		}
-		fmt.Fprintf(os.Stderr, "\n🔁 Restarting CLI...\n")
+		OutputInfo("\n🔁 Restarting CLI...")
 		if runtime.GOOS == "windows" {
 			// On Windows, fall back to manual restart
-			fmt.Fprintf(os.Stderr, "Restart is not automated on Windows. Please relaunch the CLI.\n")
+			OutputInfo("Restart is not automated on Windows. Please relaunch the CLI.")
 			// Unset the flag to avoid leaking into subsequent processes
 			_ = os.Unsetenv("LF_RESTART_AFTER_UPGRADE")
 			return nil
 		}
 		// Re-exec the new binary in-place
 		if err := validateBinaryPath(finalBinaryPath); err != nil {
-			fmt.Fprintf(os.Stderr, "\n⚠️  Restart validation failed: %v\n", err)
+			OutputInfo("\n⚠️  Restart validation failed: %v", err)
 		} else {
 			// Use a minimal, controlled environment for restart and ensure the flag does not persist
 			_ = os.Unsetenv("LF_RESTART_AFTER_UPGRADE")
 			if execErr := syscall.Exec(finalBinaryPath, append([]string{finalBinaryPath}, argsToUse...), os.Environ()); execErr != nil {
-				fmt.Fprintf(os.Stderr, "\n⚠️  Restart exec failed: %v\n", execErr)
+				OutputInfo("\n⚠️  Restart exec failed: %v", execErr)
 			}
 		}
 		// If Exec returns, show a hint
-		fmt.Fprintf(os.Stderr, "\n⚠️  Restart failed. Please exit and relaunch the CLI.\n")
+		OutputInfo("\n⚠️  Restart failed. Please exit and relaunch the CLI.")
 	}
 	return nil
 }
 
 // showManualInstructions displays manual installation instructions as fallback
 func showManualInstructions(info *UpgradeInfo) {
-	fmt.Printf("\n📖 Manual Installation Instructions:\n")
-	fmt.Printf("  • macOS / Linux: curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash\n")
-	fmt.Printf("  • Windows:       winget install LlamaFarm.CLI\n")
+	OutputInfo("\n📖 Manual Installation Instructions:")
+	OutputInfo("  • macOS / Linux: curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash")
+	OutputInfo("  • Windows:       winget install LlamaFarm.CLI")
 
 	if info.ReleaseURL != "" {
-		fmt.Printf("  • Release notes: %s\n", info.ReleaseURL)
+		OutputInfo("  • Release notes: %s", info.ReleaseURL)
 	}
 }
