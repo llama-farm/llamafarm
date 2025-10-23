@@ -47,12 +47,21 @@ type ServiceState struct {
 	Health  *Component // From health payload
 }
 
+type OrchestrationMode int
+
+const (
+	OrchestrationAuto OrchestrationMode = iota // Auto-detect (prefer native)
+	OrchestrationDocker                        // Force Docker mode
+	OrchestrationNative                        // Force Native mode
+)
+
 type ServiceOrchestrationConfig struct {
-	ServerURL       string
-	PrintStatus     bool
-	ServiceNeeds    map[string]ServiceRequirement
-	DefaultTimeout  time.Duration
-	ServiceTimeouts map[string]time.Duration
+	ServerURL          string
+	PrintStatus        bool
+	ServiceNeeds       map[string]ServiceRequirement
+	DefaultTimeout     time.Duration
+	ServiceTimeouts    map[string]time.Duration
+	OrchestrationMode  OrchestrationMode
 }
 
 func (config *ServiceOrchestrationConfig) isLocalhost() bool {
@@ -175,10 +184,18 @@ func checkRAGHealthForService(serverURL string) (*Component, error) {
 }
 
 func startServerContainerForService(serverURL string) error {
+	mode := determineOrchestrationMode()
+	if mode == OrchestrationNative {
+		return startLocalServerNative(serverURL)
+	}
 	return startLocalServerViaDocker(serverURL)
 }
 
 func startRAGContainerForService(serverURL string) error {
+	mode := determineOrchestrationMode()
+	if mode == OrchestrationNative {
+		return startRAGNative(serverURL)
+	}
 	orchestrator := NewContainerOrchestrator()
 	return orchestrator.startRAGContainer()
 }
@@ -499,7 +516,8 @@ func StartCommandConfig(serverURL string) *ServiceOrchestrationConfig {
 			"server": ServiceRequired,
 			"rag":    ServiceOptional, // Start async, don't wait
 		},
-		DefaultTimeout: 45 * time.Second,
+		DefaultTimeout:    45 * time.Second,
+		OrchestrationMode: determineOrchestrationMode(),
 	}
 }
 

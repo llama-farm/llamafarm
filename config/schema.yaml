@@ -110,7 +110,7 @@ properties:
               description: "Human-readable description of this model configuration"
             provider:
               type: string
-              enum: [openai, ollama, lemonade]
+              enum: [openai, ollama, lemonade, universal]
               description: "Runtime provider for this model"
             model:
               type: string
@@ -189,4 +189,3 @@ properties:
                 type: string
               example:
                 Authorization: Bearer ${env:MCP_SERVER_TOKEN}
-

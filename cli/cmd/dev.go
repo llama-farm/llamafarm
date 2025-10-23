@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"llamafarm-cli/cmd/config"
 
@@ -35,6 +37,9 @@ var devCmd = &cobra.Command{
 }
 
 func start(mode SessionMode) {
+	// Set up signal handler for cleanup
+	setupCleanupHandler()
+
 	// Load config to get namespace and project for watcher
 	cwd := getEffectiveCWD()
 	cfg, err := config.LoadConfig(cwd)
@@ -71,6 +76,22 @@ func start(mode SessionMode) {
 	}
 
 	runChatSessionTUI(mode, projectInfo, serverHealth)
+
+	// Cleanup on exit
+	cleanupNativeProcesses()
+}
+
+// setupCleanupHandler sets up signal handlers to cleanup processes on exit
+func setupCleanupHandler() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-c
+		// Cleanup processes
+		cleanupNativeProcesses()
+		os.Exit(0)
+	}()
 }
 
 func init() {

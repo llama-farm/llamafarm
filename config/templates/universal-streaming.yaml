@@ -1,0 +1,125 @@
+# LlamaFarm Configuration - Streaming with Universal Runtime
+# This template demonstrates using the universal provider with SSE streaming support
+
+version: v1
+name: streaming-demo
+namespace: default
+
+# Model configurations using the universal provider
+# The universal provider connects to the Universal Runtime (runtimes/universal)
+# which provides OpenAI-compatible endpoints with streaming support
+models:
+  # Primary chat model with streaming
+  - id: chat
+    description: "Fast chat model with SSE streaming support"
+    provider: universal
+    model: Qwen/Qwen3-0.6B  # Small, fast model for testing
+    # base_url: http://localhost:11540/v1  # Optional: defaults to localhost:11540
+    # api_key: universal  # Optional: defaults to 'universal'
+    instructor_mode: null  # Disable structured output for streaming
+    model_api_parameters:
+      temperature: 0.7
+      max_tokens: 2000
+      top_p: 0.9
+
+  # Alternative chat model
+  - id: phi-chat
+    description: "Microsoft Phi-2 for detailed responses"
+    provider: universal
+    model: microsoft/phi-2
+    instructor_mode: null
+    model_api_parameters:
+      temperature: 0.8
+      max_tokens: 1500
+
+  # Embeddings model for RAG
+  - id: embeddings
+    description: "Sentence embeddings for RAG"
+    provider: universal
+    model: sentence-transformers/all-MiniLM-L6-v2
+
+  # Image generation model (optional)
+  - id: image-gen
+    description: "Stable Diffusion XL for image generation"
+    provider: universal
+    model: stabilityai/stable-diffusion-xl-base-1.0
+
+# System prompts for chat
+prompts:
+  - role: system
+    content: |
+      You are a helpful AI assistant powered by the LlamaFarm Universal Runtime.
+      You provide clear, accurate, and concise responses.
+      When asked about yourself, explain that you use open-source models via HuggingFace.
+
+# RAG configuration (optional)
+rag:
+  # Main database for document storage
+  databases:
+    - id: main_db
+      type: vector
+      provider: chromadb
+      config:
+        persist_directory: .llamafarm/projects/default/streaming-demo/data/chromadb
+        collection_name: documents
+      embedding_model_ref: embeddings
+
+  # Data processing strategy
+  data_processing_strategies:
+    - id: pdf_ingest
+      name: "PDF Document Processing"
+      description: "Process PDF documents with chunking and embeddings"
+      parsers:
+        - type: pdf_text
+          config:
+            chunk_size: 512
+            chunk_overlap: 50
+      embedding:
+        model_ref: embeddings
+        batch_size: 32
+      storage:
+        - database_ref: main_db
+
+# Datasets (optional - define your data sources)
+datasets: []
+
+# Usage Examples:
+#
+# 1. Start the Universal Runtime:
+#    cd runtimes/universal
+#    uv run uvicorn server:app --host 0.0.0.0 --port 11540 --reload
+#
+# 2. Initialize this project:
+#    lf init my-streaming-project
+#    cp config/templates/universal-streaming.yaml llamafarm.yaml
+#
+# 3. Check health:
+#    lf rag health
+#    # Output should show: ✓ universal: healthy (reachable on mps/cuda/cpu)
+#
+# 4. Chat with streaming:
+#    lf chat --stream "Tell me a story about a robot"
+#
+# 5. Use in Python:
+#    from agents.llamagent.clients.openai import LFAgentClientOpenAI
+#    from config.datamodel import Model, Provider
+#
+#    model_config = Model(
+#        id="chat",
+#        provider=Provider.universal,
+#        model="Qwen/Qwen3-0.6B"
+#    )
+#
+#    client = LFAgentClientOpenAI(model_config=model_config)
+#
+#    # Stream responses
+#    for chunk in client.chat_completion_stream(
+#        messages=[{"role": "user", "content": "Count to 10"}]
+#    ):
+#        if chunk.choices and chunk.choices[0].delta.content:
+#            print(chunk.choices[0].delta.content, end="", flush=True)
+#
+# For more information:
+# - runtimes/universal/SSE_STREAMING.md - Streaming documentation
+# - runtimes/universal/UNIVERSAL_PROVIDER_USAGE.md - Provider guide
+# - runtimes/universal/README.md - Universal Runtime overview

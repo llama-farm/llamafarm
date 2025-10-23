@@ -8,9 +8,9 @@ namespace: default
 runtime:
   models:
   - name: default
-    description: "Default Ollama model"
-    provider: ollama
-    model: gemma3:1b
+    description: "Default Universal model"
+    provider: universal
+    model: google/gemma-3-1b-it
     default: true
     prompt_format: unstructured
     # instructor_mode: json
@@ -171,10 +171,10 @@ rag:
       # Available embedding strategies
       embedding_strategies:
         - name: "default_embeddings"
-          type: "OllamaEmbedder"
+          type: "UniversalEmbedder"
           priority: 0
           config:
-            model: "nomic-embed-text"
+            model: nomic-ai/nomic-embed-text-v2-moe
             dimension: 768
             batch_size: 16
             timeout: 60

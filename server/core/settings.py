@@ -47,5 +47,10 @@ class Settings(BaseSettings, env_file=".env"):
     lemonade_host: str = "127.0.0.1"
     lemonade_api_key: str = "lemonade"
 
+    # Universal Runtime Configuration
+    universal_port: int = 11540
+    universal_host: str = "127.0.0.1"
+    universal_api_key: str = "universal"
+
 
 settings = Settings()
