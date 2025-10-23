@@ -130,9 +130,18 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		StartLocal:      startServerContainerForService,
 		WaitReady:       waitForServerReadyForService,
 	},
+	"chromadb": {
+		Name:            "chromadb",
+		Dependencies:    []string{}, // No dependencies - can start early
+		CanStartLocally: true,
+		DefaultTimeout:  30 * time.Second,
+		CheckHealth:     checkChromaDBHealthForService,
+		StartLocal:      startChromaDBContainerForService,
+		WaitReady:       waitForChromaDBReadyForService,
+	},
 	"rag": {
 		Name:            "rag",
-		Dependencies:    []string{"server"}, // Depends on server
+		Dependencies:    []string{"server", "chromadb"}, // Depends on server and chromadb
 		CanStartLocally: true,
 		DefaultTimeout:  30 * time.Second,
 		CheckHealth:     checkRAGHealthForService,
@@ -174,8 +183,33 @@ func checkRAGHealthForService(serverURL string) (*Component, error) {
 	return ragComponent, nil
 }
 
+func checkChromaDBHealthForService(serverURL string) (*Component, error) {
+	// Check ChromaDB heartbeat endpoint directly
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://localhost:8001/api/v1/heartbeat")
+	if err != nil {
+		return nil, fmt.Errorf("chromadb not reachable: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("chromadb returned status %d", resp.StatusCode)
+	}
+
+	return &Component{
+		Name:    "chromadb",
+		Status:  "healthy",
+		Message: "ChromaDB server is running",
+	}, nil
+}
+
 func startServerContainerForService(serverURL string) error {
 	return startLocalServerViaDocker(serverURL)
+}
+
+func startChromaDBContainerForService(serverURL string) error {
+	orchestrator := NewContainerOrchestrator()
+	return orchestrator.startChromaDBContainer()
 }
 
 func startRAGContainerForService(serverURL string) error {
@@ -197,6 +231,11 @@ func waitForServerReadyForService(serverURL string, timeout time.Duration) error
 func waitForRAGReadyForService(serverURL string, timeout time.Duration) error {
 	orchestrator := NewContainerOrchestrator()
 	return orchestrator.waitForRAGReadiness(timeout, serverURL)
+}
+
+func waitForChromaDBReadyForService(serverURL string, timeout time.Duration) error {
+	orchestrator := NewContainerOrchestrator()
+	return orchestrator.waitForChromaDBReadiness(timeout)
 }
 
 // ServiceOrchestrator Implementation
@@ -490,14 +529,15 @@ func (so *ServiceOrchestrator) getServiceTimeout(serviceName string, serviceDef 
 
 // Command-Specific Configuration Factories
 
-// StartCommandConfig creates config for lf start - Server required, RAG optional (background)
+// StartCommandConfig creates config for lf start - Server required, ChromaDB and RAG optional (background)
 func StartCommandConfig(serverURL string) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true, // Show progress for lf start so users see what's happening
 		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional, // Start async, don't wait
+			"server":   ServiceRequired,
+			"chromadb": ServiceRequired, // ChromaDB needed for RAG
+			"rag":      ServiceOptional, // Start async, don't wait
 		},
 		DefaultTimeout: 45 * time.Second,
 	}
