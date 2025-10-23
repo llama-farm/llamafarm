@@ -193,7 +193,7 @@ class QueryResult(BaseModel):
     content: str
     score: float
     metadata: dict[str, Any]
-    chunk_id: str = None
+    chunk_id: str | None = None
     document_id: str | None = None
 
 

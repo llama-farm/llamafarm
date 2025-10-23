@@ -54,7 +54,7 @@ class ChatOrchestratorAgent(LFAgent):
         self._project_dir = project_dir
         self._session_id = None
         self._persist_enabled = False
-        
+
         # Get the model config - if model_name is None, get_model returns the default
         model_config = ModelService.get_model(project_config, model_name)
         # Store the model name (the config name), not the model string

@@ -25,6 +25,8 @@ from pydantic.fields import FieldInfo
 
 from services.project_service import ProjectService
 
+repo_root = Path(__file__).parent.parent.parent.parent
+
 logger = logging.getLogger(__name__)
 
 

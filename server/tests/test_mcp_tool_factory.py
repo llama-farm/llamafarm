@@ -5,9 +5,9 @@ Unit tests for MCPToolFactory
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from config.datamodel import LlamaFarmConfig, Mcp, Server, Transport
-from services.mcp_service import MCPService, ToolSchema
+
+from services.mcp_service import MCPService
 from tools.mcp_tool.tool.mcp_tool_factory import (
     MCPToolFactory,
 )
