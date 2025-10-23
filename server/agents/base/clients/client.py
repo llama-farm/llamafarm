@@ -3,8 +3,8 @@ from collections.abc import AsyncGenerator
 
 from config.datamodel import Model, Prompt
 
-from agents.llamagent.history import LFAgentChatMessage
-from agents.llamagent.types import StreamEvent, ToolDefinition
+from agents.base.history import LFAgentChatMessage
+from agents.base.types import StreamEvent, ToolDefinition
 
 
 class LFAgentClient(ABC):

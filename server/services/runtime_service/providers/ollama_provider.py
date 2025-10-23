@@ -4,8 +4,8 @@ import time
 
 import requests
 
-from agents.llamagent.clients.client import LFAgentClient
-from agents.llamagent.clients.ollama import LFAgentClientOllama
+from agents.base.clients.client import LFAgentClient
+from agents.base.clients.ollama import LFAgentClientOllama
 from core.settings import settings
 
 from .base import RuntimeProvider

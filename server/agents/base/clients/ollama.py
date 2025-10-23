@@ -4,8 +4,8 @@ from collections.abc import AsyncGenerator
 from config.datamodel import Prompt
 from ollama import AsyncClient, Message
 
-from agents.llamagent.history import LFAgentChatMessage
-from agents.llamagent.types import StreamEvent, ToolCallRequest, ToolDefinition
+from agents.base.history import LFAgentChatMessage
+from agents.base.types import StreamEvent, ToolCallRequest, ToolDefinition
 from core.logging import FastAPIStructLogger
 
 from .client import LFAgentClient

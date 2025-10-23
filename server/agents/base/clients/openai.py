@@ -5,8 +5,8 @@ from config.datamodel import Prompt
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from agents.llamagent.history import LFAgentChatMessage
-from agents.llamagent.types import StreamEvent, ToolCallRequest, ToolDefinition
+from agents.base.history import LFAgentChatMessage
+from agents.base.types import StreamEvent, ToolCallRequest, ToolDefinition
 from core.logging import FastAPIStructLogger
 
 from .client import LFAgentClient

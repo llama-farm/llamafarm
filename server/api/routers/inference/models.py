@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
-from agents.llamagent.history import LFAgentChatMessage
+from agents.base.history import LFAgentChatMessage
 from pydantic import BaseModel, Field
 
 

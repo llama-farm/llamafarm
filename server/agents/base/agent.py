@@ -2,8 +2,8 @@ from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agents.llamagent.clients.client import LFAgentClient
-from agents.llamagent.types import StreamEvent, ToolDefinition
+from agents.base.clients.client import LFAgentClient
+from agents.base.types import StreamEvent, ToolDefinition
 from core.logging import FastAPIStructLogger
 
 from .context_provider import LFAgentContextProvider

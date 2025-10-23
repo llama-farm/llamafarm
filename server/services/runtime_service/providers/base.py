@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from config.datamodel import LlamaFarmConfig, Model
 
-from agents.llamagent.clients.client import LFAgentClient
+from agents.base.clients.client import LFAgentClient
 from services.model_service import ModelService
 
 from .health import HealthCheckResult

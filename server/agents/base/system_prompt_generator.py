@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
-from agents.llamagent.context_provider import LFAgentContextProvider
-from agents.llamagent.history import LFAgentChatMessage
+from agents.base.context_provider import LFAgentContextProvider
+from agents.base.history import LFAgentChatMessage
 
 
 class LFAgentPrompt(BaseModel):

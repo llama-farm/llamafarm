@@ -8,8 +8,8 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
 from agents.chat_orchestrator import ChatOrchestratorAgent
-from agents.llamagent.agent import LFAgent
-from agents.llamagent.history import LFAgentChatMessage
+from agents.base.agent import LFAgent
+from agents.base.history import LFAgentChatMessage
 from context_providers.rag_context_provider import (
     ChunkItem,
     RAGContextProvider,

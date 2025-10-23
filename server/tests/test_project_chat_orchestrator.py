@@ -1,6 +1,6 @@
 import tempfile
 
-from agents.llamagent.history import LFAgentChatMessage
+from agents.base.history import LFAgentChatMessage
 import pytest
 
 from config.datamodel import (
@@ -101,7 +101,7 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     config = make_config(PromptFormat.unstructured, model="tinyllama:latest")
 
     # Intercept LFAgent.run_async to capture messages (no network calls)
-    from agents.llamagent.agent import LFAgent
+    from agents.base.agent import LFAgent
 
     async def fake_run_async(self, *, user_input=None):
         # LFAgent.run_async adds user_input to history if provided

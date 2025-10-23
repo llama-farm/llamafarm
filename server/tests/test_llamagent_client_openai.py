@@ -13,9 +13,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.llamagent.clients.openai import LFAgentClientOpenAI
-from agents.llamagent.history import LFAgentChatMessage
-from agents.llamagent.types import ToolDefinition
+from agents.base.clients.openai import LFAgentClientOpenAI
+from agents.base.history import LFAgentChatMessage
+from agents.base.types import ToolDefinition
 from config.datamodel import Model, Prompt, Provider
 
 
@@ -123,7 +123,7 @@ class TestLFAgentClientOpenAI:
         assert result["function"]["parameters"] == tool.parameters
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_chat_success(self, mock_openai_class, client):
         """Test basic chat without tools."""
         # Mock streaming response
@@ -153,7 +153,7 @@ class TestLFAgentClientOpenAI:
         assert response == "Hello world"
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_stream_chat(self, mock_openai_class, client):
         """Test streaming chat without tools."""
         mock_chunk1 = MagicMock()
@@ -186,7 +186,7 @@ class TestLFAgentClientOpenAI:
         assert chunks[1] == " world"
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_stream_chat_with_tools_no_tool_call(self, mock_openai_class, client):
         """Test streaming chat with tools available but no tool call."""
         mock_chunk = MagicMock()
@@ -222,7 +222,7 @@ class TestLFAgentClientOpenAI:
         assert events[0].content == "Response"
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_stream_chat_with_tools_tool_call(self, mock_openai_class, client):
         """Test streaming chat with tool call."""
         # Create mock tool call delta chunks
@@ -284,7 +284,7 @@ class TestLFAgentClientOpenAI:
         assert events[0].tool_call.arguments == {"arg1": "value1"}
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_stream_chat_with_tools_mixed_content_and_tool_call(
         self, mock_openai_class, client
     ):
@@ -340,7 +340,7 @@ class TestLFAgentClientOpenAI:
         assert events[1].tool_call.name == "search"
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_stream_chat_with_tools_invalid_json_arguments(
         self, mock_openai_class, client
     ):
@@ -383,7 +383,7 @@ class TestLFAgentClientOpenAI:
         assert len(events) == 0
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_stream_chat_with_multiple_tools(self, mock_openai_class, client):
         """Test streaming with multiple tool calls."""
         # First tool call
@@ -446,7 +446,7 @@ class TestLFAgentClientOpenAI:
         assert events[1].tool_call.name == "tool2"
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.clients.openai.AsyncOpenAI")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
     async def test_stream_chat_empty_choices(self, mock_openai_class, client):
         """Test handling of chunks with empty choices."""
         mock_chunk = MagicMock()

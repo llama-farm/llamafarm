@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agents.llamagent.agent import LFAgent, LFAgentConfig
-from agents.llamagent.context_provider import LFAgentContextProvider
-from agents.llamagent.history import LFAgentChatMessage, LFAgentHistory
-from agents.llamagent.system_prompt_generator import LFAgentSystemPromptGenerator
-from agents.llamagent.types import (
+from agents.base.agent import LFAgent, LFAgentConfig
+from agents.base.context_provider import LFAgentContextProvider
+from agents.base.history import LFAgentChatMessage, LFAgentHistory
+from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
+from agents.base.types import (
     StreamEvent,
     ToolCallRequest,
     ToolDefinition,
@@ -214,7 +214,7 @@ class TestLFAgent:
     @pytest.fixture
     def mock_client(self):
         """Create mock client that inherits from LFAgentClient."""
-        from agents.llamagent.clients.client import LFAgentClient
+        from agents.base.clients.client import LFAgentClient
         from config.datamodel import Model, Provider
 
         # Create a concrete mock that inherits from LFAgentClient
@@ -231,7 +231,7 @@ class TestLFAgent:
 
             @staticmethod
             def prompt_to_message(prompt):
-                from agents.llamagent.history import LFAgentChatMessage
+                from agents.base.history import LFAgentChatMessage
 
                 return LFAgentChatMessage(role="system", content=prompt.content)
 

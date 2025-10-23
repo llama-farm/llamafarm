@@ -4,8 +4,8 @@ import time
 
 import requests
 
-from agents.llamagent.clients.client import LFAgentClient
-from agents.llamagent.clients.openai import LFAgentClientOpenAI
+from agents.base.clients.client import LFAgentClient
+from agents.base.clients.openai import LFAgentClientOpenAI
 
 from .base import RuntimeProvider
 from .health import HealthCheckResult

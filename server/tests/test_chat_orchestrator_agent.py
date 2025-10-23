@@ -20,8 +20,8 @@ from agents.chat_orchestrator import (
     ChatOrchestratorAgent,
     ChatOrchestratorAgentFactory,
 )
-from agents.llamagent.history import LFAgentChatMessage
-from agents.llamagent.types import StreamEvent, ToolCallRequest
+from agents.base.history import LFAgentChatMessage
+from agents.base.types import StreamEvent, ToolCallRequest
 from config.datamodel import (
     LlamaFarmConfig,
     Mcp,
@@ -130,7 +130,7 @@ class TestChatOrchestratorAgent:
             assert agent._model_string == "llama3.2:latest"
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.agent.LFAgent.run_async")
+    @patch("agents.base.agent.LFAgent.run_async")
     async def test_run_async_simple_response(self, mock_run_async, base_config):
         """Test simple chat without tool calling."""
         mock_run_async.return_value = "Hello there!"
@@ -149,7 +149,7 @@ class TestChatOrchestratorAgent:
             # is bypassed in this test
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.agent.LFAgent.run_async")
+    @patch("agents.base.agent.LFAgent.run_async")
     async def test_run_async_with_tool_call(self, mock_run_async, base_config):
         """Test chat with tool call."""
         # First call: LLM requests a tool
@@ -185,7 +185,7 @@ class TestChatOrchestratorAgent:
             assert mock_tool_instance.arun.called
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.agent.LFAgent.run_async")
+    @patch("agents.base.agent.LFAgent.run_async")
     async def test_run_async_max_iterations(self, mock_run_async, base_config):
         """Test that max iterations is enforced."""
         # Keep requesting tools forever
@@ -216,7 +216,7 @@ class TestChatOrchestratorAgent:
             assert "maximum number of tool calls" in response
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.agent.LFAgent.run_async")
+    @patch("agents.base.agent.LFAgent.run_async")
     async def test_run_async_tool_not_found(self, mock_run_async, base_config):
         """Test handling of non-existent tool."""
         mock_run_async.side_effect = [
@@ -239,7 +239,7 @@ class TestChatOrchestratorAgent:
             assert "apologize" in response.lower()
 
     @pytest.mark.asyncio
-    @patch("agents.llamagent.agent.LFAgent.run_async")
+    @patch("agents.base.agent.LFAgent.run_async")
     async def test_run_async_tool_execution_error(self, mock_run_async, base_config):
         """Test handling of tool execution errors."""
         mock_run_async.side_effect = [
