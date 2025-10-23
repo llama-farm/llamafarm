@@ -30,12 +30,14 @@ class LFAgentClient(ABC):
         return self._model_name
 
     @staticmethod
-    @abstractmethod
-    def prompt_to_message(prompt: Prompt) -> LFAgentChatMessage:
+    def prompt_to_message(prompt: Prompt) -> list[LFAgentChatMessage]:
         """
-        Converts a llamafarm Prompt to a LFAgentChatMessage.
+        Converts a llamafarm Prompt set into a list of LFAgentChatMessages.
         """
-        pass
+        return [
+            LFAgentChatMessage(role=message.role, content=message.content)  # type: ignore
+            for message in prompt.messages
+        ]
 
     @abstractmethod
     async def chat(self, *, messages: list[LFAgentChatMessage]) -> str:

@@ -125,10 +125,6 @@ class LFAgentClientOpenAI(LFAgentClient):
                             error=str(e),
                         )
 
-    @staticmethod
-    def prompt_to_message(prompt: Prompt) -> LFAgentChatMessage:
-        return LFAgentChatMessage(role="system", content=prompt.content)
-
     def _tool_to_openai_format(self, tool: ToolDefinition) -> dict:
         """Convert ToolDefinition to OpenAI function calling format."""
         return {

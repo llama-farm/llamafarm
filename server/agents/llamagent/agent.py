@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 
-from atomic_agents import AtomicAgent
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.llamagent.clients.client import LFAgentClient
@@ -101,6 +100,10 @@ class LFAgent:
 
     def remove_context_provider(self, title: str):
         self._system_prompt_generator.context_providers.pop(title, None)
+
+    def reset_history(self):
+        """Reset the agent's conversation history."""
+        self.history.history.clear()
 
     def _prepare_messages(self) -> list[LFAgentChatMessage]:
         messages: list[LFAgentChatMessage] = []

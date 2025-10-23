@@ -30,7 +30,7 @@ mcp = FastApiMCP(
     # describe_full_response_schema=True,
 )
 
-mcp.mount(
+mcp.mount_http(
     mount_path="/mcp",
 )
 

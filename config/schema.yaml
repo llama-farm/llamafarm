@@ -41,6 +41,7 @@ properties:
           items:
             type: object
             required:
+              - role
               - content
             properties:
               role:

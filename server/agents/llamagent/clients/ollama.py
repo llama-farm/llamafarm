@@ -130,10 +130,6 @@ class LFAgentClientOllama(LFAgentClient):
                 # Not valid JSON, treat as content
                 yield StreamEvent(type="content", content=buffer)
 
-    @staticmethod
-    def prompt_to_message(prompt: Prompt) -> LFAgentChatMessage:
-        return LFAgentChatMessage(role="system", content=prompt.content)
-
     def _create_tool_instruction(self, tools: list[ToolDefinition]) -> str:
         """Create system prompt instructions for JSON-based tool calling."""
         tool_schemas = []

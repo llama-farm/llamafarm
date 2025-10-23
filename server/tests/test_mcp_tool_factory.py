@@ -2,15 +2,13 @@
 Unit tests for MCPToolFactory
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from config.datamodel import LlamaFarmConfig, Mcp, Server, Transport
-from services.mcp_service import MCPService
+from services.mcp_service import MCPService, ToolSchema
 from tools.mcp_tool.tool.mcp_tool_factory import (
-    DynamicMCPTool,
-    MCPToolInput,
     MCPToolFactory,
 )
 
@@ -56,98 +54,81 @@ class TestMCPToolFactory:
         service = MCPService(mock_config)
         factory = MCPToolFactory(service)
 
-        mock_tools = [
-            {
-                "name": "tool1",
-                "description": "First tool",
-                "inputSchema": {"type": "object", "properties": {}},
-            },
-            {
-                "name": "tool2",
-                "description": "Second tool",
-                "inputSchema": {"type": "object", "properties": {}},
-            },
-        ]
+        # Create mock tool classes
+        mock_tool1 = MagicMock()
+        mock_tool1.__name__ = "Tool1"
+        mock_tool1.mcp_tool_name = "tool1"
 
-        with patch.object(service, "list_tools", return_value=mock_tools):
-            tools = await factory.create_tools_for_server("test-server")
-            assert len(tools) == 2
-            assert all(isinstance(tool, DynamicMCPTool) for tool in tools)
+        mock_tool2 = MagicMock()
+        mock_tool2.__name__ = "Tool2"
+        mock_tool2.mcp_tool_name = "tool2"
+
+        # Mock the persistent session to avoid actual network connection
+        mock_session = AsyncMock()
+
+        # Mock fetch_mcp_tools_async from atomic_agents
+        with patch.object(
+            service, "get_or_create_persistent_session", return_value=mock_session
+        ):
+            with patch(
+                "tools.mcp_tool.tool.mcp_tool_factory.fetch_mcp_tools_async",
+                return_value=[mock_tool1, mock_tool2],
+            ):
+                tools = await factory.create_tools_for_server("test-server")
+                assert len(tools) == 2
+                # Tools are now dynamic AtomicAgent tool classes
+                assert all(hasattr(tool, "mcp_tool_name") for tool in tools)
 
     async def test_create_all_tools(self, mock_config):
         """Test creating tools for all servers."""
         service = MCPService(mock_config)
         factory = MCPToolFactory(service)
 
-        mock_tools = [
-            {
-                "name": "global_tool",
-                "description": "A tool",
-                "inputSchema": {"type": "object", "properties": {}},
-            }
-        ]
+        # Create mock tool class
+        mock_tool = MagicMock()
+        mock_tool.__name__ = "GlobalTool"
+        mock_tool.mcp_tool_name = "global_tool"
 
-        with patch.object(service, "list_tools", return_value=mock_tools):
-            tools = await factory.create_all_tools()
-            assert len(tools) >= 1
+        # Mock the persistent session to avoid actual network connection
+        mock_session = AsyncMock()
 
-    async def test_dynamic_tool_execution_success(self, mock_config):
-        """Test dynamic tool execution with success."""
-        service = MCPService(mock_config)
-
-        mock_tool_schema = MagicMock()
-        mock_tool_schema.name = "test_tool"
-
-        tool = DynamicMCPTool(service, "test-server", mock_tool_schema)
-
-        with patch.object(service, "call_tool", return_value={"result": "success"}):
-            input_data = MCPToolInput(arguments={"arg1": "value1"})
-            output = await tool.run_async(input_data)
-
-            assert output.success is True
-            assert output.result == {"result": "success"}
-            assert output.error is None
-
-    async def test_dynamic_tool_execution_error(self, mock_config):
-        """Test dynamic tool execution with error."""
-        service = MCPService(mock_config)
-
-        mock_tool_schema = MagicMock()
-        mock_tool_schema.name = "failing_tool"
-
-        tool = DynamicMCPTool(service, "test-server", mock_tool_schema)
-
+        # Mock fetch_mcp_tools_async from atomic_agents
         with patch.object(
-            service, "call_tool", side_effect=Exception("Tool execution failed")
+            service, "get_or_create_persistent_session", return_value=mock_session
         ):
-            input_data = MCPToolInput(arguments={"arg1": "value1"})
-            output = await tool.run_async(input_data)
-
-            assert output.success is False
-            assert output.error == "Tool execution failed"
-            assert output.result is None
+            with patch(
+                "tools.mcp_tool.tool.mcp_tool_factory.fetch_mcp_tools_async",
+                return_value=[mock_tool],
+            ):
+                tools = await factory.create_all_tools()
+                assert len(tools) >= 1
 
     async def test_create_tools_invalid_schema(self, mock_config):
-        """Test that invalid schemas are skipped gracefully."""
+        """Test that invalid schemas are handled gracefully."""
         service = MCPService(mock_config)
         factory = MCPToolFactory(service)
 
-        # Mock tools with one that will cause an exception during tool creation
-        mock_tools = [
-            {
-                "name": "valid_tool",
-                "description": "Valid tool",
-                "inputSchema": {"type": "object", "properties": {}},
-            },
-            {
-                # This will be valid for ToolSchema but we'll mock an exception
-                "name": "problem_tool",
-                "description": "Tool that causes issues",
-            },
-        ]
+        # Create mock tool classes
+        mock_tool1 = MagicMock()
+        mock_tool1.__name__ = "ValidTool"
+        mock_tool1.mcp_tool_name = "valid_tool"
 
-        with patch.object(service, "list_tools", return_value=mock_tools):
-            # Both tools should be created successfully since ToolSchema is flexible
-            tools = await factory.create_tools_for_server("test-server")
-            # We get 2 tools since both schemas are actually valid with optional fields
-            assert len(tools) == 2
+        mock_tool2 = MagicMock()
+        mock_tool2.__name__ = "ProblemTool"
+        mock_tool2.mcp_tool_name = "problem_tool"
+
+        # Mock the persistent session to avoid actual network connection
+        mock_session = AsyncMock()
+
+        # Mock fetch_mcp_tools_async - atomic_agents handles schema validation
+        # and will return valid tools even if some have issues
+        with patch.object(
+            service, "get_or_create_persistent_session", return_value=mock_session
+        ):
+            with patch(
+                "tools.mcp_tool.tool.mcp_tool_factory.fetch_mcp_tools_async",
+                return_value=[mock_tool1, mock_tool2],
+            ):
+                tools = await factory.create_tools_for_server("test-server")
+                # Both tools should be returned since atomic_agents handles validation
+                assert len(tools) == 2

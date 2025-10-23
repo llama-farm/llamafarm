@@ -54,18 +54,21 @@ class ChatOrchestratorAgent(LFAgent):
         self._project_dir = project_dir
         self._session_id = None
         self._persist_enabled = False
-        self.model_name = (
-            model_name or ModelService.get_model(project_config, model_name).name
-        )
+        
+        # Get the model config - if model_name is None, get_model returns the default
+        model_config = ModelService.get_model(project_config, model_name)
+        # Store the model name (the config name), not the model string
+        # This allows lookup by name in the config
+        self.model_name = model_config.name
+        # Store the actual model string for reference (e.g., "llama3.2:latest")
+        self._model_string = model_config.model
 
         history = self._get_history(project_config)
-
-        model_config = ModelService.get_model(project_config, self.model_name)
         provider = RuntimeService.get_provider(model_config)
         client = provider.get_client()
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
-            prompts=self._get_prompts_for_model(self.model_name)
+            prompts=self._get_prompts_for_model(model_config.name)
         )
         config = LFAgentConfig(
             history=history,
@@ -455,9 +458,19 @@ class ChatOrchestratorAgent(LFAgent):
         provider = RuntimeService.get_provider(model_config)
         Client = provider.get_client().__class__
 
+        if model_config.prompts:
+            prompts = [
+                prompt
+                for prompt in (self._project_config.prompts or [])
+                if getattr(prompt, "name", None) in (model_config.prompts or [])
+            ]
+        else:
+            prompts = self._project_config.prompts or []
+
         return [
-            Client.prompt_to_message(prompt)
-            for prompt in self._project_config.prompts or []
+            message
+            for prompt in prompts
+            for message in Client.prompt_to_message(prompt)
         ]
 
     @property

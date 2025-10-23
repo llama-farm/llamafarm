@@ -1,5 +1,8 @@
 import tempfile
 
+from agents.llamagent.history import LFAgentChatMessage
+import pytest
+
 from config.datamodel import (
     LlamaFarmConfig,
     Message,
@@ -11,10 +14,9 @@ from config.datamodel import (
     Version,
 )
 
-from agents.project_chat_orchestrator import (
-    ProjectChatOrchestratorAgent,
-    ProjectChatOrchestratorAgentFactory,
-    ProjectChatOrchestratorAgentInputSchema,
+from agents.chat_orchestrator import (
+    ChatOrchestratorAgent,
+    ChatOrchestratorAgentFactory,
 )
 from context_providers.rag_context_provider import (
     ChunkItem,
@@ -47,9 +49,13 @@ def make_config(
         name="demo",
         namespace="default",
         runtime=Runtime(
+            default_model="default",
             models=[
                 Model(
                     name="default",
+                    description=None,
+                    provider_config=None,
+                    prompts=None,
                     provider=Provider.ollama,
                     model=model,
                     base_url="http://localhost:11434/v1",
@@ -58,7 +64,7 @@ def make_config(
                     instructor_mode="tools",
                     model_api_parameters={},
                 )
-            ]
+            ],
         ),
         prompts=[
             Prompt(
@@ -70,68 +76,52 @@ def make_config(
         ],
         rag=None,  # Don't set RAG if not needed, avoids validation errors
         datasets=[],
+        mcp=None,
     )
 
 
-def test_factory_returns_unstructured_agent(monkeypatch, dummy_client):
+@pytest.mark.asyncio
+async def test_factory_returns_unstructured_agent(monkeypatch, dummy_client):
     config = make_config(PromptFormat.unstructured)
 
     with tempfile.TemporaryDirectory() as project_dir:
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
-    assert isinstance(agent, ProjectChatOrchestratorAgent)
-    assert hasattr(agent, "client")
-
-
-def test_factory_returns_structured_agent(monkeypatch, dummy_client):
-    config = make_config(PromptFormat.structured, model="qwen3:8b")
-
-    class DummyAgent(ProjectChatOrchestratorAgent):
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-    monkeypatch.setattr(
-        "agents.project_chat_orchestrator.ProjectChatOrchestratorAgent",
-        DummyAgent,
-    )
-
-    with tempfile.TemporaryDirectory() as project_dir:
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
-    assert isinstance(agent, DummyAgent)
-
-
-def test_structured_agent_falls_back_for_unsupported_model(monkeypatch, dummy_client):
-    config = make_config(PromptFormat.structured, model="tinyllama:latest")
-
-    with tempfile.TemporaryDirectory() as project_dir:
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
-    assert isinstance(agent, ProjectChatOrchestratorAgent)
+        agent = await ChatOrchestratorAgentFactory.create_agent(
+            project_config=config, project_dir=project_dir
+        )
+    assert isinstance(agent, ChatOrchestratorAgent)
+    # Client is now private (_client)
+    assert hasattr(agent, "_client")
+    assert agent.model_name == "default"
 
 
 @pytest.mark.asyncio
 async def test_simple_rag_agent_injects_context(monkeypatch):
-    import json
-
     captured = {}
 
     config = make_config(PromptFormat.unstructured, model="tinyllama:latest")
 
     # Intercept LFAgent.run_async to capture messages (no network calls)
-    from agents.agent import LFAgent
+    from agents.llamagent.agent import LFAgent
 
-    async def fake_run_async(self, user_input=None):
+    async def fake_run_async(self, *, user_input=None):
+        # LFAgent.run_async adds user_input to history if provided
         if user_input:
-            self.history.initialize_turn()
-            self.current_user_input = user_input
-            self.history.add_message("user", user_input)
-        self._prepare_messages()
-        captured["messages"] = self.messages
-        return self.output_schema(chat_message="ok")
+            self.history.add_message(user_input)
+        # Capture messages after preparation
+        messages = self._prepare_messages()
+        captured["messages"] = messages
+        # Return a simple string response (not a schema object)
+        return "ok"
 
     monkeypatch.setattr(LFAgent, "run_async", fake_run_async)
 
     with tempfile.TemporaryDirectory() as project_dir:
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(config, project_dir)
-    assert isinstance(agent, ProjectChatOrchestratorAgent)
+        agent = await ChatOrchestratorAgentFactory.create_agent(
+            project_config=config,
+            project_dir=project_dir,
+            model_name="default",
+        )
+    assert isinstance(agent, ChatOrchestratorAgent)
 
     provider = RAGContextProvider(title="Context")
     provider.chunks.append(
@@ -140,34 +130,21 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     agent.register_context_provider("project_chat_context", provider)
 
     await agent.run_async(
-        ProjectChatOrchestratorAgentInputSchema(chat_message="Hello there")
+        user_input=LFAgentChatMessage(role="user", content="Hello there")
     )
 
     messages = captured.get("messages", [])
     assert messages
 
-    def norm_content(val):
-        if hasattr(val, "chat_message"):
-            return val.chat_message
-        if isinstance(val, dict) and "chat_message" in val:
-            return val.get("chat_message")
-        if isinstance(val, str):
-            try:
-                parsed = json.loads(val)
-                if isinstance(parsed, dict) and "chat_message" in parsed:
-                    return parsed.get("chat_message")
-            except Exception:
-                pass
-        return val
-
-    assert messages[0]["role"] == "system"
-    assert "You are a helpful assistant." in norm_content(messages[0]["content"])
+    # Messages are now LFAgentChatMessage objects
+    assert len(messages) >= 2
+    # First message should be system prompt
+    assert messages[0].role == "system"
+    assert "You are a helpful assistant." in messages[0].content
+    # Check that RAG context was injected
     assert any(
-        "Important note" in norm_content(msg["content"])
-        for msg in messages
-        if msg["role"] == "system"
+        "Important note" in msg.content for msg in messages if msg.role == "system"
     )
-    assert (
-        messages[-1]["role"] == "user"
-        and norm_content(messages[-1]["content"]) == "Hello there"
-    )
+    # Last message should be the user input
+    assert messages[-1].role == "user"
+    assert messages[-1].content == "Hello there"
