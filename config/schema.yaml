@@ -162,7 +162,7 @@ properties:
               description: MCP server identifier
             transport:
               type: string
-              enum: ["stdio", "http"]
+              enum: ["stdio", "http", "sse"]
               description: Connection transport to the MCP server
             # stdio transport
             command:

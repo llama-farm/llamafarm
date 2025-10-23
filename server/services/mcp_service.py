@@ -9,6 +9,7 @@ from config.datamodel import LlamaFarmConfig, Server, Transport
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamablehttp_client
 from pydantic import BaseModel
 
 from core.logging import FastAPIStructLogger
@@ -182,13 +183,13 @@ class MCPService:
                             # Wait for shutdown signal
                             await shutdown_event.wait()
 
-                elif server_config.transport == Transport.http:
+                elif server_config.transport == Transport.sse:
                     if not server_config.base_url:
                         raise ValueError(
-                            f"HTTP server '{server_config.name}' has no base_url"
+                            f"SSE server '{server_config.name}' has no base_url"
                         )
 
-                    # Keep context alive in this task
+                    # Keep context alive in this task - SSE transport
                     async with sse_client(server_config.base_url) as (read, write):
                         async with ClientSession(read, write) as session:
                             await session.initialize()
@@ -197,6 +198,28 @@ class MCPService:
 
                             # Wait for shutdown signal
                             await shutdown_event.wait()
+
+                elif server_config.transport == Transport.http:
+                    if not server_config.base_url:
+                        raise ValueError(
+                            f"HTTP server '{server_config.name}' has no base_url"
+                        )
+
+                    # Keep context alive in this task - Streamable HTTP transport
+                    # Note: streamablehttp_client returns 3 values (read, write, get_session_id)
+                    async with streamablehttp_client(server_config.base_url) as (
+                        read,
+                        write,
+                        _get_session_id,  # noqa: F841
+                    ):
+                        async with ClientSession(read, write) as session:
+                            await session.initialize()
+                            session_container["session"] = session
+                            session_ready.set()
+
+                            # Wait for shutdown signal
+                            await shutdown_event.wait()
+
                 else:
                     raise ValueError(
                         f"Unsupported transport: {server_config.transport}"
@@ -327,16 +350,33 @@ class MCPService:
                     f"HTTP server '{server_config.name}' has no base_url configured"
                 )
 
-            # Use SSE client for HTTP transport
-            async with (
-                sse_client(server_config.base_url) as (
-                    read_stream,
-                    write_stream,
-                ),
-                ClientSession(read_stream, write_stream) as session,
+            # Use streamable HTTP client for HTTP transport
+            # Note: streamablehttp_client returns 3 values (read, write, get_session_id)
+            async with streamablehttp_client(server_config.base_url) as (
+                read_stream,
+                write_stream,
+                _get_session_id,  # noqa: F841
             ):
-                await session.initialize()
-                yield session
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    yield session
+
+        elif server_config.transport == Transport.sse:
+            if not server_config.base_url:
+                raise ValueError(
+                    f"SSE server '{server_config.name}' has no base_url configured"
+                )
+
+            # Use SSE client for SSE transport
+            # Note: sse_client returns 2 values (read, write)
+            async with sse_client(server_config.base_url) as (
+                read_stream,
+                write_stream,
+            ):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    yield session
+
         else:
             raise ValueError(f"Unsupported transport: {server_config.transport}")
 

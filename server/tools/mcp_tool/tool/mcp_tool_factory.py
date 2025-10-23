@@ -34,6 +34,8 @@ class MCPToolFactory:
             return MCPTransportType.HTTP_STREAM
         elif server.transport == Transport.stdio:
             return MCPTransportType.STDIO
+        elif server.transport == Transport.sse:
+            return MCPTransportType.SSE
         else:
             raise ValueError(f"Unsupported transport type: {server.transport}")
 
@@ -63,6 +65,12 @@ class MCPToolFactory:
                 raise ValueError(f"STDIO server '{server.name}' has no command")
             command_parts = [server.command] + (server.args or [])
             return " ".join(command_parts)
+
+        elif server.transport == Transport.sse:
+            if not server.base_url:
+                raise ValueError(f"SSE server '{server.name}' has no base_url")
+            return server.base_url.rstrip("/")
+
         else:
             raise ValueError(f"Unsupported transport type: {server.transport}")
 
