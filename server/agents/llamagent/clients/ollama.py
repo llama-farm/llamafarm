@@ -85,7 +85,8 @@ class LFAgentClientOllama(LFAgentClient):
             model=self._model_config.model,
             messages=[self._message_to_ollama_message(m) for m in messages],
             stream=True,
-            **(self._model_config.model_api_parameters or {}),
+            think=False,
+            # **(self._model_config.model_api_parameters or {}),
         )
 
         # Buffer for detecting JSON tool calls

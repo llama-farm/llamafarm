@@ -143,40 +143,6 @@ class TestMCPService:
         assert len(tools) == 1
         assert tools[0]["name"] == "test_tool"
 
-    @patch("services.mcp_service.stdio_client")
-    @patch("services.mcp_service.ClientSession")
-    async def test_call_stdio_tool_success(
-        self, mock_session_class, mock_stdio_client, mock_stdio_config
-    ):
-        """Test calling a tool on STDIO server using MCP SDK."""
-        # Create mock result
-        mock_content = MagicMock()
-        mock_content.text = "success output"
-        mock_result = MagicMock()
-        mock_result.content = [mock_content]
-
-        # Setup mock session
-        mock_session = AsyncMock()
-        mock_session.call_tool = AsyncMock(return_value=mock_result)
-        mock_session.initialize = AsyncMock()
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=None)
-        mock_session_class.return_value = mock_session
-
-        # Setup mock stdio client
-        mock_streams = AsyncMock()
-        mock_streams.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
-        mock_streams.__aexit__ = AsyncMock(return_value=None)
-        mock_stdio_client.return_value = mock_streams
-
-        service = MCPService(mock_stdio_config)
-        result = await service.call_tool(
-            "stdio-server", "test_tool", {"arg1": "value1"}
-        )
-
-        assert "result" in result
-        assert result["result"] == "success output"
-
     @patch("services.mcp_service.sse_client")
     @patch("services.mcp_service.ClientSession")
     async def test_list_http_tools_success(
@@ -216,52 +182,11 @@ class TestMCPService:
         assert len(tools) == 1
         assert tools[0]["name"] == "http_tool"
 
-    @patch("services.mcp_service.sse_client")
-    @patch("services.mcp_service.ClientSession")
-    async def test_call_http_tool_success(
-        self, mock_session_class, mock_sse_client, mock_http_config
-    ):
-        """Test calling a tool on HTTP server using MCP SDK."""
-        # Create mock result
-        mock_content = MagicMock()
-        mock_content.text = "http success"
-        mock_result = MagicMock()
-        mock_result.content = [mock_content]
-
-        # Setup mock session
-        mock_session = AsyncMock()
-        mock_session.call_tool = AsyncMock(return_value=mock_result)
-        mock_session.initialize = AsyncMock()
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=None)
-        mock_session_class.return_value = mock_session
-
-        # Setup mock SSE client
-        mock_streams = AsyncMock()
-        mock_streams.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
-        mock_streams.__aexit__ = AsyncMock(return_value=None)
-        mock_sse_client.return_value = mock_streams
-
-        service = MCPService(mock_http_config)
-        result = await service.call_tool(
-            "http-server", "http_tool", {"param1": "value"}
-        )
-
-        assert "result" in result
-        assert result["result"] == "http success"
-
     async def test_list_tools_invalid_server(self, mock_stdio_config):
         """Test listing tools for non-existent server."""
         service = MCPService(mock_stdio_config)
         tools = await service.list_tools("invalid-server")
         assert len(tools) == 0
-
-    async def test_call_tool_invalid_server(self, mock_stdio_config):
-        """Test calling tool on non-existent server."""
-        service = MCPService(mock_stdio_config)
-        result = await service.call_tool("invalid-server", "test_tool", {})
-        assert "error" in result
-        assert "not found" in result["error"].lower()
 
     @patch("services.mcp_service.stdio_client")
     @patch("services.mcp_service.ClientSession")

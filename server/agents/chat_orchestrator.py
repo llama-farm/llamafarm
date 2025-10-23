@@ -87,7 +87,7 @@ class ChatOrchestratorAgent(LFAgent):
             "Based on this tool result, please provide your "
             "complete final answer to my original question. "
             "Do not call the same tool again unless you need "
-            "additional different information."
+            "additional different information. Answer:"
         )
 
     def _persist_history_safe(self) -> None:
@@ -304,7 +304,7 @@ class ChatOrchestratorAgent(LFAgent):
                                 "Based on the tool result above, I should now provide "
                                 "my complete final answer to the user's original question. "
                                 "I should not call the same tool again unless I need "
-                                "additional different information..."
+                                "additional different information. Answer:"
                             ),
                         )
                     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 from config.datamodel import LlamaFarmConfig, Server, Transport
@@ -83,33 +83,6 @@ class MCPService:
             )
             return []
 
-    async def call_tool(
-        self,
-        server_name: str,
-        tool_name: str,
-        arguments: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Call a tool on the specified MCP server."""
-        if server_name not in self._servers:
-            return {"error": f"Server '{server_name}' not found"}
-
-        server_config = self._servers[server_name]
-
-        try:
-            # Call async method directly (no thread needed in async context)
-            result = await self._call_tool_async(
-                server_config, tool_name, arguments or {}
-            )
-            return result
-        except Exception as e:
-            logger.exception(
-                "Error calling tool",
-                server_name=server_name,
-                tool_name=tool_name,
-                error=str(e),
-            )
-            return {"error": str(e)}
-
     def _is_cache_valid(self, server_name: str) -> bool:
         """Check if cached tools are still valid."""
         if server_name not in self._last_cache_update:
@@ -161,69 +134,15 @@ class MCPService:
         async def maintain_session():
             """Background task that keeps the session context alive."""
             try:
-                if server_config.transport == Transport.stdio:
-                    if not server_config.command:
-                        raise ValueError(
-                            f"STDIO server '{server_config.name}' has no command"
-                        )
+                # Use longer timeout (1 hour) for persistent sessions
+                async with self._create_session_context(
+                    server_config, sse_read_timeout=3600.0
+                ) as session:
+                    session_container["session"] = session
+                    session_ready.set()
 
-                    server_params = StdioServerParameters(
-                        command=server_config.command,
-                        args=server_config.args or [],
-                        env=server_config.env,
-                    )
-
-                    # Keep context alive in this task
-                    async with stdio_client(server_params) as (read, write):
-                        async with ClientSession(read, write) as session:
-                            await session.initialize()
-                            session_container["session"] = session
-                            session_ready.set()
-
-                            # Wait for shutdown signal
-                            await shutdown_event.wait()
-
-                elif server_config.transport == Transport.sse:
-                    if not server_config.base_url:
-                        raise ValueError(
-                            f"SSE server '{server_config.name}' has no base_url"
-                        )
-
-                    # Keep context alive in this task - SSE transport
-                    async with sse_client(server_config.base_url) as (read, write):
-                        async with ClientSession(read, write) as session:
-                            await session.initialize()
-                            session_container["session"] = session
-                            session_ready.set()
-
-                            # Wait for shutdown signal
-                            await shutdown_event.wait()
-
-                elif server_config.transport == Transport.http:
-                    if not server_config.base_url:
-                        raise ValueError(
-                            f"HTTP server '{server_config.name}' has no base_url"
-                        )
-
-                    # Keep context alive in this task - Streamable HTTP transport
-                    # Note: streamablehttp_client returns 3 values (read, write, get_session_id)
-                    async with streamablehttp_client(server_config.base_url) as (
-                        read,
-                        write,
-                        _get_session_id,  # noqa: F841
-                    ):
-                        async with ClientSession(read, write) as session:
-                            await session.initialize()
-                            session_container["session"] = session
-                            session_ready.set()
-
-                            # Wait for shutdown signal
-                            await shutdown_event.wait()
-
-                else:
-                    raise ValueError(
-                        f"Unsupported transport: {server_config.transport}"
-                    )
+                    # Wait for shutdown signal - keeps context alive
+                    await shutdown_event.wait()
 
             except asyncio.CancelledError:
                 logger.info(
@@ -281,16 +200,14 @@ class MCPService:
                     task = self._session_tasks[server_name]
                     try:
                         await asyncio.wait_for(task, timeout=5.0)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.warning(
                             "MCP session task did not complete, cancelling",
                             server_name=server_name,
                         )
                         task.cancel()
-                        try:
+                        with suppress(asyncio.CancelledError):
                             await task
-                        except asyncio.CancelledError:
-                            pass
 
                 # Cleanup
                 self._persistent_sessions.pop(server_name, None)
@@ -323,8 +240,20 @@ class MCPService:
         logger.info("All MCP sessions closed")
 
     @asynccontextmanager
-    async def _get_client_session(self, server_config: Server):
-        """Get an MCP client session based on transport type."""
+    async def _create_session_context(
+        self, server_config: Server, *, sse_read_timeout: float = 300.0
+    ):
+        """Create an MCP client session context based on transport type.
+
+        Args:
+            server_config: Server configuration
+            sse_read_timeout: Timeout for SSE/HTTP read operations in seconds.
+                             Use 300 (5 min) for one-off operations,
+                             3600 (1 hour) for persistent sessions.
+
+        Yields:
+            Initialized ClientSession
+        """
         if server_config.transport == Transport.stdio:
             if not server_config.command:
                 raise ValueError(
@@ -350,16 +279,20 @@ class MCPService:
                     f"HTTP server '{server_config.name}' has no base_url configured"
                 )
 
-            # Use streamable HTTP client for HTTP transport
-            # Note: streamablehttp_client returns 3 values (read, write, get_session_id)
-            async with streamablehttp_client(server_config.base_url) as (
-                read_stream,
-                write_stream,
-                _get_session_id,  # noqa: F841
+            async with (
+                streamablehttp_client(
+                    server_config.base_url,
+                    timeout=30.0,
+                    sse_read_timeout=sse_read_timeout,
+                ) as (
+                    read_stream,
+                    write_stream,
+                    _get_session_id,  # noqa: F841
+                ),
+                ClientSession(read_stream, write_stream) as session,
             ):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    yield session
+                await session.initialize()
+                yield session
 
         elif server_config.transport == Transport.sse:
             if not server_config.base_url:
@@ -367,18 +300,30 @@ class MCPService:
                     f"SSE server '{server_config.name}' has no base_url configured"
                 )
 
-            # Use SSE client for SSE transport
-            # Note: sse_client returns 2 values (read, write)
-            async with sse_client(server_config.base_url) as (
-                read_stream,
-                write_stream,
+            async with (
+                sse_client(
+                    server_config.base_url,
+                    timeout=30.0,
+                    sse_read_timeout=sse_read_timeout,
+                ) as (read_stream, write_stream),
+                ClientSession(read_stream, write_stream) as session,
             ):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    yield session
+                await session.initialize()
+                yield session
 
         else:
             raise ValueError(f"Unsupported transport: {server_config.transport}")
+
+    @asynccontextmanager
+    async def _get_client_session(self, server_config: Server):
+        """Get an MCP client session for one-off operations.
+
+        Uses shorter timeout (5 minutes) suitable for quick operations.
+        """
+        async with self._create_session_context(
+            server_config, sse_read_timeout=300.0
+        ) as session:
+            yield session
 
     async def _list_tools_async(self, server_config: Server) -> list[ToolSchema]:
         """List tools from MCP server using official SDK."""
@@ -416,46 +361,6 @@ class MCPService:
             logger.error(
                 "Error in _list_tools_async",
                 server_name=server_config.name,
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-            raise
-
-    async def _call_tool_async(
-        self, server_config: Server, tool_name: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Call a tool on MCP server using official SDK."""
-        logger.info(
-            "Calling MCP tool",
-            server_name=server_config.name,
-            tool_name=tool_name,
-            arguments=arguments,
-        )
-
-        try:
-            async with self._get_client_session(server_config) as session:
-                result = await session.call_tool(tool_name, arguments=arguments)
-
-                # Extract content from the result
-                if hasattr(result, "content"):
-                    content_list = result.content
-                    if content_list:
-                        # Return the first content item's text or data
-                        first_content = content_list[0]
-                        if hasattr(first_content, "text"):
-                            return {"result": first_content.text}
-                        elif hasattr(first_content, "data"):
-                            return {"result": first_content.data}
-                        else:
-                            return {"result": str(first_content)}
-
-                # Fallback: return the whole result as dict
-                return {"result": str(result)}
-        except Exception as e:
-            logger.error(
-                "Error in _call_tool_async",
-                server_name=server_config.name,
-                tool_name=tool_name,
                 error=str(e),
                 error_type=type(e).__name__,
             )

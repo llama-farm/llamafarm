@@ -46,8 +46,14 @@ def search_with_rag_database_task(
     database: str,
     query: str,
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-    score_threshold: Optional[float] = None,
+    retrieval_strategy: str | None = None,
+    score_threshold: float | None = None,
+    metadata_filters: dict[str, Any] | None = None,
+    distance_metric: str | None = None,
+    hybrid_alpha: float | None = None,
+    rerank_model: str | None = None,
+    query_expansion: bool | None = None,
+    max_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
@@ -58,6 +64,13 @@ def search_with_rag_database_task(
         query: Search query string
         top_k: Maximum number of results to return
         retrieval_strategy: Optional retrieval strategy name
+        score_threshold: Minimum similarity score filter
+        metadata_filters: Filter results by metadata fields
+        distance_metric: Distance metric to use for similarity calculation
+        hybrid_alpha: Hybrid alpha for hybrid retrieval
+        rerank_model: Rerank model to use for reranking
+        query_expansion: Enable query expansion
+        max_tokens: Maximum tokens to generate for each result
 
     Returns:
         List of search results as dictionaries
@@ -72,6 +85,12 @@ def search_with_rag_database_task(
             "top_k": top_k,
             "retrieval_strategy": retrieval_strategy,
             "score_threshold": score_threshold,
+            "metadata_filters": metadata_filters,
+            "distance_metric": distance_metric,
+            "hybrid_alpha": hybrid_alpha,
+            "rerank_model": rerank_model,
+            "query_expansion": query_expansion,
+            "max_tokens": max_tokens,
         },
     )
 
