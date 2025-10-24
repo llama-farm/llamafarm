@@ -11,7 +11,6 @@ import {
 } from '../ui/dropdown-menu'
 import { defaultStrategies } from '../Rag/strategies'
 import type { RagStrategy } from '../Rag/strategies'
-import { getStoredSet, setStoredSet } from '../../utils/storage'
 import {
   Dialog,
   DialogContent,
@@ -35,6 +34,7 @@ import {
   useListDatasets,
   useCreateDataset,
   useDeleteDataset,
+  useAvailableStrategies,
 } from '../../hooks/useDatasets'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
@@ -78,6 +78,13 @@ const Data = () => {
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
 
+  // Fetch available strategies and databases from API
+  const { data: availableOptions } = useAvailableStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
+
   // Hook for managing data processing strategies
   const strategies = useDataProcessingStrategies(
     activeProject?.namespace || '',
@@ -86,43 +93,14 @@ const Data = () => {
 
   // Convert API datasets to UI format - only show real datasets from the API
   const datasets = useMemo(() => {
-    // Only return datasets from the API, no localStorage fallback or demo data
+    // Only return datasets from the API, no localStorage, no placeholders
     return (apiDatasets?.datasets || []).map(dataset => ({
       id: dataset.name,
       name: dataset.name,
-      database: (dataset as any).database,
-      processingStrategy: (() => {
-        const strategy = (dataset as any).data_processing_strategy
-        if (!strategy) {
-          console.warn(
-            `Warning: 'data_processing_strategy' is missing for dataset '${dataset.name}'. Defaulting to 'default'.`
-          )
-          return 'default'
-        }
-        return strategy
-      })(),
-      files: Array.isArray((dataset as any).details?.files_metadata)
-        ? (dataset as any).details.files_metadata
-        : (dataset as any).files,
-      lastRun: new Date(),
-      embedModel: 'text-embedding-3-large',
-      // Estimate chunk count numerically for display
-      numChunks: Array.isArray((dataset as any).details?.files_metadata)
-        ? Math.max(
-            0,
-            ((dataset as any).details.files_metadata.length || 0) * 100
-          )
-        : Array.isArray((dataset as any).files)
-          ? Math.max(
-              0,
-              (Array.isArray((dataset as any).files)
-                ? (dataset as any).files.length
-                : 0) * 100
-            )
-          : 0,
-      processedPercent: 100,
-      version: 'v1',
-      description: '',
+      database: dataset.database,
+      data_processing_strategy: dataset.data_processing_strategy,
+      files: dataset.details?.files_metadata || [],
+      // Only show fields that actually come from the API
     }))
   }, [apiDatasets])
 
@@ -167,58 +145,13 @@ const Data = () => {
     )
   }
 
-  const getCustomStrategies = (): RagStrategy[] => {
-    try {
-      const raw = localStorage.getItem('lf_custom_strategies')
-      if (!raw) return []
-      const arr = JSON.parse(raw) as RagStrategy[]
-      if (!Array.isArray(arr)) return []
-      return arr.filter(isValidRagStrategy)
-    } catch {
-      return []
-    }
-  }
 
-  const saveCustomStrategies = (list: RagStrategy[]) => {
-    try {
-      localStorage.setItem('lf_custom_strategies', JSON.stringify(list))
-    } catch {}
-  }
-
-  const addCustomStrategy = (s: RagStrategy) => {
-    const list = getCustomStrategies()
-    const exists = list.some(x => x.id === s.id)
-    if (exists) {
-      toast({ message: 'Strategy id already exists', variant: 'destructive' })
-      return
-    }
-    list.push(s)
-    saveCustomStrategies(list)
-    setMetaTick(t => t + 1)
-  }
-
-  const removeCustomStrategy = (id: string) => {
-    const list = getCustomStrategies().filter(s => s.id !== id)
-    saveCustomStrategies(list)
-  }
-
-  const getDeletedSet = (): Set<string> => getStoredSet('lf_strategy_deleted')
-  const saveDeletedSet = (s: Set<string>) =>
-    setStoredSet('lf_strategy_deleted', s)
-
-  const markDeleted = (id: string) => {
-    const set = getDeletedSet()
-    set.add(id)
-    saveDeletedSet(set)
-    setMetaTick(t => t + 1)
-  }
-
-  // Load strategies from config (source of truth)
+  // Load strategies from config (source of truth - NO hardcoding)
   const displayStrategies = useMemo((): RagStrategy[] => {
     const projectConfig = (projectResp as any)?.project?.config
     if (!projectConfig?.rag?.data_processing_strategies) {
-      // Fallback to defaults if config not loaded yet
-      return defaultStrategies
+      // Return empty array if config not loaded yet
+      return []
     }
 
     const configStrategies = projectConfig.rag.data_processing_strategies || []
@@ -229,19 +162,20 @@ const Data = () => {
       name: strategy.name
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (c: string) => c.toUpperCase()),
-      description: strategy.description || 'Custom processing strategy',
-      isDefault: false,
+      description: strategy.description || '',
+      isDefault: false, // All strategies are equal - no hardcoded defaults
       datasetsUsing: 0, // Will be calculated from datasetsByStrategyName
-    }))
+      configName: strategy.name, // Store original config name for API calls
+    } as RagStrategy))
   }, [projectResp])
 
   // Build mapping of strategy name -> dataset names
   const datasetsByStrategyName = useMemo(() => {
     const map = new Map<string, string[]>()
 
-    // Use the datasets from the useMemo above
+    // Use the datasets from API
     for (const d of datasets) {
-      const strategyName = (d as any).processingStrategy
+      const strategyName = (d as any).data_processing_strategy
       const datasetName = d.name
       if (typeof strategyName === 'string' && typeof datasetName === 'string') {
         const arr = map.get(strategyName) || []
@@ -251,7 +185,7 @@ const Data = () => {
     }
 
     return map
-  }, [datasets, metaTick])
+  }, [datasets])
 
   const getParsersCount = (strategyName: string): number => {
     const projectConfig = (projectResp as any)?.project?.config
@@ -297,18 +231,31 @@ const Data = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [newDatasetName, setNewDatasetName] = useState('')
-  const [newDatasetDescription, setNewDatasetDescription] = useState('')
   const [newDatasetDatabase, setNewDatasetDatabase] = useState('')
   const [
     newDatasetDataProcessingStrategy,
     setNewDatasetDataProcessingStrategy,
   ] = useState('')
 
+  // Set default values when dialog opens and options are available
+  useEffect(() => {
+    if (isCreateOpen && availableOptions) {
+      if (
+        !newDatasetDataProcessingStrategy &&
+        availableOptions.data_processing_strategies?.[0]
+      ) {
+        setNewDatasetDataProcessingStrategy(
+          availableOptions.data_processing_strategies[0]
+        )
+      }
+      if (!newDatasetDatabase && availableOptions.databases?.[0]) {
+        setNewDatasetDatabase(availableOptions.databases[0])
+      }
+    }
+  }, [isCreateOpen, availableOptions, newDatasetDataProcessingStrategy, newDatasetDatabase])
+
   // Simple edit modal state
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editDatasetId, setEditDatasetId] = useState<string>('')
-  const [editName, setEditName] = useState('')
-  const [editDescription, setEditDescription] = useState('')
+  // Edit dataset removed - API doesn't support updating datasets
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>('')
@@ -529,17 +476,50 @@ const Data = () => {
                             className="text-destructive focus:text-destructive"
                             onClick={e => {
                               e.stopPropagation()
+
+                              // Prevent deleting default strategy
+                              if (s.isDefault) {
+                                toast({
+                                  message: 'Cannot delete default strategy',
+                                  variant: 'destructive',
+                                })
+                                return
+                              }
+
                               const ok = confirm(
                                 'Delete this processing strategy?'
                               )
                               if (!ok) return
-                              try {
-                                removeCustomStrategy(s.id)
-                                const set = getDeletedSet()
-                                set.add(s.id)
-                                saveDeletedSet(set)
-                                setMetaTick(t => t + 1)
-                              } catch {}
+
+                              const projectConfig = (projectResp as any)?.project?.config
+                              if (!projectConfig || !s.configName) {
+                                toast({
+                                  message: 'Unable to delete strategy',
+                                  variant: 'destructive',
+                                })
+                                return
+                              }
+
+                              strategies.deleteStrategy.mutate(
+                                {
+                                  strategyName: s.configName,
+                                  projectConfig,
+                                },
+                                {
+                                  onSuccess: () => {
+                                    toast({
+                                      message: 'Strategy deleted',
+                                      variant: 'default',
+                                    })
+                                  },
+                                  onError: (error: any) => {
+                                    toast({
+                                      message: error.message || 'Failed to delete strategy',
+                                      variant: 'destructive',
+                                    })
+                                  },
+                                }
+                              )
                             }}
                           >
                             Delete
@@ -626,6 +606,12 @@ const Data = () => {
                     // Prevent closing dialog during mutation
                     if (!createDatasetMutation.isPending) {
                       setIsCreateOpen(open)
+                      if (!open) {
+                        // Reset form when closing
+                        setNewDatasetName('')
+                        setNewDatasetDatabase('')
+                        setNewDatasetDataProcessingStrategy('')
+                      }
                     }
                   }}
                 >
@@ -652,38 +638,41 @@ const Data = () => {
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-muted-foreground">
-                          Description
-                        </label>
-                        <Textarea
-                          value={newDatasetDescription}
-                          onChange={e =>
-                            setNewDatasetDescription(e.target.value)
-                          }
-                          placeholder="Optional description"
-                          rows={3}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
                           Data Processing Strategy
                         </label>
-                        <Input
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           value={newDatasetDataProcessingStrategy}
                           onChange={e =>
                             setNewDatasetDataProcessingStrategy(e.target.value)
                           }
-                          placeholder="e.g., PDF Simple, Markdown"
-                        />
+                        >
+                          <option value="">Select a strategy...</option>
+                          {availableOptions?.data_processing_strategies?.map(
+                            strategy => (
+                              <option key={strategy} value={strategy}>
+                                {strategy}
+                              </option>
+                            )
+                          )}
+                        </select>
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-muted-foreground">
                           Database
                         </label>
-                        <Input
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           value={newDatasetDatabase}
                           onChange={e => setNewDatasetDatabase(e.target.value)}
-                          placeholder="e.g., default_db"
-                        />
+                        >
+                          <option value="">Select a database...</option>
+                          {availableOptions?.databases?.map(database => (
+                            <option key={database} value={database}>
+                              {database}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                     <DialogFooter>
@@ -788,18 +777,7 @@ const Data = () => {
                                 align="end"
                                 className="min-w-[10rem] w-[10rem]"
                               >
-                                <DropdownMenuItem
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    // open simple edit modal
-                                    setEditDatasetId(ds.id)
-                                    setEditName(ds.name)
-                                    setEditDescription(ds.description || '')
-                                    setIsEditOpen(true)
-                                  }}
-                                >
-                                  Edit
-                                </DropdownMenuItem>
+                                {/* Edit removed - API doesn't support updating datasets */}
                                 <DropdownMenuItem
                                   onClick={e => {
                                     e.stopPropagation()
@@ -823,17 +801,14 @@ const Data = () => {
                             </DropdownMenu>
                           </div>
                           <div className="text-sm font-medium">{ds.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Last run on {formatLastRun(ds.lastRun)}
-                          </div>
-                          <div className="flex flex-row gap-2 items-center flex-wrap">
-                            {(ds as any).database && (
+                          <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
+                            {ds.database && (
                               <Badge
                                 variant="default"
                                 size="sm"
                                 className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
                               >
-                                {(ds as any).database}
+                                {ds.database}
                               </Badge>
                             )}
                             <Badge
@@ -841,12 +816,11 @@ const Data = () => {
                               size="sm"
                               className="rounded-xl"
                             >
-                              {(ds as any).processingStrategy || 'default'}
+                              {ds.data_processing_strategy}
                             </Badge>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {ds.numChunks.toLocaleString()} chunks •{' '}
-                            {ds.processedPercent}% processed • {ds.version}
+                          <div className="text-xs text-muted-foreground mt-2">
+                            {ds.files.length} {ds.files.length === 1 ? 'file' : 'files'}
                           </div>
                         </div>
                       ))}
@@ -958,60 +932,6 @@ const Data = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit dataset dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit dataset</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Name</label>
-              <Input
-                autoFocus
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                placeholder="Dataset name"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">
-                Description
-              </label>
-              <Textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <Button
-              onClick={() => {
-                const id = editDatasetId.trim()
-                const name = editName.trim()
-                if (!id || !name) return
-                try {
-                  localStorage.setItem(`lf_dataset_name_${id}`, name)
-                  localStorage.setItem(
-                    `lf_dataset_description_${id}`,
-                    editDescription
-                  )
-                } catch {}
-                setIsEditOpen(false)
-              }}
-              disabled={!editName.trim()}
-            >
-              Save
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Edit Strategy Modal */}
       <Dialog open={strategyEditOpen} onOpenChange={setStrategyEditOpen}>
         <DialogContent className="sm:max-w-xl">
@@ -1050,23 +970,50 @@ const Data = () => {
               className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
               onClick={() => {
                 if (!strategyEditId) return
+
+                const strategy = displayStrategies.find(s => s.id === strategyEditId)
+                if (!strategy || strategy.isDefault) {
+                  toast({
+                    message: strategy?.isDefault
+                      ? 'Cannot delete default strategy'
+                      : 'Strategy not found',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
                 const ok = confirm(
                   'Are you sure you want to delete this strategy?'
                 )
-                if (ok) {
-                  try {
-                    localStorage.removeItem(
-                      `lf_strategy_name_override_${strategyEditId}`
-                    )
-                    localStorage.removeItem(
-                      `lf_strategy_description_${strategyEditId}`
-                    )
-                  } catch {}
-                  removeCustomStrategy(strategyEditId)
-                  markDeleted(strategyEditId)
-                  setStrategyEditOpen(false)
-                  toast({ message: 'Strategy deleted', variant: 'default' })
+                if (!ok) return
+
+                const projectConfig = (projectResp as any)?.project?.config
+                if (!projectConfig || !strategy.configName) {
+                  toast({
+                    message: 'Unable to delete strategy',
+                    variant: 'destructive',
+                  })
+                  return
                 }
+
+                strategies.deleteStrategy.mutate(
+                  {
+                    strategyName: strategy.configName,
+                    projectConfig,
+                  },
+                  {
+                    onSuccess: () => {
+                      setStrategyEditOpen(false)
+                      toast({ message: 'Strategy deleted', variant: 'default' })
+                    },
+                    onError: (error: any) => {
+                      toast({
+                        message: error.message || 'Failed to delete strategy',
+                        variant: 'destructive',
+                      })
+                    },
+                  }
+                )
               }}
               type="button"
             >
@@ -1085,18 +1032,50 @@ const Data = () => {
                 onClick={() => {
                   if (!strategyEditId || strategyEditName.trim().length === 0)
                     return
-                  try {
-                    localStorage.setItem(
-                      `lf_strategy_name_override_${strategyEditId}`,
-                      strategyEditName.trim()
-                    )
-                    localStorage.setItem(
-                      `lf_strategy_description_${strategyEditId}`,
-                      strategyEditDescription
-                    )
-                  } catch {}
-                  setStrategyEditOpen(false)
-                  setMetaTick(t => t + 1)
+
+                  const strategy = displayStrategies.find(s => s.id === strategyEditId)
+                  if (!strategy || !strategy.configName) {
+                    toast({
+                      message: 'Strategy not found',
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+
+                  const projectConfig = (projectResp as any)?.project?.config
+                  if (!projectConfig) {
+                    toast({
+                      message: 'Unable to update strategy',
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+
+                  // Convert UI name back to snake_case for config
+                  const newConfigName = strategyEditName.trim().toLowerCase().replace(/\s+/g, '_')
+
+                  strategies.updateStrategy.mutate(
+                    {
+                      strategyName: strategy.configName,
+                      updates: {
+                        name: newConfigName,
+                        description: strategyEditDescription,
+                      },
+                      projectConfig,
+                    },
+                    {
+                      onSuccess: () => {
+                        setStrategyEditOpen(false)
+                        toast({ message: 'Strategy updated', variant: 'default' })
+                      },
+                      onError: (error: any) => {
+                        toast({
+                          message: error.message || 'Failed to update strategy',
+                          variant: 'destructive',
+                        })
+                      },
+                    }
+                  )
                 }}
                 disabled={strategyEditName.trim().length === 0}
                 type="button"
