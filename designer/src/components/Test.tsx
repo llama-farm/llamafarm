@@ -579,7 +579,9 @@ const Test = () => {
                         <div className="h-px w-full bg-border mt-2" />
                         {/* RAG retrieval controls */}
                         <div className="grid grid-cols-3 gap-2 items-center">
-                          <span className="text-muted-foreground">Top‑K</span>
+                          <span className="text-sm text-muted-foreground">
+                            Top‑K
+                          </span>
                           <Input
                             type="number"
                             min={1}
@@ -608,11 +610,11 @@ const Test = () => {
                               // force re-render
                               setGen({ ...gen })
                             }}
-                            className="col-span-2 h-10 text-sm px-3"
+                            className="col-span-2"
                           />
                         </div>
                         <div className="grid grid-cols-3 gap-2 items-center">
-                          <span className="text-muted-foreground">
+                          <span className="text-sm text-muted-foreground">
                             Threshold
                           </span>
                           <Input
@@ -640,46 +642,18 @@ const Test = () => {
                               } catch {}
                               setGen({ ...gen })
                             }}
-                            className="col-span-2 h-10 text-sm px-3"
+                            className="col-span-2"
                           />
                         </div>
                         <div className="h-px w-full bg-border" />
                       </>
                     )}
                   </div>
-                  <div className="mt-4 space-y-3 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">
-                        Use test data
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={useTestData}
-                          onCheckedChange={(v: boolean) =>
-                            setUseTestData(Boolean(v))
-                          }
-                          aria-label="Use test data"
-                        />
-                        <span className="text-muted-foreground">
-                          {useTestData ? 'On' : 'Off'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="h-px w-full bg-border" />
-                    <label className="inline-flex items-center gap-2">
-                      <Checkbox
-                        checked={showGenSettings}
-                        onCheckedChange={(v: boolean | 'indeterminate') =>
-                          setShowGenSettings(Boolean(v))
-                        }
-                      />
-                      <span className="whitespace-nowrap">
-                        Show generation settings in responses
-                      </span>
-                    </label>
-                    <div className="h-px w-full bg-border" />
+                  <div className="mt-4 space-y-3">
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Temperature</span>
+                      <span className="text-sm text-muted-foreground">
+                        Temperature
+                      </span>
                       <Input
                         type="number"
                         step="0.1"
@@ -696,7 +670,9 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Top‑p</span>
+                      <span className="text-sm text-muted-foreground">
+                        Top‑p
+                      </span>
                       <Input
                         type="number"
                         step="0.05"
@@ -710,7 +686,9 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Max tokens</span>
+                      <span className="text-sm text-muted-foreground">
+                        Max tokens
+                      </span>
                       <Input
                         type="number"
                         step="1"
@@ -723,7 +701,7 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         Presence penalty
                       </span>
                       <Input
@@ -742,7 +720,7 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         Frequency penalty
                       </span>
                       <Input
@@ -760,44 +738,18 @@ const Test = () => {
                         className="col-span-2"
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Seed</span>
-                      <Input
-                        type="number"
-                        step="1"
-                        value={gen.seed as any}
-                        onChange={e =>
-                          setGen({
-                            ...gen,
-                            seed:
-                              e.target.value === ''
-                                ? ''
-                                : Number(e.target.value),
-                          })
+                    <div className="h-px w-full bg-border" />
+                    <label className="inline-flex items-center gap-2">
+                      <Checkbox
+                        checked={showGenSettings}
+                        onCheckedChange={(v: boolean | 'indeterminate') =>
+                          setShowGenSettings(Boolean(v))
                         }
-                        className="col-span-2"
                       />
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <label className="inline-flex items-center gap-2">
-                        <Checkbox
-                          checked={gen.streaming}
-                          onCheckedChange={(v: boolean | 'indeterminate') =>
-                            setGen({ ...gen, streaming: Boolean(v) })
-                          }
-                        />
-                        <span>Streaming</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2">
-                        <Checkbox
-                          checked={gen.jsonMode}
-                          onCheckedChange={(v: boolean | 'indeterminate') =>
-                            setGen({ ...gen, jsonMode: Boolean(v) })
-                          }
-                        />
-                        <span>JSON mode</span>
-                      </label>
-                    </div>
+                      <span className="whitespace-nowrap">
+                        Show generation settings in responses
+                      </span>
+                    </label>
                   </div>
                 </div>
               )}
