@@ -9,12 +9,12 @@ import (
 
 // NativeOrchestrator manages native process-based service orchestration
 type NativeOrchestrator struct {
-	uvManager      *UVManager
-	pythonEnvMgr   *PythonEnvManager
-	sourceMgr      *SourceManager
-	processMgr     *ProcessManager
-	initialized    bool
-	serverURL      string
+	uvManager    *UVManager
+	pythonEnvMgr *PythonEnvManager
+	sourceMgr    *SourceManager
+	processMgr   *ProcessManager
+	initialized  bool
+	serverURL    string
 }
 
 // NewNativeOrchestrator creates a new native orchestrator
@@ -180,6 +180,11 @@ func (no *NativeOrchestrator) getServerEnv() []string {
 	// Get port from serverURL
 	port := resolvePort(no.serverURL, 8000)
 	env = append(env, fmt.Sprintf("PORT=%d", port))
+
+	// Set up file logging for the server
+	logsDir := filepath.Join(homeDir, ".llamafarm", "logs")
+	serverLogFile := filepath.Join(logsDir, "server.log")
+	env = append(env, fmt.Sprintf("LOG_FILE=%s", serverLogFile))
 
 	// Add any other environment variables from current environment
 	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {

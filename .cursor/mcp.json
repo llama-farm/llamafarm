@@ -1,12 +1,5 @@
 {
   "mcpServers": {
-    "nx-mcp": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "nx-mcp@latest"
-      ]
-    },
     "github": {
       "type": "http",
       "url": "https://api.githubcopilot.com/mcp/",

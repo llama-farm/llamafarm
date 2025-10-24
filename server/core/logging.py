@@ -37,7 +37,7 @@ def drop_color_message_key(_, __, event_dict: EventDict) -> EventDict:
     return event_dict
 
 
-def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
+def setup_logging(json_logs: bool = False, log_level: str = "INFO", log_file: str = ""):
     timestamper = structlog.processors.TimeStamper(fmt="iso")
 
     shared_processors: list[Processor] = [
@@ -91,10 +91,30 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # Add our single structlog handler to the root logger
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    root_logger.addHandler(handler)
+    # Add console handler (stdout)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # Add file handler if LOG_FILE is specified
+    if log_file:
+        try:
+            # Ensure parent directory exists
+            from pathlib import Path
+
+            log_path = Path(log_file)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            file_handler = logging.FileHandler(log_file, mode="a")
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+
+            # Log that file logging is enabled
+            root_logger.info(f"File logging enabled: {log_file}")
+        except Exception as e:
+            # If file logging fails, log to console but don't crash
+            root_logger.error(f"Failed to set up file logging to {log_file}: {e}")
+
     root_logger.setLevel(_coerce_log_level(log_level))
 
     # Configure celery logger

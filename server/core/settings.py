@@ -17,6 +17,8 @@ class Settings(BaseSettings, env_file=".env"):
     LOG_LEVEL: str = "INFO"
     LOG_NAME: str = "server"
     LOG_ACCESS_NAME: str = "server.access"
+    # If set, logs will be written to this file in addition to stdout
+    LOG_FILE: str = ""
 
     CELERY_LOG_LEVEL: str = "INFO"
 

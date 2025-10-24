@@ -254,7 +254,6 @@ jobs:
           echo "✓ RAG health check complete"
 
       - name: E2E test summary
-        if: always()
         run: |
           echo "=========================================="
           echo "End-to-End Test Summary"
@@ -277,13 +276,46 @@ jobs:
           rm -rf /tmp/e2e-test
           echo "✓ Cleanup complete"
 
+      - name: Display service logs on failure
+        if: failure()
+        run: |
+          echo "=========================================="
+          echo "Service Logs"
+          echo "=========================================="
+
+          # Display server logs if they exist
+          if [ -f "$HOME/.llamafarm/logs/server.log" ]; then
+            echo "--- Server Logs ---"
+            tail -100 "$HOME/.llamafarm/logs/server.log"
+          else
+            echo "No server logs found at $HOME/.llamafarm/logs/server.log"
+          fi
+
+          echo ""
+
+          # Display RAG logs if they exist
+          if [ -f "$HOME/.llamafarm/logs/rag.log" ]; then
+            echo "--- RAG Worker Logs ---"
+            tail -100 "$HOME/.llamafarm/logs/rag.log"
+          else
+            echo "No RAG logs found at $HOME/.llamafarm/logs/rag.log"
+          fi
+
+          echo ""
+
+          # List all log files that exist
+          echo "--- All Log Files ---"
+          ls -lah "$HOME/.llamafarm/logs/" 2>/dev/null || echo "Logs directory does not exist"
+
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-test-logs
           path: |
+            ~/.llamafarm/logs/*.log
+            ~/.llamafarm/src/server/**/*.log
+            ~/.llamafarm/src/rag/**/*.log
             /tmp/e2e-test/**/*.log
-            /tmp/e2e-test/.llamafarm/**/*.log
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
