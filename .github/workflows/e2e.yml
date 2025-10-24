@@ -94,7 +94,11 @@ jobs:
       - name: Initialize project with CLI
         working-directory: cli
         run: |
-          ./lf init --cwd /tmp/e2e-test --debug
+          if ! ./lf init --cwd /tmp/e2e-test --debug; then
+            echo "❌ Project initialization failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
           echo "✓ Project initialized"
 
       - name: Verify project config was created
@@ -115,10 +119,14 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          ./lf --cwd /tmp/e2e-test --debug datasets create \
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets create \
             -s quick_note_processor \
             -b main_db \
-            test_dataset
+            test_dataset; then
+            echo "❌ Dataset creation failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
           echo "✓ Dataset created"
 
       - name: Upload sample files
@@ -128,7 +136,11 @@ jobs:
         run: |
           for file in ../examples/quick-rag/files/*; do
             echo "Uploading $(basename "$file")..."
-            ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "$file"
+            if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "$file"; then
+              echo "❌ Upload failed for $(basename "$file"), checking server health..."
+              curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+              exit 1
+            fi
           done
           echo "✓ All sample files uploaded"
 
@@ -137,7 +149,11 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          ./lf --cwd /tmp/e2e-test --debug datasets process test_dataset
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets process test_dataset; then
+            echo "❌ Dataset processing failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
           echo "✓ Dataset processing complete"
 
       # ============================================================
@@ -149,16 +165,23 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running RAG query..."
-          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
             --database main_db \
             --top-k 3 \
-            "neural scaling laws")
+            "neural scaling laws" 2>&1); then
+            echo "❌ RAG query command failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
 
           echo "$OUTPUT"
 
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: RAG query returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -169,11 +192,17 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
             --database main_db \
             --top-k 3 \
             --include-metadata \
-            "neural scaling laws")
+            "neural scaling laws" 2>&1); then
+            echo "❌ RAG query validation failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
 
           # Check if output contains expected content
           if echo "$OUTPUT" | grep -q "neural"; then
@@ -192,9 +221,15 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command with RAG..."
-          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
             --database main_db \
-            "Summarize neural scaling laws in one sentence")
+            "Summarize neural scaling laws in one sentence" 2>&1); then
+            echo "❌ Chat command failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
 
           echo "Chat response:"
           echo "$OUTPUT"
@@ -202,12 +237,14 @@ jobs:
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: Chat command returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
           # Check if output contains some text (at least 10 characters)
           if [ ${#OUTPUT} -lt 10 ]; then
             echo "❌ Error: Chat response too short, possible error"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -219,9 +256,15 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command without RAG..."
-          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
             --no-rag \
-            "What is 2 + 2?")
+            "What is 2 + 2?" 2>&1); then
+            echo "❌ Chat command (no RAG) failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
 
           echo "Chat response:"
           echo "$OUTPUT"
@@ -229,6 +272,7 @@ jobs:
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: Chat command (no RAG) returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -243,7 +287,11 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Listing datasets..."
-          ./lf --cwd /tmp/e2e-test --debug datasets list
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets list; then
+            echo "❌ Dataset listing failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
           echo "✓ Dataset listing works"
 
       - name: Check RAG health
