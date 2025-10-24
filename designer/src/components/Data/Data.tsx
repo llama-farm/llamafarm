@@ -336,7 +336,7 @@ const Data = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-8">
               {displayStrategies.map(s => {
-                const assigned = datasetsByStrategyName.get(s.name) || []
+                const assigned = datasetsByStrategyName.get(s.configName || '') || []
                 return (
                   <div
                     key={s.id}
@@ -480,8 +480,8 @@ const Data = () => {
                     </div>
                     <div className="flex items-center justify-between mt-1">
                       <div className="text-xs text-muted-foreground">
-                        {getParsersCount(s.id)} parsers •{' '}
-                        {getExtractorsCount(s.id)} extractors
+                        {getParsersCount(s.configName || '')} parsers •{' '}
+                        {getExtractorsCount(s.configName || '')} extractors
                       </div>
                       <Button
                         variant="outline"
