@@ -186,7 +186,7 @@ func checkRAGHealthForService(serverURL string) (*Component, error) {
 func checkChromaDBHealthForService(serverURL string) (*Component, error) {
 	// Check if ChromaDB is accessible (any HTTP response means it's running)
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("http://localhost:8001/api/v1/heartbeat")
+	resp, err := client.Get("http://localhost:8001/api/v2/heartbeat")
 	if err != nil {
 		return nil, fmt.Errorf("chromadb not reachable: %v", err)
 	}

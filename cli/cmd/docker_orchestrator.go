@@ -169,7 +169,7 @@ func (co *ContainerOrchestrator) waitForChromaDBReadiness(timeout time.Duration)
 	return WaitForReadiness(ctx, func() error {
 		// Check if ChromaDB is accessible
 		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Get("http://localhost:8001/api/v1/heartbeat")
+		resp, err := client.Get("http://localhost:8001/api/v2/heartbeat")
 		if err != nil {
 			return fmt.Errorf("chromadb not reachable: %v", err)
 		}
