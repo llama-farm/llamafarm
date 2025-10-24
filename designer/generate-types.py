@@ -539,7 +539,8 @@ def generate_rag_types_typescript(schema: Dict[str, Any]) -> str:
         description = config_schema.get("description", "")
         properties = config_schema.get("properties", {})
         required = config_schema.get("required", [])
-        extensions = infer_file_extensions(pt)
+        # Read extensions from schema (not from x-ui-metadata)
+        extensions = config_schema.get("defaultExtensions", [])
 
         lines.append(f'  "{pt}": {{')
         lines.append(f'    type: "{pt}",')
