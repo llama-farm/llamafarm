@@ -120,8 +120,8 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           if ! ./lf --cwd /tmp/e2e-test --debug datasets create \
-            -s quick_note_processor \
-            -b main_db \
+            -s universal_processor \
+            -b main_database \
             test_dataset; then
             echo "❌ Dataset creation failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
@@ -134,14 +134,11 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          for file in ../examples/quick-rag/files/*; do
-            echo "Uploading $(basename "$file")..."
-            if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "$file"; then
-              echo "❌ Upload failed for $(basename "$file"), checking server health..."
-              curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-              exit 1
-            fi
-          done
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "../examples/quick-rag/files"; then
+            echo "❌ Upload failed for ../examples/quick-rag/files, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
           echo "✓ All sample files uploaded"
 
       - name: Process dataset
@@ -166,7 +163,7 @@ jobs:
         run: |
           echo "Running RAG query..."
           if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
-            --database main_db \
+            --database main_database \
             --top-k 3 \
             "neural scaling laws" 2>&1); then
             echo "❌ RAG query command failed"
@@ -193,7 +190,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
-            --database main_db \
+            --database main_database \
             --top-k 3 \
             --include-metadata \
             "neural scaling laws" 2>&1); then
@@ -222,7 +219,6 @@ jobs:
         run: |
           echo "Running chat command with RAG..."
           if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
-            --database main_db \
             "Summarize neural scaling laws in one sentence" 2>&1); then
             echo "❌ Chat command failed"
             echo "$OUTPUT"
