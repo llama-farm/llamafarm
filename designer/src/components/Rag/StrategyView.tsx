@@ -640,7 +640,7 @@ function StrategyView() {
     return []
   }
 
-  const patternsToString = (arr: string[]): string => JSON.stringify(arr)
+  const patternsToString = (arr: string[]): string => arr.join(', ')
 
   const SAFE_PATTERNS = [
     'README',

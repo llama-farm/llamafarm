@@ -166,20 +166,12 @@ export async function uploadFileToDataset(
   // This handles folder uploads where file.name might be "folder/file.pdf"
   const cleanFileName = file.name.split('/').pop() || file.name
 
-  console.log('📤 Uploading file:', {
-    original: file.name,
-    cleaned: cleanFileName,
-    wasStripped: file.name !== cleanFileName
-  })
-
   // Create new File with clean name if needed
   const fileToUpload = file.name !== cleanFileName
     ? new File([file], cleanFileName, { type: file.type, lastModified: file.lastModified })
     : file
 
   formData.append('file', fileToUpload)
-
-  console.log('📤 FormData file name:', fileToUpload.name)
 
   const response = await apiClient.post<FileUploadResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data`,

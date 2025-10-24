@@ -85,7 +85,7 @@ export const ragStrategyConverters = {
       type: row.name,
       config: row.config || {},
       file_include_patterns: patterns.length > 0 ? patterns : undefined,
-      priority: row.priority || 50,
+      priority: row.priority ?? 50,
     }
   },
 
@@ -96,7 +96,7 @@ export const ragStrategyConverters = {
     const yamlConfig: any = {
       type: row.name,
       config: row.config || {},
-      priority: row.priority || 50,
+      priority: row.priority ?? 50,
     }
 
     // Parse applyTo patterns if present

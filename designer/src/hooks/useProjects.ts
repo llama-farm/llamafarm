@@ -99,8 +99,10 @@ export const useUpdateProject = () => {
         { project: data.project }
       )
 
-      // Only invalidate the specific project detail, not the list
-      // The list invalidation was causing unnecessary API calls and 500 errors
+      // Invalidate the projects list to ensure it shows updated data
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.lists(),
+      })
     },
     onError: (error) => {
       console.error('Failed to update project:', error)

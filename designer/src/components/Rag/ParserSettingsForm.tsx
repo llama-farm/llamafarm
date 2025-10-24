@@ -147,7 +147,12 @@ export default function ParserSettingsForm({
             }}
             onFocus={e => {
               // Select all text on focus so user can easily replace the value
-              e.target.select()
+              // Only works for text inputs, not number inputs
+              try {
+                e.target.select()
+              } catch {
+                // Silently ignore if select() is not supported (e.g., number inputs)
+              }
             }}
             min={min}
             max={max}
