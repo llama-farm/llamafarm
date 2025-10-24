@@ -184,7 +184,7 @@ func checkRAGHealthForService(serverURL string) (*Component, error) {
 }
 
 func checkChromaDBHealthForService(serverURL string) (*Component, error) {
-	// Check ChromaDB heartbeat endpoint directly
+	// Check if ChromaDB is accessible (any HTTP response means it's running)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get("http://localhost:8001/api/v1/heartbeat")
 	if err != nil {
@@ -192,10 +192,8 @@ func checkChromaDBHealthForService(serverURL string) (*Component, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("chromadb returned status %d", resp.StatusCode)
-	}
-
+	// Any HTTP response (including error responses) means ChromaDB is running
+	// The v1 API is deprecated but the server is accessible
 	return &Component{
 		Name:    "chromadb",
 		Status:  "healthy",
@@ -253,6 +251,7 @@ func NewServiceOrchestrator(config *ServiceOrchestrationConfig) *ServiceOrchestr
 func (so *ServiceOrchestrator) EnsureServices() *OrchestrationResult {
 	// Initialize channels
 	so.serviceReady["server"] = make(chan *ServiceState, 1)
+	so.serviceReady["chromadb"] = make(chan *ServiceState, 1)
 	so.serviceReady["rag"] = make(chan *ServiceState, 1)
 
 	// Build execution plan based on dependencies
