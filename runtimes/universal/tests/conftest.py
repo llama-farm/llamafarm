@@ -81,7 +81,7 @@ def sample_audio_base64(sample_audio):
 
 # Model IDs for testing (using smallest/fastest models)
 TEST_MODELS = {
-    "causal_lm": "hf-internal-testing/tiny-random-gpt2",
+    "language": "hf-internal-testing/tiny-random-gpt2",
     "encoder": "sentence-transformers/all-MiniLM-L6-v2",
     "diffusion": "hf-internal-testing/tiny-stable-diffusion-torch",
     "vision_classification": "hf-internal-testing/tiny-random-vit",

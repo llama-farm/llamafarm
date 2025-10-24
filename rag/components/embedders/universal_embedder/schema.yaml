@@ -40,3 +40,4 @@ properties:
     type: boolean
     default: true
     description: Normalize embeddings to unit length
+

@@ -223,3 +223,4 @@ class TestUniversalEmbedder:
 
         # Should not call API
         assert not mock_post.called
+

@@ -3,24 +3,24 @@ Tests for CausalLMModel (text generation).
 """
 
 import pytest
-from models.causal_lm_model import CausalLMModel
+from models.language_model import CausalLMModel
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_load(device, test_model_ids):
+async def test_language_load(device, test_model_ids):
     """Test loading a causal LM."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     assert model.model is not None
     assert model.tokenizer is not None
-    assert model.model_type == "causal_lm"
+    assert model.model_type == "language"
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_generate(device, test_model_ids, sample_text):
+async def test_language_generate(device, test_model_ids, sample_text):
     """Test text generation."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     result = await model.generate(
@@ -34,9 +34,9 @@ async def test_causal_lm_generate(device, test_model_ids, sample_text):
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_format_messages(device, test_model_ids, sample_messages):
+async def test_language_format_messages(device, test_model_ids, sample_messages):
     """Test message formatting for chat."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     formatted = model.format_messages(sample_messages)
@@ -47,22 +47,22 @@ async def test_causal_lm_format_messages(device, test_model_ids, sample_messages
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_model_info(device, test_model_ids):
+async def test_language_model_info(device, test_model_ids):
     """Test getting model info."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     info = model.get_model_info()
 
-    assert info["model_id"] == test_model_ids["causal_lm"]
-    assert info["model_type"] == "causal_lm"
+    assert info["model_id"] == test_model_ids["language"]
+    assert info["model_type"] == "language"
     assert info["device"] == device
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_temperature_variations(device, test_model_ids, sample_text):
+async def test_language_temperature_variations(device, test_model_ids, sample_text):
     """Test generation with different temperatures."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     # Test with temperature=0 (deterministic)
@@ -79,9 +79,9 @@ async def test_causal_lm_temperature_variations(device, test_model_ids, sample_t
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_streaming(device, test_model_ids, sample_text):
+async def test_language_streaming(device, test_model_ids, sample_text):
     """Test streaming text generation."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     # Verify model supports streaming
@@ -106,9 +106,9 @@ async def test_causal_lm_streaming(device, test_model_ids, sample_text):
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_streaming_with_stop(device, test_model_ids):
+async def test_language_streaming_with_stop(device, test_model_ids):
     """Test streaming with stop sequences."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     # Generate with a stop sequence
@@ -128,11 +128,11 @@ async def test_causal_lm_streaming_with_stop(device, test_model_ids):
 
 
 @pytest.mark.asyncio
-async def test_causal_lm_streaming_vs_nonstreaming_equivalence(
+async def test_language_streaming_vs_nonstreaming_equivalence(
     device, test_model_ids, sample_text
 ):
     """Test that streaming and non-streaming produce equivalent results with deterministic settings."""
-    model = CausalLMModel(test_model_ids["causal_lm"], device)
+    model = CausalLMModel(test_model_ids["language"], device)
     await model.load()
 
     # Generate with non-streaming (deterministic)

@@ -1,5 +1,5 @@
 """
-Causal language model wrapper for text generation.
+Language model wrapper for text generation or embedding.
 """
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
@@ -18,7 +18,7 @@ class CausalLMModel(BaseModel):
 
     def __init__(self, model_id: str, device: str):
         super().__init__(model_id, device)
-        self.model_type = "causal_lm"
+        self.model_type = "language"
         self.supports_streaming = True
 
     async def load(self):

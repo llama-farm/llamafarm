@@ -157,9 +157,9 @@ def get_device():
     return _current_device
 
 
-async def load_causal_lm(model_id: str):
+async def load_language(model_id: str):
     """Load a causal language model for text generation."""
-    cache_key = f"causal_lm:{model_id}"
+    cache_key = f"language:{model_id}"
     if cache_key not in _models:
         logger.info(f"Loading causal LM: {model_id}")
         device = get_device()
@@ -340,7 +340,7 @@ async def chat_completions(request: ChatCompletionRequest):
     Supports any HuggingFace causal language model.
     """
     try:
-        model = await load_causal_lm(request.model)
+        model = await load_language(request.model)
 
         # Convert messages to prompt
         messages_dict = [msg.model_dump() for msg in request.messages]
