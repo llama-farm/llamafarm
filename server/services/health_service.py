@@ -70,7 +70,7 @@ def _check_storage() -> dict:
         }
 
 
-def _check_ollama() -> dict:
+def _check_ollama_runtime() -> dict:
     """Check Ollama runtime health using provider registry."""
     # Create minimal config with one model for health check
     model_config_dict = {
@@ -80,6 +80,19 @@ def _check_ollama() -> dict:
     }
     model_config = Model.model_validate(model_config_dict)
 
+    provider = runtime_service.get_provider(model_config)
+    result = provider.check_health()
+    return result.to_dict()
+
+
+def _check_universal_runtime() -> dict:
+    """Check Universal runtime health using provider registry."""
+    model_config_dict = {
+        "name": "universal-health",
+        "provider": Provider.universal,
+        "model": "health-check",
+    }
+    model_config = Model.model_validate(model_config_dict)
     provider = runtime_service.get_provider(model_config)
     result = provider.check_health()
     return result.to_dict()
@@ -228,11 +241,12 @@ def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
 
-    # Only consider non-RAG components for overall status
-    # RAG service status is included in response but doesn't affect overall health
+    # Only consider core server components for overall status
+    # RAG service, Ollama, Universal, and Project seed are informational
+    # but don't affect server health
     for c in components + seeds:
-        # Skip RAG service and Project seed when computing overall status
-        if c.get("name", "") in ["rag-service", "seed:project"]:
+        # Skip optional services when computing overall status
+        if c.get("name", "") not in ["server", "storage"]:
             continue
         worst = max(worst, order.get(c.get("status", "unhealthy"), 2))
 
@@ -246,7 +260,8 @@ def health_summary() -> dict[str, Any]:
 
     components.append(_check_server())
     components.append(_check_storage())
-    components.append(_check_ollama())
+    components.append(_check_ollama_runtime())
+    components.append(_check_universal_runtime())
     components.append(_check_rag_service())
 
     seeds.append(_check_seed_project())
