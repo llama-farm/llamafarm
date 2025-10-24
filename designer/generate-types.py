@@ -375,7 +375,12 @@ def convert_schema_properties_to_ts(properties: Dict[str, Any]) -> str:
 
         if "items" in prop_def and yaml_type == "array":
             items_type = prop_def["items"].get("type", "string")
-            field_parts.append(f'items: {{ type: "{items_type}" }}')
+            # Only include items type if it's a valid PrimitiveType
+            if items_type in ["integer", "number", "string", "boolean", "array"]:
+                field_parts.append(f'items: {{ type: "{items_type}" }}')
+            elif items_type == "object":
+                # For object types, use type assertion to bypass TypeScript strict checking
+                field_parts.append(f'items: {{ type: "object" as any }}')
 
         if prop_def.get("nullable"):
             field_parts.append('nullable: true')

@@ -43,7 +43,7 @@ import {
   datasetKeys,
   useReIngestDataset,
 } from '../../hooks/useDatasets'
-import { useProject, useUpdateProject, projectKeys } from '../../hooks/useProjects'
+import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import {
   useRagStrategy,
   type ParserRow,
@@ -136,8 +136,6 @@ function StrategyView() {
     }
   }, [datasetsResp])
 
-  const [strategyMetaTick, setStrategyMetaTick] = useState(0)
-
   /**
    * Get the ACTUAL strategy name from config (source of truth)
    * This is what we use for API calls and lookups
@@ -180,7 +178,7 @@ function StrategyView() {
     if (actualStrategyName) {
       return actualStrategyName
         .replace(/_/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase())
+        .replace(/\b\w/g, (c: string) => c.toUpperCase())
     }
 
     // Fallback to defaultStrategies
@@ -190,7 +188,7 @@ function StrategyView() {
     // Last fallback: title-case the id
     return strategyId
       .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase())
+      .replace(/\b\w/g, (c: string) => c.toUpperCase())
   }, [strategyId, actualStrategyName])
 
   const strategyDescription = useMemo(() => {
@@ -344,18 +342,6 @@ function StrategyView() {
   // Tabbed Parsers/Extractors data -------------------------------------------
   // Types now imported from useRagStrategy hook
 
-  // Map legacy high-number priorities to new low-number scale
-  const migratePriority = (value: unknown): number => {
-    const n = Number(value)
-    if (!Number.isFinite(n)) return 1
-    if (n >= 100) return 1
-    if (n >= 90) return 2
-    if (n >= 80) return 3
-    if (n >= 50) return 4
-    if (n < 1) return 1
-    return n
-  }
-
   const defaultParsers: ParserRow[] = [
     {
       id: 'pdf-llamaindex',
@@ -378,21 +364,21 @@ function StrategyView() {
     },
     {
       id: 'docx-llamaindex',
-      name: 'DocxParser_LlamaIndex',
+      name: 'DOCXParser_LlamaIndex',
       priority: 1,
       include: '*.docx, *.DOCX, *.doc, *.DOC',
       exclude: '~$*, *.tmp',
       summary: '1000 chars, 150 overlap, extract tables & metadata',
-      config: getDefaultParserConfig('DocxParser_LlamaIndex'),
+      config: getDefaultParserConfig('DOCXParser_LlamaIndex'),
     },
     {
       id: 'md-python',
-      name: 'MarkdownParser_Python',
+      name: 'MARKDOWNParser_Python',
       priority: 1,
       include: '*.md, *.markdown, *.mdown, *.mkd, README*',
       exclude: '*.tmp.md, _draft*.md',
       summary: 'Section-based, extract code & links',
-      config: getDefaultParserConfig('MarkdownParser_Python'),
+      config: getDefaultParserConfig('MARKDOWNParser_Python'),
     },
     {
       id: 'csv-pandas',
@@ -405,21 +391,21 @@ function StrategyView() {
     },
     {
       id: 'excel-pandas',
-      name: 'ExcelParser_Pandas',
+      name: 'EXCELParser_Pandas',
       priority: 1,
       include: '*.xlsx, *.XLSX, *.xls, *.XLS',
       exclude: '~$*, *.tmp.xlsx',
       summary: 'Process all sheets, 500 chars, extract metadata',
-      config: getDefaultParserConfig('ExcelParser_Pandas'),
+      config: getDefaultParserConfig('EXCELParser_Pandas'),
     },
     {
       id: 'text-python',
-      name: 'TextParser_Python',
+      name: 'TEXTParser_Python',
       priority: 4,
       include: '*.txt, *.json, *.xml, *.yaml, *.py, *.js, LICENSE*, etc.',
       exclude: '*.pyc, *.pyo, *.class',
       summary: 'Sentence-based, 1200 chars, 200 overlap',
-      config: getDefaultParserConfig('TextParser_Python'),
+      config: getDefaultParserConfig('TEXTParser_Python'),
     },
   ]
 
@@ -635,32 +621,6 @@ function StrategyView() {
   }
 
   // Patterns editors helpers --------------------------------------------------
-  const getDefaultIncludePatternsForParser = (parserName: string): string[] => {
-    switch (parserName) {
-      case 'PDFParser_LlamaIndex':
-      case 'PDFParser_PyPDF2':
-        return ['*.pdf']
-      case 'DocxParser_LlamaIndex':
-      case 'DocxParser_PythonDocx':
-        return ['*.docx', '*.doc']
-      case 'MarkdownParser_Python':
-      case 'MarkdownParser_LlamaIndex':
-        return ['*.md', '*.markdown']
-      case 'CSVParser_Pandas':
-      case 'CSVParser_LlamaIndex':
-        return ['*.csv']
-      case 'ExcelParser_OpenPyXL':
-      case 'ExcelParser_Pandas':
-      case 'ExcelParser_LlamaIndex':
-        return ['*.xlsx', '*.xls']
-      case 'TextParser_Python':
-      case 'TextParser_LlamaIndex':
-        return ['*.txt', '*.text']
-      default:
-        return []
-    }
-  }
-
   // const getDefaultApplyPatternsForExtractor = (): string[] => ['*']
 
   const parsePatternsString = (s: string | undefined): string[] => {
@@ -828,9 +788,9 @@ function StrategyView() {
     selectedParserTypes.forEach(parserType => {
       const idBase = slugify(parserType) || 'parser'
       const id = `${idBase}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      const config = getDefaultParserConfig(parserType)
-      const defaultExtensions = PARSER_SCHEMAS[parserType]?.defaultExtensions || []
-      const includePatterns = defaultExtensions.map(ext => `*${ext}`)
+      const config = getDefaultParserConfig(parserType as any)
+      const defaultExtensions = (PARSER_SCHEMAS as any)[parserType]?.defaultExtensions || []
+      const includePatterns = defaultExtensions.map((ext: string) => `*${ext}`)
 
       // Use same default values as schema and edit function
       const newRow: ParserRow = {
@@ -886,7 +846,7 @@ function StrategyView() {
     const found = parserRows.find(p => p.id === id)
     if (!found) return
     setEditParserId(found.id)
-    setEditParserConfig(found.config || getDefaultParserConfig(found.name))
+    setEditParserConfig(found.config || getDefaultParserConfig(found.name as any))
     setEditParserPriority(String(found.priority))
     setEditParserIncludes(parsePatternsString(found.include))
     setIsEditParserOpen(true)
@@ -1055,7 +1015,7 @@ function StrategyView() {
     setEditExtractorId(found.id)
     setEditExtractorPriority(String(found.priority))
     setEditExtractorConfig(
-      found.config || getDefaultExtractorConfig(found.name)
+      found.config || getDefaultExtractorConfig(found.name as any)
     )
     setEditExtractorApplies(parsePatternsString(found.applyTo))
     setIsEditExtractorOpen(true)
@@ -1160,7 +1120,7 @@ function StrategyView() {
         // @ts-ignore custom event
         const { strategyId: sid } = (e as CustomEvent).detail || {}
         if (sid && strategyId && sid === strategyId) {
-          setStrategyMetaTick(t => t + 1)
+          // Processing update event - could trigger re-render if needed
         }
       } catch {}
     }
@@ -1896,7 +1856,7 @@ function StrategyView() {
                   {(() => {
                     const found = parserRows.find(p => p.id === editParserId)
                     if (!found) return null
-                    const schema = PARSER_SCHEMAS[found.name]
+                    const schema = (PARSER_SCHEMAS as any)[found.name]
                     if (!schema) {
                       return (
                         <div className="text-sm text-muted-foreground">
@@ -2130,10 +2090,10 @@ function StrategyView() {
                       </div>
                     </div>
                   </div>
-                  {newExtractorType && EXTRACTOR_SCHEMAS[newExtractorType] ? (
+                  {newExtractorType && (EXTRACTOR_SCHEMAS as any)[newExtractorType] ? (
                     <>
                       <div className="text-xs text-muted-foreground">
-                        {EXTRACTOR_SCHEMAS[newExtractorType].description}
+                        {(EXTRACTOR_SCHEMAS as any)[newExtractorType].description}
                       </div>
                       <div>
                         <Label className="text-xs text-muted-foreground">
@@ -2162,10 +2122,10 @@ function StrategyView() {
                       </div>
                       <div className="rounded-lg border border-border bg-accent/10 p-3">
                         <div className="text-sm font-medium mb-2">
-                          {EXTRACTOR_SCHEMAS[newExtractorType].title}
+                          {(EXTRACTOR_SCHEMAS as any)[newExtractorType].title}
                         </div>
                         <ExtractorSettingsForm
-                          schema={EXTRACTOR_SCHEMAS[newExtractorType]}
+                          schema={(EXTRACTOR_SCHEMAS as any)[newExtractorType]}
                           value={newExtractorConfig}
                           onChange={setNewExtractorConfig}
                         />
@@ -2231,7 +2191,7 @@ function StrategyView() {
                       e => e.id === editExtractorId
                     )
                     if (!found) return null
-                    const schema = EXTRACTOR_SCHEMAS[found.name]
+                    const schema = (EXTRACTOR_SCHEMAS as any)[found.name]
                     if (!schema) {
                       return (
                         <div className="text-sm text-muted-foreground">
@@ -2426,7 +2386,6 @@ function StrategyView() {
                         )
                       } catch {}
                       setIsEditOpen(false)
-                      setStrategyMetaTick(t => t + 1)
                       navigate('/chat/rag')
                       toast({ message: 'Strategy deleted', variant: 'default' })
                     }
@@ -2458,7 +2417,6 @@ function StrategyView() {
                         )
                       } catch {}
                       setIsEditOpen(false)
-                      setStrategyMetaTick(t => t + 1)
                     }}
                     disabled={editName.trim().length === 0}
                     type="button"

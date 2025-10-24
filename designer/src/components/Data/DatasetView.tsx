@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
-  DialogTrigger,
 } from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
@@ -20,7 +19,6 @@ import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectSwitchNavigation } from '../../hooks/useProjectSwitchNavigation'
 import {
   useUploadFileToDataset,
-  useReIngestDataset,
   useProcessDataset,
   useTaskStatus,
   useListDatasets,
@@ -28,7 +26,6 @@ import {
   useDeleteDataset,
 } from '../../hooks/useDatasets'
 import { DatasetFile } from '../../types/datasets'
-import { defaultStrategies } from '../Rag/strategies'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -232,18 +229,9 @@ function DatasetView() {
     })
   }
 
-  type DatasetVersion = {
-    id: string // e.g., v1, v2
-    createdAt: string // ISO
-  }
-  const [versions, setVersions] = useState<DatasetVersion[]>([])
-
   // Drag-and-drop state
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
-  // Strategy modal search
-  const [strategyQuery, setStrategyQuery] = useState('')
-  const [processingMetaTick, setProcessingMetaTick] = useState(0)
 
   // Note: Custom strategies now come from API via project config, not localStorage
 
@@ -536,20 +524,6 @@ function DatasetView() {
   // Processing strategy comes from API dataset response
   const currentStrategy = (currentApiDataset as any)?.data_processing_strategy || 'universal_processor'
 
-  // Listen for processing updates from strategy page to refresh summaries
-  useEffect(() => {
-    const onProcessingUpdate = () => setProcessingMetaTick(t => t + 1)
-    window.addEventListener(
-      'lf:processingUpdated',
-      onProcessingUpdate as EventListener
-    )
-    return () =>
-      window.removeEventListener(
-        'lf:processingUpdated',
-        onProcessingUpdate as EventListener
-      )
-  }, [])
-
   // Note: Parsers/extractors info now comes from project config API, not localStorage
   // This is a placeholder - should be fetched from the strategy config if needed
   const parsersSummary = 'Configured via strategy settings'
@@ -617,7 +591,7 @@ function DatasetView() {
                       className="rounded-xl w-max"
                     >
                       {taskStatus.state === 'PENDING' && 'Queued...'}
-                      {taskStatus.state === 'STARTED' && 'Processing...'}
+                      {(taskStatus.state !== 'PENDING' && taskStatus.state !== 'SUCCESS' && taskStatus.state !== 'FAILURE') && 'Processing...'}
                     </Badge>
                   </div>
                 )}
@@ -636,7 +610,7 @@ function DatasetView() {
                     className="rounded-xl w-max"
                   >
                     {taskStatus.state === 'PENDING' && 'Queued...'}
-                    {taskStatus.state === 'STARTED' && 'Processing...'}
+                    {(taskStatus.state !== 'PENDING' && taskStatus.state !== 'SUCCESS' && taskStatus.state !== 'FAILURE') && 'Processing...'}
                   </Badge>
                 )}
                 <Button
@@ -680,9 +654,7 @@ function DatasetView() {
                 >
                   {processMutation.isPending
                     ? 'Starting...'
-                    : currentTaskId && taskStatus?.state === 'PENDING'
-                      ? 'Processing...'
-                      : currentTaskId && taskStatus?.state === 'STARTED'
+                    : currentTaskId && taskStatus
                       ? 'Processing...'
                       : 'Process Dataset'}
                 </Button>
@@ -799,7 +771,7 @@ function DatasetView() {
                         <div className="flex items-center justify-between">
                           <span className="text-foreground">{detail.file}</span>
                           <Badge
-                            variant={detail.status === 'processed' ? 'default' : 'destructive'}
+                            variant={detail.status === 'processed' ? 'default' : 'secondary'}
                             size="sm"
                           >
                             {detail.status}

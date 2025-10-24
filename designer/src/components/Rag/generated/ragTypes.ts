@@ -744,7 +744,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     description: "",
     properties: {
       predefined_patterns: { type: "array", description: "Use built-in patterns for common data types (e.g., email, phone). Takes precedence over 'patterns' field for matching pattern names", default: [], items: { type: "string" } },
-      custom_patterns: { type: "array", description: "Custom regex patterns", default: [], items: { type: "object" } },
+      custom_patterns: { type: "array", description: "Custom regex patterns", default: [], items: { type: "object" as any } },
       case_sensitive: { type: "boolean", description: "Case-sensitive matching", default: false },
       return_positions: { type: "boolean", description: "Return match positions", default: false },
       include_context: { type: "boolean", description: "Include surrounding context in results", default: false },

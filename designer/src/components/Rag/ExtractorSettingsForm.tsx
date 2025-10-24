@@ -262,7 +262,7 @@ export default function ExtractorSettingsForm({
       )
     }
 
-    if (field.type === 'array' && field.items?.type === 'object') {
+    if (field.type === 'array' && (field.items as any)?.type === 'object') {
       return renderArrayOfObjects(key, field)
     }
 

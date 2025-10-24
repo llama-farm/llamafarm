@@ -9,7 +9,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '../ui/dropdown-menu'
-import { defaultStrategies } from '../Rag/strategies'
 import type { RagStrategy } from '../Rag/strategies'
 import {
   Dialog,
@@ -25,7 +24,6 @@ import ImportSampleDatasetModal from './ImportSampleDatasetModal'
 import { useImportExampleDataset } from '../../hooks/useExamples'
 import PageActions from '../common/PageActions'
 import { Input } from '../ui/input'
-import { Textarea } from '../ui/textarea'
 import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -38,15 +36,9 @@ import {
 } from '../../hooks/useDatasets'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
-import type { UIFile } from '../../types/datasets'
-
-type RawFile = UIFile
-
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
-  // rawFiles is transient UI state only - no persistence needed
-  const [rawFiles, setRawFiles] = useState<RawFile[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useState<Mode>('designer')
 
@@ -119,10 +111,9 @@ const Data = () => {
   }, [location.search, datasets, navigate])
 
   // Map of fileKey -> array of dataset ids (transient UI state)
-  const [fileAssignments] = useState<Record<string, string[]>>({})
+  // const [fileAssignments] = useState<Record<string, string[]>>({})
 
   // Processing strategies state management ----------------------------------
-  const [metaTick, setMetaTick] = useState(0)
   const [strategyEditOpen, setStrategyEditOpen] = useState(false)
   const [strategyEditId, setStrategyEditId] = useState<string>('')
   const [strategyEditName, setStrategyEditName] = useState('')
@@ -132,18 +123,6 @@ const Data = () => {
   const [strategyCreateDescription, setStrategyCreateDescription] = useState('')
   const [strategyCopyFromId, setStrategyCopyFromId] = useState('')
   const [strategyCreateFileTypes, setStrategyCreateFileTypes] = useState<Set<string>>(new Set())
-
-  // Validate that an object is a well-formed RagStrategy
-  const isValidRagStrategy = (s: any): s is RagStrategy => {
-    return (
-      !!s &&
-      typeof s.id === 'string' &&
-      typeof s.name === 'string' &&
-      typeof s.description === 'string' &&
-      typeof s.isDefault === 'boolean' &&
-      typeof s.datasetsUsing === 'number'
-    )
-  }
 
 
   // Load strategies from config (source of truth - NO hardcoding)
@@ -157,7 +136,7 @@ const Data = () => {
     const configStrategies = projectConfig.rag.data_processing_strategies || []
 
     // Convert config strategies to UI format
-    return configStrategies.map((strategy: any, index: number) => ({
+    return configStrategies.map((strategy: any) => ({
       id: `processing-${strategy.name.replace(/_/g, '-')}`, // Convert snake_case to kebab-case
       name: strategy.name
         .replace(/_/g, ' ')
@@ -207,23 +186,6 @@ const Data = () => {
     return strategy?.extractors?.length || 0
   }
 
-  // Refresh on processing changes (parsers/extractors add/edit/delete)
-  useEffect(() => {
-    const handler = (_e: Event) => {
-      setMetaTick(t => t + 1)
-    }
-    try {
-      window.addEventListener('lf:processingUpdated', handler as EventListener)
-    } catch {}
-    return () => {
-      try {
-        window.removeEventListener(
-          'lf:processingUpdated',
-          handler as EventListener
-        )
-      } catch {}
-    }
-  }, [])
 
   // rawFiles and fileAssignments are transient UI state - no persistence needed
 
@@ -260,10 +222,6 @@ const Data = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>('')
 
-  // Ensure setters are considered used even in builds that elide menu handlers
-  useEffect(() => {
-    // no-op referencing setters to satisfy strict noUnusedLocals in some CI builds
-  }, [setConfirmDeleteId, setConfirmDeleteName])
 
   const handleCreateDataset = async () => {
     const name = newDatasetName.trim()
@@ -288,7 +246,6 @@ const Data = () => {
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
-      setNewDatasetDescription('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
     } catch (error) {
@@ -318,23 +275,7 @@ const Data = () => {
       setIsDropped(false)
     }, 1000)
 
-    const files = Array.from(e.dataTransfer.files)
-    setTimeout(() => {
-      const converted: RawFile[] = files.map(f => ({
-        id: `${f.name}:${f.size}:${f.lastModified}`,
-        name: f.name,
-        size: f.size,
-        lastModified: f.lastModified,
-        type: f.type,
-      }))
-      setRawFiles(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const deduped = converted.filter(r => !existingIds.has(r.id))
-        return [...prev, ...deduped]
-      })
-    }, 4000)
-
-    // console.log('Dropped files:', files)
+    // File drop handling removed - files are now uploaded directly to datasets
   }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -342,35 +283,9 @@ const Data = () => {
     if (files.length === 0) return
 
     setIsDropped(true)
-
-    setTimeout(() => {
-      const converted: RawFile[] = files.map(f => ({
-        id: `${f.name}:${f.size}:${f.lastModified}`,
-        name: f.name,
-        size: f.size,
-        lastModified: f.lastModified,
-        type: f.type,
-      }))
-      setRawFiles(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const deduped = converted.filter(r => !existingIds.has(r.id))
-        return [...prev, ...deduped]
-      })
-      setIsDropped(false)
-    }, 4000)
+    setTimeout(() => setIsDropped(false), 1000)
 
     // console.log('Selected files:', files)
-  }
-
-  const formatLastRun = (d: Date) => {
-    if (!(d instanceof Date) || isNaN(d.getTime())) {
-      return '-'
-    }
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: '2-digit',
-    }).format(d)
   }
 
   return (
