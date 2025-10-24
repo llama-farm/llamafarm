@@ -4,14 +4,14 @@ This directory contains Docker Compose configurations for running the LlamaFarm 
 
 ## Services
 
-- **chromadb-server**: ChromaDB vector database server
+- **llamafarm-chromadb**: ChromaDB vector database server
 - **server**: FastAPI backend server (Python)
 - **rag**: RAG service with Celery workers (Python)
 - **designer**: React frontend application (TypeScript/Vite)
 
 ## ChromaDB Server
 
-The `chromadb-server` service is required to prevent multi-process write conflicts that occur when multiple RAG workers try to write to the same ChromaDB persistent database simultaneously. This was causing "Failed to apply logs to the metadata segment" errors when processing multiple PDFs.
+The `llamafarm-chromadb` service is required to prevent multi-process write conflicts that occur when multiple RAG workers try to write to the same ChromaDB persistent database simultaneously. This was causing "Failed to apply logs to the metadata segment" errors when processing multiple PDFs.
 
 **How it works:**
 - ChromaDB runs as a centralized server
@@ -121,7 +121,7 @@ docker-compose build --no-cache
 curl http://localhost:8001/api/v2/heartbeat
 
 # View ChromaDB server logs
-docker-compose logs chromadb-server
+docker-compose logs llamafarm-chromadb
 
 # Check collections
 curl http://localhost:8001/api/v2/collections
@@ -145,7 +145,7 @@ docker-compose logs rag | grep "ChromaDB HTTP client"
 
 ### Expected Log Messages
 When the fix is working correctly, you should see:
-- `Using ChromaDB HTTP client connecting to chromadb-server:8000`
+- `Using ChromaDB HTTP client connecting to llamafarm-chromadb:8000`
 - No "Failed to apply logs to the metadata segment" errors
 - All PDFs process successfully
 
@@ -155,10 +155,10 @@ When the fix is working correctly, you should see:
 If ChromaDB server fails to start or reports as unhealthy:
 ```bash
 # Check ChromaDB server logs
-docker-compose logs chromadb-server
+docker-compose logs llamafarm-chromadb
 
 # Check service status
-docker-compose ps chromadb-server
+docker-compose ps llamafarm-chromadb
 
 # Test connectivity manually
 curl http://localhost:8001/api/v2/heartbeat
@@ -169,7 +169,7 @@ curl http://localhost:8001/api/v2/collections
 If you still see persistent client warnings:
 1. Check that `host` and `port` are set in your `llamafarm.yaml`
 2. Verify `CHROMADB_HOST` and `CHROMADB_PORT` environment variables
-3. Ensure ChromaDB server is healthy: `docker-compose ps chromadb-server`
+3. Ensure ChromaDB server is healthy: `docker-compose ps llamafarm-chromadb`
 
 #### Common ChromaDB Server Problems
 - **Slow startup**: ChromaDB needs 60-90 seconds to fully initialize

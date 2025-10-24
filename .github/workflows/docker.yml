@@ -374,13 +374,13 @@ jobs:
           
           # Check ChromaDB server specifically
           echo "Checking ChromaDB server status..."
-          docker compose -f docker-compose.yml logs chromadb-server | tail -20
+          docker compose -f docker-compose.yml logs llamafarm-chromadb | tail -20
 
           # Check if services are running
           docker compose -f docker-compose.yml ps
 
           # Basic health checks
-          docker compose -f docker-compose.yml logs chromadb-server
+          docker compose -f docker-compose.yml logs llamafarm-chromadb
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
           docker compose -f docker-compose.yml logs rag

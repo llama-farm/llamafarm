@@ -28,7 +28,7 @@ class ChromaStore(VectorStore):
         self.collection_name = config.get("collection_name", "documents")
         # Support environment variable override for Docker deployment
         # This allows docker-compose to set CHROMADB_HOST and CHROMADB_PORT
-        # to connect to the chromadb-server service
+        # to connect to the llamafarm-chromadb service
         self.host = config.get("host") or os.getenv("CHROMADB_HOST")
         self.port = config.get("port") or (int(os.getenv("CHROMADB_PORT")) if os.getenv("CHROMADB_PORT") else None)
         self.embedding_dimension = max(
