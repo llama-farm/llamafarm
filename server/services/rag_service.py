@@ -5,7 +5,7 @@ This service handles RAG operations by delegating to the RAG container
 via Celery tasks instead of subprocess calls.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from config.datamodel import LlamaFarmConfig
 
@@ -33,6 +33,12 @@ def search_with_rag(
     top_k: int = 5,
     retrieval_strategy: str | None = None,
     score_threshold: float | None = None,
+    metadata_filters: dict[str, Any] | None = None,
+    distance_metric: str | None = None,
+    hybrid_alpha: float | None = None,
+    rerank_model: str | None = None,
+    query_expansion: bool | None = None,
+    max_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
@@ -55,16 +61,30 @@ def search_with_rag(
         top_k=top_k,
         retrieval_strategy=retrieval_strategy,
         score_threshold=score_threshold,
+        metadata_filters=metadata_filters,
+        distance_metric=distance_metric,
+        hybrid_alpha=hybrid_alpha,
+        rerank_model=rerank_model,
+        query_expansion=query_expansion,
+        max_tokens=max_tokens,
     )
 
     try:
-        results = search_task(
+        # Pass through supported args; task will map to API kwargs
+        search_task_any = cast(Any, search_task)
+        results = search_task_any(
             project_dir=project_dir,
             database=database,
             query=query,
             top_k=top_k,
             retrieval_strategy=retrieval_strategy,
             score_threshold=score_threshold,
+            metadata_filters=metadata_filters,
+            distance_metric=distance_metric,
+            hybrid_alpha=hybrid_alpha,
+            rerank_model=rerank_model,
+            query_expansion=query_expansion,
+            max_tokens=max_tokens,
         )
 
         logger.info(

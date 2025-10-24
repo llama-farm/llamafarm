@@ -1,20 +1,19 @@
 import builtins
 import contextlib
 import shutil
-import sys
 import threading
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-import celery.result  # type: ignore
-from atomic_agents import AtomicAgent  # type: ignore
-from fastapi import APIRouter, Header, HTTPException, Response
+import celery.result
+from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
+from fastapi import APIRouter, Header, HTTPException, Path as FastAPIPath, Response
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
-from agents.project_chat_orchestrator import ProjectChatOrchestratorAgentFactory
+from agents.chat_orchestrator import ChatOrchestratorAgent, ChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
 from api.routers.inference.models import ChatRequest
 
@@ -25,53 +24,52 @@ from api.routers.shared.response_utils import (
 )
 from core.celery import app
 from core.settings import settings
+from services.docs_context_service import get_docs_service
 from services.project_chat_service import (
     FALLBACK_ECHO_RESPONSE,
     project_chat_service,
 )
 from services.project_service import ProjectService
-from services.docs_context_service import get_docs_service
-
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 
 
 class Project(BaseModel):
-    namespace: str
-    name: str
-    config: LlamaFarmConfig
+    namespace: str = Field(..., description="The namespace of the project")
+    name: str = Field(..., description="The name of the project")
+    config: LlamaFarmConfig = Field(..., description="The configuration of the project")
 
 
 class ListProjectsResponse(BaseModel):
-    total: int
-    projects: list[Project]
+    total: int = Field(..., description="The total number of projects")
+    projects: list[Project] = Field(..., description="The list of projects")
 
 
 class CreateProjectRequest(BaseModel):
-    name: str
-    config_template: str | None = None
+    name: str = Field(..., description="The name of the project")
+    config_template: str | None = Field(
+        None, description="The config template to use for the project"
+    )
 
 
 class CreateProjectResponse(BaseModel):
-    project: Project
+    project: Project = Field(..., description="The created project")
 
 
 class GetProjectResponse(BaseModel):
-    project: Project
+    project: Project = Field(..., description="The project")
 
 
 class DeleteProjectResponse(BaseModel):
-    project: Project
+    project: Project = Field(..., description="The deleted project")
 
 
 class UpdateProjectRequest(BaseModel):
-    # Full replacement update of the project's configuration
-    config: LlamaFarmConfig
+    config: LlamaFarmConfig = Field(
+        ..., description="The full updated configuration of the project"
+    )
 
 
 class UpdateProjectResponse(BaseModel):
-    project: Project
+    project: Project = Field(..., description="The updated project")
 
 
 class ModelResponse(Model):
@@ -98,14 +96,19 @@ router = APIRouter(
 
 @router.get(
     "/{namespace}",
-    response_model=ListProjectsResponse,
+    operation_id="projects_list",
+    summary="List projects for a namespace",
+    tags=["projects", "mcp"],
     responses={
-        404: {"model": ErrorResponse},
-        422: {"model": ErrorResponse},
-        500: {"model": ErrorResponse},
+        200: {"model": ListProjectsResponse},
     },
 )
-async def list_projects(namespace: str):
+async def list_projects(
+    namespace: str = FastAPIPath(
+        ...,
+        description='The namespace to list projects for. Use "default" for the default namespace.',
+    ),
+):
     projects = ProjectService.list_projects(namespace)
     return ListProjectsResponse(
         total=len(projects),
@@ -122,11 +125,11 @@ async def list_projects(namespace: str):
 
 @router.post(
     "/{namespace}",
-    response_model=CreateProjectResponse,
+    operation_id="project_create",
+    summary="Create a project",
+    tags=["projects", "mcp"],
     responses={
-        404: {"model": ErrorResponse},
-        422: {"model": ErrorResponse},
-        500: {"model": ErrorResponse},
+        200: {"model": CreateProjectResponse},
     },
 )
 async def create_project(namespace: str, request: CreateProjectRequest):
@@ -144,11 +147,11 @@ async def create_project(namespace: str, request: CreateProjectRequest):
 
 @router.get(
     "/{namespace}/{project_id}",
-    response_model=GetProjectResponse,
+    operation_id="project_get",
+    summary="Get a project",
+    tags=["projects", "mcp"],
     responses={
-        404: {"model": ErrorResponse},
-        422: {"model": ErrorResponse},
-        500: {"model": ErrorResponse},
+        200: {"model": GetProjectResponse},
     },
 )
 async def get_project(namespace: str, project_id: str):
@@ -164,11 +167,12 @@ async def get_project(namespace: str, project_id: str):
 
 @router.put(
     "/{namespace}/{project_id}",
+    operation_id="project_update",
+    summary="Update a project",
+    tags=["projects", "mcp"],
     response_model=UpdateProjectResponse,
     responses={
-        404: {"model": ErrorResponse},
-        422: {"model": ErrorResponse},
-        500: {"model": ErrorResponse},
+        200: {"model": UpdateProjectResponse},
     },
 )
 async def update_project(
@@ -192,11 +196,11 @@ async def update_project(
 
 @router.delete(
     "/{namespace}/{project_id}",
-    response_model=DeleteProjectResponse,
+    operation_id="project_delete",
+    summary="Delete a project",
+    tags=["projects", "mcp"],
     responses={
-        404: {"model": ErrorResponse},
-        422: {"model": ErrorResponse},
-        500: {"model": ErrorResponse},
+        200: {"model": DeleteProjectResponse},
     },
 )
 async def delete_project(namespace: str, project_id: str):
@@ -218,7 +222,7 @@ SESSION_TTL_SECONDS = 30 * 60
 class SessionRecord:
     namespace: str
     project_id: str
-    agent: AtomicAgent
+    agent: ChatOrchestratorAgent
     created_at: float
     last_used: float
     request_count: int
@@ -286,9 +290,10 @@ async def chat(
     stateless = x_no_session is not None
 
     if stateless:
-        # Stateless mode: create throwaway agent without session or persistence
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(
-            project_config, project_dir=project_dir, model_name=request.model
+        agent = await ChatOrchestratorAgentFactory.create_agent(
+            project_config=project_config,
+            project_dir=project_dir,
+            model_name=request.model,
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -306,10 +311,9 @@ async def chat(
                 agent_sessions.pop(key, None)
                 record = None
 
-            if record is None or record.agent.model_name != request.model:
-                # Create new agent and enable persistence
-                agent = ProjectChatOrchestratorAgentFactory.create_agent(
-                    project_config,
+            if record is None or request.model != record.agent.model_name:
+                agent = await ChatOrchestratorAgentFactory.create_agent(
+                    project_config=project_config,
                     project_dir=project_dir,
                     model_name=request.model,
                     session_id=session_id,
@@ -393,70 +397,55 @@ async def chat(
     return completion
 
 
-@router.post(
-    "/{namespace}/{project_id}/rag/query",
-    responses={
-        404: {"model": ErrorResponse, "description": "Database or strategy not found"},
-        500: {"model": ErrorResponse, "description": "Internal server error"},
-    },
+class GetTaskResponse(BaseModel):
+    task_id: str = Field(..., description="The ID of the asynchronous task")
+    state: str = Field(
+        ...,
+        description="Current state of the task (e.g., PENDING, STARTED, SUCCESS, FAILURE)",
+    )
+    meta: dict | None = Field(
+        None, description="Progress metadata or intermediate results, if available"
+    )
+    result: dict | str | None = Field(
+        None, description="Result of the task if completed successfully"
+    )
+    error: str | None = Field(None, description="Error message if the task failed")
+    traceback: str | None = Field(
+        None, description="Traceback information if the task failed"
+    )
+
+
+@router.get(
+    "/{namespace}/{project_id}/tasks/{task_id}",
+    operation_id="task_get",
+    tags=["tasks", "mcp"],
+    summary="Get the status of an asynchronous task",
+    description="Return state, progress meta, and result/error if available.",
+    responses={200: {"model": GetTaskResponse}},
 )
-async def rag_query(
-    namespace: str,
-    project_id: str,
-    request: dict,  # Using dict to avoid circular import, will validate inside function
-):
-    """Perform a RAG query on the project's configured databases."""
-    # Import here to avoid circular import
-    from api.routers.rag.rag_query import QueryRequest, handle_rag_query
-
-    # Validate request
-    request = QueryRequest(**request)
-    # Get project configuration
-    project_service = ProjectService()
-    project_dir = project_service.get_project_dir(namespace, project_id)
-
-    if not Path(project_dir).exists():
-        raise HTTPException(
-            status_code=404, detail=f"Project {namespace}/{project_id} not found"
-        )
-
-    project_config = ProjectService.load_config(namespace, project_id)
-
-    if not project_config:
-        raise HTTPException(
-            status_code=500, detail="Failed to load project configuration"
-        )
-
-    # Handle the RAG query
-    response = await handle_rag_query(request, project_config, str(project_dir))
-
-    return response
-
-
-@router.get("/{namespace}/{project_id}/tasks/{task_id}")
 async def get_task(namespace: str, project_id: str, task_id: str):
     """Return state, progress meta, and result/error if available."""
     res: celery.result.AsyncResult = app.AsyncResult(task_id)
 
-    payload = {
-        "task_id": task_id,
-        "state": res.state,
-        "meta": None,
-        "result": None,
-        "error": None,
-        "traceback": None,
-    }
+    response = GetTaskResponse(
+        task_id=task_id,
+        state=res.state,
+        meta=None,
+        result=None,
+        error=None,
+        traceback=None,
+    )
 
     if res.info:
-        payload["meta"] = res.info
+        response.meta = res.info
 
     if res.state == "SUCCESS":
-        payload["result"] = res.result
+        response.result = res.result
     elif res.state == "FAILURE":
-        payload["error"] = str(res.result)
-        payload["traceback"] = res.traceback
+        response.error = str(res.result)
+        response.traceback = res.traceback
 
-    return payload
+    return response
 
 
 @router.get(
@@ -472,8 +461,10 @@ async def get_chat_session_history(namespace: str, project_id: str, session_id: 
         project_dir = ProjectService.get_project_dir(namespace, project_id)
         project_config = ProjectService.load_config(namespace, project_id)
 
-        agent = ProjectChatOrchestratorAgentFactory.create_agent(
-            project_config, project_dir=project_dir, session_id=session_id
+        agent = await ChatOrchestratorAgentFactory.create_agent(
+            project_config=project_config,
+            project_dir=project_dir,
+            session_id=session_id,
         )
         history = agent.history.get_history()
 
@@ -516,6 +507,10 @@ async def delete_all_chat_sessions(namespace: str, project_id: str):
 
 @router.get(
     "/{namespace}/{project_id}/models",
+    operation_id="models_list",
+    tags=["models", "mcp"],
+    summary="List all available models for this project",
+    description="List all available models for this project",
     responses={
         200: {"model": ListModelsResponse},
         404: {"model": ErrorResponse},

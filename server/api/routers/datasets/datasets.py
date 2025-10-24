@@ -1,9 +1,11 @@
 import time
+from enum import Enum
 
 from config.datamodel import Dataset
 from fastapi import APIRouter, HTTPException, Query, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from api.routers.datasets._models import ListDatasetsResponse
 from core.celery.tasks import process_dataset_task
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, FileExistsInAnotherDatasetError
@@ -18,12 +20,12 @@ router = APIRouter(
 )
 
 
-class ListDatasetsResponse(BaseModel):
-    total: int
-    datasets: list[Dataset | DatasetWithFileDetails]
-
-
-@router.get("/", response_model=ListDatasetsResponse)
+@router.get(
+    "/",
+    operation_id="dataset_list",
+    tags=["mcp"],
+    responses={200: {"model": ListDatasetsResponse}},
+)
 async def list_datasets(
     namespace: str,
     project: str,
@@ -70,7 +72,14 @@ class AvailableStrategiesResponse(BaseModel):
     databases: list[str]
 
 
-@router.get("/strategies", response_model=AvailableStrategiesResponse)
+@router.get(
+    "/strategies",
+    operation_id="dataset_strategies_list",
+    tags=["mcp"],
+    summary="List available data processing strategies and databases for the project",
+    description="List available data processing strategies and databases for the project",
+    responses={200: {"model": AvailableStrategiesResponse}},
+)
 async def get_available_strategies(namespace: str, project: str):
     """Get available data processing strategies and databases for the project"""
     logger.bind(namespace=namespace, project=project)
@@ -94,7 +103,12 @@ class CreateDatasetResponse(BaseModel):
     dataset: Dataset
 
 
-@router.post("/", response_model=CreateDatasetResponse)
+@router.post(
+    "/",
+    operation_id="dataset_create",
+    tags=["mcp"],
+    responses={200: {"model": CreateDatasetResponse}},
+)
 async def create_dataset(namespace: str, project: str, request: CreateDatasetRequest):
     logger.bind(namespace=namespace, project=project)
     try:
@@ -114,7 +128,12 @@ class DeleteDatasetResponse(BaseModel):
     dataset: Dataset
 
 
-@router.delete("/{dataset}", response_model=DeleteDatasetResponse)
+@router.delete(
+    "/{dataset}",
+    operation_id="dataset_delete",
+    tags=["mcp"],
+    responses={200: {"model": DeleteDatasetResponse}},
+)
 async def delete_dataset(namespace: str, project: str, dataset: str):
     logger.bind(namespace=namespace, project=project)
     try:
@@ -126,11 +145,36 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+class DatasetActionType(str, Enum):
+    INGEST = "ingest"  # alias for "process"
+    PROCESS = Field(
+        "process",
+        description="Process all files in the dataset using the configured data processing strategy",
+    )
+
+
 class DatasetActionRequest(BaseModel):
-    action_type: str
+    action_type: DatasetActionType = Field(
+        ..., description="The type of action to execute"
+    )
 
 
-@router.post("/{dataset}/actions")
+class DatasetActionResponse(BaseModel):
+    message: str = Field(..., description="The status message")
+    task_uri: str = Field(..., description="The URI for tracking the task")
+
+
+@router.post(
+    "/{dataset}/actions",
+    operation_id="dataset_actions",
+    summary="Execute an action on a dataset",
+    description="""Execute an action on a dataset
+    - INGEST: Process all files in the dataset using the configured data processing strategy
+    - PROCESS: Process all files in the dataset using the configured data processing strategy
+    """,
+    tags=["mcp"],
+    responses={200: {"model": DatasetActionResponse}},
+)
 async def actions(
     namespace: str, project: str, dataset: str, request: DatasetActionRequest
 ):
@@ -143,7 +187,7 @@ async def actions(
             f"http://localhost:8000/v1/projects/{namespace}/{project}/tasks/{task_id}"
         )
 
-    if action_type == "ingest":
+    if action_type in [DatasetActionType.INGEST, DatasetActionType.PROCESS]:
         task = process_dataset_task.delay(namespace, project, dataset)
         return {
             "message": "Accepted",
@@ -155,7 +199,23 @@ async def actions(
         )
 
 
-@router.post("/{dataset}/data")
+class DatasetDataUploadResponse(BaseModel):
+    filename: str = Field(..., description="The name of the uploaded file")
+    hash: str = Field(..., description="The hash of the uploaded file")
+    processed: bool = Field(..., description="Whether the file has been processed")
+
+
+@router.post(
+    "/{dataset}/data",
+    operation_id="dataset_data_upload",
+    summary="Upload a file to the dataset",
+    description=(
+        "Upload a file to the dataset (stores it but does NOT process into vector database. "
+        "Use the dataset actions endpoint with the 'ingest' action_type to process the file into the vector database)"
+    ),
+    tags=["mcp"],
+    responses={200: {"model": DatasetDataUploadResponse}},
+)
 async def upload_data(
     namespace: str,
     project: str,
@@ -184,11 +244,11 @@ async def upload_data(
         hash=metadata_file_content.hash,
     )
 
-    return {
-        "filename": file.filename,
-        "hash": metadata_file_content.hash,
-        "processed": False,
-    }
+    return DatasetDataUploadResponse(
+        filename=file.filename,
+        hash=metadata_file_content.hash,
+        processed=False,
+    )
 
 
 class FileProcessingDetail(BaseModel):

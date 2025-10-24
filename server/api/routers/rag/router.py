@@ -1,14 +1,15 @@
 """RAG router for query endpoints."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, List, Dict, Any
-from datetime import datetime
 from pydantic import BaseModel
 
 from core.logging import FastAPIStructLogger
 from services.project_service import ProjectService
-from .rag_query import QueryRequest, QueryResponse, handle_rag_query
+
 from .rag_health import RAGHealthResponse, handle_rag_health
+from .rag_query import QueryResponse, RAGQueryRequest, handle_rag_query
 
 logger = FastAPIStructLogger()
 
@@ -18,7 +19,6 @@ router = APIRouter(
 )
 
 
-# Response models for databases endpoint
 class RetrievalStrategyInfo(BaseModel):
     name: str
     type: str
@@ -29,37 +29,49 @@ class DatabaseInfo(BaseModel):
     name: str
     type: str
     is_default: bool
-    retrieval_strategies: List[RetrievalStrategyInfo]
+    retrieval_strategies: list[RetrievalStrategyInfo]
 
 
 class DatabasesResponse(BaseModel):
-    databases: List[DatabaseInfo]
-    default_database: Optional[str]
+    databases: list[DatabaseInfo]
+    default_database: str | None
 
 
-@router.post("/query", response_model=QueryResponse)
-async def query_rag(namespace: str, project: str, request: QueryRequest):
+@router.post(
+    "/query",
+    operation_id="rag_query",
+    tags=["mcp"],
+    summary="Query the RAG system for semantic search",
+    responses={200: {"model": QueryResponse}},
+)
+async def query_rag(namespace: str, project: str, request: RAGQueryRequest):
     """Query the RAG system for semantic search."""
     logger.bind(namespace=namespace, project=project)
 
-    # Get project configuration
-    project_obj = ProjectService.get_project(namespace, project)
     project_dir = ProjectService.get_project_dir(namespace, project)
 
-    if not project_obj.config.rag:
+    if not Path(project_dir).exists():
+        raise HTTPException(
+            status_code=404, detail=f"Project {namespace}/{project} not found"
+        )
+
+    # Get project configuration
+    project_config = ProjectService.load_config(namespace, project)
+
+    if not project_config.rag:
         raise HTTPException(
             status_code=400, detail="RAG not configured for this project"
         )
 
     # Use the handler function from rag_query.py
-    return await handle_rag_query(request, project_obj.config, str(project_dir))
+    return await handle_rag_query(request, project_config, str(project_dir))
 
 
 @router.get("/health", response_model=RAGHealthResponse)
 async def get_rag_health(
     namespace: str,
     project: str,
-    database: Optional[str] = Query(
+    database: str | None = Query(
         None, description="Specific database to check health for"
     ),
 ):
@@ -103,13 +115,13 @@ async def get_rag_databases(namespace: str, project: str):
         found_default = False
 
         # Determine default strategy (priority: default_retrieval_strategy > strategy.default > first)
-        if hasattr(db, 'default_retrieval_strategy') and db.default_retrieval_strategy:
+        if hasattr(db, "default_retrieval_strategy") and db.default_retrieval_strategy:
             default_strategy_name = str(db.default_retrieval_strategy)
 
         # First pass: check if any strategy is explicitly marked as default
         if not default_strategy_name:
             for strategy in db.retrieval_strategies or []:
-                if hasattr(strategy, 'default') and strategy.default:
+                if hasattr(strategy, "default") and strategy.default:
                     default_strategy_name = str(strategy.name)
                     break
 
@@ -127,28 +139,38 @@ async def get_rag_databases(namespace: str, project: str):
                     is_default = True
                     found_default = True
 
-            strategies.append(RetrievalStrategyInfo(
-                name=str(strategy.name),
-                type=strategy.type.value if hasattr(strategy.type, 'value') else str(strategy.type),
-                is_default=is_default
-            ))
+            strategies.append(
+                RetrievalStrategyInfo(
+                    name=str(strategy.name),
+                    type=strategy.type.value
+                    if hasattr(strategy.type, "value")
+                    else str(strategy.type),
+                    is_default=is_default,
+                )
+            )
 
         # Check if this database is the default
         is_default_db = False
-        if rag_config.default_database and str(db.name) == str(rag_config.default_database):
+        if rag_config.default_database and str(db.name) == str(
+            rag_config.default_database
+        ):
             is_default_db = True
         elif not rag_config.default_database and not databases:
             # First database is default if no explicit default
             is_default_db = True
 
-        databases.append(DatabaseInfo(
-            name=str(db.name),
-            type=db.type.value if hasattr(db.type, 'value') else str(db.type),
-            is_default=is_default_db,
-            retrieval_strategies=strategies
-        ))
+        databases.append(
+            DatabaseInfo(
+                name=str(db.name),
+                type=db.type.value if hasattr(db.type, "value") else str(db.type),
+                is_default=is_default_db,
+                retrieval_strategies=strategies,
+            )
+        )
 
     return DatabasesResponse(
         databases=databases,
-        default_database=str(rag_config.default_database) if rag_config.default_database else None
+        default_database=str(rag_config.default_database)
+        if rag_config.default_database
+        else None,
     )

@@ -852,7 +852,7 @@ func StartContainerDetachedWithPolicy(spec ContainerRunSpec, policy *PortResolut
 
 	// Remove stale container if exists and not running
 	if containerExists(spec.Name) && !isContainerRunning(spec.Name) {
-		fmt.Fprintln(os.Stderr, "Removing existing container to refresh image/args...")
+		OutputDebug("Removing existing container to refresh image/args...")
 		if err := removeContainer(spec.Name); err != nil {
 			return nil, fmt.Errorf("failed to remove existing container %s: %w", spec.Name, err)
 		}
@@ -1233,7 +1233,7 @@ func StartContainerWithNetwork(spec ContainerRunSpec, networkName string, policy
 
 	// Remove stale container if exists and not running
 	if containerExists(spec.Name) && !isContainerRunning(spec.Name) {
-		fmt.Fprintln(os.Stderr, "Removing existing container to refresh image/args...")
+		OutputDebug("Removing existing container to refresh image/args...")
 		if err := removeContainer(spec.Name); err != nil {
 			return nil, fmt.Errorf("failed to remove existing container %s: %w", spec.Name, err)
 		}

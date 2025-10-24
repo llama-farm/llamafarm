@@ -38,7 +38,8 @@ def test_dataset_actions_invalid_type_returns_400():
         "/v1/projects/ns1/proj1/datasets/ds1/actions",
         json={"action_type": "unknown"},
     )
-    assert resp.status_code == 400
+    # Pydantic validation returns 422 for invalid enum values
+    assert resp.status_code == 422
 
 
 class _FakeAsyncResult:

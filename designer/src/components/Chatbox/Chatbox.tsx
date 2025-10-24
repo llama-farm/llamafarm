@@ -38,6 +38,7 @@ function Chatbox({
 
   const activeProject = useActiveProject()
   const activeProjectName = activeProject?.project || ''
+  // Session list UI removed: single session per project
 
   // Refs for auto-scroll
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -61,7 +62,8 @@ function Chatbox({
       sessionId === null // Only if no existing session
     ) {
       // Use the existing sendMessage function - this will trigger normal session creation
-      sendMessage(initialMessage)
+      const briefKickoff = `${initialMessage}\n\nPlease answer briefly (one or two sentences).`
+      sendMessage(briefKickoff)
       setHasProcessedInitialMessage(true)
     }
   }, [
@@ -194,10 +196,45 @@ function Chatbox({
         </div>
       )}
 
-      {/* Error display */}
+      {/* Error/empty state banner (dark-mode friendly) */}
       {error && isPanelOpen && (
-        <div className="mx-4 mb-2 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
-          {error}
+        <div className="mx-4 mb-2 rounded-xl border border-border bg-card/40">
+          <div className="px-3 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
+                !
+              </span>
+              <div className="text-sm">
+                <div className="font-medium text-foreground">
+                  Project setup required
+                </div>
+                <div className="text-xs text-muted-foreground">{error}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() =>
+                  window.open(
+                    'https://github.com/llama-farm/llamafarm#quickstart',
+                    '_blank'
+                  )
+                }
+                className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80"
+              >
+                Docs
+              </button>
+              <button
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent('lf-open-create-project')
+                  )
+                }
+                className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
+              >
+                Create project
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -209,8 +246,26 @@ function Chatbox({
           className="flex-1 overflow-y-auto flex flex-col gap-5 pr-1"
         >
           {!hasMessages ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              Start a conversation...
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40 max-w-[560px]">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+                  <span className="text-primary text-lg">💬</span>
+                </div>
+                <div className="text-base font-medium">
+                  Start a conversation
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Type a message below to chat with your model.
+                </div>
+                {error && (
+                  <div className="mt-3 text-xs text-red-400">
+                    Set up a project config first to get responses.
+                  </div>
+                )}
+                <div className="mt-3 text-xs text-muted-foreground">
+                  Tip: Press Enter to send
+                </div>
+              </div>
             </div>
           ) : (
             messages.map(message => (
@@ -220,20 +275,52 @@ function Chatbox({
           <div ref={endRef} />
         </div>
         <div className="flex flex-col gap-3 p-3 rounded-lg bg-secondary mt-auto sticky bottom-4">
-          <textarea
-            value={inputValue}
-            onChange={e => updateInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isSending}
-            className="w-full h-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
-            placeholder={
-              isStreaming
-                ? 'Streaming response...'
-                : isSending
-                  ? 'Waiting for response...'
-                  : 'Type here...'
-            }
-          />
+          <div className="relative">
+            <textarea
+              value={inputValue}
+              onChange={e => updateInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isSending}
+              className="w-full h-10 pr-10 resize-none bg-transparent border-none placeholder-opacity-60 focus:outline-none focus:ring-0 font-sans text-sm sm:text-base leading-relaxed overflow-hidden text-foreground placeholder-foreground/60 disabled:opacity-50"
+              placeholder={
+                isStreaming
+                  ? 'Streaming response...'
+                  : isSending
+                    ? 'Waiting for response...'
+                    : 'Type here...'
+              }
+            />
+            {/* Action button overlays top-right inside the input area, same spot for send/stop */}
+            {isStreaming ? (
+              <button
+                onClick={cancelStreaming}
+                className="absolute right-2 top-2 z-10 w-8 h-8 rounded-full flex items-center justify-center text-primary hover:opacity-80"
+                aria-label="Stop response"
+              >
+                <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden="true">
+                  <rect
+                    x="6"
+                    y="6"
+                    width="12"
+                    height="12"
+                    rx="2"
+                    className="fill-current"
+                  />
+                </svg>
+              </button>
+            ) : (
+              <FontIcon
+                isButton
+                type="arrow-filled"
+                className={`absolute right-2 top-2 z-10 w-8 h-8 ${
+                  inputValue.trim().length === 0
+                    ? 'text-muted-foreground opacity-50 cursor-not-allowed'
+                    : 'text-primary hover:opacity-80'
+                }`}
+                handleOnClick={handleSendClick}
+              />
+            )}
+          </div>
           <div className="flex justify-between items-center">
             {(isSending || isStreaming) && (
               <span className="text-xs text-muted-foreground flex items-center gap-2">
@@ -241,24 +328,12 @@ function Chatbox({
                   <>
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-teal-500" />
                     Streaming response...
-                    <button
-                      onClick={cancelStreaming}
-                      className="ml-2 text-xs px-2 py-1 rounded bg-red-500 hover:bg-red-600 text-white"
-                    >
-                      Cancel
-                    </button>
                   </>
                 ) : (
                   'Sending message...'
                 )}
               </span>
             )}
-            <FontIcon
-              isButton
-              type="arrow-filled"
-              className={`w-8 h-8 self-end ${!canSend ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
-              handleOnClick={handleSendClick}
-            />
           </div>
         </div>
       </div>

@@ -27,6 +27,8 @@ dependencies = [
   "urllib3==1.26.20",
   "six>=1.16.0",
   "requests>=2.25.0",
+  "httpx>=0.25.0",
+  "mcp>=1.2.0",
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
@@ -38,6 +40,9 @@ dependencies = [
   "python-dotenv>=1.0.0",
   "llamafarm-config",
   "types-requests>=2.31.0.6",
+  "fastapi-mcp>=0.4.0",
+  "mcp>=1.2.0",
+  "ollama>=0.6.0",
 ]
 
 [project.optional-dependencies]
@@ -53,6 +58,8 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 88         # Match Black's default
