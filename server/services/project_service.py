@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -14,8 +13,6 @@ from api.errors import (
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
 from config import (  # noqa: E402
     ConfigError,
     generate_base_config,

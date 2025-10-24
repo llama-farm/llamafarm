@@ -10,6 +10,24 @@ from structlog.types import EventDict, Processor
 from .settings import settings
 
 
+def _coerce_log_level(level: Any) -> int | str:
+    """Allow level as int, numeric string, or name.
+
+    Returns an int for numeric inputs; otherwise an upper-cased level name.
+    """
+    if isinstance(level, int):
+        return level
+    if isinstance(level, str):
+        s = level.strip()
+        if s.isdigit():
+            try:
+                return int(s)
+            except Exception:
+                return s.upper()
+        return s.upper()
+    return level
+
+
 def drop_color_message_key(_, __, event_dict: EventDict) -> EventDict:
     """
     Uvicorn logs the message a second time in the extra `color_message`, but we don't
@@ -51,7 +69,10 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     if json_logs:
         log_renderer = structlog.processors.JSONRenderer()
     else:
-        log_renderer = structlog.dev.ConsoleRenderer()
+        log_renderer = structlog.dev.ConsoleRenderer(
+            # exception_formatter=structlog.dev.rich_traceback
+            exception_formatter=structlog.dev.plain_traceback
+        )
 
     formatter = structlog.stdlib.ProcessorFormatter(
         # These run ONLY on `logging` entries that do NOT originate within
@@ -74,11 +95,11 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
-    root_logger.setLevel(log_level.upper())
+    root_logger.setLevel(_coerce_log_level(log_level))
 
     # Configure celery logger
     celery_logger = logging.getLogger("celery.worker")
-    celery_logger.setLevel(settings.CELERY_LOG_LEVEL.upper() or "INFO")
+    celery_logger.setLevel(_coerce_log_level(settings.CELERY_LOG_LEVEL) or "INFO")
 
     # Configure uvicorn loggers to use our root logger setup
     for logger_name in ["uvicorn", "uvicorn.error"]:
@@ -89,7 +110,7 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
         # Let logs propagate to root logger (which has our structlog handler)
         # uvicorn_logger.propagate = True
         uvicorn_logger.name = "uvicorn"
-        uvicorn_logger.setLevel(log_level.upper())
+        uvicorn_logger.setLevel(_coerce_log_level(log_level))
 
 
 class FastAPIStructLogger:

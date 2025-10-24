@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
+from agents.base.history import LFAgentChatMessage
 from pydantic import BaseModel, Field
 
 
 # OpenAI-compatible chat message
-class ChatMessage(BaseModel):
-    role: Literal["system", "user", "assistant"]
-    content: str
+class ChatMessage(LFAgentChatMessage):
+    pass
 
 
 # OpenAI-compatible chat completion request

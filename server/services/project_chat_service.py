@@ -1,29 +1,21 @@
-import re
-import sys
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
 from typing import Any
 
+from config.datamodel import LlamaFarmConfig  # noqa: E402
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
-from agents.project_chat_orchestrator import (
-    ProjectChatOrchestratorAgent,
-    ProjectChatOrchestratorAgentInputSchema,
-)
-from context_providers.project_chat_context_provider import (
+from agents.chat_orchestrator import ChatOrchestratorAgent
+from agents.base.agent import LFAgent
+from agents.base.history import LFAgentChatMessage
+from context_providers.rag_context_provider import (
     ChunkItem,
-    ProjectChatContextProvider,
+    RAGContextProvider,
 )
 from core.logging import FastAPIStructLogger
 from services.rag_service import search_with_rag
-
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 logger = FastAPIStructLogger()
 
@@ -39,11 +31,14 @@ FALLBACK_ECHO_RESPONSE = (
 MIN_LENGTH_RATIO = 0.3  # Minimum length ratio (candidate/input) to avoid echo detection
 LENGTH_EXTENSION_FACTOR = 1.2  # Factor by which candidate must exceed input length
 SIMILARITY_THRESHOLD = 0.8  # Minimum word similarity ratio to trigger echo detection
-SIMILARITY_LENGTH_FACTOR = 1.5  # Maximum length multiplier for similarity-based echo detection
+SIMILARITY_LENGTH_FACTOR = (
+    1.5  # Maximum length multiplier for similarity-based echo detection
+)
 
 
 class RAGParameters:
     """Container for resolved RAG parameters."""
+
     def __init__(
         self,
         rag_enabled: bool = False,
@@ -120,16 +115,22 @@ class ProjectChatService:
             elif db_config.retrieval_strategies:
                 # Check for strategy marked as default
                 for strategy in db_config.retrieval_strategies:
-                    if hasattr(strategy, 'default') and strategy.default:
+                    if hasattr(strategy, "default") and strategy.default:
                         retrieval_strategy = str(strategy.name)
-                        logger.info(f"Using default-marked strategy: {retrieval_strategy}")
+                        logger.info(
+                            f"Using default-marked strategy: {retrieval_strategy}"
+                        )
                         break
                 # If no default marked, use first strategy
                 if retrieval_strategy is None:
                     retrieval_strategy = str(db_config.retrieval_strategies[0].name)
-                    logger.info(f"Using first strategy as default: {retrieval_strategy}")
+                    logger.info(
+                        f"Using first strategy as default: {retrieval_strategy}"
+                    )
             else:
-                logger.warning(f"No retrieval strategies defined for database '{database}'")
+                logger.warning(
+                    f"No retrieval strategies defined for database '{database}'"
+                )
                 return RAGParameters(rag_enabled=False)
 
         # Step 4: Resolve parameters from strategy config (only if not explicitly provided)
@@ -138,7 +139,9 @@ class ProjectChatService:
                 if strategy.name == retrieval_strategy:
                     # Get top_k from strategy config if not provided
                     if rag_top_k is None and strategy.config:
-                        rag_top_k = self._extract_config_value(strategy.config, "top_k", retrieval_strategy)
+                        rag_top_k = self._extract_config_value(
+                            strategy.config, "top_k", retrieval_strategy
+                        )
 
                     # Get score_threshold from strategy config if not provided
                     if rag_score_threshold is None and strategy.config:
@@ -163,7 +166,9 @@ class ProjectChatService:
             rag_score_threshold=rag_score_threshold,
         )
 
-    def _extract_config_value(self, config: dict | Any, key: str, strategy_name: str) -> Any:
+    def _extract_config_value(
+        self, config: dict | Any, key: str, strategy_name: str
+    ) -> Any:
         """Extract a value from strategy config, handling both dict and object types."""
         value = None
         if isinstance(config, dict):
@@ -280,23 +285,18 @@ class ProjectChatService:
         logger.info(f"RAG search returned {len(normalized)} results")
         return normalized
 
-    def _clear_rag_context_provider(
-        self, chat_agent: ProjectChatOrchestratorAgent
-    ) -> None:
+    def _clear_rag_context_provider(self, chat_agent: LFAgent) -> None:
         try:
-            if (
-                hasattr(chat_agent, "context_providers")
-                and chat_agent.context_providers
-            ):
-                chat_agent.context_providers.pop("project_chat_context", None)
+            chat_agent.remove_context_provider("project_chat_context")
         except Exception:
             logger.warning("Failed to clear RAG context provider", exc_info=True)
 
     async def chat(
         self,
+        *,
         project_dir: str,
         project_config: LlamaFarmConfig,
-        chat_agent: ProjectChatOrchestratorAgent,
+        chat_agent: ChatOrchestratorAgent,
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
@@ -304,77 +304,24 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> ChatCompletion:
-        self._clear_rag_context_provider(chat_agent)
-        context_provider = ProjectChatContextProvider(title="Project Chat Context")
-        chat_agent.register_context_provider("project_chat_context", context_provider)
-
-        # Resolve RAG parameters using shared helper
-        rag_params = self._resolve_rag_parameters(
-            project_config,
+        response_message = ""
+        async for chunk in self.stream_chat(
+            project_dir=project_dir,
+            project_config=project_config,
+            chat_agent=chat_agent,
+            message=message,
             rag_enabled=rag_enabled,
             database=database,
-            retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
-        )
-
-        # Use the RAG subsystem to perform RAG based on the project config
-        rag_results = []
-        if rag_params.rag_enabled:
-            rag_results = self._perform_rag_search(
-                project_dir,
-                project_config,
-                message,
-                top_k=rag_params.rag_top_k or 5,
-                database=rag_params.database,
-                retrieval_strategy=rag_params.retrieval_strategy,
-                score_threshold=rag_params.rag_score_threshold,
-            )
-
-        for idx, result in enumerate(rag_results):
-            chunk_item = ChunkItem(
-                content=result.content,
-                metadata={
-                    "source": result.metadata.get("source", "unknown"),
-                    "score": getattr(result, "score", 0.0),
-                    "chunk_index": idx,
-                    "retrieval_method": "rag_search",
-                    **result.metadata,
-                },
-            )
-            context_provider.chunks.append(chunk_item)
-
-        input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
-        logger.info(f"Input schema: {input_schema}")
-        agent_response = await chat_agent.run_async(input_schema)
-        logger.info(f"Agent response: {agent_response}")
-
-        response_message = agent_response.chat_message
-        logger.debug(f"Response received (length: {len(response_message)} chars)")
-
-        # Check if response is echoing input
-        if _is_echo(message, response_message):
-            logger.warning(
-                f"Response is echoing input! Input length: {len(message)}, Response length: {len(response_message)}"
-            )
-            logger.warning(f"Input: '{message}'")
-            logger.warning(f"Response: '{response_message}'")
-
-            # Instead of clearing entire history, just remove the problematic response
-            # to prevent the model from learning bad behavior while preserving context
-            if hasattr(chat_agent, "history"):
-                logger.info("Removing problematic response from history due to echo detection")
-                _remove_echo_response_from_history(chat_agent)
-
-            # Generate a fallback response
-            response_message = FALLBACK_ECHO_RESPONSE
-            logger.info("Using improved fallback response instead of echo")
+        ):
+            response_message += chunk
 
         completion = ChatCompletion(
             id=f"chat-{uuid.uuid4()}",
             object="chat.completion",
             created=int(time.time()),
-            model=chat_agent.model_name,  # Use the model name stored in the agent
+            model=chat_agent.model_name,
             choices=[
                 Choice(
                     index=0,
@@ -393,7 +340,7 @@ class ProjectChatService:
         *,
         project_dir: str,
         project_config: LlamaFarmConfig,
-        chat_agent: ProjectChatOrchestratorAgent,
+        chat_agent: LFAgent,
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
@@ -403,7 +350,7 @@ class ProjectChatService:
     ) -> AsyncGenerator[str, None]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         self._clear_rag_context_provider(chat_agent)
-        context_provider = ProjectChatContextProvider(title="Project Chat Context")
+        context_provider = RAGContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
 
         # Resolve RAG parameters using shared helper
@@ -439,47 +386,18 @@ class ProjectChatService:
             )
             context_provider.chunks.append(chunk_item)
 
-        input_schema = ProjectChatOrchestratorAgentInputSchema(chat_message=message)
+        user_input = LFAgentChatMessage(role="user", content=message)
         try:
             logger.info("Running async stream")
             previous_response = ""
             emitted = False
-            echo_detected = False
-            normalized_input = _normalize_text(message)
-            async for chunk in chat_agent.run_async_stream(input_schema):
-                if not hasattr(chunk, "chat_message") or not chunk.chat_message:
-                    continue
-                current_response = chunk.chat_message
-                normalized_current = _normalize_text(current_response)
-                if normalized_input.startswith(normalized_current):
-                    echo_detected = True
-                    logger.info(
-                        "Streaming matches user input prefix; waiting for divergence",
-                        chunk=current_response,
-                    )
-                    continue
-
-                incremental = current_response
-                if previous_response:
-                    if len(current_response) > len(previous_response):
-                        incremental = current_response[len(previous_response) :]
-                    else:
-                        incremental = ""
-
-                if incremental:
+            async for chunk in chat_agent.run_async_stream(user_input=user_input):
+                if chunk:
                     emitted = True
-                    yield incremental
-
-                previous_response = current_response
+                    yield chunk
 
             if not emitted:
-                if echo_detected or not previous_response:
-                    logger.info("Streaming produced no usable content; using fallback")
-                    _remove_echo_response_from_history(chat_agent)
-                    yield FALLBACK_ECHO_RESPONSE
-                else:
-                    yield previous_response
-                return
+                yield previous_response
         except Exception:
             logger.error(
                 "Model call failed",
@@ -488,67 +406,3 @@ class ProjectChatService:
 
 
 project_chat_service = ProjectChatService()
-
-
-def _normalize_text(text: str) -> str:
-    return re.sub(r"\W+", "", text).lower()
-
-
-def _is_echo(user_input: str, candidate: str) -> bool:
-    if not candidate or not user_input:
-        return False
-
-    if _normalize_text(candidate) == _normalize_text(user_input):
-        return True
-
-    if len(candidate.strip()) < len(user_input.strip()) * MIN_LENGTH_RATIO:
-        return False
-
-    normalized_input = _normalize_text(user_input)
-    normalized_candidate = _normalize_text(candidate)
-
-    if normalized_candidate.startswith(normalized_input) and len(candidate) > len(user_input) * LENGTH_EXTENSION_FACTOR:
-        return False
-
-    similarity_ratio = len(set(normalized_candidate.split()) & set(normalized_input.split())) / len(set(normalized_input.split())) if normalized_input.split() else 0
-
-    if similarity_ratio >= SIMILARITY_THRESHOLD and len(candidate) <= len(user_input) * SIMILARITY_LENGTH_FACTOR:
-        return True
-
-    return False
-
-
-def _remove_echo_response_from_history(chat_agent: ProjectChatOrchestratorAgent) -> None:
-    history = getattr(chat_agent, "history", None)
-    if not history:
-        return
-
-    try:
-        if hasattr(history, "history") and isinstance(history.history, list):
-            messages = history.history
-            for i in range(len(messages) - 1, -1, -1):
-                msg = messages[i]
-                role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
-                if role == "assistant":
-                    messages.pop(i)
-                    logger.info(f"Removed assistant message at index {i} from history")
-                    break
-    except Exception:
-        logger.warning("Failed to remove echo response from history", exc_info=True)
-
-
-def _drop_last_history_entry(chat_agent: ProjectChatOrchestratorAgent) -> None:
-    history = getattr(chat_agent, "history", None)
-    if not history:
-        return
-
-    try:
-        if isinstance(history, list):
-            if history:
-                history.pop()
-        elif hasattr(history, "history"):
-            internal = getattr(history, "history", None)
-            if internal and isinstance(internal, list):
-                internal.pop()
-    except Exception:
-        logger.warning("Failed to trim chat history", exc_info=True)

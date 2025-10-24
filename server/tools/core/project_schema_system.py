@@ -18,16 +18,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from config import load_config, save_config
+from config.datamodel import LlamaFarmConfig
 from pydantic import BaseModel, Field
 from pydantic.fields import FieldInfo
 
-# Import the existing configuration system
-import sys
-repo_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
-from config.datamodel import LlamaFarmConfig
-from config import load_config, save_config
 from services.project_service import ProjectService
+
+repo_root = Path(__file__).parent.parent.parent.parent
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +33,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConfigFieldInfo:
     """Rich information about a configuration field for LLM understanding"""
+
     name: str
     field_type: str
     description: str
@@ -42,7 +41,7 @@ class ConfigFieldInfo:
     default_value: Any = None
     examples: List[str] = field(default_factory=list)
     constraints: Dict[str, Any] = field(default_factory=dict)
-    nested_fields: Optional[List['ConfigFieldInfo']] = None
+    nested_fields: Optional[List["ConfigFieldInfo"]] = None
     enum_values: Optional[List[str]] = None
     llm_guidance: Optional[str] = None  # Specific guidance for LLMs
 
@@ -50,6 +49,7 @@ class ConfigFieldInfo:
 @dataclass
 class ConfigChange:
     """Represents a single configuration change"""
+
     field_path: str  # e.g., "rag.strategies[0].components.parser.type"
     old_value: Any
     new_value: Any
@@ -61,6 +61,7 @@ class ConfigChange:
 @dataclass
 class ConfigChangeSet:
     """Collection of related configuration changes"""
+
     changes: List[ConfigChange] = field(default_factory=list)
     description: str = ""
     user_intent: str = ""
@@ -84,6 +85,7 @@ class ProjectSchemaIntrospector:
             schema_path = repo_root / "config" / "schema.yaml"
             if schema_path.exists():
                 import yaml
+
                 with open(schema_path) as f:
                     self._json_schema = yaml.safe_load(f)
             else:
@@ -125,17 +127,17 @@ class ProjectSchemaIntrospector:
 
         # Extract examples from field info
         examples = []
-        if hasattr(field_info, 'examples') and field_info.examples:
+        if hasattr(field_info, "examples") and field_info.examples:
             examples = field_info.examples
 
         # Extract constraints
         constraints: dict[str, Any] = {}
-        if hasattr(field_info, 'constraints'):
+        if hasattr(field_info, "constraints"):
             constraints = field_info.constraints or {}
 
         # Check for enum values
         enum_values = None
-        if field_info.annotation and hasattr(field_info.annotation, '__members__'):
+        if field_info.annotation and hasattr(field_info.annotation, "__members__"):
             enum_values = list(field_info.annotation.__members__.keys())
 
         # Generate LLM guidance
@@ -152,12 +154,17 @@ class ProjectSchemaIntrospector:
             examples=examples,
             constraints=constraints,
             enum_values=enum_values,
-            llm_guidance=llm_guidance
+            llm_guidance=llm_guidance,
         )
 
-    def _generate_llm_guidance(self, name: str, field_type: str, description: str,
-                             constraints: Dict[str, Any],
-                             enum_values: Optional[List[str]]) -> str:
+    def _generate_llm_guidance(
+        self,
+        name: str,
+        field_type: str,
+        description: str,
+        constraints: Dict[str, Any],
+        enum_values: Optional[List[str]],
+    ) -> str:
         """Generate specific guidance for LLMs on how to handle this field"""
 
         guidance_parts: list[str] = [f"Field '{name}': {description}"]
@@ -166,44 +173,26 @@ class ProjectSchemaIntrospector:
             guidance_parts.append(f"Must be one of: {', '.join(enum_values)}")
 
         if constraints:
-            if 'ge' in constraints:
+            if "ge" in constraints:
                 guidance_parts.append(f"Minimum value: {constraints['ge']}")
-            if 'le' in constraints:
+            if "le" in constraints:
                 guidance_parts.append(f"Maximum value: {constraints['le']}")
-            if 'min_length' in constraints:
+            if "min_length" in constraints:
                 guidance_parts.append(f"Minimum length: {constraints['min_length']}")
-            if 'max_length' in constraints:
+            if "max_length" in constraints:
                 guidance_parts.append(f"Maximum length: {constraints['max_length']}")
-            if 'pattern' in constraints:
+            if "pattern" in constraints:
                 guidance_parts.append(f"Must match pattern: {constraints['pattern']}")
 
         # Add field-specific guidance
         guidance_map = {
-            'name': (
-                "Should be a valid project identifier without spaces or "
-                "special characters"
-            ),
-            'namespace': (
-                "Should be a valid namespace identifier, typically "
-                "organization or team name"
-            ),
-            'version': "Must always be 'v1' for current config version",
-            'prompts': (
-                "List of prompt configurations. Each prompt needs a name and "
-                "either sections or raw_text"
-            ),
-            'rag': (
-                "RAG system configuration. Contains strategies, parsers, "
-                "embedders, vector stores, and retrieval strategies"
-            ),
-            'datasets': (
-                "List of dataset configurations. Each dataset needs a name "
-                "and list of file hashes"
-            ),
-            'runtime': (
-                "Runtime configuration specifying the AI provider "
-                "(openai/ollama) and model details"
-            )
+            "name": "Should be a valid project identifier without spaces or special characters",
+            "namespace": "Should be a valid namespace identifier, typically organization or team name",
+            "version": "Must always be 'v1' for current config version",
+            "prompts": "List of prompt configurations. Each prompt needs a name and either sections or raw_text",
+            "rag": "RAG system configuration. Contains strategies, parsers, embedders, vector stores, and retrieval strategies",
+            "datasets": "List of dataset configurations. Each dataset needs a name and list of file hashes",
+            "runtime": "Runtime configuration specifying the AI provider (openai/ollama) and model details",
         }
 
         if name in guidance_map:
@@ -217,7 +206,7 @@ class ProjectSchemaIntrospector:
 
         # For nested paths, we'd need to traverse the structure
         # For now, handle top-level fields
-        if '.' not in field_path:
+        if "." not in field_path:
             return fields.get(field_path)
 
         # TODO: Implement nested field traversal
@@ -232,7 +221,7 @@ class ProjectSchemaIntrospector:
             "description": "Complete schema for LlamaFarm project configuration files",
             "version": "v1",
             "sections": {},
-            "field_guidance": {}
+            "field_guidance": {},
         }
 
         for field_name, field_info in fields.items():
@@ -241,7 +230,7 @@ class ProjectSchemaIntrospector:
                 "type": field_info.field_type,
                 "required": field_info.required,
                 "examples": field_info.examples,
-                "constraints": field_info.constraints
+                "constraints": field_info.constraints,
             }
 
             if field_info.enum_values:
@@ -334,7 +323,7 @@ class ProjectConfigManipulator:
             old_value=old_value,
             new_value=new_value,
             change_type="update" if old_value is not None else "create",
-            description=description
+            description=description,
         )
 
         return change
@@ -353,7 +342,7 @@ class ProjectConfigManipulator:
                 self.apply_change(
                     change_spec.field_path,
                     change_spec.new_value,
-                    change_spec.description or f"Change to {change_spec.field_path}"
+                    change_spec.description or f"Change to {change_spec.field_path}",
                 )
 
             # If we get here, all changes were successful
@@ -402,7 +391,7 @@ class ProjectConfigManipulator:
 
     def _get_nested_field(self, obj: Dict[str, Any], field_path: str) -> Any:
         """Get a nested field value using dot notation"""
-        keys = field_path.split('.')
+        keys = field_path.split(".")
         current = obj
 
         for key in keys:
@@ -415,7 +404,7 @@ class ProjectConfigManipulator:
 
     def _set_nested_field(self, obj: Dict[str, Any], field_path: str, value: Any):
         """Set a nested field value using dot notation"""
-        keys = field_path.split('.')
+        keys = field_path.split(".")
         current = obj
 
         # Navigate to the parent of the target field
@@ -442,32 +431,38 @@ class ProjectConfigManipulator:
 
                 if key not in original:
                     # New field added
-                    changes.append(ConfigChange(
-                        field_path=new_path,
-                        old_value=None,
-                        new_value=current[key],
-                        change_type="create"
-                    ))
+                    changes.append(
+                        ConfigChange(
+                            field_path=new_path,
+                            old_value=None,
+                            new_value=current[key],
+                            change_type="create",
+                        )
+                    )
                 elif key not in current:
                     # Field removed
-                    changes.append(ConfigChange(
-                        field_path=new_path,
-                        old_value=original[key],
-                        new_value=None,
-                        change_type="delete"
-                    ))
+                    changes.append(
+                        ConfigChange(
+                            field_path=new_path,
+                            old_value=original[key],
+                            new_value=None,
+                            change_type="delete",
+                        )
+                    )
                 else:
                     # Field potentially modified
                     self._find_changes(original[key], current[key], new_path, changes)
 
         elif original != current:
             # Value changed
-            changes.append(ConfigChange(
-                field_path=path,
-                old_value=original,
-                new_value=current,
-                change_type="update"
-            ))
+            changes.append(
+                ConfigChange(
+                    field_path=path,
+                    old_value=original,
+                    new_value=current,
+                    change_type="update",
+                )
+            )
 
 
 class LLMConfigurationAssistant:
@@ -487,23 +482,25 @@ class LLMConfigurationAssistant:
             f"Configuration Version: {schema['version']}",
             "",
             "## Configuration Sections:",
-            ""
+            "",
         ]
 
         for section_name, section_info in schema["sections"].items():
-            doc_parts.extend([
-                f"### {section_name}",
-                f"**Description:** {section_info['description']}",
-                f"**Type:** {section_info['type']}",
-                f"**Required:** {'Yes' if section_info['required'] else 'No'}",
-            ])
+            doc_parts.extend(
+                [
+                    f"### {section_name}",
+                    f"**Description:** {section_info['description']}",
+                    f"**Type:** {section_info['type']}",
+                    f"**Required:** {'Yes' if section_info['required'] else 'No'}",
+                ]
+            )
 
-            if section_info.get('allowed_values'):
+            if section_info.get("allowed_values"):
                 doc_parts.append(
                     f"**Allowed Values:** {', '.join(section_info['allowed_values'])}"
                 )
 
-            if section_info.get('examples'):
+            if section_info.get("examples"):
                 doc_parts.append(
                     f"**Examples:** {', '.join(map(str, section_info['examples']))}"
                 )
@@ -526,19 +523,19 @@ class LLMConfigurationAssistant:
             "project_info": {
                 "namespace": config.namespace,
                 "name": config.name,
-                "version": config.version.value
+                "version": config.version.value,
             },
             "sections_configured": [],
             "sections_empty": [],
             "configuration_completeness": {},
-            "potential_improvements": []
+            "potential_improvements": [],
         }
 
         # Analyze each section
         config_dict = config.model_dump()
 
         for section_name, section_value in config_dict.items():
-            if section_name in ['version', 'name', 'namespace']:
+            if section_name in ["version", "name", "namespace"]:
                 continue
 
             if section_value:
@@ -573,31 +570,39 @@ class LLMConfigurationAssistant:
         intent_lower = user_intent.lower()
 
         if "openai" in intent_lower or "gpt" in intent_lower:
-            suggestions.append({
-                "field_path": "runtime.provider",
-                "new_value": "openai",
-                "description": "Switch to OpenAI provider",
-                "rationale": "User mentioned OpenAI or GPT"
-            })
+            suggestions.append(
+                {
+                    "field_path": "runtime.provider",
+                    "new_value": "openai",
+                    "description": "Switch to OpenAI provider",
+                    "rationale": "User mentioned OpenAI or GPT",
+                }
+            )
 
         if "ollama" in intent_lower or "local" in intent_lower:
-            suggestions.append({
-                "field_path": "runtime.provider",
-                "new_value": "ollama",
-                "description": "Switch to local Ollama provider",
-                "rationale": "User wants to use local models"
-            })
+            suggestions.append(
+                {
+                    "field_path": "runtime.provider",
+                    "new_value": "ollama",
+                    "description": "Switch to local Ollama provider",
+                    "rationale": "User wants to use local models",
+                }
+            )
 
         if "prompt" in intent_lower:
-            suggestions.append({
-                "field_path": "prompts",
-                "new_value": [{
-                    "name": "custom_prompt",
-                    "raw_text": "You are a helpful assistant."
-                }],
-                "description": "Add a custom prompt",
-                "rationale": "User mentioned prompts"
-            })
+            suggestions.append(
+                {
+                    "field_path": "prompts",
+                    "new_value": [
+                        {
+                            "name": "custom_prompt",
+                            "raw_text": "You are a helpful assistant.",
+                        }
+                    ],
+                    "description": "Add a custom prompt",
+                    "rationale": "User mentioned prompts",
+                }
+            )
 
         return suggestions
 
@@ -608,7 +613,7 @@ class LLMConfigurationAssistant:
 
         changeset = ConfigChangeSet(
             description=f"User requested changes: {user_intent}",
-            user_intent=user_intent
+            user_intent=user_intent,
         )
 
         for change_spec in changes:
@@ -617,7 +622,7 @@ class LLMConfigurationAssistant:
                 old_value=None,  # Will be determined during application
                 new_value=change_spec["new_value"],
                 change_type="update",
-                description=change_spec.get("description", "")
+                description=change_spec.get("description", ""),
             )
             changeset.add_change(change)
 
@@ -637,7 +642,7 @@ class LLMConfigurationAssistant:
                     "field": change.field_path,
                     "old_value": change.old_value,
                     "new_value": change.new_value,
-                    "type": change.change_type
+                    "type": change.change_type,
                 }
                 for change in current_changes
             ]

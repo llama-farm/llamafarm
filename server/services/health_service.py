@@ -80,7 +80,7 @@ def _check_ollama() -> dict:
     }
     model_config = Model.model_validate(model_config_dict)
 
-    provider = runtime_service.get_provider(Provider.ollama, model_config)
+    provider = runtime_service.get_provider(model_config)
     result = provider.check_health()
     return result.to_dict()
 
@@ -116,9 +116,7 @@ def _check_seed_project() -> dict:
         model_config = ModelService.get_model(project_config, model_name=None)
 
         # Get provider and check health
-        provider_impl = runtime_service.get_provider(
-            model_config.provider, model_config
-        )
+        provider_impl = runtime_service.get_provider(model_config)
         health_result = provider_impl.check_health()
 
         # Enhance with model validation for Ollama

@@ -1,9 +1,9 @@
 /**
  * Chat UI Types for frontend chat interface and session management
- * 
+ *
  * This file contains types for UI state management, session persistence, and frontend-specific
  * chat functionality. These types include UI-specific fields and behaviors not present in the API layer.
- * 
+ *
  * Related to: ../types/chat.ts (API layer types)
  */
 
@@ -12,12 +12,12 @@ import { BaseMessage } from './chat'
 /**
  * Enhanced message structure for UI layer with frontend-specific fields
  * Extends BaseMessage to maintain consistency with API layer
- * 
+ *
  * Key differences from ChatMessage (API layer):
  * - Uses 'type' instead of 'role' (includes 'error' for UI feedback)
  * - Includes UI state: id, timestamp, isLoading
  * - Includes presentation data: sources, metadata
- * 
+ *
  * @example
  * const message: ChatboxMessage = {
  *   id: 'msg-123',
@@ -38,6 +38,8 @@ export interface ChatboxMessage extends BaseMessage {
   isLoading?: boolean
   /** Whether the message is currently being streamed */
   isStreaming?: boolean
+  /** Whether the message stream was cancelled mid-response */
+  cancelled?: boolean
   /** Additional context or citation sources for display */
   sources?: any[]
   /** Extended metadata for UI purposes */
@@ -47,7 +49,7 @@ export interface ChatboxMessage extends BaseMessage {
 /**
  * Session metadata for chat persistence and management
  * Used by the session management layer for storing chat history and user session data
- * 
+ *
  * @example
  * const session: ChatSession = {
  *   id: 'session-abc123',

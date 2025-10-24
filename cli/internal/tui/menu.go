@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/atotto/clipboard"
@@ -173,7 +174,6 @@ func NewQuickMenuModel(config *Config) QuickMenuModel {
 
 	// Build help entries
 	m.helpItems = []HelpItem{
-		{Label: "/help - Show this help", Command: "/help"},
 		{Label: "/mode [dev|project] - Switch mode", Action: "toggle-mode"},
 		{Label: "/model [name] - Switch model (PROJECT mode)", Command: "/model ", NeedsInput: true},
 		{Label: "/database [name] - Switch RAG database (PROJECT mode)", Command: "/database ", NeedsInput: true},
@@ -186,6 +186,9 @@ func NewQuickMenuModel(config *Config) QuickMenuModel {
 		{Label: "Hotkeys:", Command: ""},
 		{Label: "Ctrl+T - Toggle DEV/PROJECT mode", Action: "ctrl+t"},
 		{Label: "Ctrl+K - Cycle models", Action: "ctrl+k"},
+		{Label: "", Command: ""},
+		{Label: "Updates:", Command: ""},
+		{Label: "Upgrade to latest version (press Enter to begin)", Command: "lf version upgrade", Action: "run-cmd"},
 		{Label: "Refresh RAG Health", Action: "refresh-health"},
 	}
 
@@ -675,10 +678,10 @@ func (m QuickMenuModel) renderRule(width int) string {
 
 // renderHeaderLine builds the top header with title, version, and close hint.
 func (m QuickMenuModel) renderHeaderLine(menuWidth int) string {
-	header := m.headerStyle.Render("🦙 LlamaFarm Quick Menu")
+	header := m.headerStyle.Render("🦙 LlamaFarm")
 	leftHeader := header
 	if strings.TrimSpace(m.version) != "" {
-		versionText := m.hintStyle.Render(fmt.Sprintf("version: %s", m.version))
+		versionText := m.hintStyle.Render(m.version)
 		leftHeader = lipgloss.JoinHorizontal(lipgloss.Left, header, " ", versionText)
 	}
 	closeHint := m.hintStyle.Render("[ESC to close]")
@@ -687,6 +690,45 @@ func (m QuickMenuModel) renderHeaderLine(menuWidth int) string {
 		spaceCount = 0
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Left, leftHeader, strings.Repeat(" ", spaceCount), closeHint)
+}
+
+// SetUpdateAvailable updates the Help tab's Updates section to show an available version
+// and make it runnable via Enter.
+func (m *QuickMenuModel) SetUpdateAvailable(latest string) {
+	idx := -1
+	for i := range m.helpItems {
+		if m.helpItems[i].Label == "Updates:" {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return
+	}
+	// Ensure there is a following row to overwrite; if not, append placeholder
+	if idx+1 >= len(m.helpItems) {
+		m.helpItems = append(m.helpItems, HelpItem{})
+	}
+	label := fmt.Sprintf("Update available %s (press Enter to begin upgrade to %s)", latest, latest)
+	m.helpItems[idx+1] = HelpItem{Label: label, Command: fmt.Sprintf("lf version upgrade %s", strings.TrimSpace(latest)), Action: "run-cmd"}
+}
+
+// SetUpToDate updates the Help tab's Updates section to show latest state as informational.
+func (m *QuickMenuModel) SetUpToDate() {
+	idx := -1
+	for i := range m.helpItems {
+		if m.helpItems[i].Label == "Updates:" {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return
+	}
+	if idx+1 >= len(m.helpItems) {
+		m.helpItems = append(m.helpItems, HelpItem{})
+	}
+	m.helpItems[idx+1] = HelpItem{Label: "You are on the latest version"}
 }
 
 // toggleIndicatorForRow returns the [▶]/[▼] indicator for expandable rows.
@@ -1180,6 +1222,23 @@ func (m *QuickMenuModel) handleHelpSelection() tea.Cmd {
 	}
 	if item.Action == "refresh-health" {
 		return showToastCmd("Refreshing health...")
+	}
+	if item.Action == "copy" {
+		if item.Command != "" {
+			clipboard.WriteAll(item.Command)
+			return showToastCmd("Copied: " + item.Command)
+		}
+		return nil
+	}
+	if item.Action == "run-cmd" {
+		if item.Command != "" {
+			// Close menu and execute command via parent
+			m.active = false
+			// Ask parent to restart after upgrade by setting an env var
+			os.Setenv("LF_RESTART_AFTER_UPGRADE", "1")
+			return executeCommandCmd(item.Command)
+		}
+		return nil
 	}
 	if item.NeedsInput {
 		// Ensure correct mode and insert template, then close

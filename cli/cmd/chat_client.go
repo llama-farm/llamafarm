@@ -108,6 +108,7 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
 		MaxTokens:        maxTokens,
 		Streaming:        streaming,
 		HTTPClient:       getHTTPClient(),
+		RAGEnabled:       true, // RAG is enabled by default
 	}
 }
 
@@ -537,12 +538,8 @@ type SessionHistory struct {
 }
 
 type SessionHistoryMessage struct {
-	Role    string                       `json:"role"`
-	Content SessionHistoryMessageContent `json:"content"`
-}
-
-type SessionHistoryMessageContent struct {
-	ChatMessage string `json:"chat_message"`
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 type SessionHistoryResponse struct {
@@ -590,12 +587,7 @@ func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) Sess
 	}
 	var messages []SessionHistoryMessage
 	for _, msg := range result.Messages {
-		var content SessionHistoryMessageContent
-		if err := json.Unmarshal([]byte(msg.Content), &content); err != nil {
-			logDebug(fmt.Sprintf("fetchSessionHistory: failed to unmarshal content: %v", err))
-			continue
-		}
-		messages = append(messages, SessionHistoryMessage{Role: msg.Role, Content: content})
+		messages = append(messages, SessionHistoryMessage{Role: msg.Role, Content: msg.Content})
 	}
 
 	return SessionHistory{Messages: messages}

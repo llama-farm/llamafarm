@@ -88,7 +88,11 @@ class DataService:
         data_dir = cls.get_data_dir(namespace, project_id)
         file_data = await file.read()
         data_hash = cls.hash_data(file_data)
-        resolved_file_name = cls.append_collision_timestamp(file.filename or "unknown")
+
+        # Strip directory paths from filename (handles folder uploads)
+        # Use only the basename to avoid creating nested directories
+        base_filename = os.path.basename(file.filename or "unknown")
+        resolved_file_name = cls.append_collision_timestamp(base_filename)
 
         # Detect MIME type from filename if not provided or is generic
         mime_type = file.content_type

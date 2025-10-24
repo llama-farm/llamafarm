@@ -64,6 +64,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LF_DATA_DIR=/var/lib/llamafarm
+      - OLLAMA_HOST=http://host.docker.internal:11434
       - CHROMADB_HOST=llamafarm-chromadb
       - CHROMADB_PORT=8000
     volumes:
@@ -71,6 +72,8 @@ services:
       - ../../config:/app/config
       - ../../models:/app/models
       - llamafarm_dev_data:/var/lib/llamafarm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       server:
         condition: service_healthy

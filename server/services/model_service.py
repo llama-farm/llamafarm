@@ -4,18 +4,9 @@ This service handles model resolution and provides utilities
 for working with multi-model configurations.
 """
 
-import sys
-from pathlib import Path
-
-from pydantic import BaseModel, Field
+from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 
 from core.logging import FastAPIStructLogger  # noqa: E402
-
-# Add repo root to path for config imports
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 
 logger = FastAPIStructLogger(__name__)
 

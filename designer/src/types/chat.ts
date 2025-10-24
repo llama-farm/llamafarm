@@ -1,6 +1,6 @@
 /**
  * Chat API Types - aligned with server/api/routers/inference/models.py
- * 
+ *
  * This file contains types for backend communication and external chat service integration.
  * These types should remain stable and aligned with the API contract.
  */
@@ -15,7 +15,7 @@ export interface BaseMessage {
 /**
  * Chat message structure for API communication
  * Used in requests/responses to the chat inference service
- * 
+ *
  * @example
  * const message: ChatMessage = {
  *   role: 'user',
@@ -99,14 +99,20 @@ export class ChatApiError extends Error {
 }
 
 export class NetworkError extends Error {
-  constructor(message: string, public originalError: Error) {
+  constructor(
+    message: string,
+    public originalError: Error
+  ) {
     super(message)
     this.name = 'NetworkError'
   }
 }
 
 export class ValidationError extends Error {
-  constructor(message: string, public validationErrors: any) {
+  constructor(
+    message: string,
+    public validationErrors: any
+  ) {
     super(message)
     this.name = 'ValidationError'
   }
@@ -157,4 +163,3 @@ export interface StreamingChatOptions {
   onComplete?: StreamCompleteHandler
   signal?: AbortSignal
 }
-

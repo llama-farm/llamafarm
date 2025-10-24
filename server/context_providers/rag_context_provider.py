@@ -7,7 +7,7 @@ class ChunkItem(BaseModel):
     metadata: dict
 
 
-class ProjectChatContextProvider(BaseDynamicContextProvider):
+class RAGContextProvider(BaseDynamicContextProvider):
     def __init__(self, title: str):
         super().__init__(title=title)
         self.chunks: list[ChunkItem] = []
