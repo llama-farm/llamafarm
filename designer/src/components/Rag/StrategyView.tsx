@@ -965,6 +965,22 @@ function StrategyView() {
   const [newExtractorPriorityError, setNewExtractorPriorityError] =
     useState(false)
   const [newExtractorApplies, setNewExtractorApplies] = useState<string[]>([])
+
+  // Set default extractor type when modal opens
+  useEffect(() => {
+    if (!isAddExtractorOpen) return
+
+    const existing = new Set(extractorRows.map(e => e.name))
+    const available = EXTRACTOR_TYPES.filter(
+      t => !existing.has(t) && EXTRACTOR_SCHEMAS[t]
+    )
+
+    if (available.length > 0 && !newExtractorType) {
+      const first = available[0]
+      setNewExtractorType(first)
+      setNewExtractorConfig(getDefaultExtractorConfig(first))
+    }
+  }, [isAddExtractorOpen, extractorRows, newExtractorType])
   const [newExtractorConfig, setNewExtractorConfig] = useState<
     Record<string, unknown>
   >({})
@@ -2047,15 +2063,6 @@ function StrategyView() {
                           const available = EXTRACTOR_TYPES.filter(
                             t => !existing.has(t) && EXTRACTOR_SCHEMAS[t]
                           )
-                          if (!newExtractorType && available.length > 0) {
-                            const first = available[0]
-                            setTimeout(() => {
-                              setNewExtractorType(first)
-                              setNewExtractorConfig(
-                                getDefaultExtractorConfig(first)
-                              )
-                            }, 0)
-                          }
                           return (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

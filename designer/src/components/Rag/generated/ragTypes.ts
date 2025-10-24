@@ -1,8 +1,8 @@
 /**
  * AUTO-GENERATED FILE - DO NOT EDIT
  * 
- * Generated from rag/schema.yaml by generate-ui-types.py
- * Run: cd rag && ./generate-ui-types.sh
+ * Generated from rag/schema.yaml by designer/generate-types.py
+ * Run: cd designer && ./generate-types.sh
  */
 
 // ============================================================================
@@ -13,18 +13,18 @@ export const PARSER_TYPES = [
   "CSVParser_LlamaIndex",
   "CSVParser_Pandas",
   "CSVParser_Python",
-  "DocxParser_LlamaIndex",
-  "DocxParser_PythonDocx",
-  "ExcelParser_LlamaIndex",
-  "ExcelParser_OpenPyXL",
-  "ExcelParser_Pandas",
+  "DOCXParser_LlamaIndex",
+  "DOCXParser_PythonDocx",
+  "EXCELParser_LlamaIndex",
+  "EXCELParser_OpenPyXL",
+  "EXCELParser_Pandas",
+  "MARKDOWNParser_LlamaIndex",
+  "MARKDOWNParser_Python",
   "MSGParser_ExtractMsg",
-  "MarkdownParser_LlamaIndex",
-  "MarkdownParser_Python",
   "PDFParser_LlamaIndex",
   "PDFParser_PyPDF2",
-  "TextParser_LlamaIndex",
-  "TextParser_Python",
+  "TEXTParser_LlamaIndex",
+  "TEXTParser_Python",
   "auto",
 ] as const
 
@@ -91,7 +91,7 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
           "delimiter": ",",
           "quotechar": "\""
       },
-    "DocxParser_LlamaIndex":       {
+    "DOCXParser_LlamaIndex":       {
           "chunk_size": 1000,
           "chunk_overlap": 100,
           "chunk_strategy": "paragraphs",
@@ -101,7 +101,7 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
           "preserve_formatting": true,
           "include_header_footer": false
       },
-    "DocxParser_PythonDocx":       {
+    "DOCXParser_PythonDocx":       {
           "chunk_size": 1000,
           "chunk_strategy": "paragraphs",
           "extract_metadata": true,
@@ -110,7 +110,7 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
           "extract_footers": false,
           "extract_comments": false
       },
-    "ExcelParser_LlamaIndex":       {
+    "EXCELParser_LlamaIndex":       {
           "chunk_size": 1000,
           "chunk_strategy": "rows",
           "combine_sheets": false,
@@ -125,14 +125,14 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
               "None"
           ]
       },
-    "ExcelParser_OpenPyXL":       {
+    "EXCELParser_OpenPyXL":       {
           "chunk_size": 1000,
           "extract_formulas": false,
           "extract_metadata": true,
           "sheets": null,
           "data_only": true
       },
-    "ExcelParser_Pandas":       {
+    "EXCELParser_Pandas":       {
           "chunk_size": 1000,
           "sheets": null,
           "extract_metadata": true,
@@ -145,6 +145,23 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
               "None"
           ]
       },
+    "MARKDOWNParser_LlamaIndex":       {
+          "chunk_size": 1000,
+          "chunk_overlap": 100,
+          "chunk_strategy": "headings",
+          "extract_metadata": true,
+          "extract_code_blocks": true,
+          "extract_tables": true,
+          "extract_links": true,
+          "preserve_structure": true
+      },
+    "MARKDOWNParser_Python":       {
+          "chunk_size": 1000,
+          "chunk_strategy": "sections",
+          "extract_metadata": true,
+          "extract_code_blocks": true,
+          "extract_links": true
+      },
     "MSGParser_ExtractMsg":       {
           "chunk_size": 1000,
           "chunk_overlap": 100,
@@ -156,23 +173,6 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
           "clean_text": true,
           "preserve_formatting": false,
           "encoding": "utf-8"
-      },
-    "MarkdownParser_LlamaIndex":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "headings",
-          "extract_metadata": true,
-          "extract_code_blocks": true,
-          "extract_tables": true,
-          "extract_links": true,
-          "preserve_structure": true
-      },
-    "MarkdownParser_Python":       {
-          "chunk_size": 1000,
-          "chunk_strategy": "sections",
-          "extract_metadata": true,
-          "extract_code_blocks": true,
-          "extract_links": true
       },
     "PDFParser_LlamaIndex":       {
           "chunk_size": 1000,
@@ -204,7 +204,7 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
           "clean_text": true,
           "combine_pages": false
       },
-    "TextParser_LlamaIndex":       {
+    "TEXTParser_LlamaIndex":       {
           "chunk_size": 1000,
           "chunk_overlap": 100,
           "chunk_strategy": "semantic",
@@ -218,7 +218,7 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
           "detect_language": true,
           "include_prev_next_rel": true
       },
-    "TextParser_Python":       {
+    "TEXTParser_Python":       {
           "chunk_size": 1000,
           "chunk_overlap": 100,
           "chunk_strategy": "sentences",
@@ -350,7 +350,11 @@ export function getDefaultExtractorConfig(extractorType: ExtractorType): Record<
           "enabled": true
       },
     "YAKEExtractor":       {
+          "algorithm": "rake",
           "max_keywords": 10,
+          "min_length": 1,
+          "max_length": 4,
+          "min_frequency": 1,
           "language": "en",
           "max_ngram_size": 3,
           "deduplication_threshold": 0.9
@@ -436,8 +440,8 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       quotechar: { type: "string", description: "Quote character", default: "\"" }
     },
   },
-  "DocxParser_LlamaIndex": {
-    type: "DocxParser_LlamaIndex",
+  "DOCXParser_LlamaIndex": {
+    type: "DOCXParser_LlamaIndex",
     title: "DOCX Parser (LlamaIndex) Configuration",
     description: "Advanced DOCX parser using LlamaIndex with enhanced chunking",
     defaultExtensions: [".docx"],
@@ -452,8 +456,8 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       include_header_footer: { type: "boolean", description: "Include header and footer content", default: false }
     },
   },
-  "DocxParser_PythonDocx": {
-    type: "DocxParser_PythonDocx",
+  "DOCXParser_PythonDocx": {
+    type: "DOCXParser_PythonDocx",
     title: "DOCX Parser (python-docx) Configuration",
     description: "Word document parser using python-docx library",
     defaultExtensions: [".docx"],
@@ -467,8 +471,8 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       extract_comments: { type: "boolean", description: "Extract comments", default: false }
     },
   },
-  "ExcelParser_LlamaIndex": {
-    type: "ExcelParser_LlamaIndex",
+  "EXCELParser_LlamaIndex": {
+    type: "EXCELParser_LlamaIndex",
     title: "Excel Parser (LlamaIndex) Configuration",
     description: "Excel parser using LlamaIndex with Pandas backend for advanced processing",
     defaultExtensions: [".xlsx", ".xls"],
@@ -484,8 +488,8 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       na_values: { type: "array", description: "Values to treat as missing", default: ["", "NA", "N/A", "null", "None"], items: { type: "string" } }
     },
   },
-  "ExcelParser_OpenPyXL": {
-    type: "ExcelParser_OpenPyXL",
+  "EXCELParser_OpenPyXL": {
+    type: "EXCELParser_OpenPyXL",
     title: "Excel Parser (OpenPyXL) Configuration",
     description: "Excel parser using OpenPyXL for XLSX files with formula support",
     defaultExtensions: [".xlsx", ".xls"],
@@ -497,8 +501,8 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       data_only: { type: "boolean", description: "Extract values instead of formulas", default: true }
     },
   },
-  "ExcelParser_Pandas": {
-    type: "ExcelParser_Pandas",
+  "EXCELParser_Pandas": {
+    type: "EXCELParser_Pandas",
     title: "Excel Parser (Pandas) Configuration",
     description: "Excel parser using Pandas with data analysis capabilities",
     defaultExtensions: [".xlsx", ".xls"],
@@ -508,6 +512,35 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       extract_metadata: { type: "boolean", description: "Extract data statistics", default: true },
       skiprows: { type: "string", description: "Rows to skip at beginning", default: null },
       na_values: { type: "array", description: "Values to treat as NaN", default: ["", "NA", "N/A", "null", "None"], items: { type: "string" } }
+    },
+  },
+  "MARKDOWNParser_LlamaIndex": {
+    type: "MARKDOWNParser_LlamaIndex",
+    title: "Markdown Parser (LlamaIndex) Configuration",
+    description: "Advanced markdown parser using LlamaIndex with semantic chunking",
+    defaultExtensions: [".md", ".markdown"],
+    properties: {
+      chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
+      chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0, maximum: 5000 },
+      chunk_strategy: { type: "string", description: "Chunking strategy for markdown", default: "headings", enum: ["headings", "paragraphs", "sentences", "semantic"] },
+      extract_metadata: { type: "boolean", description: "Extract frontmatter metadata", default: true },
+      extract_code_blocks: { type: "boolean", description: "Extract code blocks separately", default: true },
+      extract_tables: { type: "boolean", description: "Extract markdown tables", default: true },
+      extract_links: { type: "boolean", description: "Extract links and references", default: true },
+      preserve_structure: { type: "boolean", description: "Preserve heading hierarchy", default: true }
+    },
+  },
+  "MARKDOWNParser_Python": {
+    type: "MARKDOWNParser_Python",
+    title: "Markdown Parser (Python) Configuration",
+    description: "Markdown parser using native Python with regex parsing",
+    defaultExtensions: [".md", ".markdown"],
+    properties: {
+      chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100 },
+      chunk_strategy: { type: "string", description: "Chunking strategy - sections uses markdown headers", default: "sections", enum: ["sections", "paragraphs", "characters"] },
+      extract_metadata: { type: "boolean", description: "Extract YAML frontmatter", default: true },
+      extract_code_blocks: { type: "boolean", description: "Extract code blocks", default: true },
+      extract_links: { type: "boolean", description: "Extract markdown links", default: true }
     },
   },
   "MSGParser_ExtractMsg": {
@@ -526,35 +559,6 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       clean_text: { type: "boolean", description: "Clean text", default: true },
       preserve_formatting: { type: "boolean", description: "Preserve formatting", default: false },
       encoding: { type: "string", description: "Encoding", default: "utf-8" }
-    },
-  },
-  "MarkdownParser_LlamaIndex": {
-    type: "MarkdownParser_LlamaIndex",
-    title: "Markdown Parser (LlamaIndex) Configuration",
-    description: "Advanced markdown parser using LlamaIndex with semantic chunking",
-    defaultExtensions: [".md", ".markdown"],
-    properties: {
-      chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
-      chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0, maximum: 5000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy for markdown", default: "headings", enum: ["headings", "paragraphs", "sentences", "semantic"] },
-      extract_metadata: { type: "boolean", description: "Extract frontmatter metadata", default: true },
-      extract_code_blocks: { type: "boolean", description: "Extract code blocks separately", default: true },
-      extract_tables: { type: "boolean", description: "Extract markdown tables", default: true },
-      extract_links: { type: "boolean", description: "Extract links and references", default: true },
-      preserve_structure: { type: "boolean", description: "Preserve heading hierarchy", default: true }
-    },
-  },
-  "MarkdownParser_Python": {
-    type: "MarkdownParser_Python",
-    title: "Markdown Parser (Python) Configuration",
-    description: "Markdown parser using native Python with regex parsing",
-    defaultExtensions: [".md", ".markdown"],
-    properties: {
-      chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100 },
-      chunk_strategy: { type: "string", description: "Chunking strategy - sections uses markdown headers", default: "sections", enum: ["sections", "paragraphs", "characters"] },
-      extract_metadata: { type: "boolean", description: "Extract YAML frontmatter", default: true },
-      extract_code_blocks: { type: "boolean", description: "Extract code blocks", default: true },
-      extract_links: { type: "boolean", description: "Extract markdown links", default: true }
     },
   },
   "PDFParser_LlamaIndex": {
@@ -594,8 +598,8 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       combine_pages: { type: "boolean", description: "Combine all pages into a single document. MUST be false to enable chunking.", default: false }
     },
   },
-  "TextParser_LlamaIndex": {
-    type: "TextParser_LlamaIndex",
+  "TEXTParser_LlamaIndex": {
+    type: "TEXTParser_LlamaIndex",
     title: "Text Parser (LlamaIndex) Configuration",
     description: "Advanced text parser using LlamaIndex with semantic splitting, code parsing, and multi-format support",
     defaultExtensions: [".txt"],
@@ -614,8 +618,8 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
       include_prev_next_rel: { type: "boolean", description: "Include relationships between chunks for better context", default: true }
     },
   },
-  "TextParser_Python": {
-    type: "TextParser_Python",
+  "TEXTParser_Python": {
+    type: "TEXTParser_Python",
     title: "Text Parser (Python) Configuration",
     description: "Text parser using native Python with encoding detection",
     defaultExtensions: [".txt"],
@@ -809,11 +813,16 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
   },
   "YAKEExtractor": {
     type: "YAKEExtractor",
-    title: "YAKE Extractor Configuration",
+    title: "Keyword Extractor Configuration",
     description: "",
     properties: {
       extractor_type: { type: "string", description: "Extractor type discriminator" },
+      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake", "yake", "tfidf", "textrank"] },
       max_keywords: { type: "integer", description: "Maximum keywords to extract", default: 10, minimum: 1, maximum: 100 },
+      min_length: { type: "integer", description: "Minimum word length for keywords", default: 1, minimum: 1 },
+      max_length: { type: "integer", description: "Maximum word length for keywords", default: 4, minimum: 1 },
+      min_frequency: { type: "integer", description: "Minimum frequency for keywords", default: 1, minimum: 1 },
+      stop_words: { type: "array", description: "Custom stop words", items: { type: "string" } },
       language: { type: "string", description: "Language for YAKE algorithm", default: "en" },
       max_ngram_size: { type: "integer", description: "Maximum n-gram size for YAKE", default: 3, minimum: 1, maximum: 5 },
       deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0.0, maximum: 1.0 }

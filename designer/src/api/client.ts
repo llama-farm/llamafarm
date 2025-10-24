@@ -35,6 +35,32 @@ function resolveBaseUrl(): string {
 const API_BASE_URL = resolveBaseUrl()
 
 /**
+ * Format validation errors for display
+ */
+function formatValidationError(errorData: any): string {
+  if (!errorData?.detail) return 'Invalid request'
+
+  // Pydantic validation errors are usually arrays
+  if (Array.isArray(errorData.detail)) {
+    return errorData.detail
+      .map((err: any) => {
+        const loc = err.loc?.join('.') || 'unknown'
+        const msg = err.msg || err.message || 'validation error'
+        return `${loc}: ${msg}`
+      })
+      .join(', ')
+  }
+
+  // If detail is a string, return it
+  if (typeof errorData.detail === 'string') {
+    return errorData.detail
+  }
+
+  // Otherwise try to stringify
+  return JSON.stringify(errorData.detail)
+}
+
+/**
  * Shared API client instance with common configuration
  * Can be imported and used by all service modules
  */
@@ -61,7 +87,7 @@ apiClient.interceptors.response.use(
       switch (status) {
         case 400:
           throw new ValidationError(
-            `Validation error: ${errorData?.detail || 'Invalid request'}`,
+            `Validation error: ${formatValidationError(errorData)}`,
             errorData
           )
         case 404:
@@ -72,7 +98,7 @@ apiClient.interceptors.response.use(
           )
         case 422:
           throw new ValidationError(
-            `Validation error: ${errorData?.detail || 'Unprocessable entity'}`,
+            `Validation error: ${formatValidationError(errorData)}`,
             errorData
           )
         case 500:

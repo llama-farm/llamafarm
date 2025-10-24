@@ -1,8 +1,8 @@
 /**
  * AUTO-GENERATED FILE - DO NOT EDIT
  * 
- * Generated from rag/schema.yaml by generate-db-embedding-types.py
- * Run: cd rag && ./generate-db-embedding-types.sh
+ * Generated from rag/schema.yaml by designer/generate-types.py
+ * Run: cd designer && ./generate-types.sh
  */
 
 // ============================================================================
@@ -67,13 +67,7 @@ export function getDefaultVectorStoreConfig(storeType: VectorStoreType): Record<
           "enable_deduplication": true,
           "embedding_function": null
       },
-    "FAISSStore":       {
-          "index_type": "Flat",
-          "metric": "L2",
-          "nlist": 100,
-          "nprobe": 10,
-          "use_gpu": false
-      },
+    "FAISSStore":       {},
     "PineconeStore":       {
           "environment": "us-east-1-aws",
           "metric": "cosine",
@@ -115,14 +109,7 @@ export function getDefaultEmbedderConfig(embedderType: EmbedderType): Record<str
           "timeout": 60,
           "auto_pull": true
       },
-    "OpenAIEmbedder":       {
-          "model": "text-embedding-3-small",
-          "base_url": null,
-          "organization": null,
-          "batch_size": 100,
-          "max_retries": 3,
-          "timeout": 60
-      },
+    "OpenAIEmbedder":       {},
     "SentenceTransformerEmbedder":       {
           "model_name": "sentence-transformers/all-MiniLM-L6-v2",
           "device": "cpu"
@@ -207,7 +194,7 @@ export const VECTOR_STORE_SCHEMAS: Record<VectorStoreType, VectorStoreSchema> = 
   },
   "FAISSStore": {
     type: "FAISSStore",
-    title: "FAISS Store Configuration",
+    title: "FAISSStore",
     description: "",
     category: "memory",
   },
@@ -240,7 +227,7 @@ export const EMBEDDER_SCHEMAS: Record<EmbedderType, EmbedderSchema> = {
   },
   "OpenAIEmbedder": {
     type: "OpenAIEmbedder",
-    title: "OpenAI Embedder Configuration",
+    title: "OpenAIEmbedder",
     description: "",
     category: "cloud",
   },

@@ -36,6 +36,8 @@ import {
   useCreateDataset,
   useDeleteDataset,
 } from '../../hooks/useDatasets'
+import { useProject } from '../../hooks/useProjects'
+import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 import type { UIFile } from '../../types/datasets'
 
 type RawFile = UIFile
@@ -43,14 +45,8 @@ type RawFile = UIFile
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
-  const [rawFiles, setRawFiles] = useState<RawFile[]>(() => {
-    try {
-      const stored = localStorage.getItem('lf_raw_files')
-      return stored ? (JSON.parse(stored) as RawFile[]) : []
-    } catch {
-      return []
-    }
-  })
+  // rawFiles is transient UI state only - no persistence needed
+  const [rawFiles, setRawFiles] = useState<RawFile[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useState<Mode>('designer')
 
@@ -61,7 +57,14 @@ const Data = () => {
   // Get current active project for API calls
   const activeProject = useActiveProject()
 
-  // Use React Query hooks for datasets with localStorage fallback
+  // Load project config to get strategies (source of truth)
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+
+  // Use React Query hooks for datasets
   const {
     data: apiDatasets,
     isLoading: isDatasetsLoading,
@@ -74,6 +77,12 @@ const Data = () => {
   const createDatasetMutation = useCreateDataset()
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
+
+  // Hook for managing data processing strategies
+  const strategies = useDataProcessingStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || ''
+  )
 
   // Convert API datasets to UI format - only show real datasets from the API
   const datasets = useMemo(() => {
@@ -131,15 +140,8 @@ const Data = () => {
     }
   }, [location.search, datasets, navigate])
 
-  // Map of fileKey -> array of dataset ids
-  const [fileAssignments] = useState<Record<string, string[]>>(() => {
-    try {
-      const stored = localStorage.getItem('lf_file_assignments')
-      return stored ? (JSON.parse(stored) as Record<string, string[]>) : {}
-    } catch {
-      return {}
-    }
-  })
+  // Map of fileKey -> array of dataset ids (transient UI state)
+  const [fileAssignments] = useState<Record<string, string[]>>({})
 
   // Processing strategies state management ----------------------------------
   const [metaTick, setMetaTick] = useState(0)
@@ -151,6 +153,7 @@ const Data = () => {
   const [strategyCreateName, setStrategyCreateName] = useState('')
   const [strategyCreateDescription, setStrategyCreateDescription] = useState('')
   const [strategyCopyFromId, setStrategyCopyFromId] = useState('')
+  const [strategyCreateFileTypes, setStrategyCreateFileTypes] = useState<Set<string>>(new Set())
 
   // Validate that an object is a well-formed RagStrategy
   const isValidRagStrategy = (s: any): s is RagStrategy => {
@@ -210,27 +213,27 @@ const Data = () => {
     setMetaTick(t => t + 1)
   }
 
-  // Derive display strategies with local overrides
-  const displayStrategies = useMemo(() => {
-    const deleted = getDeletedSet()
-    const all = [...defaultStrategies, ...getCustomStrategies()]
-    return all
-      .filter(s => !deleted.has(s.id))
-      .map(s => {
-        let { name, description } = s
-        try {
-          const n = localStorage.getItem(`lf_strategy_name_override_${s.id}`)
-          if (typeof n === 'string' && n.trim().length > 0) {
-            name = n.trim()
-          }
-          const d = localStorage.getItem(`lf_strategy_description_${s.id}`)
-          if (typeof d === 'string' && d.trim().length > 0) {
-            description = d.trim()
-          }
-        } catch {}
-        return { ...s, name, description }
-      })
-  }, [metaTick])
+  // Load strategies from config (source of truth)
+  const displayStrategies = useMemo((): RagStrategy[] => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) {
+      // Fallback to defaults if config not loaded yet
+      return defaultStrategies
+    }
+
+    const configStrategies = projectConfig.rag.data_processing_strategies || []
+
+    // Convert config strategies to UI format
+    return configStrategies.map((strategy: any, index: number) => ({
+      id: `processing-${strategy.name.replace(/_/g, '-')}`, // Convert snake_case to kebab-case
+      name: strategy.name
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase()),
+      description: strategy.description || 'Custom processing strategy',
+      isDefault: false,
+      datasetsUsing: 0, // Will be calculated from datasetsByStrategyName
+    }))
+  }, [projectResp])
 
   // Build mapping of strategy name -> dataset names
   const datasetsByStrategyName = useMemo(() => {
@@ -250,26 +253,24 @@ const Data = () => {
     return map
   }, [datasets, metaTick])
 
-  const getParsersCount = (sid: string): number => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_parsers_${sid}`)
-      if (!raw) return 7 // default seed
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr.length : 7
-    } catch {
-      return 7
-    }
+  const getParsersCount = (strategyName: string): number => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) return 0
+
+    const strategy = projectConfig.rag.data_processing_strategies.find(
+      (s: any) => s.name === strategyName
+    )
+    return strategy?.parsers?.length || 0
   }
 
-  const getExtractorsCount = (sid: string): number => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_extractors_${sid}`)
-      if (!raw) return 8 // default seed
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr.length : 8
-    } catch {
-      return 8
-    }
+  const getExtractorsCount = (strategyName: string): number => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) return 0
+
+    const strategy = projectConfig.rag.data_processing_strategies.find(
+      (s: any) => s.name === strategyName
+    )
+    return strategy?.extractors?.length || 0
   }
 
   // Refresh on processing changes (parsers/extractors add/edit/delete)
@@ -290,25 +291,7 @@ const Data = () => {
     }
   }, [])
 
-  // (initial state is loaded from localStorage)
-
-  // Persist data when it changes
-  useEffect(() => {
-    try {
-      localStorage.setItem('lf_raw_files', JSON.stringify(rawFiles))
-    } catch {}
-  }, [rawFiles])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        'lf_file_assignments',
-        JSON.stringify(fileAssignments)
-      )
-    } catch {}
-  }, [fileAssignments])
-
-  // Dataset persistence is handled in the setDatasets function for localStorage fallback
+  // rawFiles and fileAssignments are transient UI state - no persistence needed
 
   // Create dataset dialog state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -1156,8 +1139,46 @@ const Data = () => {
               />
             </div>
             <div>
+              <label className="text-xs text-muted-foreground mb-2 block">
+                What type of files do you plan on uploading?
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { type: 'PDF', parser: 'PDFParser_LlamaIndex', extensions: ['*.pdf'] },
+                  { type: 'Docx', parser: 'DOCXParser_LlamaIndex', extensions: ['*.docx'] },
+                  { type: 'Text', parser: 'TEXTParser_LlamaIndex', extensions: ['*.txt'] },
+                  { type: 'CSV', parser: 'CSVParser_Pandas', extensions: ['*.csv'] },
+                  { type: 'Markdown', parser: 'MARKDOWNParser_LlamaIndex', extensions: ['*.md', '*.markdown'] },
+                ].map(({ type }) => {
+                  const isSelected = strategyCreateFileTypes.has(type)
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        const newSet = new Set(strategyCreateFileTypes)
+                        if (isSelected) {
+                          newSet.delete(type)
+                        } else {
+                          newSet.add(type)
+                        }
+                        setStrategyCreateFileTypes(newSet)
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-input hover:bg-accent hover:text-accent-foreground'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
               <label className="text-xs text-muted-foreground">
-                Copy from existing
+                Copy from existing (optional)
               </label>
               <select
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
@@ -1198,60 +1219,142 @@ const Data = () => {
           <DialogFooter className="flex items-center justify-between gap-2">
             <button
               className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-              onClick={() => setStrategyCreateOpen(false)}
+              onClick={() => {
+                setStrategyCreateOpen(false)
+                setStrategyCreateName('')
+                setStrategyCreateDescription('')
+                setStrategyCopyFromId('')
+                setStrategyCreateFileTypes(new Set())
+              }}
               type="button"
             >
               Cancel
             </button>
             <button
-              className={`px-3 py-2 rounded-md text-sm ${strategyCreateName.trim().length > 0 ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
-              onClick={() => {
-                const name = strategyCreateName.trim()
-                if (name.length === 0) return
-                const slugify = (str: string) =>
-                  str
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, '')
-                const baseId = `custom-${slugify(name)}`
-                const existingIds = new Set(
-                  [...defaultStrategies, ...getCustomStrategies()].map(
-                    s => s.id
-                  )
+              className={`px-3 py-2 rounded-md text-sm ${strategyCreateName.trim().length > 0 && !strategies.isUpdating ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
+              onClick={async () => {
+                const displayName = strategyCreateName.trim()
+                if (displayName.length === 0) return
+
+                // Convert display name to snake_case for config
+                const strategyName = displayName
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '_')
+                  .replace(/^_+|_+$/g, '')
+
+                if (!projectResp) {
+                  toast({
+                    message: 'Project config not loaded',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
+                const projectConfig = (projectResp as any)?.project?.config
+
+                // Get parsers from copyFrom strategy, selected file types, or use defaults
+                const copyFrom = displayStrategies.find(
+                  s => s.id === strategyCopyFromId
                 )
-                let newId = baseId
-                if (existingIds.has(newId)) {
-                  newId = `${baseId}-${Date.now()}`
+                let parsers: any[] = []
+                let extractors: any[] = [] // Always start with no extractors
+
+                if (copyFrom && projectConfig) {
+                  // Find the source strategy in config
+                  const sourceStrategy =
+                    projectConfig.rag?.data_processing_strategies?.find(
+                      (s: any) =>
+                        s.name ===
+                        copyFrom.name
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '_')
+                    )
+                  if (sourceStrategy) {
+                    parsers = sourceStrategy.parsers || []
+                    // Don't copy extractors - let user add them manually
+                  }
                 }
-                const newStrategy: RagStrategy = {
-                  id: newId,
-                  name,
-                  description: strategyCreateDescription,
-                  isDefault: false,
-                  datasetsUsing: 0,
+
+                // If no copy source but file types selected, create parsers from file types
+                if (parsers.length === 0 && strategyCreateFileTypes.size > 0) {
+                  const fileTypeMapping = [
+                    { type: 'PDF', parser: 'PDFParser_LlamaIndex', extensions: ['*.pdf'] },
+                    { type: 'Docx', parser: 'DOCXParser_LlamaIndex', extensions: ['*.docx'] },
+                    { type: 'Text', parser: 'TEXTParser_LlamaIndex', extensions: ['*.txt'] },
+                    { type: 'CSV', parser: 'CSVParser_Pandas', extensions: ['*.csv'] },
+                    { type: 'Markdown', parser: 'MARKDOWNParser_LlamaIndex', extensions: ['*.md', '*.markdown'] },
+                  ]
+
+                  parsers = Array.from(strategyCreateFileTypes).map(fileType => {
+                    const mapping = fileTypeMapping.find(m => m.type === fileType)
+                    return {
+                      type: mapping?.parser || 'PDFParser_LlamaIndex',
+                      config: {},
+                      file_include_patterns: mapping?.extensions || ['*.pdf'],
+                      priority: 50,
+                    }
+                  })
                 }
-                addCustomStrategy(newStrategy)
+
+                // If no copy source and no file types selected, create with a default parser
+                if (parsers.length === 0) {
+                  parsers = [
+                    {
+                      type: 'PDFParser_LlamaIndex',
+                      config: {},
+                      file_include_patterns: ['*.pdf'],
+                      priority: 50,
+                    },
+                  ]
+                }
+
                 try {
-                  localStorage.setItem(
-                    `lf_strategy_name_override_${newId}`,
-                    name
-                  )
-                  localStorage.setItem(
-                    `lf_strategy_description_${newId}`,
-                    strategyCreateDescription
-                  )
-                } catch {}
-                setStrategyCreateOpen(false)
-                setStrategyCreateName('')
-                setStrategyCreateDescription('')
-                setStrategyCopyFromId('')
-                setMetaTick(t => t + 1)
-                toast({ message: 'Strategy created', variant: 'default' })
+                  // Build strategy object, only including valid fields
+                  const description = strategyCreateDescription.trim() || displayName
+                  const strategy: any = {
+                    name: strategyName,
+                    parsers,
+                  }
+
+                  // Only include description if it meets the 10 character minimum (schema requirement)
+                  if (description.length >= 10) {
+                    strategy.description = description
+                  }
+
+                  // Only include extractors if there are any
+                  if (extractors.length > 0) {
+                    strategy.extractors = extractors
+                  }
+
+                  await strategies.createStrategy.mutateAsync({
+                    strategy,
+                    projectConfig,
+                  })
+
+                  setStrategyCreateOpen(false)
+                  setStrategyCreateName('')
+                  setStrategyCreateDescription('')
+                  setStrategyCopyFromId('')
+                  setStrategyCreateFileTypes(new Set())
+                  toast({
+                    message: 'Strategy created successfully',
+                    variant: 'default',
+                  })
+                } catch (error) {
+                  console.error('Failed to create strategy:', error)
+                  toast({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to create strategy',
+                    variant: 'destructive',
+                  })
+                }
               }}
-              disabled={strategyCreateName.trim().length === 0}
+              disabled={strategyCreateName.trim().length === 0 || strategies.isUpdating}
               type="button"
             >
-              Create
+              {strategies.isUpdating ? 'Creating...' : 'Create'}
             </button>
           </DialogFooter>
         </DialogContent>
