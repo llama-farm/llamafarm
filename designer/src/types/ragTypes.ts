@@ -1,7 +1,7 @@
 /**
  * AUTO-GENERATED FILE - DO NOT EDIT
  * 
- * Generated from rag/schema.yaml by designer/generate-types.py
+ * Generated from rag/schema.yaml by designer/generate-types.ts
  * Run: cd designer && ./generate-types.sh
  */
 
@@ -59,176 +59,176 @@ export type ExtractorType = typeof EXTRACTOR_TYPES[number]
 export function getDefaultParserConfig(parserType: ParserType): Record<string, any> {
   const configs: Record<ParserType, Record<string, any>> = {
     "CSVParser_LlamaIndex":       {
-          "chunk_size": 1000,
-          "chunk_strategy": "rows",
-          "extract_metadata": true,
-          "combine_fields": true,
-          "na_values": [
-              "",
-              "NA",
-              "N/A",
-              "null",
-              "None"
-          ]
+        "chunk_size": 1000,
+        "chunk_strategy": "rows",
+        "extract_metadata": true,
+        "combine_fields": true,
+        "na_values": [
+          "",
+          "NA",
+          "N/A",
+          "null",
+          "None"
+        ]
       },
     "CSVParser_Pandas":       {
-          "chunk_size": 1000,
-          "chunk_strategy": "rows",
-          "extract_metadata": true,
-          "encoding": "utf-8",
-          "delimiter": ",",
-          "na_values": [
-              "",
-              "NA",
-              "N/A",
-              "null",
-              "None"
-          ]
+        "chunk_size": 1000,
+        "chunk_strategy": "rows",
+        "extract_metadata": true,
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "na_values": [
+          "",
+          "NA",
+          "N/A",
+          "null",
+          "None"
+        ]
       },
     "CSVParser_Python":       {
-          "chunk_size": 1000,
-          "encoding": "utf-8",
-          "delimiter": ",",
-          "quotechar": "\""
+        "chunk_size": 1000,
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "quotechar": "\""
       },
     "DOCXParser_LlamaIndex":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "paragraphs",
-          "extract_metadata": true,
-          "extract_tables": true,
-          "extract_images": false,
-          "preserve_formatting": true,
-          "include_header_footer": false
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "paragraphs",
+        "extract_metadata": true,
+        "extract_tables": true,
+        "extract_images": false,
+        "preserve_formatting": true,
+        "include_header_footer": false
       },
     "DOCXParser_PythonDocx":       {
-          "chunk_size": 1000,
-          "chunk_strategy": "paragraphs",
-          "extract_metadata": true,
-          "extract_tables": true,
-          "extract_headers": true,
-          "extract_footers": false,
-          "extract_comments": false
+        "chunk_size": 1000,
+        "chunk_strategy": "paragraphs",
+        "extract_metadata": true,
+        "extract_tables": true,
+        "extract_headers": true,
+        "extract_footers": false,
+        "extract_comments": false
       },
     "EXCELParser_LlamaIndex":       {
-          "chunk_size": 1000,
-          "chunk_strategy": "rows",
-          "combine_sheets": false,
-          "extract_metadata": true,
-          "extract_formulas": false,
-          "header_row": 0,
-          "na_values": [
-              "",
-              "NA",
-              "N/A",
-              "null",
-              "None"
-          ]
+        "chunk_size": 1000,
+        "chunk_strategy": "rows",
+        "combine_sheets": false,
+        "extract_metadata": true,
+        "extract_formulas": false,
+        "header_row": 0,
+        "na_values": [
+          "",
+          "NA",
+          "N/A",
+          "null",
+          "None"
+        ]
       },
     "EXCELParser_OpenPyXL":       {
-          "chunk_size": 1000,
-          "extract_formulas": false,
-          "extract_metadata": true,
-          "sheets": null,
-          "data_only": true
+        "chunk_size": 1000,
+        "extract_formulas": false,
+        "extract_metadata": true,
+        "sheets": null,
+        "data_only": true
       },
     "EXCELParser_Pandas":       {
-          "chunk_size": 1000,
-          "sheets": null,
-          "extract_metadata": true,
-          "skiprows": null,
-          "na_values": [
-              "",
-              "NA",
-              "N/A",
-              "null",
-              "None"
-          ]
+        "chunk_size": 1000,
+        "sheets": null,
+        "extract_metadata": true,
+        "skiprows": null,
+        "na_values": [
+          "",
+          "NA",
+          "N/A",
+          "null",
+          "None"
+        ]
       },
     "MARKDOWNParser_LlamaIndex":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "headings",
-          "extract_metadata": true,
-          "extract_code_blocks": true,
-          "extract_tables": true,
-          "extract_links": true,
-          "preserve_structure": true
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "headings",
+        "extract_metadata": true,
+        "extract_code_blocks": true,
+        "extract_tables": true,
+        "extract_links": true,
+        "preserve_structure": true
       },
     "MARKDOWNParser_Python":       {
-          "chunk_size": 1000,
-          "chunk_strategy": "sections",
-          "extract_metadata": true,
-          "extract_code_blocks": true,
-          "extract_links": true
+        "chunk_size": 1000,
+        "chunk_strategy": "sections",
+        "extract_metadata": true,
+        "extract_code_blocks": true,
+        "extract_links": true
       },
     "MSGParser_ExtractMsg":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "email_sections",
-          "extract_metadata": true,
-          "extract_attachments": true,
-          "extract_headers": true,
-          "include_attachment_content": true,
-          "clean_text": true,
-          "preserve_formatting": false,
-          "encoding": "utf-8"
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "email_sections",
+        "extract_metadata": true,
+        "extract_attachments": true,
+        "extract_headers": true,
+        "include_attachment_content": true,
+        "clean_text": true,
+        "preserve_formatting": false,
+        "encoding": "utf-8"
       },
     "PDFParser_LlamaIndex":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "sentences",
-          "extract_metadata": true,
-          "extract_images": false,
-          "extract_tables": true,
-          "fallback_strategies": [
-              "llama_pdf_reader",
-              "llama_pymupdf_reader",
-              "direct_pymupdf",
-              "pypdf2_fallback"
-          ]
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "sentences",
+        "extract_metadata": true,
+        "extract_images": false,
+        "extract_tables": true,
+        "fallback_strategies": [
+          "llama_pdf_reader",
+          "llama_pymupdf_reader",
+          "direct_pymupdf",
+          "pypdf2_fallback"
+        ]
       },
     "PDFParser_PyPDF2":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "paragraphs",
-          "extract_metadata": true,
-          "preserve_layout": true,
-          "extract_page_info": true,
-          "extract_annotations": false,
-          "extract_links": false,
-          "extract_form_fields": false,
-          "extract_outlines": false,
-          "extract_images": false,
-          "extract_xmp_metadata": false,
-          "clean_text": true,
-          "combine_pages": false
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "paragraphs",
+        "extract_metadata": true,
+        "preserve_layout": true,
+        "extract_page_info": true,
+        "extract_annotations": false,
+        "extract_links": false,
+        "extract_form_fields": false,
+        "extract_outlines": false,
+        "extract_images": false,
+        "extract_xmp_metadata": false,
+        "clean_text": true,
+        "combine_pages": false
       },
     "TEXTParser_LlamaIndex":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "semantic",
-          "encoding": "utf-8",
-          "clean_text": true,
-          "extract_metadata": true,
-          "semantic_buffer_size": 1,
-          "semantic_breakpoint_percentile_threshold": 95,
-          "token_model": "gpt-3.5-turbo",
-          "preserve_code_structure": true,
-          "detect_language": true,
-          "include_prev_next_rel": true
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "semantic",
+        "encoding": "utf-8",
+        "clean_text": true,
+        "extract_metadata": true,
+        "semantic_buffer_size": 1,
+        "semantic_breakpoint_percentile_threshold": 95,
+        "token_model": "gpt-3.5-turbo",
+        "preserve_code_structure": true,
+        "detect_language": true,
+        "include_prev_next_rel": true
       },
     "TEXTParser_Python":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 100,
-          "chunk_strategy": "sentences",
-          "encoding": "utf-8",
-          "clean_text": true,
-          "extract_metadata": true
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "chunk_strategy": "sentences",
+        "encoding": "utf-8",
+        "clean_text": true,
+        "extract_metadata": true
       },
     "auto":       {
-          "chunk_size": 1000,
-          "chunk_overlap": 200
+        "chunk_size": 1000,
+        "chunk_overlap": 200
       },
   }
   return configs[parserType] || {}
@@ -237,127 +237,127 @@ export function getDefaultParserConfig(parserType: ParserType): Record<string, a
 export function getDefaultExtractorConfig(extractorType: ExtractorType): Record<string, any> {
   const configs: Record<ExtractorType, Record<string, any>> = {
     "ContentStatisticsExtractor":       {
-          "include_readability": true,
-          "include_vocabulary": true,
-          "include_structure": true,
-          "include_sentiment_indicators": false
+        "include_readability": true,
+        "include_vocabulary": true,
+        "include_structure": true,
+        "include_sentiment_indicators": false
       },
     "DateTimeExtractor":       {
-          "fuzzy_parsing": true,
-          "extract_relative": true,
-          "extract_times": true,
-          "extract_durations": true,
-          "default_timezone": "UTC",
-          "date_format": "ISO",
-          "prefer_dates_from": "current"
+        "fuzzy_parsing": true,
+        "extract_relative": true,
+        "extract_times": true,
+        "extract_durations": true,
+        "default_timezone": "UTC",
+        "date_format": "ISO",
+        "prefer_dates_from": "current"
       },
     "EntityExtractor":       {
-          "model": "en_core_web_sm",
-          "entity_types": [
-              "PERSON",
-              "ORG",
-              "GPE",
-              "DATE",
-              "TIME",
-              "MONEY",
-              "EMAIL",
-              "PHONE",
-              "URL",
-              "PERCENT",
-              "PRODUCT",
-              "EVENT"
-          ],
-          "use_fallback": true,
-          "min_entity_length": 2,
-          "merge_entities": true,
-          "confidence_threshold": 0.7
+        "model": "en_core_web_sm",
+        "entity_types": [
+          "PERSON",
+          "ORG",
+          "GPE",
+          "DATE",
+          "TIME",
+          "MONEY",
+          "EMAIL",
+          "PHONE",
+          "URL",
+          "PERCENT",
+          "PRODUCT",
+          "EVENT"
+        ],
+        "use_fallback": true,
+        "min_entity_length": 2,
+        "merge_entities": true,
+        "confidence_threshold": 0.7
       },
     "HeadingExtractor":       {
-          "max_level": 6,
-          "include_hierarchy": true,
-          "extract_outline": true,
-          "min_heading_length": 3,
-          "enabled": true
+        "max_level": 6,
+        "include_hierarchy": true,
+        "extract_outline": true,
+        "min_heading_length": 3,
+        "enabled": true
       },
     "KeywordExtractor":       {
-          "algorithm": "rake",
-          "max_keywords": 10,
-          "min_length": 1,
-          "max_length": 4,
-          "min_frequency": 1,
-          "language": "en",
-          "max_ngram_size": 3,
-          "deduplication_threshold": 0.9
+        "algorithm": "rake",
+        "max_keywords": 10,
+        "min_length": 1,
+        "max_length": 4,
+        "min_frequency": 1,
+        "language": "en",
+        "max_ngram_size": 3,
+        "deduplication_threshold": 0.9
       },
     "LinkExtractor":       {
-          "extract_urls": true,
-          "extract_emails": true,
-          "extract_domains": true,
-          "validate_urls": false,
-          "resolve_redirects": false,
-          "enabled": true
+        "extract_urls": true,
+        "extract_emails": true,
+        "extract_domains": true,
+        "validate_urls": false,
+        "resolve_redirects": false,
+        "enabled": true
       },
     "PathExtractor":       {
-          "extract_file_paths": true,
-          "extract_urls": true,
-          "extract_s3_paths": true,
-          "validate_paths": false,
-          "normalize_paths": true,
-          "enabled": true
+        "extract_file_paths": true,
+        "extract_urls": true,
+        "extract_s3_paths": true,
+        "validate_paths": false,
+        "normalize_paths": true,
+        "enabled": true
       },
     "PatternExtractor":       {
-          "predefined_patterns": [],
-          "custom_patterns": [],
-          "case_sensitive": false,
-          "return_positions": false,
-          "include_context": false,
-          "max_matches_per_pattern": 100,
-          "deduplicate_matches": true
+        "predefined_patterns": [],
+        "custom_patterns": [],
+        "case_sensitive": false,
+        "return_positions": false,
+        "include_context": false,
+        "max_matches_per_pattern": 100,
+        "deduplicate_matches": true
       },
     "RAKEExtractor":       {
-          "algorithm": "rake",
-          "max_keywords": 10,
-          "min_length": 1,
-          "max_length": 4,
-          "min_frequency": 1,
-          "language": "en",
-          "max_ngram_size": 3,
-          "deduplication_threshold": 0.9
+        "algorithm": "rake",
+        "max_keywords": 10,
+        "min_length": 1,
+        "max_length": 4,
+        "min_frequency": 1,
+        "language": "en",
+        "max_ngram_size": 3,
+        "deduplication_threshold": 0.9
       },
     "SummaryExtractor":       {
-          "summary_sentences": 3,
-          "algorithm": "textrank",
-          "include_key_phrases": true,
-          "include_statistics": true,
-          "min_sentence_length": 10,
-          "max_sentence_length": 500
+        "summary_sentences": 3,
+        "algorithm": "textrank",
+        "include_key_phrases": true,
+        "include_statistics": true,
+        "min_sentence_length": 10,
+        "max_sentence_length": 500
       },
     "TFIDFExtractor":       {
-          "algorithm": "rake",
-          "max_keywords": 10,
-          "min_length": 1,
-          "max_length": 4,
-          "min_frequency": 1,
-          "language": "en",
-          "max_ngram_size": 3,
-          "deduplication_threshold": 0.9
+        "algorithm": "rake",
+        "max_keywords": 10,
+        "min_length": 1,
+        "max_length": 4,
+        "min_frequency": 1,
+        "language": "en",
+        "max_ngram_size": 3,
+        "deduplication_threshold": 0.9
       },
     "TableExtractor":       {
-          "output_format": "dict",
-          "extract_headers": true,
-          "merge_cells": true,
-          "min_rows": 2,
-          "enabled": true
+        "output_format": "dict",
+        "extract_headers": true,
+        "merge_cells": true,
+        "min_rows": 2,
+        "enabled": true
       },
     "YAKEExtractor":       {
-          "algorithm": "rake",
-          "max_keywords": 10,
-          "min_length": 1,
-          "max_length": 4,
-          "min_frequency": 1,
-          "language": "en",
-          "max_ngram_size": 3,
-          "deduplication_threshold": 0.9
+        "algorithm": "rake",
+        "max_keywords": 10,
+        "min_length": 1,
+        "max_length": 4,
+        "min_frequency": 1,
+        "language": "en",
+        "max_ngram_size": 3,
+        "deduplication_threshold": 0.9
       },
   }
   return configs[extractorType] || {}
@@ -406,12 +406,12 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     defaultExtensions: [".csv"],
     properties: {
       chunk_size: { type: "integer", description: "Number of rows per chunk", default: 1000, minimum: 100, maximum: 50000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy", default: "rows", enum: ["rows", "semantic", "full"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy", default: "rows", enum: ["rows","semantic","full"] },
       field_mapping: { type: "string", description: "Map CSV columns to standard fields" },
       extract_metadata: { type: "boolean", description: "Extract metadata from CSV", default: true },
       combine_fields: { type: "boolean", description: "Combine fields into text content", default: true },
       skiprows: { type: "integer", description: "Number of rows to skip at beginning", minimum: 0 },
-      na_values: { type: "array", description: "Values to treat as missing", default: ["", "NA", "N/A", "null", "None"], items: { type: "string" } }
+      na_values: { type: "array", description: "Values to treat as missing", default: ["","NA","N/A","null","None"], items: { type: "string" } }
     },
   },
   "CSVParser_Pandas": {
@@ -421,11 +421,11 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     defaultExtensions: [".csv"],
     properties: {
       chunk_size: { type: "integer", description: "Number of rows per chunk", default: 1000, minimum: 100 },
-      chunk_strategy: { type: "string", description: "How to chunk the CSV data", default: "rows", enum: ["rows", "columns", "full"] },
+      chunk_strategy: { type: "string", description: "How to chunk the CSV data", default: "rows", enum: ["rows","columns","full"] },
       extract_metadata: { type: "boolean", description: "Extract data statistics and metadata", default: true },
       encoding: { type: "string", description: "File encoding", default: "utf-8" },
       delimiter: { type: "string", description: "CSV delimiter", default: "," },
-      na_values: { type: "array", description: "Values to treat as NaN", default: ["", "NA", "N/A", "null", "None"], items: { type: "string" } }
+      na_values: { type: "array", description: "Values to treat as NaN", default: ["","NA","N/A","null","None"], items: { type: "string" } }
     },
   },
   "CSVParser_Python": {
@@ -448,7 +448,7 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
       chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0, maximum: 5000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy", default: "paragraphs", enum: ["paragraphs", "sentences", "semantic"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy", default: "paragraphs", enum: ["paragraphs","sentences","semantic"] },
       extract_metadata: { type: "boolean", description: "Extract document metadata", default: true },
       extract_tables: { type: "boolean", description: "Extract tables from document", default: true },
       extract_images: { type: "boolean", description: "Extract images from document", default: false },
@@ -463,7 +463,7 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     defaultExtensions: [".docx"],
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100 },
-      chunk_strategy: { type: "string", description: "Chunking strategy", default: "paragraphs", enum: ["paragraphs", "sentences", "characters"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy", default: "paragraphs", enum: ["paragraphs","sentences","characters"] },
       extract_metadata: { type: "boolean", description: "Extract document metadata", default: true },
       extract_tables: { type: "boolean", description: "Extract tables using python-docx", default: true },
       extract_headers: { type: "boolean", description: "Extract headers", default: true },
@@ -475,24 +475,24 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     type: "EXCELParser_LlamaIndex",
     title: "Excel Parser (LlamaIndex) Configuration",
     description: "Excel parser using LlamaIndex with Pandas backend for advanced processing",
-    defaultExtensions: [".xlsx", ".xls"],
+    defaultExtensions: [".xlsx",".xls"],
     properties: {
       chunk_size: { type: "integer", description: "Number of rows per chunk", default: 1000, minimum: 100, maximum: 50000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy", default: "rows", enum: ["rows", "semantic", "full"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy", default: "rows", enum: ["rows","semantic","full"] },
       sheets: { type: "string", description: "Specific sheets to parse (null for all)" },
       combine_sheets: { type: "boolean", description: "Combine all sheets into one document", default: false },
       extract_metadata: { type: "boolean", description: "Extract metadata from Excel", default: true },
       extract_formulas: { type: "boolean", description: "Extract formulas instead of values", default: false },
       header_row: { type: "integer", description: "Row index for headers", default: 0, minimum: 0 },
       skiprows: { type: "integer", description: "Number of rows to skip", minimum: 0 },
-      na_values: { type: "array", description: "Values to treat as missing", default: ["", "NA", "N/A", "null", "None"], items: { type: "string" } }
+      na_values: { type: "array", description: "Values to treat as missing", default: ["","NA","N/A","null","None"], items: { type: "string" } }
     },
   },
   "EXCELParser_OpenPyXL": {
     type: "EXCELParser_OpenPyXL",
     title: "Excel Parser (OpenPyXL) Configuration",
     description: "Excel parser using OpenPyXL for XLSX files with formula support",
-    defaultExtensions: [".xlsx", ".xls"],
+    defaultExtensions: [".xlsx",".xls"],
     properties: {
       chunk_size: { type: "integer", description: "Number of rows per chunk", default: 1000, minimum: 100 },
       extract_formulas: { type: "boolean", description: "Extract cell formulas using OpenPyXL", default: false },
@@ -505,24 +505,24 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     type: "EXCELParser_Pandas",
     title: "Excel Parser (Pandas) Configuration",
     description: "Excel parser using Pandas with data analysis capabilities",
-    defaultExtensions: [".xlsx", ".xls"],
+    defaultExtensions: [".xlsx",".xls"],
     properties: {
       chunk_size: { type: "integer", description: "Number of rows per chunk", default: 1000, minimum: 100 },
       sheets: { type: "string", description: "Specific sheets to process (null = all)", default: null },
       extract_metadata: { type: "boolean", description: "Extract data statistics", default: true },
       skiprows: { type: "string", description: "Rows to skip at beginning", default: null },
-      na_values: { type: "array", description: "Values to treat as NaN", default: ["", "NA", "N/A", "null", "None"], items: { type: "string" } }
+      na_values: { type: "array", description: "Values to treat as NaN", default: ["","NA","N/A","null","None"], items: { type: "string" } }
     },
   },
   "MARKDOWNParser_LlamaIndex": {
     type: "MARKDOWNParser_LlamaIndex",
     title: "Markdown Parser (LlamaIndex) Configuration",
     description: "Advanced markdown parser using LlamaIndex with semantic chunking",
-    defaultExtensions: [".md", ".markdown"],
+    defaultExtensions: [".md",".markdown"],
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
       chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0, maximum: 5000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy for markdown", default: "headings", enum: ["headings", "paragraphs", "sentences", "semantic"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy for markdown", default: "headings", enum: ["headings","paragraphs","sentences","semantic"] },
       extract_metadata: { type: "boolean", description: "Extract frontmatter metadata", default: true },
       extract_code_blocks: { type: "boolean", description: "Extract code blocks separately", default: true },
       extract_tables: { type: "boolean", description: "Extract markdown tables", default: true },
@@ -534,10 +534,10 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     type: "MARKDOWNParser_Python",
     title: "Markdown Parser (Python) Configuration",
     description: "Markdown parser using native Python with regex parsing",
-    defaultExtensions: [".md", ".markdown"],
+    defaultExtensions: [".md",".markdown"],
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100 },
-      chunk_strategy: { type: "string", description: "Chunking strategy - sections uses markdown headers", default: "sections", enum: ["sections", "paragraphs", "characters"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy - sections uses markdown headers", default: "sections", enum: ["sections","paragraphs","characters"] },
       extract_metadata: { type: "boolean", description: "Extract YAML frontmatter", default: true },
       extract_code_blocks: { type: "boolean", description: "Extract code blocks", default: true },
       extract_links: { type: "boolean", description: "Extract markdown links", default: true }
@@ -551,7 +551,7 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
       chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0, maximum: 5000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy", default: "email_sections", enum: ["sentences", "paragraphs", "characters", "email_sections"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy", default: "email_sections", enum: ["sentences","paragraphs","characters","email_sections"] },
       extract_metadata: { type: "boolean", description: "Extract metadata", default: true },
       extract_attachments: { type: "boolean", description: "Extract attachments", default: true },
       extract_headers: { type: "boolean", description: "Extract headers", default: true },
@@ -569,11 +569,11 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
       chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0, maximum: 5000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy for PDF content", default: "sentences", enum: ["sentences", "paragraphs", "pages", "semantic"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy for PDF content", default: "sentences", enum: ["sentences","paragraphs","pages","semantic"] },
       extract_metadata: { type: "boolean", description: "Extract PDF metadata", default: true },
       extract_images: { type: "boolean", description: "Extract images from PDF", default: false },
       extract_tables: { type: "boolean", description: "Extract tables from PDF", default: true },
-      fallback_strategies: { type: "array", description: "Fallback strategies to try in order", default: ["llama_pdf_reader", "llama_pymupdf_reader", "direct_pymupdf", "pypdf2_fallback"], items: { type: "string" } }
+      fallback_strategies: { type: "array", description: "Fallback strategies to try in order", default: ["llama_pdf_reader","llama_pymupdf_reader","direct_pymupdf","pypdf2_fallback"], items: { type: "string" } }
     },
   },
   "PDFParser_PyPDF2": {
@@ -584,7 +584,7 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
       chunk_overlap: { type: "integer", description: "Overlap between chunks in characters", default: 100, minimum: 0, maximum: 5000 },
-      chunk_strategy: { type: "string", description: "Chunking strategy using PyPDF2 text structure", default: "paragraphs", enum: ["paragraphs", "sentences", "characters"] },
+      chunk_strategy: { type: "string", description: "Chunking strategy using PyPDF2 text structure", default: "paragraphs", enum: ["paragraphs","sentences","characters"] },
       extract_metadata: { type: "boolean", description: "Extract PDF metadata using PyPDF2", default: true },
       preserve_layout: { type: "boolean", description: "Use PyPDF2 layout-preserving extraction mode", default: true },
       extract_page_info: { type: "boolean", description: "Extract page numbers and rotation info", default: true },
@@ -606,7 +606,7 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100, maximum: 50000 },
       chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0, maximum: 5000 },
-      chunk_strategy: { type: "string", description: "Advanced chunking strategy - semantic uses content-based splitting, code preserves syntax", default: "semantic", enum: ["characters", "sentences", "paragraphs", "tokens", "semantic", "code"] },
+      chunk_strategy: { type: "string", description: "Advanced chunking strategy - semantic uses content-based splitting, code preserves syntax", default: "semantic", enum: ["characters","sentences","paragraphs","tokens","semantic","code"] },
       encoding: { type: "string", description: "Text encoding", default: "utf-8" },
       clean_text: { type: "boolean", description: "Clean extracted text", default: true },
       extract_metadata: { type: "boolean", description: "Extract comprehensive file and content metadata", default: true },
@@ -626,7 +626,7 @@ export const PARSER_SCHEMAS: Record<ParserType, ParserSchema> = {
     properties: {
       chunk_size: { type: "integer", description: "Chunk size in characters", default: 1000, minimum: 100 },
       chunk_overlap: { type: "integer", description: "Overlap between chunks", default: 100, minimum: 0 },
-      chunk_strategy: { type: "string", description: "Text chunking strategy", default: "sentences", enum: ["sentences", "paragraphs", "characters"] },
+      chunk_strategy: { type: "string", description: "Text chunking strategy", default: "sentences", enum: ["sentences","paragraphs","characters"] },
       encoding: { type: "string", description: "Text encoding (utf-8 or auto-detect)", default: "utf-8" },
       clean_text: { type: "boolean", description: "Remove excessive whitespace", default: true },
       extract_metadata: { type: "boolean", description: "Extract file statistics", default: true }
@@ -667,7 +667,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
       extract_durations: { type: "boolean", description: "Extract durations", default: true },
       default_timezone: { type: "string", description: "Default timezone", default: "UTC" },
       date_format: { type: "string", description: "Output date format", default: "ISO" },
-      prefer_dates_from: { type: "string", description: "Preference for ambiguous dates", default: "current", enum: ["past", "future", "current"] }
+      prefer_dates_from: { type: "string", description: "Preference for ambiguous dates", default: "current", enum: ["past","future","current"] }
     },
   },
   "EntityExtractor": {
@@ -676,11 +676,11 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     description: "",
     properties: {
       model: { type: "string", description: "NER model name", default: "en_core_web_sm" },
-      entity_types: { type: "array", description: "Entity types to extract", default: ["PERSON", "ORG", "GPE", "DATE", "TIME", "MONEY", "EMAIL", "PHONE", "URL", "PERCENT", "PRODUCT", "EVENT"], items: { type: "string" } },
+      entity_types: { type: "array", description: "Entity types to extract", default: ["PERSON","ORG","GPE","DATE","TIME","MONEY","EMAIL","PHONE","URL","PERCENT","PRODUCT","EVENT"], items: { type: "string" } },
       use_fallback: { type: "boolean", description: "Use regex fallback", default: true },
       min_entity_length: { type: "integer", description: "Minimum entity length", default: 2, minimum: 1 },
       merge_entities: { type: "boolean", description: "Merge adjacent entities", default: true },
-      confidence_threshold: { type: "number", description: "Minimum confidence score", default: 0.7, minimum: 0.0, maximum: 1.0 }
+      confidence_threshold: { type: "number", description: "Minimum confidence score", default: 0.7, minimum: 0, maximum: 1 }
     },
   },
   "HeadingExtractor": {
@@ -701,7 +701,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     description: "",
     properties: {
       extractor_type: { type: "string", description: "Extractor type discriminator" },
-      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake", "yake", "tfidf", "textrank"] },
+      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake","yake","tfidf","textrank"] },
       max_keywords: { type: "integer", description: "Maximum keywords to extract", default: 10, minimum: 1, maximum: 100 },
       min_length: { type: "integer", description: "Minimum word length for keywords", default: 1, minimum: 1 },
       max_length: { type: "integer", description: "Maximum word length for keywords", default: 4, minimum: 1 },
@@ -709,7 +709,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
       stop_words: { type: "array", description: "Custom stop words", items: { type: "string" } },
       language: { type: "string", description: "Language for YAKE algorithm", default: "en" },
       max_ngram_size: { type: "integer", description: "Maximum n-gram size for YAKE", default: 3, minimum: 1, maximum: 5 },
-      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0.0, maximum: 1.0 }
+      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0, maximum: 1 }
     },
   },
   "LinkExtractor": {
@@ -758,7 +758,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     description: "",
     properties: {
       extractor_type: { type: "string", description: "Extractor type discriminator" },
-      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake", "yake", "tfidf", "textrank"] },
+      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake","yake","tfidf","textrank"] },
       max_keywords: { type: "integer", description: "Maximum keywords to extract", default: 10, minimum: 1, maximum: 100 },
       min_length: { type: "integer", description: "Minimum word length for keywords", default: 1, minimum: 1 },
       max_length: { type: "integer", description: "Maximum word length for keywords", default: 4, minimum: 1 },
@@ -766,7 +766,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
       stop_words: { type: "array", description: "Custom stop words", items: { type: "string" } },
       language: { type: "string", description: "Language for YAKE algorithm", default: "en" },
       max_ngram_size: { type: "integer", description: "Maximum n-gram size for YAKE", default: 3, minimum: 1, maximum: 5 },
-      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0.0, maximum: 1.0 }
+      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0, maximum: 1 }
     },
   },
   "SummaryExtractor": {
@@ -775,7 +775,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     description: "",
     properties: {
       summary_sentences: { type: "integer", description: "Number of summary sentences", default: 3, minimum: 1, maximum: 10 },
-      algorithm: { type: "string", description: "Summarization algorithm", default: "textrank", enum: ["textrank", "lsa", "luhn", "lexrank"] },
+      algorithm: { type: "string", description: "Summarization algorithm", default: "textrank", enum: ["textrank","lsa","luhn","lexrank"] },
       include_key_phrases: { type: "boolean", description: "Extract key phrases", default: true },
       include_statistics: { type: "boolean", description: "Include text statistics", default: true },
       min_sentence_length: { type: "integer", description: "Minimum sentence length for summary", default: 10, minimum: 1 },
@@ -788,7 +788,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     description: "",
     properties: {
       extractor_type: { type: "string", description: "Extractor type discriminator" },
-      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake", "yake", "tfidf", "textrank"] },
+      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake","yake","tfidf","textrank"] },
       max_keywords: { type: "integer", description: "Maximum keywords to extract", default: 10, minimum: 1, maximum: 100 },
       min_length: { type: "integer", description: "Minimum word length for keywords", default: 1, minimum: 1 },
       max_length: { type: "integer", description: "Maximum word length for keywords", default: 4, minimum: 1 },
@@ -796,7 +796,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
       stop_words: { type: "array", description: "Custom stop words", items: { type: "string" } },
       language: { type: "string", description: "Language for YAKE algorithm", default: "en" },
       max_ngram_size: { type: "integer", description: "Maximum n-gram size for YAKE", default: 3, minimum: 1, maximum: 5 },
-      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0.0, maximum: 1.0 }
+      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0, maximum: 1 }
     },
   },
   "TableExtractor": {
@@ -804,7 +804,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     title: "Table Extractor Configuration",
     description: "",
     properties: {
-      output_format: { type: "string", description: "Output format", default: "dict", enum: ["dict", "list", "csv", "markdown"] },
+      output_format: { type: "string", description: "Output format", default: "dict", enum: ["dict","list","csv","markdown"] },
       extract_headers: { type: "boolean", description: "Extract table headers", default: true },
       merge_cells: { type: "boolean", description: "Handle merged cells", default: true },
       min_rows: { type: "integer", description: "Minimum rows for table", default: 2, minimum: 1 },
@@ -817,7 +817,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
     description: "",
     properties: {
       extractor_type: { type: "string", description: "Extractor type discriminator" },
-      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake", "yake", "tfidf", "textrank"] },
+      algorithm: { type: "string", description: "Extraction algorithm", default: "rake", enum: ["rake","yake","tfidf","textrank"] },
       max_keywords: { type: "integer", description: "Maximum keywords to extract", default: 10, minimum: 1, maximum: 100 },
       min_length: { type: "integer", description: "Minimum word length for keywords", default: 1, minimum: 1 },
       max_length: { type: "integer", description: "Maximum word length for keywords", default: 4, minimum: 1 },
@@ -825,7 +825,7 @@ export const EXTRACTOR_SCHEMAS: Record<ExtractorType, ExtractorSchema> = {
       stop_words: { type: "array", description: "Custom stop words", items: { type: "string" } },
       language: { type: "string", description: "Language for YAKE algorithm", default: "en" },
       max_ngram_size: { type: "integer", description: "Maximum n-gram size for YAKE", default: 3, minimum: 1, maximum: 5 },
-      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0.0, maximum: 1.0 }
+      deduplication_threshold: { type: "number", description: "Deduplication threshold for YAKE", default: 0.9, minimum: 0, maximum: 1 }
     },
   },
 }

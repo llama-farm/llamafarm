@@ -10,7 +10,7 @@ import {
 } from '../ui/dropdown-menu'
 import { Button } from '../ui/button'
 // Import schema types from generated file
-import type { ExtractorSchema, SchemaField } from './generated/ragTypes'
+import type { ExtractorSchema, SchemaField } from '@/types/ragTypes'
 
 type Props = {
   schema: ExtractorSchema

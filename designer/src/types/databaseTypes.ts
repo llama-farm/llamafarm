@@ -1,7 +1,7 @@
 /**
  * AUTO-GENERATED FILE - DO NOT EDIT
  * 
- * Generated from rag/schema.yaml by designer/generate-types.py
+ * Generated from rag/schema.yaml by designer/generate-types.ts
  * Run: cd designer && ./generate-types.sh
  */
 
@@ -58,30 +58,30 @@ export type RetrievalStrategyType = typeof RETRIEVAL_STRATEGY_TYPES[number]
 export function getDefaultVectorStoreConfig(storeType: VectorStoreType): Record<string, any> {
   const configs: Record<VectorStoreType, Record<string, any>> = {
     "ChromaStore":       {
-          "collection_name": "documents",
-          "host": null,
-          "port": 8000,
-          "distance_function": "cosine",
-          "distance_metric": "cosine",
-          "embedding_dimension": 768,
-          "enable_deduplication": true,
-          "embedding_function": null
+        "collection_name": "documents",
+        "host": null,
+        "port": 8000,
+        "distance_function": "cosine",
+        "distance_metric": "cosine",
+        "embedding_dimension": 768,
+        "enable_deduplication": true,
+        "embedding_function": null
       },
     "FAISSStore":       {},
     "PineconeStore":       {
-          "environment": "us-east-1-aws",
-          "metric": "cosine",
-          "namespace": "",
-          "replicas": 1
+        "environment": "us-east-1-aws",
+        "metric": "cosine",
+        "namespace": "",
+        "replicas": 1
       },
     "QdrantStore":       {
-          "host": "localhost",
-          "port": 6333,
-          "grpc_port": 6334,
-          "api_key": null,
-          "collection_name": "documents",
-          "distance": "Cosine",
-          "on_disk": false
+        "host": "localhost",
+        "port": 6333,
+        "grpc_port": 6334,
+        "api_key": null,
+        "collection_name": "documents",
+        "distance": "Cosine",
+        "on_disk": false
       },
   }
   return configs[storeType] || {}
@@ -94,25 +94,25 @@ export function getDefaultVectorStoreConfig(storeType: VectorStoreType): Record<
 export function getDefaultEmbedderConfig(embedderType: EmbedderType): Record<string, any> {
   const configs: Record<EmbedderType, Record<string, any>> = {
     "HuggingFaceEmbedder":       {
-          "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-          "device": "auto",
-          "batch_size": 32,
-          "normalize_embeddings": true,
-          "show_progress_bar": false,
-          "cache_folder": null
+        "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+        "device": "auto",
+        "batch_size": 32,
+        "normalize_embeddings": true,
+        "show_progress_bar": false,
+        "cache_folder": null
       },
     "OllamaEmbedder":       {
-          "model": "nomic-embed-text",
-          "base_url": "http://localhost:11434",
-          "dimension": 768,
-          "batch_size": 16,
-          "timeout": 60,
-          "auto_pull": true
+        "model": "nomic-embed-text",
+        "base_url": "http://localhost:11434",
+        "dimension": 768,
+        "batch_size": 16,
+        "timeout": 60,
+        "auto_pull": true
       },
     "OpenAIEmbedder":       {},
     "SentenceTransformerEmbedder":       {
-          "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-          "device": "cpu"
+        "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+        "device": "cpu"
       },
   }
   return configs[embedderType] || {}
@@ -126,34 +126,34 @@ export function getDefaultRetrievalStrategyConfig(strategyType: RetrievalStrateg
   const configs: Record<RetrievalStrategyType, Record<string, any>> = {
     "BM25Retriever":       {},
     "BasicSimilarityStrategy":       {
-          "top_k": 10,
-          "distance_metric": "cosine",
-          "score_threshold": null
+        "top_k": 10,
+        "distance_metric": "cosine",
+        "score_threshold": null
       },
     "ElasticRetriever":       {},
     "GraphRetriever":       {},
     "HybridRetriever":       {},
     "HybridUniversalStrategy":       {
-          "combination_method": "weighted_average",
-          "final_k": 10
+        "combination_method": "weighted_average",
+        "final_k": 10
       },
     "MetadataFilteredStrategy":       {
-          "top_k": 10,
-          "filters": {},
-          "filter_mode": "pre",
-          "fallback_multiplier": 3
+        "top_k": 10,
+        "filters": {},
+        "filter_mode": "pre",
+        "fallback_multiplier": 3
       },
     "MultiQueryStrategy":       {
-          "num_queries": 3,
-          "top_k": 10,
-          "aggregation_method": "weighted",
-          "query_weights": null
+        "num_queries": 3,
+        "top_k": 10,
+        "aggregation_method": "weighted",
+        "query_weights": null
       },
     "RerankedRetriever":       {},
     "RerankedStrategy":       {
-          "initial_k": 30,
-          "final_k": 10,
-          "normalize_scores": true
+        "initial_k": 30,
+        "final_k": 10,
+        "normalize_scores": true
       },
     "VectorRetriever":       {},
   }

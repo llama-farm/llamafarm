@@ -16,7 +16,7 @@ import {
   EXTRACTOR_TYPES,
   EXTRACTOR_SCHEMAS,
   getDefaultExtractorConfig,
-} from './generated/ragTypes'
+} from '@/types/ragTypes'
 import { useToast } from '../ui/toast'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
@@ -508,21 +508,25 @@ function StrategyView() {
     }
 
     // Load parsers from YAML config
+    // If strategy exists, respect its configuration (even if empty)
     const yamlParsers = strategy.parsers || []
     if (Array.isArray(yamlParsers) && yamlParsers.length > 0) {
       const rows = yamlParsers.map((p: any, i: number) => yamlToParserRow(p, i))
       setParserRows(rows)
     } else {
-      setParserRows(defaultParsers)
+      // Strategy exists but has no parsers - start with empty array
+      setParserRows([])
     }
 
     // Load extractors from YAML config
+    // If strategy exists, respect its configuration (even if empty)
     const yamlExtractors = strategy.extractors || []
     if (Array.isArray(yamlExtractors) && yamlExtractors.length > 0) {
       const rows = yamlExtractors.map((e: any, i: number) => yamlToExtractorRow(e, i))
       setExtractorRows(rows)
     } else {
-      setExtractorRows(defaultExtractors)
+      // Strategy exists but has no extractors - start with empty array
+      setExtractorRows([])
     }
   }
 
@@ -543,8 +547,28 @@ function StrategyView() {
       return
     }
 
+    // Ensure at least one parser exists - default to TEXTParser_Python if empty
+    let parsersToSave = rows
+    if (rows.length === 0) {
+      const defaultTextParser: ParserRow = {
+        id: `text-python-${Date.now()}`,
+        name: 'TEXTParser_Python',
+        priority: 50,
+        include: '*.txt',
+        exclude: '',
+        summary: 'Default text parser',
+        config: getDefaultParserConfig('TEXTParser_Python'),
+      }
+      parsersToSave = [defaultTextParser]
+      // Update local state to reflect the added parser
+      setParserRows([defaultTextParser])
+      toast({
+        message: 'A strategy must have at least one parser. Added default text parser.',
+      })
+    }
+
     await ragStrategy.updateParsers.mutateAsync({
-      parserRows: rows,
+      parserRows: parsersToSave,
       projectConfig: currentConfig,
     })
   }
@@ -904,6 +928,18 @@ function StrategyView() {
   }
   const handleDeleteParser = () => {
     if (!deleteParserId) return
+
+    // Prevent deleting the last parser
+    if (parserRows.length <= 1) {
+      toast({
+        message: 'A strategy must have at least one parser. Add another parser before deleting this one.',
+        variant: 'destructive',
+      })
+      setIsDeleteParserOpen(false)
+      setDeleteParserId('')
+      return
+    }
+
     const next = parserRows.filter(p => p.id !== deleteParserId)
     setParserRows(next)
     saveParsers(next)

@@ -11,14 +11,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# We need to run from the server directory where pyproject.toml is
-SERVER_DIR="$(cd "$SCRIPT_DIR/../server" && pwd)"
-
-cd "$SERVER_DIR"
+cd "$SCRIPT_DIR"
 
 echo "🦙 Generating Designer UI types from schema..."
 echo ""
-uv run python ../designer/generate-types.py
+npx tsx generate-types.ts
 
 echo ""
-echo "✅ Done! Types generated in designer/src/components/Rag/generated/"
+echo "✅ Done! Types generated in designer/src/types/"
