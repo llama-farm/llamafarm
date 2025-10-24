@@ -156,6 +156,44 @@ func (no *NativeOrchestrator) StartRAGNative() error {
 	return nil
 }
 
+// StartUniversalRuntimeNative starts the universal runtime using native processes
+func (no *NativeOrchestrator) StartUniversalRuntimeNative() error {
+	// Ensure environment is ready
+	if err := no.EnsureNativeEnvironment(); err != nil {
+		return err
+	}
+
+	// Check if universal runtime is already running
+	if no.processMgr.IsProcessHealthy("universal-runtime") {
+		if debug {
+			logDebug("Universal runtime process already running")
+		}
+		return nil
+	}
+
+	OutputProgress("Starting universal runtime via native process...\n")
+
+	// Prepare universal runtime environment
+	env := no.getUniversalRuntimeEnv()
+
+	// Get universal runtime directory
+	runtimeDir := no.sourceMgr.GetUniversalRuntimeDir()
+
+	// Build command: uv run python server.py
+	uvPath := no.uvManager.GetUVPath()
+	args := []string{uvPath, "run", "python", "server.py"}
+
+	// Start the process
+	if err := no.processMgr.StartProcess("universal-runtime", runtimeDir, env, args...); err != nil {
+		return fmt.Errorf("failed to start universal runtime process: %w", err)
+	}
+
+	// Wait a moment for runtime to start
+	time.Sleep(2 * time.Second)
+
+	return nil
+}
+
 // getServerEnv returns environment variables for the server process
 func (no *NativeOrchestrator) getServerEnv() []string {
 	env := no.pythonEnvMgr.GetEnvForProcess()
@@ -207,6 +245,59 @@ func (no *NativeOrchestrator) getRAGEnv() []string {
 	// Add required environment variables
 	env = append(env, fmt.Sprintf("LLAMAFARM_HOME=%s", llamafarmDir))
 	env = append(env, fmt.Sprintf("SERVER_URL=%s", no.serverURL))
+
+	// Add any other environment variables from current environment
+	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
+		if val := os.Getenv(key); val != "" {
+			env = append(env, fmt.Sprintf("%s=%s", key, val))
+		}
+	}
+
+	return env
+}
+
+// getUniversalRuntimeEnv returns environment variables for the universal runtime process
+func (no *NativeOrchestrator) getUniversalRuntimeEnv() []string {
+	env := no.pythonEnvMgr.GetEnvForProcess()
+
+	// Add universal runtime-specific environment variables
+	homeDir, _ := os.UserHomeDir()
+	llamafarmDir := filepath.Join(homeDir, ".llamafarm")
+
+	// Get environment variables with defaults
+	port := os.Getenv("TRANSFORMERS_PORT")
+	if port == "" {
+		port = "11540"
+	}
+
+	host := os.Getenv("TRANSFORMERS_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
+	outputDir := os.Getenv("TRANSFORMERS_OUTPUT_DIR")
+	if outputDir == "" {
+		outputDir = filepath.Join(llamafarmDir, "outputs", "images")
+	}
+
+	cacheDir := os.Getenv("TRANSFORMERS_CACHE_DIR")
+	if cacheDir == "" {
+		cacheDir = filepath.Join(homeDir, ".cache", "huggingface")
+	}
+
+	// Add runtime-specific environment variables
+	env = append(env, fmt.Sprintf("TRANSFORMERS_PORT=%s", port))
+	env = append(env, fmt.Sprintf("TRANSFORMERS_HOST=%s", host))
+	env = append(env, fmt.Sprintf("TRANSFORMERS_OUTPUT_DIR=%s", outputDir))
+	env = append(env, fmt.Sprintf("HF_HOME=%s", cacheDir))
+
+	// Pass through device override variables if set
+	if val := os.Getenv("TRANSFORMERS_SKIP_MPS"); val != "" {
+		env = append(env, fmt.Sprintf("TRANSFORMERS_SKIP_MPS=%s", val))
+	}
+	if val := os.Getenv("TRANSFORMERS_FORCE_CPU"); val != "" {
+		env = append(env, fmt.Sprintf("TRANSFORMERS_FORCE_CPU=%s", val))
+	}
 
 	// Add any other environment variables from current environment
 	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
@@ -302,4 +393,14 @@ func startRAGNative(serverURL string) error {
 	}
 
 	return orchestrator.StartRAGNative()
+}
+
+// startUniversalRuntimeNative starts the universal runtime using native processes
+func startUniversalRuntimeNative(serverURL string) error {
+	orchestrator, err := ensureNativeEnvironment(serverURL)
+	if err != nil {
+		return err
+	}
+
+	return orchestrator.StartUniversalRuntimeNative()
 }

@@ -50,18 +50,18 @@ type ServiceState struct {
 type OrchestrationMode int
 
 const (
-	OrchestrationAuto OrchestrationMode = iota // Auto-detect (prefer native)
-	OrchestrationDocker                        // Force Docker mode
-	OrchestrationNative                        // Force Native mode
+	OrchestrationAuto   OrchestrationMode = iota // Auto-detect (prefer native)
+	OrchestrationDocker                          // Force Docker mode
+	OrchestrationNative                          // Force Native mode
 )
 
 type ServiceOrchestrationConfig struct {
-	ServerURL          string
-	PrintStatus        bool
-	ServiceNeeds       map[string]ServiceRequirement
-	DefaultTimeout     time.Duration
-	ServiceTimeouts    map[string]time.Duration
-	OrchestrationMode  OrchestrationMode
+	ServerURL         string
+	PrintStatus       bool
+	ServiceNeeds      map[string]ServiceRequirement
+	DefaultTimeout    time.Duration
+	ServiceTimeouts   map[string]time.Duration
+	OrchestrationMode OrchestrationMode
 }
 
 func (config *ServiceOrchestrationConfig) isLocalhost() bool {
@@ -130,9 +130,18 @@ func (e *HealthError) Error() string {
 // Service Graph Definition
 
 var ServiceGraph = map[string]*ServiceDefinition{
+	"universal-runtime": {
+		Name:            "universal-runtime",
+		Dependencies:    []string{}, // No dependencies - starts in parallel with server
+		CanStartLocally: true,
+		DefaultTimeout:  30 * time.Second,
+		CheckHealth:     checkUniversalRuntimeHealthForService,
+		StartLocal:      startUniversalRuntimeContainerForService,
+		WaitReady:       waitForUniversalRuntimeReadyForService,
+	},
 	"server": {
 		Name:            "server",
-		Dependencies:    []string{}, // No dependencies - always first
+		Dependencies:    []string{}, // No dependencies - starts in parallel with universal runtime
 		CanStartLocally: true,
 		DefaultTimeout:  45 * time.Second,
 		CheckHealth:     checkServerHealthForService,
@@ -183,6 +192,38 @@ func checkRAGHealthForService(serverURL string) (*Component, error) {
 	return ragComponent, nil
 }
 
+func checkUniversalRuntimeHealthForService(serverURL string) (*Component, error) {
+	// Universal runtime runs on its own port (11540 by default)
+	port := os.Getenv("TRANSFORMERS_PORT")
+	if port == "" {
+		port = "11540"
+	}
+	host := os.Getenv("TRANSFORMERS_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
+	runtimeURL := fmt.Sprintf("http://%s:%s", host, port)
+
+	// Check health endpoint
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(runtimeURL + "/health")
+	if err != nil {
+		return nil, fmt.Errorf("universal runtime not reachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("universal runtime unhealthy: status %d", resp.StatusCode)
+	}
+
+	return &Component{
+		Name:    "universal-runtime",
+		Status:  "healthy",
+		Message: fmt.Sprintf("Runtime available at %s", runtimeURL),
+	}, nil
+}
+
 func startServerContainerForService(serverURL string) error {
 	mode := determineOrchestrationMode()
 	if mode == OrchestrationNative {
@@ -198,6 +239,15 @@ func startRAGContainerForService(serverURL string) error {
 	}
 	orchestrator := NewContainerOrchestrator()
 	return orchestrator.startRAGContainer()
+}
+
+func startUniversalRuntimeContainerForService(serverURL string) error {
+	mode := determineOrchestrationMode()
+	if mode == OrchestrationNative {
+		return startUniversalRuntimeNative(serverURL)
+	}
+	// Docker mode not yet implemented for universal runtime
+	return fmt.Errorf("universal runtime Docker mode not yet implemented")
 }
 
 func waitForServerReadyForService(serverURL string, timeout time.Duration) error {
@@ -216,6 +266,17 @@ func waitForRAGReadyForService(serverURL string, timeout time.Duration) error {
 	return orchestrator.waitForRAGReadiness(timeout, serverURL)
 }
 
+func waitForUniversalRuntimeReadyForService(serverURL string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := checkUniversalRuntimeHealthForService(serverURL); err == nil {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("universal runtime did not become ready within %v", timeout)
+}
+
 // ServiceOrchestrator Implementation
 
 func NewServiceOrchestrator(config *ServiceOrchestrationConfig) *ServiceOrchestrator {
@@ -230,6 +291,7 @@ func NewServiceOrchestrator(config *ServiceOrchestrationConfig) *ServiceOrchestr
 
 func (so *ServiceOrchestrator) EnsureServices() *OrchestrationResult {
 	// Initialize channels
+	so.serviceReady["universal-runtime"] = make(chan *ServiceState, 1)
 	so.serviceReady["server"] = make(chan *ServiceState, 1)
 	so.serviceReady["rag"] = make(chan *ServiceState, 1)
 
@@ -507,54 +569,58 @@ func (so *ServiceOrchestrator) getServiceTimeout(serviceName string, serviceDef 
 
 // Command-Specific Configuration Factories
 
-// StartCommandConfig creates config for lf start - Server required, RAG optional (background)
+// StartCommandConfig creates config for lf start - Server required, universal runtime and RAG optional (background)
 func StartCommandConfig(serverURL string) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true, // Show progress for lf start so users see what's happening
 		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional, // Start async, don't wait
+			"universal-runtime": ServiceOptional, // Start async, don't wait
+			"server":            ServiceRequired,
+			"rag":               ServiceOptional, // Start async, don't wait
 		},
 		DefaultTimeout:    45 * time.Second,
 		OrchestrationMode: determineOrchestrationMode(),
 	}
 }
 
-// RAGCommandConfig creates config for RAG commands - Both server and RAG required
+// RAGCommandConfig creates config for RAG commands - Server and RAG required, universal runtime optional
 func RAGCommandConfig(serverURL string) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
 		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceRequired, // Wait for both
+			"universal-runtime": ServiceOptional, // Start async, don't wait
+			"server":            ServiceRequired,
+			"rag":               ServiceRequired, // Wait for both server and RAG
 		},
 		DefaultTimeout: 45 * time.Second,
 	}
 }
 
-// ChatNoRAGConfig creates config for lf chat --no-rag - Only server
+// ChatNoRAGConfig creates config for lf chat --no-rag - Server required, universal runtime optional
 func ChatNoRAGConfig(serverURL string) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
 		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
+			"universal-runtime": ServiceOptional, // Start async, don't wait
+			"server":            ServiceRequired,
 			// RAG not mentioned = ServiceIgnored
 		},
 		DefaultTimeout: 45 * time.Second,
 	}
 }
 
-// ServerOnlyConfig creates config for server-only commands - Server required, RAG optional (background)
+// ServerOnlyConfig creates config for server-only commands - Server required, universal runtime and RAG optional (background)
 func ServerOnlyConfig(serverURL string) *ServiceOrchestrationConfig {
 	return &ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
 		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional, // Start async, don't wait
+			"universal-runtime": ServiceOptional, // Start async, don't wait
+			"server":            ServiceRequired,
+			"rag":               ServiceOptional, // Start async, don't wait
 		},
 		DefaultTimeout: 45 * time.Second,
 	}

@@ -483,6 +483,11 @@ func (m *SourceManager) GetConfigDir() string {
 	return filepath.Join(m.srcDir, "config")
 }
 
+// GetUniversalRuntimeDir returns the path to the universal runtime source directory
+func (m *SourceManager) GetUniversalRuntimeDir() string {
+	return filepath.Join(m.srcDir, "runtimes", "universal")
+}
+
 // GenerateDatamodel generates the config datamodel types
 // This must be run after source download and dependency sync, but before starting services
 func (m *SourceManager) GenerateDatamodel() error {
