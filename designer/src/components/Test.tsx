@@ -29,60 +29,25 @@ const scorePillClasses = (score: number) => {
 const Test = () => {
   const { openPackageModal } = usePackageModal()
   const [running, setRunning] = useState<Record<number, boolean>>({})
-  const [tests, setTests] = useState<TestCase[]>([
-    {
-      id: 1,
-      name: 'Aircraft maintenance queries',
-      source: 'From prompts',
-      score: 99.5,
-      environment: 'Local',
-      lastRun: '2hr ago',
-      input:
-        'The hydraulic pump on the F-16 showed a pressure drop during taxi. What are the most likely causes and the next steps for inspection?',
-      expected:
-        'A pressure drop in the hydraulic pump during taxi on an F-16 could be caused by fluid leakage, air in the system, or a failing pressure sensor. Recommended next steps include inspecting hydraulic lines for leaks, checking fluid levels, and running a diagnostic on the pressure sensor.',
-    },
-    {
-      id: 2,
-      name: 'Basic user queries',
-      source: 'From prompts',
-      score: 82.5,
-      environment: 'Local',
-      lastRun: '1d ago',
-    },
-    {
-      id: 3,
-      name: 'Aircraft maintenance queries',
-      source: 'From prompts',
-      score: 76.5,
-      environment: 'Production',
-      lastRun: '8/1/25',
-    },
-    {
-      id: 4,
-      name: 'API integration',
-      source: 'Custom',
-      score: 99.5,
-      environment: 'Production',
-      lastRun: '7/30/25',
-    },
-    {
-      id: 5,
-      name: 'Aircraft maintenance queries',
-      source: 'From chat history',
-      score: 54,
-      environment: 'Local',
-      lastRun: '7/30/25',
-    },
-    {
-      id: 6,
-      name: 'Security validation',
-      source: 'Custom',
-      score: 99.5,
-      environment: 'Staging',
-      lastRun: '7/30/25',
-    },
-  ])
+
+  // Load tests from localStorage per project (or empty array)
+  const [tests, setTests] = useState<TestCase[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = localStorage.getItem('lf_test_cases')
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })
+
+  // Persist tests to localStorage when they change
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem('lf_test_cases', JSON.stringify(tests))
+    } catch {}
+  }, [tests])
 
   // New tests are created via a button and edited in the existing modal
 

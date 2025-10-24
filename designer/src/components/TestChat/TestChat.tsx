@@ -678,56 +678,29 @@ export default function TestChat({
       }
 
       try {
-        // Ensure we have a session for test execution
-        let sessionId
-        if (!projectSessionId) {
-          // Create a session first using streaming API
-          sessionId = await projectChatStreamingMessage.mutateAsync({
-            namespace: chatParams.namespace,
-            projectId: chatParams.projectId,
-            message: 'Starting test session...',
-            sessionId: undefined,
-            streamingOptions: {
-              onChunk: () => {}, // No-op for test session creation
-              onError: () => {},
-              onComplete: () => {},
-            },
-          })
-
-          // Session will be created automatically by the hook when needed
-        }
-
-        // Add test input message
+        // Add test input message to project session
         const userMessage = input || '(no input provided)'
-        addMessage({
-          type: 'user',
-          content: userMessage,
-          timestamp: new Date(),
-          metadata: {
-            isTest: true,
-            testId: detail.id,
-            testName: detail.name,
-            expected,
-          },
-        })
+        projectSession.addMessage(userMessage, 'user')
         lastUserInputRef.current = input
 
-        // Add loading assistant message
-        const assistantId = addMessage({
+        // Show transient streaming bubble (same as normal send)
+        const transientId = `stream_test_${Date.now()}`
+        setStreamingMessage({
+          id: transientId,
           type: 'assistant',
-          content: 'Evaluating…',
+          content: '',
           timestamp: new Date(),
+          isStreaming: true,
           isLoading: true,
-          metadata: { isTest: true, testId: detail.id, testName: detail.name },
         })
 
         // Send the actual test input via project chat streaming
         let accumulatedContent = ''
-        await projectChatStreamingMessage.mutateAsync({
+        const finalSessionId = await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
           message: userMessage,
-          sessionId: projectSessionId || sessionId || undefined,
+          sessionId: projectChatStreamingSession.sessionId || undefined,
           requestOptions: {
             temperature:
               typeof genSettings?.temperature === 'number'
@@ -762,52 +735,37 @@ export default function TestChat({
             onChunk: (chunk: ProjectChatStreamChunk) => {
               if (chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
+                setStreamingMessage({
+                  id: transientId,
+                  type: 'assistant',
+                  content: accumulatedContent,
+                  timestamp: new Date(),
+                  isStreaming: true,
+                  isLoading: false,
+                })
               }
             },
             onError: (error: Error) => {
               console.error('Test streaming error:', error)
+              setStreamingMessage(null)
+              projectSession.addMessage(`Error: ${error.message}`, 'assistant')
             },
-            onComplete: () => {},
-          },
-        })
-
-        // Extract the response content
-        const actualResponse = accumulatedContent || 'No response received'
-
-        // Compute test evaluation
-        const testResult = evaluateTest(input, expected, actualResponse)
-
-        // Update the assistant message with the actual response and test results
-        updateMessage(assistantId, {
-          content: actualResponse,
-          isLoading: false,
-          metadata: {
-            isTest: true,
-            testId: detail.id,
-            testName: detail.name,
-            testResult: { ...testResult, expected },
-            // Add mock prompts and thinking for now (can be real data from API later)
-            prompts: [
-              'System: You are an expert assistant. Answer clearly and concisely.',
-              'Instruction: Provide likely causes and actionable next steps.',
-              `User input: ${input || '(empty)'}`,
-            ],
-            thinking: [
-              'Parsed the problem and identified the domain.',
-              'Searched knowledge base for relevant information.',
-              'Cross-checked with available data and context.',
-              'Composed a comprehensive response.',
-            ],
-            generation: {
-              temperature: 0.6,
-              topP: 0.9,
-              maxTokens: 512,
-              presencePenalty: 0.0,
-              frequencyPenalty: 0.0,
-              seed: 42,
+            onComplete: () => {
+              if (accumulatedContent && accumulatedContent.trim()) {
+                projectSession.addMessage(accumulatedContent, 'assistant')
+              }
+              setStreamingMessage(null)
             },
           },
         })
+
+        // Update session ID if we got a new one
+        if (
+          finalSessionId &&
+          finalSessionId !== projectChatStreamingSession.sessionId
+        ) {
+          projectChatStreamingSession.setSessionId(finalSessionId)
+        }
       } catch (error) {
         console.error('Test run error:', error)
         // Add error message
@@ -1096,7 +1054,7 @@ export function TestChatMessage({
                 {openThinking && (
                   <div className="px-3 py-2 text-sm whitespace-pre-wrap border-t border-border">
                     {thinkingFromTags ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-2 prose-li:my-1 prose-ul:my-2 prose-ol:my-2 prose-headings:my-2 prose-pre:my-3">
+                      <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1.5 prose-pre:my-2">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {thinkingFromTags}
                         </ReactMarkdown>
@@ -1123,7 +1081,7 @@ export function TestChatMessage({
             )}
 
             {/* Final answer content (without <think> … </think>) */}
-            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap leading-relaxed prose-p:my-2 prose-li:my-1 prose-ul:my-2 prose-ol:my-2 prose-headings:my-2 prose-pre:my-3">
+            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap leading-relaxed prose-p:my-1 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1.5 prose-pre:my-2">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {contentWithoutThinking}
               </ReactMarkdown>
