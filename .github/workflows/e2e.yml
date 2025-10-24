@@ -1,4 +1,6 @@
 name: End-to-End Tests
+permissions:
+  contents: read
 
 on:
   push:
@@ -92,7 +94,7 @@ jobs:
       - name: Initialize project with CLI
         working-directory: cli
         run: |
-          ./lf init --cwd /tmp/e2e-test
+          ./lf init --cwd /tmp/e2e-test --debug
           echo "✓ Project initialized"
 
       - name: Verify project config was created
@@ -113,7 +115,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          ./lf --cwd /tmp/e2e-test datasets create \
+          ./lf --cwd /tmp/e2e-test --debug datasets create \
             -s quick_note_processor \
             -b main_db \
             test_dataset
@@ -126,7 +128,7 @@ jobs:
         run: |
           for file in ../examples/quick-rag/files/*; do
             echo "Uploading $(basename "$file")..."
-            ./lf --cwd /tmp/e2e-test datasets upload test_dataset "$file"
+            ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "$file"
           done
           echo "✓ All sample files uploaded"
 
@@ -135,7 +137,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          ./lf --cwd /tmp/e2e-test datasets process test_dataset
+          ./lf --cwd /tmp/e2e-test --debug datasets process test_dataset
           echo "✓ Dataset processing complete"
 
       # ============================================================
@@ -147,7 +149,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running RAG query..."
-          OUTPUT=$(./lf --cwd /tmp/e2e-test rag query \
+          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
             --database main_db \
             --top-k 3 \
             "neural scaling laws")
@@ -167,7 +169,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          OUTPUT=$(./lf --cwd /tmp/e2e-test rag query \
+          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
             --database main_db \
             --top-k 3 \
             --include-metadata \
@@ -190,7 +192,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command with RAG..."
-          OUTPUT=$(./lf --cwd /tmp/e2e-test chat \
+          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
             --database main_db \
             "Summarize neural scaling laws in one sentence")
 
@@ -217,7 +219,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command without RAG..."
-          OUTPUT=$(./lf --cwd /tmp/e2e-test chat \
+          OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
             --no-rag \
             "What is 2 + 2?")
 
@@ -241,7 +243,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Listing datasets..."
-          ./lf --cwd /tmp/e2e-test datasets list
+          ./lf --cwd /tmp/e2e-test --debug datasets list
           echo "✓ Dataset listing works"
 
       - name: Check RAG health
@@ -250,7 +252,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Checking RAG health..."
-          ./lf --cwd /tmp/e2e-test rag health || true
+          ./lf --cwd /tmp/e2e-test --debug rag health || true
           echo "✓ RAG health check complete"
 
       - name: E2E test summary
@@ -312,10 +314,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-test-logs
-          path: |
-            ~/.llamafarm/logs/*.log
-            ~/.llamafarm/src/server/**/*.log
-            ~/.llamafarm/src/rag/**/*.log
-            /tmp/e2e-test/**/*.log
+          path: $HOME/.llamafarm/logs/*
           retention-days: 7
           if-no-files-found: warn

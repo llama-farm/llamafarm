@@ -182,7 +182,7 @@ func (no *NativeOrchestrator) getServerEnv() []string {
 	env = append(env, fmt.Sprintf("PORT=%d", port))
 
 	// Set up file logging for the server
-	logsDir := filepath.Join(homeDir, ".llamafarm", "logs")
+	logsDir := filepath.Join(llamafarmDir, "logs")
 	serverLogFile := filepath.Join(logsDir, "server.log")
 	env = append(env, fmt.Sprintf("LOG_FILE=%s", serverLogFile))
 
