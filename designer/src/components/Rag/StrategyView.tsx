@@ -364,21 +364,21 @@ function StrategyView() {
     },
     {
       id: 'docx-llamaindex',
-      name: 'DOCXParser_LlamaIndex',
+      name: 'DocxParser_LlamaIndex',
       priority: 1,
       include: '*.docx, *.DOCX, *.doc, *.DOC',
       exclude: '~$*, *.tmp',
       summary: '1000 chars, 150 overlap, extract tables & metadata',
-      config: getDefaultParserConfig('DOCXParser_LlamaIndex'),
+      config: getDefaultParserConfig('DocxParser_LlamaIndex'),
     },
     {
       id: 'md-python',
-      name: 'MARKDOWNParser_Python',
+      name: 'MarkdownParser_Python',
       priority: 1,
       include: '*.md, *.markdown, *.mdown, *.mkd, README*',
       exclude: '*.tmp.md, _draft*.md',
       summary: 'Section-based, extract code & links',
-      config: getDefaultParserConfig('MARKDOWNParser_Python'),
+      config: getDefaultParserConfig('MarkdownParser_Python'),
     },
     {
       id: 'csv-pandas',
@@ -391,12 +391,12 @@ function StrategyView() {
     },
     {
       id: 'excel-pandas',
-      name: 'EXCELParser_Pandas',
+      name: 'ExcelParser_Pandas',
       priority: 1,
       include: '*.xlsx, *.XLSX, *.xls, *.XLS',
       exclude: '~$*, *.tmp.xlsx',
       summary: 'Process all sheets, 500 chars, extract metadata',
-      config: getDefaultParserConfig('EXCELParser_Pandas'),
+      config: getDefaultParserConfig('ExcelParser_Pandas'),
     },
     {
       id: 'text-python',
@@ -405,7 +405,7 @@ function StrategyView() {
       include: '*.txt, *.json, *.xml, *.yaml, *.py, *.js, LICENSE*, etc.',
       exclude: '*.pyc, *.pyo, *.class',
       summary: 'Sentence-based, 1200 chars, 200 overlap',
-      config: getDefaultParserConfig('TEXTParser_Python'),
+      config: getDefaultParserConfig('TextParser_Python'),
     },
   ]
 
@@ -547,17 +547,17 @@ function StrategyView() {
       return
     }
 
-    // Ensure at least one parser exists - default to TEXTParser_Python if empty
+    // Ensure at least one parser exists - default to TextParser_Python if empty
     let parsersToSave = rows
     if (rows.length === 0) {
       const defaultTextParser: ParserRow = {
         id: `text-python-${Date.now()}`,
-        name: 'TEXTParser_Python',
+        name: 'TextParser_Python',
         priority: 50,
         include: '*.txt',
         exclude: '',
         summary: 'Default text parser',
-        config: getDefaultParserConfig('TEXTParser_Python'),
+        config: getDefaultParserConfig('TextParser_Python'),
       }
       parsersToSave = [defaultTextParser]
       // Update local state to reflect the added parser
@@ -1833,7 +1833,7 @@ function StrategyView() {
                                 </div>
                                 {schema?.defaultExtensions && schema.defaultExtensions.length > 0 && (
                                   <div className="flex flex-wrap gap-1 mt-2">
-                                    {schema.defaultExtensions.map(ext => (
+                                    {schema.defaultExtensions.map((ext: string) => (
                                       <Badge key={ext} variant="secondary" className="text-xs">
                                         {ext}
                                       </Badge>
