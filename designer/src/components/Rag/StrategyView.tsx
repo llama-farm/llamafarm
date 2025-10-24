@@ -51,6 +51,9 @@ import {
 } from '../../hooks/useRagStrategy'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 
+// Maximum priority value as defined in rag/schema.yaml
+const MAX_PRIORITY = 1000
+
 function StrategyView() {
   const navigate = useNavigate()
   const { strategyId } = useParams()
