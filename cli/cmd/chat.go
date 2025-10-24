@@ -173,11 +173,13 @@ Examples:
 		}
 
 		// Ensure server is up (auto-start locally if needed)
+		// Using the new factory pattern to automatically inherit CLI context
+		factory := GetServiceConfigFactory()
 		var config *ServiceOrchestrationConfig
 		if runNoRAG {
-			config = ChatNoRAGConfig(serverURL, noAutoStart) // Server only, completely ignore RAG
+			config = factory.ChatNoRAG(serverURL) // Server only, completely ignore RAG
 		} else {
-			config = RAGCommandConfig(serverURL, noAutoStart) // Wait for both server and RAG
+			config = factory.RAGCommand(serverURL) // Wait for both server and RAG
 		}
 		// Ensure health checks reflect project context before contacting server
 		EnsureServicesWithConfig(config)

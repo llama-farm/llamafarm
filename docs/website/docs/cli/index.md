@@ -19,6 +19,7 @@ lf [command] [flags]
 | `--server-url` | Override the server endpoint (default `http://localhost:8000`). |
 | `--server-start-timeout` | How long to wait for local server startup (default 45s). |
 | `--cwd` | Treat another directory as the working project root. |
+| `--no-auto-start` | Skip automatic starting of services (only connect to already-running services). |
 
 Environment helpers:
 - `LLAMAFARM_SESSION_ID` – reuse a session for `lf chat`.
@@ -37,10 +38,56 @@ Environment helpers:
 | [`lf projects`](./lf-projects.md) | List projects by namespace. |
 | [`lf version`](./lf-version.md) | Print CLI version/build info. |
 
+## Service Management with --no-auto-start
+
+The `--no-auto-start` flag gives you control over when services start. By default, the CLI automatically starts the server and RAG worker when needed. Use this flag to:
+
+- **CI/CD pipelines**: Connect to pre-started services without triggering restarts
+- **Manual service management**: Keep services running between commands
+- **Debugging**: Separate service startup from command execution
+
+### Usage Examples
+
+**Two-terminal development workflow:**
+```bash
+# Terminal 1: Start and monitor services
+lf start
+
+# Terminal 2: Run commands without triggering restarts
+lf chat --no-auto-start "What is LlamaFarm?"
+lf datasets list --no-auto-start
+lf rag stats --no-auto-start
+```
+
+**CI/CD integration:**
+```yaml
+- name: Start services
+  run: lf start &
+  
+- name: Wait for health
+  run: timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+  
+- name: Run tests
+  run: |
+    lf datasets create --no-auto-start -s pdf_ingest -b main_db test-data
+    lf rag query --no-auto-start "test query"
+```
+
+**Error handling:**
+If services are not running and you use `--no-auto-start`, you'll see:
+```
+Service 'server' is not running and auto-start is disabled (--no-auto-start).
+
+To start services manually, run:
+  lf start
+
+Or remove the --no-auto-start flag to allow automatic startup.
+```
+
 ## Troubleshooting CLI Output
 
-- **“Server is degraded”** – At least one dependency (Celery, RAG worker, Ollama) is slow or offline. Commands may still succeed; check logs if they hang.
-- **“No response received”** – The runtime streamed nothing; run with `--no-rag` or change models if the provider struggles with tools output.
+- **"Server is degraded"** – At least one dependency (Celery, RAG worker, Ollama) is slow or offline. Commands may still succeed; check logs if they hang.
+- **"No response received"** – The runtime streamed nothing; run with `--no-rag` or change models if the provider struggles with tools output.
 - **Dataset processing timeouts** – The CLI times out after waiting for Celery. Re-run once ingestion finishes or increase worker availability.
 - **Authorization redaction** – `lf chat --curl` hides API keys automatically; replace `<redacted>` before running.
 

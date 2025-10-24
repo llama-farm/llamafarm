@@ -502,64 +502,6 @@ func (so *ServiceOrchestrator) getServiceTimeout(serviceName string, serviceDef 
 	return serviceDef.DefaultTimeout
 }
 
-// Command-Specific Configuration Factories
-
-// StartCommandConfig creates config for lf start - Server required, RAG optional (background)
-func StartCommandConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
-		ServerURL:   serverURL,
-		PrintStatus: true, // Show progress for lf start so users see what's happening
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional, // Start async, don't wait
-		},
-		DefaultTimeout: 45 * time.Second,
-		NoAutoStart:    noAutoStart,
-	}
-}
-
-// RAGCommandConfig creates config for RAG commands - Both server and RAG required
-func RAGCommandConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
-		ServerURL:   serverURL,
-		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceRequired, // Wait for both
-		},
-		DefaultTimeout: 45 * time.Second,
-		NoAutoStart:    noAutoStart,
-	}
-}
-
-// ChatNoRAGConfig creates config for lf chat --no-rag - Only server
-func ChatNoRAGConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
-		ServerURL:   serverURL,
-		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			// RAG not mentioned = ServiceIgnored
-		},
-		DefaultTimeout: 45 * time.Second,
-		NoAutoStart:    noAutoStart,
-	}
-}
-
-// ServerOnlyConfig creates config for server-only commands - Server required, RAG optional (background)
-func ServerOnlyConfig(serverURL string, noAutoStart bool) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
-		ServerURL:   serverURL,
-		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional, // Start async, don't wait
-		},
-		DefaultTimeout: 45 * time.Second,
-		NoAutoStart:    noAutoStart,
-	}
-}
-
 // New unified service orchestration function
 func EnsureServicesWithConfig(config *ServiceOrchestrationConfig) *HealthPayload {
 	orchestrator := NewServiceOrchestrator(config)

@@ -79,7 +79,8 @@ Examples:
 		StartConfigWatcherForCommand()
 
 		// Ensure server and RAG are available
-		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
 		EnsureServicesWithConfig(config)
 
 		// Build the request

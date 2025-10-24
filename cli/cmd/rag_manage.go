@@ -48,7 +48,8 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
 		EnsureServicesWithConfig(config)
 
 		// Confirm operation unless force flag is set
@@ -117,7 +118,8 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
 		EnsureServicesWithConfig(config)
 
 		// Build deletion request
@@ -187,7 +189,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
 		EnsureServicesWithConfig(config)
 
 		// Get prune preview
@@ -254,7 +257,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
 		EnsureServicesWithConfig(config)
 
 		fmt.Printf("📦 Exporting database to %s...\n", outputFile)
@@ -301,7 +305,8 @@ Examples:
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL, noAutoStart)
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
 		EnsureServicesWithConfig(config)
 
 		// Read import file
