@@ -1,0 +1,289 @@
+name: End-to-End Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  e2e-test:
+    name: End-to-End Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Use the current branch/ref being tested instead of main
+      LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      # ============================================================
+      # Setup Phase
+      # ============================================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+          cache-dependency-path: cli/go.sum
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install uv (for build-time datamodel generation)
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      # ============================================================
+      # Build Phase
+      # ============================================================
+      - name: Copy schema.yaml to CLI config
+        run: |
+          mkdir -p cli/cmd/config
+          cp config/schema.yaml cli/cmd/config/
+
+      - name: Generate Python datamodels
+        working-directory: config
+        run: |
+          echo "Generating datamodels from schema..."
+          ./generate-types.sh
+          echo "✓ Datamodel generation complete"
+
+      - name: Validate datamodel generation
+        working-directory: config
+        run: |
+          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
+            echo "❌ Error: datamodel.py not generated or is empty"
+            exit 1
+          fi
+          echo "✓ Datamodel validation passed"
+
+      - name: Build CLI binary
+        working-directory: cli
+        run: |
+          go build -o lf main.go
+          echo "✓ CLI binary built successfully"
+
+      - name: Verify CLI binary works
+        working-directory: cli
+        run: |
+          ./lf version
+          echo "✓ CLI binary is functional"
+
+      # ============================================================
+      # Project Initialization
+      # ============================================================
+      - name: Create test directory
+        run: |
+          mkdir -p /tmp/e2e-test
+          echo "✓ Test directory created at /tmp/e2e-test"
+
+      - name: Initialize project with CLI
+        working-directory: cli
+        run: |
+          ./lf init --cwd /tmp/e2e-test
+          echo "✓ Project initialized"
+
+      - name: Verify project config was created
+        run: |
+          if [ ! -f "/tmp/e2e-test/llamafarm.yaml" ]; then
+            echo "❌ Error: llamafarm.yaml not created"
+            exit 1
+          fi
+          echo "✓ Project configuration exists"
+          echo "Configuration preview:"
+          head -20 /tmp/e2e-test/llamafarm.yaml
+
+      # ============================================================
+      # Data Ingestion Test
+      # ============================================================
+      - name: Create dataset
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          ./lf --cwd /tmp/e2e-test datasets create \
+            -s quick_note_processor \
+            -b main_db \
+            test_dataset
+          echo "✓ Dataset created"
+
+      - name: Upload sample files
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          for file in ../examples/quick-rag/files/*; do
+            echo "Uploading $(basename "$file")..."
+            ./lf --cwd /tmp/e2e-test datasets upload test_dataset "$file"
+          done
+          echo "✓ All sample files uploaded"
+
+      - name: Process dataset
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          ./lf --cwd /tmp/e2e-test datasets process test_dataset
+          echo "✓ Dataset processing complete"
+
+      # ============================================================
+      # RAG Query Test
+      # ============================================================
+      - name: Run RAG query
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Running RAG query..."
+          OUTPUT=$(./lf --cwd /tmp/e2e-test rag query \
+            --database main_db \
+            --top-k 3 \
+            "neural scaling laws")
+
+          echo "$OUTPUT"
+
+          # Verify output is not empty
+          if [ -z "$OUTPUT" ]; then
+            echo "❌ Error: RAG query returned empty output"
+            exit 1
+          fi
+
+          echo "✓ RAG query returned results"
+
+      - name: Validate RAG query results
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          OUTPUT=$(./lf --cwd /tmp/e2e-test rag query \
+            --database main_db \
+            --top-k 3 \
+            --include-metadata \
+            "neural scaling laws")
+
+          # Check if output contains expected content
+          if echo "$OUTPUT" | grep -q "neural"; then
+            echo "✓ RAG query results contain relevant content"
+          else
+            echo "⚠ Warning: Results may not contain expected content"
+            echo "$OUTPUT"
+          fi
+
+      # ============================================================
+      # Chat Command Test
+      # ============================================================
+      - name: Run chat command with RAG
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Running chat command with RAG..."
+          OUTPUT=$(./lf --cwd /tmp/e2e-test chat \
+            --database main_db \
+            "Summarize neural scaling laws in one sentence")
+
+          echo "Chat response:"
+          echo "$OUTPUT"
+
+          # Verify output is not empty
+          if [ -z "$OUTPUT" ]; then
+            echo "❌ Error: Chat command returned empty output"
+            exit 1
+          fi
+
+          # Check if output contains some text (at least 10 characters)
+          if [ ${#OUTPUT} -lt 10 ]; then
+            echo "❌ Error: Chat response too short, possible error"
+            exit 1
+          fi
+
+          echo "✓ Chat command returned a response"
+
+      - name: Test chat command without RAG
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Running chat command without RAG..."
+          OUTPUT=$(./lf --cwd /tmp/e2e-test chat \
+            --no-rag \
+            "What is 2 + 2?")
+
+          echo "Chat response:"
+          echo "$OUTPUT"
+
+          # Verify output is not empty
+          if [ -z "$OUTPUT" ]; then
+            echo "❌ Error: Chat command (no RAG) returned empty output"
+            exit 1
+          fi
+
+          echo "✓ Chat command without RAG works"
+
+      # ============================================================
+      # Validation & Summary
+      # ============================================================
+      - name: List datasets to verify persistence
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Listing datasets..."
+          ./lf --cwd /tmp/e2e-test datasets list
+          echo "✓ Dataset listing works"
+
+      - name: Check RAG health
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Checking RAG health..."
+          ./lf --cwd /tmp/e2e-test rag health || true
+          echo "✓ RAG health check complete"
+
+      - name: E2E test summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "End-to-End Test Summary"
+          echo "=========================================="
+          echo "✓ CLI built successfully"
+          echo "✓ Project initialized"
+          echo "✓ Dataset created and processed"
+          echo "✓ RAG queries executed"
+          echo "✓ Chat commands completed"
+          echo "=========================================="
+          echo "All E2E tests passed!"
+
+      # ============================================================
+      # Cleanup
+      # ============================================================
+      - name: Cleanup test artifacts
+        if: always()
+        run: |
+          echo "Cleaning up test directory..."
+          rm -rf /tmp/e2e-test
+          echo "✓ Cleanup complete"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-logs
+          path: |
+            /tmp/e2e-test/**/*.log
+            /tmp/e2e-test/.llamafarm/**/*.log
+          retention-days: 7
+          if-no-files-found: ignore

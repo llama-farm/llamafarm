@@ -14,6 +14,12 @@ import (
 	"sync"
 )
 
+// Environment Variables:
+//   LF_VERSION_REF - Override the git ref (branch, tag, or commit SHA) to download
+//                    source code from. Useful for CI/CD to test specific branches.
+//                    Examples: "main", "feat-universal-runtime", "v1.2.3", "abc123..."
+//                    Default: "main" branch
+
 const (
 	// GitHub repository information
 	githubOwner = "llama-farm"
@@ -106,7 +112,17 @@ func (m *SourceManager) EnsureSource() error {
 }
 
 // GetCurrentCLIVersion determines the version of the currently running CLI
+// It first checks for the LF_VERSION_REF environment variable (useful for CI/CD),
+// then falls back to "main" branch by default.
 func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
+	// Check for LF_VERSION_REF environment variable first (CI/CD override)
+	if versionRef := strings.TrimSpace(os.Getenv("LF_VERSION_REF")); versionRef != "" {
+		if debug {
+			logDebug(fmt.Sprintf("Using version from LF_VERSION_REF: %s", versionRef))
+		}
+		return versionRef, nil
+	}
+
 	// Check if we're in development mode
 	// In dev mode, we use "main" branch
 	// In release mode, we use the CLI version tag
@@ -117,18 +133,37 @@ func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 }
 
 // DownloadSource downloads the source code for a specific version
+// Supports branches, tags, and commit SHAs via GitHub's archive API
 func (m *SourceManager) DownloadSource(version string) error {
 	// Build download URL
-	// For "main", use: https://github.com/llama-farm/llamafarm/archive/refs/heads/main.tar.gz
-	// For tags, use: https://github.com/llama-farm/llamafarm/archive/refs/tags/v1.2.3.tar.gz
+	// For branches: https://github.com/llama-farm/llamafarm/archive/refs/heads/{branch}.tar.gz
+	// For tags: https://github.com/llama-farm/llamafarm/archive/refs/tags/{tag}.tar.gz
+	// For commits/any ref: https://github.com/llama-farm/llamafarm/archive/{ref}.tar.gz
 
 	var downloadURL string
+
+	// Try to intelligently determine the ref type
 	if version == "main" || version == "dev" {
+		// Known branch names
 		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.tar.gz",
 			githubOwner, githubRepo)
-	} else {
+	} else if strings.HasPrefix(version, "v") && len(version) > 1 {
+		// Looks like a version tag (starts with 'v')
 		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
 			githubOwner, githubRepo, version)
+	} else if len(version) == 40 {
+		// Looks like a full commit SHA (40 hex characters)
+		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
+			githubOwner, githubRepo, version)
+	} else {
+		// Assume it's a branch name or tag - try as branch first
+		// GitHub will return 404 if not found, and the generic ref format works for most cases
+		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
+			githubOwner, githubRepo, version)
+	}
+
+	if debug {
+		logDebug(fmt.Sprintf("Downloading source from: %s", downloadURL))
 	}
 
 	// Download the archive
