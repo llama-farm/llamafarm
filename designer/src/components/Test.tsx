@@ -295,6 +295,17 @@ const Test = () => {
 
   // Local diagnose loading for origin CTAs
   const [diagnosing, setDiagnosing] = useState<Record<string, boolean>>({})
+  // RAG UI state for drawer (persisted via localStorage)
+  const [ragEnabledUI, setRagEnabledUI] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    const v = localStorage.getItem('lf_testchat_rag_enabled')
+    return v == null ? true : v === 'true'
+  })
+  const [ragThresholdUI, setRagThresholdUI] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0.7
+    const v = Number(localStorage.getItem('lf_testchat_rag_threshold') || '0.7')
+    return Number.isFinite(v) ? v : 0.7
+  })
 
   // Persist preferences
   useEffect(() => {
@@ -570,7 +581,106 @@ const Test = () => {
               {isSettingsOpen && (
                 <div className="absolute left-0 right-0 top-full w-full rounded-b-xl bg-card border border-border border-t-0 p-4 shadow-xl z-50">
                   <div className="w-full">
-                    <div className="h-px w-full bg-border" />
+                    {/* RAG master toggle */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">RAG</span>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={ragEnabledUI}
+                          onCheckedChange={(v: boolean) => {
+                            const next = Boolean(v)
+                            setRagEnabledUI(next)
+                            try {
+                              localStorage.setItem(
+                                'lf_testchat_rag_enabled',
+                                String(next)
+                              )
+                              window.dispatchEvent(
+                                new CustomEvent('lf-rag-enabled-changed', {
+                                  detail: { enabled: next },
+                                })
+                              )
+                            } catch {}
+                          }}
+                          aria-label="RAG enabled"
+                        />
+                        <span className="text-muted-foreground">
+                          {ragEnabledUI ? 'On' : 'Off'}
+                        </span>
+                      </div>
+                    </div>
+                    {ragEnabledUI && (
+                      <>
+                        <div className="h-px w-full bg-border mt-2" />
+                        {/* RAG retrieval controls */}
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                          <span className="text-muted-foreground">Top‑K</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={100}
+                            step={1}
+                            value={Number(
+                              localStorage.getItem('lf_testchat_rag_top_k') ||
+                                '10'
+                            )}
+                            onChange={e => {
+                              const v = Math.max(
+                                1,
+                                Math.min(100, Number(e.target.value))
+                              )
+                              localStorage.setItem(
+                                'lf_testchat_rag_top_k',
+                                String(v)
+                              )
+                              try {
+                                window.dispatchEvent(
+                                  new CustomEvent('lf-rag-settings-changed', {
+                                    detail: { topK: v },
+                                  })
+                                )
+                              } catch {}
+                              // force re-render
+                              setGen({ ...gen })
+                            }}
+                            className="col-span-2 h-10 text-sm px-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                          <span className="text-muted-foreground">
+                            Threshold
+                          </span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={ragThresholdUI}
+                            onChange={e => {
+                              const val = Number(e.target.value)
+                              const v = isNaN(val)
+                                ? 0
+                                : Math.max(0, Math.min(1, val))
+                              setRagThresholdUI(v)
+                              try {
+                                localStorage.setItem(
+                                  'lf_testchat_rag_threshold',
+                                  String(v)
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent('lf-rag-settings-changed', {
+                                    detail: { threshold: v },
+                                  })
+                                )
+                              } catch {}
+                              setGen({ ...gen })
+                            }}
+                            className="col-span-2 h-10 text-sm px-3"
+                          />
+                        </div>
+                        <div className="h-px w-full bg-border" />
+                      </>
+                    )}
                   </div>
                   <div className="mt-4 space-y-3 text-sm">
                     <div className="flex items-center justify-between">
@@ -748,6 +858,7 @@ const Test = () => {
                   showPrompts,
                   showThinking,
                   showGenSettings,
+                  genSettings: gen,
                 } as any)}
               />
             </div>

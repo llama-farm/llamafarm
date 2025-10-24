@@ -17,7 +17,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Workaround for occasional resolution issues on some setups
+      'react-markdown': path.resolve(
+        __dirname,
+        './node_modules/react-markdown/index.js'
+      ),
     },
+  },
+  optimizeDeps: {
+    include: ['react-markdown', 'rehype-sanitize'],
   },
   build: {
     rollupOptions: {
