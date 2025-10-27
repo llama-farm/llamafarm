@@ -158,11 +158,7 @@ rag:
     - name: "main_database"
       type: "ChromaStore"
       config:
-        # Client-server mode (recommended for production/Docker)
-        host: "chromadb-server"  # Docker service name, or "localhost" for local server
-        port: 8000
-        # Persistent mode (for local development only - comment out host/port above)
-        # persist_directory: "./data/chroma_db"
+        persist_directory: "./data/chroma_db"
         distance_function: "cosine"
         collection_name: "documents"
       # Default strategies for this database
