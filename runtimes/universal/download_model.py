@@ -73,7 +73,7 @@ def download_text_model(model_id: str, device: str = "auto"):
         model_id,
         dtype=dtype,
         trust_remote_code=True,
-        device_map=device if device != "cpu" else None,
+        device_map="auto" if device != "cpu" else None,
         low_cpu_mem_usage=True,
     )
 
