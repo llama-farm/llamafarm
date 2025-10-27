@@ -29,6 +29,8 @@ import logging
 from datetime import datetime
 import json
 
+from openai.types.chat import ChatCompletionMessageParam
+
 from models import (
     BaseModel,
     LanguageModel,
@@ -90,18 +92,15 @@ async def load_encoder(model_id: str, task: str = "embedding"):
 
 
 # ============================================================================
-# Request/Response Models
+# Request/Response Models (using OpenAI types)
 # ============================================================================
 
 
-class ChatMessage(PydanticBaseModel):
-    role: Literal["system", "user", "assistant"]
-    content: str
-
-
 class ChatCompletionRequest(PydanticBaseModel):
+    """OpenAI-compatible chat completion request."""
+
     model: str
-    messages: List[ChatMessage]
+    messages: List[ChatCompletionMessageParam]
     temperature: Optional[float] = 1.0
     top_p: Optional[float] = 1.0
     max_tokens: Optional[int] = None
@@ -159,7 +158,8 @@ async def chat_completions(chat_request: ChatCompletionRequest, request: Request
         model = await load_language(chat_request.model)
 
         # Convert messages to prompt
-        messages_dict = [msg.model_dump() for msg in chat_request.messages]
+        # ChatCompletionMessageParam is already dict-compatible
+        messages_dict = [dict(msg) for msg in chat_request.messages]
         prompt = model.format_messages(messages_dict)
 
         # Handle streaming if requested
@@ -269,9 +269,12 @@ async def chat_completions(chat_request: ChatCompletionRequest, request: Request
 
 
 class EmbeddingRequest(PydanticBaseModel):
+    """OpenAI-compatible embedding request."""
+
     model: str
     input: Union[str, List[str]]
     encoding_format: Optional[Literal["float", "base64"]] = "float"
+    user: Optional[str] = None
     extra_body: Optional[dict] = None
 
 

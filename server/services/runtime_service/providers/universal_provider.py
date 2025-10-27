@@ -75,7 +75,7 @@ class UniversalProvider(RuntimeProvider):
             HealthCheckResult with status, loaded models, and device info
         """
         start = int(time.time() * 1000)
-        base = self._base_url.replace("/v1", "")
+        base = self._base_url.replace("/v1", "").rstrip("/")
 
         # First check /health endpoint for device info
         health_url = f"{base}/health"

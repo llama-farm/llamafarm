@@ -254,6 +254,34 @@ func (m *UVManager) Validate() error {
 	return nil
 }
 
+// sanitizePath validates and sanitizes an archive entry path to prevent directory traversal
+func sanitizePath(destDir, entryPath string) (string, error) {
+	// Clean the entry path to remove any ".." or other suspicious elements
+	cleanPath := filepath.Clean(entryPath)
+
+	// Reject absolute paths
+	if filepath.IsAbs(cleanPath) {
+		return "", fmt.Errorf("archive contains absolute path: %s", entryPath)
+	}
+
+	// Join with destination and clean again
+	target := filepath.Join(destDir, cleanPath)
+
+	// Ensure the target is within destDir by checking if destDir is a prefix
+	// We use filepath.Rel to check if the target is within destDir
+	rel, err := filepath.Rel(destDir, target)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	// If the relative path starts with "..", it's trying to escape
+	if strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+		return "", fmt.Errorf("archive contains path traversal: %s", entryPath)
+	}
+
+	return target, nil
+}
+
 // extractTarGz extracts a tar.gz archive to the specified directory
 func (m *UVManager) extractTarGz(archivePath, destDir string) error {
 	file, err := os.Open(archivePath)
@@ -279,7 +307,11 @@ func (m *UVManager) extractTarGz(archivePath, destDir string) error {
 			return err
 		}
 
-		target := filepath.Join(destDir, header.Name)
+		// Sanitize path to prevent directory traversal
+		target, err := sanitizePath(destDir, header.Name)
+		if err != nil {
+			return err
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -311,7 +343,11 @@ func (m *UVManager) extractZip(archivePath, destDir string) error {
 	defer r.Close()
 
 	for _, f := range r.File {
-		fpath := filepath.Join(destDir, f.Name)
+		// Sanitize path to prevent directory traversal
+		fpath, err := sanitizePath(destDir, f.Name)
+		if err != nil {
+			return err
+		}
 
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(fpath, os.ModePerm)
