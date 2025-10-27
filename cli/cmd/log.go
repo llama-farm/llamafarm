@@ -62,6 +62,16 @@ func CloseDebugLogger() {
 	}
 }
 
+// ResetDebugLoggerForTesting resets the debug logger state for testing purposes.
+// This allows tests to reinitialize the logger with different file paths.
+// WARNING: This should ONLY be called from tests!
+func ResetDebugLoggerForTesting() {
+	CloseDebugLogger()
+	debugOnce = sync.Once{}
+	debugFile = nil
+	debugLogger = nil
+}
+
 func logDebug(msg string) {
 	if !debug {
 		return
