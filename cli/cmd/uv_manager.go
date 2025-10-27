@@ -279,7 +279,11 @@ func (m *UVManager) extractTarGz(archivePath, destDir string) error {
 			return err
 		}
 
-		target := filepath.Join(destDir, header.Name)
+		cleanName := filepath.Clean(header.Name)
+		if strings.Contains(cleanName, "..") || filepath.IsAbs(cleanName) {
+			return fmt.Errorf("unsafe path in archive: %s", header.Name)
+		}
+		target := filepath.Join(destDir, cleanName)
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -311,7 +315,11 @@ func (m *UVManager) extractZip(archivePath, destDir string) error {
 	defer r.Close()
 
 	for _, f := range r.File {
-		fpath := filepath.Join(destDir, f.Name)
+		cleanName := filepath.Clean(f.Name)
+		if strings.Contains(cleanName, "..") || filepath.IsAbs(cleanName) {
+			return fmt.Errorf("unsafe path in archive: %s", f.Name)
+		}
+		fpath := filepath.Join(destDir, cleanName)
 
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(fpath, os.ModePerm)
