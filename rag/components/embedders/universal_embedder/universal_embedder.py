@@ -1,13 +1,14 @@
 """Universal Runtime-based embedding generator."""
 
 from pathlib import Path
-from core.settings import settings
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
+
 import requests  # type: ignore
-from typing import List, Dict, Any, Optional
 
 from core.base import Embedder
-
 from core.logging import RAGStructLogger
+from core.settings import settings
 
 logger = RAGStructLogger(
     "rag.components.embedders.universal_embedder.universal_embedder"
@@ -38,11 +39,22 @@ class UniversalEmbedder(Embedder):
         )
         # Ensure base_url includes the /v1 path for OpenAI compatibility
         if not self.api_base.endswith("/v1"):
-            self.api_base = (
-                f"{self.api_base}/v1"
-                if ":" in self.api_base
-                else f"{self.api_base}:11540/v1"
-            )
+            # Parse URL to check if port is explicitly specified
+            parsed = urlparse(self.api_base)
+            # If there's a port in netloc (e.g., "localhost:8080"), it will be in parsed.port
+            # Otherwise parsed.port will be None
+            if parsed.port is not None:
+                # Port is explicitly specified, just add /v1
+                self.api_base = f"{self.api_base}/v1"
+            else:
+                # No port specified, add default port and /v1
+                # Preserve the scheme if present, otherwise default to http
+                if parsed.scheme:
+                    self.api_base = (
+                        f"{parsed.scheme}://{parsed.netloc}:11540{parsed.path}/v1"
+                    )
+                else:
+                    self.api_base = f"{self.api_base}:11540/v1"
 
         self.base_url = self.api_base  # Alias for compatibility
         self.api_key = config.get("api_key", "universal")

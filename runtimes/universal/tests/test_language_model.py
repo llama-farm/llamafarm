@@ -124,7 +124,7 @@ async def test_language_streaming_with_stop(device, test_model_ids):
     full_text = "".join(tokens)
     assert len(full_text) > 0
     # Should stop before newline
-    assert "\n" not in full_text or full_text.rstrip() == full_text.rstrip("\n")
+    assert "\n" not in full_text
 
 
 @pytest.mark.asyncio
