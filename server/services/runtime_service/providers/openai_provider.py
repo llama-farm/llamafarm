@@ -27,7 +27,7 @@ class OpenAIProvider(RuntimeProvider):
         """Get API key for OpenAI."""
         return self._model_config.api_key or ""
 
-    def get_client(self, extra_body: dict | None = None) -> LFAgentClient:
+    def get_client(self) -> LFAgentClient:
         """Get OpenAI client with optional instructor wrapping."""
         cfg_copy = self._model_config.model_copy()
         if not cfg_copy.base_url:
@@ -36,7 +36,6 @@ class OpenAIProvider(RuntimeProvider):
             cfg_copy.api_key = self._api_key
         client = LFAgentClientOpenAI(
             model_config=cfg_copy,
-            extra_body=extra_body or {},
         )
 
         return client

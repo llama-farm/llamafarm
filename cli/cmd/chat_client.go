@@ -44,8 +44,6 @@ type ChatRequest struct {
 	RAGRetrievalStrategy *string  `json:"rag_retrieval_strategy,omitempty"`
 	RAGTopK              *int     `json:"rag_top_k,omitempty"`
 	RAGScoreThreshold    *float64 `json:"rag_score_threshold,omitempty"`
-	// Additional parameters to pass through to runtime providers
-	ExtraBody map[string]string `json:"extra_body,omitempty"`
 }
 
 // ChatChoice represents a choice in the chat response
@@ -166,11 +164,7 @@ func buildChatCurl(messages []Message, ctx *ChatSessionContext) (string, error) 
 		}
 	}
 
-	request := ChatRequest{
-		Messages:  filteredMessages,
-		Stream:    &streamTrue,
-		ExtraBody: detectExtraBody(),
-	}
+	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
 
 	// Include model if specified
 	if ctx.Model != "" {
@@ -210,23 +204,6 @@ func buildChatCurl(messages []Message, ctx *ChatSessionContext) (string, error) 
 // single quote, and resuming the quoted string.
 func shellEscapeSingleQuotes(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
-}
-
-// detectExtraBody detects common environment variables and returns them
-// as a map suitable for the extra_body field. This allows passing runtime
-// authentication tokens (like HuggingFace tokens) through to backend providers.
-func detectExtraBody() map[string]string {
-	extra := make(map[string]string)
-
-	// HuggingFace token
-	if hfToken := os.Getenv("HF_TOKEN"); hfToken != "" {
-		extra["huggingface_token"] = hfToken
-	}
-
-	// Can add more environment variables here as needed
-	// Example: ANTHROPIC_API_KEY, COHERE_API_KEY, etc.
-
-	return extra
 }
 
 func buildChatCurlCommand(url string, body []byte, headers http.Header) string {
@@ -329,11 +306,7 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 				filteredMessages = append(filteredMessages, msg)
 			}
 		}
-		request := ChatRequest{
-			Messages:  filteredMessages,
-			Stream:    &streamTrue,
-			ExtraBody: detectExtraBody(),
-		}
+		request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
 
 		// Include model if specified
 		if ctx.Model != "" {

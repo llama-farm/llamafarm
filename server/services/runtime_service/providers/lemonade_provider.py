@@ -29,7 +29,7 @@ class LemonadeProvider(RuntimeProvider):
         """Get API key for Lemonade (uses 'lemonade' as default)."""
         return self._model_config.api_key or settings.lemonade_api_key
 
-    def get_client(self, extra_body: dict | None = None) -> LFAgentClient:
+    def get_client(self) -> LFAgentClient:
         """Get Lemonade client with optional instructor wrapping."""
         cfg_copy = self._model_config.model_copy()
         if not cfg_copy.base_url:
@@ -38,7 +38,6 @@ class LemonadeProvider(RuntimeProvider):
             cfg_copy.api_key = self._api_key
         client = LFAgentClientOpenAI(
             model_config=cfg_copy,
-            extra_body=extra_body or {},
         )
         return client
 

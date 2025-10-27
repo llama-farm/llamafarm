@@ -50,7 +50,6 @@ class ChatOrchestratorAgent(LFAgent):
         project_config: LlamaFarmConfig,
         project_dir: str,
         model_name: str | None = None,
-        extra_body: dict | None = None,
     ):
         self._project_config = project_config
         self._project_dir = project_dir
@@ -67,7 +66,7 @@ class ChatOrchestratorAgent(LFAgent):
 
         history = self._get_history(project_config)
         provider = RuntimeService.get_provider(model_config)
-        client = provider.get_client(extra_body=extra_body or {})
+        client = provider.get_client()
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
             prompts=self._get_prompts_for_model(model_config.name)
@@ -553,13 +552,11 @@ class ChatOrchestratorAgentFactory:
         project_dir: str,
         model_name: str | None = None,
         session_id: str | None = None,
-        extra_body: dict | None = None,
     ) -> LFAgent:
         agent = ChatOrchestratorAgent(
             project_config=project_config,
             project_dir=project_dir,
             model_name=model_name,
-            extra_body=extra_body,
         )
         if session_id:
             agent.enable_persistence(session_id=session_id)

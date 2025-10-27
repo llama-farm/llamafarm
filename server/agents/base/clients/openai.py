@@ -67,10 +67,6 @@ class LFAgentClientOpenAI(LFAgentClient):
             params["tools"] = openai_tools
             params["tool_choice"] = "auto"
 
-        # Pass extra_body directly to the runtime via OpenAI SDK's extra_body parameter
-        if self._extra_body:
-            params["extra_body"] = self._extra_body
-
         response_stream = await client.chat.completions.create(**params)  # type: ignore
 
         # Track partial tool calls as they stream in

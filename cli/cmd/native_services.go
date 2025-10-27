@@ -299,6 +299,11 @@ func (no *NativeOrchestrator) getUniversalRuntimeEnv() []string {
 		env = append(env, fmt.Sprintf("TRANSFORMERS_FORCE_CPU=%s", val))
 	}
 
+	// Pass through HuggingFace token if set
+	if val := os.Getenv("HF_TOKEN"); val != "" {
+		env = append(env, fmt.Sprintf("HF_TOKEN=%s", val))
+	}
+
 	// Add any other environment variables from current environment
 	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
 		if val := os.Getenv(key); val != "" {

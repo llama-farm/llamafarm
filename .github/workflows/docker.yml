@@ -41,6 +41,11 @@ jobs:
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
 
+          - service: universal_runtime
+            context: ./
+            dockerfile: ./runtimes/universal/Dockerfile
+            description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -357,7 +362,7 @@ jobs:
           # Create base data directory for main llamafarm volume
           mkdir -p "$HOME/.llamafarm"
           chmod 777 "$HOME/.llamafarm"
-          
+
           # ChromaDB now uses Docker-managed volumes, no directory creation needed
 
       - name: Test services startup
@@ -371,7 +376,7 @@ jobs:
           # Wait for services to be ready (ChromaDB needs more time to initialize)
           echo "Waiting for services to start..."
           sleep 60
-          
+
           # Check ChromaDB server specifically
           echo "Checking ChromaDB server status..."
           docker compose -f docker-compose.yml logs chromadb-server | tail -20
@@ -384,15 +389,15 @@ jobs:
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
           docker compose -f docker-compose.yml logs rag
-          
+
           # Test ChromaDB server connectivity
           echo "Testing ChromaDB server connectivity..."
           echo "Trying heartbeat endpoint..."
           curl -f http://localhost:8001/api/v2/heartbeat || echo "Heartbeat endpoint failed"
-          
+
           echo "Trying version endpoint..."
           curl -f http://localhost:8001/api/v2/version || echo "Version endpoint failed"
-          
+
           echo "Trying collections endpoint..."
           curl -f http://localhost:8001/api/v2/collections || echo "Collections endpoint failed"
 

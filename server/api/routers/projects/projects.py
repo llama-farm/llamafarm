@@ -294,7 +294,6 @@ async def chat(
             project_config=project_config,
             project_dir=project_dir,
             model_name=request.model,
-            extra_body=request.extra_body,
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -318,7 +317,6 @@ async def chat(
                     project_dir=project_dir,
                     model_name=request.model,
                     session_id=session_id,
-                    extra_body=request.extra_body,
                 )
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(

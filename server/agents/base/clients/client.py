@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
-from typing import Any
 
 from config.datamodel import Model, Prompt
 
@@ -21,14 +20,10 @@ class LFAgentClient(ABC):
 
     _model_name: str
     _model_config: Model
-    _extra_body: dict[str, Any]
 
-    def __init__(
-        self, *, model_config: Model, extra_body: dict[str, Any] | None = None
-    ):
+    def __init__(self, *, model_config: Model):
         self._model_name = model_config.name
         self._model_config = model_config
-        self._extra_body = extra_body or {}
 
     @property
     def model_name(self) -> str:
