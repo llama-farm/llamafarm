@@ -19,7 +19,6 @@ import DatasetView from './components/Data/DatasetView'
 import Prompt from './components/Prompt/Prompt'
 import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
-import Versions from './components/Dashboard/Versions'
 import Models from './components/Models/Models'
 import Databases from './components/Rag/Databases'
 import StrategyView from './components/Rag/StrategyView'
@@ -35,6 +34,7 @@ import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
 import { MobileViewProvider } from './contexts/MobileViewContext'
+import NotFound from './components/NotFound'
 
 // Redirect component for dynamic routes from /rag to /databases
 function RagRedirect({ path }: { path: string }) {
@@ -92,7 +92,10 @@ function App() {
                     element={<Navigate to="/chat/dashboard" replace />}
                   />
                   <Route path="dashboard" element={<Dashboard />} />
-                  <Route path="versions" element={<Versions />} />
+                  <Route
+                    path="versions"
+                    element={<Navigate to="/chat/dashboard" replace />}
+                  />
                   <Route path="data" element={<Data />} />
                   <Route path="data/:datasetId" element={<DatasetView />} />
                   {/* Processing strategies routes - now under data */}
@@ -154,7 +157,11 @@ function App() {
                   />
                   <Route path="prompt" element={<Prompt />} />
                   <Route path="test" element={<Test />} />
+                  {/* Catch-all for unknown /chat routes */}
+                  <Route path="*" element={<NotFound />} />
                 </Route>
+                {/* Catch-all for unknown top-level routes */}
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </div>
             <ProjectModalRoot />

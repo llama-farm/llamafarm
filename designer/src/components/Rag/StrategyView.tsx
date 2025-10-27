@@ -10,21 +10,19 @@ import { defaultStrategies } from './strategies'
 import ParserSettingsForm from './ParserSettingsForm'
 import PatternEditor from './PatternEditor'
 import {
+  PARSER_TYPES,
   PARSER_SCHEMAS,
-  ORDERED_PARSER_TYPES,
-  getDefaultConfigForParser,
-} from './parserSchemas'
+  getDefaultParserConfig,
+  EXTRACTOR_TYPES,
+  EXTRACTOR_SCHEMAS,
+  getDefaultExtractorConfig,
+} from '@/types/ragTypes'
 import { useToast } from '../ui/toast'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
 import Tabs from '../Tabs'
 import ExtractorSettingsForm from './ExtractorSettingsForm'
-import {
-  EXTRACTOR_SCHEMAS,
-  ORDERED_EXTRACTOR_TYPES,
-  getDefaultConfigForExtractor,
-} from './extractorSchemas'
-import { ChevronDown, Plus, Settings, Trash2 } from 'lucide-react'
+import { ChevronDown, Loader2, Plus, Settings, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -46,7 +44,15 @@ import {
   useReIngestDataset,
 } from '../../hooks/useDatasets'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
+import {
+  useRagStrategy,
+  type ParserRow,
+  type ExtractorRow,
+} from '../../hooks/useRagStrategy'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
+
+// Maximum priority value as defined in rag/schema.yaml
+const MAX_PRIORITY = 1000
 
 function StrategyView() {
   const navigate = useNavigate()
@@ -61,7 +67,6 @@ function StrategyView() {
     activeProject?.project || '',
     !!activeProject
   )
-  const updateProjectMutation = useUpdateProject()
   const { data: datasetsResp } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
@@ -131,43 +136,84 @@ function StrategyView() {
     }
   }, [datasetsResp])
 
-  const [strategyMetaTick, setStrategyMetaTick] = useState(0)
+  /**
+   * Get the ACTUAL strategy name from config (source of truth)
+   * This is what we use for API calls and lookups
+   */
+  const actualStrategyName = useMemo(() => {
+    if (!strategyId || !projectResp) return null
 
-  const strategyName = useMemo(() => {
+    const currentConfig = (projectResp as any)?.project?.config
+    const strategies = currentConfig?.rag?.data_processing_strategies || []
+
+    // Map strategyId to actual config strategy
+    // For now, we use a simple mapping based on known patterns
+    const idToConfigName: Record<string, string> = {
+      'processing-universal': 'universal_processor',
+    }
+
+    // First, try the mapping
+    const mappedName = idToConfigName[strategyId]
+    if (mappedName) {
+      const found = strategies.find((s: any) => s.name === mappedName)
+      if (found) return found.name
+    }
+
+    // Fallback: try to find by transforming the ID
+    const transformed = strategyId.replace('processing-', '').replace(/-/g, '_')
+    const found = strategies.find((s: any) => s.name === transformed)
+    if (found) return found.name
+
+    // Last resort: return first strategy or null
+    return strategies[0]?.name || null
+  }, [strategyId, projectResp])
+
+  /**
+   * Display name for UI (can be overridden, but actual name is always from config)
+   */
+  const strategyDisplayName = useMemo(() => {
     if (!strategyId) return 'Strategy'
-    try {
-      const override = localStorage.getItem(
-        `lf_strategy_name_override_${strategyId}`
-      )
-      if (override && override.trim().length > 0) return override
-    } catch {}
+
+    // Use actual name from config if available
+    if (actualStrategyName) {
+      return actualStrategyName
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase())
+    }
+
+    // Fallback to defaultStrategies
     const found = defaultStrategies.find(s => s.id === strategyId)
     if (found) return found.name
-    // Fallback to title-casing the id
+
+    // Last fallback: title-case the id
     return strategyId
       .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase())
-  }, [strategyId, strategyMetaTick])
+      .replace(/\b\w/g, (c: string) => c.toUpperCase())
+  }, [strategyId, actualStrategyName])
 
   const strategyDescription = useMemo(() => {
     if (!strategyId) return ''
-    try {
-      const override = localStorage.getItem(
-        `lf_strategy_description_${strategyId}`
-      )
-      if (override !== null) return override
-    } catch {}
     const found = defaultStrategies.find(s => s.id === strategyId)
     return found?.description || ''
-  }, [strategyId, strategyMetaTick])
+  }, [strategyId])
+
+  // RAG Strategy hook for parser/extractor updates - use ACTUAL name from config
+  const ragStrategy = useRagStrategy(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    actualStrategyName || ''
+  )
+
+  // Still need updateProjectMutation for dataset assignments
+  const updateProjectMutation = useUpdateProject()
 
   // Datasets using this strategy (from API) -----------------------------------
   const assignedDatasets = useMemo(() => {
-    if (!allDatasets || !strategyName) return [] as string[]
+    if (!allDatasets || !actualStrategyName) return [] as string[]
     return allDatasets
-      .filter(d => d.rag_strategy === strategyName)
+      .filter(d => d.rag_strategy === actualStrategyName)
       .map(d => d.name)
-  }, [allDatasets, strategyName])
+  }, [allDatasets, actualStrategyName])
 
   const canReprocess =
     assignedDatasets.length > 0 && needsReprocess && !reIngestMutation.isPending
@@ -198,7 +244,7 @@ function StrategyView() {
   // Helper to check if dataset is locked to this strategy
   const isDatasetLocked = (name: string) => {
     const current = allDatasets.find(d => d.name === name)?.rag_strategy
-    return current === strategyName
+    return current === actualStrategyName
   }
 
   // Reprocess confirmation modal
@@ -214,7 +260,7 @@ function StrategyView() {
   }
 
   const saveAssignments = async () => {
-    if (!strategyId || !strategyName) return
+    if (!strategyId || !actualStrategyName) return
     const prev = new Set(assignedDatasets)
     const next = new Set(selectedDatasets)
     const added: string[] = []
@@ -237,7 +283,7 @@ function StrategyView() {
         localStorage.setItem(key, JSON.stringify(Array.from(working)))
         // Also set per-dataset overrides so UI reflects immediately
         for (const n of added) {
-          localStorage.setItem(`lf_dataset_strategy_name_${n}`, strategyName)
+          localStorage.setItem(`lf_dataset_strategy_name_${n}`, actualStrategyName)
         }
         toast({ message: 'Assignments saved locally', variant: 'default' })
       } catch {}
@@ -248,7 +294,7 @@ function StrategyView() {
         performLocalFallback()
       } else {
         const updatedDatasets = (currentDatasets || []).map(ds =>
-          added.includes(ds.name) ? { ...ds, rag_strategy: strategyName } : ds
+          added.includes(ds.name) ? { ...ds, rag_strategy: actualStrategyName } : ds
         )
         const nextConfig = { ...currentConfig, datasets: updatedDatasets }
         await updateProjectMutation.mutateAsync({
@@ -259,7 +305,7 @@ function StrategyView() {
         // Mirror per-dataset overrides locally for instant UI feedback
         try {
           for (const n of added) {
-            localStorage.setItem(`lf_dataset_strategy_name_${n}`, strategyName)
+            localStorage.setItem(`lf_dataset_strategy_name_${n}`, actualStrategyName)
           }
         } catch {}
         // Refresh datasets list
@@ -294,35 +340,7 @@ function StrategyView() {
   // (Removed) embedding save flow and listeners
 
   // Tabbed Parsers/Extractors data -------------------------------------------
-  type ParserRow = {
-    id: string
-    name: string
-    priority: number
-    include: string
-    exclude: string
-    summary: string
-    config?: Record<string, unknown>
-  }
-  type ExtractorRow = {
-    id: string
-    name: string
-    priority: number
-    applyTo: string
-    summary: string
-    config?: Record<string, unknown>
-  }
-
-  // Map legacy high-number priorities to new low-number scale
-  const migratePriority = (value: unknown): number => {
-    const n = Number(value)
-    if (!Number.isFinite(n)) return 1
-    if (n >= 100) return 1
-    if (n >= 90) return 2
-    if (n >= 80) return 3
-    if (n >= 50) return 4
-    if (n < 1) return 1
-    return n
-  }
+  // Types now imported from useRagStrategy hook
 
   const defaultParsers: ParserRow[] = [
     {
@@ -333,7 +351,7 @@ function StrategyView() {
       exclude: '*_draft.pdf, *.tmp.pdf',
       summary:
         'Semantic chunking, 1000 chars, 200 overlap, extract metadata & tables',
-      config: getDefaultConfigForParser('PDFParser_LlamaIndex'),
+      config: getDefaultParserConfig('PDFParser_LlamaIndex'),
     },
     {
       id: 'pdf-pypdf2',
@@ -342,7 +360,7 @@ function StrategyView() {
       include: '*.pdf, *.PDF',
       exclude: '*_draft.pdf, *.tmp.pdf',
       summary: 'Paragraph chunking, 1000 chars, 150 overlap, extract metadata',
-      config: getDefaultConfigForParser('PDFParser_PyPDF2'),
+      config: getDefaultParserConfig('PDFParser_PyPDF2'),
     },
     {
       id: 'docx-llamaindex',
@@ -351,7 +369,7 @@ function StrategyView() {
       include: '*.docx, *.DOCX, *.doc, *.DOC',
       exclude: '~$*, *.tmp',
       summary: '1000 chars, 150 overlap, extract tables & metadata',
-      config: getDefaultConfigForParser('DocxParser_LlamaIndex'),
+      config: getDefaultParserConfig('DocxParser_LlamaIndex'),
     },
     {
       id: 'md-python',
@@ -360,7 +378,7 @@ function StrategyView() {
       include: '*.md, *.markdown, *.mdown, *.mkd, README*',
       exclude: '*.tmp.md, _draft*.md',
       summary: 'Section-based, extract code & links',
-      config: getDefaultConfigForParser('MarkdownParser_Python'),
+      config: getDefaultParserConfig('MarkdownParser_Python'),
     },
     {
       id: 'csv-pandas',
@@ -369,7 +387,7 @@ function StrategyView() {
       include: '*.csv, *.CSV, *.tsv, *.TSV, *.dat',
       exclude: '*_backup.csv, *.tmp.csv',
       summary: 'Row-based, 500 chars, UTF-8',
-      config: getDefaultConfigForParser('CSVParser_Pandas'),
+      config: getDefaultParserConfig('CSVParser_Pandas'),
     },
     {
       id: 'excel-pandas',
@@ -378,16 +396,16 @@ function StrategyView() {
       include: '*.xlsx, *.XLSX, *.xls, *.XLS',
       exclude: '~$*, *.tmp.xlsx',
       summary: 'Process all sheets, 500 chars, extract metadata',
-      config: getDefaultConfigForParser('ExcelParser_Pandas'),
+      config: getDefaultParserConfig('ExcelParser_Pandas'),
     },
     {
       id: 'text-python',
-      name: 'TextParser_Python',
+      name: 'TEXTParser_Python',
       priority: 4,
       include: '*.txt, *.json, *.xml, *.yaml, *.py, *.js, LICENSE*, etc.',
       exclude: '*.pyc, *.pyo, *.class',
       summary: 'Sentence-based, 1200 chars, 200 overlap',
-      config: getDefaultConfigForParser('TextParser_Python'),
+      config: getDefaultParserConfig('TextParser_Python'),
     },
   ]
 
@@ -461,87 +479,133 @@ function StrategyView() {
   const [extractorRows, setExtractorRows] =
     useState<ExtractorRow[]>(defaultExtractors)
 
-  const storageKeys = useMemo(() => {
-    if (!strategyId) return { parsers: '', extractors: '' }
-    return {
-      parsers: `lf_strategy_parsers_${strategyId}`,
-      extractors: `lf_strategy_extractors_${strategyId}`,
+  // Use converters and loading state from the hook
+  const { yamlToParserRow, yamlToExtractorRow } = ragStrategy.converters
+  const isSaving = ragStrategy.isUpdating
+
+  /**
+   * Load parsers and extractors from API config (single source of truth)
+   */
+  const loadFromConfig = () => {
+    if (!projectResp || !actualStrategyName) return
+
+    const currentConfig = (projectResp as any)?.project?.config
+    if (!currentConfig?.rag?.data_processing_strategies) {
+      // No config yet - use defaults
+      setParserRows(defaultParsers)
+      setExtractorRows(defaultExtractors)
+      return
     }
-  }, [strategyId])
 
-  const loadPersisted = () => {
-    try {
-      if (!storageKeys.parsers || !storageKeys.extractors) return
-      const pRaw = localStorage.getItem(storageKeys.parsers)
-      const eRaw = localStorage.getItem(storageKeys.extractors)
-      if (pRaw) {
-        try {
-          const arr = JSON.parse(pRaw)
-          if (Array.isArray(arr)) {
-            const migrated = arr.map((p: ParserRow) => {
-              if (!p || typeof p !== 'object') return p
-              const hasSchema =
-                typeof p.name === 'string' && PARSER_SCHEMAS[p.name]
-              const withConfig =
-                hasSchema && !p.config
-                  ? { ...p, config: getDefaultConfigForParser(p.name) }
-                  : p
-              return {
-                ...withConfig,
-                priority: migratePriority(withConfig.priority),
-              }
-            })
-            setParserRows(migrated)
-            try {
-              localStorage.setItem(
-                storageKeys.parsers,
-                JSON.stringify(migrated)
-              )
-            } catch {}
-          }
-        } catch {}
-      } else {
-        setParserRows(defaultParsers)
-      }
-      if (eRaw) {
-        try {
-          const arr = JSON.parse(eRaw)
-          if (Array.isArray(arr)) {
-            const migrated = arr.map((e: ExtractorRow) => {
-              if (!e || typeof e !== 'object') return e
-              return { ...e, priority: migratePriority(e.priority) }
-            })
-            setExtractorRows(migrated)
-            try {
-              localStorage.setItem(
-                storageKeys.extractors,
-                JSON.stringify(migrated)
-              )
-            } catch {}
-          }
-        } catch {}
-      } else {
-        setExtractorRows(defaultExtractors)
-      }
-    } catch {}
+    const strategies = currentConfig.rag.data_processing_strategies || []
+    const strategy = strategies.find((s: any) => s.name === actualStrategyName)
+
+    if (!strategy) {
+      // Strategy not found - use defaults
+      setParserRows(defaultParsers)
+      setExtractorRows(defaultExtractors)
+      return
+    }
+
+    // Load parsers from YAML config
+    // If strategy exists, respect its configuration (even if empty)
+    const yamlParsers = strategy.parsers || []
+    if (Array.isArray(yamlParsers) && yamlParsers.length > 0) {
+      const rows = yamlParsers.map((p: any, i: number) => yamlToParserRow(p, i))
+      setParserRows(rows)
+    } else {
+      // Strategy exists but has no parsers - start with empty array
+      setParserRows([])
+    }
+
+    // Load extractors from YAML config
+    // If strategy exists, respect its configuration (even if empty)
+    const yamlExtractors = strategy.extractors || []
+    if (Array.isArray(yamlExtractors) && yamlExtractors.length > 0) {
+      const rows = yamlExtractors.map((e: any, i: number) => yamlToExtractorRow(e, i))
+      setExtractorRows(rows)
+    } else {
+      // Strategy exists but has no extractors - start with empty array
+      setExtractorRows([])
+    }
   }
 
+  // Load from API config whenever project data changes
   useEffect(() => {
-    loadPersisted()
+    loadFromConfig()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKeys.parsers, storageKeys.extractors])
+  }, [projectResp, actualStrategyName])
 
-  const saveParsers = (rows: ParserRow[]) => {
-    try {
-      if (storageKeys.parsers)
-        localStorage.setItem(storageKeys.parsers, JSON.stringify(rows))
-    } catch {}
+  /**
+   * Sync parsers to YAML config (updates llamafarm.yaml via API)
+   * Now uses the useRagStrategy hook
+   */
+  const syncParsersToConfig = async (rows: ParserRow[]) => {
+    const currentConfig = (projectResp as any)?.project?.config
+    if (!currentConfig) {
+      console.warn('Cannot sync parsers: no config found')
+      return
+    }
+
+    // Ensure at least one parser exists - default to TextParser_Python if empty
+    let parsersToSave = rows
+    if (rows.length === 0) {
+      const defaultTextParser: ParserRow = {
+        id: `text-python-${Date.now()}`,
+        name: 'TextParser_Python',
+        priority: 50,
+        include: '*.txt',
+        exclude: '',
+        summary: 'Default text parser',
+        config: getDefaultParserConfig('TextParser_Python'),
+      }
+      parsersToSave = [defaultTextParser]
+      // Update local state to reflect the added parser
+      setParserRows([defaultTextParser])
+      toast({
+        message: 'A strategy must have at least one parser. Added default text parser.',
+      })
+    }
+
+    await ragStrategy.updateParsers.mutateAsync({
+      parserRows: parsersToSave,
+      projectConfig: currentConfig,
+    })
   }
-  const saveExtractors = (rows: ExtractorRow[]) => {
+
+  /**
+   * Sync extractors to YAML config (updates llamafarm.yaml via API)
+   * Now uses the useRagStrategy hook
+   */
+  const syncExtractorsToConfig = async (rows: ExtractorRow[]) => {
+    const currentConfig = (projectResp as any)?.project?.config
+    if (!currentConfig) {
+      console.warn('Cannot sync extractors: no config found')
+      return
+    }
+
+    await ragStrategy.updateExtractors.mutateAsync({
+      extractorRows: rows,
+      projectConfig: currentConfig,
+    })
+  }
+
+  const saveParsers = async (rows: ParserRow[]) => {
     try {
-      if (storageKeys.extractors)
-        localStorage.setItem(storageKeys.extractors, JSON.stringify(rows))
-    } catch {}
+      await syncParsersToConfig(rows)
+      // Hook handles loading state and cache invalidation
+    } catch (err) {
+      console.error('Failed to save parsers:', err)
+    }
+  }
+
+  const saveExtractors = async (rows: ExtractorRow[]) => {
+    try {
+      await syncExtractorsToConfig(rows)
+      // Hook handles loading state and cache invalidation
+    } catch (err) {
+      console.error('Failed to save extractors:', err)
+    }
   }
   const toggleRow = (id: string) => {
     setOpenRows(prev => {
@@ -581,32 +645,6 @@ function StrategyView() {
   }
 
   // Patterns editors helpers --------------------------------------------------
-  const getDefaultIncludePatternsForParser = (parserName: string): string[] => {
-    switch (parserName) {
-      case 'PDFParser_LlamaIndex':
-      case 'PDFParser_PyPDF2':
-        return ['*.pdf']
-      case 'DocxParser_LlamaIndex':
-      case 'DocxParser_PythonDocx':
-        return ['*.docx', '*.doc']
-      case 'MarkdownParser_Python':
-      case 'MarkdownParser_LlamaIndex':
-        return ['*.md', '*.markdown']
-      case 'CSVParser_Pandas':
-      case 'CSVParser_LlamaIndex':
-        return ['*.csv']
-      case 'ExcelParser_OpenPyXL':
-      case 'ExcelParser_Pandas':
-      case 'ExcelParser_LlamaIndex':
-        return ['*.xlsx', '*.xls']
-      case 'TextParser_Python':
-      case 'TextParser_LlamaIndex':
-        return ['*.txt', '*.text']
-      default:
-        return []
-    }
-  }
-
   // const getDefaultApplyPatternsForExtractor = (): string[] => ['*']
 
   const parsePatternsString = (s: string | undefined): string[] => {
@@ -626,7 +664,7 @@ function StrategyView() {
     return []
   }
 
-  const patternsToString = (arr: string[]): string => JSON.stringify(arr)
+  const patternsToString = (arr: string[]): string => arr.join(', ')
 
   const SAFE_PATTERNS = [
     'README',
@@ -745,13 +783,7 @@ function StrategyView() {
 
   // Add Parser modal ----------------------------------------------------------
   const [isAddParserOpen, setIsAddParserOpen] = useState(false)
-  const [newParserType, setNewParserType] = useState<string>('')
-  const [newParserConfig, setNewParserConfig] = useState<
-    Record<string, unknown>
-  >({})
-  const [newParserPriority, setNewParserPriority] = useState<string>('1')
-  const [newParserPriorityError, setNewParserPriorityError] = useState(false)
-  const [newParserIncludes, setNewParserIncludes] = useState<string[]>([])
+  const [selectedParserTypes, setSelectedParserTypes] = useState<Set<string>>(new Set())
 
   const slugify = (str: string) =>
     str
@@ -759,57 +791,68 @@ function StrategyView() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
 
-  const MAX_PRIORITY = 1000
+  const toggleParserSelection = (parserType: string) => {
+    setSelectedParserTypes(prev => {
+      const next = new Set(prev)
+      if (next.has(parserType)) {
+        next.delete(parserType)
+      } else {
+        next.add(parserType)
+      }
+      return next
+    })
+  }
 
-  const handleCreateParser = () => {
-    const name = newParserType.trim()
-    if (!name) return
-    const prio = Number(newParserPriority)
-    if (!Number.isInteger(prio)) {
-      setNewParserPriorityError(true)
-      toast({
-        message: `Priority must be an integer between 0 and ${MAX_PRIORITY}`,
-        variant: 'destructive',
-      })
-      return
-    }
-    if (prio < 0 || prio > MAX_PRIORITY) {
-      setNewParserPriorityError(true)
-      toast({
-        message: `Priority must be between 0 and ${MAX_PRIORITY}`,
-        variant: 'destructive',
-      })
-      return
-    }
-    const idBase = slugify(name) || 'parser'
-    const id = `${idBase}-${Date.now()}`
-    const next: ParserRow = {
-      id,
-      name,
-      priority: prio,
-      include: patternsToString(newParserIncludes),
-      exclude: '',
-      summary: '',
-      config: newParserConfig,
-    }
-    const rows = [...parserRows, next]
+  const handleCreateParsers = () => {
+    if (selectedParserTypes.size === 0) return
+
+    const newRows: ParserRow[] = []
+    const newIds: string[] = []
+
+    selectedParserTypes.forEach(parserType => {
+      const idBase = slugify(parserType) || 'parser'
+      const id = `${idBase}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const config = getDefaultParserConfig(parserType as any)
+      const defaultExtensions = (PARSER_SCHEMAS as any)[parserType]?.defaultExtensions || []
+      const includePatterns = defaultExtensions.map((ext: string) => `*${ext}`)
+
+      // Use same default values as schema and edit function
+      const newRow: ParserRow = {
+        id,
+        name: parserType,
+        priority: 50, // Schema default (from parserRowToYaml fallback)
+        include: includePatterns.join(', '),
+        exclude: '',
+        summary: '',
+        config, // Already has schema defaults from getDefaultParserConfig
+      }
+      newRows.push(newRow)
+      newIds.push(id)
+    })
+
+    const rows = [...parserRows, ...newRows]
     setParserRows(rows)
     saveParsers(rows)
+
     try {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('lf:processingUpdated', {
-            detail: { strategyId, type: 'parser:add', item: next },
+            detail: { strategyId, type: 'parsers:add', items: newRows },
           })
         )
       }
     } catch {}
-    setOpenRows(prev => new Set(prev).add(id))
+
+    // Open all newly added parsers
+    setOpenRows(prev => {
+      const next = new Set(prev)
+      newIds.forEach(id => next.add(id))
+      return next
+    })
+
     setIsAddParserOpen(false)
-    setNewParserType('')
-    setNewParserConfig({})
-    setNewParserPriority('1')
-    setNewParserIncludes([])
+    setSelectedParserTypes(new Set())
     markNeedsReprocess()
   }
 
@@ -827,7 +870,7 @@ function StrategyView() {
     const found = parserRows.find(p => p.id === id)
     if (!found) return
     setEditParserId(found.id)
-    setEditParserConfig(found.config || getDefaultConfigForParser(found.name))
+    setEditParserConfig(found.config || getDefaultParserConfig(found.name as any))
     setEditParserPriority(String(found.priority))
     setEditParserIncludes(parsePatternsString(found.include))
     setIsEditParserOpen(true)
@@ -885,6 +928,18 @@ function StrategyView() {
   }
   const handleDeleteParser = () => {
     if (!deleteParserId) return
+
+    // Prevent deleting the last parser
+    if (parserRows.length <= 1) {
+      toast({
+        message: 'A strategy must have at least one parser. Add another parser before deleting this one.',
+        variant: 'destructive',
+      })
+      setIsDeleteParserOpen(false)
+      setDeleteParserId('')
+      return
+    }
+
     const next = parserRows.filter(p => p.id !== deleteParserId)
     setParserRows(next)
     saveParsers(next)
@@ -909,6 +964,22 @@ function StrategyView() {
   const [newExtractorPriorityError, setNewExtractorPriorityError] =
     useState(false)
   const [newExtractorApplies, setNewExtractorApplies] = useState<string[]>([])
+
+  // Set default extractor type when modal opens
+  useEffect(() => {
+    if (!isAddExtractorOpen) return
+
+    const existing = new Set(extractorRows.map(e => e.name))
+    const available = EXTRACTOR_TYPES.filter(
+      t => !existing.has(t) && EXTRACTOR_SCHEMAS[t]
+    )
+
+    if (available.length > 0 && !newExtractorType) {
+      const first = available[0]
+      setNewExtractorType(first)
+      setNewExtractorConfig(getDefaultExtractorConfig(first))
+    }
+  }, [isAddExtractorOpen, extractorRows, newExtractorType])
   const [newExtractorConfig, setNewExtractorConfig] = useState<
     Record<string, unknown>
   >({})
@@ -980,7 +1051,7 @@ function StrategyView() {
     setEditExtractorId(found.id)
     setEditExtractorPriority(String(found.priority))
     setEditExtractorConfig(
-      found.config || getDefaultConfigForExtractor(found.name)
+      found.config || getDefaultExtractorConfig(found.name as any)
     )
     setEditExtractorApplies(parsePatternsString(found.applyTo))
     setIsEditExtractorOpen(true)
@@ -1056,23 +1127,18 @@ function StrategyView() {
 
   // Reset to defaults (for universal strategy) --------------------------------
   const isUniversal = strategyId === 'processing-universal'
-  const handleResetDefaults = () => {
+  const handleResetDefaults = async () => {
     if (!isUniversal) return
     const ok = confirm('Reset parsers and extractors to defaults?')
     if (!ok) return
     try {
       setParserRows(defaultParsers)
       setExtractorRows(defaultExtractors)
-      if (storageKeys.parsers)
-        localStorage.setItem(
-          storageKeys.parsers,
-          JSON.stringify(defaultParsers)
-        )
-      if (storageKeys.extractors)
-        localStorage.setItem(
-          storageKeys.extractors,
-          JSON.stringify(defaultExtractors)
-        )
+
+      // Save defaults to config (single source of truth)
+      await saveParsers(defaultParsers)
+      await saveExtractors(defaultExtractors)
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('lf:processingUpdated', {
@@ -1090,7 +1156,7 @@ function StrategyView() {
         // @ts-ignore custom event
         const { strategyId: sid } = (e as CustomEvent).detail || {}
         if (sid && strategyId && sid === strategyId) {
-          setStrategyMetaTick(t => t + 1)
+          // Processing update event - could trigger re-render if needed
         }
       } catch {}
     }
@@ -1128,17 +1194,17 @@ function StrategyView() {
               </span>
               <span className="text-foreground sm:hidden">…</span>
               <span className="text-muted-foreground px-1">/</span>
-              <span className="text-foreground">{strategyName}</span>
+              <span className="text-foreground">{strategyDisplayName}</span>
             </nav>
             <PageActions mode={mode} onModeChange={setMode} />
           </div>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg md:text-xl font-medium">{strategyName}</h2>
+              <h2 className="text-lg md:text-xl font-medium">{strategyDisplayName}</h2>
               <button
                 className="p-1 rounded-md hover:bg-accent text-muted-foreground"
                 onClick={() => {
-                  setEditName(strategyName)
+                  setEditName(strategyDisplayName)
                   setEditDescription(strategyDescription)
                   setIsEditOpen(true)
                 }}
@@ -1307,22 +1373,22 @@ function StrategyView() {
                         const name = ds.name
                         const current = (ds as any).rag_strategy
                         const selected =
-                          selectedDatasets.has(name) || current === strategyName
+                          selectedDatasets.has(name) || current === actualStrategyName
                         const assignedElsewhere =
                           current &&
                           current !== 'auto' &&
-                          current !== strategyName
+                          current !== actualStrategyName
                         return (
                           <li
                             key={name}
                             className={`flex items-center gap-3 px-3 py-3 hover:bg-muted/30 ${
-                              current === strategyName
+                              current === actualStrategyName
                                 ? 'opacity-70 cursor-not-allowed'
                                 : 'cursor-pointer'
                             }`}
-                            aria-disabled={current === strategyName}
+                            aria-disabled={current === actualStrategyName}
                             onClick={() => {
-                              if (current === strategyName) return
+                              if (current === actualStrategyName) return
                               toggleDataset(name)
                             }}
                           >
@@ -1330,9 +1396,9 @@ function StrategyView() {
                               checked={selected}
                               onCheckedChange={() => toggleDataset(name)}
                               onClick={e => e.stopPropagation()}
-                              disabled={current === strategyName}
+                              disabled={current === actualStrategyName}
                               title={
-                                current === strategyName
+                                current === actualStrategyName
                                   ? 'This dataset cannot be unassigned from this strategy.'
                                   : assignedElsewhere
                                     ? 'This dataset is already assigned to another strategy and cannot be assigned here.'
@@ -1395,7 +1461,7 @@ function StrategyView() {
                 </DialogTitle>
               </DialogHeader>
               <div className="text-sm text-muted-foreground">
-                Reprocess these dataset(s) with "{strategyName}" now?
+                Reprocess these dataset(s) with "{strategyDisplayName}" now?
               </div>
               {/* Show per-dataset errors if any */}
               {reprocessErrors && Object.keys(reprocessErrors).length > 0 ? (
@@ -1486,7 +1552,16 @@ function StrategyView() {
               },
             ]}
           />
-          <section className="rounded-lg border border-border bg-card p-4">
+          <section className="rounded-lg border border-border bg-card p-4 relative">
+            {/* Loading overlay */}
+            {isSaving && (
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Updating configuration...</span>
+                </div>
+              </div>
+            )}
             {activeTab === 'parsers' ? (
               <div className="flex flex-col gap-2">
                 {parserRows.map(row => {
@@ -1704,159 +1779,97 @@ function StrategyView() {
 
           {/* Add Parser Modal */}
           <Dialog open={isAddParserOpen} onOpenChange={setIsAddParserOpen}>
-            <DialogContent className="sm:max-w-3xl lg:max-w-4xl p-0 h-[100dvh] sm:h-auto max-h-[100vh] md:max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogContent className="sm:max-w-2xl p-0 max-h-[85vh] overflow-hidden flex flex-col">
               <div className="flex flex-col flex-1 min-h-0">
                 <DialogHeader className="bg-background p-4 border-b">
                   <DialogTitle className="text-lg text-foreground">
-                    Add parser
+                    Add Parsers
                   </DialogTitle>
-                </DialogHeader>
-                <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
-                  <div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <Label className="text-xs text-muted-foreground">
-                        Parser type
-                      </Label>
-                      <Label className="text-xs text-muted-foreground">
-                        Priority
-                      </Label>
-                    </div>
-                    <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-                      <div>
-                        {(() => {
-                          const existing = new Set(parserRows.map(p => p.name))
-                          const available = ORDERED_PARSER_TYPES.filter(
-                            t => !existing.has(t) && PARSER_SCHEMAS[t]
-                          )
-                          if (!newParserType && available.length > 0) {
-                            const first = available[0]
-                            setTimeout(() => {
-                              setNewParserType(first)
-                              setNewParserConfig(
-                                getDefaultConfigForParser(first)
-                              )
-                              setNewParserIncludes(
-                                getDefaultIncludePatternsForParser(first)
-                              )
-                            }, 0)
-                          }
-                          return (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  className="w-full justify-between"
-                                >
-                                  {newParserType
-                                    ? getFriendlyParserName(newParserType)
-                                    : available[0]
-                                      ? getFriendlyParserName(available[0])
-                                      : 'No parsers available'}
-                                  <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent>
-                                {available.length === 0 ? (
-                                  <DropdownMenuItem disabled>
-                                    No parsers available
-                                  </DropdownMenuItem>
-                                ) : (
-                                  available.map(t => (
-                                    <DropdownMenuItem
-                                      key={t}
-                                      onClick={() => {
-                                        setNewParserType(t)
-                                        setNewParserConfig(
-                                          getDefaultConfigForParser(t)
-                                        )
-                                        setNewParserIncludes(
-                                          getDefaultIncludePatternsForParser(t)
-                                        )
-                                      }}
-                                    >
-                                      {getFriendlyParserName(t)}
-                                    </DropdownMenuItem>
-                                  ))
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )
-                        })()}
-                        {newParserType && PARSER_SCHEMAS[newParserType] ? (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {PARSER_SCHEMAS[newParserType].description}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div>
-                        <Input
-                          type="number"
-                          className="bg-background w-40"
-                          value={newParserPriority}
-                          min={0}
-                          onChange={e => {
-                            const raw = e.target.value
-                            setNewParserPriority(raw)
-                            const n = Number(raw)
-                            setNewParserPriorityError(
-                              !Number.isInteger(n) || n < 0 || n > MAX_PRIORITY
-                            )
-                          }}
-                        />
-                        {newParserPriorityError ? (
-                          <div className="text-xs text-destructive mt-1">
-                            Priority must be an integer between 0 and{' '}
-                            {MAX_PRIORITY}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    Select one or more parsers to add. You can edit their settings after adding.
                   </div>
-                  {newParserType && PARSER_SCHEMAS[newParserType] ? (
-                    <>
-                      <div className="rounded-lg border border-border bg-accent/10 p-3">
-                        <div className="text-sm font-medium mb-2">
-                          {PARSER_SCHEMAS[newParserType].title}
+                </DialogHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4">
+                  {(() => {
+                    const existing = new Set(parserRows.map(p => p.name))
+                    const available = PARSER_TYPES.filter(
+                      t => !existing.has(t) && PARSER_SCHEMAS[t]
+                    )
+
+                    if (available.length === 0) {
+                      return (
+                        <div className="text-center text-muted-foreground py-8">
+                          All available parsers have been added.
                         </div>
-                        <ParserSettingsForm
-                          schema={PARSER_SCHEMAS[newParserType]}
-                          value={newParserConfig}
-                          onChange={setNewParserConfig}
-                        />
+                      )
+                    }
+
+                    return (
+                      <div className="space-y-2">
+                        {available.map(parserType => {
+                          const schema = PARSER_SCHEMAS[parserType]
+                          const isSelected = selectedParserTypes.has(parserType)
+                          return (
+                            <div
+                              key={parserType}
+                              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-border hover:bg-accent/20'
+                              }`}
+                              onClick={() => toggleParserSelection(parserType)}
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleParserSelection(parserType)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm">
+                                  {getFriendlyParserName(parserType)}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  {schema?.description || ''}
+                                </div>
+                                {schema?.defaultExtensions && schema.defaultExtensions.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {schema.defaultExtensions.map((ext: string) => (
+                                      <Badge key={ext} variant="secondary" className="text-xs">
+                                        {ext}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
-                      <PatternEditor
-                        label="Included files / file types"
-                        description="Specify which files this parser should process - file patterns, extensions, or specific filenames"
-                        placeholder="*.pdf, data_*, report.docx"
-                        value={newParserIncludes}
-                        onChange={setNewParserIncludes}
-                        isSuspicious={isSuspiciousPattern}
-                      />
-                    </>
-                  ) : null}
+                    )
+                  })()}
                 </div>
-                <DialogFooter className="sticky bottom-0 bg-background p-4 border-t flex-col sm:flex-row sm:justify-end gap-2">
+                <DialogFooter className="bg-muted/20 p-4 border-t flex flex-col sm:flex-row gap-2">
                   <button
-                    className="px-3 py-2 rounded-md text-sm text-primary hover:underline w-full sm:w-auto"
-                    onClick={() => setIsAddParserOpen(false)}
+                    className="px-4 py-2 rounded-md text-sm bg-muted text-muted-foreground hover:bg-muted/70 w-full sm:w-auto"
+                    onClick={() => {
+                      setIsAddParserOpen(false)
+                      setSelectedParserTypes(new Set())
+                    }}
                     type="button"
                   >
                     Cancel
                   </button>
                   <button
                     className={`px-3 py-2 rounded-md text-sm w-full sm:w-auto ${
-                      newParserType.trim().length > 0 && !newParserPriorityError
+                      selectedParserTypes.size > 0
                         ? 'bg-primary text-primary-foreground hover:opacity-90'
                         : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
                     }`}
-                    onClick={handleCreateParser}
-                    disabled={
-                      newParserType.trim().length === 0 ||
-                      newParserPriorityError
-                    }
+                    onClick={handleCreateParsers}
+                    disabled={selectedParserTypes.size === 0}
                     type="button"
                   >
-                    Add parser
+                    Add {selectedParserTypes.size > 0 ? `${selectedParserTypes.size} ` : ''}Parser{selectedParserTypes.size !== 1 ? 's' : ''}
                   </button>
                 </DialogFooter>
               </div>
@@ -1879,7 +1892,7 @@ function StrategyView() {
                   {(() => {
                     const found = parserRows.find(p => p.id === editParserId)
                     if (!found) return null
-                    const schema = PARSER_SCHEMAS[found.name]
+                    const schema = (PARSER_SCHEMAS as any)[found.name]
                     if (!schema) {
                       return (
                         <div className="text-sm text-muted-foreground">
@@ -2046,18 +2059,9 @@ function StrategyView() {
                           const existing = new Set(
                             extractorRows.map(e => e.name)
                           )
-                          const available = ORDERED_EXTRACTOR_TYPES.filter(
+                          const available = EXTRACTOR_TYPES.filter(
                             t => !existing.has(t) && EXTRACTOR_SCHEMAS[t]
                           )
-                          if (!newExtractorType && available.length > 0) {
-                            const first = available[0]
-                            setTimeout(() => {
-                              setNewExtractorType(first)
-                              setNewExtractorConfig(
-                                getDefaultConfigForExtractor(first)
-                              )
-                            }, 0)
-                          }
                           return (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -2085,7 +2089,7 @@ function StrategyView() {
                                       onClick={() => {
                                         setNewExtractorType(t)
                                         setNewExtractorConfig(
-                                          getDefaultConfigForExtractor(t)
+                                          getDefaultExtractorConfig(t)
                                         )
                                       }}
                                     >
@@ -2122,10 +2126,10 @@ function StrategyView() {
                       </div>
                     </div>
                   </div>
-                  {newExtractorType && EXTRACTOR_SCHEMAS[newExtractorType] ? (
+                  {newExtractorType && (EXTRACTOR_SCHEMAS as any)[newExtractorType] ? (
                     <>
                       <div className="text-xs text-muted-foreground">
-                        {EXTRACTOR_SCHEMAS[newExtractorType].description}
+                        {(EXTRACTOR_SCHEMAS as any)[newExtractorType].description}
                       </div>
                       <div>
                         <Label className="text-xs text-muted-foreground">
@@ -2154,10 +2158,10 @@ function StrategyView() {
                       </div>
                       <div className="rounded-lg border border-border bg-accent/10 p-3">
                         <div className="text-sm font-medium mb-2">
-                          {EXTRACTOR_SCHEMAS[newExtractorType].title}
+                          {(EXTRACTOR_SCHEMAS as any)[newExtractorType].title}
                         </div>
                         <ExtractorSettingsForm
-                          schema={EXTRACTOR_SCHEMAS[newExtractorType]}
+                          schema={(EXTRACTOR_SCHEMAS as any)[newExtractorType]}
                           value={newExtractorConfig}
                           onChange={setNewExtractorConfig}
                         />
@@ -2223,7 +2227,7 @@ function StrategyView() {
                       e => e.id === editExtractorId
                     )
                     if (!found) return null
-                    const schema = EXTRACTOR_SCHEMAS[found.name]
+                    const schema = (EXTRACTOR_SCHEMAS as any)[found.name]
                     if (!schema) {
                       return (
                         <div className="text-sm text-muted-foreground">
@@ -2418,7 +2422,6 @@ function StrategyView() {
                         )
                       } catch {}
                       setIsEditOpen(false)
-                      setStrategyMetaTick(t => t + 1)
                       navigate('/chat/rag')
                       toast({ message: 'Strategy deleted', variant: 'default' })
                     }
@@ -2450,7 +2453,6 @@ function StrategyView() {
                         )
                       } catch {}
                       setIsEditOpen(false)
-                      setStrategyMetaTick(t => t + 1)
                     }}
                     disabled={editName.trim().length === 0}
                     type="button"

@@ -89,11 +89,12 @@ func logHeaders(kind string, hdr http.Header) {
 // It parses common JSON shapes like {"detail":...}, {"message":...}, {"error":...}.
 func prettyServerError(resp *http.Response, body []byte) string {
 	// Try to parse JSON error envelopes
-	var env struct {
-		Detail  any    `json:"detail"`
-		Message string `json:"message"`
-		Error   string `json:"error"`
-	}
+    var env struct {
+        Detail    any    `json:"detail"`
+        Message   string `json:"message"`
+        Error     string `json:"error"`
+        RequestID string `json:"request_id"`
+    }
 	if json.Unmarshal(body, &env) == nil {
 		switch v := env.Detail.(type) {
 		case string:
@@ -126,9 +127,13 @@ func prettyServerError(resp *http.Response, body []byte) string {
 			return env.Error
 		}
 	}
-	s := strings.TrimSpace(string(body))
+    s := strings.TrimSpace(string(body))
 	if s == "" {
 		return http.StatusText(resp.StatusCode)
 	}
-	return s
+    // Append request id if present to aid debugging
+    if env.RequestID != "" {
+        return s + " (request_id=" + env.RequestID + ")"
+    }
+    return s
 }

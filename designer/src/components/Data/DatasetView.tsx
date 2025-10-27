@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
-  DialogTrigger,
 } from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
@@ -20,14 +19,13 @@ import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectSwitchNavigation } from '../../hooks/useProjectSwitchNavigation'
 import {
   useUploadFileToDataset,
-  useReIngestDataset,
+  useProcessDataset,
   useTaskStatus,
   useListDatasets,
   useDeleteDatasetFile,
   useDeleteDataset,
 } from '../../hooks/useDatasets'
 import { DatasetFile } from '../../types/datasets'
-import { defaultStrategies } from '../Rag/strategies'
 import PageActions from '../common/PageActions'
 import { Mode } from '../ModeToggle'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -66,7 +64,8 @@ function DatasetView() {
 
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
-  const reIngestMutation = useReIngestDataset()
+  const [processingResult, setProcessingResult] = useState<any>(null)
+  const processMutation = useProcessDataset()
   const deleteFileMutation = useDeleteDatasetFile()
   const deleteDatasetMutation = useDeleteDataset()
   const { data: taskStatus } = useTaskStatus(
@@ -155,6 +154,17 @@ function DatasetView() {
   }>({})
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const directoryInputRef = useRef<HTMLInputElement>(null)
+
+  // Set directory attributes on mount
+  useEffect(() => {
+    const input = directoryInputRef.current
+    if (input) {
+      input.setAttribute('webkitdirectory', '')
+      input.setAttribute('directory', '')
+      input.setAttribute('mozdirectory', '')
+    }
+  }, [])
   type FileUploadStatus = {
     id: string
     name: string
@@ -165,42 +175,65 @@ function DatasetView() {
     FileUploadStatus[]
   >([])
 
-  type DatasetVersion = {
-    id: string // e.g., v1, v2
-    createdAt: string // ISO
+  // File type filtering - flexible input for any file extension
+  const [fileTypeFilter, setFileTypeFilter] = useState<string>('')
+  const [showFileTypeFilter, setShowFileTypeFilter] = useState(false)
+  const [uploadStats, setUploadStats] = useState<{
+    total: number
+    filtered: number
+    uploading: number
+  } | null>(null)
+
+  // Common file type suggestions (non-exhaustive)
+  const commonFileTypes = [
+    '.pdf', '.txt', '.md', '.csv', '.json', '.xml',
+    '.html', '.docx', '.xlsx', '.pptx'
+  ]
+
+  const addFileTypeToFilter = (ext: string) => {
+    const current = fileTypeFilter
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+
+    if (!current.includes(ext)) {
+      const newFilter = [...current, ext].join(', ')
+      setFileTypeFilter(newFilter)
+    }
   }
-  const [versions, setVersions] = useState<DatasetVersion[]>([])
+
+  const clearFileTypeFilter = () => {
+    setFileTypeFilter('')
+  }
+
+  const filterFilesByType = (files: File[]): File[] => {
+    if (!fileTypeFilter.trim()) {
+      // If no filter specified, accept all files
+      return files
+    }
+
+    // Parse extensions from comma-separated input
+    const extensions = fileTypeFilter
+      .split(',')
+      .map(ext => ext.trim().toLowerCase())
+      .filter(Boolean)
+      .map(ext => ext.startsWith('.') ? ext : `.${ext}`) // Ensure leading dot
+
+    if (extensions.length === 0) {
+      return files
+    }
+
+    return files.filter(file => {
+      const fileName = file.name.toLowerCase()
+      return extensions.some(ext => fileName.endsWith(ext))
+    })
+  }
 
   // Drag-and-drop state
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
-  // Strategy modal search
-  const [strategyQuery, setStrategyQuery] = useState('')
-  const [processingMetaTick, setProcessingMetaTick] = useState(0)
 
-  // Helpers to validate available strategies for this view
-  type RagStrategyType = import('../Rag/strategies').RagStrategy
-  const isValidRagStrategy = (s: any): s is RagStrategyType => {
-    return (
-      !!s &&
-      typeof s.id === 'string' &&
-      typeof s.name === 'string' &&
-      typeof s.description === 'string' &&
-      typeof s.isDefault === 'boolean' &&
-      typeof s.datasetsUsing === 'number'
-    )
-  }
-  const getCustomStrategies = (): RagStrategyType[] => {
-    try {
-      const raw = localStorage.getItem('lf_custom_strategies')
-      if (!raw) return []
-      const arr = JSON.parse(raw) as RagStrategyType[]
-      if (!Array.isArray(arr)) return []
-      return arr.filter(isValidRagStrategy)
-    } catch {
-      return []
-    }
-  }
+  // Note: Custom strategies now come from API via project config, not localStorage
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -212,6 +245,8 @@ function DatasetView() {
   }
 
   const handleFilesUpload = async (list: File[]) => {
+    console.log('🔄 handleFilesUpload called with', list.length, 'files')
+
     if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
       toast({
         message: 'Missing required information for upload',
@@ -221,16 +256,49 @@ function DatasetView() {
     }
     if (list.length === 0) return
 
+    // Apply file type filtering
+    const totalFiles = list.length
+    const filteredFiles = filterFilesByType(list)
+    const filteredCount = filteredFiles.length
+
+    console.log('🔍 File type filter:', fileTypeFilter || '(none - all files allowed)')
+    console.log('🔍 Total files:', totalFiles, '→ Filtered:', filteredCount)
+
+    // Show stats if filtering occurred
+    if (totalFiles !== filteredCount) {
+      setUploadStats({
+        total: totalFiles,
+        filtered: filteredCount,
+        uploading: filteredCount,
+      })
+      toast({
+        message: `Filtered ${filteredCount} of ${totalFiles} files based on file type filter`,
+        variant: 'default',
+      })
+    }
+
+    if (filteredFiles.length === 0) {
+      console.error('❌ All files filtered out by file type filter!')
+      toast({
+        message: 'No files match the selected file type filter',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Note: Filename stripping for folder uploads is now handled in the API layer
+    // (see datasets.ts uploadFileToDataset function)
+
     // Initialize upload statuses
-    const initialStatuses: FileUploadStatus[] = list.map(f => ({
+    const initialStatuses: FileUploadStatus[] = filteredFiles.map(f => ({
       id: `${f.name}:${f.size}:${f.lastModified}`,
-      name: f.name,
+      name: f.name.split('/').pop() || f.name, // Display basename only
       status: 'pending',
     }))
     setFileUploadStatuses(initialStatuses)
 
     await Promise.all(
-      list.map(async (file, idx) => {
+      filteredFiles.map(async (file, idx) => {
         setFileUploadStatuses(prev =>
           prev.map((s, i) => (i === idx ? { ...s, status: 'uploading' } : s))
         )
@@ -264,6 +332,9 @@ function DatasetView() {
         }
       })
     )
+
+    // Clear stats after upload completes
+    setTimeout(() => setUploadStats(null), 5000)
   }
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -274,33 +345,33 @@ function DatasetView() {
     handleFilesUpload(files).finally(() => setIsDropped(false))
   }
 
-  // Load dataset metadata from API or create fallback
+  // Load dataset metadata from API only - no hardcoded values
   useEffect(() => {
     if (!datasetId) return
 
     if (currentApiDataset) {
-      // Use API data when available
+      // Use only real API data
       setDataset({
         id: datasetId,
         name: currentApiDataset.name,
-        lastRun: new Date(),
-        embedModel: 'text-embedding-3-large',
-        numChunks: currentApiDataset.files?.length || 0,
-        processedPercent: 100,
-        version: 'v1',
+        lastRun: '', // Not available from API
+        embedModel: '', // Not available from API
+        numChunks: 0, // Not available from API - will be in processing results
+        processedPercent: 0, // Not available from API
+        version: '', // Not available from API
         description: '',
         files: currentApiDataset.files,
       })
     } else {
-      // Fallback to minimal dataset object
+      // Minimal fallback
       setDataset({
         id: datasetId,
         name: datasetId,
-        lastRun: new Date(),
-        embedModel: 'text-embedding-3-large',
+        lastRun: '',
+        embedModel: '',
         numChunks: 0,
-        processedPercent: 100,
-        version: 'v1',
+        processedPercent: 0,
+        version: '',
         description: '',
         files: [],
       })
@@ -314,49 +385,27 @@ function DatasetView() {
     if (taskStatus.state === 'SUCCESS') {
       // Task completed successfully
       setCurrentTaskId(null)
+
+      // Store the processing result
+      if (taskStatus.result) {
+        setProcessingResult(taskStatus.result)
+      }
+
       toast({
-        message: 'Dataset reprocessing completed successfully',
+        message: 'Dataset processing completed successfully',
         variant: 'default',
       })
-
-      // Create a new version
-      if (datasetId) {
-        const nextNum = (versions.length || 0) + 1
-        const nextId = `v${nextNum}`
-        const next: DatasetVersion = {
-          id: nextId,
-          createdAt: new Date().toISOString(),
-        }
-        const list = [...versions, next]
-        setVersions(list)
-
-        // Update dataset version/lastRun
-        try {
-          const stored = localStorage.getItem('lf_datasets')
-          const arr = stored ? (JSON.parse(stored) as Dataset[]) : []
-          const updated = arr.map(d =>
-            d.id === datasetId
-              ? {
-                  ...d,
-                  version: nextId,
-                  lastRun: new Date().toISOString(),
-                }
-              : d
-          )
-          localStorage.setItem('lf_datasets', JSON.stringify(updated))
-          setDataset(updated.find(d => d.id === datasetId) || null)
-        } catch {}
-      }
     } else if (taskStatus.state === 'FAILURE') {
       // Task failed
       setCurrentTaskId(null)
+      setProcessingResult(null)
       const errorMessage = taskStatus.error || 'Unknown error occurred'
       toast({
-        message: `Dataset reprocessing failed: ${errorMessage}`,
+        message: `Dataset processing failed: ${errorMessage}`,
         variant: 'destructive',
       })
     }
-  }, [taskStatus?.state, taskStatus?.error, datasetId, versions, toast])
+  }, [taskStatus?.state, taskStatus?.error, taskStatus?.result, toast])
 
   const openEdit = () => {
     setEditName(dataset?.name ?? '')
@@ -472,147 +521,13 @@ function DatasetView() {
     )
   }
 
-  // Processing strategy selection (id + name)
-  const [strategyId, setStrategyId] = useState<string>('processing-universal')
-  const [strategyName, setStrategyName] = useState<string>(
-    'Universal document processor'
-  )
+  // Processing strategy comes from API dataset response
+  const currentStrategy = (currentApiDataset as any)?.data_processing_strategy || 'universal_processor'
 
-  const getAllStrategies = (): import('../Rag/strategies').RagStrategy[] => {
-    return [...defaultStrategies, ...getCustomStrategies()]
-  }
-
-  const getStrategyNameForId = (id: string): string => {
-    try {
-      const override = localStorage.getItem(`lf_strategy_name_override_${id}`)
-      if (override && override.trim().length > 0) return override
-    } catch {}
-    const found = getAllStrategies().find(s => s.id === id)
-    return found?.name || id
-  }
-
-  useEffect(() => {
-    if (!datasetId) return
-    try {
-      const storedId = localStorage.getItem(
-        `lf_dataset_strategy_id_${datasetId}`
-      )
-      if (storedId && typeof storedId === 'string') {
-        setStrategyId(storedId)
-        setStrategyName(getStrategyNameForId(storedId))
-        return
-      }
-      // Fallback: old storage only had name, attempt to map → id
-      const storedName = localStorage.getItem(
-        `lf_dataset_strategy_name_${datasetId}`
-      )
-      if (storedName && typeof storedName === 'string') {
-        const match = getAllStrategies().find(s => s.name === storedName)
-        if (match) {
-          setStrategyId(match.id)
-          setStrategyName(match.name)
-          try {
-            localStorage.setItem(
-              `lf_dataset_strategy_id_${datasetId}`,
-              match.id
-            )
-          } catch {}
-          return
-        }
-      }
-      // Default
-      setStrategyId('processing-universal')
-      setStrategyName(getStrategyNameForId('processing-universal'))
-    } catch {
-      setStrategyId('processing-universal')
-      setStrategyName(getStrategyNameForId('processing-universal'))
-    }
-  }, [datasetId])
-
-  // Listen for processing updates from strategy page to refresh summaries
-  useEffect(() => {
-    const onProcessingUpdate = () => setProcessingMetaTick(t => t + 1)
-    window.addEventListener(
-      'lf:processingUpdated',
-      onProcessingUpdate as EventListener
-    )
-    return () =>
-      window.removeEventListener(
-        'lf:processingUpdated',
-        onProcessingUpdate as EventListener
-      )
-  }, [])
-
-  // Load parsers/extractors summary for selected strategy
-  type ParserRowLite = {
-    id?: string
-    name?: string
-    priority?: number
-    include?: string
-    summary?: string
-  }
-  type ExtractorRowLite = {
-    id?: string
-    name?: string
-    priority?: number
-    applyTo?: string
-    summary?: string
-  }
-
-  const loadParsers = (sid: string): ParserRowLite[] => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_parsers_${sid}`)
-      if (!raw) return []
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr : []
-    } catch {
-      return []
-    }
-  }
-  const loadExtractors = (sid: string): ExtractorRowLite[] => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_extractors_${sid}`)
-      if (!raw) return []
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr : []
-    } catch {
-      return []
-    }
-  }
-
-  const parsersSummary = useMemo(() => {
-    const rows = loadParsers(strategyId)
-    if (!rows || rows.length === 0)
-      return 'Using default parsers (not customized)'
-    const sorted = [...rows].sort(
-      (a, b) => (b.priority || 0) - (a.priority || 0)
-    )
-    const top = sorted
-      .slice(0, 2)
-      .map(
-        r =>
-          `${r.name || 'Parser'}${typeof r.priority === 'number' ? ` (${r.priority})` : ''}`
-      )
-    const more = sorted.length > 2 ? `, +${sorted.length - 2} more` : ''
-    return `${sorted.length} configured: ${top.join(', ')}${more}`
-  }, [strategyId, processingMetaTick])
-
-  const extractorsSummary = useMemo(() => {
-    const rows = loadExtractors(strategyId)
-    if (!rows || rows.length === 0)
-      return 'Using default extractors (not customized)'
-    const sorted = [...rows].sort(
-      (a, b) => (b.priority || 0) - (a.priority || 0)
-    )
-    const top = sorted
-      .slice(0, 2)
-      .map(
-        r =>
-          `${r.name || 'Extractor'}${typeof r.priority === 'number' ? ` (${r.priority})` : ''}`
-      )
-    const more = sorted.length > 2 ? `, +${sorted.length - 2} more` : ''
-    return `${sorted.length} configured: ${top.join(', ')}${more}`
-  }, [strategyId, processingMetaTick])
+  // Note: Parsers/extractors info now comes from project config API, not localStorage
+  // This is a placeholder - should be fetched from the strategy config if needed
+  const parsersSummary = 'Configured via strategy settings'
+  const extractorsSummary = 'Configured via strategy settings'
 
   // Removed unused derived values
 
@@ -667,16 +582,19 @@ function DatasetView() {
                     <FontIcon type="edit" className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="sm:hidden mt-1 mb-2">
-                  <Badge
-                    variant="secondary"
-                    size="sm"
-                    className="rounded-xl w-max"
-                  >
-                    {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
-                    {dataset?.processedPercent ?? 0}% processed
-                  </Badge>
-                </div>
+                {/* Status shown inline on mobile */}
+                {currentTaskId && taskStatus && (
+                  <div className="sm:hidden mt-1 mb-2">
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-xl w-max"
+                    >
+                      {taskStatus.state === 'PENDING' && 'Queued...'}
+                      {(taskStatus.state !== 'PENDING' && taskStatus.state !== 'SUCCESS' && taskStatus.state !== 'FAILURE') && 'Processing...'}
+                    </Badge>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground max-w-[640px]">
                   {dataset?.description && dataset.description.trim().length > 0
                     ? dataset.description
@@ -684,15 +602,17 @@ function DatasetView() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {/* Show status pill below title on small screens */}
-                <Badge
-                  variant="secondary"
-                  size="sm"
-                  className="rounded-xl w-max hidden sm:inline-flex"
-                >
-                  {dataset?.numChunks?.toLocaleString?.() || '—'} chunks •{' '}
-                  {dataset?.processedPercent ?? 0}% processed
-                </Badge>
+                {/* Processing status badge */}
+                {currentTaskId && taskStatus && (
+                  <Badge
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-xl w-max"
+                  >
+                    {taskStatus.state === 'PENDING' && 'Queued...'}
+                    {(taskStatus.state !== 'PENDING' && taskStatus.state !== 'SUCCESS' && taskStatus.state !== 'FAILURE') && 'Processing...'}
+                  </Badge>
+                )}
                 <Button
                   size="sm"
                   onClick={async () => {
@@ -704,37 +624,39 @@ function DatasetView() {
                       return
 
                     try {
-                      const result = await reIngestMutation.mutateAsync({
+                      // Clear previous results
+                      setProcessingResult(null)
+
+                      const result = await processMutation.mutateAsync({
                         namespace: activeProject.namespace,
                         project: activeProject.project,
                         dataset: datasetId,
                       })
 
-                      // Extract task ID from task_uri (e.g., "http://localhost:8000/v1/projects/ns/proj/tasks/abc-123" -> "abc-123")
-                      const taskId = result.task_uri.split('/').pop()
-                      if (taskId) {
-                        setCurrentTaskId(taskId)
+                      // The process endpoint returns task_id directly
+                      if (result.task_id) {
+                        setCurrentTaskId(result.task_id)
                         toast({
-                          message: 'Dataset reprocessing started...',
+                          message: 'Dataset processing started...',
                           variant: 'default',
                         })
                       }
                     } catch (error) {
-                      console.error('Failed to start reprocessing:', error)
+                      console.error('Failed to start processing:', error)
                       toast({
                         message:
-                          'Failed to start reprocessing. Please try again.',
+                          'Failed to start processing. Please try again.',
                         variant: 'destructive',
                       })
                     }
                   }}
-                  disabled={reIngestMutation.isPending || !!currentTaskId}
+                  disabled={processMutation.isPending || !!currentTaskId}
                 >
-                  {reIngestMutation.isPending
+                  {processMutation.isPending
                     ? 'Starting...'
-                    : currentTaskId && taskStatus?.state === 'PENDING'
+                    : currentTaskId && taskStatus
                       ? 'Processing...'
-                      : 'Reprocess'}
+                      : 'Process Dataset'}
                 </Button>
               </div>
             </div>
@@ -774,127 +696,16 @@ function DatasetView() {
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium">Processing strategy</h3>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    navigate(`/chat/data/strategies/${strategyId}`)
-                  }
-                >
-                  Configure
-                </Button>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button size="sm">Change</Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>Choose a processing strategy</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-3">
-                      <div className="w-full">
-                        <SearchInput
-                          placeholder="Search processing strategies"
-                          value={strategyQuery}
-                          onChange={e => setStrategyQuery(e.target.value)}
-                        />
-                      </div>
-                      <div className="max-h-[360px] overflow-auto rounded-md border border-border/60">
-                        <ul>
-                          {defaultStrategies
-                            .filter(s =>
-                              [s.name, s.description]
-                                .join(' ')
-                                .toLowerCase()
-                                .includes(strategyQuery.toLowerCase())
-                            )
-                            .map(s => (
-                              <li
-                                key={s.id}
-                                className="px-3 py-3 border-b last:border-b-0 border-border/60 hover:bg-muted/30 transition-colors"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <Badge
-                                      variant="default"
-                                      size="sm"
-                                      className="rounded-xl shrink-0"
-                                    >
-                                      {s.name}
-                                    </Badge>
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() =>
-                                        navigate(
-                                          `/chat/data/strategies/${s.id}`
-                                        )
-                                      }
-                                    >
-                                      Configure
-                                    </Button>
-                                    <DialogClose asChild>
-                                      <Button
-                                        size="sm"
-                                        onClick={() => {
-                                          if (!datasetId) return
-                                          try {
-                                            localStorage.setItem(
-                                              `lf_dataset_strategy_id_${datasetId}`,
-                                              s.id
-                                            )
-                                            localStorage.setItem(
-                                              `lf_dataset_strategy_name_${datasetId}`,
-                                              s.name
-                                            )
-                                          } catch {}
-                                          setStrategyId(s.id)
-                                          setStrategyName(s.name)
-                                          toast({
-                                            message: `Processing strategy set to ${s.name}`,
-                                            variant: 'default',
-                                          })
-                                        }}
-                                      >
-                                        Use
-                                      </Button>
-                                    </DialogClose>
-                                  </div>
-                                </div>
-                                <div className="mt-2 text-xs text-muted-foreground">
-                                  {s.description}
-                                </div>
-                              </li>
-                            ))}
-                        </ul>
-                      </div>
-                      <div className="mt-3 flex">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate('/chat/rag')}
-                        >
-                          Manage or add processing strategies
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <Badge variant="default" size="sm" className="rounded-xl">
-                {strategyName}
+                {currentStrategy}
               </Badge>
-              <Badge variant="secondary" size="sm" className="rounded-xl">
-                Last processed{' '}
-                {dataset?.lastRun
-                  ? new Date(dataset.lastRun).toLocaleString()
-                  : '—'}
-              </Badge>
+              {processingResult && (
+                <Badge variant="secondary" size="sm" className="rounded-xl">
+                  Last processed: {processingResult.processed_files || 0} files
+                </Badge>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
@@ -915,6 +726,69 @@ function DatasetView() {
               </div>
             </div>
           </section>
+
+          {/* Processing Results */}
+          {processingResult && (
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium">Processing Results</h3>
+                <button
+                  onClick={() => setProcessingResult(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <div className="rounded-md border border-border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Processed Files</div>
+                  <div className="text-2xl font-semibold text-green-600">
+                    {processingResult.processed_files || 0}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Skipped Files</div>
+                  <div className="text-2xl font-semibold text-yellow-600">
+                    {processingResult.skipped_files || 0}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Failed Files</div>
+                  <div className="text-2xl font-semibold text-red-600">
+                    {processingResult.failed_files || 0}
+                  </div>
+                </div>
+              </div>
+              {processingResult.details && processingResult.details.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">Processing Details</div>
+                  <div className="rounded-md border border-border max-h-60 overflow-auto">
+                    {processingResult.details.map((detail: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="p-2 border-b last:border-b-0 text-xs font-mono"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground">{detail.file}</span>
+                          <Badge
+                            variant={detail.status === 'processed' ? 'default' : 'secondary'}
+                            size="sm"
+                          >
+                            {detail.status}
+                          </Badge>
+                        </div>
+                        {detail.chunks_created && (
+                          <div className="text-muted-foreground mt-1">
+                            {detail.chunks_created} chunks created
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           <Dialog
             open={isEditOpen}
@@ -1083,10 +957,90 @@ function DatasetView() {
           <section className="rounded-lg border border-border bg-card p-4 mb-40">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium">Raw data</h3>
-              <Button size="sm" onClick={() => fileInputRef.current?.click()}>
-                Upload data
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowFileTypeFilter(!showFileTypeFilter)}
+                >
+                  {showFileTypeFilter ? 'Hide' : 'Filter'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    console.log('🔘 Upload folder button clicked')
+                    console.log('📂 Directory input ref:', directoryInputRef.current)
+                    directoryInputRef.current?.click()
+                  }}
+                >
+                  Upload folder
+                </Button>
+                <Button size="sm" onClick={() => fileInputRef.current?.click()}>
+                  Upload files
+                </Button>
+              </div>
             </div>
+
+            {/* File type filter section */}
+            {showFileTypeFilter && (
+              <div className="mb-3 p-3 bg-muted/20 rounded-md border border-border/60">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      File type filter (comma-separated)
+                    </label>
+                    {fileTypeFilter && (
+                      <button
+                        onClick={clearFileTypeFilter}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                  </div>
+                  <Input
+                    value={fileTypeFilter}
+                    onChange={e => setFileTypeFilter(e.target.value)}
+                    placeholder="e.g., .pdf, .txt, .docx (leave empty for all files)"
+                    className="text-sm"
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      Quick add:
+                    </span>
+                    {commonFileTypes.map(ext => (
+                      <button
+                        key={ext}
+                        onClick={() => addFileTypeToFilter(ext)}
+                        className="text-xs px-2 py-0.5 rounded bg-background border border-border hover:bg-accent"
+                      >
+                        {ext}
+                      </button>
+                    ))}
+                  </div>
+                  {fileTypeFilter && (
+                    <p className="text-xs text-muted-foreground">
+                      Will only upload files matching:{' '}
+                      <span className="font-mono font-medium">
+                        {fileTypeFilter}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Upload stats */}
+            {uploadStats && (
+              <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Uploading {uploadStats.filtered} of {uploadStats.total} files
+                  (filtered by file type)
+                </p>
+              </div>
+            )}
+
             <input
               ref={fileInputRef}
               type="file"
@@ -1108,12 +1062,72 @@ function DatasetView() {
                 const list = e.target.files ? Array.from(e.target.files) : []
                 if (list.length === 0) return
 
+                // Reset input immediately to allow re-selecting same files
+                const target = e.currentTarget
                 try {
                   await handleFilesUpload(list)
-                } catch {}
+                } catch (error) {
+                  console.error('File upload error:', error)
+                  toast({
+                    message: 'Failed to upload files. See console for details.',
+                    variant: 'destructive',
+                  })
+                } finally {
+                  // Reset input value after upload completes
+                  if (target) {
+                    target.value = ''
+                  }
+                }
+              }}
+            />
+            <input
+              ref={directoryInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={async e => {
+                console.log('📁 Directory input triggered')
 
-                // Reset input so same files can be picked again
-                e.currentTarget.value = ''
+                if (
+                  !datasetId ||
+                  !activeProject?.namespace ||
+                  !activeProject?.project
+                ) {
+                  toast({
+                    message: 'Missing required information for upload',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
+                const list = e.target.files ? Array.from(e.target.files) : []
+                console.log('📁 Files selected:', list.length)
+                console.log('📁 File names:', list.map(f => f.name))
+
+                if (list.length === 0) {
+                  toast({
+                    message: 'No files selected',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
+                // Store reference to avoid null issues after async operation
+                const target = e.currentTarget
+                try {
+                  await handleFilesUpload(list)
+                } catch (error) {
+                  console.error('Folder upload error:', error)
+                  toast({
+                    message: 'Failed to upload folder. See console for details.',
+                    variant: 'destructive',
+                  })
+                } finally {
+                  // Reset input value after upload completes
+                  if (target) {
+                    target.value = ''
+                  }
+                }
               }}
             />
             <div className="flex items-center gap-2 mb-2">

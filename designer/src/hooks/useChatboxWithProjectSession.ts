@@ -8,9 +8,12 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useChatInference, useDeleteChatSession } from './useChat'
 import { createChatRequest, chatInferenceStreaming } from '../api/chatService'
+import { useProject } from './useProjects'
+import { useActiveProject } from './useActiveProject'
+import { parsePromptSets } from '../utils/promptSets'
 import { useProjectSession } from './useProjectSession'
 import { ChatboxMessage } from '../types/chatbox'
-import { ChatStreamChunk, NetworkError } from '../types/chat'
+import { ChatStreamChunk, NetworkError, ChatMessage } from '../types/chat'
 import { generateMessageId } from '../utils/idGenerator'
 
 /**
@@ -42,6 +45,14 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
     chatService: 'designer',
     autoCreate: false, // Sessions created on first message
   })
+
+  // Load project config to include active prompt set
+  const activeProject = useActiveProject()
+  const { data: projectResponse } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject?.namespace && !!activeProject?.project
+  )
 
   // UI state
   const [inputValue, setInputValue] = useState('')
@@ -77,6 +88,29 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
     }
   }, [])
 
+  // Helper function to prepend prompt sets to chat request
+  const prependActiveSet = useCallback(
+    (chatRequest: { messages: ChatMessage[] }) => {
+      const projectPrompts = projectResponse?.project?.config
+        ?.prompts as Array<{
+        name: string
+        messages: Array<{ role?: string; content: string }>
+      }>
+      if (Array.isArray(projectPrompts) && projectPrompts.length > 0) {
+        // Get messages from the first prompt set
+        const sets = parsePromptSets(projectPrompts)
+        if (sets.length > 0 && sets[0].items.length > 0) {
+          const systemMessages = sets[0].items.map(item => ({
+            role: item.role,
+            content: item.content,
+          })) as ChatMessage[]
+          chatRequest.messages = [...systemMessages, ...chatRequest.messages]
+        }
+      }
+    },
+    [projectResponse?.project?.config]
+  )
+
   // Helper function to execute fallback non-streaming request
   const executeFallbackRequest = useCallback(
     async (
@@ -92,6 +126,8 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
 
       try {
         const chatRequest = createChatRequest(messageContent)
+        // Prepend active prompt set once
+        prependActiveSet(chatRequest)
         const response = await chatMutation.mutateAsync({
           chatRequest,
           sessionId: currentSessionId,
@@ -117,7 +153,7 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
         )
       }
     },
-    [chatMutation]
+    [chatMutation, prependActiveSet]
   )
 
   // Add message to both streaming state and project session
@@ -244,6 +280,9 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
       try {
         // Create chat request
         const chatRequest = createChatRequest(messageContent)
+
+        // Prepend active prompt set once
+        prependActiveSet(chatRequest)
 
         if (streamingEnabled) {
           // Streaming path
@@ -541,6 +580,8 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
           return true
         } else {
           // Non-streaming path
+          // Prepend active prompt set once
+          prependActiveSet(chatRequest)
           const response = await chatMutation.mutateAsync({
             chatRequest,
             sessionId: currentSessionId || undefined,

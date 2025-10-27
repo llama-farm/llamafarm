@@ -82,6 +82,7 @@ definitions:
       type: object
       title: PDF Parser (PyPDF2) Configuration
       description: Enhanced PDF parser using PyPDF2 with comprehensive capabilities
+      defaultExtensions: [".pdf"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -150,6 +151,7 @@ definitions:
       type: object
       title: CSV Parser (Pandas) Configuration
       description: Advanced CSV parser using Pandas with data analysis capabilities
+      defaultExtensions: [".csv"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -185,6 +187,7 @@ definitions:
       type: object
       title: CSV Parser (Python) Configuration
       description: Simple CSV parser using native Python csv module
+      defaultExtensions: [".csv"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -209,6 +212,7 @@ definitions:
       type: object
       title: Excel Parser (OpenPyXL) Configuration
       description: Excel parser using OpenPyXL for XLSX files with formula support
+      defaultExtensions: [".xlsx", ".xls"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -239,6 +243,7 @@ definitions:
       type: object
       title: Excel Parser (Pandas) Configuration
       description: Excel parser using Pandas with data analysis capabilities
+      defaultExtensions: [".xlsx", ".xls"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -271,6 +276,7 @@ definitions:
       type: object
       title: DOCX Parser (python-docx) Configuration
       description: Word document parser using python-docx library
+      defaultExtensions: [".docx"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -308,6 +314,7 @@ definitions:
       type: object
       title: Markdown Parser (Python) Configuration
       description: Markdown parser using native Python with regex parsing
+      defaultExtensions: [".md", ".markdown"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -337,6 +344,7 @@ definitions:
       type: object
       title: Text Parser (Python) Configuration
       description: Text parser using native Python with encoding detection
+      defaultExtensions: [".txt"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -371,6 +379,7 @@ definitions:
       type: object
       title: Text Parser (LlamaIndex) Configuration
       description: Advanced text parser using LlamaIndex with semantic splitting, code parsing, and multi-format support
+      defaultExtensions: [".txt"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -435,6 +444,7 @@ definitions:
       type: object
       title: PDF Parser (LlamaIndex) Configuration
       description: Advanced PDF parser using LlamaIndex with multiple fallback strategies
+      defaultExtensions: [".pdf"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -490,6 +500,7 @@ definitions:
       type: object
       title: CSV Parser (LlamaIndex) Configuration
       description: CSV parser using LlamaIndex with Pandas backend for advanced processing
+      defaultExtensions: [".csv"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -531,6 +542,7 @@ definitions:
       type: object
       title: Excel Parser (LlamaIndex) Configuration
       description: Excel parser using LlamaIndex with Pandas backend for advanced processing
+      defaultExtensions: [".xlsx", ".xls"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -581,6 +593,7 @@ definitions:
       type: object
       title: DOCX Parser (LlamaIndex) Configuration
       description: Advanced DOCX parser using LlamaIndex with enhanced chunking
+      defaultExtensions: [".docx"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -625,6 +638,7 @@ definitions:
       type: object
       title: Markdown Parser (LlamaIndex) Configuration
       description: Advanced markdown parser using LlamaIndex with semantic chunking
+      defaultExtensions: [".md", ".markdown"]
       additionalProperties: false
       properties:
         chunk_size:
@@ -667,6 +681,7 @@ definitions:
     msgParserExtractMsgConfig:
       type: object
       title: MSG Parser (extract-msg) Configuration
+      defaultExtensions: [".msg"]
       additionalProperties: false
       properties:
         chunk_size:

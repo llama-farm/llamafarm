@@ -55,6 +55,7 @@ class StructLogMiddleware:
                 content={
                     "error": "Internal Server Error",
                     "message": "An unexpected error occurred.",
+                    "request_id": correlation_id.get(),
                 },
             )
             await response(scope, receive, send)

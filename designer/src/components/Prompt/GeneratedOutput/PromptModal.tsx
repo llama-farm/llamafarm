@@ -21,8 +21,14 @@ interface PromptModalProps {
   mode: PromptModalMode
   initialText?: string
   initialRole?: 'system' | 'assistant' | 'user'
+  promptSets?: Array<{ name: string }>
+  selectedSetIndex?: number
   onClose: () => void
-  onSave: (text: string, role: 'system' | 'assistant' | 'user') => void
+  onSave: (
+    text: string,
+    role: 'system' | 'assistant' | 'user',
+    setIndex?: number
+  ) => void
   onDelete?: () => void
 }
 
@@ -31,22 +37,26 @@ const PromptModal: React.FC<PromptModalProps> = ({
   mode,
   initialText = '',
   initialRole = 'system',
+  promptSets = [],
+  selectedSetIndex = 0,
   onClose,
   onSave,
   onDelete,
 }) => {
   const [text, setText] = useState(initialText)
   const [role, setRole] = useState<'system' | 'assistant' | 'user'>(initialRole)
+  const [setIndex, setSetIndex] = useState(selectedSetIndex)
 
   useEffect(() => {
     if (isOpen) {
       setText(initialText)
       setRole(initialRole)
+      setSetIndex(selectedSetIndex)
     }
-  }, [isOpen, mode, initialText, initialRole])
+  }, [isOpen, mode, initialText, initialRole, selectedSetIndex])
 
-  const title = mode === 'create' ? 'Create prompt' : 'Edit prompt'
-  const cta = mode === 'create' ? 'Create' : 'Save'
+  const title = mode === 'create' ? 'Add prompt' : 'Edit prompt'
+  const cta = mode === 'create' ? 'Add' : 'Save'
   const isValid = text.trim().length > 0
 
   const handleDelete = () => {
@@ -80,8 +90,36 @@ const PromptModal: React.FC<PromptModalProps> = ({
               </a>
             </div>
           )}
+          {mode === 'create' && promptSets.length > 0 && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-0">
+                Prompt set
+              </label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="w-full h-9 rounded-md border border-input bg-background px-3 text-left flex items-center justify-between mt-1">
+                    <span className="text-sm">
+                      {promptSets[setIndex]?.name || 'Select set'}
+                    </span>
+                    <FontIcon type="chevron-down" className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-full">
+                  {promptSets.map((set, idx) => (
+                    <DropdownMenuItem
+                      key={idx}
+                      className="w-full justify-start text-left"
+                      onClick={() => setSetIndex(idx)}
+                    >
+                      {set.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
           <div>
-            <label className="text-xs text-muted-foreground">Role</label>
+            <label className="text-xs text-muted-foreground mb-0">Role</label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="w-full h-9 rounded-md border border-input bg-background px-3 text-left flex items-center justify-between mt-1">
@@ -103,7 +141,9 @@ const PromptModal: React.FC<PromptModalProps> = ({
             </DropdownMenu>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground">Prompt text</label>
+            <label className="text-xs text-muted-foreground mb-0">
+              Prompt text
+            </label>
             <textarea
               rows={10}
               className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground font-mono text-sm"
@@ -141,7 +181,13 @@ const PromptModal: React.FC<PromptModalProps> = ({
                   : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'
               }`}
               disabled={!isValid}
-              onClick={() => onSave(text.trim(), role)}
+              onClick={() =>
+                onSave(
+                  text.trim(),
+                  role,
+                  mode === 'create' ? setIndex : undefined
+                )
+              }
             >
               {cta}
             </button>
