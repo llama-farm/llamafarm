@@ -10,11 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def save_image_with_metadata(
-    image: Image.Image,
-    filepath: Path,
-    metadata: dict
-):
+def save_image_with_metadata(image: Image.Image, filepath: Path, metadata: dict):
     """
     Save an image with accompanying JSON metadata.
 
@@ -24,7 +20,7 @@ def save_image_with_metadata(
         metadata: Dictionary of metadata to save
     """
     # Save image
-    image.save(filepath, format="PNG")
+    image.save(filepath)
     logger.info(f"Saved image to {filepath}")
 
     # Save metadata as JSON sidecar
