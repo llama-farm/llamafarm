@@ -462,7 +462,7 @@ func (so *ServiceOrchestrator) ensureService(serviceName string, requirement Ser
 
 	// Test progress message to verify the system is working
 	if so.config.PrintStatus && serviceName == "rag" {
-		OutputProgress("RAG container started, initializing...\n")
+		OutputProgress("RAG services started, initializing...\n")
 	}
 
 	// Wait for service to be ready (if required)
