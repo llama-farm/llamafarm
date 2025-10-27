@@ -50,6 +50,7 @@ app = FastAPI(
 
 # Global model cache
 _models: dict[str, BaseModel] = {}
+_model_load_lock = asyncio.Lock()
 _current_device = None
 
 
@@ -71,11 +72,14 @@ async def load_language(model_id: str):
     """Load a causal language model for text generation."""
     cache_key = f"language:{model_id}"
     if cache_key not in _models:
-        logger.info(f"Loading causal LM: {model_id}")
-        device = get_device()
-        model = LanguageModel(model_id, device)
-        await model.load()
-        _models[cache_key] = model
+        async with _model_load_lock:
+            # Double-check if model was loaded while waiting for the lock
+            if cache_key not in _models:
+                logger.info(f"Loading causal LM: {model_id}")
+                device = get_device()
+                model = LanguageModel(model_id, device)
+                await model.load()
+                _models[cache_key] = model
     return _models[cache_key]
 
 
@@ -83,11 +87,14 @@ async def load_encoder(model_id: str, task: str = "embedding"):
     """Load an encoder model for embeddings or classification."""
     cache_key = f"encoder:{task}:{model_id}"
     if cache_key not in _models:
-        logger.info(f"Loading encoder ({task}): {model_id}")
-        device = get_device()
-        model = EncoderModel(model_id, device, task=task)
-        await model.load()
-        _models[cache_key] = model
+        async with _model_load_lock:
+            # Double-check if model was loaded while waiting for the lock
+            if cache_key not in _models:
+                logger.info(f"Loading encoder ({task}): {model_id}")
+                device = get_device()
+                model = EncoderModel(model_id, device, task=task)
+                await model.load()
+                _models[cache_key] = model
     return _models[cache_key]
 
 
@@ -172,7 +179,7 @@ async def chat_completions(chat_request: ChatCompletionRequest, request: Request
                 created_time = int(datetime.now().timestamp())
 
                 # Send initial chunk
-                yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created_time, 'model': chat_request.model, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n"
+                yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created_time, 'model': chat_request.model, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n".encode()
 
                 # Stream tokens
                 async for token in model.generate_stream(

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -234,8 +235,12 @@ func (pm *ProcessManager) isProcessRunning(proc *ProcessInfo) bool {
 		return false
 	}
 
-	// On Unix systems, sending signal 0 checks if process exists
-	// On Windows, this might not work, so we check process state
+	// On Unix, sending signal 0 checks if a process exists.
+	// On Windows, this is not supported, so we check if the process has exited.
+	if runtime.GOOS == "windows" {
+		return proc.Cmd.ProcessState == nil || !proc.Cmd.ProcessState.Exited()
+	}
+
 	err := proc.Cmd.Process.Signal(os.Signal(nil))
 	return err == nil
 }
