@@ -5,7 +5,7 @@ Supports both HuggingFace Transformers and Diffusers models.
 """
 
 from .base import BaseModel
-from .language_model import CausalLMModel
+from .language_model import LanguageModel
 from .encoder_model import EncoderModel
 from .diffusion_model import DiffusionModel
 from .vision_model import VisionModel
@@ -14,7 +14,7 @@ from .multimodal_model import MultimodalModel
 
 __all__ = [
     "BaseModel",
-    "CausalLMModel",
+    "LanguageModel",
     "EncoderModel",
     "DiffusionModel",
     "VisionModel",

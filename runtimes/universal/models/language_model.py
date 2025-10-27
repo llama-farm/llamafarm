@@ -13,11 +13,11 @@ from .base import BaseModel
 logger = logging.getLogger(__name__)
 
 
-class CausalLMModel(BaseModel):
-    """Wrapper for HuggingFace causal language models (GPT-style text generation)."""
+class LanguageModel(BaseModel):
+    """Wrapper for HuggingFace language models (GPT-style text generation)."""
 
-    def __init__(self, model_id: str, device: str):
-        super().__init__(model_id, device)
+    def __init__(self, model_id: str, device: str, token: Optional[str] = None):
+        super().__init__(model_id, device, token=token)
         self.model_type = "language"
         self.supports_streaming = True
 
@@ -29,7 +29,9 @@ class CausalLMModel(BaseModel):
 
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id, trust_remote_code=True
+            self.model_id,
+            trust_remote_code=True,
+            token=self.token,
         )
 
         # Load model
@@ -38,6 +40,7 @@ class CausalLMModel(BaseModel):
             dtype=dtype,
             trust_remote_code=True,
             device_map="auto" if self.device == "cuda" else None,
+            token=self.token,
         )
 
         if self.device != "cuda":

@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 class BaseModel(ABC):
     """Base class for all model types (transformers, diffusers, etc.)."""
 
-    def __init__(self, model_id: str, device: str):
+    def __init__(self, model_id: str, device: str, token: Optional[str] = None):
         self.model_id = model_id
         self.device = device
+        self.token = token  # HuggingFace authentication token
         self.model = None
         self.tokenizer = None
         self.processor = None  # For vision/audio models

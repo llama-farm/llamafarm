@@ -25,7 +25,7 @@ class OllamaProvider(RuntimeProvider):
         """Get API key for Ollama (usually not required)."""
         return self._model_config.api_key or settings.ollama_api_key
 
-    def get_client(self) -> LFAgentClient:
+    def get_client(self, extra_body: dict | None = None) -> LFAgentClient:
         """Get Ollama client with optional instructor wrapping."""
         cfg_copy = self._model_config.model_copy()
         if not cfg_copy.base_url:
@@ -35,6 +35,7 @@ class OllamaProvider(RuntimeProvider):
 
         client = LFAgentClientOllama(
             model_config=cfg_copy,
+            extra_body=extra_body or {},
         )
         return client
 

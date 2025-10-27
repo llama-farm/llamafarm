@@ -16,7 +16,13 @@ logger = logging.getLogger(__name__)
 class EncoderModel(BaseModel):
     """Wrapper for HuggingFace encoder models (BERT-style embeddings & classification)."""
 
-    def __init__(self, model_id: str, device: str, task: str = "embedding"):
+    def __init__(
+        self,
+        model_id: str,
+        device: str,
+        task: str = "embedding",
+        token: Optional[str] = None,
+    ):
         """
         Initialize encoder model.
 
@@ -24,8 +30,9 @@ class EncoderModel(BaseModel):
             model_id: HuggingFace model ID
             device: Target device (cuda/mps/cpu)
             task: Model task - "embedding" or "classification"
+            token: HuggingFace authentication token for gated models
         """
-        super().__init__(model_id, device)
+        super().__init__(model_id, device, token=token)
         self.task = task
         self.model_type = f"encoder_{task}"
         self.supports_streaming = False
@@ -38,7 +45,7 @@ class EncoderModel(BaseModel):
 
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id, trust_remote_code=True
+            self.model_id, trust_remote_code=True, token=self.token
         )
 
         # Load model based on task
@@ -47,12 +54,14 @@ class EncoderModel(BaseModel):
                 self.model_id,
                 dtype=dtype,
                 trust_remote_code=True,
+                token=self.token,
             )
         else:  # embedding
             self.model = AutoModel.from_pretrained(
                 self.model_id,
                 dtype=dtype,
                 trust_remote_code=True,
+                token=self.token,
             )
 
         self.model = self.model.to(self.device)

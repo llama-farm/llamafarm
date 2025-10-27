@@ -1,6 +1,7 @@
 """Universal Runtime provider implementation with streaming support."""
 
 import time
+from typing import Any
 
 import requests
 
@@ -35,7 +36,7 @@ class UniversalProvider(RuntimeProvider):
         """Get API key for Universal Runtime."""
         return self._model_config.api_key or settings.universal_api_key
 
-    def get_client(self) -> LFAgentClient:
+    def get_client(self, extra_body: dict | None = None) -> LFAgentClient:
         """Get Universal Runtime client with OpenAI compatibility.
 
         The client supports:
@@ -45,6 +46,9 @@ class UniversalProvider(RuntimeProvider):
         - Text embeddings (encoder models)
         - Audio transcription (speech-to-text)
         - Vision tasks (classification, VQA)
+
+        Args:
+            extra_body: Additional parameters to pass through (e.g., huggingface_token)
 
         Returns:
             LFAgentClient configured for Universal Runtime
@@ -56,6 +60,7 @@ class UniversalProvider(RuntimeProvider):
 
         client = LFAgentClientOpenAI(
             model_config=self._model_config,
+            extra_body=extra_body or {},
         )
         return client
 

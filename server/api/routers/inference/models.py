@@ -33,6 +33,8 @@ class ChatRequest(BaseModel):
     rag_retrieval_strategy: str | None = None
     rag_top_k: int | None = None
     rag_score_threshold: float | None = None
+    # Additional parameters to pass through to runtime providers
+    extra_body: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatChoice(BaseModel):

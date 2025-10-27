@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 class DiffusionModel(BaseModel):
     """Wrapper for HuggingFace diffusion models (Stable Diffusion, FLUX, etc.)."""
 
-    def __init__(self, model_id: str, device: str):
-        super().__init__(model_id, device)
+    def __init__(self, model_id: str, device: str, token: Optional[str] = None):
+        super().__init__(model_id, device, token=token)
         self.model_type = "diffusion"
         self.default_steps = 50
         self.default_guidance = 7.5

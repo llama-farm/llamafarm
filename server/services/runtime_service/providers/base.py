@@ -1,6 +1,7 @@
 """Base class for runtime providers."""
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from config.datamodel import LlamaFarmConfig, Model
 
@@ -25,11 +26,11 @@ class RuntimeProvider(ABC):
         self._model_config = model_config
 
     @abstractmethod
-    def get_client(self) -> LFAgentClient:
+    def get_client(self, extra_body: dict[str, Any] | None = None) -> LFAgentClient:
         """Get compatible client for this provider.
 
         Args:
-            config: LlamaFarm configuration containing runtime settings
+            extra_body: Additional parameters to pass through to runtime (e.g., auth tokens)
 
         Returns:
             A compatible client for this provider

@@ -41,7 +41,7 @@ from datetime import datetime
 import json
 
 from models import (
-    CausalLMModel,
+    LanguageModel,
     EncoderModel,
     DiffusionModel,
     VisionModel,
@@ -68,6 +68,55 @@ _current_device = None
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+
+def extract_huggingface_token(request: Request) -> Optional[str]:
+    """
+    Extract HuggingFace token from request headers.
+
+    Looks for X-LF-Huggingface-Token header sent by the server.
+    Falls back to HUGGINGFACE_TOKEN environment variable.
+
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        Token string or None if not found
+    """
+    # Check request headers first
+    token = request.headers.get("X-LF-Huggingface-Token")
+    if token:
+        return token
+
+    # Fall back to environment variable
+    # token = os.environ.get("HF_TOKEN")
+    if token:
+        return token
+
+    return None
+
+
+def extract_token_from_extra_body_or_headers(
+    extra_body: Optional[dict], request: Request
+) -> Optional[str]:
+    """
+    Extract HuggingFace token from extra_body or request headers.
+
+    Prioritizes extra_body over headers for better flexibility.
+
+    Args:
+        extra_body: Optional dictionary from request body
+        request: FastAPI Request object
+
+    Returns:
+        Token string or None if not found
+    """
+    # Check extra_body first (highest priority)
+    if extra_body and "huggingface_token" in extra_body:
+        return extra_body["huggingface_token"]
+
+    # Fall back to headers
+    return extract_huggingface_token(request)
 
 
 def get_image_format_from_accept(accept_header: str) -> tuple[str, str]:
@@ -157,73 +206,81 @@ def get_device():
     return _current_device
 
 
-async def load_language(model_id: str):
+async def load_language(model_id: str, token: Optional[str] = None):
     """Load a causal language model for text generation."""
     cache_key = f"language:{model_id}"
     if cache_key not in _models:
         logger.info(f"Loading causal LM: {model_id}")
         device = get_device()
-        model = CausalLMModel(model_id, device)
+        model = LanguageModel(model_id, device, token=token)
         await model.load()
         _models[cache_key] = model
     return _models[cache_key]
 
 
-async def load_encoder(model_id: str, task: str = "embedding"):
+async def load_encoder(
+    model_id: str, task: str = "embedding", token: Optional[str] = None
+):
     """Load an encoder model for embeddings or classification."""
     cache_key = f"encoder:{task}:{model_id}"
     if cache_key not in _models:
         logger.info(f"Loading encoder ({task}): {model_id}")
         device = get_device()
-        model = EncoderModel(model_id, device, task=task)
+        model = EncoderModel(model_id, device, task=task, token=token)
         await model.load()
         _models[cache_key] = model
     return _models[cache_key]
 
 
-async def load_diffusion_model(model_id: str):
+async def load_diffusion_model(model_id: str, token: Optional[str] = None):
     """Load a diffusion model for image generation."""
     cache_key = f"diffusion:{model_id}"
     if cache_key not in _models:
         logger.info(f"Loading diffusion model: {model_id}")
         device = get_device()
-        model = DiffusionModel(model_id, device)
+        model = DiffusionModel(model_id, device, token=token)
         await model.load()
         _models[cache_key] = model
     return _models[cache_key]
 
 
-async def load_vision_model(model_id: str, task: str = "classification"):
+async def load_vision_model(
+    model_id: str, task: str = "classification", token: Optional[str] = None
+):
     """Load a vision model for image classification or embeddings."""
     cache_key = f"vision:{task}:{model_id}"
     if cache_key not in _models:
         logger.info(f"Loading vision model ({task}): {model_id}")
         device = get_device()
-        model = VisionModel(model_id, device, task=task)
+        model = VisionModel(model_id, device, task=task, token=token)
         await model.load()
         _models[cache_key] = model
     return _models[cache_key]
 
 
-async def load_audio_model(model_id: str, task: str = "transcribe"):
+async def load_audio_model(
+    model_id: str, task: str = "transcribe", token: Optional[str] = None
+):
     """Load an audio model for speech-to-text."""
     cache_key = f"audio:{task}:{model_id}"
     if cache_key not in _models:
         logger.info(f"Loading audio model ({task}): {model_id}")
         device = get_device()
-        model = AudioModel(model_id, device, task=task)
+        model = AudioModel(model_id, device, task=task, token=token)
         await model.load()
         _models[cache_key] = model
     return _models[cache_key]
 
 
-async def load_multimodal_model(model_id: str, task: str = "image-to-text"):
+async def load_multimodal_model(
+    model_id: str, task: str = "image-to-text", token: Optional[str] = None
+):
     """Load a multimodal model for vision-language tasks."""
     cache_key = f"multimodal:{task}:{model_id}"
     if cache_key not in _models:
         logger.info(f"Loading multimodal model ({task}): {model_id}")
         device = get_device()
-        model = MultimodalModel(model_id, device, task=task)
+        model = MultimodalModel(model_id, device, task=task, token=token)
         await model.load()
         _models[cache_key] = model
     return _models[cache_key]
@@ -250,6 +307,7 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: Optional[float] = 0.0
     frequency_penalty: Optional[float] = 0.0
     user: Optional[str] = None
+    extra_body: Optional[dict] = None
 
 
 class ImageGenerationRequest(BaseModel):
@@ -278,6 +336,7 @@ class ImageGenerationRequest(BaseModel):
     guidance_scale: Optional[float] = Field(default=None, ge=1.0, le=20.0)
     seed: Optional[int] = None
     scheduler: Optional[str] = None
+    extra_body: Optional[dict] = None
 
 
 class ImageEditRequest(BaseModel):
@@ -333,22 +392,26 @@ async def list_models():
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
+async def chat_completions(chat_request: ChatCompletionRequest, request: Request):
     """
     OpenAI-compatible chat completions endpoint.
 
     Supports any HuggingFace causal language model.
     """
     try:
-        model = await load_language(request.model)
+        # Extract HuggingFace token from extra_body or headers
+        token = extract_token_from_extra_body_or_headers(
+            chat_request.extra_body, request
+        )
+        model = await load_language(chat_request.model, token=token)
 
         # Convert messages to prompt
-        messages_dict = [msg.model_dump() for msg in request.messages]
+        messages_dict = [msg.model_dump() for msg in chat_request.messages]
         prompt = model.format_messages(messages_dict)
 
         # Handle streaming if requested
-        if request.stream:
-            logger.info(f"Streaming chat completions for model: {request.model}")
+        if chat_request.stream:
+            logger.info(f"Streaming chat completions for model: {chat_request.model}")
 
             # Return SSE stream
             async def generate_sse():
@@ -356,21 +419,21 @@ async def chat_completions(request: ChatCompletionRequest):
                 created_time = int(datetime.now().timestamp())
 
                 # Send initial chunk
-                yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created_time, 'model': request.model, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n"
+                yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created_time, 'model': chat_request.model, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n"
 
                 # Stream tokens
                 async for token in model.generate_stream(
                     prompt=prompt,
-                    max_tokens=request.max_tokens,
-                    temperature=request.temperature,
-                    top_p=request.top_p,
-                    stop=request.stop,
+                    max_tokens=chat_request.max_tokens,
+                    temperature=chat_request.temperature,
+                    top_p=chat_request.top_p,
+                    stop=chat_request.stop,
                 ):
                     chunk = {
                         "id": completion_id,
                         "object": "chat.completion.chunk",
                         "created": created_time,
-                        "model": request.model,
+                        "model": chat_request.model,
                         "choices": [
                             {
                                 "index": 0,
@@ -391,7 +454,7 @@ async def chat_completions(request: ChatCompletionRequest):
                     "id": completion_id,
                     "object": "chat.completion.chunk",
                     "created": created_time,
-                    "model": request.model,
+                    "model": chat_request.model,
                     "choices": [
                         {
                             "index": 0,
@@ -417,17 +480,17 @@ async def chat_completions(request: ChatCompletionRequest):
         # Non-streaming response
         response_text = await model.generate(
             prompt=prompt,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            top_p=request.top_p,
-            stop=request.stop,
+            max_tokens=chat_request.max_tokens,
+            temperature=chat_request.temperature,
+            top_p=chat_request.top_p,
+            stop=chat_request.stop,
         )
 
         return {
             "id": f"chatcmpl-{os.urandom(16).hex()}",
             "object": "chat.completion",
             "created": int(datetime.now().timestamp()),
-            "model": request.model,
+            "model": chat_request.model,
             "choices": [
                 {
                     "index": 0,
@@ -468,7 +531,9 @@ async def generate_images(
             "DEFAULT_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0"
         )
 
-        model = await load_diffusion_model(model_id)
+        # Extract HuggingFace token from extra_body or headers
+        token = extract_token_from_extra_body_or_headers(request.extra_body, req)
+        model = await load_diffusion_model(model_id, token=token)
 
         # Parse size
         width, height = map(int, request.size.split("x"))
@@ -815,17 +880,20 @@ class EmbeddingRequest(BaseModel):
     model: str
     input: Union[str, List[str]]
     encoding_format: Optional[Literal["float", "base64"]] = "float"
+    extra_body: Optional[dict] = None
 
 
 @app.post("/v1/embeddings")
-async def create_embeddings(request: EmbeddingRequest):
+async def create_embeddings(request: EmbeddingRequest, req: Request):
     """
     OpenAI-compatible embeddings endpoint.
 
     Supports any HuggingFace encoder model for text embeddings.
     """
     try:
-        model = await load_encoder(request.model, task="embedding")
+        # Extract HuggingFace token from extra_body or headers
+        token = extract_token_from_extra_body_or_headers(request.extra_body, req)
+        model = await load_encoder(request.model, task="embedding", token=token)
 
         # Normalize input to list
         texts = [request.input] if isinstance(request.input, str) else request.input
