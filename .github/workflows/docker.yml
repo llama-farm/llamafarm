@@ -41,7 +41,7 @@ jobs:
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
 
-          - service: universal_runtime
+          - service: runtime
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
             description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
@@ -126,6 +126,11 @@ jobs:
             context: ./
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
+
+          - service: runtime
+            context: ./
+            dockerfile: ./runtimes/universal/Dockerfile
+            description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
 
     steps:
       - name: Checkout repository
