@@ -109,7 +109,9 @@ class UniversalEmbedder(Embedder):
                 logger.warning(
                     f"No embeddings returned for batch of {len(texts)} texts"
                 )
-                return [[0.0] * self.get_embedding_dimension()] * len(texts)
+                return [
+                    [0.0] * self.get_embedding_dimension() for _ in range(len(texts))
+                ]
 
             # Extract embeddings from data array
             embeddings = []
@@ -129,7 +131,7 @@ class UniversalEmbedder(Embedder):
 
         except Exception as e:
             logger.error(f"Error generating embeddings: {e}")
-            return [[0.0] * self.get_embedding_dimension()] * len(texts)
+            return [[0.0] * self.get_embedding_dimension() for _ in range(len(texts))]
 
     def get_embedding_dimension(self) -> int:
         """Get the dimension of embeddings produced by this model."""
