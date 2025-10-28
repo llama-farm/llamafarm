@@ -20,7 +20,7 @@ jobs:
   # Build AMD64 images on standard Ubuntu runners
   build-amd64:
     name: Build AMD64 Docker Images
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.service == 'runner' && 'lf-large-amd64' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
@@ -123,7 +123,7 @@ jobs:
   # Build ARM64 images on native ARM64 runners for efficiency
   build-arm64:
     name: Build ARM64 Docker Images
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.service == 'runner' && 'lf-large-arm64' || 'ubuntu-24.04-arm' }}
     permissions:
       contents: read
       packages: write
@@ -342,7 +342,7 @@ jobs:
   # Build multi-service docker-compose for testing
   test-compose:
     name: Test Docker Compose
-    runs-on: ubuntu-latest
+    runs-on: lf-large-amd64
     needs: [create-manifest]
     if: github.event_name == 'pull_request'
     steps:
