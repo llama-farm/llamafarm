@@ -33,6 +33,7 @@ type SourceManager struct {
 	versionFile   string
 	pythonEnvMgr  *PythonEnvManager
 	currentSource string // tracks what source version is currently installed
+	mu            sync.Mutex // protects against parallel downloads
 }
 
 // NewSourceManager creates a new source code manager
@@ -55,7 +56,12 @@ func NewSourceManager(pythonEnvMgr *PythonEnvManager) (*SourceManager, error) {
 }
 
 // EnsureSource ensures source code is downloaded and dependencies are synced
+// This method is protected by a mutex to prevent parallel downloads
 func (m *SourceManager) EnsureSource() error {
+	// Lock to prevent parallel downloads from multiple service starts
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Determine what version we need
 	targetVersion, err := m.GetCurrentCLIVersion()
 	if err != nil {
@@ -98,7 +104,7 @@ func (m *SourceManager) EnsureSource() error {
 		OutputWarning("Warning: could not write version file: %v\n", err)
 	}
 
-	// Sync dependencies
+	// Sync dependencies (config and common sequentially, then server and rag in parallel)
 	if err := m.SyncDependencies(); err != nil {
 		return fmt.Errorf("failed to sync dependencies: %w", err)
 	}

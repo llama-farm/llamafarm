@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type NativeOrchestrator struct {
 	sourceMgr    *SourceManager
 	processMgr   *ProcessManager
 	initialized  bool
+	initMu       sync.Mutex // protects initialized flag
 	serverURL    string
 }
 
@@ -53,7 +55,13 @@ func NewNativeOrchestrator(serverURL string) (*NativeOrchestrator, error) {
 }
 
 // EnsureNativeEnvironment ensures the native environment is set up
+// This method is protected by a mutex to prevent parallel initialization
 func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
+	// Lock to prevent parallel environment setup from multiple service starts
+	no.initMu.Lock()
+	defer no.initMu.Unlock()
+
+	// Double-check the initialized flag after acquiring lock
 	if no.initialized {
 		return nil
 	}
@@ -71,6 +79,7 @@ func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
 	}
 
 	// Step 3: Ensure source code is downloaded and dependencies are synced
+	// (SourceManager has its own mutex to prevent parallel downloads)
 	if err := no.sourceMgr.EnsureSource(); err != nil {
 		return fmt.Errorf("failed to ensure source code: %w", err)
 	}
