@@ -286,7 +286,15 @@ export function useTaskStatus(
     queryKey: ['task-status', namespace, project, taskId],
     queryFn: () => datasetService.getTaskStatus(namespace, project, taskId!),
     enabled: !!taskId && !!namespace && !!project && options?.enabled !== false,
-    refetchInterval: options?.refetchInterval || 2000, // Poll every 2 seconds by default
+    refetchInterval: (query) => {
+      // Stop polling if task completed or failed
+      const data = query.state.data as any
+      if (data?.state === 'SUCCESS' || data?.state === 'FAILURE') {
+        return false
+      }
+      return options?.refetchInterval || 2000 // Poll every 2 seconds by default
+    },
+    refetchIntervalInBackground: true, // Continue polling even when tab is not focused
     staleTime: 0, // Always consider stale to ensure fresh polling
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes after unmount
   })

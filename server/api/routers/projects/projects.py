@@ -425,7 +425,15 @@ class GetTaskResponse(BaseModel):
 )
 async def get_task(namespace: str, project_id: str, task_id: str):
     """Return state, progress meta, and result/error if available."""
+    from celery.result import GroupResult
+    from core.logging import FastAPIStructLogger
+
+    logger = FastAPIStructLogger(__name__)
+    logger.info("Checking task status", task_id=task_id)
+
     res: celery.result.AsyncResult = app.AsyncResult(task_id)
+
+    logger.info("Task status", task_id=task_id, state=res.state, ready=res.ready())
 
     response = GetTaskResponse(
         task_id=task_id,
@@ -435,6 +443,171 @@ async def get_task(namespace: str, project_id: str, task_id: str):
         error=None,
         traceback=None,
     )
+
+    # Check if this is a group result (parallel tasks)
+    try:
+        # First check if we stored group metadata manually
+        # This is needed because GroupResult.restore() doesn't work well with filesystem backend
+        group_info = res.result if res.state == "PENDING" and isinstance(res.result, dict) and res.result.get("type") == "group" else None
+
+        if group_info and "children" in group_info:
+            # We have stored group metadata - query child tasks directly
+            logger.info("Found stored group metadata", task_id=task_id, child_count=len(group_info["children"]))
+
+            children = [app.AsyncResult(child_id) for child_id in group_info["children"]]
+            total = len(children)
+            completed = sum(1 for child in children if child.ready())
+            failed = sum(1 for child in children if child.failed())
+            successful = sum(1 for child in children if child.successful())
+
+            logger.info("Group progress", task_id=task_id, total=total, completed=completed, failed=failed, successful=successful)
+
+            # Build per-file status details
+            file_statuses = []
+            file_hashes = group_info.get("file_hashes", [])
+            for i, child in enumerate(children):
+                file_status = {
+                    "index": i,
+                    "task_id": child.id,
+                    "state": "pending",
+                    "filename": file_hashes[i] if i < len(file_hashes) else None,
+                    "error": None,
+                }
+
+                if child.successful():
+                    file_status["state"] = "success"
+                    try:
+                        result_data = child.result
+                        if isinstance(result_data, dict):
+                            file_status["filename"] = result_data.get("file_hash", file_hashes[i] if i < len(file_hashes) else f"file_{i}")
+                            file_status["chunks"] = result_data.get("chunks_created")
+                    except Exception:
+                        pass
+                elif child.failed():
+                    file_status["state"] = "failure"
+                    try:
+                        file_status["error"] = str(child.result)
+                    except Exception:
+                        file_status["error"] = "Unknown error"
+                elif child.state == "STARTED":
+                    file_status["state"] = "processing"
+                else:
+                    file_status["state"] = "pending"
+
+                file_statuses.append(file_status)
+
+            # Determine overall state
+            if failed > 0 and completed == total:
+                response.state = "FAILURE"
+                response.error = f"{failed} of {total} tasks failed"
+            elif completed == total:
+                response.state = "SUCCESS"
+                # Aggregate results from successful tasks
+                results = []
+                for child in children:
+                    if child.successful():
+                        try:
+                            results.append(child.result)
+                        except Exception:
+                            pass
+                response.result = {
+                    "processed_files": successful,
+                    "failed_files": failed,
+                    "skipped_files": 0,
+                    "details": results,
+                }
+            else:
+                response.state = "PROGRESS"
+                response.meta = {
+                    "current": completed,
+                    "total": total,
+                    "progress": int((completed / total) * 100) if total > 0 else 0,
+                    "message": f"Processing {completed}/{total} files",
+                    "files": file_statuses,  # Include per-file details
+                }
+            return response
+
+        # Fallback: Try to restore the group from the result backend
+        group_res = GroupResult.restore(task_id, app=app)
+        logger.info("GroupResult.restore attempt", task_id=task_id, found=group_res is not None)
+
+        if group_res is not None:
+            # This is a group - aggregate children's states and track per-file progress
+            children = list(group_res.results)
+            logger.info("Group children found", task_id=task_id, child_count=len(children))
+            total = len(children)
+            completed = sum(1 for child in children if child.ready())
+            failed = sum(1 for child in children if child.failed())
+            successful = sum(1 for child in children if child.successful())
+
+            # Build per-file status details
+            file_statuses = []
+            for i, child in enumerate(children):
+                file_status = {
+                    "index": i,
+                    "task_id": child.id,
+                    "state": "pending",
+                    "filename": None,
+                    "error": None,
+                }
+
+                if child.successful():
+                    file_status["state"] = "success"
+                    try:
+                        result = child.result
+                        if isinstance(result, dict):
+                            file_status["filename"] = result.get("file_hash", f"file_{i}")
+                            file_status["chunks"] = result.get("chunks_created")
+                    except Exception:
+                        pass
+                elif child.failed():
+                    file_status["state"] = "failure"
+                    try:
+                        file_status["error"] = str(child.result)
+                    except Exception:
+                        file_status["error"] = "Unknown error"
+                elif child.state == "STARTED":
+                    file_status["state"] = "processing"
+                else:
+                    file_status["state"] = "pending"
+
+                file_statuses.append(file_status)
+
+            # Determine overall state
+            if failed > 0 and completed == total:
+                response.state = "FAILURE"
+                response.error = f"{failed} of {total} tasks failed"
+            elif completed == total:
+                response.state = "SUCCESS"
+                # Aggregate results from successful tasks
+                results = []
+                for child in children:
+                    if child.successful():
+                        try:
+                            results.append(child.result)
+                        except Exception:
+                            pass
+                response.result = {
+                    "processed_files": successful,
+                    "failed_files": failed,
+                    "skipped_files": 0,
+                    "details": results,
+                }
+            else:
+                response.state = "PROGRESS"
+                response.meta = {
+                    "current": completed,
+                    "total": total,
+                    "progress": int((completed / total) * 100) if total > 0 else 0,
+                    "message": f"Processing {completed}/{total} files",
+                    "files": file_statuses,  # Include per-file details
+                }
+            return response
+        else:
+            logger.info("No group found via GroupResult.restore", task_id=task_id)
+    except Exception as e:
+        # Not a group, handle as normal task
+        logger.warning("Error checking for group task", task_id=task_id, error=str(e), exc_info=True)
 
     if res.info:
         response.meta = res.info
