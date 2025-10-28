@@ -235,12 +235,20 @@ func (m *SourceManager) DownloadSource(version string) error {
 	return nil
 }
 
-// SyncDependencies runs `uv sync` on server and rag directories
+// SyncDependencies runs `uv sync` on config, common, server and rag directories
 func (m *SourceManager) SyncDependencies() error {
+	configDir := filepath.Join(m.srcDir, "config")
+	commonDir := filepath.Join(m.srcDir, "common")
 	serverDir := filepath.Join(m.srcDir, "server")
 	ragDir := filepath.Join(m.srcDir, "rag")
 
 	// Verify directories exist
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		return fmt.Errorf("config directory not found: %s", configDir)
+	}
+	if _, err := os.Stat(commonDir); os.IsNotExist(err) {
+		return fmt.Errorf("common directory not found: %s", commonDir)
+	}
 	if _, err := os.Stat(serverDir); os.IsNotExist(err) {
 		return fmt.Errorf("server directory not found: %s", serverDir)
 	}
@@ -248,7 +256,18 @@ func (m *SourceManager) SyncDependencies() error {
 		return fmt.Errorf("rag directory not found: %s", ragDir)
 	}
 
-	// Run uv sync on both directories in parallel for speed
+	// First, sync config and common (which are dependencies of server and rag)
+	OutputProgress("Syncing config dependencies...\n")
+	if err := m.syncDirectory(configDir, "config"); err != nil {
+		return fmt.Errorf("failed to sync config dependencies: %w", err)
+	}
+
+	OutputProgress("Syncing common dependencies...\n")
+	if err := m.syncDirectory(commonDir, "common"); err != nil {
+		return fmt.Errorf("failed to sync common dependencies: %w", err)
+	}
+
+	// Now sync server and rag in parallel
 	var wg sync.WaitGroup
 	var serverErr, ragErr error
 
@@ -329,13 +348,17 @@ func (m *SourceManager) isSourceInstalled() bool {
 // areDependenciesSynced checks if dependencies are already synced
 func (m *SourceManager) areDependenciesSynced() bool {
 	// Check for .venv directories as an indicator that uv sync has been run
+	configVenv := filepath.Join(m.srcDir, "config", ".venv")
+	commonVenv := filepath.Join(m.srcDir, "common", ".venv")
 	serverVenv := filepath.Join(m.srcDir, "server", ".venv")
 	ragVenv := filepath.Join(m.srcDir, "rag", ".venv")
 
+	_, configErr := os.Stat(configVenv)
+	_, commonErr := os.Stat(commonVenv)
 	_, serverErr := os.Stat(serverVenv)
 	_, ragErr := os.Stat(ragVenv)
 
-	return serverErr == nil && ragErr == nil
+	return configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil
 }
 
 // readVersionFile reads the current version from the version file

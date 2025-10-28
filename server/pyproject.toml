@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["api", "core", "agents", "services", "background"]
+packages = ["api", "core", "agents", "services"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
