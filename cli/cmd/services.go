@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -712,7 +713,6 @@ func stopServicesNativeBySystem(serviceNames []string) {
 		// Check if process is actually running
 		if !isProcessRunning(pid) {
 			OutputProgress("%s is not running (stale PID file)\n", serviceName)
-			cleanupPIDFile(serviceName)
 			continue
 		}
 
@@ -720,12 +720,11 @@ func stopServicesNativeBySystem(serviceNames []string) {
 		process, err := os.FindProcess(pid)
 		if err != nil {
 			OutputError("Failed to find process %d for %s: %v\n", pid, serviceName, err)
-			cleanupPIDFile(serviceName)
 			continue
 		}
 
 		// Try graceful shutdown first (SIGTERM)
-		if err := process.Signal(os.Interrupt); err != nil {
+		if err := process.Signal(syscall.SIGTERM); err != nil {
 			// If graceful shutdown fails, try SIGKILL
 			if err := process.Kill(); err != nil {
 				OutputError("Failed to stop %s (PID %d): %v\n", serviceName, pid, err)
@@ -739,7 +738,7 @@ func stopServicesNativeBySystem(serviceNames []string) {
 		// Verify it stopped
 		if !isProcessRunning(pid) {
 			OutputSuccess("%s stopped successfully\n", serviceName)
-			cleanupPIDFile(serviceName)
+
 		} else {
 			OutputError("Process %d for %s did not stop after signal\n", pid, serviceName)
 		}
@@ -951,9 +950,9 @@ func formatServicesStatus(output *ServicesStatusOutput) {
 		fmt.Println()
 		fmt.Println("To start services:")
 		if output.Orchestration == "docker" {
-			fmt.Println("  lf services start  (or set LF_ORCHESTRATION_MODE=native to use native processes)")
+			fmt.Println("  lf dev  (or set LF_ORCHESTRATION_MODE=native to use native processes)")
 		} else {
-			fmt.Println("  lf services start")
+			fmt.Println("  lf dev")
 		}
 		fmt.Println()
 	} else if !allRunning {
@@ -1052,42 +1051,59 @@ func isProcessRunning(pid int) bool {
 // getProcessStartTime gets the start time of a process (best effort)
 func getProcessStartTime(pid int) time.Time {
 	// This is platform-specific and best effort
-	// On Linux, we can read from /proc
-	// On macOS/BSD, we can use ps
-	// On Windows, this is more complex
+	// On Linux, we can read from /proc/[pid]/stat and /proc/uptime
+	// On macOS/BSD, we can use ps (not implemented)
+	// On Windows, this is more complex (not implemented)
 
 	if runtime.GOOS == "linux" {
-		// Try to read from /proc
+		// Try to read from /proc/[pid]/stat
 		statFile := fmt.Sprintf("/proc/%d/stat", pid)
 		data, err := os.ReadFile(statFile)
 		if err != nil {
 			return time.Time{}
 		}
 
-		// Parse the stat file to get start time
-		// Field 22 is start time in clock ticks since boot
 		fields := strings.Fields(string(data))
 		if len(fields) < 22 {
 			return time.Time{}
 		}
 
-		// This is complex to convert accurately, so we'll skip it for now
-		// The uptime will just not be available in this case
-		return time.Time{}
+		// Field 22: starttime (in clock ticks since boot)
+		startTicks, err := strconv.ParseUint(fields[21], 10, 64)
+		if err != nil {
+			return time.Time{}
+		}
+
+		// Get clock ticks per second
+		// Most Linux systems use 100 Hz (USER_HZ), which is a safe default
+		// For a more accurate implementation, one could use cgo to call sysconf(_SC_CLK_TCK)
+		const clkTck int64 = 100
+
+		// Get system uptime from /proc/uptime
+		uptimeData, err := os.ReadFile("/proc/uptime")
+		if err != nil {
+			return time.Time{}
+		}
+		uptimeFields := strings.Fields(string(uptimeData))
+		if len(uptimeFields) < 1 {
+			return time.Time{}
+		}
+		uptimeSeconds, err := strconv.ParseFloat(uptimeFields[0], 64)
+		if err != nil {
+			return time.Time{}
+		}
+
+		// Calculate boot time
+		now := time.Now()
+		bootTime := now.Add(-time.Duration(uptimeSeconds * float64(time.Second)))
+
+		// Calculate process start time
+		startSeconds := float64(startTicks) / float64(clkTck)
+		startTime := bootTime.Add(time.Duration(startSeconds * float64(time.Second)))
+		return startTime
 	}
 
-	// For other platforms, we could use ps, but it's complex and may not be reliable
-	// Return zero time to indicate we don't have the start time
+	// For other platforms, process uptime is not implemented.
+	// Return zero time to indicate we don't have the start time.
 	return time.Time{}
-}
-
-// cleanupPIDFile removes a stale PID file
-func cleanupPIDFile(serviceName string) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-
-	pidFile := filepath.Join(homeDir, ".llamafarm", "pids", fmt.Sprintf("%s.pid", serviceName))
-	os.Remove(pidFile) // Ignore errors
 }
