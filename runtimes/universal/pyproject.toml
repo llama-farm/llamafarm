@@ -16,6 +16,7 @@ dependencies = [
   "python-multipart",
   "einops>=0.8.1",
   "openai>=1.0.0",
+  "llamafarm-common",
 ]
 
 [project.optional-dependencies]
@@ -38,3 +39,6 @@ dev-dependencies = [
   "httpx>=0.24.0",
   "numpy>=1.24.0",
 ]
+
+[tool.uv.sources]
+llamafarm-common = { path = "../../common", editable = true }

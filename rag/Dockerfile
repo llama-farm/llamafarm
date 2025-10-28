@@ -30,11 +30,12 @@ WORKDIR /app
 # Copy the required packages from the monorepo
 # Note: This Dockerfile should be run from the repo root: docker build -f server/Dockerfile .
 COPY config/ ./config/
+COPY common/ ./common/
 COPY rag/ ./rag/
 
 # Install each package with its own dependencies
-RUN ls -la config
 RUN cd config && uv sync --locked --all-extras --verbose
+RUN cd common && uv sync --locked --all-extras --verbose
 RUN cd rag && uv sync --locked  --verbose
 
 # Generate config schema and datamodel types
