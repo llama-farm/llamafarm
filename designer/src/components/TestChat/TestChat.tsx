@@ -111,9 +111,9 @@ export default function TestChat({
     ? runtimeCfg.models
     : []
   const cfgDefaultName: string | undefined = runtimeCfg?.default_model
-  const cfgDefaultModelId: string | undefined = cfgModels.find(
-    m => m.name === cfgDefaultName
-  )?.model
+  // const cfgDefaultModelId: string | undefined = cfgModels.find(
+  //   m => m.name === cfgDefaultName
+  // )?.model
 
   // Unified view of models: prefer API; fallback to config-defined models
   const unifiedModels =
@@ -556,14 +556,12 @@ export default function TestChat({
         }
       } catch (error) {
         console.error('Project chat streaming error:', error)
-        // Update assistant message with error using the stored assistantId
-        if (assistantId) {
-          updateMessage(assistantId, {
-            content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
-            isStreaming: false,
-            isLoading: false,
-          })
-        }
+        // Clear transient bubble and show error in project session
+        setStreamingMessage(null)
+        projectSession.addMessage(
+          `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+          'assistant'
+        )
       } finally {
         setIsProjectSending(false)
       }
@@ -669,7 +667,7 @@ export default function TestChat({
       }
 
       const input = (detail.input || '').trim()
-      const expected = (detail.expected || '').trim()
+      // const expected = (detail.expected || '').trim()
 
       // For test runs, we need to ensure we have a valid project
       if (!chatParams) {

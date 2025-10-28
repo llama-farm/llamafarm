@@ -227,7 +227,7 @@ const Test = () => {
     const v = localStorage.getItem('lf_test_allowRanking')
     return v == null ? true : v === 'true'
   })
-  const [useTestData, setUseTestData] = useState<boolean>(() => {
+  const [useTestData, _setUseTestData] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     const v = localStorage.getItem('lf_test_useTestData')
     return v == null ? false : v === 'true'
