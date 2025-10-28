@@ -94,7 +94,8 @@ const Dashboard = () => {
   }, [projectDetail])
 
   const modelsCount = useMemo(() => {
-    return projectDetail?.project?.config?.runtime?.model ? 1 : 0
+    const models = projectDetail?.project?.config?.runtime?.models
+    return Array.isArray(models) ? models.length : 0
   }, [projectDetail])
 
   // Shared modal hook
@@ -119,41 +120,16 @@ const Dashboard = () => {
       window.removeEventListener('lf-active-project', handler as EventListener)
   }, [])
 
-  // Keep default project model in sync (listen for updates)
-  const [defaultModelName, setDefaultModelName] = useState<string>(() => {
-    try {
-      const raw = localStorage.getItem('lf_default_project_model')
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        return parsed?.name || 'TinyLlama'
-      }
-    } catch {}
-    return 'TinyLlama'
-  })
-  useEffect(() => {
-    const load = () => {
-      try {
-        const raw = localStorage.getItem('lf_default_project_model')
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          setDefaultModelName(parsed?.name || 'TinyLlama')
-        }
-      } catch {}
+  // Get default model name from config
+  const defaultModelName = useMemo(() => {
+    const config = projectDetail?.project?.config
+    const runtime = (config && (config as Record<string, any>).runtime) || null
+    const def = runtime && (runtime as Record<string, any>).default_model
+    if (!def || typeof def !== 'string' || def.trim().length === 0) {
+      return 'No model configured'
     }
-    const handler = () => load()
-    window.addEventListener(
-      'lf:defaultProjectModelUpdated',
-      handler as EventListener
-    )
-    window.addEventListener('storage', handler)
-    return () => {
-      window.removeEventListener(
-        'lf:defaultProjectModelUpdated',
-        handler as EventListener
-      )
-      window.removeEventListener('storage', handler)
-    }
-  }, [])
+    return def
+  }, [projectDetail])
 
   return (
     <>
