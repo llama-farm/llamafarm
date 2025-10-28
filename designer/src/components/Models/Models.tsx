@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
-import { Mode } from '../ModeToggle'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
+import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -936,7 +936,7 @@ const Models = () => {
     !!activeProject?.namespace && !!activeProject?.project
   )
   const [activeTab, setActiveTab] = useState('project')
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([
     {
       id: 'tinyllama',

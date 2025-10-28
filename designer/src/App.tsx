@@ -12,6 +12,7 @@ import {
   ProjectModalProvider,
   useProjectModalContext,
 } from './contexts/ProjectModalContext'
+import { ModeResetProvider } from './contexts/ModeContext'
 import Home from './Home'
 import Chat from './Chat'
 import Data from './components/Data/Data'
@@ -77,95 +78,97 @@ function App() {
     <main className="h-screen w-full">
       <ToastProvider>
         <ProjectModalProvider>
-          <MobileViewProvider>
-            <Header currentVersion={currentVersion} />
-            {isHome ? <HomeUpgradeBanner /> : null}
-            <div className="h-full w-full">
-              <Routes>
-                <Route path="/" element={<Home />} />
-                {/* Redirect '/projects' to Home; Home will scroll to projects */}
-                <Route path="/projects" element={<Home />} />
-                <Route path="/samples" element={<SampleProjects />} />
-                <Route path="/chat" element={<Chat />}>
-                  <Route
-                    index
-                    element={<Navigate to="/chat/dashboard" replace />}
-                  />
-                  <Route path="dashboard" element={<Dashboard />} />
-                  <Route
-                    path="versions"
-                    element={<Navigate to="/chat/dashboard" replace />}
-                  />
-                  <Route path="data" element={<Data />} />
-                  <Route path="data/:datasetId" element={<DatasetView />} />
-                  {/* Processing strategies routes - now under data */}
-                  <Route
-                    path="data/strategies/processing"
-                    element={<StrategyView />}
-                  />
-                  <Route
-                    path="data/strategies/:strategyId"
-                    element={<StrategyView />}
-                  />
-                  <Route path="models" element={<Models />} />
-                  {/* Redirect old /rag routes to /databases */}
-                  <Route
-                    path="rag"
-                    element={<Navigate to="/chat/databases" replace />}
-                  />
-                  <Route
-                    path="rag/add-embedding"
-                    element={
-                      <Navigate to="/chat/databases/add-embedding" replace />
-                    }
-                  />
-                  <Route
-                    path="rag/add-retrieval"
-                    element={
-                      <Navigate to="/chat/databases/add-retrieval" replace />
-                    }
-                  />
-                  <Route
-                    path="rag/:strategyId/change-embedding"
-                    element={
-                      <RagRedirect path="/chat/databases/:strategyId/change-embedding" />
-                    }
-                  />
-                  <Route
-                    path="rag/:strategyId/retrieval"
-                    element={
-                      <RagRedirect path="/chat/databases/:strategyId/retrieval" />
-                    }
-                  />
-                  <Route path="databases" element={<Databases />} />
-                  {/* Database-level embedding and retrieval strategy pages */}
-                  <Route
-                    path="databases/add-embedding"
-                    element={<AddEmbeddingStrategy />}
-                  />
-                  <Route
-                    path="databases/add-retrieval"
-                    element={<AddRetrievalStrategy />}
-                  />
-                  <Route
-                    path="databases/:strategyId/change-embedding"
-                    element={<ChangeEmbeddingModel />}
-                  />
-                  <Route
-                    path="databases/:strategyId/retrieval"
-                    element={<RetrievalMethod />}
-                  />
-                  <Route path="prompt" element={<Prompt />} />
-                  <Route path="test" element={<Test />} />
-                  {/* Catch-all for unknown /chat routes */}
+          <ModeResetProvider>
+            <MobileViewProvider>
+              <Header currentVersion={currentVersion} />
+              {isHome ? <HomeUpgradeBanner /> : null}
+              <div className="h-full w-full">
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  {/* Redirect '/projects' to Home; Home will scroll to projects */}
+                  <Route path="/projects" element={<Home />} />
+                  <Route path="/samples" element={<SampleProjects />} />
+                  <Route path="/chat" element={<Chat />}>
+                    <Route
+                      index
+                      element={<Navigate to="/chat/dashboard" replace />}
+                    />
+                    <Route path="dashboard" element={<Dashboard />} />
+                    <Route
+                      path="versions"
+                      element={<Navigate to="/chat/dashboard" replace />}
+                    />
+                    <Route path="data" element={<Data />} />
+                    <Route path="data/:datasetId" element={<DatasetView />} />
+                    {/* Processing strategies routes - now under data */}
+                    <Route
+                      path="data/strategies/processing"
+                      element={<StrategyView />}
+                    />
+                    <Route
+                      path="data/strategies/:strategyId"
+                      element={<StrategyView />}
+                    />
+                    <Route path="models" element={<Models />} />
+                    {/* Redirect old /rag routes to /databases */}
+                    <Route
+                      path="rag"
+                      element={<Navigate to="/chat/databases" replace />}
+                    />
+                    <Route
+                      path="rag/add-embedding"
+                      element={
+                        <Navigate to="/chat/databases/add-embedding" replace />
+                      }
+                    />
+                    <Route
+                      path="rag/add-retrieval"
+                      element={
+                        <Navigate to="/chat/databases/add-retrieval" replace />
+                      }
+                    />
+                    <Route
+                      path="rag/:strategyId/change-embedding"
+                      element={
+                        <RagRedirect path="/chat/databases/:strategyId/change-embedding" />
+                      }
+                    />
+                    <Route
+                      path="rag/:strategyId/retrieval"
+                      element={
+                        <RagRedirect path="/chat/databases/:strategyId/retrieval" />
+                      }
+                    />
+                    <Route path="databases" element={<Databases />} />
+                    {/* Database-level embedding and retrieval strategy pages */}
+                    <Route
+                      path="databases/add-embedding"
+                      element={<AddEmbeddingStrategy />}
+                    />
+                    <Route
+                      path="databases/add-retrieval"
+                      element={<AddRetrievalStrategy />}
+                    />
+                    <Route
+                      path="databases/:strategyId/change-embedding"
+                      element={<ChangeEmbeddingModel />}
+                    />
+                    <Route
+                      path="databases/:strategyId/retrieval"
+                      element={<RetrievalMethod />}
+                    />
+                    <Route path="prompt" element={<Prompt />} />
+                    <Route path="test" element={<Test />} />
+                    {/* Catch-all for unknown /chat routes */}
+                    <Route path="*" element={<NotFound />} />
+                  </Route>
+                  {/* Catch-all for unknown top-level routes */}
                   <Route path="*" element={<NotFound />} />
-                </Route>
-                {/* Catch-all for unknown top-level routes */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </div>
-            <ProjectModalRoot />
-          </MobileViewProvider>
+                </Routes>
+              </div>
+              <ProjectModalRoot />
+            </MobileViewProvider>
+          </ModeResetProvider>
         </ProjectModalProvider>
       </ToastProvider>
     </main>

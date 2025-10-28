@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import FontIcon from '../common/FontIcon'
-import ModeToggle, { Mode } from './ModeToggle'
+import ModeToggle from './ModeToggle'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
 import { Switch } from './ui/switch'
@@ -8,6 +8,7 @@ import ConfigEditor from './ConfigEditor/ConfigEditor'
 import TestChat from './TestChat/TestChat'
 import { usePackageModal } from '../contexts/PackageModalContext'
 import { Input } from './ui/input'
+import { useModeWithReset } from '../hooks/useModeWithReset'
 
 interface TestCase {
   id: number
@@ -234,7 +235,7 @@ const Test = () => {
     setIsEditOpen(false)
   }
 
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [showReferences, setShowReferences] = useState<boolean>(() => {
@@ -351,7 +352,12 @@ const Test = () => {
         </div>
         <div className="flex items-center gap-3">
           <ModeToggle mode={mode} onToggle={setMode} />
-          <Button variant="outline" size="sm" onClick={openPackageModal}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openPackageModal}
+            disabled
+          >
             Package
           </Button>
         </div>

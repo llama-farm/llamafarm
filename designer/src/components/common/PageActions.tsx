@@ -10,12 +10,13 @@ interface PageActionsProps {
   packageLabel?: string
   onPackageClick?: () => void
   className?: string
+  packageDisabled?: boolean
 }
 
 /**
  * Renders the standard page actions: Code/Designer switcher and Package button.
  * - Mode switcher appears only when both mode and onModeChange are provided.
- * - Package button is enabled by default and can be hidden via showPackage=false.
+ * - Package button is disabled by default and can be hidden via showPackage=false.
  */
 const PageActions: React.FC<PageActionsProps> = ({
   mode,
@@ -24,6 +25,7 @@ const PageActions: React.FC<PageActionsProps> = ({
   packageLabel = 'Package',
   onPackageClick,
   className,
+  packageDisabled = true,
 }) => {
   const { openPackageModal } = usePackageModal()
 
@@ -37,6 +39,7 @@ const PageActions: React.FC<PageActionsProps> = ({
           variant="outline"
           size="sm"
           onClick={onPackageClick ?? openPackageModal}
+          disabled={packageDisabled}
         >
           {packageLabel}
         </Button>
