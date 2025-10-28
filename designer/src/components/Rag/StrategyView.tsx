@@ -9,6 +9,7 @@ import { Label } from '../ui/label'
 import { defaultStrategies } from './strategies'
 import ParserSettingsForm from './ParserSettingsForm'
 import PatternEditor from './PatternEditor'
+import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   PARSER_TYPES,
   PARSER_SCHEMAS,
@@ -19,7 +20,6 @@ import {
 } from '@/types/ragTypes'
 import { useToast } from '../ui/toast'
 import PageActions from '../common/PageActions'
-import { Mode } from '../ModeToggle'
 import Tabs from '../Tabs'
 import ExtractorSettingsForm from './ExtractorSettingsForm'
 import { ChevronDown, Loader2, Plus, Settings, Trash2 } from 'lucide-react'
@@ -58,7 +58,7 @@ function StrategyView() {
   const navigate = useNavigate()
   const { strategyId } = useParams()
   const { toast } = useToast()
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
   const queryClient = useQueryClient()
   const activeProject = useActiveProject()
   const reIngestMutation = useReIngestDataset()
@@ -283,7 +283,10 @@ function StrategyView() {
         localStorage.setItem(key, JSON.stringify(Array.from(working)))
         // Also set per-dataset overrides so UI reflects immediately
         for (const n of added) {
-          localStorage.setItem(`lf_dataset_strategy_name_${n}`, actualStrategyName)
+          localStorage.setItem(
+            `lf_dataset_strategy_name_${n}`,
+            actualStrategyName
+          )
         }
         toast({ message: 'Assignments saved locally', variant: 'default' })
       } catch {}
@@ -294,7 +297,9 @@ function StrategyView() {
         performLocalFallback()
       } else {
         const updatedDatasets = (currentDatasets || []).map(ds =>
-          added.includes(ds.name) ? { ...ds, rag_strategy: actualStrategyName } : ds
+          added.includes(ds.name)
+            ? { ...ds, rag_strategy: actualStrategyName }
+            : ds
         )
         const nextConfig = { ...currentConfig, datasets: updatedDatasets }
         await updateProjectMutation.mutateAsync({
@@ -305,7 +310,10 @@ function StrategyView() {
         // Mirror per-dataset overrides locally for instant UI feedback
         try {
           for (const n of added) {
-            localStorage.setItem(`lf_dataset_strategy_name_${n}`, actualStrategyName)
+            localStorage.setItem(
+              `lf_dataset_strategy_name_${n}`,
+              actualStrategyName
+            )
           }
         } catch {}
         // Refresh datasets list
@@ -522,7 +530,9 @@ function StrategyView() {
     // If strategy exists, respect its configuration (even if empty)
     const yamlExtractors = strategy.extractors || []
     if (Array.isArray(yamlExtractors) && yamlExtractors.length > 0) {
-      const rows = yamlExtractors.map((e: any, i: number) => yamlToExtractorRow(e, i))
+      const rows = yamlExtractors.map((e: any, i: number) =>
+        yamlToExtractorRow(e, i)
+      )
       setExtractorRows(rows)
     } else {
       // Strategy exists but has no extractors - start with empty array
@@ -563,7 +573,8 @@ function StrategyView() {
       // Update local state to reflect the added parser
       setParserRows([defaultTextParser])
       toast({
-        message: 'A strategy must have at least one parser. Added default text parser.',
+        message:
+          'A strategy must have at least one parser. Added default text parser.',
       })
     }
 
@@ -783,7 +794,9 @@ function StrategyView() {
 
   // Add Parser modal ----------------------------------------------------------
   const [isAddParserOpen, setIsAddParserOpen] = useState(false)
-  const [selectedParserTypes, setSelectedParserTypes] = useState<Set<string>>(new Set())
+  const [selectedParserTypes, setSelectedParserTypes] = useState<Set<string>>(
+    new Set()
+  )
 
   const slugify = (str: string) =>
     str
@@ -813,7 +826,8 @@ function StrategyView() {
       const idBase = slugify(parserType) || 'parser'
       const id = `${idBase}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       const config = getDefaultParserConfig(parserType as any)
-      const defaultExtensions = (PARSER_SCHEMAS as any)[parserType]?.defaultExtensions || []
+      const defaultExtensions =
+        (PARSER_SCHEMAS as any)[parserType]?.defaultExtensions || []
       const includePatterns = defaultExtensions.map((ext: string) => `*${ext}`)
 
       // Use same default values as schema and edit function
@@ -870,7 +884,9 @@ function StrategyView() {
     const found = parserRows.find(p => p.id === id)
     if (!found) return
     setEditParserId(found.id)
-    setEditParserConfig(found.config || getDefaultParserConfig(found.name as any))
+    setEditParserConfig(
+      found.config || getDefaultParserConfig(found.name as any)
+    )
     setEditParserPriority(String(found.priority))
     setEditParserIncludes(parsePatternsString(found.include))
     setIsEditParserOpen(true)
@@ -932,7 +948,8 @@ function StrategyView() {
     // Prevent deleting the last parser
     if (parserRows.length <= 1) {
       toast({
-        message: 'A strategy must have at least one parser. Add another parser before deleting this one.',
+        message:
+          'A strategy must have at least one parser. Add another parser before deleting this one.',
         variant: 'destructive',
       })
       setIsDeleteParserOpen(false)
@@ -1200,7 +1217,9 @@ function StrategyView() {
           </div>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg md:text-xl font-medium">{strategyDisplayName}</h2>
+              <h2 className="text-lg md:text-xl font-medium">
+                {strategyDisplayName}
+              </h2>
               <button
                 className="p-1 rounded-md hover:bg-accent text-muted-foreground"
                 onClick={() => {
@@ -1373,7 +1392,8 @@ function StrategyView() {
                         const name = ds.name
                         const current = (ds as any).rag_strategy
                         const selected =
-                          selectedDatasets.has(name) || current === actualStrategyName
+                          selectedDatasets.has(name) ||
+                          current === actualStrategyName
                         const assignedElsewhere =
                           current &&
                           current !== 'auto' &&
@@ -1786,7 +1806,8 @@ function StrategyView() {
                     Add Parsers
                   </DialogTitle>
                   <div className="text-sm text-muted-foreground mt-1">
-                    Select one or more parsers to add. You can edit their settings after adding.
+                    Select one or more parsers to add. You can edit their
+                    settings after adding.
                   </div>
                 </DialogHeader>
                 <div className="flex-1 min-h-0 overflow-y-auto p-4">
@@ -1821,8 +1842,10 @@ function StrategyView() {
                             >
                               <Checkbox
                                 checked={isSelected}
-                                onCheckedChange={() => toggleParserSelection(parserType)}
-                                onClick={(e) => e.stopPropagation()}
+                                onCheckedChange={() =>
+                                  toggleParserSelection(parserType)
+                                }
+                                onClick={e => e.stopPropagation()}
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-sm">
@@ -1831,15 +1854,22 @@ function StrategyView() {
                                 <div className="text-xs text-muted-foreground mt-1">
                                   {schema?.description || ''}
                                 </div>
-                                {schema?.defaultExtensions && schema.defaultExtensions.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-2">
-                                    {schema.defaultExtensions.map((ext: string) => (
-                                      <Badge key={ext} variant="secondary" className="text-xs">
-                                        {ext}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
+                                {schema?.defaultExtensions &&
+                                  schema.defaultExtensions.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {schema.defaultExtensions.map(
+                                        (ext: string) => (
+                                          <Badge
+                                            key={ext}
+                                            variant="secondary"
+                                            className="text-xs"
+                                          >
+                                            {ext}
+                                          </Badge>
+                                        )
+                                      )}
+                                    </div>
+                                  )}
                               </div>
                             </div>
                           )
@@ -1869,7 +1899,11 @@ function StrategyView() {
                     disabled={selectedParserTypes.size === 0}
                     type="button"
                   >
-                    Add {selectedParserTypes.size > 0 ? `${selectedParserTypes.size} ` : ''}Parser{selectedParserTypes.size !== 1 ? 's' : ''}
+                    Add{' '}
+                    {selectedParserTypes.size > 0
+                      ? `${selectedParserTypes.size} `
+                      : ''}
+                    Parser{selectedParserTypes.size !== 1 ? 's' : ''}
                   </button>
                 </DialogFooter>
               </div>
@@ -2126,10 +2160,14 @@ function StrategyView() {
                       </div>
                     </div>
                   </div>
-                  {newExtractorType && (EXTRACTOR_SCHEMAS as any)[newExtractorType] ? (
+                  {newExtractorType &&
+                  (EXTRACTOR_SCHEMAS as any)[newExtractorType] ? (
                     <>
                       <div className="text-xs text-muted-foreground">
-                        {(EXTRACTOR_SCHEMAS as any)[newExtractorType].description}
+                        {
+                          (EXTRACTOR_SCHEMAS as any)[newExtractorType]
+                            .description
+                        }
                       </div>
                       <div>
                         <Label className="text-xs text-muted-foreground">

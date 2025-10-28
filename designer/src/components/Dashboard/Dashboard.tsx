@@ -1,7 +1,6 @@
 import FontIcon from '../../common/FontIcon'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mode } from '../ModeToggle'
 import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -10,6 +9,7 @@ import { useProject } from '../../hooks/useProjects'
 // import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets } from '../../hooks/useDatasets'
+import { useModeWithReset } from '../../hooks/useModeWithReset'
 
 const Dashboard = () => {
   const navigate = useNavigate()
@@ -17,7 +17,7 @@ const Dashboard = () => {
   const activeProject = useActiveProject()
 
   // All state declarations first
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
   const [projectName, setProjectName] = useState<string>('Dashboard')
   // Datasets list for Data card
   const { data: apiDatasets, isLoading: isDatasetsLoading } = useListDatasets(

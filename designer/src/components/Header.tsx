@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import FontIcon from '../common/FontIcon'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
+import { useModeReset } from '../contexts/ModeContext'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +34,7 @@ function Header({ currentVersion }: HeaderProps) {
   const location = useLocation()
   const isSelected = location.pathname.split('/')[2]
   const { theme, setTheme } = useTheme()
+  const { triggerReset } = useModeReset()
   const [versionDialogOpen, setVersionDialogOpen] = useState(false)
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
   const [effectiveVersion, setEffectiveVersion] = useState<string>('0.0.0')
@@ -67,6 +69,16 @@ function Header({ currentVersion }: HeaderProps) {
   const emitSetMobileView = (v: 'chat' | 'project') => {
     markUserChoice(v)
   }
+
+  // Navigation items for header tabs
+  const navigationItems = [
+    { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { key: 'prompt', label: 'Prompts', icon: 'prompt' },
+    { key: 'data', label: 'Data', icon: 'data' },
+    { key: 'databases', label: 'Databases', icon: 'rag' },
+    { key: 'models', label: 'Models', icon: 'model' },
+    { key: 'test', label: 'Test', icon: 'test' },
+  ] as const
 
   // Mapping for mobile project dropdown (labels + icons)
   const pageDefs: Record<
@@ -300,73 +312,29 @@ function Header({ currentVersion }: HeaderProps) {
         </div>
 
         {isBuilding && (
-          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-4 z-10">
-            <button
-              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                isSelected === 'dashboard'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
-              onClick={() => navigate('/chat/dashboard')}
-            >
-              <FontIcon type="dashboard" className="w-6 h-6 shrink-0" />
-              <span className="hidden lg:inline">Dashboard</span>
-            </button>
-            <button
-              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                isSelected === 'prompt'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
-              onClick={() => navigate('/chat/prompt')}
-            >
-              <FontIcon type="prompt" className="w-6 h-6 shrink-0" />
-              <span className="hidden lg:inline">Prompts</span>
-            </button>
-            <button
-              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                isSelected === 'data'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
-              onClick={() => navigate('/chat/data')}
-            >
-              <FontIcon type="data" className="w-6 h-6 shrink-0" />
-              <span className="hidden lg:inline">Data</span>
-            </button>
-            <button
-              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                isSelected === 'databases'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
-              onClick={() => navigate('/chat/databases')}
-            >
-              <FontIcon type="rag" className="w-6 h-6 shrink-0" />
-              <span className="hidden lg:inline">Databases</span>
-            </button>
-            <button
-              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                isSelected === 'models'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
-              onClick={() => navigate('/chat/models')}
-            >
-              <FontIcon type="model" className="w-6 h-6 shrink-0" />
-              <span className="hidden lg:inline">Models</span>
-            </button>
-            <button
-              className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg p-2 ${
-                isSelected === 'test'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary/80'
-              }`}
-              onClick={() => navigate('/chat/test')}
-            >
-              <FontIcon type="test" className="w-6 h-6 shrink-0" />
-              <span className="hidden lg:inline">Test</span>
-            </button>
+          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-3 z-10">
+            {navigationItems.map(item => (
+              <button
+                key={item.key}
+                className={`w-full flex items-center justify-center gap-2 transition-colors rounded-lg py-2 pl-2 pr-3 ${
+                  isSelected === item.key
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => {
+                  if (isSelected === item.key) {
+                    triggerReset()
+                  }
+                  navigate(`/chat/${item.key}`)
+                }}
+              >
+                <FontIcon
+                  type={item.icon as any}
+                  className="w-6 h-6 shrink-0"
+                />
+                <span className="hidden lg:inline">{item.label}</span>
+              </button>
+            ))}
           </div>
         )}
 
