@@ -20,13 +20,13 @@ jobs:
   # Build AMD64 images on standard Ubuntu runners
   build-amd64:
     name: Build AMD64 Docker Images
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.service == 'runner' && 'lf-large-amd64' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
         include:
           - service: designer
             context: ./designer
@@ -40,10 +40,31 @@ jobs:
             context: ./
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
+          - service: runtime
+            context: ./
+            dockerfile: ./runtimes/universal/Dockerfile
+            description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Free disk space for large images
+        if: matrix.service == 'runtime'
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+
+          # Remove large unnecessary packages to free up ~10GB
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -a -f
+          sudo apt-get clean
+
+          echo "Disk space after cleanup:"
+          df -h
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -77,6 +98,7 @@ jobs:
       - name: Build and push AMD64 Docker image
         id: build
         uses: docker/build-push-action@v5
+        timeout-minutes: 60
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -101,13 +123,13 @@ jobs:
   # Build ARM64 images on native ARM64 runners for efficiency
   build-arm64:
     name: Build ARM64 Docker Images
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.service == 'runner' && 'lf-large-arm64' || 'ubuntu-24.04-arm' }}
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
         include:
           - service: designer
             context: ./designer
@@ -121,10 +143,31 @@ jobs:
             context: ./
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
+          - service: runtime
+            context: ./
+            dockerfile: ./runtimes/universal/Dockerfile
+            description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Free disk space for large images
+        if: matrix.service == 'runtime'
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+
+          # Remove large unnecessary packages to free up ~10GB
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -a -f
+          sudo apt-get clean
+
+          echo "Disk space after cleanup:"
+          df -h
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -158,6 +201,7 @@ jobs:
       - name: Build and push ARM64 Docker image
         id: build
         uses: docker/build-push-action@v5
+        timeout-minutes: 60
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -298,7 +342,7 @@ jobs:
   # Build multi-service docker-compose for testing
   test-compose:
     name: Test Docker Compose
-    runs-on: ubuntu-latest
+    runs-on: lf-large-amd64
     needs: [create-manifest]
     if: github.event_name == 'pull_request'
     steps:
@@ -333,7 +377,7 @@ jobs:
           IMAGE_TAG: pr-${{ github.event.number }}
         run: |
           # Tag the loaded images with the expected format for docker-compose
-          SERVICES=(designer server rag)
+          SERVICES=(designer server rag runtime)
 
           for SERVICE in "${SERVICES[@]}"; do
             # Find the loaded images for this service
@@ -357,7 +401,7 @@ jobs:
           # Create base data directory for main llamafarm volume
           mkdir -p "$HOME/.llamafarm"
           chmod 777 "$HOME/.llamafarm"
-          
+
           # ChromaDB now uses Docker-managed volumes, no directory creation needed
 
       - name: Test services startup
@@ -371,7 +415,7 @@ jobs:
           # Wait for services to be ready (ChromaDB needs more time to initialize)
           echo "Waiting for services to start..."
           sleep 60
-          
+
           # Check ChromaDB server specifically
           echo "Checking ChromaDB server status..."
           docker compose -f docker-compose.yml logs chromadb-server | tail -20
@@ -384,15 +428,15 @@ jobs:
           docker compose -f docker-compose.yml logs server
           docker compose -f docker-compose.yml logs designer
           docker compose -f docker-compose.yml logs rag
-          
+
           # Test ChromaDB server connectivity
           echo "Testing ChromaDB server connectivity..."
           echo "Trying heartbeat endpoint..."
           curl -f http://localhost:8001/api/v2/heartbeat || echo "Heartbeat endpoint failed"
-          
+
           echo "Trying version endpoint..."
           curl -f http://localhost:8001/api/v2/version || echo "Version endpoint failed"
-          
+
           echo "Trying collections endpoint..."
           curl -f http://localhost:8001/api/v2/collections || echo "Collections endpoint failed"
 
@@ -415,7 +459,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

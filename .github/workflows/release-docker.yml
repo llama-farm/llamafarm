@@ -54,7 +54,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
 
           # Services to retag
-          SERVICES=(designer server rag)
+          SERVICES=(designer server rag runtime)
 
           # Wait for all Docker images to be available
           echo "Waiting for Docker images to be built and pushed..."

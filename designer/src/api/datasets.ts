@@ -13,6 +13,22 @@ import {
 } from '../types/datasets'
 
 /**
+ * Get available strategies and databases for a project
+ * @param namespace - The namespace to get strategies for
+ * @param project - The project to get strategies for
+ * @returns Promise with available strategies and databases
+ */
+export async function getAvailableStrategies(
+  namespace: string,
+  project: string
+): Promise<{ data_processing_strategies: string[]; databases: string[] }> {
+  const response = await apiClient.get(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/strategies`
+  )
+  return response.data
+}
+
+/**
  * List all datasets in a project
  * @param namespace - The namespace to list datasets for
  * @param project - The project to list datasets for
@@ -145,7 +161,17 @@ export async function uploadFileToDataset(
   file: File
 ): Promise<FileUploadResponse> {
   const formData = new FormData()
-  formData.append('file', file)
+
+  // Strip directory paths from filename before uploading
+  // This handles folder uploads where file.name might be "folder/file.pdf"
+  const cleanFileName = file.name.split('/').pop() || file.name
+
+  // Create new File with clean name if needed
+  const fileToUpload = file.name !== cleanFileName
+    ? new File([file], cleanFileName, { type: file.type, lastModified: file.lastModified })
+    : file
+
+  formData.append('file', fileToUpload)
 
   const response = await apiClient.post<FileUploadResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data`,
@@ -255,9 +281,28 @@ export async function deleteDatasetFile(
 }
 
 /**
+ * Process a dataset (async processing with task tracking)
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param dataset - The dataset name
+ * @returns Promise with task information
+ */
+export async function processDataset(
+  namespace: string,
+  project: string,
+  dataset: string
+): Promise<{ message: string; task_id: string }> {
+  const response = await apiClient.post(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/process?async_processing=true`
+  )
+  return response.data
+}
+
+/**
  * Default export with all dataset service functions
  */
 export default {
+  getAvailableStrategies,
   listDatasets,
   createDataset,
   deleteDataset,
@@ -267,4 +312,5 @@ export default {
   ingestDataset,
   getTaskStatus,
   deleteDatasetFile,
+  processDataset,
 }

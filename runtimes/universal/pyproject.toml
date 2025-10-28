@@ -1,0 +1,40 @@
+[project]
+name = "transformers-runtime"
+version = "1.0.0"
+description = "OpenAI-compatible API for HuggingFace models"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "torch>=2.0.0",
+  "transformers>=4.35.0",
+  "diffusers>=0.25.0",
+  "accelerate>=0.25.0",
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+  "pydantic>=2.0.0",
+  "pillow>=10.0.0",
+  "python-multipart",
+  "einops>=0.8.1",
+  "openai>=1.0.0",
+]
+
+[project.optional-dependencies]
+xformers = ["xformers>=0.0.22"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["models", "utils"]
+py-modules = ["server", "download_model"]
+
+[tool.uv]
+dev-dependencies = [
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "pytest-timeout>=2.1.0",
+  "httpx>=0.24.0",
+  "numpy>=1.24.0",
+]

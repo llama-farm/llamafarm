@@ -9,9 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '../ui/dropdown-menu'
-import { defaultStrategies } from '../Rag/strategies'
 import type { RagStrategy } from '../Rag/strategies'
-import { getStoredSet, setStoredSet } from '../../utils/storage'
 import {
   Dialog,
   DialogContent,
@@ -26,7 +24,6 @@ import ImportSampleDatasetModal from './ImportSampleDatasetModal'
 import { useImportExampleDataset } from '../../hooks/useExamples'
 import PageActions from '../common/PageActions'
 import { Input } from '../ui/input'
-import { Textarea } from '../ui/textarea'
 import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -35,22 +32,13 @@ import {
   useListDatasets,
   useCreateDataset,
   useDeleteDataset,
+  useAvailableStrategies,
 } from '../../hooks/useDatasets'
-import type { UIFile } from '../../types/datasets'
-
-type RawFile = UIFile
-
+import { useProject } from '../../hooks/useProjects'
+import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
-  const [rawFiles, setRawFiles] = useState<RawFile[]>(() => {
-    try {
-      const stored = localStorage.getItem('lf_raw_files')
-      return stored ? (JSON.parse(stored) as RawFile[]) : []
-    } catch {
-      return []
-    }
-  })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useState<Mode>('designer')
 
@@ -61,7 +49,14 @@ const Data = () => {
   // Get current active project for API calls
   const activeProject = useActiveProject()
 
-  // Use React Query hooks for datasets with localStorage fallback
+  // Load project config to get strategies (source of truth)
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+
+  // Use React Query hooks for datasets
   const {
     data: apiDatasets,
     isLoading: isDatasetsLoading,
@@ -75,104 +70,31 @@ const Data = () => {
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
 
-  // Local demo datasets change counter (forces recompute when we mutate localStorage)
-  const [localDatasetsVersion, setLocalDatasetsVersion] = useState(0)
+  // Fetch available strategies and databases from API
+  const { data: availableOptions } = useAvailableStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
 
-  // Convert API datasets to UI format; provide demo fallback if none
+  // Hook for managing data processing strategies
+  const strategies = useDataProcessingStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || ''
+  )
+
+  // Convert API datasets to UI format - only show real datasets from the API
   const datasets = useMemo(() => {
-    const apiList = (apiDatasets?.datasets || []).map(dataset => ({
+    // Only return datasets from the API, no localStorage, no placeholders
+    return (apiDatasets?.datasets || []).map(dataset => ({
       id: dataset.name,
       name: dataset.name,
-      // No rag_strategy on datasets; server provides data_processing_strategy/database
-      database: (dataset as any).database,
-      processingStrategy: (() => {
-        const strategy = (dataset as any).data_processing_strategy
-        if (!strategy) {
-          try {
-            console.warn(
-              `Warning: 'data_processing_strategy' is missing for dataset '${dataset.name}'. Defaulting to 'default'.`
-            )
-          } catch {}
-          return 'default'
-        }
-        return strategy
-      })(),
-      files: Array.isArray((dataset as any).details?.files_metadata)
-        ? (dataset as any).details.files_metadata
-        : (dataset as any).files,
-      lastRun: new Date(),
-      embedModel: 'text-embedding-3-large',
-      // Estimate chunk count numerically for display
-      numChunks: Array.isArray((dataset as any).details?.files_metadata)
-        ? Math.max(
-            0,
-            ((dataset as any).details.files_metadata.length || 0) * 100
-          )
-        : Array.isArray((dataset as any).files)
-          ? Math.max(
-              0,
-              (Array.isArray((dataset as any).files)
-                ? (dataset as any).files.length
-                : 0) * 100
-            )
-          : 0,
-      processedPercent: 100,
-      version: 'v1',
-      description: '',
+      database: dataset.database,
+      data_processing_strategy: dataset.data_processing_strategy,
+      files: dataset.details?.files_metadata || [],
+      // Only show fields that actually come from the API
     }))
-
-    // Load locally persisted demo/imported datasets
-    let localList: any[] = []
-    try {
-      const stored = localStorage.getItem('lf_demo_datasets')
-      const parsed = stored ? JSON.parse(stored) : []
-      if (Array.isArray(parsed)) localList = parsed
-    } catch {}
-
-    // If no API datasets, fall back to local list or seed demo entries
-    if (apiList.length === 0) {
-      if (localList.length > 0) return localList
-      const demo = [
-        {
-          id: 'demo-arxiv',
-          name: 'arxiv-papers',
-          database: 'main_database',
-          processingStrategy: 'universal_processor',
-          files: [],
-          lastRun: new Date(),
-          embedModel: 'text-embedding-3-large',
-          numChunks: 12800,
-          processedPercent: 100,
-          version: 'v1',
-          description: 'Demo dataset of academic PDFs',
-        },
-        {
-          id: 'demo-handbook',
-          name: 'company-handbook',
-          database: 'main_database',
-          processingStrategy: 'universal_processor',
-          files: [],
-          lastRun: new Date(),
-          embedModel: 'text-embedding-3-large',
-          numChunks: 4200,
-          processedPercent: 100,
-          version: 'v2',
-          description: 'Demo employee handbook and policies',
-        },
-      ]
-      try {
-        localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
-      } catch {}
-      return demo
-    }
-
-    // Merge API and local lists when API returns entries, keeping API as source of truth
-    const mergedById = new Map<string, any>()
-    for (const ds of apiList) mergedById.set(ds.id, ds)
-    for (const ds of localList)
-      if (!mergedById.has(ds.id)) mergedById.set(ds.id, ds)
-    return Array.from(mergedById.values())
-  }, [apiDatasets, localDatasetsVersion])
+  }, [apiDatasets])
 
   // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
   const hasRedirectedFromQuery = useRef(false)
@@ -188,18 +110,10 @@ const Data = () => {
     }
   }, [location.search, datasets, navigate])
 
-  // Map of fileKey -> array of dataset ids
-  const [fileAssignments] = useState<Record<string, string[]>>(() => {
-    try {
-      const stored = localStorage.getItem('lf_file_assignments')
-      return stored ? (JSON.parse(stored) as Record<string, string[]>) : {}
-    } catch {
-      return {}
-    }
-  })
+  // Map of fileKey -> array of dataset ids (transient UI state)
+  // const [fileAssignments] = useState<Record<string, string[]>>({})
 
   // Processing strategies state management ----------------------------------
-  const [metaTick, setMetaTick] = useState(0)
   const [strategyEditOpen, setStrategyEditOpen] = useState(false)
   const [strategyEditId, setStrategyEditId] = useState<string>('')
   const [strategyEditName, setStrategyEditName] = useState('')
@@ -208,94 +122,39 @@ const Data = () => {
   const [strategyCreateName, setStrategyCreateName] = useState('')
   const [strategyCreateDescription, setStrategyCreateDescription] = useState('')
   const [strategyCopyFromId, setStrategyCopyFromId] = useState('')
+  const [strategyCreateFileTypes, setStrategyCreateFileTypes] = useState<Set<string>>(new Set())
 
-  // Validate that an object is a well-formed RagStrategy
-  const isValidRagStrategy = (s: any): s is RagStrategy => {
-    return (
-      !!s &&
-      typeof s.id === 'string' &&
-      typeof s.name === 'string' &&
-      typeof s.description === 'string' &&
-      typeof s.isDefault === 'boolean' &&
-      typeof s.datasetsUsing === 'number'
-    )
-  }
 
-  const getCustomStrategies = (): RagStrategy[] => {
-    try {
-      const raw = localStorage.getItem('lf_custom_strategies')
-      if (!raw) return []
-      const arr = JSON.parse(raw) as RagStrategy[]
-      if (!Array.isArray(arr)) return []
-      return arr.filter(isValidRagStrategy)
-    } catch {
+  // Load strategies from config (source of truth - NO hardcoding)
+  const displayStrategies = useMemo((): RagStrategy[] => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) {
+      // Return empty array if config not loaded yet
       return []
     }
-  }
 
-  const saveCustomStrategies = (list: RagStrategy[]) => {
-    try {
-      localStorage.setItem('lf_custom_strategies', JSON.stringify(list))
-    } catch {}
-  }
+    const configStrategies = projectConfig.rag.data_processing_strategies || []
 
-  const addCustomStrategy = (s: RagStrategy) => {
-    const list = getCustomStrategies()
-    const exists = list.some(x => x.id === s.id)
-    if (exists) {
-      toast({ message: 'Strategy id already exists', variant: 'destructive' })
-      return
-    }
-    list.push(s)
-    saveCustomStrategies(list)
-    setMetaTick(t => t + 1)
-  }
-
-  const removeCustomStrategy = (id: string) => {
-    const list = getCustomStrategies().filter(s => s.id !== id)
-    saveCustomStrategies(list)
-  }
-
-  const getDeletedSet = (): Set<string> => getStoredSet('lf_strategy_deleted')
-  const saveDeletedSet = (s: Set<string>) =>
-    setStoredSet('lf_strategy_deleted', s)
-
-  const markDeleted = (id: string) => {
-    const set = getDeletedSet()
-    set.add(id)
-    saveDeletedSet(set)
-    setMetaTick(t => t + 1)
-  }
-
-  // Derive display strategies with local overrides
-  const displayStrategies = useMemo(() => {
-    const deleted = getDeletedSet()
-    const all = [...defaultStrategies, ...getCustomStrategies()]
-    return all
-      .filter(s => !deleted.has(s.id))
-      .map(s => {
-        let { name, description } = s
-        try {
-          const n = localStorage.getItem(`lf_strategy_name_override_${s.id}`)
-          if (typeof n === 'string' && n.trim().length > 0) {
-            name = n.trim()
-          }
-          const d = localStorage.getItem(`lf_strategy_description_${s.id}`)
-          if (typeof d === 'string' && d.trim().length > 0) {
-            description = d.trim()
-          }
-        } catch {}
-        return { ...s, name, description }
-      })
-  }, [metaTick])
+    // Convert config strategies to UI format
+    return configStrategies.map((strategy: any) => ({
+      id: `processing-${strategy.name.replace(/_/g, '-')}`, // Convert snake_case to kebab-case
+      name: strategy.name
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase()),
+      description: strategy.description || '',
+      isDefault: false, // All strategies are equal - no hardcoded defaults
+      datasetsUsing: 0, // Will be calculated from datasetsByStrategyName
+      configName: strategy.name, // Store original config name for API calls
+    } as RagStrategy))
+  }, [projectResp])
 
   // Build mapping of strategy name -> dataset names
   const datasetsByStrategyName = useMemo(() => {
     const map = new Map<string, string[]>()
 
-    // Use the datasets from the useMemo above
+    // Use the datasets from API
     for (const d of datasets) {
-      const strategyName = (d as any).processingStrategy
+      const strategyName = (d as any).data_processing_strategy
       const datasetName = d.name
       if (typeof strategyName === 'string' && typeof datasetName === 'string') {
         const arr = map.get(strategyName) || []
@@ -305,92 +164,64 @@ const Data = () => {
     }
 
     return map
-  }, [datasets, metaTick])
+  }, [datasets])
 
-  const getParsersCount = (sid: string): number => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_parsers_${sid}`)
-      if (!raw) return 7 // default seed
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr.length : 7
-    } catch {
-      return 7
-    }
+  const getParsersCount = (strategyName: string): number => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) return 0
+
+    const strategy = projectConfig.rag.data_processing_strategies.find(
+      (s: any) => s.name === strategyName
+    )
+    return strategy?.parsers?.length || 0
   }
 
-  const getExtractorsCount = (sid: string): number => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_extractors_${sid}`)
-      if (!raw) return 8 // default seed
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr.length : 8
-    } catch {
-      return 8
-    }
+  const getExtractorsCount = (strategyName: string): number => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) return 0
+
+    const strategy = projectConfig.rag.data_processing_strategies.find(
+      (s: any) => s.name === strategyName
+    )
+    return strategy?.extractors?.length || 0
   }
 
-  // Refresh on processing changes (parsers/extractors add/edit/delete)
-  useEffect(() => {
-    const handler = (_e: Event) => {
-      setMetaTick(t => t + 1)
-    }
-    try {
-      window.addEventListener('lf:processingUpdated', handler as EventListener)
-    } catch {}
-    return () => {
-      try {
-        window.removeEventListener(
-          'lf:processingUpdated',
-          handler as EventListener
-        )
-      } catch {}
-    }
-  }, [])
 
-  // (initial state is loaded from localStorage)
-
-  // Persist data when it changes
-  useEffect(() => {
-    try {
-      localStorage.setItem('lf_raw_files', JSON.stringify(rawFiles))
-    } catch {}
-  }, [rawFiles])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        'lf_file_assignments',
-        JSON.stringify(fileAssignments)
-      )
-    } catch {}
-  }, [fileAssignments])
-
-  // Dataset persistence is handled in the setDatasets function for localStorage fallback
+  // rawFiles and fileAssignments are transient UI state - no persistence needed
 
   // Create dataset dialog state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [newDatasetName, setNewDatasetName] = useState('')
-  const [newDatasetDescription, setNewDatasetDescription] = useState('')
   const [newDatasetDatabase, setNewDatasetDatabase] = useState('')
   const [
     newDatasetDataProcessingStrategy,
     setNewDatasetDataProcessingStrategy,
   ] = useState('')
 
+  // Set default values when dialog opens and options are available
+  useEffect(() => {
+    if (isCreateOpen && availableOptions) {
+      if (
+        !newDatasetDataProcessingStrategy &&
+        availableOptions.data_processing_strategies?.[0]
+      ) {
+        setNewDatasetDataProcessingStrategy(
+          availableOptions.data_processing_strategies[0]
+        )
+      }
+      if (!newDatasetDatabase && availableOptions.databases?.[0]) {
+        setNewDatasetDatabase(availableOptions.databases[0])
+      }
+    }
+  }, [isCreateOpen, availableOptions, newDatasetDataProcessingStrategy, newDatasetDatabase])
+
   // Simple edit modal state
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editDatasetId, setEditDatasetId] = useState<string>('')
-  const [editName, setEditName] = useState('')
-  const [editDescription, setEditDescription] = useState('')
+  // Edit dataset removed - API doesn't support updating datasets
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>('')
 
-  // Ensure setters are considered used even in builds that elide menu handlers
-  useEffect(() => {
-    // no-op referencing setters to satisfy strict noUnusedLocals in some CI builds
-  }, [setConfirmDeleteId, setConfirmDeleteName])
 
   const handleCreateDataset = async () => {
     const name = newDatasetName.trim()
@@ -415,7 +246,6 @@ const Data = () => {
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
-      setNewDatasetDescription('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
     } catch (error) {
@@ -445,23 +275,7 @@ const Data = () => {
       setIsDropped(false)
     }, 1000)
 
-    const files = Array.from(e.dataTransfer.files)
-    setTimeout(() => {
-      const converted: RawFile[] = files.map(f => ({
-        id: `${f.name}:${f.size}:${f.lastModified}`,
-        name: f.name,
-        size: f.size,
-        lastModified: f.lastModified,
-        type: f.type,
-      }))
-      setRawFiles(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const deduped = converted.filter(r => !existingIds.has(r.id))
-        return [...prev, ...deduped]
-      })
-    }, 4000)
-
-    // console.log('Dropped files:', files)
+    // File drop handling removed - files are now uploaded directly to datasets
   }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -469,35 +283,9 @@ const Data = () => {
     if (files.length === 0) return
 
     setIsDropped(true)
-
-    setTimeout(() => {
-      const converted: RawFile[] = files.map(f => ({
-        id: `${f.name}:${f.size}:${f.lastModified}`,
-        name: f.name,
-        size: f.size,
-        lastModified: f.lastModified,
-        type: f.type,
-      }))
-      setRawFiles(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const deduped = converted.filter(r => !existingIds.has(r.id))
-        return [...prev, ...deduped]
-      })
-      setIsDropped(false)
-    }, 4000)
+    setTimeout(() => setIsDropped(false), 1000)
 
     // console.log('Selected files:', files)
-  }
-
-  const formatLastRun = (d: Date) => {
-    if (!(d instanceof Date) || isNaN(d.getTime())) {
-      return '-'
-    }
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: '2-digit',
-    }).format(d)
   }
 
   return (
@@ -548,7 +336,7 @@ const Data = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-8">
               {displayStrategies.map(s => {
-                const assigned = datasetsByStrategyName.get(s.name) || []
+                const assigned = datasetsByStrategyName.get(s.configName || '') || []
                 return (
                   <div
                     key={s.id}
@@ -603,17 +391,50 @@ const Data = () => {
                             className="text-destructive focus:text-destructive"
                             onClick={e => {
                               e.stopPropagation()
+
+                              // Prevent deleting default strategy
+                              if (s.isDefault) {
+                                toast({
+                                  message: 'Cannot delete default strategy',
+                                  variant: 'destructive',
+                                })
+                                return
+                              }
+
                               const ok = confirm(
                                 'Delete this processing strategy?'
                               )
                               if (!ok) return
-                              try {
-                                removeCustomStrategy(s.id)
-                                const set = getDeletedSet()
-                                set.add(s.id)
-                                saveDeletedSet(set)
-                                setMetaTick(t => t + 1)
-                              } catch {}
+
+                              const projectConfig = (projectResp as any)?.project?.config
+                              if (!projectConfig || !s.configName) {
+                                toast({
+                                  message: 'Unable to delete strategy',
+                                  variant: 'destructive',
+                                })
+                                return
+                              }
+
+                              strategies.deleteStrategy.mutate(
+                                {
+                                  strategyName: s.configName,
+                                  projectConfig,
+                                },
+                                {
+                                  onSuccess: () => {
+                                    toast({
+                                      message: 'Strategy deleted',
+                                      variant: 'default',
+                                    })
+                                  },
+                                  onError: (error: any) => {
+                                    toast({
+                                      message: error.message || 'Failed to delete strategy',
+                                      variant: 'destructive',
+                                    })
+                                  },
+                                }
+                              )
                             }}
                           >
                             Delete
@@ -659,8 +480,8 @@ const Data = () => {
                     </div>
                     <div className="flex items-center justify-between mt-1">
                       <div className="text-xs text-muted-foreground">
-                        {getParsersCount(s.id)} parsers •{' '}
-                        {getExtractorsCount(s.id)} extractors
+                        {getParsersCount(s.configName || '')} parsers •{' '}
+                        {getExtractorsCount(s.configName || '')} extractors
                       </div>
                       <Button
                         variant="outline"
@@ -700,6 +521,12 @@ const Data = () => {
                     // Prevent closing dialog during mutation
                     if (!createDatasetMutation.isPending) {
                       setIsCreateOpen(open)
+                      if (!open) {
+                        // Reset form when closing
+                        setNewDatasetName('')
+                        setNewDatasetDatabase('')
+                        setNewDatasetDataProcessingStrategy('')
+                      }
                     }
                   }}
                 >
@@ -726,38 +553,41 @@ const Data = () => {
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-muted-foreground">
-                          Description
-                        </label>
-                        <Textarea
-                          value={newDatasetDescription}
-                          onChange={e =>
-                            setNewDatasetDescription(e.target.value)
-                          }
-                          placeholder="Optional description"
-                          rows={3}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
                           Data Processing Strategy
                         </label>
-                        <Input
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           value={newDatasetDataProcessingStrategy}
                           onChange={e =>
                             setNewDatasetDataProcessingStrategy(e.target.value)
                           }
-                          placeholder="e.g., PDF Simple, Markdown"
-                        />
+                        >
+                          <option value="">Select a strategy...</option>
+                          {availableOptions?.data_processing_strategies?.map(
+                            strategy => (
+                              <option key={strategy} value={strategy}>
+                                {strategy}
+                              </option>
+                            )
+                          )}
+                        </select>
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-muted-foreground">
                           Database
                         </label>
-                        <Input
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           value={newDatasetDatabase}
                           onChange={e => setNewDatasetDatabase(e.target.value)}
-                          placeholder="e.g., default_db"
-                        />
+                        >
+                          <option value="">Select a database...</option>
+                          {availableOptions?.databases?.map(database => (
+                            <option key={database} value={database}>
+                              {database}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                     <DialogFooter>
@@ -862,18 +692,7 @@ const Data = () => {
                                 align="end"
                                 className="min-w-[10rem] w-[10rem]"
                               >
-                                <DropdownMenuItem
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    // open simple edit modal
-                                    setEditDatasetId(ds.id)
-                                    setEditName(ds.name)
-                                    setEditDescription(ds.description || '')
-                                    setIsEditOpen(true)
-                                  }}
-                                >
-                                  Edit
-                                </DropdownMenuItem>
+                                {/* Edit removed - API doesn't support updating datasets */}
                                 <DropdownMenuItem
                                   onClick={e => {
                                     e.stopPropagation()
@@ -897,17 +716,14 @@ const Data = () => {
                             </DropdownMenu>
                           </div>
                           <div className="text-sm font-medium">{ds.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Last run on {formatLastRun(ds.lastRun)}
-                          </div>
-                          <div className="flex flex-row gap-2 items-center flex-wrap">
-                            {(ds as any).database && (
+                          <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
+                            {ds.database && (
                               <Badge
                                 variant="default"
                                 size="sm"
                                 className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
                               >
-                                {(ds as any).database}
+                                {ds.database}
                               </Badge>
                             )}
                             <Badge
@@ -915,12 +731,11 @@ const Data = () => {
                               size="sm"
                               className="rounded-xl"
                             >
-                              {(ds as any).processingStrategy || 'default'}
+                              {ds.data_processing_strategy}
                             </Badge>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {ds.numChunks.toLocaleString()} chunks •{' '}
-                            {ds.processedPercent}% processed • {ds.version}
+                          <div className="text-xs text-muted-foreground mt-2">
+                            {ds.files.length} {ds.files.length === 1 ? 'file' : 'files'}
                           </div>
                         </div>
                       ))}
@@ -974,38 +789,11 @@ const Data = () => {
                 variant: 'destructive',
               })
             } catch {}
-            // Local fallback to make import work without server: persist into demo datasets
-            try {
-              const raw = localStorage.getItem('lf_demo_datasets')
-              const arr = raw ? JSON.parse(raw) : []
-              const newEntry = {
-                id: name,
-                name,
-                files: [],
-                lastRun: new Date(),
-                embedModel: 'text-embedding-3-large',
-                numChunks: 0,
-                processedPercent: 0,
-                version: 'v1',
-                description: 'Imported sample dataset (local)',
-              }
-              const exists =
-                Array.isArray(arr) && arr.some((d: any) => d.id === name)
-              const updated = exists ? arr : [...arr, newEntry]
-              localStorage.setItem('lf_demo_datasets', JSON.stringify(updated))
-              setLocalDatasetsVersion(v => v + 1)
-              setIsImportOpen(false)
-              toast({
-                message: `Dataset "${name}" imported (local)`,
-                variant: 'default',
-              })
-              navigate(`/chat/data?dataset=${encodeURIComponent(name)}`)
-            } catch {
-              toast({
-                message: 'Failed to import dataset',
-                variant: 'destructive',
-              })
-            }
+            // Import failed - show error (no localStorage fallback)
+            toast({
+              message: 'Failed to import dataset',
+              variant: 'destructive',
+            })
           }
         }}
       />
@@ -1031,28 +819,10 @@ const Data = () => {
                 setIsConfirmDeleteOpen(false)
                 if (!id) return
                 if (!activeProject?.namespace || !activeProject?.project) {
-                  // No active project: perform local deletion fallback
-                  try {
-                    const raw = localStorage.getItem('lf_demo_datasets')
-                    const arr = raw ? JSON.parse(raw) : []
-                    const updated = Array.isArray(arr)
-                      ? arr.filter((d: any) => d.id !== id)
-                      : []
-                    localStorage.setItem(
-                      'lf_demo_datasets',
-                      JSON.stringify(updated)
-                    )
-                    setLocalDatasetsVersion(v => v + 1)
-                    toast({
-                      message: 'Dataset deleted (local)',
-                      variant: 'default',
-                    })
-                  } catch {
-                    toast({
-                      message: 'Failed to delete dataset',
-                      variant: 'destructive',
-                    })
-                  }
+                  toast({
+                    message: 'No active project selected',
+                    variant: 'destructive',
+                  })
                   return
                 }
                 try {
@@ -1064,86 +834,14 @@ const Data = () => {
                   toast({ message: 'Dataset deleted', variant: 'default' })
                 } catch (err) {
                   console.error('Delete failed', err)
-                  // Local fallback removal
-                  try {
-                    const raw = localStorage.getItem('lf_demo_datasets')
-                    const arr = raw ? JSON.parse(raw) : []
-                    const updated = Array.isArray(arr)
-                      ? arr.filter((d: any) => d.id !== id)
-                      : []
-                    localStorage.setItem(
-                      'lf_demo_datasets',
-                      JSON.stringify(updated)
-                    )
-                    setLocalDatasetsVersion(v => v + 1)
-                    toast({
-                      message: 'Dataset deleted (local)',
-                      variant: 'default',
-                    })
-                  } catch {
-                    toast({
-                      message: 'Failed to delete dataset',
-                      variant: 'destructive',
-                    })
-                  }
+                  toast({
+                    message: 'Failed to delete dataset',
+                    variant: 'destructive',
+                  })
                 }
               }}
             >
               Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit dataset dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit dataset</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Name</label>
-              <Input
-                autoFocus
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                placeholder="Dataset name"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">
-                Description
-              </label>
-              <Textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <Button
-              onClick={() => {
-                const id = editDatasetId.trim()
-                const name = editName.trim()
-                if (!id || !name) return
-                try {
-                  localStorage.setItem(`lf_dataset_name_${id}`, name)
-                  localStorage.setItem(
-                    `lf_dataset_description_${id}`,
-                    editDescription
-                  )
-                } catch {}
-                setIsEditOpen(false)
-              }}
-              disabled={!editName.trim()}
-            >
-              Save
             </Button>
           </div>
         </DialogContent>
@@ -1187,23 +885,50 @@ const Data = () => {
               className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
               onClick={() => {
                 if (!strategyEditId) return
+
+                const strategy = displayStrategies.find(s => s.id === strategyEditId)
+                if (!strategy || strategy.isDefault) {
+                  toast({
+                    message: strategy?.isDefault
+                      ? 'Cannot delete default strategy'
+                      : 'Strategy not found',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
                 const ok = confirm(
                   'Are you sure you want to delete this strategy?'
                 )
-                if (ok) {
-                  try {
-                    localStorage.removeItem(
-                      `lf_strategy_name_override_${strategyEditId}`
-                    )
-                    localStorage.removeItem(
-                      `lf_strategy_description_${strategyEditId}`
-                    )
-                  } catch {}
-                  removeCustomStrategy(strategyEditId)
-                  markDeleted(strategyEditId)
-                  setStrategyEditOpen(false)
-                  toast({ message: 'Strategy deleted', variant: 'default' })
+                if (!ok) return
+
+                const projectConfig = (projectResp as any)?.project?.config
+                if (!projectConfig || !strategy.configName) {
+                  toast({
+                    message: 'Unable to delete strategy',
+                    variant: 'destructive',
+                  })
+                  return
                 }
+
+                strategies.deleteStrategy.mutate(
+                  {
+                    strategyName: strategy.configName,
+                    projectConfig,
+                  },
+                  {
+                    onSuccess: () => {
+                      setStrategyEditOpen(false)
+                      toast({ message: 'Strategy deleted', variant: 'default' })
+                    },
+                    onError: (error: any) => {
+                      toast({
+                        message: error.message || 'Failed to delete strategy',
+                        variant: 'destructive',
+                      })
+                    },
+                  }
+                )
               }}
               type="button"
             >
@@ -1222,18 +947,50 @@ const Data = () => {
                 onClick={() => {
                   if (!strategyEditId || strategyEditName.trim().length === 0)
                     return
-                  try {
-                    localStorage.setItem(
-                      `lf_strategy_name_override_${strategyEditId}`,
-                      strategyEditName.trim()
-                    )
-                    localStorage.setItem(
-                      `lf_strategy_description_${strategyEditId}`,
-                      strategyEditDescription
-                    )
-                  } catch {}
-                  setStrategyEditOpen(false)
-                  setMetaTick(t => t + 1)
+
+                  const strategy = displayStrategies.find(s => s.id === strategyEditId)
+                  if (!strategy || !strategy.configName) {
+                    toast({
+                      message: 'Strategy not found',
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+
+                  const projectConfig = (projectResp as any)?.project?.config
+                  if (!projectConfig) {
+                    toast({
+                      message: 'Unable to update strategy',
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+
+                  // Convert UI name back to snake_case for config
+                  const newConfigName = strategyEditName.trim().toLowerCase().replace(/\s+/g, '_')
+
+                  strategies.updateStrategy.mutate(
+                    {
+                      strategyName: strategy.configName,
+                      updates: {
+                        name: newConfigName,
+                        description: strategyEditDescription,
+                      },
+                      projectConfig,
+                    },
+                    {
+                      onSuccess: () => {
+                        setStrategyEditOpen(false)
+                        toast({ message: 'Strategy updated', variant: 'default' })
+                      },
+                      onError: (error: any) => {
+                        toast({
+                          message: error.message || 'Failed to update strategy',
+                          variant: 'destructive',
+                        })
+                      },
+                    }
+                  )
                 }}
                 disabled={strategyEditName.trim().length === 0}
                 type="button"
@@ -1276,8 +1033,46 @@ const Data = () => {
               />
             </div>
             <div>
+              <label className="text-xs text-muted-foreground mb-2 block">
+                What type of files do you plan on uploading?
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { type: 'PDF', parser: 'PDFParser_LlamaIndex', extensions: ['*.pdf'] },
+                  { type: 'Docx', parser: 'DOCXParser_LlamaIndex', extensions: ['*.docx'] },
+                  { type: 'Text', parser: 'TEXTParser_LlamaIndex', extensions: ['*.txt'] },
+                  { type: 'CSV', parser: 'CSVParser_Pandas', extensions: ['*.csv'] },
+                  { type: 'Markdown', parser: 'MARKDOWNParser_LlamaIndex', extensions: ['*.md', '*.markdown'] },
+                ].map(({ type }) => {
+                  const isSelected = strategyCreateFileTypes.has(type)
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        const newSet = new Set(strategyCreateFileTypes)
+                        if (isSelected) {
+                          newSet.delete(type)
+                        } else {
+                          newSet.add(type)
+                        }
+                        setStrategyCreateFileTypes(newSet)
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-input hover:bg-accent hover:text-accent-foreground'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
               <label className="text-xs text-muted-foreground">
-                Copy from existing
+                Copy from existing (optional)
               </label>
               <select
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
@@ -1318,60 +1113,142 @@ const Data = () => {
           <DialogFooter className="flex items-center justify-between gap-2">
             <button
               className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-              onClick={() => setStrategyCreateOpen(false)}
+              onClick={() => {
+                setStrategyCreateOpen(false)
+                setStrategyCreateName('')
+                setStrategyCreateDescription('')
+                setStrategyCopyFromId('')
+                setStrategyCreateFileTypes(new Set())
+              }}
               type="button"
             >
               Cancel
             </button>
             <button
-              className={`px-3 py-2 rounded-md text-sm ${strategyCreateName.trim().length > 0 ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
-              onClick={() => {
-                const name = strategyCreateName.trim()
-                if (name.length === 0) return
-                const slugify = (str: string) =>
-                  str
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, '')
-                const baseId = `custom-${slugify(name)}`
-                const existingIds = new Set(
-                  [...defaultStrategies, ...getCustomStrategies()].map(
-                    s => s.id
-                  )
+              className={`px-3 py-2 rounded-md text-sm ${strategyCreateName.trim().length > 0 && !strategies.isUpdating ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
+              onClick={async () => {
+                const displayName = strategyCreateName.trim()
+                if (displayName.length === 0) return
+
+                // Convert display name to snake_case for config
+                const strategyName = displayName
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '_')
+                  .replace(/^_+|_+$/g, '')
+
+                if (!projectResp) {
+                  toast({
+                    message: 'Project config not loaded',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
+                const projectConfig = (projectResp as any)?.project?.config
+
+                // Get parsers from copyFrom strategy, selected file types, or use defaults
+                const copyFrom = displayStrategies.find(
+                  s => s.id === strategyCopyFromId
                 )
-                let newId = baseId
-                if (existingIds.has(newId)) {
-                  newId = `${baseId}-${Date.now()}`
+                let parsers: any[] = []
+                let extractors: any[] = [] // Always start with no extractors
+
+                if (copyFrom && projectConfig) {
+                  // Find the source strategy in config
+                  const sourceStrategy =
+                    projectConfig.rag?.data_processing_strategies?.find(
+                      (s: any) =>
+                        s.name ===
+                        copyFrom.name
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '_')
+                    )
+                  if (sourceStrategy) {
+                    parsers = sourceStrategy.parsers || []
+                    // Don't copy extractors - let user add them manually
+                  }
                 }
-                const newStrategy: RagStrategy = {
-                  id: newId,
-                  name,
-                  description: strategyCreateDescription,
-                  isDefault: false,
-                  datasetsUsing: 0,
+
+                // If no copy source but file types selected, create parsers from file types
+                if (parsers.length === 0 && strategyCreateFileTypes.size > 0) {
+                  const fileTypeMapping = [
+                    { type: 'PDF', parser: 'PDFParser_LlamaIndex', extensions: ['*.pdf'] },
+                    { type: 'Docx', parser: 'DOCXParser_LlamaIndex', extensions: ['*.docx'] },
+                    { type: 'Text', parser: 'TEXTParser_LlamaIndex', extensions: ['*.txt'] },
+                    { type: 'CSV', parser: 'CSVParser_Pandas', extensions: ['*.csv'] },
+                    { type: 'Markdown', parser: 'MARKDOWNParser_LlamaIndex', extensions: ['*.md', '*.markdown'] },
+                  ]
+
+                  parsers = Array.from(strategyCreateFileTypes).map(fileType => {
+                    const mapping = fileTypeMapping.find(m => m.type === fileType)
+                    return {
+                      type: mapping?.parser || 'PDFParser_LlamaIndex',
+                      config: {},
+                      file_include_patterns: mapping?.extensions || ['*.pdf'],
+                      priority: 50,
+                    }
+                  })
                 }
-                addCustomStrategy(newStrategy)
+
+                // If no copy source and no file types selected, create with a default parser
+                if (parsers.length === 0) {
+                  parsers = [
+                    {
+                      type: 'PDFParser_LlamaIndex',
+                      config: {},
+                      file_include_patterns: ['*.pdf'],
+                      priority: 50,
+                    },
+                  ]
+                }
+
                 try {
-                  localStorage.setItem(
-                    `lf_strategy_name_override_${newId}`,
-                    name
-                  )
-                  localStorage.setItem(
-                    `lf_strategy_description_${newId}`,
-                    strategyCreateDescription
-                  )
-                } catch {}
-                setStrategyCreateOpen(false)
-                setStrategyCreateName('')
-                setStrategyCreateDescription('')
-                setStrategyCopyFromId('')
-                setMetaTick(t => t + 1)
-                toast({ message: 'Strategy created', variant: 'default' })
+                  // Build strategy object, only including valid fields
+                  const description = strategyCreateDescription.trim() || displayName
+                  const strategy: any = {
+                    name: strategyName,
+                    parsers,
+                  }
+
+                  // Only include description if it meets the 10 character minimum (schema requirement)
+                  if (description.length >= 10) {
+                    strategy.description = description
+                  }
+
+                  // Only include extractors if there are any
+                  if (extractors.length > 0) {
+                    strategy.extractors = extractors
+                  }
+
+                  await strategies.createStrategy.mutateAsync({
+                    strategy,
+                    projectConfig,
+                  })
+
+                  setStrategyCreateOpen(false)
+                  setStrategyCreateName('')
+                  setStrategyCreateDescription('')
+                  setStrategyCopyFromId('')
+                  setStrategyCreateFileTypes(new Set())
+                  toast({
+                    message: 'Strategy created successfully',
+                    variant: 'default',
+                  })
+                } catch (error) {
+                  console.error('Failed to create strategy:', error)
+                  toast({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to create strategy',
+                    variant: 'destructive',
+                  })
+                }
               }}
-              disabled={strategyCreateName.trim().length === 0}
+              disabled={strategyCreateName.trim().length === 0 || strategies.isUpdating}
               type="button"
             >
-              Create
+              {strategies.isUpdating ? 'Creating...' : 'Create'}
             </button>
           </DialogFooter>
         </DialogContent>

@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { Button } from '../ui/button'
-import type { ExtractorSchema, SchemaField } from './extractorSchemas'
+// Import schema types from generated file
+import type { ExtractorSchema, SchemaField } from '@/types/ragTypes'
 
 type Props = {
   schema: ExtractorSchema
@@ -169,12 +170,20 @@ export default function ExtractorSettingsForm({
       const str = Number.isFinite(n) ? String(n) : ''
       const min = typeof field.minimum === 'number' ? field.minimum : undefined
       const max = typeof field.maximum === 'number' ? field.maximum : undefined
+
+      // Check if current value is out of bounds for validation warning
+      const isOutOfBounds =
+        Number.isFinite(n) && (
+          (typeof min === 'number' && n < min) ||
+          (typeof max === 'number' && n > max)
+        )
+
       return (
         <div key={key} className="flex flex-col gap-1">
           <Label className="text-xs text-foreground">{label}</Label>
           <Input
             type="number"
-            className="bg-background"
+            className={`bg-background ${isOutOfBounds ? 'border-destructive' : ''}`}
             value={str}
             onChange={e => {
               const raw = e.target.value
@@ -184,17 +193,35 @@ export default function ExtractorSettingsForm({
               }
               const num = Number(raw)
               if (!Number.isFinite(num)) return
-              let bounded = num
+              // Coerce integers to whole numbers but don't clamp to bounds yet
+              const coerced = field.type === 'integer' ? Math.trunc(num) : num
+              setField(key, coerced)
+            }}
+            onBlur={e => {
+              // Only validate and clamp on blur, not while typing
+              const raw = e.target.value
+              if (raw.trim() === '') return
+              const num = Number(raw)
+              if (!Number.isFinite(num)) return
+              const coerced = field.type === 'integer' ? Math.trunc(num) : num
+              let bounded = coerced
               if (typeof min === 'number') bounded = Math.max(min, bounded)
               if (typeof max === 'number') bounded = Math.min(max, bounded)
-              setField(key, bounded)
+              if (bounded !== coerced) {
+                setField(key, bounded)
+              }
+            }}
+            onFocus={e => {
+              // Select all text on focus so user can easily replace the value
+              e.target.select()
             }}
             min={min}
             max={max}
             placeholder={String(field.default ?? '')}
             disabled={disabled}
           />
-          <div className="text-xs text-muted-foreground">
+          <div className={`text-xs ${isOutOfBounds ? 'text-destructive' : 'text-muted-foreground'}`}>
+            {isOutOfBounds ? '⚠️ ' : ''}
             {field.description}
             {typeof min === 'number' ? ` (min ${min})` : ''}
             {typeof max === 'number' ? ` (max ${max})` : ''}
@@ -235,7 +262,7 @@ export default function ExtractorSettingsForm({
       )
     }
 
-    if (field.type === 'array' && field.items?.type === 'object') {
+    if (field.type === 'array' && (field.items as any)?.type === 'object') {
       return renderArrayOfObjects(key, field)
     }
 

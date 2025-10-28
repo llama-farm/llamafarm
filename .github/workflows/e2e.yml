@@ -1,0 +1,363 @@
+name: End-to-End Tests
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  e2e-test:
+    name: End-to-End Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Use the current branch/ref being tested instead of main
+      LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      # ============================================================
+      # Setup Phase
+      # ============================================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+          cache-dependency-path: cli/go.sum
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install uv (for build-time datamodel generation)
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      # ============================================================
+      # Build Phase
+      # ============================================================
+      - name: Copy schema.yaml to CLI config
+        run: |
+          mkdir -p cli/cmd/config
+          cp config/schema.yaml cli/cmd/config/
+
+      - name: Generate Python datamodels
+        working-directory: config
+        run: |
+          echo "Generating datamodels from schema..."
+          ./generate-types.sh
+          echo "✓ Datamodel generation complete"
+
+      - name: Validate datamodel generation
+        working-directory: config
+        run: |
+          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
+            echo "❌ Error: datamodel.py not generated or is empty"
+            exit 1
+          fi
+          echo "✓ Datamodel validation passed"
+
+      - name: Build CLI binary
+        working-directory: cli
+        run: |
+          go build -o lf main.go
+          echo "✓ CLI binary built successfully"
+
+      - name: Verify CLI binary works
+        working-directory: cli
+        run: |
+          ./lf version
+          echo "✓ CLI binary is functional"
+
+      # ============================================================
+      # Project Initialization
+      # ============================================================
+      - name: Create test directory
+        run: |
+          mkdir -p /tmp/e2e-test
+          echo "✓ Test directory created at /tmp/e2e-test"
+
+      - name: Initialize project with CLI
+        working-directory: cli
+        run: |
+          if ! ./lf init --cwd /tmp/e2e-test --debug; then
+            echo "❌ Project initialization failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+          echo "✓ Project initialized"
+
+      - name: Verify project config was created
+        run: |
+          if [ ! -f "/tmp/e2e-test/llamafarm.yaml" ]; then
+            echo "❌ Error: llamafarm.yaml not created"
+            exit 1
+          fi
+          echo "✓ Project configuration exists"
+          echo "Configuration preview:"
+          head -20 /tmp/e2e-test/llamafarm.yaml
+
+      # ============================================================
+      # Data Ingestion Test
+      # ============================================================
+      - name: Create dataset
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets create \
+            -s universal_processor \
+            -b main_database \
+            test_dataset; then
+            echo "❌ Dataset creation failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+          echo "✓ Dataset created"
+
+      - name: Upload sample files
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "../examples/quick-rag/files"; then
+            echo "❌ Upload failed for ../examples/quick-rag/files, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+          echo "✓ All sample files uploaded"
+
+      - name: Process dataset
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets process test_dataset; then
+            echo "❌ Dataset processing failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+          echo "✓ Dataset processing complete"
+
+      # ============================================================
+      # RAG Query Test
+      # ============================================================
+      - name: Run RAG query
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Running RAG query..."
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+            --database main_database \
+            --top-k 3 \
+            "neural scaling laws" 2>&1); then
+            echo "❌ RAG query command failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          echo "$OUTPUT"
+
+          # Verify output is not empty
+          if [ -z "$OUTPUT" ]; then
+            echo "❌ Error: RAG query returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          echo "✓ RAG query returned results"
+
+      - name: Validate RAG query results
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+            --database main_database \
+            --top-k 3 \
+            --include-metadata \
+            "neural scaling laws" 2>&1); then
+            echo "❌ RAG query validation failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          # Check if output contains expected content
+          if echo "$OUTPUT" | grep -q "neural"; then
+            echo "✓ RAG query results contain relevant content"
+          else
+            echo "⚠ Warning: Results may not contain expected content"
+            echo "$OUTPUT"
+          fi
+
+      # ============================================================
+      # Chat Command Test
+      # ============================================================
+      - name: Run chat command with RAG
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Running chat command with RAG..."
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+            "Summarize neural scaling laws in one sentence" 2>&1); then
+            echo "❌ Chat command failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          echo "Chat response:"
+          echo "$OUTPUT"
+
+          # Verify output is not empty
+          if [ -z "$OUTPUT" ]; then
+            echo "❌ Error: Chat command returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          # Check if output contains some text (at least 10 characters)
+          if [ ${#OUTPUT} -lt 10 ]; then
+            echo "❌ Error: Chat response too short, possible error"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          echo "✓ Chat command returned a response"
+
+      - name: Test chat command without RAG
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Running chat command without RAG..."
+          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+            --no-rag \
+            "What is 2 + 2?" 2>&1); then
+            echo "❌ Chat command (no RAG) failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          echo "Chat response:"
+          echo "$OUTPUT"
+
+          # Verify output is not empty
+          if [ -z "$OUTPUT" ]; then
+            echo "❌ Error: Chat command (no RAG) returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          echo "✓ Chat command without RAG works"
+
+      # ============================================================
+      # Validation & Summary
+      # ============================================================
+      - name: List datasets to verify persistence
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Listing datasets..."
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets list; then
+            echo "❌ Dataset listing failed, checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+          echo "✓ Dataset listing works"
+
+      - name: Check RAG health
+        working-directory: cli
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Checking RAG health..."
+          ./lf --cwd /tmp/e2e-test --debug rag health || true
+          echo "✓ RAG health check complete"
+
+      - name: E2E test summary
+        run: |
+          echo "=========================================="
+          echo "End-to-End Test Summary"
+          echo "=========================================="
+          echo "✓ CLI built successfully"
+          echo "✓ Project initialized"
+          echo "✓ Dataset created and processed"
+          echo "✓ RAG queries executed"
+          echo "✓ Chat commands completed"
+          echo "=========================================="
+          echo "All E2E tests passed!"
+
+      # ============================================================
+      # Cleanup
+      # ============================================================
+      - name: Cleanup test artifacts
+        if: always()
+        run: |
+          echo "Cleaning up test directory..."
+          rm -rf /tmp/e2e-test
+          echo "✓ Cleanup complete"
+
+      - name: Display service logs on failure
+        if: failure()
+        run: |
+          echo "=========================================="
+          echo "Service Logs"
+          echo "=========================================="
+
+          # Display server logs if they exist
+          if [ -f "$HOME/.llamafarm/logs/server.log" ]; then
+            echo "--- Server Logs ---"
+            tail -100 "$HOME/.llamafarm/logs/server.log"
+          else
+            echo "No server logs found at $HOME/.llamafarm/logs/server.log"
+          fi
+
+          echo ""
+
+          # Display RAG logs if they exist
+          if [ -f "$HOME/.llamafarm/logs/rag.log" ]; then
+            echo "--- RAG Worker Logs ---"
+            tail -100 "$HOME/.llamafarm/logs/rag.log"
+          else
+            echo "No RAG logs found at $HOME/.llamafarm/logs/rag.log"
+          fi
+
+          echo ""
+
+          # List all log files that exist
+          echo "--- All Log Files ---"
+          ls -lah "$HOME/.llamafarm/logs/" 2>/dev/null || echo "Logs directory does not exist"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-logs
+          path: $HOME/.llamafarm/logs/*
+          retention-days: 7
+          if-no-files-found: warn

@@ -1,0 +1,50 @@
+# Universal Embedder Default Configurations
+
+general_purpose:
+  name: General Purpose
+  description: Fast and efficient embeddings using MiniLM
+  config:
+    model: sentence-transformers/all-MiniLM-L6-v2
+    base_url: http://127.0.0.1:11540/v1
+    api_key: universal
+    batch_size: 32
+    timeout: 120
+    normalize: true
+  recommended_for:
+    - Local deployment
+    - Development
+    - Fast inference
+    - General text similarity
+
+high_quality:
+  name: High Quality
+  description: High-quality embeddings using BGE
+  config:
+    model: BAAI/bge-base-en-v1.5
+    base_url: http://127.0.0.1:11540/v1
+    api_key: universal
+    batch_size: 16
+    timeout: 120
+    normalize: true
+  recommended_for:
+    - Production RAG systems
+    - Semantic search
+    - Question answering
+    - High accuracy requirements
+
+long_context:
+  name: Long Context
+  description: Optimized for longer text passages
+  config:
+    model: nomic-ai/nomic-embed-text-v1.5
+    base_url: http://127.0.0.1:11540/v1
+    api_key: universal
+    batch_size: 16
+    timeout: 120
+    normalize: true
+  recommended_for:
+    - Long documents
+    - Academic papers
+    - Legal documents
+    - Technical documentation
+

@@ -580,8 +580,9 @@ func (m *chatModel) switchMode(newMode ChatMode) {
 		ServerURL:   serverURL,
 		PrintStatus: true,
 		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional, // Start async, don't wait
+			"universal-runtime": ServiceOptional, // Start async, don't wait
+			"server":            ServiceRequired,
+			"rag":               ServiceOptional, // Start async, don't wait
 		},
 		DefaultTimeout: 45 * time.Second,
 	}

@@ -157,11 +157,14 @@ func TestVerboseHTTPClient_Logs(t *testing.T) {
 	_ = os.Remove(testLogFile)
 	defer os.Remove(testLogFile) // Clean up after test
 
+	// Reset the logger state so we can initialize with a new file path
+	ResetDebugLoggerForTesting()
+	defer ResetDebugLoggerForTesting() // Reset after test for other tests
+
 	// Initialize debug logger BEFORE making the HTTP request
 	if initErr := InitDebugLogger(testLogFile); initErr != nil {
 		t.Fatalf("failed to initialize debug logger: %v", initErr)
 	}
-	defer CloseDebugLogger() // Ensure cleanup even if test fails
 
 	req, _ := http.NewRequest(http.MethodGet, "http://localhost:8000/foo", nil)
 	client := getHTTPClient()

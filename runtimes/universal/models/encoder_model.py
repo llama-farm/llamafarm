@@ -1,0 +1,170 @@
+"""
+Encoder model wrapper for embeddings and classification.
+"""
+
+from transformers import AutoModel, AutoTokenizer, AutoModelForSequenceClassification
+import torch
+import torch.nn.functional as F
+from typing import List, Optional, Dict, Any
+import logging
+
+from .base import BaseModel
+
+logger = logging.getLogger(__name__)
+
+
+class EncoderModel(BaseModel):
+    """Wrapper for HuggingFace encoder models (BERT-style embeddings & classification)."""
+
+    def __init__(
+        self,
+        model_id: str,
+        device: str,
+        task: str = "embedding",
+        token: Optional[str] = None,
+    ):
+        """
+        Initialize encoder model.
+
+        Args:
+            model_id: HuggingFace model ID
+            device: Target device (cuda/mps/cpu)
+            task: Model task - "embedding" or "classification"
+            token: HuggingFace authentication token for gated models
+        """
+        super().__init__(model_id, device, token=token)
+        self.task = task
+        self.model_type = f"encoder_{task}"
+        self.supports_streaming = False
+
+    async def load(self):
+        """Load the encoder model."""
+        logger.info(f"Loading encoder model ({self.task}): {self.model_id}")
+
+        dtype = self.get_dtype()
+
+        # Load tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_id, trust_remote_code=True, token=self.token
+        )
+
+        # Load model based on task
+        if self.task == "classification":
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.model_id,
+                dtype=dtype,
+                trust_remote_code=True,
+                token=self.token,
+            )
+        else:  # embedding
+            self.model = AutoModel.from_pretrained(
+                self.model_id,
+                dtype=dtype,
+                trust_remote_code=True,
+                token=self.token,
+            )
+
+        self.model = self.model.to(self.device)
+        self.model.eval()
+
+        logger.info(f"Encoder model loaded on {self.device}")
+
+    def _mean_pooling(self, model_output, attention_mask):
+        """Mean pooling - take attention mask into account for correct averaging."""
+        token_embeddings = model_output[0]
+        input_mask_expanded = (
+            attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        )
+        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+            input_mask_expanded.sum(1), min=1e-9
+        )
+
+    async def embed(
+        self, texts: List[str], normalize: bool = True
+    ) -> List[List[float]]:
+        """
+        Generate embeddings for input texts.
+
+        Args:
+            texts: List of input texts
+            normalize: Whether to L2 normalize embeddings
+
+        Returns:
+            List of embedding vectors
+        """
+        if self.task != "embedding":
+            raise ValueError(f"Model task is '{self.task}', not 'embedding'")
+
+        # Tokenize
+        encoded = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt",
+        )
+        encoded = {k: v.to(self.device) for k, v in encoded.items()}
+
+        # Generate embeddings
+        with torch.no_grad():
+            model_output = self.model(**encoded)
+
+        # Mean pooling
+        embeddings = self._mean_pooling(model_output, encoded["attention_mask"])
+
+        # Normalize
+        if normalize:
+            embeddings = F.normalize(embeddings, p=2, dim=1)
+
+        return embeddings.cpu().tolist()
+
+    async def classify(self, texts: List[str]) -> List[Dict[str, Any]]:
+        """
+        Classify input texts.
+
+        Args:
+            texts: List of input texts
+
+        Returns:
+            List of classification results with labels and scores
+        """
+        if self.task != "classification":
+            raise ValueError(f"Model task is '{self.task}', not 'classification'")
+
+        # Tokenize
+        encoded = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt",
+        )
+        encoded = {k: v.to(self.device) for k, v in encoded.items()}
+
+        # Classify
+        with torch.no_grad():
+            outputs = self.model(**encoded)
+            predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+
+        # Format results
+        results = []
+        for pred in predictions:
+            scores = pred.cpu().tolist()
+            # Get top prediction
+            max_idx = pred.argmax().item()
+
+            result = {
+                "label": self.model.config.id2label.get(max_idx, str(max_idx)),
+                "score": scores[max_idx],
+                "all_scores": {
+                    self.model.config.id2label.get(i, str(i)): score
+                    for i, score in enumerate(scores)
+                },
+            }
+            results.append(result)
+
+        return results
+
+    async def generate(self, *args, **kwargs):
+        """Not applicable for encoder models."""
+        raise NotImplementedError("Encoder models do not support text generation")
