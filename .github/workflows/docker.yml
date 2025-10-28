@@ -26,7 +26,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
         include:
           - service: designer
             context: ./designer
@@ -40,7 +40,6 @@ jobs:
             context: ./
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
-
           - service: runtime
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
@@ -82,6 +81,7 @@ jobs:
       - name: Build and push AMD64 Docker image
         id: build
         uses: docker/build-push-action@v5
+        timeout-minutes: 60
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -112,7 +112,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
         include:
           - service: designer
             context: ./designer
@@ -126,7 +126,6 @@ jobs:
             context: ./
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
-
           - service: runtime
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
@@ -168,6 +167,7 @@ jobs:
       - name: Build and push ARM64 Docker image
         id: build
         uses: docker/build-push-action@v5
+        timeout-minutes: 60
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -343,7 +343,7 @@ jobs:
           IMAGE_TAG: pr-${{ github.event.number }}
         run: |
           # Tag the loaded images with the expected format for docker-compose
-          SERVICES=(designer server rag)
+          SERVICES=(designer server rag runtime)
 
           for SERVICE in "${SERVICES[@]}"; do
             # Find the loaded images for this service
@@ -425,7 +425,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

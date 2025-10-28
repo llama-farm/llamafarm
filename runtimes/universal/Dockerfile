@@ -44,9 +44,6 @@ COPY runtimes/universal/pyproject.toml runtimes/universal/uv.lock runtimes/unive
 # Install server dependencies
 RUN cd runtimes/universal && uv sync --locked --verbose
 
-# Fix ownership and permissions of UV directories after they've been populated
-RUN chmod -R 777 /tmp/uv-cache /tmp/uv-venv
-
 # Copy universal runtime source code
 COPY runtimes/universal/ ./runtimes/universal/
 
