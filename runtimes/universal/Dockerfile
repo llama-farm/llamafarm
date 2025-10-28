@@ -41,8 +41,10 @@ RUN rm -rf rag server
 # Copy universal runtime dependency files and README
 COPY runtimes/universal/pyproject.toml runtimes/universal/uv.lock runtimes/universal/README.md ./runtimes/universal/
 
-# Install server dependencies
-RUN cd runtimes/universal && uv sync --locked --verbose
+# Install server dependencies and clean up cache to reduce layer size
+RUN cd runtimes/universal && uv sync --locked --verbose \
+    && uv cache clean \
+    && rm -rf /tmp/uv-cache/*
 
 # Copy universal runtime source code
 COPY runtimes/universal/ ./runtimes/universal/
