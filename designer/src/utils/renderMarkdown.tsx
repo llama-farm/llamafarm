@@ -1,6 +1,4 @@
 import React from 'react'
-import ReactMarkdown from 'react-markdown'
-import rehypeSanitize from 'rehype-sanitize'
 
 interface MarkdownProps {
   content: string
@@ -8,11 +6,13 @@ interface MarkdownProps {
 }
 
 const Markdown: React.FC<MarkdownProps> = ({ content, className }) => {
+  // Minimal fallback renderer without external deps
   return (
-    <div className={className}>
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-        {content}
-      </ReactMarkdown>
+    <div
+      className={className}
+      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+    >
+      {content}
     </div>
   )
 }

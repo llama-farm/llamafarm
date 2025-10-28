@@ -20,6 +20,10 @@ import {
   DialogTitle,
 } from '../ui/dialog'
 import { Label } from '../ui/label'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProject } from '../../hooks/useProjects'
+import { Checkbox } from '../ui/checkbox'
+import { parsePromptSets } from '../../utils/promptSets'
 
 interface TabBarProps {
   activeTab: string
@@ -62,11 +66,23 @@ interface ModelCardProps {
   model: InferenceModel
   onMakeDefault?: () => void
   onDelete?: () => void
+  promptSetNames: string[]
+  selectedPromptSets: string[]
+  onTogglePromptSet: (name: string, checked: boolean | string) => void
+  onClearPromptSets: () => void
 }
 
-function ModelCard({ model, onMakeDefault, onDelete }: ModelCardProps) {
+function ModelCard({
+  model,
+  onMakeDefault,
+  onDelete,
+  promptSetNames,
+  selectedPromptSets,
+  onTogglePromptSet,
+  onClearPromptSets,
+}: ModelCardProps) {
   return (
-    <div className="w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative">
+    <div className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative">
       <div className="absolute top-2 right-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -90,35 +106,86 @@ function ModelCard({ model, onMakeDefault, onDelete }: ModelCardProps) {
         </DropdownMenu>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="text-sm">{model.name}</div>
-        {model.isDefault && (
-          <div className="text-[10px] leading-4 rounded-xl px-2 py-0.5 bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900">
-            Default
+      <div className="grid grid-cols-1 md:grid-cols-2 md:items-end gap-3 w-full">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm">{model.name}</div>
+            {model.isDefault && (
+              <div className="text-[10px] leading-4 rounded-xl px-2 py-0.5 bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900">
+                Default
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      <div className="text-xs text-muted-foreground">{model.meta}</div>
-      <div className="flex flex-row gap-2">
-        {model.badges.map((b, i) => (
-          <div
-            key={`${b}-${i}`}
-            className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5"
-          >
-            {b}
+          <div className="text-xs text-muted-foreground">{model.meta}</div>
+          <div className="flex flex-row gap-2 mt-3">
+            {model.badges.map((b, i) => (
+              <div
+                key={`${b}-${i}`}
+                className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5"
+              >
+                {b}
+              </div>
+            ))}
           </div>
-        ))}
+          {model.status === 'downloading' ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader
+                size={16}
+                className="border-blue-400 dark:border-blue-100"
+              />
+              Downloading...
+            </div>
+          ) : null}
+        </div>
+        {/* Prompt sets multi-select column */}
+        <div className="mt-3 md:mt-0 md:justify-self-end w-full flex flex-col justify-end md:pl-4">
+          <div className="text-xs text-muted-foreground mb-1">Prompt sets</div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full h-8 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between mr-6 md:mr-8">
+                <span className="truncate text-sm flex items-center gap-2">
+                  {selectedPromptSets.length > 0 ? (
+                    <>
+                      <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
+                        {selectedPromptSets.length}
+                      </span>
+                      <span className="truncate">
+                        {selectedPromptSets.join(', ')}
+                      </span>
+                    </>
+                  ) : (
+                    'All sets'
+                  )}
+                </span>
+                <FontIcon type="chevron-down" className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
+              {promptSetNames.map(name => (
+                <DropdownMenuItem
+                  key={name}
+                  className="w-full justify-start text-left"
+                  onSelect={e => e.preventDefault()}
+                >
+                  <label className="flex items-center gap-2 w-full">
+                    <Checkbox
+                      checked={selectedPromptSets.includes(name)}
+                      onCheckedChange={v => onTogglePromptSet(name, v)}
+                    />
+                    <span className="text-sm">{name}</span>
+                  </label>
+                </DropdownMenuItem>
+              ))}
+              <div className="h-px bg-border my-1" />
+              <DropdownMenuItem onClick={onClearPromptSets}>
+                <span className="text-xs text-muted-foreground">
+                  Clear selection (All sets)
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-      {model.status === 'downloading' ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader size={16} className="border-blue-400 dark:border-blue-100" />
-          Downloading...
-        </div>
-      ) : (
-        <div className="text-xs text-muted-foreground">
-          more info here in a line
-        </div>
-      )}
     </div>
   )
 }
@@ -127,19 +194,31 @@ function ProjectInferenceModels({
   models,
   onMakeDefault,
   onDelete,
+  getSelected,
+  promptSetNames,
+  onToggle,
+  onClear,
 }: {
   models: InferenceModel[]
   onMakeDefault: (id: string) => void
   onDelete: (id: string) => void
+  getSelected: (id: string) => string[]
+  promptSetNames: string[]
+  onToggle: (id: string, name: string, checked: boolean | string) => void
+  onClear: (id: string) => void
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6">
       {models.map(m => (
         <ModelCard
           key={m.id}
           model={m}
           onMakeDefault={() => onMakeDefault(m.id)}
           onDelete={() => onDelete(m.id)}
+          promptSetNames={promptSetNames}
+          selectedPromptSets={getSelected(m.id)}
+          onTogglePromptSet={(name, checked) => onToggle(m.id, name, checked)}
+          onClearPromptSets={() => onClear(m.id)}
         />
       ))}
     </div>
@@ -850,6 +929,12 @@ function TrainingData() {
 }
 
 const Models = () => {
+  const activeProject = useActiveProject()
+  const { data: projectResponse } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject?.namespace && !!activeProject?.project
+  )
   const [activeTab, setActiveTab] = useState('project')
   const [mode, setMode] = useState<Mode>('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([
@@ -932,6 +1017,74 @@ const Models = () => {
     setProjectModels(prev => prev.filter(m => m.id !== id))
   }
 
+  // Prompt set assignment per model (Designer-only, localStorage)
+  const mapKey =
+    activeProject?.namespace && activeProject?.project
+      ? `lf_model_prompt_sets:${activeProject.namespace}/${activeProject.project}`
+      : null
+
+  const loadMap = (): Record<string, string[]> => {
+    try {
+      if (!mapKey) return {}
+      const raw = localStorage.getItem(mapKey)
+      return raw ? (JSON.parse(raw) as Record<string, string[]>) : {}
+    } catch {
+      return {}
+    }
+  }
+
+  const saveMap = (next: Record<string, string[]>) => {
+    if (!mapKey) return
+    try {
+      localStorage.setItem(mapKey, JSON.stringify(next))
+    } catch {}
+  }
+
+  const [modelSetMap, setModelSetMap] = useState<Record<string, string[]>>(() =>
+    loadMap()
+  )
+
+  const promptSetNames = (() => {
+    const prompts = projectResponse?.project?.config?.prompts as
+      | Array<{
+          name: string
+          messages: Array<{ role?: string; content: string }>
+        }>
+      | undefined
+    const sets = parsePromptSets(prompts)
+    return sets.map((s: { name: string }) => s.name)
+  })()
+
+  useEffect(() => {
+    setModelSetMap(loadMap())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.namespace, activeProject?.project])
+
+  const getSelectedFor = (id: string): string[] => modelSetMap[id] || []
+
+  const toggleFor = (id: string, name: string, checked: boolean | string) => {
+    setModelSetMap(prev => {
+      const next = { ...prev }
+      const cur = new Set(next[id] || [])
+      if (checked) cur.add(name)
+      else cur.delete(name)
+      const arr = Array.from(cur)
+      if (arr.length === 0) delete next[id]
+      else next[id] = arr
+      saveMap(next)
+      return next
+    })
+  }
+
+  const clearFor = (id: string) => {
+    setModelSetMap(prev => {
+      const next = { ...prev }
+      delete next[id]
+      saveMap(next)
+      return next
+    })
+  }
+
   return (
     <div
       className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-32' : ''}`}
@@ -964,6 +1117,10 @@ const Models = () => {
               models={projectModels}
               onMakeDefault={makeDefault}
               onDelete={deleteModel}
+              getSelected={getSelectedFor}
+              promptSetNames={promptSetNames}
+              onToggle={toggleFor}
+              onClear={clearFor}
             />
           )}
           {activeTab === 'manage' && (
@@ -975,6 +1132,8 @@ const Models = () => {
           {activeTab === 'training' && <TrainingData />}
         </>
       )}
+
+      {/* Inline multi-select on cards replaces separate dialog */}
     </div>
   )
 }

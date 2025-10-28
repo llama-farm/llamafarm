@@ -11,7 +11,7 @@ required:
 properties:
   version:
     type: string
-    enum: ["v1"]
+    enum: [v1]
     default: v1
     description: Config version, must be "v1"
   name:
@@ -33,11 +33,11 @@ properties:
       properties:
         name:
           type: string
-          pattern: "^[a-z][a-z0-9_]*$"
-          description: "Unique prompt set identifier"
+          pattern: '^[a-z][a-z0-9_]*$'
+          description: Unique prompt set identifier
         messages:
           type: array
-          description: "List of messages in this prompt set"
+          description: List of messages in this prompt set
           items:
             type: object
             required:
@@ -46,15 +46,15 @@ properties:
             properties:
               role:
                 type: string
-                description: 'Message role (e.g., "system", "user", "assistant")'
+                description: "Message role (e.g., \"system\", \"user\", \"assistant\")"
               content:
                 type: string
-                description: "Message content"
+                description: Message content
           default: []
     default: []
 
   rag:
-    $ref: "../rag/schema.yaml"
+    $ref: '../rag/schema.yaml'
 
   datasets:
     type: array
@@ -90,11 +90,11 @@ properties:
     properties:
       default_model:
         type: string
-        description: "Name of the default model to use (references a model name in the models list). If not specified, uses first model."
+        description: Name of the default model to use (references a model name in the models list). If not specified, uses first model.
 
       models:
         type: array
-        description: "List of model configurations for multi-model support"
+        description: List of model configurations for multi-model support
         items:
           type: object
           required:
@@ -104,33 +104,33 @@ properties:
           properties:
             name:
               type: string
-              description: "Model identifier (unique name)"
+              description: Model identifier (unique name)
             description:
               type: string
-              description: "Human-readable description of this model configuration"
+              description: Human-readable description of this model configuration
             provider:
               type: string
               enum: [openai, ollama, lemonade]
-              description: "Runtime provider for this model"
+              description: Runtime provider for this model
             model:
               type: string
-              description: "Model name or ID"
+              description: Model name or ID
             base_url:
               type: string
-              description: "Base URL for the provider"
+              description: Base URL for the provider
             api_key:
               type: string
-              description: "API key for the provider"
+              description: API key for the provider
             instructor_mode:
               type: string
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
             prompt_format:
               type: string
               enum: [structured, unstructured]
-              description: "Prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)"
+              description: Prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)
             model_api_parameters:
               type: object
-              description: "Additional parameters passed to the API provider"
+              description: Additional parameters passed to the API provider
               additionalProperties: true
             provider_config:
               type: object
@@ -139,7 +139,7 @@ properties:
               additionalProperties: true
             prompts:
               type: array
-              description: "List of prompt set names to use for this model (merged in order)"
+              description: List of prompt set names to use for this model (merged in order)
               items:
                 type: string
               default: []
@@ -162,7 +162,7 @@ properties:
               description: MCP server identifier
             transport:
               type: string
-              enum: ["stdio", "http", "sse"]
+              enum: [stdio, http, sse]
               description: Connection transport to the MCP server
             # stdio transport
             command:
@@ -189,4 +189,3 @@ properties:
                 type: string
               example:
                 Authorization: Bearer ${env:MCP_SERVER_TOKEN}
-

@@ -15,8 +15,11 @@ export interface LlamaFarmConfig {
   name: string
   namespace: string
   prompts?: Array<{
-    role?: string
-    content: string
+    name: string
+    messages: Array<{
+      role?: string
+      content: string
+    }>
   }>
   rag?: Record<string, any>
   datasets?: Array<{
