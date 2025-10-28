@@ -32,7 +32,7 @@ type SourceManager struct {
 	srcDir        string
 	versionFile   string
 	pythonEnvMgr  *PythonEnvManager
-	currentSource string // tracks what source version is currently installed
+	currentSource string     // tracks what source version is currently installed
 	mu            sync.Mutex // protects against parallel downloads
 }
 
