@@ -17,6 +17,8 @@ class Settings(BaseSettings, env_file=".env"):
     LOG_LEVEL: str = "INFO"
     LOG_NAME: str = "server"
     LOG_ACCESS_NAME: str = "server.access"
+    # If set, logs will be written to this file in addition to stdout
+    LOG_FILE: str = ""
 
     CELERY_LOG_LEVEL: str = "INFO"
 
@@ -46,6 +48,11 @@ class Settings(BaseSettings, env_file=".env"):
     lemonade_port: int = 11534
     lemonade_host: str = "127.0.0.1"
     lemonade_api_key: str = "lemonade"
+
+    # Universal Runtime Configuration
+    universal_port: int = 11540
+    universal_host: str = "127.0.0.1"
+    universal_api_key: str = "universal"
 
 
 settings = Settings()

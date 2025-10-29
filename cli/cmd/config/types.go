@@ -13,13 +13,21 @@ var (
 
 // LlamaFarmConfig represents the complete llamafarm configuration
 type LlamaFarmConfig struct {
-	Version   string    `yaml:"version" toml:"version"`
-	Name      string    `yaml:"name,omitempty" toml:"name,omitempty"`
-	Namespace string    `yaml:"namespace,omitempty" toml:"namespace,omitempty"`
-	Prompts   []Prompt  `yaml:"prompts,omitempty" toml:"prompts,omitempty"`
-	RAG       RAGConfig `yaml:"rag,omitempty" toml:"rag,omitempty"`
-	Datasets  []Dataset `yaml:"datasets,omitempty" toml:"datasets,omitempty"`
-	Models    []Model   `yaml:"models,omitempty" toml:"models,omitempty"`
+	Version   string         `yaml:"version" toml:"version"`
+	Name      string         `yaml:"name,omitempty" toml:"name,omitempty"`
+	Namespace string         `yaml:"namespace,omitempty" toml:"namespace,omitempty"`
+	Runtime   RuntimeConfig  `yaml:"runtime,omitempty" toml:"runtime,omitempty"`
+	Prompts   []Prompt       `yaml:"prompts,omitempty" toml:"prompts,omitempty"`
+	RAG       RAGConfig      `yaml:"rag,omitempty" toml:"rag,omitempty"`
+	Datasets  []Dataset      `yaml:"datasets,omitempty" toml:"datasets,omitempty"`
+	
+	// Legacy field for backwards compatibility
+	Models    []Model        `yaml:"models,omitempty" toml:"models,omitempty"`
+}
+
+// RuntimeConfig represents runtime configuration
+type RuntimeConfig struct {
+	Models []Model `yaml:"models,omitempty" toml:"models,omitempty"`
 }
 
 // Dataset represents a dataset configuration

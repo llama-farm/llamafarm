@@ -33,7 +33,7 @@ properties:
       properties:
         name:
           type: string
-          pattern: '^[a-z][a-z0-9_]*$'
+          pattern: "^[a-z][a-z0-9_]*$"
           description: Unique prompt set identifier
         messages:
           type: array
@@ -46,7 +46,7 @@ properties:
             properties:
               role:
                 type: string
-                description: "Message role (e.g., \"system\", \"user\", \"assistant\")"
+                description: 'Message role (e.g., "system", "user", "assistant")'
               content:
                 type: string
                 description: Message content
@@ -54,7 +54,7 @@ properties:
     default: []
 
   rag:
-    $ref: '../rag/schema.yaml'
+    $ref: "../rag/schema.yaml"
 
   datasets:
     type: array
@@ -110,7 +110,7 @@ properties:
               description: Human-readable description of this model configuration
             provider:
               type: string
-              enum: [openai, ollama, lemonade]
+              enum: [openai, ollama, lemonade, universal]
               description: Runtime provider for this model
             model:
               type: string

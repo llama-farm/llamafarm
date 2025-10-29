@@ -114,24 +114,24 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
-		var createResp CreateProjectResponse
-		if err := json.Unmarshal(respBody, &createResp); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
-			os.Exit(1)
-		}
+	// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
+	var createResp CreateProjectResponse
+	if err := json.Unmarshal(respBody, &createResp); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
+		os.Exit(1)
+	}
 
-		yamlBytes, err := yaml.Marshal(createResp.Project.Config)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
-			os.Exit(1)
-		}
+	yamlBytes, err := yaml.Marshal(createResp.Project.Config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
+		os.Exit(1)
+	}
 
-		yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
-		if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
-			os.Exit(1)
-		}
+	yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
+	if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
+		os.Exit(1)
+	}
 
 		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absProjectDir)
 	},

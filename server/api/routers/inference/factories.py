@@ -144,7 +144,7 @@ class AgentFactory:
 
                 For each user turn:
 
-                1. Parse intent (improve\_prompt, add\_new, add\_examples, define\_schema, refusal, tools, run\_eval, persist, switch\_focus).
+                1. Parse intent (improve_prompt, add_new, add_examples, define_schema, refusal, tools, run_eval, persist, switch_focus).
                 2. Reference current state.
                 3. Respond with:
 

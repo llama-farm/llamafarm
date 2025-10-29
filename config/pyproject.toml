@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["config"]
-package-dir = {"" = ".."}
+package-dir = { "" = ".." }
 py-modules = []
 
 [project]
@@ -12,23 +12,23 @@ name = "llamafarm-config"
 version = "0.1.0"
 description = "Configuration loader for LlamaFarm with JSON schema validation"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = [
-    "jsonref>=1.1.0",
-    "jsonschema>=4.23.0",
-    "jsonschema-path>=0.3.4",
-    "PyYAML>=6.0",
-    "tomli>=2.0.0; python_version<'3.11'",
+  "jsonref>=1.1.0",
+  "jsonschema>=4.23.0",
+  "jsonschema-path>=0.3.4",
+  "PyYAML>=6.0",
+  "tomli>=2.0.0; python_version<'3.11'",
 ]
 
 [dependency-groups]
 dev = [
-    "datamodel-code-generator>=0.27.3",
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "mypy>=1.0.0",
-    "ruff>=0.12.7",
-    "jsonref>=1.1.0",
+  "datamodel-code-generator>=0.27.3",
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "mypy>=1.0.0",
+  "ruff>=0.12.7",
+  "jsonref>=1.1.0",
 ]
 
 [project.scripts]

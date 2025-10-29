@@ -18,6 +18,7 @@ const Dashboard = () => {
 
   // All state declarations first
   const [mode, setMode] = useModeWithReset('designer')
+  const [showValidationDetails, setShowValidationDetails] = useState(false)
   const [projectName, setProjectName] = useState<string>('Dashboard')
   // Datasets list for Data card
   const { data: apiDatasets, isLoading: isDatasetsLoading } = useListDatasets(
@@ -152,6 +153,61 @@ const Dashboard = () => {
           </div>
           <PageActions mode={mode} onModeChange={setMode} />
         </div>
+
+        {/* Validation Error Banner */}
+        {projectDetail?.project?.validation_error && (() => {
+          // Parse actual error count from validation messages
+          const errorText = projectDetail.project.validation_error
+          let errorCount = 1 // Default to 1 if we can't parse
+
+          // Try to extract error count from patterns like "5 validation errors" or "(and 3 more errors)"
+          const countMatch = errorText.match(/(\d+)\s+(?:validation\s+)?errors?/i)
+          if (countMatch) {
+            errorCount = parseInt(countMatch[1], 10)
+          } else {
+            // Count semicolon-separated error messages as individual errors
+            const parts = errorText.split(';').filter(s => s.trim().length > 0)
+            if (parts.length > 1) {
+              errorCount = parts.length
+            }
+          }
+
+          return (
+            <div className="mb-4 rounded-lg border border-red-600 bg-red-50 dark:bg-red-950/20">
+              <button
+                onClick={() => setShowValidationDetails(!showValidationDetails)}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-red-100 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <FontIcon type="alert-triangle" className="w-5 h-5 text-red-600" />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-100 bg-red-600 rounded-full px-2.5 py-0.5 font-semibold">
+                      {errorCount} {errorCount === 1 ? 'error' : 'errors'}
+                    </span>
+                    <span className="text-sm font-semibold text-red-900 dark:text-red-100">
+                      Configuration validation {errorCount === 1 ? 'issue' : 'issues'} detected
+                    </span>
+                  </div>
+                </div>
+                <FontIcon
+                  type={showValidationDetails ? 'chevron-up' : 'chevron-down'}
+                  className="w-5 h-5 text-red-600"
+                />
+              </button>
+              {showValidationDetails && (
+                <div className="px-4 pb-4 pt-2 border-t border-red-200 dark:border-red-900">
+                  <pre className="text-xs text-red-800 dark:text-red-200 whitespace-pre-wrap font-mono bg-red-100 dark:bg-red-950/40 p-3 rounded overflow-x-auto">
+                    {projectDetail.project.validation_error}
+                  </pre>
+                  <div className="mt-3 text-xs text-red-700 dark:text-red-300">
+                    <strong>Note:</strong> You can still view and edit this project, but some features may not work correctly until the validation errors are fixed.
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {mode !== 'designer' ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-6">
             <ConfigEditor className="h-full" />

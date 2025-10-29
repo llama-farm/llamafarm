@@ -1,0 +1,43 @@
+# Universal Embedder Component Schema
+# JSON Schema draft-07 format
+$schema: http://json-schema.org/draft-07/schema#
+$id: components/embedders/universal_embedder/schema.yaml
+title: Universal Embedder Configuration
+description: Generate embeddings using Universal Runtime (any HuggingFace model)
+type: object
+additionalProperties: false
+properties:
+  model:
+    type: string
+    default: sentence-transformers/all-MiniLM-L6-v2
+    description: HuggingFace model ID for embeddings
+    examples:
+      - sentence-transformers/all-MiniLM-L6-v2
+      - BAAI/bge-base-en-v1.5
+      - nomic-ai/nomic-embed-text-v1.5
+      - sentence-transformers/all-mpnet-base-v2
+  base_url:
+    type: string
+    format: uri
+    default: http://127.0.0.1:11540/v1
+    description: Universal Runtime API endpoint
+  api_key:
+    type: string
+    default: universal
+    description: API key for Universal Runtime
+  batch_size:
+    type: integer
+    default: 32
+    minimum: 1
+    maximum: 128
+    description: Batch processing size
+  timeout:
+    type: integer
+    default: 120
+    minimum: 10
+    description: Request timeout (seconds) - longer for initial model loading
+  normalize:
+    type: boolean
+    default: true
+    description: Normalize embeddings to unit length
+

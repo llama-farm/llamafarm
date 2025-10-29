@@ -7,7 +7,7 @@ additionalProperties: false
 properties:
   default_database:
     type: string
-    description: 'Name of the default database to use for RAG queries. If not specified, uses the first database in the databases array.'
+    description: "Name of the default database to use for RAG queries. If not specified, uses the first database in the databases array."
     example: main_database
     pattern: ^[a-z][a-z0-9_]*$
   databases:
@@ -16,14 +16,14 @@ properties:
     description: Independent database definitions with their own embedding/retrieval strategies
     minItems: 1
     items:
-      $ref: '#/definitions/databaseDefinition'
+      $ref: "#/definitions/databaseDefinition"
   data_processing_strategies:
     type: array
     title: Data Processing Strategies
     description: Processing pipelines for parsers and extractors
     minItems: 1
     items:
-      $ref: '#/definitions/dataProcessingStrategyDefinition'
+      $ref: "#/definitions/dataProcessingStrategyDefinition"
 
 required: []
 definitions:
@@ -41,7 +41,7 @@ definitions:
         type: object
         oneOf:
           # Auto-detection parser
-          - $ref: '#/definitions/parsers/autoParserConfig'
+          - $ref: "#/definitions/parsers/autoParserConfig"
           # Tool-specific parser configurations
           - $ref: "#/definitions/parsers/pdfParserPyPDF2Config"
           - $ref: "#/definitions/parsers/pdfParserLlamaIndexConfig"
@@ -174,13 +174,13 @@ definitions:
           description: File encoding
         delimiter:
           type: string
-          default: ','
+          default: ","
           description: CSV delimiter
         na_values:
           type: array
           items:
             type: string
-          default: ['', 'NA', 'N/A', 'null', 'None']
+          default: ["", "NA", "N/A", "null", "None"]
           description: Values to treat as NaN
 
     csvParserPythonConfig:
@@ -201,7 +201,7 @@ definitions:
           description: File encoding
         delimiter:
           type: string
-          default: ','
+          default: ","
           description: CSV delimiter
         quotechar:
           type: string
@@ -229,7 +229,7 @@ definitions:
           default: true
           description: Extract workbook metadata
         sheets:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
           default: null
@@ -252,7 +252,7 @@ definitions:
           minimum: 100
           description: Number of rows per chunk
         sheets:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
           default: null
@@ -262,14 +262,14 @@ definitions:
           default: true
           description: Extract data statistics
         skiprows:
-          type: ['integer', 'null']
+          type: ["integer", "null"]
           default: null
           description: Rows to skip at beginning
         na_values:
           type: array
           items:
             type: string
-          default: ['', 'NA', 'N/A', 'null', 'None']
+          default: ["", "NA", "N/A", "null", "None"]
           description: Values to treat as NaN
 
     docxParserPythonDocxConfig:
@@ -535,7 +535,7 @@ definitions:
           type: array
           items:
             type: string
-          default: ['', 'NA', 'N/A', 'null', 'None']
+          default: ["", "NA", "N/A", "null", "None"]
           description: Values to treat as missing
 
     excelParserLlamaIndexConfig:
@@ -557,7 +557,7 @@ definitions:
           default: rows
           description: Chunking strategy
         sheets:
-          type: ['array', 'null']
+          type: ["array", "null"]
           items:
             type: string
           description: Specific sheets to parse (null for all)
@@ -586,7 +586,7 @@ definitions:
           type: array
           items:
             type: string
-          default: ['', 'NA', 'N/A', 'null', 'None']
+          default: ["", "NA", "N/A", "null", "None"]
           description: Values to treat as missing
 
     docxParserLlamaIndexConfig:
@@ -760,19 +760,19 @@ definitions:
       config:
         type: object
         anyOf:
-          - $ref: '#/definitions/extractors/keywordExtractorConfig'
-          - $ref: '#/definitions/extractors/entityExtractorConfig'
-          - $ref: '#/definitions/extractors/dateTimeExtractorConfig'
-          - $ref: '#/definitions/extractors/headingExtractorConfig'
-          - $ref: '#/definitions/extractors/linkExtractorConfig'
-          - $ref: '#/definitions/extractors/pathExtractorConfig'
-          - $ref: '#/definitions/extractors/patternExtractorConfig'
-          - $ref: '#/definitions/extractors/statisticsExtractorConfig'
-          - $ref: '#/definitions/extractors/summaryExtractorConfig'
-          - $ref: '#/definitions/extractors/tableExtractorConfig'
-          - $ref: '#/definitions/extractors/sentimentExtractorConfig'
-          - $ref: '#/definitions/extractors/yakeExtractorConfig'
-          - $ref: '#/definitions/extractors/contentStatisticsExtractorConfig'
+          - $ref: "#/definitions/extractors/keywordExtractorConfig"
+          - $ref: "#/definitions/extractors/entityExtractorConfig"
+          - $ref: "#/definitions/extractors/dateTimeExtractorConfig"
+          - $ref: "#/definitions/extractors/headingExtractorConfig"
+          - $ref: "#/definitions/extractors/linkExtractorConfig"
+          - $ref: "#/definitions/extractors/pathExtractorConfig"
+          - $ref: "#/definitions/extractors/patternExtractorConfig"
+          - $ref: "#/definitions/extractors/statisticsExtractorConfig"
+          - $ref: "#/definitions/extractors/summaryExtractorConfig"
+          - $ref: "#/definitions/extractors/tableExtractorConfig"
+          - $ref: "#/definitions/extractors/sentimentExtractorConfig"
+          - $ref: "#/definitions/extractors/yakeExtractorConfig"
+          - $ref: "#/definitions/extractors/contentStatisticsExtractorConfig"
   extractors:
     keywordExtractorConfig:
       type: object
@@ -1173,7 +1173,7 @@ definitions:
               - negative
               - neutral
               - mixed
-          default: ['positive', 'negative', 'neutral']
+          default: ["positive", "negative", "neutral"]
           description: Sentiment categories to analyze
     yakeExtractorConfig:
       type: object
@@ -1270,13 +1270,46 @@ definitions:
           - HuggingFaceEmbedder
           - OpenAIEmbedder
           - SentenceTransformerEmbedder
+          - UniversalEmbedder
       config:
         oneOf:
-          - $ref: '#/definitions/embedders/ollamaEmbedderConfig'
-          - $ref: '#/definitions/embedders/huggingfaceEmbedderConfig'
-          - $ref: '#/definitions/embedders/openaiEmbedderConfig'
-          - $ref: '#/definitions/embedders/sentenceTransformerConfig'
+          - $ref: "#/definitions/embedders/ollamaEmbedderConfig"
+          - $ref: "#/definitions/embedders/huggingfaceEmbedderConfig"
+          - $ref: "#/definitions/embedders/openaiEmbedderConfig"
+          - $ref: "#/definitions/embedders/sentenceTransformerConfig"
+          - $ref: "#/definitions/embedders/universalEmbedderConfig"
   embedders:
+    universalEmbedderConfig:
+      type: object
+      title: Universal Embedder Configuration
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+          default: nomic-ai/nomic-embed-text-v2-moe
+          description: HuggingFace model ID
+        base_url:
+          type: string
+          format: uri
+          default: http://localhost:11434
+          description: Ollama API endpoint (preferred)
+        dimension:
+          type: integer
+          default: 768
+          minimum: 128
+          maximum: 4096
+          description: Embedding dimension
+        batch_size:
+          type: integer
+          default: 16
+          minimum: 1
+          maximum: 128
+          description: Batch processing size
+        timeout:
+          type: integer
+          default: 60
+          minimum: 10
+          description: Request timeout (seconds)
     ollamaEmbedderConfig:
       type: object
       title: Ollama Embedder Configuration
@@ -1347,7 +1380,7 @@ definitions:
         cache_folder:
           type:
             - string
-            - 'null'
+            - "null"
           default: null
           description: Model cache directory
     openaiEmbedderConfig:
@@ -1365,13 +1398,13 @@ definitions:
         base_url:
           type:
             - string
-            - 'null'
+            - "null"
           default: null
           description: OpenAI API base URL
         organization:
           type:
             - string
-            - 'null'
+            - "null"
           default: null
           description: OpenAI organization ID
         batch_size:
@@ -1421,10 +1454,10 @@ definitions:
           - QdrantStore
       config:
         oneOf:
-          - $ref: '#/definitions/vectorStores/chromaStoreConfig'
-          - $ref: '#/definitions/vectorStores/faissStoreConfig'
-          - $ref: '#/definitions/vectorStores/pineconeStoreConfig'
-          - $ref: '#/definitions/vectorStores/qdrantStoreConfig'
+          - $ref: "#/definitions/vectorStores/chromaStoreConfig"
+          - $ref: "#/definitions/vectorStores/faissStoreConfig"
+          - $ref: "#/definitions/vectorStores/pineconeStoreConfig"
+          - $ref: "#/definitions/vectorStores/qdrantStoreConfig"
   vectorStores:
     chromaStoreConfig:
       type: object
@@ -1439,7 +1472,7 @@ definitions:
         host:
           type:
             - string
-            - 'null'
+            - "null"
           default: null
           description: Server host
         port:
@@ -1477,7 +1510,7 @@ definitions:
         embedding_function:
           type:
             - string
-            - 'null'
+            - "null"
           default: null
           description: Built-in embedding function
     faissStoreConfig:
@@ -1558,7 +1591,7 @@ definitions:
           description: Distance metric
         namespace:
           type: string
-          default: ''
+          default: ""
           description: Namespace for isolation
         replicas:
           type: integer
@@ -1592,7 +1625,7 @@ definitions:
         api_key:
           type:
             - string
-            - 'null'
+            - "null"
           default: null
           description: API key
         collection_name:
@@ -1629,7 +1662,7 @@ definitions:
             const: BasicSimilarityStrategy
             description: Retrieval strategy type identifier
           config:
-            $ref: '#/definitions/retrievalStrategies/basicSimilarityConfig'
+            $ref: "#/definitions/retrievalStrategies/basicSimilarityConfig"
       - required: [type, config]
         properties:
           type:
@@ -1637,7 +1670,7 @@ definitions:
             const: MetadataFilteredStrategy
             description: Retrieval strategy type identifier
           config:
-            $ref: '#/definitions/retrievalStrategies/metadataFilteredConfig'
+            $ref: "#/definitions/retrievalStrategies/metadataFilteredConfig"
       - required: [type, config]
         properties:
           type:
@@ -1645,7 +1678,7 @@ definitions:
             const: MultiQueryStrategy
             description: Retrieval strategy type identifier
           config:
-            $ref: '#/definitions/retrievalStrategies/multiQueryConfig'
+            $ref: "#/definitions/retrievalStrategies/multiQueryConfig"
       - required: [type, config]
         properties:
           type:
@@ -1653,7 +1686,7 @@ definitions:
             const: RerankedStrategy
             description: Retrieval strategy type identifier
           config:
-            $ref: '#/definitions/retrievalStrategies/rerankedConfig'
+            $ref: "#/definitions/retrievalStrategies/rerankedConfig"
       - required: [type, config]
         properties:
           type:
@@ -1661,7 +1694,7 @@ definitions:
             const: HybridUniversalStrategy
             description: Retrieval strategy type identifier
           config:
-            $ref: '#/definitions/retrievalStrategies/hybridUniversalConfig'
+            $ref: "#/definitions/retrievalStrategies/hybridUniversalConfig"
   retrievalStrategies:
     basicSimilarityConfig:
       type: object
@@ -1686,7 +1719,7 @@ definitions:
         score_threshold:
           type:
             - number
-            - 'null'
+            - "null"
           default: null
           minimum: 0.0
           maximum: 1.0
@@ -1759,7 +1792,7 @@ definitions:
         query_weights:
           type:
             - array
-            - 'null'
+            - "null"
           items:
             type: number
             minimum: 0.0
@@ -1899,6 +1932,7 @@ definitions:
                   OllamaEmbedder,
                   OpenAIEmbedder,
                   SentenceTransformerEmbedder,
+                  UniversalEmbedder,
                 ]
               description: Embedding type
             config:
@@ -1906,7 +1940,7 @@ definitions:
               description: Embedder configuration
               additionalProperties: true
             condition:
-              type: ['string', 'null']
+              type: ["string", "null"]
               description: Optional condition for when to use this embedding (e.g., doc.type == 'code')
             priority:
               type: integer
@@ -1992,24 +2026,24 @@ definitions:
               description: Parser configuration
               additionalProperties: true
             file_extensions:
-              type: ['array', 'null']
+              type: ["array", "null"]
               items:
                 type: string
                 pattern: ^\.[a-zA-Z0-9]+$
               description: File extensions this parser handles (e.g., [".pdf", ".PDF"])
               examples:
-                - ['.pdf', '.PDF'] # PDF parser
-                - ['.csv', '.tsv'] # CSV parser
-                - ['.md', '.markdown'] # Markdown parser
+                - [".pdf", ".PDF"] # PDF parser
+                - [".csv", ".tsv"] # CSV parser
+                - [".md", ".markdown"] # Markdown parser
             file_include_patterns:
               type: array
               items:
                 type: string
               description: Glob patterns for files to include (e.g., ["*.pdf", "report_*.pdf"])
               examples:
-                - ['*.pdf', '*.PDF'] # All PDF files
-                - ['report_*.csv'] # CSV files starting with report_
-                - ['README*', '*.md'] # README files and markdown
+                - ["*.pdf", "*.PDF"] # All PDF files
+                - ["report_*.csv"] # CSV files starting with report_
+                - ["README*", "*.md"] # README files and markdown
             priority:
               type: integer
               description: Parser priority (lower = try first)
@@ -2017,16 +2051,16 @@ definitions:
               minimum: 0
               maximum: 1000
             mime_types:
-              type: ['array', 'null']
+              type: ["array", "null"]
               items:
                 type: string
               description: MIME types this parser handles (e.g., ["application/pdf"])
               examples:
-                - ['application/pdf'] # PDF parser
-                - ['text/csv', 'text/tab-separated-values'] # CSV parser
-                - ['text/markdown', 'text/x-markdown'] # Markdown parser
+                - ["application/pdf"] # PDF parser
+                - ["text/csv", "text/tab-separated-values"] # CSV parser
+                - ["text/markdown", "text/x-markdown"] # Markdown parser
             fallback_parser:
-              type: ['string', 'null']
+              type: ["string", "null"]
               description: Parser to use if this one fails
       extractors:
         type: array
@@ -2045,12 +2079,12 @@ definitions:
               description: Extractor configuration
               additionalProperties: true
             required_for:
-              type: ['array', 'null']
+              type: ["array", "null"]
               items:
                 type: string
               description: Database names that require this extractor
             condition:
-              type: ['string', 'null']
+              type: ["string", "null"]
               description: Optional condition for when to use this extractor
             file_include_patterns:
               type: array
@@ -2058,8 +2092,8 @@ definitions:
                 type: string
               description: Glob patterns for files to apply this extractor to
               examples:
-                - ['*.pdf', '*.PDF'] # PDF files only
-                - ['*'] # All files
+                - ["*.pdf", "*.PDF"] # PDF files only
+                - ["*"] # All files
             priority:
               type: integer
               description: Extractor priority (lower = apply first)

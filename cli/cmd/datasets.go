@@ -487,7 +487,7 @@ var datasetsProcessCmd = &cobra.Command{
 			// Show both filename and hash for clarity
 			identifier := ""
 			if d.Filename != "" {
-				identifier = fmt.Sprintf("%s", d.Filename)
+				identifier = d.Filename
 				if len(d.Hash) > 12 {
 					identifier += fmt.Sprintf(" [%s...]", d.Hash[:12])
 				}
@@ -605,6 +605,11 @@ var datasetsProcessCmd = &cobra.Command{
 		}
 		if result.FailedFiles > 0 {
 			fmt.Printf("   ❌ Failed: %d\n", result.FailedFiles)
+		}
+
+		// Exit with non-zero code if any files failed
+		if result.FailedFiles > 0 {
+			os.Exit(1)
 		}
 	},
 }

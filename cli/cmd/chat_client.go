@@ -357,7 +357,9 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 		}
 		logDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
 		logHeaders("request", req.Header)
-		logDebug(fmt.Sprintf("  -> body: %s", req.Body))
+
+		// Log and restore request body
+		req.Body = logBodyContent(req.Body, "request body")
 
 		hc := &http.Client{Timeout: 0, Transport: &http.Transport{DisableCompression: true, IdleConnTimeout: 0}}
 		resp, err := hc.Do(req)

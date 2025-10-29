@@ -1,7 +1,6 @@
 import json
 from collections.abc import AsyncGenerator
 
-from config.datamodel import Prompt
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
