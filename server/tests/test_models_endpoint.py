@@ -15,7 +15,9 @@ def _client() -> TestClient:
 def test_list_models_empty(mocker):
     """Test models endpoint when no models are cached."""
     # Mock list_cached_models to return empty list
-    mock_list = mocker.patch("api.routers.models.UniversalProvider.list_cached_models")
+    mock_list = mocker.patch(
+        "server.services.model_service.ModelService.list_cached_models"
+    )
     mock_list.return_value = []
 
     client = _client()
@@ -45,7 +47,9 @@ def test_list_models_with_cached_models(mocker):
         ),
     ]
 
-    mock_list = mocker.patch("api.routers.models.UniversalProvider.list_cached_models")
+    mock_list = mocker.patch(
+        "server.services.model_service.ModelService.list_cached_models"
+    )
     mock_list.return_value = test_models
 
     client = _client()
@@ -74,7 +78,9 @@ def test_list_models_with_cached_models(mocker):
 def test_list_models_handles_errors(mocker):
     """Test models endpoint handles errors gracefully."""
     # Mock list_cached_models to raise an exception
-    mock_list = mocker.patch("api.routers.models.UniversalProvider.list_cached_models")
+    mock_list = mocker.patch(
+        "server.services.model_service.ModelService.list_cached_models"
+    )
     mock_list.side_effect = Exception("Cache directory not found")
 
     client = _client()
