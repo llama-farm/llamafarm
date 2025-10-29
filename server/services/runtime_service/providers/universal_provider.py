@@ -235,6 +235,59 @@ class UniversalProvider(RuntimeProvider):
             logger.exception(f"Error downloading model {model_name}: {e}")
             raise e
 
+    @staticmethod
+    def delete_model(model_name: str) -> dict:
+        """Delete a cached model from the HuggingFace cache.
+
+        Args:
+            model_name: The model identifier (e.g., "meta-llama/Llama-2-7b-hf")
+
+        Returns:
+            Dict with deleted model info including freed space
+
+        Raises:
+            NotFoundError: If the model is not found in the cache
+        """
+        cache_info = scan_cache_dir()
+
+        # Find the repo to delete
+        target_repo = None
+        for repo in cache_info.repos:
+            if repo.repo_id == model_name and repo.repo_type == "model":
+                target_repo = repo
+                break
+
+        if not target_repo:
+            raise NotFoundError(
+                f"Model '{model_name}' not found in cache. "
+                "Use GET /v1/models to see available models."
+            )
+
+        # Store info before deletion
+        size_on_disk = target_repo.size_on_disk
+        repo_path = str(target_repo.repo_path)
+        revision_count = len(target_repo.revisions)
+
+        # Delete all revisions of the model
+        # Need to pass the actual revision hashes to delete_revisions
+        revisions_to_delete = [rev.commit_hash for rev in target_repo.revisions]
+        delete_strategy = cache_info.delete_revisions(*revisions_to_delete)
+        delete_strategy.execute()
+
+        logger.info(
+            f"Deleted model {model_name}",
+            revisions=revision_count,
+            size_freed=size_on_disk,
+            path=repo_path,
+        )
+
+        return {
+            "model_name": model_name,
+            "revisions_deleted": revision_count,
+            "size_freed": size_on_disk,
+            "path": repo_path,
+        }
+
 
 def make_reporting_tqdm(queue: asyncio.Queue[dict], loop: asyncio.AbstractEventLoop):
     """Create a tqdm class that reports progress to an asyncio queue.
