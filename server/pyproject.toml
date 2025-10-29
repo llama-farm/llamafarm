@@ -43,6 +43,7 @@ dependencies = [
   "fastapi-mcp>=0.4.0",
   "mcp>=1.2.0",
   "ollama>=0.6.0",
+  "huggingface-hub>=1.0.1",
 ]
 
 [project.optional-dependencies]

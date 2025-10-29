@@ -1,15 +1,24 @@
 """Universal Runtime provider implementation with streaming support."""
 
+import asyncio
 import time
+from collections.abc import AsyncIterator
 
-import requests
+import requests  # type: ignore
+from huggingface_hub import scan_cache_dir, snapshot_download
+from huggingface_hub.errors import RepositoryNotFoundError
+from tqdm.asyncio import tqdm  # type: ignore
 
 from agents.base.clients.client import LFAgentClient
 from agents.base.clients.openai import LFAgentClientOpenAI
+from api.errors import NotFoundError
+from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-from .base import RuntimeProvider
+from .base import CachedModel, RuntimeProvider
 from .health import HealthCheckResult
+
+logger = FastAPIStructLogger(__name__)
 
 
 class UniversalProvider(RuntimeProvider):
@@ -154,3 +163,123 @@ class UniversalProvider(RuntimeProvider):
                 latency_ms=int(time.time() * 1000) - start,
                 details={"host": base, "error": str(e)},
             )
+
+    @staticmethod
+    def list_cached_models() -> list[CachedModel]:
+        """List models that are available on this system"""
+
+        cache_info = scan_cache_dir()
+
+        cached_models = []
+        for repo in cache_info.repos:
+            if repo.repo_type != "model":
+                continue
+
+            cached_models.append(
+                CachedModel(
+                    id=repo.repo_id,
+                    name=repo.repo_id,
+                    size=repo.size_on_disk,
+                    path=str(repo.repo_path),
+                )
+            )
+        return cached_models
+
+    @staticmethod
+    async def download_model(model_name: str) -> AsyncIterator[dict]:
+        """Download/cache a model for the given model name."""
+        try:
+            queue: asyncio.Queue[dict] = asyncio.Queue()
+            loop = asyncio.get_event_loop()
+
+            def run_download():
+                # Patch file_download module to capture actual download progress
+                import huggingface_hub.file_download
+
+                original = huggingface_hub.file_download.tqdm
+                custom_class = make_reporting_tqdm(queue, loop)
+                huggingface_hub.file_download.tqdm = custom_class
+
+                try:
+                    local_dir = snapshot_download(
+                        repo_id=model_name, revision="main", tqdm_class=custom_class
+                    )
+                finally:
+                    huggingface_hub.file_download.tqdm = original
+
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, {"event": "done", "local_dir": local_dir}
+                )
+
+            worker = asyncio.to_thread(run_download)
+
+            # consume events until "done"
+            done = False
+
+            # start the worker
+            task = asyncio.create_task(worker)
+            while not done:
+                evt = await queue.get()
+                yield evt
+                done = evt.get("event") == "done"
+
+            # ensure thread finished (propagate any exception)
+            await task
+        except RepositoryNotFoundError as e:
+            logger.error(f"Model {model_name} not found")
+            raise NotFoundError(
+                f"Model '{model_name}' not found. Check if the model exists on "
+                f"HuggingFace and that you specified the correct repo path."
+            ) from e
+        except Exception as e:
+            logger.exception(f"Error downloading model {model_name}: {e}")
+            raise e
+
+
+def make_reporting_tqdm(queue: asyncio.Queue[dict], loop: asyncio.AbstractEventLoop):
+    """Create a tqdm class that reports progress to an asyncio queue.
+
+    Args:
+        queue: Asyncio queue to send progress events to
+        loop: Event loop reference (must be passed from async context)
+    """
+
+    class ReportingTQDM(tqdm):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {
+                    "event": "start",
+                    "desc": self.desc,
+                    "total": int(self.total) if self.total is not None else None,
+                    "n": int(self.n),
+                },
+            )
+
+        def update(self, n=1):
+            r = super().update(n)
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {
+                    "event": "progress",
+                    "desc": self.desc,
+                    "total": int(self.total) if self.total is not None else None,
+                    "n": int(self.n),
+                },
+            )
+            return r
+
+        def close(self):
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {
+                    "event": "end",
+                    "desc": self.desc,
+                    "total": int(self.total) if self.total is not None else None,
+                    "n": int(self.n),
+                },
+            )
+            super().close()
+
+    return ReportingTQDM
