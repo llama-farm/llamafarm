@@ -28,7 +28,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'aircraft-mx',
     slug: 'aircraft-mx',
-    title: 'Aircraft Maintenance Assistant (Airgapped)',
+    title: 'aircraft-maintenance-assistant-airgapped',
     description:
       'Diagnoses faults and guides airmen through step-by-step repairs using offline manuals, checklists, flight logs, and parts cross-references. Built for disconnected, secure environments.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -86,7 +86,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'med-records',
     slug: 'medical-records',
-    title: 'Healthcare Records Summarizer & Triage',
+    title: 'healthcare-records-summarizer-triage',
     description:
       'Ingests EHR notes, labs, and imaging reports to produce clinician summaries, problem lists, and follow-up suggestions with PHI-safe guardrails.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -141,7 +141,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'case-law-2025',
     slug: 'case-law-2025',
-    title: 'Case Law Research Copilot (2025)',
+    title: 'case-law-research-copilot-2025',
     description:
       'Searches recent opinions, extracts holdings, compares jurisdictions, and drafts argument outlines with citation tracking.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -197,7 +197,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'cust-support-copilot',
     slug: 'customer-support-copilot',
-    title: 'Customer Support Copilot for SaaS',
+    title: 'customer-support-copilot-saas',
     description:
       'Retrieves KB articles, past tickets, and changelogs to draft replies, suggest troubleshooting steps, and auto-route complex cases.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -238,7 +238,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'sales-rfp-assistant',
     slug: 'sales-rfp',
-    title: 'Sales RFP & Proposal Assistant',
+    title: 'sales-rfp-proposal-assistant',
     description:
       'Parses RFPs, maps requirements to product capabilities, drafts compliant responses, and flags gaps/risks.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -282,7 +282,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'financial-filings-analyst',
     slug: 'fin-filings-analyst',
-    title: 'Financial Filings Analyst',
+    title: 'financial-filings-analyst',
     description:
       'Extracts metrics from 10-Ks/10-Qs and earnings calls, builds comps tables, and generates variance commentary.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -330,7 +330,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'devops-runbook-guide',
     slug: 'devops-runbook',
-    title: 'DevOps Runbook Guide',
+    title: 'devops-runbook-guide',
     description:
       'Correlates logs/alerts, proposes likely incident causes, and walks engineers through validated runbook steps and rollback commands.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -371,7 +371,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'manufacturing-quality-coach',
     slug: 'mfg-quality',
-    title: 'Manufacturing Quality Coach',
+    title: 'manufacturing-quality-coach',
     description:
       'Classifies defects from inspection notes, surfaces tolerances/SOPs, and recommends corrective actions with traceability.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -419,7 +419,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'hr-policy-assistant',
     slug: 'hr-policy',
-    title: 'HR Policy & Document Assistant',
+    title: 'hr-policy-document-assistant',
     description:
       'Answers policy questions, generates letters (PIPs, offers), and logs decisions for audit compliance.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -460,7 +460,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'compliance-controls-navigator',
     slug: 'compliance-controls',
-    title: 'Compliance Controls Navigator (SOC 2/ISO 27001)',
+    title: 'compliance-controls-navigator-soc2-iso27001',
     description:
       'Maps controls to evidence, drafts audit responses, and schedules renewal reminders.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -508,7 +508,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'real-estate-lease-analyzer',
     slug: 'lease-analyzer',
-    title: 'Real Estate Lease Analyzer',
+    title: 'real-estate-lease-analyzer',
     description:
       'Extracts key terms (rent escalations, options, CAM) from leases and summarizes obligations/risk.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -549,7 +549,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'education-course-builder',
     slug: 'edu-course-builder',
-    title: 'Education Course Builder & Tutor',
+    title: 'education-course-builder-tutor',
     description:
       'Generates lesson plans, quizzes, and explanations from curriculum outlines; adapts difficulty to learner progress.',
     updatedAt: '2025-08-15T00:00:00.000Z',
