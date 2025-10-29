@@ -1,20 +1,34 @@
 import { apiClient } from './client'
 import {
   ListModelsResponse,
+  ListCachedModelsResponse,
   DownloadModelRequest,
   DownloadEvent,
   DeleteModelResponse,
 } from '../types/model'
 
 /**
+ * List all models for a project
+ */
+export async function listModels(
+  namespace: string,
+  projectId: string
+): Promise<ListModelsResponse> {
+  const response = await apiClient.get<ListModelsResponse>(
+    `/projects/${namespace}/${encodeURIComponent(projectId)}/models`
+  )
+  return response.data
+}
+
+/**
  * List all cached models available on disk
  * @param provider - The provider to list models for (default: universal)
- * @returns Promise<ListModelsResponse> - List of cached models
+ * @returns Promise<ListCachedModelsResponse> - List of cached models
  */
 export async function listCachedModels(
   provider = 'universal'
-): Promise<ListModelsResponse> {
-  const response = await apiClient.get<ListModelsResponse>(
+): Promise<ListCachedModelsResponse> {
+  const response = await apiClient.get<ListCachedModelsResponse>(
     `/models?provider=${provider}`
   )
   return response.data
@@ -95,6 +109,7 @@ export async function deleteModel(
  * Default export with all model service functions
  */
 export default {
+  listModels,
   listCachedModels,
   downloadModel,
   deleteModel,

@@ -21,8 +21,12 @@
     "sync": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "uv sync",
-        "cwd": "runtimes/universal"
+        "commands": [
+          "uv python install 3.12",
+          "uv sync"
+        ],
+        "cwd": "runtimes/universal",
+        "parallel": false
       }
     }
   },
