@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Environment Variables:
@@ -119,7 +120,7 @@ func (m *SourceManager) EnsureSource() error {
 
 // GetCurrentCLIVersion determines the version of the currently running CLI
 // It first checks for the LF_VERSION_REF environment variable (useful for CI/CD),
-// then falls back to "main" branch by default.
+// then uses the CLI's Version variable (set at build time), falling back to "main" for dev builds.
 func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 	// Check for LF_VERSION_REF environment variable first (CI/CD override)
 	if versionRef := strings.TrimSpace(os.Getenv("LF_VERSION_REF")); versionRef != "" {
@@ -129,13 +130,23 @@ func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 		return versionRef, nil
 	}
 
-	// Check if we're in development mode
-	// In dev mode, we use "main" branch
-	// In release mode, we use the CLI version tag
+	// Use the CLI's actual version (set by build flags during release)
+	cliVersion := strings.TrimSpace(Version)
 
-	// For now, always use "main" - in production this would check the actual CLI version
-	// TODO: Implement proper version detection from build-time variables
-	return "main", nil
+	// Development builds (Version = "dev") should use "main" branch
+	if cliVersion == "" || cliVersion == "dev" {
+		if debug {
+			logDebug("CLI is dev build, using main branch for source")
+		}
+		return "main", nil
+	}
+
+	// For release builds, use the version tag directly
+	// The Version variable should already include the "v" prefix (e.g., "v1.2.3")
+	if debug {
+		logDebug(fmt.Sprintf("Using CLI version for source: %s", cliVersion))
+	}
+	return cliVersion, nil
 }
 
 // DownloadSource downloads the source code for a specific version
@@ -519,6 +530,7 @@ func (m *SourceManager) GetUniversalRuntimeDir() string {
 
 // GenerateDatamodel generates the config datamodel types
 // This must be run after source download and dependency sync, but before starting services
+// It checks if datamodel.py exists and is up-to-date to avoid unnecessary regeneration
 func (m *SourceManager) GenerateDatamodel() error {
 	configDir := m.GetConfigDir()
 
@@ -538,7 +550,64 @@ func (m *SourceManager) GenerateDatamodel() error {
 		}
 	}
 
-	OutputProgress("Generating config datamodel...\n")
+	// Check if datamodel.py already exists and is up-to-date
+	datamodelPath := filepath.Join(configDir, "datamodel.py")
+	schemaPath := filepath.Join(configDir, "schema.yaml")
+	ragSchemaPath := filepath.Join(m.srcDir, "rag", "schema.yaml")
+
+	datamodelExists := false
+	var datamodelModTime time.Time
+	if info, err := os.Stat(datamodelPath); err == nil {
+		datamodelExists = true
+		datamodelModTime = info.ModTime()
+	}
+
+	// Check if schema files are newer than datamodel.py
+	needsRegeneration := !datamodelExists
+
+	if datamodelExists {
+		// Check schema.yaml modification time
+		if schemaInfo, err := os.Stat(schemaPath); err == nil {
+			if schemaInfo.ModTime().After(datamodelModTime) {
+				needsRegeneration = true
+			}
+		}
+
+		// Check rag/schema.yaml modification time
+		if !needsRegeneration {
+			if ragSchemaInfo, err := os.Stat(ragSchemaPath); err == nil {
+				if ragSchemaInfo.ModTime().After(datamodelModTime) {
+					needsRegeneration = true
+				}
+			}
+		}
+
+		// Check compile_schema.py modification time (it's part of the generation process)
+		if !needsRegeneration {
+			compileScriptPath := filepath.Join(configDir, "compile_schema.py")
+			if compileInfo, err := os.Stat(compileScriptPath); err == nil {
+				if compileInfo.ModTime().After(datamodelModTime) {
+					needsRegeneration = true
+				}
+			}
+		}
+	}
+
+	// Skip generation if datamodel is up-to-date
+	if !needsRegeneration {
+		if debug {
+			logDebug("Datamodel is up-to-date, skipping generation")
+		}
+		return nil
+	}
+
+	// Generate datamodel (only show progress if not in silent mode)
+	if debug {
+		logDebug("Datamodel needs regeneration")
+	} else {
+		// Only show progress for actual regeneration, not for silent checks
+		OutputProgress("Generating config datamodel...\n")
+	}
 
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 

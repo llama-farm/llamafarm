@@ -103,8 +103,44 @@ func init() {
 	servicesStatusCmd.Flags().Bool("json", false, "Output status in JSON format")
 }
 
+// ensureSourceVersion checks and updates source code version if needed
+// This should be called at the start of all services commands to ensure
+// source code matches the CLI version
+func ensureSourceVersion() error {
+	// Create UV manager
+	uvMgr, err := NewUVManager()
+	if err != nil {
+		return fmt.Errorf("failed to create UV manager: %w", err)
+	}
+
+	// Create Python environment manager
+	pythonMgr, err := NewPythonEnvManager(uvMgr)
+	if err != nil {
+		return fmt.Errorf("failed to create Python environment manager: %w", err)
+	}
+
+	// Create source manager and ensure source version matches CLI
+	srcMgr, err := NewSourceManager(pythonMgr)
+	if err != nil {
+		return fmt.Errorf("failed to create source manager: %w", err)
+	}
+
+	// This will check version and download/update if needed
+	if err := srcMgr.EnsureSource(); err != nil {
+		return fmt.Errorf("failed to ensure source code version: %w", err)
+	}
+
+	return nil
+}
+
 // runServicesStatus is the main entry point for the services status command
 func runServicesStatus(cmd *cobra.Command, args []string) {
+	// Ensure source code version matches CLI version
+	if err := ensureSourceVersion(); err != nil {
+		OutputWarning("Warning: %v\n", err)
+		// Continue anyway - user might just want to check status
+	}
+
 	// Determine orchestration mode
 	orchestrationMode := determineOrchestrationMode()
 
@@ -187,6 +223,12 @@ func runServicesStatus(cmd *cobra.Command, args []string) {
 
 // runServicesStart is the main entry point for the services start command
 func runServicesStart(cmd *cobra.Command, args []string) {
+	// Ensure source code version matches CLI version
+	if err := ensureSourceVersion(); err != nil {
+		OutputError("Failed to ensure source code version: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Determine orchestration mode
 	orchestrationMode := determineOrchestrationMode()
 
@@ -217,6 +259,13 @@ func runServicesStart(cmd *cobra.Command, args []string) {
 
 // runServicesStop is the main entry point for the services stop command
 func runServicesStop(cmd *cobra.Command, args []string) {
+	// Ensure source code version matches CLI version
+	// (Important even for stop - ensures source is ready if user restarts)
+	if err := ensureSourceVersion(); err != nil {
+		OutputWarning("Warning: %v\n", err)
+		// Continue anyway - stopping services doesn't require source to be perfect
+	}
+
 	// Determine orchestration mode
 	orchestrationMode := determineOrchestrationMode()
 

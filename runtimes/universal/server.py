@@ -46,15 +46,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifecycle (startup and shutdown)."""
-    from llamafarm_common.pidfile import cleanup_pid
+    """Manage application lifecycle (startup and shutdown)."""id
 
     # Startup
     logger.info("Starting Universal Runtime")
     yield
     # Shutdown
     logger.info("Shutting down Universal Runtime")
-    cleanup_pid("universal-runtime")
     logger.info("Shutdown complete")
 
 

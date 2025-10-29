@@ -256,7 +256,9 @@ func stopServiceBySystem(serviceName string) error {
 
 // startServicesNative starts multiple services using native processes
 func startServicesNative(serviceNames []string, serverURL string) {
-	OutputProgress("Starting services with native orchestration...\n")
+	if debug {
+		OutputProgress("Starting services with native orchestration...\n")
+	}
 
 	// Ensure native environment is set up
 	orchestrator, err := ensureNativeEnvironment(serverURL)
@@ -291,6 +293,17 @@ func startServicesNative(serviceNames []string, serverURL string) {
 
 		if startErr != nil {
 			OutputError("Failed to start %s: %v\n", serviceName, startErr)
+
+			// Provide helpful guidance for RAG failures
+			if serviceName == "rag" {
+				homeDir, _ := os.UserHomeDir()
+				logFile := filepath.Join(homeDir, ".llamafarm", "logs", "rag.log")
+				fmt.Fprintf(os.Stderr, "\n💡 Tips for troubleshooting RAG startup:\n")
+				fmt.Fprintf(os.Stderr, "  • Check the log file: %s\n", logFile)
+				fmt.Fprintf(os.Stderr, "  • Ensure the server is running: lf services start server\n")
+				fmt.Fprintf(os.Stderr, "  • Verify dependencies are synced: check ~/.llamafarm/src/rag/.venv\n")
+				fmt.Fprintf(os.Stderr, "  • Check for Python import errors in the log file\n")
+			}
 			continue
 		}
 

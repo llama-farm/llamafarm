@@ -66,7 +66,9 @@ func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
 		return nil
 	}
 
-	OutputProgress("Setting up native environment...\n")
+	if debug {
+		OutputProgress("Setting up native environment...\n")
+	}
 
 	// Step 1: Ensure UV is installed
 	if _, err := no.uvManager.EnsureUV(); err != nil {
@@ -85,7 +87,9 @@ func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
 	}
 
 	no.initialized = true
-	OutputProgress("Native environment ready\n")
+	if debug {
+		OutputProgress("Native environment ready\n")
+	}
 	return nil
 }
 
@@ -104,7 +108,9 @@ func (no *NativeOrchestrator) StartServerNative() error {
 		return nil
 	}
 
-	OutputProgress("Starting server via native process...\n")
+	if debug {
+		OutputProgress("Starting server via native process...\n")
+	}
 
 	// Prepare server environment
 	env := no.getServerEnv()
@@ -142,7 +148,9 @@ func (no *NativeOrchestrator) StartRAGNative() error {
 		return nil
 	}
 
-	OutputProgress("Starting RAG worker via native process...\n")
+	if debug {
+		OutputProgress("Starting RAG worker via native process...\n")
+	}
 
 	// Prepare RAG environment
 	env := no.getRAGEnv()
@@ -159,8 +167,15 @@ func (no *NativeOrchestrator) StartRAGNative() error {
 		return fmt.Errorf("failed to start RAG process: %w", err)
 	}
 
-	// Wait a moment for RAG to start
+	// Wait a moment for RAG to start and check if it's still running
 	time.Sleep(2 * time.Second)
+
+	// Check if the process is still running (it might have crashed immediately)
+	if !no.processMgr.IsProcessHealthy("rag") {
+		homeDir, _ := os.UserHomeDir()
+		logFile := filepath.Join(homeDir, ".llamafarm", "logs", "rag.log")
+		return fmt.Errorf("RAG process started but exited immediately. Check logs: %s", logFile)
+	}
 
 	return nil
 }
@@ -180,7 +195,9 @@ func (no *NativeOrchestrator) StartUniversalRuntimeNative() error {
 		return nil
 	}
 
-	OutputProgress("Starting universal runtime via native process...\n")
+	if debug {
+		OutputProgress("Starting universal runtime via native process...\n")
+	}
 
 	// Prepare universal runtime environment
 	env := no.getUniversalRuntimeEnv()
