@@ -4,6 +4,7 @@
  */
 
 import type { Project } from '../types/project'
+import { getModelDisplayName } from './projectHelpers'
 
 export const DEFAULT_PROJECT_NAMES = [
   'aircraft-mx-flow',
@@ -39,6 +40,7 @@ export const getProjectsList = (apiResponse?: {
   return merged.length > 0 ? merged : DEFAULT_PROJECT_NAMES
 }
 
+
 /**
  * Convert API projects to UI ProjectItem format
  * @param apiResponse - The API response containing projects
@@ -55,9 +57,10 @@ export const getProjectsForUI = (apiResponse?: { projects?: Project[] }) => {
     const itemsFromApi = api.map((project, idx) => ({
       id: idx + 1,
       name: project.name,
-      model: 'TinyLama',
-      lastEdited: '8/15/2025',
+      model: getModelDisplayName(project.config),
+      lastEdited: 'N/A',
       description: project.config?.description || '',
+      validationError: project.validation_error,
     }))
     const startIndex = itemsFromApi.length
     const itemsFromCustom = custom
@@ -65,8 +68,8 @@ export const getProjectsForUI = (apiResponse?: { projects?: Project[] }) => {
       .map((name, idx) => ({
         id: startIndex + idx + 1,
         name,
-        model: 'TinyLama',
-        lastEdited: '8/15/2025',
+        model: 'Unknown',
+        lastEdited: 'N/A',
         description: '',
       }))
     return [...itemsFromApi, ...itemsFromCustom]

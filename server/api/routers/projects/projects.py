@@ -5,7 +5,9 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
@@ -35,7 +37,9 @@ from services.project_service import ProjectService
 class Project(BaseModel):
     namespace: str = Field(..., description="The namespace of the project")
     name: str = Field(..., description="The name of the project")
-    config: LlamaFarmConfig = Field(..., description="The configuration of the project")
+    config: Union[LlamaFarmConfig, dict] = Field(..., description="The configuration of the project")
+    validation_error: str | None = Field(None, description="Validation error message if config has issues")
+    last_modified: datetime | None = Field(None, description="Last modified timestamp of the project config")
 
 
 class ListProjectsResponse(BaseModel):
@@ -109,16 +113,20 @@ async def list_projects(
         description='The namespace to list projects for. Use "default" for the default namespace.',
     ),
 ):
-    projects = ProjectService.list_projects(namespace)
+    # Use safe method to handle projects with validation errors
+    safe_projects = ProjectService.list_projects_safe(namespace)
     return ListProjectsResponse(
-        total=len(projects),
+        total=len(safe_projects),
         projects=[
             Project(
                 namespace=namespace,
                 name=project.name,
-                config=project.config,
+                # Use validated config if available, otherwise use raw dict
+                config=project.config if project.config is not None else project.config_dict,
+                validation_error=project.validation_error,
+                last_modified=project.last_modified,
             )
-            for project in projects
+            for project in safe_projects
         ],
     )
 
@@ -155,12 +163,16 @@ async def create_project(namespace: str, request: CreateProjectRequest):
     },
 )
 async def get_project(namespace: str, project_id: str):
-    project = ProjectService.get_project(namespace, project_id)
+    # Use safe method to handle projects with validation errors
+    safe_project = ProjectService.get_project_safe(namespace, project_id)
     return GetProjectResponse(
         project=Project(
-            namespace=project.namespace,
-            name=project.name,
-            config=project.config,
+            namespace=safe_project.namespace,
+            name=safe_project.name,
+            # Use validated config if available, otherwise use raw dict
+            config=safe_project.config if safe_project.config is not None else safe_project.config_dict,
+            validation_error=safe_project.validation_error,
+            last_modified=safe_project.last_modified,
         ),
     )
 

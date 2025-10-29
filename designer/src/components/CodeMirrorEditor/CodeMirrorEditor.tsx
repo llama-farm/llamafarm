@@ -12,15 +12,21 @@ import type { CodeMirrorEditorProps } from '../../types/codemirror'
  * CodeMirror editor component for displaying project configurations
  * Refactored to use composition of smaller, focused components
  */
-const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ 
-  content, 
+const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
+  content,
   className = '',
   readOnly = true,
   language = 'json',
-  theme
+  theme,
+  onChange,
+  onSave,
+  onDiscard,
+  isDirty = false,
+  isSaving = false,
+  saveError = null
 }) => {
   const activeProject = useActiveProject()
-  
+
   // Use the extracted CodeMirror hook
   const {
     editorRef,
@@ -30,15 +36,24 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   } = useCodeMirror(content, {
     readOnly,
     language,
-    theme
+    theme,
+    onChange
   })
 
   // Show loading state while CodeMirror modules are loading
   if (isLoading) {
     return (
       <div className={`w-full h-full max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col ${className}`}>
-        <EditorToolbar activeProject={activeProject} readOnly={readOnly} />
-        
+        <EditorToolbar
+          activeProject={activeProject}
+          readOnly={readOnly}
+          onSave={onSave}
+          onDiscard={onDiscard}
+          isDirty={isDirty}
+          isSaving={isSaving}
+          saveError={saveError}
+        />
+
         {/* Loading content */}
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
@@ -54,8 +69,16 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   if (error) {
     return (
       <div className={`w-full h-full max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col ${className}`}>
-        <EditorToolbar activeProject={activeProject} readOnly={readOnly} />
-        
+        <EditorToolbar
+          activeProject={activeProject}
+          readOnly={readOnly}
+          onSave={onSave}
+          onDiscard={onDiscard}
+          isDirty={isDirty}
+          isSaving={isSaving}
+          saveError={saveError}
+        />
+
         {/* Error content */}
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-md text-center space-y-4">
@@ -89,15 +112,23 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
 
   return (
     <div className={`w-full h-full max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col ${className}`}>
-      <EditorToolbar activeProject={activeProject} readOnly={readOnly} />
-      
+      <EditorToolbar
+        activeProject={activeProject}
+        readOnly={readOnly}
+        onSave={onSave}
+        onDiscard={onDiscard}
+        isDirty={isDirty}
+        isSaving={isSaving}
+        saveError={saveError}
+      />
+
       {/* Editor container with fallback */}
       <div className="flex-1 min-h-0 relative">
-        <EditorContent 
-          editorRef={editorRef} 
+        <EditorContent
+          editorRef={editorRef}
         />
-        <EditorFallback 
-          content={content} 
+        <EditorFallback
+          content={content}
           isInitialized={isInitialized}
         />
       </div>

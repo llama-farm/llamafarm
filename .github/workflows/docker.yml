@@ -399,6 +399,9 @@ jobs:
       - name: Prepare Docker environment
         run: |
           # Create base data directory for main llamafarm volume
+          # Remove existing directory if present to avoid permission issues
+          # Use sudo because Docker containers may have created files as root
+          sudo rm -rf "$HOME/.llamafarm"
           mkdir -p "$HOME/.llamafarm"
           chmod 777 "$HOME/.llamafarm" || true
 

@@ -30,10 +30,13 @@ export default defineConfig({
             '@codemirror/language',
             '@codemirror/commands',
             '@codemirror/lang-json',
+            '@codemirror/lang-yaml',
             '@codemirror/search',
             '@codemirror/theme-one-dark',
             '@lezer/highlight',
           ],
+          // YAML parsing
+          'yaml-validation': ['yaml'],
           // React vendor libraries
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           // UI vendor libraries

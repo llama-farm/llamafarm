@@ -10,6 +10,11 @@ import {
   filterProjectsBySearch,
   getProjectsList,
 } from './utils/projectConstants'
+import {
+  getModelNames,
+  formatLastModified,
+  parseTimestamp
+} from './utils/projectHelpers'
 import { getCurrentNamespace } from './utils/namespaceUtils'
 import { encodeMessageForUrl } from './utils/homePageUtils'
 import projectService from './api/projectService'
@@ -32,6 +37,7 @@ function Home() {
   )
 
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'a-z' | 'z-a' | 'model'>('newest')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
   const [fakeProgress, setFakeProgress] = useState(0)
@@ -53,17 +59,66 @@ function Home() {
     [projectsResponse]
   )
 
+  // Get full project objects from API with precomputed sort keys
+  // Uses namespace+name as key to avoid potential collisions
+  const fullProjects = useMemo(() => {
+    const apiProjects = projectsResponse?.projects || []
+    return new Map(
+      apiProjects.map(p => {
+        const key = `${p.namespace}/${p.name}`
+        return [key, {
+          ...p,
+          // Precompute sort keys for performance
+          _sortTimestamp: parseTimestamp(p.last_modified),
+          _sortModels: getModelNames(p.config)
+        }]
+      })
+    )
+  }, [projectsResponse])
+
   // Shared modal hook
   const projectModal = useProjectModalContext()
 
   // create-form scroll handler no longer used (buttons removed)
 
-  const filteredProjectNames = useMemo(() => {
-    return filterProjectsBySearch(
+  const filteredAndSortedProjectNames = useMemo(() => {
+    // First, filter by search
+    const filtered = filterProjectsBySearch(
       projectsList.map(name => ({ name })),
       search
     ).map(item => item.name)
-  }, [projectsList, search])
+
+    // Get current namespace for key lookup
+    const currentNamespace = namespace
+
+    // Then sort based on sortBy selection (inline immediately returned variable)
+    return [...filtered].sort((a, b) => {
+      // Use namespace+name composite key for lookup
+      const projectA = fullProjects.get(`${currentNamespace}/${a}`)
+      const projectB = fullProjects.get(`${currentNamespace}/${b}`)
+
+      switch (sortBy) {
+        case 'newest':
+          // Use precomputed timestamps
+          return (projectB?._sortTimestamp || 0) - (projectA?._sortTimestamp || 0)
+        case 'oldest':
+          // Use precomputed timestamps
+          return (projectA?._sortTimestamp || 0) - (projectB?._sortTimestamp || 0)
+        case 'a-z':
+          return a.localeCompare(b)
+        case 'z-a':
+          return b.localeCompare(a)
+        case 'model': {
+          // Use precomputed model lists
+          const modelA = projectA?._sortModels?.[0] || 'zzz'
+          const modelB = projectB?._sortModels?.[0] || 'zzz'
+          return modelA.localeCompare(modelB)
+        }
+        default:
+          return 0
+      }
+    })
+  }, [projectsList, search, sortBy, fullProjects, namespace])
 
   // No-op: pills removed
 
@@ -521,57 +576,109 @@ function Home() {
           {/* New project button removed per design */}
         </div>
 
-        {/* Search */}
-        <div className="mb-4 w-full flex items-center bg-card rounded-lg px-3 py-2 border border-input">
-          <FontIcon type="search" className="w-4 h-4 text-foreground" />
-          <input
-            className="w-full bg-transparent border-none focus:outline-none px-2 text-sm text-foreground"
-            placeholder="Search projects"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+        {/* Search and Sort */}
+        <div className="mb-4 flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 flex items-center bg-card rounded-lg px-3 py-2 border border-input">
+            <FontIcon type="search" className="w-4 h-4 text-foreground" />
+            <input
+              className="w-full bg-transparent border-none focus:outline-none px-2 text-sm text-foreground"
+              placeholder="Search projects"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="px-3 py-2 rounded-lg border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as any)}
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="a-z">A-Z</option>
+            <option value="z-a">Z-A</option>
+            <option value="model">By Model</option>
+          </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-8">
-          {filteredProjectNames.map(name => (
-            <div
-              key={name}
-              className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer flex flex-col"
-              onClick={() => openProject(name)}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex flex-col flex-1 min-w-0">
-                  <div className="text-base text-foreground line-clamp-2 break-words">
-                    {name}
+          {filteredAndSortedProjectNames.map(name => {
+            const project = fullProjects.get(`${namespace}/${name}`)
+            const modelNames = project?._sortModels || []
+            const hasValidationError = project?.validation_error
+
+            // Show first 2 models, then "+N" for additional
+            const visibleModels = modelNames.slice(0, 2)
+            const additionalCount = modelNames.length - 2
+
+            return (
+              <div
+                key={name}
+                className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer flex flex-col"
+                onClick={() => openProject(name)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="text-base text-foreground line-clamp-2 break-words">
+                      {name}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {visibleModels.length > 0 ? (
+                        <>
+                          {visibleModels.map((model, idx) => (
+                            <span
+                              key={idx}
+                              className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5"
+                            >
+                              {model}
+                            </span>
+                          ))}
+                          {additionalCount > 0 && (
+                            <span
+                              className="text-xs text-primary-foreground bg-primary/70 rounded-xl px-3 py-0.5"
+                              title={modelNames.slice(2).join(', ')}
+                            >
+                              +{additionalCount}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-foreground/60 bg-muted rounded-xl px-3 py-0.5">
+                          No model
+                        </span>
+                      )}
+                      {hasValidationError && (
+                        <span
+                          className="text-xs text-red-100 bg-red-600 rounded-xl px-3 py-0.5"
+                          title={hasValidationError}
+                        >
+                          Validation Error
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-foreground/60 mt-2">
+                      {formatLastModified(project?.last_modified)}
+                    </div>
                   </div>
-                  <div className="mt-3">
-                    <span className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5">
-                      TinyLama
-                    </span>
-                  </div>
-                  <div className="text-xs text-foreground/60 mt-2">
-                    Last edited on N/A
-                  </div>
+                  <FontIcon
+                    type="arrow-right"
+                    className="w-5 h-5 text-primary shrink-0 ml-2"
+                  />
                 </div>
-                <FontIcon
-                  type="arrow-right"
-                  className="w-5 h-5 text-primary shrink-0 ml-2"
-                />
+                <div className="mt-auto pt-4 flex justify-end">
+                  <button
+                    className="flex items-center gap-1 text-primary hover:opacity-80"
+                    onClick={e => {
+                      e.stopPropagation()
+                      projectModal.openEditModal(name)
+                    }}
+                  >
+                    <FontIcon type="edit" className="w-5 h-5 text-primary" />
+                    <span className="text-sm">Edit</span>
+                  </button>
+                </div>
               </div>
-              <div className="mt-auto pt-4 flex justify-end">
-                <button
-                  className="flex items-center gap-1 text-primary hover:opacity-80"
-                  onClick={e => {
-                    e.stopPropagation()
-                    projectModal.openEditModal(name)
-                  }}
-                >
-                  <FontIcon type="edit" className="w-5 h-5 text-primary" />
-                  <span className="text-sm">Edit</span>
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
