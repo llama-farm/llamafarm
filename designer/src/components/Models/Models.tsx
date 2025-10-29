@@ -940,7 +940,7 @@ function AddOrChangeModels({
             project.
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4 mb-12">
           {/* Source switcher */}
           <div className="w-full flex items-center">
             <div className="flex w-full max-w-xl rounded-lg overflow-hidden border border-border">
@@ -1013,83 +1013,106 @@ function AddOrChangeModels({
                 </div>
                 <div className="col-span-1" />
               </div>
-              {filteredGroups.map(group => {
-                const isOpen = expandedGroupId === group.id
-                return (
-                  <div key={group.id} className="border-t border-border">
-                    <div
-                      className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
-                      onClick={() =>
-                        setExpandedGroupId(prev =>
-                          prev === group.id ? null : group.id
-                        )
-                      }
-                    >
-                      <div className="col-span-6 flex items-center gap-2">
-                        <FontIcon
-                          type="chevron-down"
-                          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                        />
-                        <span className="truncate">{group.name}</span>
+              {filteredGroups.length === 0 ? (
+                <div className="p-6 flex flex-col items-center justify-center text-center">
+                  <div className="text-sm text-muted-foreground mb-3">
+                    No matching results. Want to download a different local
+                    model from Hugging Face?
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setCustomModelOpen(true)
+                      setCustomModelInput('')
+                      setCustomModelName('')
+                      setCustomModelDescription('')
+                      setCustomSelectedPromptSets([])
+                      setCustomDownloadState('idle')
+                      setCustomDownloadError('')
+                    }}
+                  >
+                    Add custom model
+                  </Button>
+                </div>
+              ) : (
+                filteredGroups.map(group => {
+                  const isOpen = expandedGroupId === group.id
+                  return (
+                    <div key={group.id} className="border-t border-border">
+                      <div
+                        className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
+                        onClick={() =>
+                          setExpandedGroupId(prev =>
+                            prev === group.id ? null : group.id
+                          )
+                        }
+                      >
+                        <div className="col-span-6 flex items-center gap-2">
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          />
+                          <span className="truncate">{group.name}</span>
+                        </div>
+                        <div className="col-span-3 text-xs">
+                          {group.parameterSummary}
+                        </div>
+                        <div className="col-span-2 text-xs text-right pr-4 sm:pr-10">
+                          <span className="inline-block min-w-[3.5rem] truncate">
+                            {group.downloadSummary}
+                          </span>
+                        </div>
+                        <div className="col-span-1" />
                       </div>
-                      <div className="col-span-3 text-xs">
-                        {group.parameterSummary}
-                      </div>
-                      <div className="col-span-2 text-xs text-right pr-4 sm:pr-10">
-                        <span className="inline-block min-w-[3.5rem] truncate">
-                          {group.downloadSummary}
-                        </span>
-                      </div>
-                      <div className="col-span-1" />
-                    </div>
-                    {isOpen && (
-                      <div className="px-3 pb-2">
-                        {group.variants.map(variant => (
-                          <div
-                            key={variant.id}
-                            className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                          >
-                            <div className="col-span-6 flex items-center text-muted-foreground">
-                              <span className="inline-block w-4" />
-                              <span className="ml-2 truncate">
-                                {variant.label}
-                              </span>
-                            </div>
-                            <div className="col-span-3 text-xs">
-                              {variant.parameterSize}
-                            </div>
-                            <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-10">
-                              <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right whitespace-nowrap">
-                                {variant.downloadSize}
+                      {isOpen && (
+                        <div className="px-3 pb-2">
+                          {group.variants.map(variant => (
+                            <div
+                              key={variant.id}
+                              className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
+                            >
+                              <div className="col-span-6 flex items-center text-muted-foreground">
+                                <span className="inline-block w-4" />
+                                <span className="ml-2 truncate">
+                                  {variant.label}
+                                </span>
+                              </div>
+                              <div className="col-span-3 text-xs">
+                                {variant.parameterSize}
+                              </div>
+                              <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-10">
+                                <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right whitespace-nowrap">
+                                  {variant.downloadSize}
+                                </div>
+                              </div>
+                              <div className="col-span-1 flex items-center justify-end pr-2">
+                                <Button
+                                  size="sm"
+                                  className="h-8 px-3"
+                                  onClick={() => {
+                                    setPendingVariant(variant)
+                                    setConfirmOpen(true)
+                                  }}
+                                >
+                                  Add
+                                </Button>
                               </div>
                             </div>
-                            <div className="col-span-1 flex items-center justify-end pr-2">
-                              <Button
-                                size="sm"
-                                className="h-8 px-3"
-                                onClick={() => {
-                                  setPendingVariant(variant)
-                                  setConfirmOpen(true)
-                                }}
-                              >
-                                Add
-                              </Button>
-                            </div>
+                          ))}
+                          <div className="flex justify-end pr-3">
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setExpandedGroupId(null)}
+                            >
+                              Hide
+                            </button>
                           </div>
-                        ))}
-                        <div className="flex justify-end pr-3">
-                          <button
-                            className="text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => setExpandedGroupId(null)}
-                          >
-                            Hide
-                          </button>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
           {sourceTab === 'cloud' && (
