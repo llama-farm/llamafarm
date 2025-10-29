@@ -633,17 +633,22 @@ function DatasetView() {
                       size="sm"
                       className="rounded-xl w-max flex items-center gap-1.5"
                     >
-                      {(taskStatus.state === 'PENDING' || taskStatus.state === 'PROGRESS') && (
+                      {taskStatus.state === 'PENDING' && (
                         <>
                           <span className="inline-block animate-spin">⟳</span>
-                          {taskStatus.state === 'PENDING' && 'Queued...'}
-                          {taskStatus.state === 'PROGRESS' && taskStatus.meta?.progress
+                          Queued...
+                        </>
+                      )}
+                      {taskStatus.state !== 'PENDING' &&
+                        taskStatus.state !== 'SUCCESS' &&
+                        taskStatus.state !== 'FAILURE' && (
+                        <>
+                          <span className="inline-block animate-spin">⟳</span>
+                          {taskStatus.meta?.progress
                             ? `Processing ${taskStatus.meta.progress}%`
-                            : taskStatus.state === 'PROGRESS' && taskStatus.meta?.current && taskStatus.meta?.total
+                            : taskStatus.meta?.current && taskStatus.meta?.total
                               ? `Processing ${taskStatus.meta.current}/${taskStatus.meta.total}`
-                              : taskStatus.state === 'PROGRESS'
-                                ? 'Processing...'
-                                : null}
+                              : 'Processing...'}
                         </>
                       )}
                     </Badge>
@@ -852,7 +857,7 @@ function DatasetView() {
                                   {/* Status icon */}
                                   {isSuccess && (
                                     <FontIcon
-                                      type="checkmark-circle"
+                                      type="checkmark-filled"
                                       className="w-5 h-5 text-green-600 flex-shrink-0"
                                     />
                                   )}
@@ -863,7 +868,7 @@ function DatasetView() {
                                   )}
                                   {isFailed && (
                                     <FontIcon
-                                      type="close-circle"
+                                      type="close"
                                       className="w-5 h-5 text-red-600 flex-shrink-0"
                                     />
                                   )}
@@ -888,7 +893,7 @@ function DatasetView() {
                                       ? 'default'
                                       : isSkipped
                                         ? 'secondary'
-                                        : 'destructive'
+                                        : 'outline'
                                   }
                                   size="sm"
                                   className="rounded-xl flex-shrink-0 font-medium"
@@ -1183,13 +1188,13 @@ function DatasetView() {
                         )}
                         {file.state === 'success' && (
                           <FontIcon
-                            type="checkmark-circle"
+                            type="checkmark-filled"
                             className="w-4 h-4 text-green-600 flex-shrink-0"
                           />
                         )}
                         {file.state === 'failure' && (
                           <FontIcon
-                            type="close-circle"
+                            type="close"
                             className="w-4 h-4 text-red-600 flex-shrink-0"
                           />
                         )}
@@ -1206,7 +1211,7 @@ function DatasetView() {
                           file.state === 'success'
                             ? 'default'
                             : file.state === 'failure'
-                              ? 'destructive'
+                              ? 'outline'
                               : 'secondary'
                         }
                         size="sm"
