@@ -1,7 +1,7 @@
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Optional
 
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
@@ -16,6 +16,10 @@ from context_providers.rag_context_provider import (
 )
 from core.logging import FastAPIStructLogger
 from services.rag_service import search_with_rag
+
+# Observability imports
+from observability.event_logger import EventLogger
+from observability.config_versioning import hash_config, save_config_snapshot
 
 logger = FastAPIStructLogger()
 
@@ -298,6 +302,8 @@ class ProjectChatService:
         project_config: LlamaFarmConfig,
         chat_agent: ChatOrchestratorAgent,
         message: str,
+        namespace: Optional[str] = None,
+        project_id: Optional[str] = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -310,6 +316,8 @@ class ProjectChatService:
             project_config=project_config,
             chat_agent=chat_agent,
             message=message,
+            namespace=namespace,
+            project_id=project_id,
             rag_enabled=rag_enabled,
             database=database,
             rag_top_k=rag_top_k,
@@ -342,6 +350,8 @@ class ProjectChatService:
         project_config: LlamaFarmConfig,
         chat_agent: LFAgent,
         message: str,
+        namespace: Optional[str] = None,
+        project_id: Optional[str] = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -349,60 +359,148 @@ class ProjectChatService:
         rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[str, None]:
         """Yield assistant content chunks, using agent-native streaming if available."""
-        self._clear_rag_context_provider(chat_agent)
-        context_provider = RAGContextProvider(title="Project Chat Context")
-        chat_agent.register_context_provider("project_chat_context", context_provider)
+        # Initialize event logger if namespace and project_id are provided
+        event_logger = None
+        if namespace and project_id:
+            try:
+                # Hash config and save snapshot
+                config_hash = hash_config(project_config)
+                save_config_snapshot(project_config, config_hash, namespace, project_id)
 
-        # Resolve RAG parameters using shared helper
-        rag_params = self._resolve_rag_parameters(
-            project_config,
-            rag_enabled=rag_enabled,
-            database=database,
-            retrieval_strategy=retrieval_strategy,
-            rag_top_k=rag_top_k,
-            rag_score_threshold=rag_score_threshold,
-        )
+                # Create event logger
+                request_id = f"req_{uuid.uuid4().hex[:12]}"
+                event_logger = EventLogger(
+                    event_type="inference",
+                    request_id=request_id,
+                    namespace=namespace,
+                    project=project_id,
+                    config_hash=config_hash,
+                )
 
-        rag_results = []
-        if rag_params.rag_enabled:
-            rag_results = self._perform_rag_search(
-                project_dir,
-                project_config,
-                message,
-                top_k=rag_params.rag_top_k or 5,
-                database=rag_params.database,
-                retrieval_strategy=rag_params.retrieval_strategy,
-            )
-        for idx, result in enumerate(rag_results):
-            chunk_item = ChunkItem(
-                content=result.content,
-                metadata={
-                    "source": result.metadata.get("source", "unknown"),
-                    "score": getattr(result, "score", 0.0),
-                    "chunk_index": idx,
-                    "retrieval_method": "rag_search",
-                    **result.metadata,
-                },
-            )
-            context_provider.chunks.append(chunk_item)
+                # Log request received
+                event_logger.log_event("request_received", {
+                    "message_length": len(message),
+                    "model": chat_agent.model_name,
+                    "rag_enabled": rag_enabled,
+                })
+            except Exception as e:
+                logger.warning(f"Failed to initialize event logger: {e}")
+                event_logger = None
 
-        user_input = LFAgentChatMessage(role="user", content=message)
         try:
+            self._clear_rag_context_provider(chat_agent)
+            context_provider = RAGContextProvider(title="Project Chat Context")
+            chat_agent.register_context_provider("project_chat_context", context_provider)
+
+            # Resolve RAG parameters using shared helper
+            rag_params = self._resolve_rag_parameters(
+                project_config,
+                rag_enabled=rag_enabled,
+                database=database,
+                retrieval_strategy=retrieval_strategy,
+                rag_top_k=rag_top_k,
+                rag_score_threshold=rag_score_threshold,
+            )
+
+            rag_results = []
+            if rag_params.rag_enabled:
+                # Log RAG query start
+                if event_logger:
+                    event_logger.log_event("rag_query_start", {
+                        "database": rag_params.database,
+                        "query": message,
+                        "top_k": rag_params.rag_top_k,
+                        "retrieval_strategy": rag_params.retrieval_strategy,
+                    })
+
+                rag_results = self._perform_rag_search(
+                    project_dir,
+                    project_config,
+                    message,
+                    top_k=rag_params.rag_top_k or 5,
+                    database=rag_params.database,
+                    retrieval_strategy=rag_params.retrieval_strategy,
+                )
+
+                # Log RAG retrieval complete
+                if event_logger:
+                    avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
+                    event_logger.log_event("rag_retrieval_complete", {
+                        "chunks_retrieved": len(rag_results),
+                        "avg_score": round(avg_score, 3),
+                        "top_chunks": [
+                            {
+                                "rank": idx + 1,
+                                "content_preview": result.content[:100] if len(result.content) > 100 else result.content,
+                                "source": result.metadata.get("source", "unknown"),
+                                "score": round(getattr(result, "score", 0.0), 3),
+                            }
+                            for idx, result in enumerate(rag_results[:2])  # Top 2 chunks
+                        ]
+                    })
+
+            for idx, result in enumerate(rag_results):
+                chunk_item = ChunkItem(
+                    content=result.content,
+                    metadata={
+                        "source": result.metadata.get("source", "unknown"),
+                        "score": getattr(result, "score", 0.0),
+                        "chunk_index": idx,
+                        "retrieval_method": "rag_search",
+                        **result.metadata,
+                    },
+                )
+                context_provider.chunks.append(chunk_item)
+
+            user_input = LFAgentChatMessage(role="user", content=message)
+
+            # Log LLM inference start
+            if event_logger:
+                event_logger.log_event("llm_inference_start", {
+                    "model": chat_agent.model_name,
+                    "input_message_length": len(message),
+                })
+
             logger.info("Running async stream")
             previous_response = ""
+            full_response = ""
             emitted = False
             async for chunk in chat_agent.run_async_stream(user_input=user_input):
                 if chunk:
                     emitted = True
+                    full_response += chunk
                     yield chunk
 
             if not emitted:
+                full_response = previous_response
                 yield previous_response
-        except Exception:
+
+            # Log LLM inference complete
+            if event_logger:
+                event_logger.log_event("llm_inference_complete", {
+                    "response_length": len(full_response),
+                    "finish_reason": "stop",
+                })
+
+                # Log response complete
+                event_logger.log_event("response_complete", {
+                    "content_preview": full_response[:200] if len(full_response) > 200 else full_response,
+                    "content_length": len(full_response),
+                })
+
+                # Complete the event
+                event_logger.complete_event()
+
+        except Exception as e:
+            # Log error if event logger exists
+            if event_logger:
+                event_logger.fail_event(str(e))
+
             logger.error(
                 "Model call failed",
                 exc_info=True,
             )
+            raise
 
 
 project_chat_service = ProjectChatService()

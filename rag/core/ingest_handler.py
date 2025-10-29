@@ -5,6 +5,7 @@ Manages the flow from CLI file uploads to blob processing and vector storage.
 
 import importlib
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +26,18 @@ except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
     ) from e
+
+# Observability imports
+try:
+    from observability.event_logger import EventLogger
+    from observability.config_versioning import hash_config, save_config_snapshot
+except ImportError as e:
+    # Gracefully handle if observability module is not available
+    EventLogger = None
+    hash_config = None
+    save_config_snapshot = None
+    logger = RAGStructLogger("rag.core.ingest_handler")
+    logger.warning(f"Observability module not available: {e}")
 
 logger = RAGStructLogger("rag.core.ingest_handler")
 
@@ -60,6 +73,21 @@ class IngestHandler:
         # Get project directory from config path (parent of llamafarm.yaml)
         project_dir = self.config_path.parent
         self.process_logger = ProcessingLogger(str(project_dir), dataset_name)
+
+        # Extract namespace and project from config path for event logging
+        # Path format: ~/.llamafarm/projects/{namespace}/{project}/llamafarm.yaml
+        try:
+            path_parts = self.config_path.parts
+            if "projects" in path_parts:
+                projects_idx = path_parts.index("projects")
+                self.namespace = path_parts[projects_idx + 1] if len(path_parts) > projects_idx + 1 else "default"
+                self.project = path_parts[projects_idx + 2] if len(path_parts) > projects_idx + 2 else "unknown"
+            else:
+                self.namespace = "default"
+                self.project = "unknown"
+        except Exception:
+            self.namespace = "default"
+            self.project = "unknown"
 
         # Initialize schema handler
         self.schema_handler = SchemaHandler(config_path)
@@ -199,6 +227,38 @@ class IngestHandler:
         file_size = len(file_data)
         logger.info(f"Ingesting file: {filename}")
 
+        # Initialize event logger if observability is available
+        event_logger = None
+        if EventLogger and hash_config and save_config_snapshot:
+            try:
+                # Load config and hash it
+                config = load_config(str(self.config_path))
+                config_hash = hash_config(config)
+                save_config_snapshot(config, config_hash, self.namespace, self.project)
+
+                # Create event logger
+                request_id = f"proc_{uuid.uuid4().hex[:12]}"
+                event_logger = EventLogger(
+                    event_type="rag_processing",
+                    request_id=request_id,
+                    namespace=self.namespace,
+                    project=self.project,
+                    config_hash=config_hash,
+                )
+
+                # Log processing start
+                event_logger.log_event("file_ingestion_start", {
+                    "filename": filename,
+                    "size_bytes": file_size,
+                    "content_type": metadata.get("content_type", "unknown"),
+                    "dataset_name": self.dataset_name,
+                    "database": self.database,
+                    "strategy": self.data_processing_strategy,
+                })
+            except Exception as e:
+                logger.warning(f"Failed to initialize event logger: {e}")
+                event_logger = None
+
         # Log file processing start
         self.process_logger.log_file_processing(
             filename,
@@ -223,6 +283,8 @@ class IngestHandler:
             documents = self.blob_processor.process_blob(file_data, metadata)
 
             if not documents:
+                if event_logger:
+                    event_logger.fail_event(f"No documents extracted from {filename}")
                 return {
                     "status": "error",
                     "message": f"No documents extracted from {filename}",
@@ -230,10 +292,32 @@ class IngestHandler:
                     "document_count": 0,
                 }
 
+            # Log file parsed
+            if event_logger:
+                # Extract parser names
+                parser_names = list(set(
+                    doc.metadata.get("parser", "unknown")
+                    for doc in documents
+                ))
+                event_logger.log_event("file_parsed", {
+                    "filename": filename,
+                    "parsers": parser_names,
+                    "mime_type": metadata.get("content_type", "unknown"),
+                })
+
             # Generate file hash for deduplication
             import hashlib
 
             file_hash = hashlib.sha256(file_data).hexdigest()
+
+            # Log chunks created
+            if event_logger:
+                avg_chunk_size = sum(len(doc.content) for doc in documents) / len(documents) if documents else 0
+                event_logger.log_event("chunks_created", {
+                    "chunk_count": len(documents),
+                    "avg_chunk_size": int(avg_chunk_size),
+                    "file_hash": file_hash[:16],
+                })
 
             # Generate embeddings for each document
             embedded_documents = []
@@ -259,6 +343,15 @@ class IngestHandler:
                         )
                         logger.info(f"   └─ Dimensions: {len(doc.embeddings)}")
                 embedded_documents.append(doc)
+
+            # Log embeddings generated
+            if event_logger:
+                embedding_dim = len(embedded_documents[0].embeddings) if embedded_documents and hasattr(embedded_documents[0], 'embeddings') else 0
+                event_logger.log_event("embeddings_generated", {
+                    "embedding_count": len(embedded_documents),
+                    "embedder": self.embedder.__class__.__name__,
+                    "embedding_dimension": embedding_dim,
+                })
 
             # Store documents in vector store with duplicate detection
             # Try batch add first (more efficient)
@@ -364,6 +457,15 @@ class IngestHandler:
                         # Re-raise to ensure error is not silently ignored
                         raise
 
+            # Log chunks stored
+            if event_logger:
+                event_logger.log_event("chunks_stored", {
+                    "database": self.database,
+                    "stored_count": stored_count,
+                    "skipped_count": skipped_count,
+                    "storage_type": self.vector_store.__class__.__name__,
+                })
+
             # Calculate processing time
             elapsed_time = time.time() - start_time
 
@@ -434,6 +536,17 @@ class IngestHandler:
                 },
             )
 
+            # Complete event logging
+            if event_logger:
+                event_logger.log_event("processing_complete", {
+                    "status": status,
+                    "total_chunks": len(documents),
+                    "stored_chunks": stored_count,
+                    "skipped_chunks": skipped_count,
+                    "processing_time_seconds": round(elapsed_time, 2),
+                })
+                event_logger.complete_event()
+
             return {
                 "status": status,
                 "filename": filename,
@@ -454,6 +567,10 @@ class IngestHandler:
 
         except Exception as e:
             logger.error(f"Error ingesting file {filename}: {e}")
+
+            # Fail event logging
+            if event_logger:
+                event_logger.fail_event(str(e))
 
             # Log error
             self.process_logger.log_error(
