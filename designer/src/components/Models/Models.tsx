@@ -656,6 +656,9 @@ function AddOrChangeModels({
   >('idle')
   const [deleteError, setDeleteError] = useState('')
 
+  // Manual refresh state to ensure visible feedback
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false)
+
   // Custom model local state (not shared)
   const [customModelInput, setCustomModelInput] = useState('')
   const [customModelName, setCustomModelName] = useState('')
@@ -962,19 +965,35 @@ function AddOrChangeModels({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refetchCachedModels()}
-            disabled={isLoadingCachedModels}
+            onClick={async () => {
+              setIsManuallyRefreshing(true)
+              const startTime = Date.now()
+
+              // Trigger the actual refetch
+              await refetchCachedModels()
+
+              // Ensure we show the loading state for at least 800ms
+              const elapsed = Date.now() - startTime
+              const remaining = Math.max(0, 800 - elapsed)
+
+              setTimeout(() => {
+                setIsManuallyRefreshing(false)
+              }, remaining)
+            }}
+            disabled={isLoadingCachedModels || isManuallyRefreshing}
             className="flex items-center gap-2"
           >
-            {isLoadingCachedModels ? (
+            {isLoadingCachedModels || isManuallyRefreshing ? (
               <Loader size={14} className="border-primary" />
             ) : (
               <FontIcon type="recently-viewed" className="w-4 h-4" />
             )}
-            Refresh
+            {isLoadingCachedModels || isManuallyRefreshing
+              ? 'Refreshing...'
+              : 'Refresh'}
           </Button>
         </div>
-        {isLoadingCachedModels ? (
+        {isLoadingCachedModels || isManuallyRefreshing ? (
           <div className="flex items-center justify-center py-8">
             <Loader size={24} className="border-primary" />
           </div>
@@ -1061,7 +1080,7 @@ function AddOrChangeModels({
                 }}
                 className="h-10 whitespace-nowrap"
               >
-                Add custom model
+                Add HuggingFace model
               </Button>
             </div>
           )}
@@ -1095,7 +1114,7 @@ function AddOrChangeModels({
                       setCustomDownloadError('')
                     }}
                   >
-                    Add custom model
+                    Add HuggingFace model
                   </Button>
                 </div>
               ) : (
@@ -1228,7 +1247,7 @@ function AddOrChangeModels({
         }}
       >
         <DialogContent>
-          <DialogTitle>Download custom model from HuggingFace</DialogTitle>
+          <DialogTitle>Download model from HuggingFace</DialogTitle>
           <DialogDescription>
             <div className="mt-2 flex flex-col gap-3">
               <p className="text-sm">
