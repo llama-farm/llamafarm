@@ -111,3 +111,23 @@ class ModelService:
                     yield evt
             case _:
                 raise ValueError(f"Unsupported provider: {provider}")
+
+    @staticmethod
+    def delete_model(provider: Provider, model_name: str) -> dict:
+        """Delete a cached model for the given provider and model name.
+
+        Args:
+            provider: The model provider
+            model_name: The model identifier to delete
+
+        Returns:
+            Dict with deleted model info including freed space
+
+        Raises:
+            ValueError: If provider is not supported
+        """
+        match provider:
+            case Provider.universal:
+                return UniversalProvider.delete_model(model_name)
+            case _:
+                raise ValueError(f"Unsupported provider: {provider}")

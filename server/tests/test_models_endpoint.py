@@ -88,3 +88,78 @@ def test_list_models_handles_errors(mocker):
 
     # Should return a 500 or appropriate error status
     assert resp.status_code >= 400
+
+
+def test_delete_model_success(mocker):
+    """Test deleting a model successfully."""
+    # Mock delete_model to return success info
+    mock_delete = mocker.patch(
+        "server.services.model_service.ModelService.delete_model"
+    )
+    mock_delete.return_value = {
+        "model_name": "meta-llama/Llama-2-7b-hf",
+        "revisions_deleted": 1,
+        "size_freed": 13476520960,
+        "path": "/path/to/models/models--meta-llama--Llama-2-7b-hf",
+    }
+
+    client = _client()
+    resp = client.delete("/v1/models/meta-llama/Llama-2-7b-hf")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["model_name"] == "meta-llama/Llama-2-7b-hf"
+    assert data["revisions_deleted"] == 1
+    assert data["size_freed"] == 13476520960
+    assert "Llama-2-7b-hf" in data["path"]
+
+
+def test_delete_model_not_found(mocker):
+    """Test deleting a model that doesn't exist."""
+    # Mock delete_model to raise ValueError with "not found"
+    mock_delete = mocker.patch(
+        "server.services.model_service.ModelService.delete_model"
+    )
+    mock_delete.side_effect = ValueError(
+        "Model 'nonexistent/model' not found in cache."
+    )
+
+    client = _client()
+    resp = client.delete("/v1/models/nonexistent/model")
+
+    assert resp.status_code == 404
+    data = resp.json()
+    assert "not found" in data["detail"].lower()
+
+
+def test_delete_model_invalid_provider(mocker):
+    """Test deleting a model with an unsupported provider."""
+    # Mock delete_model to raise ValueError for unsupported provider
+    # Note: Using 'openai' as a valid enum value that will be handled by our code
+    mock_delete = mocker.patch(
+        "server.services.model_service.ModelService.delete_model"
+    )
+    mock_delete.side_effect = ValueError("Unsupported provider: openai")
+
+    client = _client()
+    resp = client.delete("/v1/models/some-model?provider=openai")
+
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "Unsupported provider" in data["detail"]
+
+
+def test_delete_model_handles_errors(mocker):
+    """Test delete endpoint handles unexpected errors gracefully."""
+    # Mock delete_model to raise an unexpected exception
+    mock_delete = mocker.patch(
+        "server.services.model_service.ModelService.delete_model"
+    )
+    mock_delete.side_effect = Exception("Unexpected error")
+
+    client = _client()
+    resp = client.delete("/v1/models/some-model")
+
+    assert resp.status_code == 500
+    data = resp.json()
+    assert "Unexpected error" in data["detail"]

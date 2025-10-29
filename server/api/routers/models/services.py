@@ -46,3 +46,37 @@ async def download_model(request: DownloadModelRequest):
             yield f"data: {json.dumps(evt)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.delete("/{model_name:path}")
+def delete_model(model_name: str, provider: Provider = Provider.universal):
+    """Delete a cached model from disk.
+
+    This will delete ALL revisions of the specified model from the HuggingFace cache.
+
+    Args:
+        model_name: The model identifier to delete (e.g., "meta-llama/Llama-2-7b-hf")
+        provider: The model provider (defaults to universal)
+
+    Returns:
+        Dict with deleted model info including:
+        - model_name: The deleted model identifier
+        - revisions_deleted: Number of revisions deleted
+        - size_freed: Total bytes freed from disk
+        - path: Path to the deleted model cache directory
+
+    Raises:
+        404: If the model is not found in the cache
+        400: If the provider is not supported
+        500: For other errors
+    """
+    try:
+        result = ModelService.delete_model(provider, model_name)
+        return result
+    except ValueError as e:
+        # Model not found or invalid provider
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
