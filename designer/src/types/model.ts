@@ -31,3 +31,12 @@ export type DownloadEvent =
   | { event: 'done'; local_dir: string }
   | { event: 'error'; message: string }
 
+/**
+ * Response from the delete model endpoint
+ */
+export interface DeleteModelResponse {
+  model_name: string
+  revisions_deleted: number
+  size_freed: number
+  path: string
+}

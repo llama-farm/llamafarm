@@ -247,14 +247,34 @@ interface DeviceModel {
 function DeviceModelCard({
   model,
   onUse,
+  onDelete,
   isInUse,
 }: {
   model: DeviceModel
   onUse: () => void
+  onDelete: () => void
   isInUse?: boolean
 }) {
   return (
-    <div className="w-full h-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4">
+    <div className="w-full h-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative">
+      <div className="absolute top-2 right-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30">
+              <FontIcon type="overflow" className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem] w-[10rem]">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={onDelete}
+            >
+              Delete from disk
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
       <div className="text-sm text-muted-foreground">
         {model.modelIdentifier}
       </div>
@@ -282,10 +302,12 @@ function DeviceModelCard({
 function DeviceModels({
   models,
   onUse,
+  onDelete,
   isModelInUse,
 }: {
   models: DeviceModel[]
   onUse: (model: DeviceModel) => void
+  onDelete: (model: DeviceModel) => void
   isModelInUse: (modelId: string) => boolean
 }) {
   return (
@@ -295,6 +317,7 @@ function DeviceModels({
           key={m.id}
           model={m}
           onUse={() => onUse(m)}
+          onDelete={() => onDelete(m)}
           isInUse={isModelInUse(m.id)}
         />
       ))}
@@ -625,6 +648,14 @@ function AddOrChangeModels({
     string[]
   >([])
 
+  // Delete device model state
+  const [deleteConfirmModelOpen, setDeleteConfirmModelOpen] = useState(false)
+  const [modelToDelete, setModelToDelete] = useState<DeviceModel | null>(null)
+  const [deleteState, setDeleteState] = useState<
+    'idle' | 'deleting' | 'success' | 'error'
+  >('idle')
+  const [deleteError, setDeleteError] = useState('')
+
   // Custom model local state (not shared)
   const [customModelInput, setCustomModelInput] = useState('')
   const [customModelName, setCustomModelName] = useState('')
@@ -877,6 +908,38 @@ function AddOrChangeModels({
     setDeviceConfirmOpen(true)
   }
 
+  const handleDeleteDeviceModel = (model: DeviceModel) => {
+    setModelToDelete(model)
+    setDeleteConfirmModelOpen(true)
+  }
+
+  const confirmDeleteDeviceModel = async () => {
+    if (!modelToDelete) return
+
+    setDeleteState('deleting')
+    setDeleteError('')
+
+    try {
+      await modelService.deleteModel(modelToDelete.modelIdentifier)
+      setDeleteState('success')
+      // Refresh the cached models list
+      refetchCachedModels()
+      // Close dialog after short delay
+      setTimeout(() => {
+        setDeleteConfirmModelOpen(false)
+        setModelToDelete(null)
+        setDeleteState('idle')
+      }, 1000)
+    } catch (error: any) {
+      setDeleteState('error')
+      setDeleteError(
+        error.response?.data?.detail ||
+          error.message ||
+          'Failed to delete model'
+      )
+    }
+  }
+
   // Check if a device model is already in the project
   const isModelInUse = (modelId: string): boolean => {
     return projectModels.some(
@@ -925,6 +988,7 @@ function AddOrChangeModels({
           <DeviceModels
             models={deviceModels}
             onUse={handleUseDeviceModel}
+            onDelete={handleDeleteDeviceModel}
             isModelInUse={isModelInUse}
           />
         )}
@@ -1442,12 +1506,16 @@ function AddOrChangeModels({
                         )
                         // Refresh cached models
                         refetchCachedModels()
-                        // Close modal and background indicator after short delay
+                        // Close modal immediately but keep success toast
                         setTimeout(() => {
                           setCustomModelOpen(false)
-                          setShowBackgroundDownload(false)
                           onGoToProject()
-                        }, 1500)
+                        }, 1000)
+                        // Hide success toast after 4 seconds
+                        setTimeout(() => {
+                          setShowBackgroundDownload(false)
+                          setCustomDownloadState('idle')
+                        }, 4000)
                       } else if (event.event === 'error') {
                         setCustomDownloadState('error')
                         setCustomDownloadError(
@@ -1682,6 +1750,69 @@ function AddOrChangeModels({
                 </span>
               )}
               Add to project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete device model confirmation dialog */}
+      <Dialog
+        open={deleteConfirmModelOpen}
+        onOpenChange={open => {
+          setDeleteConfirmModelOpen(open)
+          if (!open && deleteState !== 'deleting') {
+            setModelToDelete(null)
+            setDeleteState('idle')
+            setDeleteError('')
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>Delete model from disk?</DialogTitle>
+          <DialogDescription>
+            {modelToDelete && (
+              <div className="mt-2 flex flex-col gap-3">
+                <p className="text-sm">
+                  Are you sure you want to delete
+                  <span className="mx-1 font-medium text-foreground">
+                    {modelToDelete.name}
+                  </span>
+                  from disk? This will permanently remove the model files (
+                  {modelToDelete.meta}) and cannot be undone.
+                </p>
+
+                {deleteState === 'error' && deleteError && (
+                  <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                    <p className="text-sm text-destructive">{deleteError}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogDescription>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setDeleteConfirmModelOpen(false)}
+              disabled={deleteState === 'deleting'}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteDeviceModel}
+              disabled={deleteState === 'deleting'}
+            >
+              {deleteState === 'deleting' && (
+                <span className="mr-2 inline-flex">
+                  <Loader size={14} className="border-destructive-foreground" />
+                </span>
+              )}
+              {deleteState === 'success' && (
+                <span className="mr-2 inline-flex">
+                  <FontIcon type="checkmark-filled" className="w-4 h-4" />
+                </span>
+              )}
+              Delete from disk
             </Button>
           </DialogFooter>
         </DialogContent>

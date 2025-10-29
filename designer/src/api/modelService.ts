@@ -3,6 +3,7 @@ import {
   ListModelsResponse,
   DownloadModelRequest,
   DownloadEvent,
+  DeleteModelResponse,
 } from '../types/model'
 
 /**
@@ -75,10 +76,26 @@ export async function* downloadModel(
 }
 
 /**
+ * Delete a cached model from disk
+ * @param modelName - The model identifier to delete (e.g., "meta-llama/Llama-2-7b-hf")
+ * @param provider - The provider (default: universal)
+ * @returns Promise<DeleteModelResponse> - Info about deleted model including freed space
+ */
+export async function deleteModel(
+  modelName: string,
+  provider = 'universal'
+): Promise<DeleteModelResponse> {
+  const response = await apiClient.delete<DeleteModelResponse>(
+    `/models/${encodeURIComponent(modelName)}?provider=${provider}`
+  )
+  return response.data
+}
+
+/**
  * Default export with all model service functions
  */
 export default {
   listCachedModels,
   downloadModel,
+  deleteModel,
 }
-
