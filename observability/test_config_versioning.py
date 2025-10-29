@@ -180,7 +180,7 @@ def test_config_snapshot_atomic_write(temp_data_dir, mock_config):
     # Verify no temporary files left behind
     configs_dir = temp_data_dir / "projects" / "default" / "test-project" / "configs"
     temp_files = list(configs_dir.glob("*.tmp"))
-    assert len(temp_files) == 0
+    assert not temp_files
 
     # Verify only the final file exists
     config_files = list(configs_dir.glob("sha256_*.json"))

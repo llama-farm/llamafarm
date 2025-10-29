@@ -120,13 +120,11 @@ async def get_event(
     - All sub-events with detailed timing and data
     - Error information (if event failed)
     """
-    event = EventLogService.get_event(
+    if not (event := EventLogService.get_event(
         namespace=namespace,
         project=project_id,
         event_id=event_id,
-    )
-
-    if not event:
+    )):
         raise HTTPException(
             status_code=404,
             detail=f"Event '{event_id}' not found in project '{namespace}/{project_id}'",

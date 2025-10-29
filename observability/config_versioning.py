@@ -33,8 +33,11 @@ def hash_config(config: Any) -> str:
     """
     # Serialize config deterministically
     # - Exclude None values
-    # - Exclude dynamic timestamp fields
     # - Use mode='json' to properly serialize enums and complex types
+    #
+    # Note: The exclude set is defensive. LlamaFarmConfig doesn't currently have
+    # dynamic timestamp fields, but we exclude them anyway to ensure hash stability
+    # if such fields are added in the future.
     config_dict = config.model_dump(
         mode='json',
         exclude_none=True,
@@ -146,5 +149,9 @@ def get_config_by_hash(
     if not config_file.exists():
         return None
 
-    with open(config_file) as f:
-        return json.load(f)
+    try:
+        with open(config_file) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        # Handle corrupted or unreadable config files
+        return None
