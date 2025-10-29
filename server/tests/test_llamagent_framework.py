@@ -15,12 +15,12 @@ import pytest
 
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.context_provider import LFAgentContextProvider
-from agents.base.history import LFAgentChatMessage, LFAgentHistory
+from agents.base.history import LFChatCompletionMessageParam, LFAgentHistory
 from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.base.types import (
     StreamEvent,
     ToolCallRequest,
-    ToolDefinition,
+    LFFunction,
 )
 from config.datamodel import Model, Provider
 
@@ -36,8 +36,8 @@ class TestLFAgentHistory:
     def test_add_message(self):
         """Test adding messages to history."""
         history = LFAgentHistory()
-        msg1 = LFAgentChatMessage(role="user", content="Hello")
-        msg2 = LFAgentChatMessage(role="assistant", content="Hi there")
+        msg1 = LFChatCompletionMessageParam(role="user", content="Hello")
+        msg2 = LFChatCompletionMessageParam(role="assistant", content="Hi there")
 
         history.add_message(msg1)
         history.add_message(msg2)
@@ -49,8 +49,10 @@ class TestLFAgentHistory:
     def test_get_history(self):
         """Test getting history as dict list."""
         history = LFAgentHistory()
-        history.add_message(LFAgentChatMessage(role="user", content="Hello"))
-        history.add_message(LFAgentChatMessage(role="assistant", content="Hi"))
+        history.add_message(LFChatCompletionMessageParam(role="user", content="Hello"))
+        history.add_message(
+            LFChatCompletionMessageParam(role="assistant", content="Hi")
+        )
 
         result = history.get_history()
         assert len(result) == 2
@@ -70,9 +72,11 @@ class TestLFAgentSystemPromptGenerator:
     def test_init_with_system_prompts(self):
         """Test initialization with system prompts."""
         prompts = [
-            LFAgentChatMessage(role="system", content="You are helpful"),
-            LFAgentChatMessage(role="user", content="Hello"),  # Should be filtered
-            LFAgentChatMessage(role="system", content="Be concise"),
+            LFChatCompletionMessageParam(role="system", content="You are helpful"),
+            LFChatCompletionMessageParam(
+                role="user", content="Hello"
+            ),  # Should be filtered
+            LFChatCompletionMessageParam(role="system", content="Be concise"),
         ]
         generator = LFAgentSystemPromptGenerator(prompts=prompts)
 
@@ -83,7 +87,9 @@ class TestLFAgentSystemPromptGenerator:
 
     def test_generate_prompt_basic(self):
         """Test basic prompt generation."""
-        prompts = [LFAgentChatMessage(role="system", content="You are helpful")]
+        prompts = [
+            LFChatCompletionMessageParam(role="system", content="You are helpful")
+        ]
         generator = LFAgentSystemPromptGenerator(prompts=prompts)
 
         prompt = generator.generate_prompt()
@@ -91,7 +97,9 @@ class TestLFAgentSystemPromptGenerator:
 
     def test_generate_prompt_with_context_providers(self):
         """Test prompt generation with context providers."""
-        prompts = [LFAgentChatMessage(role="system", content="You are helpful")]
+        prompts = [
+            LFChatCompletionMessageParam(role="system", content="You are helpful")
+        ]
 
         # Create mock context provider
         mock_provider = MagicMock(spec=LFAgentContextProvider)
@@ -110,7 +118,9 @@ class TestLFAgentSystemPromptGenerator:
 
     def test_generate_prompt_empty_context(self):
         """Test prompt generation when context provider returns empty."""
-        prompts = [LFAgentChatMessage(role="system", content="You are helpful")]
+        prompts = [
+            LFChatCompletionMessageParam(role="system", content="You are helpful")
+        ]
 
         mock_provider = MagicMock(spec=LFAgentContextProvider)
         mock_provider.title = "Empty Context"
@@ -131,7 +141,7 @@ class TestToolDefinition:
 
     def test_tool_definition_creation(self):
         """Test creating a ToolDefinition."""
-        tool = ToolDefinition(
+        tool = LFFunction(
             name="test_tool",
             description="A test tool",
             parameters={
@@ -164,7 +174,7 @@ class TestToolDefinition:
                         "required": ["tool_name", "param1"],
                     }
 
-        tool_def = ToolDefinition.from_mcp_tool(MockMCPTool)
+        tool_def = LFFunction.from_mcp_tool(MockMCPTool)
         assert tool_def.name == "mock_tool"
         assert tool_def.description == "Mock tool description"
         # tool_name discriminator should be removed
@@ -179,7 +189,7 @@ class TestToolDefinition:
             __name__ = "MockMCPTool"
             __doc__ = "Tool without schema"
 
-        tool_def = ToolDefinition.from_mcp_tool(MockMCPTool)
+        tool_def = LFFunction.from_mcp_tool(MockMCPTool)
         assert tool_def.name == "MockMCPTool"
         assert tool_def.description == "Tool without schema"
         assert tool_def.parameters == {"type": "object", "properties": {}}
@@ -231,9 +241,11 @@ class TestLFAgent:
 
             @staticmethod
             def prompt_to_message(prompt):
-                from agents.base.history import LFAgentChatMessage
+                from agents.base.history import LFChatCompletionMessageParam
 
-                return LFAgentChatMessage(role="system", content=prompt.content)
+                return LFChatCompletionMessageParam(
+                    role="system", content=prompt.content
+                )
 
         model_config = Model(
             name="test-model",
@@ -249,7 +261,9 @@ class TestLFAgent:
         """Create agent config."""
         history = LFAgentHistory()
         system_prompt_gen = LFAgentSystemPromptGenerator(
-            prompts=[LFAgentChatMessage(role="system", content="You are helpful")]
+            prompts=[
+                LFChatCompletionMessageParam(role="system", content="You are helpful")
+            ]
         )
         return LFAgentConfig(
             client=mock_client,
@@ -268,7 +282,7 @@ class TestLFAgent:
     async def test_run_async_with_user_input(self, agent_config):
         """Test running agent with user input."""
         agent = LFAgent(config=agent_config)
-        user_msg = LFAgentChatMessage(role="user", content="Hello")
+        user_msg = LFChatCompletionMessageParam(role="user", content="Hello")
 
         response = await agent.run_async(user_input=user_msg)
 
@@ -282,7 +296,7 @@ class TestLFAgent:
         agent = LFAgent(config=agent_config)
         # Pre-populate history
         agent.history.add_message(
-            LFAgentChatMessage(role="user", content="Previous message")
+            LFChatCompletionMessageParam(role="user", content="Previous message")
         )
 
         response = await agent.run_async()
@@ -295,7 +309,7 @@ class TestLFAgent:
     async def test_run_async_stream(self, agent_config):
         """Test streaming response."""
         agent = LFAgent(config=agent_config)
-        user_msg = LFAgentChatMessage(role="user", content="Hello")
+        user_msg = LFChatCompletionMessageParam(role="user", content="Hello")
 
         chunks = []
         async for chunk in agent.run_async_stream(user_input=user_msg):
@@ -308,9 +322,9 @@ class TestLFAgent:
     async def test_stream_chat_with_tools(self, agent_config):
         """Test streaming with tools."""
         agent = LFAgent(config=agent_config)
-        user_msg = LFAgentChatMessage(role="user", content="Hello")
+        user_msg = LFChatCompletionMessageParam(role="user", content="Hello")
         tools = [
-            ToolDefinition(
+            LFFunction(
                 name="test_tool",
                 description="Test",
                 parameters={"type": "object", "properties": {}},
@@ -363,9 +377,11 @@ class TestLFAgent:
     def test_prepare_messages(self, agent_config):
         """Test message preparation."""
         agent = LFAgent(config=agent_config)
-        agent.history.add_message(LFAgentChatMessage(role="user", content="Hello"))
         agent.history.add_message(
-            LFAgentChatMessage(role="assistant", content="Hi there")
+            LFChatCompletionMessageParam(role="user", content="Hello")
+        )
+        agent.history.add_message(
+            LFChatCompletionMessageParam(role="assistant", content="Hi there")
         )
 
         messages = agent._prepare_messages()

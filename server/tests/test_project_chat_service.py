@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agents.chat_orchestrator import ChatOrchestratorAgent
-from agents.base.history import LFAgentChatMessage
+from agents.base.history import LFChatCompletionMessageParam
 from config.datamodel import (
     Database,
     LlamaFarmConfig,

@@ -3,13 +3,18 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
+
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
 from agents.chat_orchestrator import ChatOrchestratorAgent
 from agents.base.agent import LFAgent
-from agents.base.history import LFAgentChatMessage
+from agents.base.history import (
+    LFChatCompletionMessageParam,
+    LFChatCompletionUserMessageParam,
+)
 from context_providers.rag_context_provider import (
     ChunkItem,
     RAGContextProvider,
@@ -55,6 +60,72 @@ class RAGParameters:
 
 
 class ProjectChatService:
+    async def chat(
+        self,
+        *,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
+        chat_agent: ChatOrchestratorAgent,
+        message: str,
+        rag_enabled: bool | None = None,
+        database: str | None = None,
+        retrieval_strategy: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
+    ) -> LFChatCompletion:
+        await self._perform_rag_search_and_add_to_context(
+            chat_agent,
+            project_dir,
+            project_config,
+            message,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
+
+        user_input = LFChatCompletionUserMessageParam(role="user", content=message)
+        return await chat_agent.run_async(user_input=user_input)
+
+    async def stream_chat(
+        self,
+        *,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
+        chat_agent: LFAgent,
+        message: str,
+        rag_enabled: bool | None = None,
+        database: str | None = None,
+        retrieval_strategy: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
+    ) -> AsyncGenerator[LFChatCompletionChunk]:
+        """Yield assistant content chunks, using agent-native streaming if available."""
+
+        await self._perform_rag_search_and_add_to_context(
+            chat_agent,
+            project_dir,
+            project_config,
+            message,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
+
+        user_input = LFChatCompletionUserMessageParam(role="user", content=message)
+        try:
+            logger.info("Running async stream")
+            async for chunk in chat_agent.run_async_stream(user_input=user_input):
+                yield chunk
+        except Exception:
+            logger.error(
+                "Model call failed",
+                exc_info=True,
+            )
+
     def _resolve_rag_parameters(
         self,
         project_config: LlamaFarmConfig,
@@ -291,64 +362,18 @@ class ProjectChatService:
         except Exception:
             logger.warning("Failed to clear RAG context provider", exc_info=True)
 
-    async def chat(
+    async def _perform_rag_search_and_add_to_context(
         self,
-        *,
-        project_dir: str,
-        project_config: LlamaFarmConfig,
-        chat_agent: ChatOrchestratorAgent,
-        message: str,
-        rag_enabled: bool | None = None,
-        database: str | None = None,
-        retrieval_strategy: str | None = None,
-        rag_top_k: int | None = None,
-        rag_score_threshold: float | None = None,
-    ) -> ChatCompletion:
-        response_message = ""
-        async for chunk in self.stream_chat(
-            project_dir=project_dir,
-            project_config=project_config,
-            chat_agent=chat_agent,
-            message=message,
-            rag_enabled=rag_enabled,
-            database=database,
-            rag_top_k=rag_top_k,
-            rag_score_threshold=rag_score_threshold,
-        ):
-            response_message += chunk
-
-        completion = ChatCompletion(
-            id=f"chat-{uuid.uuid4()}",
-            object="chat.completion",
-            created=int(time.time()),
-            model=chat_agent.model_name,
-            choices=[
-                Choice(
-                    index=0,
-                    message=ChatCompletionMessage(
-                        role="assistant",
-                        content=response_message,
-                    ),
-                    finish_reason="stop",
-                )
-            ],
-        )
-        return completion
-
-    async def stream_chat(
-        self,
-        *,
-        project_dir: str,
-        project_config: LlamaFarmConfig,
         chat_agent: LFAgent,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
         message: str,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
-    ) -> AsyncGenerator[str, None]:
-        """Yield assistant content chunks, using agent-native streaming if available."""
+    ) -> None:
         self._clear_rag_context_provider(chat_agent)
         context_provider = RAGContextProvider(title="Project Chat Context")
         chat_agent.register_context_provider("project_chat_context", context_provider)
@@ -385,24 +410,6 @@ class ProjectChatService:
                 },
             )
             context_provider.chunks.append(chunk_item)
-
-        user_input = LFAgentChatMessage(role="user", content=message)
-        try:
-            logger.info("Running async stream")
-            previous_response = ""
-            emitted = False
-            async for chunk in chat_agent.run_async_stream(user_input=user_input):
-                if chunk:
-                    emitted = True
-                    yield chunk
-
-            if not emitted:
-                yield previous_response
-        except Exception:
-            logger.error(
-                "Model call failed",
-                exc_info=True,
-            )
 
 
 project_chat_service = ProjectChatService()

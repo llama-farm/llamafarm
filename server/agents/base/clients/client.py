@@ -1,10 +1,31 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
+from typing import Literal, TypeAlias
 
-from config.datamodel import Model, Prompt
+from config.datamodel import Message, Model, Prompt
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
+from pydantic import BaseModel
 
-from agents.base.history import LFAgentChatMessage
-from agents.base.types import StreamEvent, ToolDefinition
+from agents.base.history import (
+    LFChatCompletionAssistantMessageParam,
+    LFChatCompletionMessageParam,
+    LFChatCompletionSystemMessageParam,
+    LFChatCompletionUserMessageParam,
+)
+from agents.base.types import ToolDefinition
+
+
+class LFToolCall(BaseModel):
+    type: Literal["function"] = "function"
+    function: ToolDefinition
+
+
+class LFChatResponse(BaseModel):
+    message: ChatCompletion
+
+
+LFChatCompletion: TypeAlias = ChatCompletion
+LFChatCompletionChunk: TypeAlias = ChatCompletionChunk
 
 
 class LFAgentClient(ABC):
@@ -30,36 +51,56 @@ class LFAgentClient(ABC):
         return self._model_name
 
     @staticmethod
-    def prompt_to_message(prompt: Prompt) -> list[LFAgentChatMessage]:
+    def prompt_to_message(prompt: Prompt) -> list[LFChatCompletionMessageParam]:
         """
         Converts a llamafarm Prompt set into a list of LFAgentChatMessages.
         """
-        return [
-            LFAgentChatMessage(role=message.role, content=message.content)  # type: ignore
+
+        messages = [
+            LFAgentClient._prompt_message_to_chat_completion_message(message)
             for message in prompt.messages
         ]
+        return messages
+
+    @staticmethod
+    def _prompt_message_to_chat_completion_message(
+        message: Message,
+    ) -> LFChatCompletionMessageParam:
+        match message.role:
+            case "system":
+                return LFChatCompletionSystemMessageParam(
+                    role="system", content=message.content
+                )
+            case "user":
+                return LFChatCompletionUserMessageParam(
+                    role="user", content=message.content
+                )
+            case "assistant":
+                return LFChatCompletionAssistantMessageParam(
+                    role="assistant", content=message.content
+                )
+            case _:
+                return LFChatCompletionUserMessageParam(
+                    role="user", content=message.content
+                )
 
     @abstractmethod
-    async def chat(self, *, messages: list[LFAgentChatMessage]) -> str:
+    async def chat(
+        self,
+        *,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
+    ) -> LFChatCompletion:
         """Simple chat without tool calling support (for backwards compatibility)."""
         pass
 
     @abstractmethod
     async def stream_chat(
-        self, *, messages: list[LFAgentChatMessage]
-    ) -> AsyncGenerator[str, None]:
-        """Stream chat without tool calling support (for backwards compatibility)."""
-        ...
-        # Async generator - implementations should use async def with yield
-        yield  # type: ignore
-
-    @abstractmethod
-    async def stream_chat_with_tools(
         self,
         *,
-        messages: list[LFAgentChatMessage],
-        tools: list[ToolDefinition],
-    ) -> AsyncGenerator[StreamEvent, None]:
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
+    ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with tool calling support.
 
         The implementation is responsible for:

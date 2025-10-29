@@ -1,6 +1,6 @@
 import tempfile
 
-from agents.base.history import LFAgentChatMessage
+from agents.base.history import LFChatCompletionMessageParam
 import pytest
 
 from config.datamodel import (
@@ -130,7 +130,7 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     agent.register_context_provider("project_chat_context", provider)
 
     await agent.run_async(
-        user_input=LFAgentChatMessage(role="user", content="Hello there")
+        user_input=LFChatCompletionMessageParam(role="user", content="Hello there")
     )
 
     messages = captured.get("messages", [])

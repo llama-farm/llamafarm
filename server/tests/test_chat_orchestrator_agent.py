@@ -20,7 +20,7 @@ from agents.chat_orchestrator import (
     ChatOrchestratorAgent,
     ChatOrchestratorAgentFactory,
 )
-from agents.base.history import LFAgentChatMessage
+from agents.base.history import LFChatCompletionMessageParam
 from agents.base.types import StreamEvent, ToolCallRequest
 from config.datamodel import (
     LlamaFarmConfig,
@@ -141,7 +141,7 @@ class TestChatOrchestratorAgent:
                 project_dir=project_dir,
             )
 
-            user_input = LFAgentChatMessage(role="user", content="Hi")
+            user_input = LFChatCompletionMessageParam(role="user", content="Hi")
             response = await agent.run_async(user_input=user_input)
 
             assert response == "Hello there!"
@@ -178,7 +178,9 @@ class TestChatOrchestratorAgent:
             agent._mcp_enabled = True
             agent._mcp_tools = [mock_tool_class]
 
-            user_input = LFAgentChatMessage(role="user", content="Use the tool")
+            user_input = LFChatCompletionMessageParam(
+                role="user", content="Use the tool"
+            )
             response = await agent.run_async(user_input=user_input)
 
             assert response == "Final answer based on tool result"
@@ -209,7 +211,7 @@ class TestChatOrchestratorAgent:
             agent._mcp_enabled = True
             agent._mcp_tools = [mock_tool_class]
 
-            user_input = LFAgentChatMessage(role="user", content="Test")
+            user_input = LFChatCompletionMessageParam(role="user", content="Test")
             response = await agent.run_async(user_input=user_input)
 
             # Should return max iterations message
@@ -232,7 +234,7 @@ class TestChatOrchestratorAgent:
             agent._mcp_enabled = True
             agent._mcp_tools = []
 
-            user_input = LFAgentChatMessage(role="user", content="Test")
+            user_input = LFChatCompletionMessageParam(role="user", content="Test")
             response = await agent.run_async(user_input=user_input)
 
             # Should handle error gracefully
@@ -263,7 +265,7 @@ class TestChatOrchestratorAgent:
             agent._mcp_enabled = True
             agent._mcp_tools = [mock_tool_class]
 
-            user_input = LFAgentChatMessage(role="user", content="Test")
+            user_input = LFChatCompletionMessageParam(role="user", content="Test")
             response = await agent.run_async(user_input=user_input)
 
             # Should handle error gracefully
@@ -288,7 +290,7 @@ class TestChatOrchestratorAgent:
                 "run_async_stream",
                 return_value=mock_stream(),
             ):
-                user_input = LFAgentChatMessage(role="user", content="Hi")
+                user_input = LFChatCompletionMessageParam(role="user", content="Hi")
                 chunks = []
                 async for chunk in agent.run_async_stream(user_input=user_input):
                     chunks.append(chunk)
@@ -332,7 +334,7 @@ class TestChatOrchestratorAgent:
             with patch.object(
                 agent, "stream_chat_with_tools", side_effect=mock_stream_with_tools
             ):
-                user_input = LFAgentChatMessage(role="user", content="Test")
+                user_input = LFChatCompletionMessageParam(role="user", content="Test")
                 chunks = []
                 async for chunk in agent.run_async_stream(user_input=user_input):
                     chunks.append(chunk)
@@ -383,9 +385,11 @@ class TestChatOrchestratorAgent:
             )
             agent1.enable_persistence(session_id="test-session")
 
-            agent1.history.add_message(LFAgentChatMessage(role="user", content="Hello"))
             agent1.history.add_message(
-                LFAgentChatMessage(role="assistant", content="Hi there")
+                LFChatCompletionMessageParam(role="user", content="Hello")
+            )
+            agent1.history.add_message(
+                LFChatCompletionMessageParam(role="assistant", content="Hi there")
             )
 
             # Persist history
@@ -413,7 +417,9 @@ class TestChatOrchestratorAgent:
             agent.enable_persistence(session_id="test-session")
 
             # Add messages and persist
-            agent.history.add_message(LFAgentChatMessage(role="user", content="Hello"))
+            agent.history.add_message(
+                LFChatCompletionMessageParam(role="user", content="Hello")
+            )
             agent._persist_history()
 
             # Reset history

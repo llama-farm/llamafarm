@@ -1,5 +1,7 @@
 import json
 import os
+import time
+import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -7,8 +9,15 @@ from atomic_agents import BaseTool  # type: ignore
 from config.datamodel import LlamaFarmConfig, Provider
 
 from agents.base.agent import LFAgent, LFAgentConfig
+from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
 from agents.base.clients.openai import LFAgentClientOpenAI
-from agents.base.history import LFAgentChatMessage, LFAgentHistory
+from agents.base.history import (
+    LFAgentHistory,
+    LFChatCompletionAssistantMessageParam,
+    LFChatCompletionMessageParam,
+    LFChatCompletionToolMessageParam,
+    LFChatCompletionUserMessageParam,
+)
 from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.base.types import ToolDefinition
 from core.logging import FastAPIStructLogger
@@ -98,7 +107,11 @@ class ChatOrchestratorAgent(LFAgent):
         except Exception:
             logger.warning("History persistence failed", exc_info=True)
 
-    async def run_async(self, user_input: LFAgentChatMessage | None = None) -> str:
+    async def run_async(
+        self,
+        user_input: LFChatCompletionMessageParam | None = None,
+        tools: list[ToolDefinition] | None = None,
+    ) -> LFChatCompletion:
         """Run the agent with MCP tool calling support.
 
         The agent will:
@@ -108,230 +121,195 @@ class ChatOrchestratorAgent(LFAgent):
         4. Repeat until LLM provides final answer
         """
         iteration = 0
+        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
+
+        final_response: LFChatCompletion | None = None
 
         while iteration < MAX_TOOL_ITERATIONS:
             iteration += 1
 
             try:
                 # Get LLM response
-                response = await super().run_async(user_input=user_input)
+                response = await super().run_async(user_input=user_input, tools=tools)
 
-                # Try to parse as JSON to check for tool calls
-                try:
-                    response_data = json.loads(response)
-                except (json.JSONDecodeError, TypeError):
-                    # Not JSON, treat as final response
-                    self._persist_history_safe()
-                    return response
+                tool_calls = response.choices[0].message.tool_calls
 
-                # Check if this is a tool call request
-                tool_name = response_data.get("tool_name")
-                tool_parameters = response_data.get("tool_parameters", {})
+                # FIXME: only handle one tool call for now
+                tool_call = tool_calls[0] if tool_calls else None
+                if not tool_call:
+                    final_response = response
+                    break
 
-                if not tool_name:
-                    # No tool requested, this is the final response
-                    # Extract the actual message if present
-                    final_message = response_data.get("message") or response
-                    self._persist_history_safe()
-                    return final_message
+                if tool_call.type != "function":
+                    logger.warning(
+                        "Model returned a tool call of type %s, but we only support function tool calls",
+                        tool_call.type,
+                    )
+                    final_response = response
+                    break
 
-                # Execute the tool
-                logger.info(
-                    "Executing MCP tool",
-                    tool_name=tool_name,
-                    iteration=iteration,
+                result = await self._execute_mcp_tool(
+                    tool_call.function.name, tool_call.function.arguments
                 )
 
-                # Find the tool in our loaded tools
-                tool_class = next(
-                    (
-                        t
-                        for t in self._mcp_tools
-                        if getattr(t, "mcp_tool_name", None) == tool_name
-                    ),
-                    None,
+                self.history.add_message(
+                    LFChatCompletionToolMessageParam(
+                        role="tool",
+                        content=result,
+                        tool_call_id=tool_call.id,
+                    )
                 )
 
-                if not tool_class:
-                    error_msg = f"Tool '{tool_name}' not found"
-                    logger.warning(error_msg)
-                    # Feed error back to LLM
-                    user_input = LFAgentChatMessage(
-                        role="user",
-                        content=(
-                            f"Error: {error_msg}. Please try again or "
-                            "provide a direct answer."
-                        ),
-                    )
-                    continue
-
-                # Call the tool
-                try:
-                    tool_instance = tool_class()
-                    # Create input schema instance with parameters
-                    input_schema_class = tool_class.input_schema
-                    tool_input = input_schema_class(
-                        tool_name=tool_name, **tool_parameters
-                    )
-                    tool_result = await tool_instance.arun(tool_input)
-
-                    # Extract result content
-                    result_content = getattr(tool_result, "result", str(tool_result))
-
-                    logger.info(
-                        "Tool execution successful",
-                        tool_name=tool_name,
-                        result_preview=str(result_content)[:200],
-                    )
-
-                    # Feed result back to LLM with clear instruction
-                    user_input = LFAgentChatMessage(
-                        role="user",
-                        content=self._create_tool_result_guidance_message(
-                            tool_name, result_content
-                        ),
-                    )
-
-                except Exception as e:
-                    error_msg = f"Error executing tool '{tool_name}': {str(e)}"
-                    logger.error(error_msg, exc_info=True)
-                    # Feed error back to LLM
-                    user_input = LFAgentChatMessage(
-                        role="user",
-                        content=(
-                            f"{error_msg}. Please try again or provide a direct answer."
-                        ),
-                    )
-                    continue
+                user_input = None
 
             except Exception as e:
                 logger.error("Error in orchestrator loop", exc_info=True)
                 raise e
 
+        if final_response:
+            self.history.add_message(
+                LFChatCompletionAssistantMessageParam(
+                    role="assistant",
+                    content=final_response.choices[0].message.content,
+                    # reasoning=final_response.choices[0].message.reasoning, # TODO: we'll need to adjust types to support saving this
+                )
+            )
+            return final_response
+
         # Max iterations reached
         logger.warning("Max iterations reached in orchestrator")
-        self._persist_history_safe()
-        return MAX_ITERATIONS_MESSAGE
+
+        return LFChatCompletion(
+            id=f"chat-{uuid.uuid4()}",
+            created=int(time.time()),
+            model=self.model_name,
+            object="chat.completion",
+            choices=[
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": MAX_ITERATIONS_MESSAGE,
+                    },
+                    "finish_reason": "tool_calls_exceeded",
+                }  # type: ignore
+            ],
+        )
 
     async def run_async_stream(
-        self, user_input: LFAgentChatMessage | None = None
-    ) -> AsyncGenerator[str, None]:
+        self,
+        user_input: LFChatCompletionMessageParam | None = None,
+        tools: list[ToolDefinition] | None = None,
+    ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with MCP tool execution support."""
-
-        if not self._mcp_enabled or not self._mcp_tools:
-            # No MCP tools, use standard streaming
-            accumulated_content = ""
-            async for chunk in super().run_async_stream(user_input=user_input):
-                yield chunk
-                accumulated_content += chunk
-
-            # Add complete assistant response to history
-            if accumulated_content:
-                self.history.add_message(
-                    LFAgentChatMessage(
-                        role="assistant",
-                        content=accumulated_content,
-                    )
-                )
-
-            self._persist_history_safe()
-            return
 
         # Convert MCP tools to ToolDefinition format
         tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
 
         iteration = 0
         current_input = user_input
+        done = False
 
-        while iteration < MAX_TOOL_ITERATIONS:
+        while not done and iteration < MAX_TOOL_ITERATIONS:
             iteration += 1
 
             logger.info("Starting tool calling iteration", iteration=iteration)
 
             # Stream chat with tools
-            tool_call_made = False
             accumulated_content = ""  # Accumulate chunks for history
+            accumulated_reasoning = ""  # Accumulate chunks for reasoning
 
-            async for event in self.stream_chat_with_tools(
+            async for chunk in super().run_async_stream(
                 user_input=current_input, tools=tools
             ):
-                if event.is_content():
-                    # Stream content to user
-                    if event.content:
-                        yield event.content
-                        accumulated_content += event.content
+                choice = chunk.choices[0]
+                delta = choice.delta
 
-                elif event.is_tool_call():
-                    # Add accumulated content to history before tool call
-                    if accumulated_content:
-                        self.history.add_message(
-                            LFAgentChatMessage(
-                                role="assistant",
-                                content=accumulated_content,
-                            )
-                        )
+                if delta.content:
+                    accumulated_content += delta.content
 
-                    # Execute the tool
-                    tool_call_made = True
-                    tool_call = event.tool_call
+                if hasattr(delta, "reasoning"):
+                    accumulated_reasoning += delta.reasoning
 
-                    if not tool_call:
+                tool_call = delta.tool_calls[0] if delta.tool_calls else None
+                if not tool_call:
+                    if choice.finish_reason == "stop":
+                        done = True
+                        yield chunk
+                        continue
+                    else:
+                        yield chunk
                         continue
 
-                    logger.info(
-                        "Executing MCP tool",
-                        tool_name=tool_call.name,
-                        iteration=iteration,
+                if tool_call.type != "function":
+                    logger.warning(
+                        "Model returned a tool call of type %s, but we only support function tool calls",
+                        tool_call.type,
                     )
+                    yield chunk
+                    continue
 
-                    yield f"\n\n🔧 Calling {tool_call.name}...\nParameters: {tool_call.arguments}\n"
+                if not (
+                    tool_call.function
+                    and tool_call.function.name
+                    and tool_call.function.arguments
+                    and tool_call.id
+                ):
+                    logger.warning("Tool call function missing required fields")
+                    yield chunk
+                    continue
 
-                    # Execute the MCP tool
-                    result = await self._execute_mcp_tool(
-                        tool_call.name, tool_call.arguments
+                logger.info(
+                    "Executing MCP tool",
+                    tool_name=tool_call.function.name,
+                    iteration=iteration,
+                )
+
+                # Execute the MCP tool
+                result = await self._execute_mcp_tool(
+                    tool_call.function.name, tool_call.function.arguments
+                )
+
+                # Add tool call and result to history with guidance
+                self.history.add_message(
+                    LFChatCompletionToolMessageParam(
+                        role="tool",
+                        content=result,
+                        tool_call_id=tool_call.id,
                     )
+                )
 
-                    # Add tool call and result to history with guidance
-                    self.history.add_message(
-                        LFAgentChatMessage(
-                            role="tool",
-                            content=result,
-                        )
-                    )
-                    self.history.add_message(
-                        LFAgentChatMessage(
-                            role="assistant",
-                            content=(
-                                "Based on the tool result above, I should now provide "
-                                "my complete final answer to the user's original question. "
-                                "I should not call the same tool again unless I need "
-                                "additional different information. Answer:"
-                            ),
-                        )
-                    )
+                # Prepare for next iteration
+                current_input = None  # History already updated
+                break  # Exit event loop, continue while loop
 
-                    # Prepare for next iteration
-                    current_input = None  # History already updated
-                    break  # Exit event loop, continue while loop
-
-            # If no tool was called, we're done
-            if not tool_call_made:
-                # Add final accumulated content to history
-                if accumulated_content:
-                    self.history.add_message(
-                        LFAgentChatMessage(
-                            role="assistant",
-                            content=accumulated_content,
-                        )
-                    )
-                logger.info("No tool call made, conversation complete")
-                break
+        # Add final accumulated content to history
+        if accumulated_content:
+            self.history.add_message(
+                LFChatCompletionAssistantMessageParam(
+                    role="assistant",
+                    content=accumulated_content,
+                    # reasoning=accumulated_reasoning, # TODO: we'll need to adjust types to support saving this
+                )
+            )
 
         # Save history
         if iteration >= MAX_TOOL_ITERATIONS:
             logger.warning("Max iterations reached", max_iterations=MAX_TOOL_ITERATIONS)
-            yield f"\n\n{MAX_ITERATIONS_MESSAGE}\n"
-
+            yield LFChatCompletionChunk(
+                id=f"chat-{uuid.uuid4()}",
+                created=int(time.time()),
+                model=self.model_name,
+                choices=[
+                    {
+                        "index": 0,
+                        "message": {
+                            "content": MAX_ITERATIONS_MESSAGE,
+                        },
+                        "finish_reason": "tool_calls_exceeded",
+                    }  # type: ignore
+                ],
+            )
         self._persist_history_safe()
 
     def enable_persistence(
@@ -376,7 +354,7 @@ class ChatOrchestratorAgent(LFAgent):
             ],
         )
 
-    async def _execute_mcp_tool(self, tool_name: str, arguments: dict) -> str:
+    async def _execute_mcp_tool(self, tool_name: str, arguments: str | None) -> str:
         """Execute an MCP tool and return the result.
 
         Args:
@@ -412,7 +390,9 @@ class ChatOrchestratorAgent(LFAgent):
             input_schema_class = tool_class.input_schema
 
             # Create input with tool_name discriminator
-            tool_input = input_schema_class(tool_name=tool_name, **arguments)
+            tool_input = input_schema_class(
+                tool_name=tool_name, **json.loads(arguments or "{}")
+            )
 
             # Execute tool
             result = await tool_instance.arun(tool_input)
@@ -446,7 +426,7 @@ class ChatOrchestratorAgent(LFAgent):
         prompts = self._get_prompts_for_model(self.model_name)
         for prompt in prompts:
             # Only add non-system prompts to the history
-            if prompt.role != "system":
+            if prompt.get("role") != "system":
                 history.add_message(prompt)
 
     def _get_history(self, project_config: LlamaFarmConfig) -> LFAgentHistory:
@@ -454,7 +434,9 @@ class ChatOrchestratorAgent(LFAgent):
         self._populate_history_with_non_system_prompts(history, project_config)
         return history
 
-    def _get_prompts_for_model(self, model_name: str) -> list[LFAgentChatMessage]:
+    def _get_prompts_for_model(
+        self, model_name: str
+    ) -> list[LFChatCompletionMessageParam]:
         model_config = ModelService.get_model(self._project_config, model_name)
         provider = RuntimeService.get_provider(model_config)
         Client = provider.get_client().__class__
@@ -507,22 +489,8 @@ class ChatOrchestratorAgent(LFAgent):
             return
 
         # Add messages into history in order
-        items = data if isinstance(data, list) else []
-        for item in items:
-            try:
-                role = item.get("role")
-                content = item.get("content", "")
-                if not role or not isinstance(content, str):
-                    continue
-                self.history.add_message(
-                    message=LFAgentChatMessage(
-                        role=role,
-                        content=content,
-                    )
-                )
-            except Exception:
-                # Skip malformed entries defensively
-                continue
+        for item in data:
+            self.history.add_message(LFAgentHistory.message_from_dict(item))
 
     def _persist_history(self) -> None:
         path = self._history_file_path

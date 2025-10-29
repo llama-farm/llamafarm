@@ -2,33 +2,16 @@ import asyncio
 import json
 import time
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import Response
 from starlette.responses import StreamingResponse
-
-from ..inference.models import ChatChoice, ChatMessage, ChatRequest, ChatResponse
 
 
 def set_session_header(response: Response | None, session_id: str | None) -> None:
     if response is not None and session_id:
         response.headers["X-Session-ID"] = session_id
-
-
-def build_chat_response(model: str | None, response_message: str) -> ChatResponse:
-    return ChatResponse(
-        id=f"chat-{uuid.uuid4()}",
-        object="chat.completion",
-        created=int(time.time()),
-        model=model,
-        choices=[
-            ChatChoice(
-                index=0,
-                message=ChatMessage(role="assistant", content=response_message),
-                finish_reason="stop",
-            )
-        ],
-    )
 
 
 def _generate_chunks(text: str, limit: int) -> list[str]:
@@ -56,7 +39,7 @@ def _generate_chunks(text: str, limit: int) -> list[str]:
 
 
 def create_streaming_response(
-    request: ChatRequest, response_message: str, session_id: str
+    request: Any, response_message: str, session_id: str
 ) -> StreamingResponse:
     created_ts = int(time.time())
 
@@ -118,56 +101,36 @@ def create_streaming_response(
 
 
 def create_streaming_response_from_iterator(
-    request: ChatRequest,
-    stream_source: AsyncGenerator[str],
+    request,
+    stream_source,
     session_id: str,
     *,
     default_message: str | None = None,
 ) -> StreamingResponse:
-    created_ts = int(time.time())
+    """Convert ChatCompletionChunk stream to OpenAI SSE format.
+
+    Args:
+        request: Chat request (for model info)
+        stream_source: AsyncGenerator yielding ChatCompletionChunk objects
+        session_id: Session ID for header
+        default_message: Fallback message if no chunks emitted
+    """
 
     async def event_stream() -> AsyncIterator[bytes]:
-        preface = {
-            "id": f"chat-{uuid.uuid4()}",
-            "object": "chat.completion.chunk",
-            "created": created_ts,
-            "model": request.model,
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"role": "assistant"},
-                    "finish_reason": None,
-                }
-            ],
-        }
-        yield f"data: {json.dumps(preface)}\n\n".encode()
-        await asyncio.sleep(0)
-
         emitted = False
 
-        async for piece in stream_source:
-            if not piece:
+        async for chunk in stream_source:
+            if not chunk:
                 continue
-            payload = {
-                "id": f"chat-{uuid.uuid4()}",
-                "object": "chat.completion.chunk",
-                "created": created_ts,
-                "model": request.model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"content": str(piece)},
-                        "finish_reason": None,
-                    }
-                ],
-            }
-            yield f"data: {json.dumps(payload)}\n\n".encode()
-            # Sleep(0) yields control back to event loop, preventing blocking
-            # This allows other coroutines to run between stream chunks
+            # Chunk is already a ChatCompletionChunk - serialize it directly
+            chunk_dict = chunk.model_dump(exclude_none=True)
+            yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
             await asyncio.sleep(0)
             emitted = True
 
         if not emitted and default_message:
+            # Fallback: create a simple chunk with default message
+            created_ts = int(time.time())
             payload = {
                 "id": f"chat-{uuid.uuid4()}",
                 "object": "chat.completion.chunk",
@@ -184,15 +147,6 @@ def create_streaming_response_from_iterator(
             yield f"data: {json.dumps(payload)}\n\n".encode()
             await asyncio.sleep(0)
 
-        done_payload = {
-            "id": f"chat-{uuid.uuid4()}",
-            "object": "chat.completion.chunk",
-            "created": created_ts,
-            "model": request.model,
-            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-        }
-        yield f"data: {json.dumps(done_payload)}\n\n".encode()
-        await asyncio.sleep(0)
         yield b"data: [DONE]\n\n"
 
     return StreamingResponse(

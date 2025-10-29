@@ -8,10 +8,11 @@ runtime:
   models:
   - name: default
     description: "Default Ollama model for LlamaFarm"
-    provider: ollama
-    model: gemma3:1b
-    base_url: http://localhost:11434/v1
-    prompt_format: unstructured
+    provider: openai
+    base_url: http://localhost:11435/v1
+    model: granite4:micro
+    # model: gpt-oss:20b
+    tool_call_strategy: native_api
 
 
 prompts:
@@ -43,11 +44,6 @@ prompts:
           - Ask clarifying questions
           - Suggest relevant CLI commands to explore (e.g., `lf --help`, `lf datasets --help`)
           - Direct users to check their project's `llamafarm.yaml` configuration
-
-          ## Output Format
-          Respond with plain text in natural language. Do NOT wrap your response in JSON or any structured format. Just provide direct, helpful answers in conversational Markdown.
-
-          Remember: You're here to make LlamaFarm easier to use. Be friendly, concise, and actionable.
       - role: "assistant"
         content: |
           Welcome to LlamaFarm dev mode! 🦙
@@ -59,3 +55,9 @@ prompts:
           - Configuration: editing `llamafarm.yaml`
 
           Ask me anything about LlamaFarm, or type `/help` for chat commands!
+
+mcp:
+  servers:
+    - name: llamafarm-server
+      transport: http
+      base_url: http://localhost:8000/mcp

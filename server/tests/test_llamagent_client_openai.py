@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agents.base.clients.openai import LFAgentClientOpenAI
-from agents.base.history import LFAgentChatMessage
-from agents.base.types import ToolDefinition
+from agents.base.history import LFChatCompletionMessageParam
+from agents.base.types import LFFunction
 from config.datamodel import Model, Prompt, Provider
 
 
@@ -56,13 +56,13 @@ class TestLFAgentClientOpenAI:
 
         assert isinstance(messages, list)
         assert len(messages) == 1
-        assert isinstance(messages[0], LFAgentChatMessage)
+        assert isinstance(messages[0], LFChatCompletionMessageParam)
         assert messages[0].role == "system"
         assert "helpful" in messages[0].content
 
     def test_message_to_openai_message_system(self, client):
         """Test converting system message."""
-        msg = LFAgentChatMessage(role="system", content="System prompt")
+        msg = LFChatCompletionMessageParam(role="system", content="System prompt")
         result = client._message_to_openai_message(msg)
 
         assert result["role"] == "system"
@@ -70,7 +70,7 @@ class TestLFAgentClientOpenAI:
 
     def test_message_to_openai_message_user(self, client):
         """Test converting user message."""
-        msg = LFAgentChatMessage(role="user", content="Hello")
+        msg = LFChatCompletionMessageParam(role="user", content="Hello")
         result = client._message_to_openai_message(msg)
 
         assert result["role"] == "user"
@@ -78,7 +78,7 @@ class TestLFAgentClientOpenAI:
 
     def test_message_to_openai_message_assistant(self, client):
         """Test converting assistant message."""
-        msg = LFAgentChatMessage(role="assistant", content="Hi there")
+        msg = LFChatCompletionMessageParam(role="assistant", content="Hi there")
         result = client._message_to_openai_message(msg)
 
         assert result["role"] == "assistant"
@@ -86,7 +86,7 @@ class TestLFAgentClientOpenAI:
 
     def test_message_to_openai_message_tool(self, client):
         """Test converting tool result message."""
-        msg = LFAgentChatMessage(role="tool", content="Tool result")
+        msg = LFChatCompletionMessageParam(role="tool", content="Tool result")
         result = client._message_to_openai_message(msg)
 
         # Tool results are converted to user messages
@@ -95,7 +95,9 @@ class TestLFAgentClientOpenAI:
 
     def test_message_to_openai_message_developer_role(self, client):
         """Test converting developer role message."""
-        msg = LFAgentChatMessage(role="developer", content="Developer message")
+        msg = LFChatCompletionMessageParam(
+            role="developer", content="Developer message"
+        )
 
         # Developer role should raise ValueError as it's not handled
         with pytest.raises(ValueError, match="Unknown message role"):
@@ -103,7 +105,7 @@ class TestLFAgentClientOpenAI:
 
     def test_tool_to_openai_format(self, client):
         """Test converting ToolDefinition to OpenAI format."""
-        tool = ToolDefinition(
+        tool = LFFunction(
             name="test_tool",
             description="A test tool",
             parameters={
@@ -147,7 +149,7 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Hi")]
+        messages = [LFChatCompletionMessageParam(role="user", content="Hi")]
         response = await client.chat(messages=messages)
 
         assert response == "Hello world"
@@ -176,7 +178,7 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Hi")]
+        messages = [LFChatCompletionMessageParam(role="user", content="Hi")]
         chunks = []
         async for chunk in client.stream_chat(messages=messages):
             chunks.append(chunk)
@@ -202,9 +204,9 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Hi")]
+        messages = [LFChatCompletionMessageParam(role="user", content="Hi")]
         tools = [
-            ToolDefinition(
+            LFFunction(
                 name="test_tool",
                 description="Test",
                 parameters={"type": "object", "properties": {}},
@@ -258,9 +260,9 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Use the tool")]
+        messages = [LFChatCompletionMessageParam(role="user", content="Use the tool")]
         tools = [
-            ToolDefinition(
+            LFFunction(
                 name="test_tool",
                 description="Test",
                 parameters={
@@ -315,9 +317,11 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Search for test")]
+        messages = [
+            LFChatCompletionMessageParam(role="user", content="Search for test")
+        ]
         tools = [
-            ToolDefinition(
+            LFFunction(
                 name="search",
                 description="Search",
                 parameters={
@@ -364,9 +368,9 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Test")]
+        messages = [LFChatCompletionMessageParam(role="user", content="Test")]
         tools = [
-            ToolDefinition(
+            LFFunction(
                 name="test_tool",
                 description="Test",
                 parameters={"type": "object", "properties": {}},
@@ -420,14 +424,14 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Use tools")]
+        messages = [LFChatCompletionMessageParam(role="user", content="Use tools")]
         tools = [
-            ToolDefinition(
+            LFFunction(
                 name="tool1",
                 description="First tool",
                 parameters={"type": "object", "properties": {}},
             ),
-            ToolDefinition(
+            LFFunction(
                 name="tool2",
                 description="Second tool",
                 parameters={"type": "object", "properties": {}},
@@ -459,7 +463,7 @@ class TestLFAgentClientOpenAI:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
         mock_openai_class.return_value = mock_client
 
-        messages = [LFAgentChatMessage(role="user", content="Test")]
+        messages = [LFChatCompletionMessageParam(role="user", content="Test")]
 
         events = []
         async for event in client.stream_chat_with_tools(messages=messages, tools=[]):
