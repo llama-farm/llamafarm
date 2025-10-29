@@ -33,6 +33,9 @@ export interface TestChatProps {
     streaming: boolean
     jsonMode: boolean
   }
+  ragEnabled?: boolean
+  ragTopK?: number
+  ragScoreThreshold?: number
 }
 
 const containerClasses =
@@ -74,6 +77,9 @@ export default function TestChat({
   showThinking,
   showGenSettings,
   genSettings,
+  ragEnabled = true,
+  ragTopK = 10,
+  ragScoreThreshold = 0.7,
 }: TestChatProps) {
   // Determine mock mode as early as possible
   const MOCK_MODE = Boolean(useTestData)
@@ -176,54 +182,6 @@ export default function TestChat({
 
   // Use project chat if we have an active project and not in mock mode
   const USE_PROJECT_CHAT = !MOCK_MODE && !!chatParams
-
-  // RAG settings (synced from Generation settings drawer via localStorage/events)
-  const [ragEnabled, setRagEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true
-    const saved = localStorage.getItem('lf_testchat_rag_enabled')
-    return saved == null ? true : saved === 'true'
-  })
-  const [ragTopK, setRagTopK] = useState<number>(() => {
-    if (typeof window === 'undefined') return 10
-    const saved = localStorage.getItem('lf_testchat_rag_top_k')
-    return saved ? parseInt(saved, 10) : 10
-  })
-  const [ragScoreThreshold, setRagScoreThreshold] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0.7
-    const saved = localStorage.getItem('lf_testchat_rag_threshold')
-    return saved ? parseFloat(saved) : 0.7
-  })
-
-  // Listen for Generation settings drawer events to keep RAG state in sync
-  useEffect(() => {
-    const onEnabled = (e: Event) => {
-      const d = (e as CustomEvent).detail || {}
-      if (typeof d.enabled === 'boolean') setRagEnabled(d.enabled)
-    }
-    const onSettings = (e: Event) => {
-      const d = (e as CustomEvent).detail || {}
-      if (typeof d.topK === 'number') setRagTopK(d.topK)
-      if (typeof d.threshold === 'number') setRagScoreThreshold(d.threshold)
-    }
-    window.addEventListener(
-      'lf-rag-enabled-changed',
-      onEnabled as EventListener
-    )
-    window.addEventListener(
-      'lf-rag-settings-changed',
-      onSettings as EventListener
-    )
-    return () => {
-      window.removeEventListener(
-        'lf-rag-enabled-changed',
-        onEnabled as EventListener
-      )
-      window.removeEventListener(
-        'lf-rag-settings-changed',
-        onSettings as EventListener
-      )
-    }
-  }, [])
 
   // Project chat state management
   const [projectInputValue, setProjectInputValue] = useState('')
@@ -376,8 +334,13 @@ export default function TestChat({
       // Update ref after handling
       prevProjectRef.current = { ns, id }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatParams?.namespace, chatParams?.projectId])
+  }, [
+    chatParams?.namespace,
+    chatParams?.projectId,
+    MOCK_MODE,
+    clearChat,
+    projectChatStreamingSession,
+  ])
 
   const handleSend = useCallback(async () => {
     const content = inputValue.trim()

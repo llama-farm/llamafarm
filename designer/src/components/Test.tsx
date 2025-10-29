@@ -267,6 +267,11 @@ const Test = () => {
     const v = localStorage.getItem('lf_testchat_rag_enabled')
     return v == null ? true : v === 'true'
   })
+  const [ragTopKUI, setRagTopKUI] = useState<number>(() => {
+    if (typeof window === 'undefined') return 10
+    const v = localStorage.getItem('lf_testchat_rag_top_k')
+    return v ? parseInt(v, 10) : 10
+  })
   const [ragThresholdUI, setRagThresholdUI] = useState<number>(() => {
     if (typeof window === 'undefined') return 0.7
     const v = Number(localStorage.getItem('lf_testchat_rag_threshold') || '0.7')
@@ -304,6 +309,19 @@ const Test = () => {
       localStorage.setItem('lf_gen_defaults', JSON.stringify(gen))
     } catch {}
   }, [gen])
+  // Persist RAG settings
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('lf_testchat_rag_enabled', String(ragEnabledUI))
+  }, [ragEnabledUI])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('lf_testchat_rag_top_k', String(ragTopKUI))
+  }, [ragTopKUI])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('lf_testchat_rag_threshold', String(ragThresholdUI))
+  }, [ragThresholdUI])
 
   // Hide settings UI and close any open panels when switching to config view
   useEffect(() => {
@@ -559,19 +577,7 @@ const Test = () => {
                         <Switch
                           checked={ragEnabledUI}
                           onCheckedChange={(v: boolean) => {
-                            const next = Boolean(v)
-                            setRagEnabledUI(next)
-                            try {
-                              localStorage.setItem(
-                                'lf_testchat_rag_enabled',
-                                String(next)
-                              )
-                              window.dispatchEvent(
-                                new CustomEvent('lf-rag-enabled-changed', {
-                                  detail: { enabled: next },
-                                })
-                              )
-                            } catch {}
+                            setRagEnabledUI(Boolean(v))
                           }}
                           aria-label="RAG enabled"
                         />
@@ -593,28 +599,13 @@ const Test = () => {
                             min={1}
                             max={100}
                             step={1}
-                            value={Number(
-                              localStorage.getItem('lf_testchat_rag_top_k') ||
-                                '10'
-                            )}
+                            value={ragTopKUI}
                             onChange={e => {
                               const v = Math.max(
                                 1,
                                 Math.min(100, Number(e.target.value))
                               )
-                              localStorage.setItem(
-                                'lf_testchat_rag_top_k',
-                                String(v)
-                              )
-                              try {
-                                window.dispatchEvent(
-                                  new CustomEvent('lf-rag-settings-changed', {
-                                    detail: { topK: v },
-                                  })
-                                )
-                              } catch {}
-                              // force re-render
-                              setGen({ ...gen })
+                              setRagTopKUI(v)
                             }}
                             className="col-span-2"
                           />
@@ -635,18 +626,6 @@ const Test = () => {
                                 ? 0
                                 : Math.max(0, Math.min(1, val))
                               setRagThresholdUI(v)
-                              try {
-                                localStorage.setItem(
-                                  'lf_testchat_rag_threshold',
-                                  String(v)
-                                )
-                                window.dispatchEvent(
-                                  new CustomEvent('lf-rag-settings-changed', {
-                                    detail: { threshold: v },
-                                  })
-                                )
-                              } catch {}
-                              setGen({ ...gen })
                             }}
                             className="col-span-2"
                           />
@@ -782,6 +761,9 @@ const Test = () => {
                   showThinking,
                   showGenSettings,
                   genSettings: gen,
+                  ragEnabled: ragEnabledUI,
+                  ragTopK: ragTopKUI,
+                  ragScoreThreshold: ragThresholdUI,
                 } as any)}
               />
             </div>
