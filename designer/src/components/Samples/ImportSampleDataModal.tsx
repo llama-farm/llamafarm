@@ -40,7 +40,7 @@ function ImportSampleDataModal({
 
   useEffect(() => {
     if (!sample) return
-    setName(`${sample.title} (sample project)`)
+    setName(`${sample.slug} (sample project)`)
     setDescription(sample.description)
   }, [sample])
 

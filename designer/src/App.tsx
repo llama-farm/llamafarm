@@ -66,6 +66,8 @@ function ProjectModalRoot() {
       onSave={modal.saveProject}
       onDelete={modal.modalMode === 'edit' ? modal.deleteProject : undefined}
       isLoading={modal.isLoading}
+      projectError={modal.projectError}
+      onNameChange={modal.validateName}
     />
   )
 }
