@@ -70,6 +70,11 @@ export interface ProjectChatRequest {
   frequency_penalty?: number | null
   presence_penalty?: number | null
   logit_bias?: Record<string, number>
+  // Optional RAG parameters (used by Designer Test Chat)
+  rag_enabled?: boolean
+  database?: string
+  rag_top_k?: number
+  rag_score_threshold?: number
 }
 
 /**

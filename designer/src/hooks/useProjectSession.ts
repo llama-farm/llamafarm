@@ -132,13 +132,13 @@ export function useProjectSession(
       setSessionId(id)
       let sessions = getStoredSessions()
       let sessionData = sessions[id]
-      // Ensure a persistent session record exists so messages survive refresh
+      // Auto-create a persistent session immediately for this project/service
       if (!sessionData) {
         createPersistentSession(id, ns, project, chatService, [])
         sessions = getStoredSessions()
         sessionData = sessions[id]
       }
-      setMessages(sessionData ? sessionData.messages : [])
+      setMessages(sessionData?.messages || [])
       setTempMessages([])
     } else {
       // No valid active project; use temporary mode

@@ -8,7 +8,7 @@ runtime:
       description: "Default Ollama model for legal document analysis"
       provider: ollama
       model: gemma3:1b
-      base_url: http://localhost:11434/v1
+      base_url: http://localhost:11434
       default: true
       prompt_format: unstructured
       model_api_parameters:
@@ -52,14 +52,13 @@ rag:
         port: 8000
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            auto_pull: true
-            base_url: http://localhost:11434
-            batch_size: 8
+            model: nomic-ai/nomic-embed-text-v2-moe
             dimension: 768
-            model: nomic-embed-text
+            batch_size: 8
             timeout: 90
+            auto_pull: true
           priority: 0
       retrieval_strategies:
         - name: legal_hybrid_strategy
@@ -88,6 +87,7 @@ rag:
             top_k: 6
             score_threshold: 0.25
           default: false
+      default_embedding_strategy: default_embeddings
       default_retrieval_strategy: legal_hybrid_strategy
   data_processing_strategies:
     - name: legal_filings_pdf_processor_007
@@ -101,14 +101,7 @@ rag:
             chunk_overlap: 200
             chunk_strategy: semantic
             extract_metadata: true
-            extract_outline: true
             extract_tables: true
-            preserve_layout: true
-            fallback_strategies:
-              - llama_pdf_reader
-              - llama_pymupdf_reader
-              - direct_pymupdf
-              - pypdf2_fallback
           file_include_patterns:
             - "*.pdf"
             - "*.PDF"
@@ -130,12 +123,17 @@ rag:
           priority: 50
       extractors:
         - type: HeadingExtractor
+          file_include_patterns:
+            - '*'
+          priority: 100
           config:
             max_level: 6
             include_hierarchy: true
             extract_outline: true
-          priority: 100
         - type: EntityExtractor
+          file_include_patterns:
+            - '*'
+          priority: 95
           config:
             entity_types:
               - PERSON
@@ -148,47 +146,53 @@ rag:
               - NORP
             use_fallback: true
             min_entity_length: 2
-            merge_entities: true
-            confidence_threshold: 0.6
-          priority: 95
         - type: PatternExtractor
+          file_include_patterns:
+            - '*'
+          priority: 90
           config:
-            patterns:
+            predefined_patterns:
               - email
-              - phone
               - url
             custom_patterns:
-              case_citation: \d+\s+F\.\d*d\s+\d+
-              court_case: '[A-Z][a-z]+\s+v\.\s+[A-Z][a-z]+'
-              legal_section: §\s*\d+(\.\d+)*
-              year_in_parens: \(\d{4}\)
-            include_context: true
-            context_window: 50
-          priority: 90
+              - name: case_citation
+                pattern: '\d+\s+F\.\d*d\s+\d+'
+                description: Federal case citations
+              - name: court_case
+                pattern: '[A-Z][a-z]+\s+v\.\s+[A-Z][a-z]+'
+                description: Court case names
+              - name: legal_section
+                pattern: '§\s*\d+(\.\d+)*'
+                description: Legal section references
+              - name: year_in_parens
+                pattern: '\(\d{4}\)'
+                description: Years in parentheses
         - type: DateTimeExtractor
+          file_include_patterns:
+            - '*'
+          priority: 85
           config:
             formats:
-              - "%B %d, %Y"
-              - "%m/%d/%Y"
-              - "%Y-%m-%d"
-              - "%d %B %Y"
-            include_relative: false
-            return_iso: true
-            timezone: UTC
-          priority: 85
+              - ISO8601
+              - US
+              - EU
+            extract_relative: false
+            extract_times: true
         - type: KeywordExtractor
+          file_include_patterns:
+            - '*'
+          priority: 80
           config:
             algorithm: yake
             max_keywords: 15
-            min_score: 0.1
-            deduplication_threshold: 0.8
-            include_scores: true
-          priority: 80
+            min_keyword_length: 3
         - type: ContentStatisticsExtractor
+          file_include_patterns:
+            - '*'
+          priority: 75
           config:
             include_structure: true
             include_readability: true
-          priority: 75
 datasets:
   - name: legal_filings_dataset_007
     data_processing_strategy: legal_filings_pdf_processor_007

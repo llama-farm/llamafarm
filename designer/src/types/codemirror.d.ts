@@ -13,6 +13,7 @@ export interface CodeMirrorModules {
   EditorState: typeof EditorState
   StateEffect: typeof StateEffect
   json: any // Language extension
+  yaml: any // Language extension
   defaultKeymap: any // Keymap array
   bracketMatching: any // Extension function
   indentOnInput: any // Extension function
@@ -22,6 +23,8 @@ export interface CodeMirrorModules {
   highlightSelectionMatches: any // Extension function
   tags: typeof tags
   oneDark: any // Dark theme extension
+  linter: any // Linting function
+  lintGutter: any // Lint gutter extension
 }
 
 /**
@@ -47,6 +50,11 @@ export interface CodeMirrorEditorProps {
   readOnly?: boolean
   language?: 'json' | 'yaml' | 'javascript' | 'typescript'
   theme?: 'light' | 'dark'
+  onSave?: () => void
+  onDiscard?: () => void
+  isDirty?: boolean
+  isSaving?: boolean
+  saveError?: string | null
 }
 
 /**
@@ -75,4 +83,5 @@ export interface CodeMirrorConfig {
   language?: string
   tabSize?: number
   indentUnit?: number
+  onChange?: (content: string) => void
 }
