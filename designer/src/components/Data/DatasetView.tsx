@@ -5,6 +5,7 @@ import Loader from '../../common/Loader'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import SearchInput from '../ui/search-input'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
@@ -599,7 +600,7 @@ function DatasetView() {
                     >
                       {taskStatus.state === 'PENDING' && (
                         <>
-                          <span className="inline-block animate-spin">⟳</span>
+                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
                           Queued...
                         </>
                       )}
@@ -607,7 +608,7 @@ function DatasetView() {
                         taskStatus.state !== 'SUCCESS' &&
                         taskStatus.state !== 'FAILURE' && (
                           <>
-                            <span className="inline-block animate-spin">⟳</span>
+                            <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
                             {taskStatus.meta?.progress
                               ? `${taskStatus.meta.progress}%`
                               : taskStatus.meta?.current && taskStatus.meta?.total
@@ -635,7 +636,7 @@ function DatasetView() {
                     >
                       {taskStatus.state === 'PENDING' && (
                         <>
-                          <span className="inline-block animate-spin">⟳</span>
+                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
                           Queued...
                         </>
                       )}
@@ -643,7 +644,7 @@ function DatasetView() {
                         taskStatus.state !== 'SUCCESS' &&
                         taskStatus.state !== 'FAILURE' && (
                         <>
-                          <span className="inline-block animate-spin">⟳</span>
+                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
                           {taskStatus.meta?.progress
                             ? `Processing ${taskStatus.meta.progress}%`
                             : taskStatus.meta?.current && taskStatus.meta?.total
@@ -879,9 +880,18 @@ function DatasetView() {
                                       {displayFilename}
                                     </span>
                                     {isHashFilename && fileResult.file_hash && (
-                                      <span className="text-xs text-muted-foreground font-mono">
-                                        Hash: {fileResult.file_hash.substring(0, 12)}...
-                                      </span>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="text-xs text-muted-foreground font-mono cursor-pointer">
+                                              Hash: {fileResult.file_hash.substring(0, 12)}...
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p className="font-mono text-xs">{fileResult.file_hash}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     )}
                                   </div>
                                 </div>
@@ -961,7 +971,7 @@ function DatasetView() {
                                   <div className="text-muted-foreground">
                                     <span className="font-medium text-foreground">Extractors:</span>{' '}
                                     <div className="inline-flex flex-wrap gap-1 mt-1">
-                                      {(result.extractors_applied || details.extractors).map((ext: string, i: number) => (
+                                      {(result.extractors_applied || details.extractors || []).map((ext: string, i: number) => (
                                         <Badge
                                           key={i}
                                           variant="outline"
