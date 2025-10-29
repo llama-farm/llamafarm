@@ -46,6 +46,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
+        env:
+          UV_PYTHON_DOWNLOADS: "automatic"
 
       # ============================================================
       # Build Phase
