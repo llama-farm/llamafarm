@@ -76,10 +76,13 @@ class IngestHandler:
 
         # Extract namespace and project from config path for event logging
         # Path format: ~/.llamafarm/projects/{namespace}/{project}/llamafarm.yaml
+        # Use LAST occurrence of "projects" to avoid false matches in parent dirs
         try:
             path_parts = self.config_path.parts
-            if "projects" in path_parts:
-                projects_idx = path_parts.index("projects")
+            # Find last occurrence of "projects" in path
+            projects_indices = [i for i, part in enumerate(path_parts) if part == "projects"]
+            if projects_indices:
+                projects_idx = projects_indices[-1]  # Use LAST occurrence
                 self.namespace = path_parts[projects_idx + 1] if len(path_parts) > projects_idx + 1 else "default"
                 self.project = path_parts[projects_idx + 2] if len(path_parts) > projects_idx + 2 else "unknown"
             else:

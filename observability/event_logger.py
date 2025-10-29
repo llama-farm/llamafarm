@@ -80,11 +80,12 @@ class EventLogger:
             duration_ms = (now - self._start_time).total_seconds() * 1000
 
             # Simple event structure - logger adds timestamp and duration
+            # IMPORTANT: Copy the data dict to prevent mutations from affecting the log
             event = {
                 "timestamp": now.isoformat(),
                 "event_name": event_name,
                 "duration_ms": round(duration_ms, 2),
-                "data": data,  # Caller's data - any dict!
+                "data": dict(data),  # Shallow copy to prevent mutations
             }
 
             self._events.append(event)

@@ -42,8 +42,7 @@ def mock_config():
     """Create a mock config object."""
     config = MagicMock()
 
-    # Mock model_dump_json for hashing (deterministic)
-    config.model_dump_json.return_value = json.dumps({
+    test_config_dict = {
         "version": "v1",
         "name": "test-project",
         "namespace": "default",
@@ -56,7 +55,14 @@ def mock_config():
                 }
             }
         }
-    }, sort_keys=True)
+    }
+
+    # Mock model_dump for hashing (returns dict)
+    # Note: model_dump is called with mode='json', exclude_none=True, exclude={...}
+    config.model_dump.return_value = test_config_dict
+
+    # Mock model_dump_json for saving (returns JSON string)
+    config.model_dump_json.return_value = json.dumps(test_config_dict, indent=2)
 
     return config
 
@@ -74,10 +80,10 @@ def test_hash_config_deterministic(mock_config):
 def test_hash_config_different_configs():
     """Test that different configs produce different hashes."""
     config1 = MagicMock()
-    config1.model_dump_json.return_value = json.dumps({"key": "value1"}, sort_keys=True)
+    config1.model_dump.return_value = {"key": "value1"}
 
     config2 = MagicMock()
-    config2.model_dump_json.return_value = json.dumps({"key": "value2"}, sort_keys=True)
+    config2.model_dump.return_value = {"key": "value2"}
 
     hash1 = hash_config(config1)
     hash2 = hash_config(config2)
@@ -145,10 +151,12 @@ def test_config_versioning_multiple_versions(temp_data_dir):
     """Test saving multiple different config versions."""
     # Create different configs
     config1 = MagicMock()
-    config1.model_dump_json.return_value = json.dumps({"version": "v1"}, sort_keys=True)
+    config1.model_dump.return_value = {"version": "v1"}
+    config1.model_dump_json.return_value = json.dumps({"version": "v1"}, indent=2)
 
     config2 = MagicMock()
-    config2.model_dump_json.return_value = json.dumps({"version": "v2"}, sort_keys=True)
+    config2.model_dump.return_value = {"version": "v2"}
+    config2.model_dump_json.return_value = json.dumps({"version": "v2"}, indent=2)
 
     # Save both
     hash1 = hash_config(config1)
