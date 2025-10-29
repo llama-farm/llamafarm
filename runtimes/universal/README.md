@@ -154,11 +154,11 @@ cd runtimes/universal
 # If Python 3.12 isn't installed yet, install it (one-time):
 uv python install 3.12
 
-# Install dependencies (automatically uses Python 3.12 from .python-version file)
+# Install dependencies
 uv sync
 ```
 
-That's it! The `.python-version` file ensures `uv` automatically uses Python 3.12.
+The `pyproject.toml` constraint (`requires-python = ">=3.11,<3.14"`) ensures only compatible Python versions are used.
 
 ### Optional: Install xformers (for Diffusion optimization)
 
@@ -870,17 +870,17 @@ nx sync universal-runtime
 
 # Or manually:
 uv python install 3.12  # Install Python 3.12 (one-time)
-uv sync                 # Uses .python-version automatically
+uv sync                 # Install dependencies with Python 3.12
 ```
 
-The `.python-version` file ensures `uv` automatically uses Python 3.12.
+The `pyproject.toml` constraint ensures only compatible Python versions are used.
 
 ### Server Won't Start
 
 **Solutions:**
 - Check port 11540 is not in use: `lsof -i :11540`
 - Ensure Python 3.11-3.13 is installed: `python --version`
-- Reinstall dependencies: `bash setup.sh` or `uv sync`
+- Reinstall dependencies: `nx sync universal-runtime` or `uv sync`
 - Check logs for detailed error messages
 
 ---

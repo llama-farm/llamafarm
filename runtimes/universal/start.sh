@@ -35,8 +35,13 @@ if ! uv python list 2>/dev/null | grep -q "cpython-3.12"; then
     uv python install 3.12
 fi
 
+# Create .python-version file if it doesn't exist (ensures uv uses correct Python)
+if [ ! -f .python-version ]; then
+    echo "3.12" > .python-version
+    echo "Created .python-version file"
+fi
+
 # Run uv sync to ensure all dependencies are installed
-# The .python-version file ensures this uses Python 3.12
 echo -e "${GREEN}Ensuring dependencies are installed...${NC}"
 uv sync
 
