@@ -1,8 +1,10 @@
 # Observability Architecture - Phase 1: Event Logging
 
-## Status: Phase 1A Complete ✅
+## Status: Phase 1 Complete ✅
 
 **Completed** (2025-10-29):
+
+### Phase 1A: Core Event Logging ✅
 - ✅ Universal event logger (shared across inference + RAG + all components)
 - ✅ Config versioning (hash-based config storage)
 - ✅ Inference event logging (live and tested)
@@ -10,9 +12,12 @@
 - ✅ Unit tests (14 tests passing)
 - ✅ Manual testing verified
 
-**Next Phase** (Phase 1B):
-- ⏳ Event logging API (read-only endpoints)
-- ⏳ API documentation
+### Phase 1B: Event Logging API ✅
+- ✅ Event logging API (read-only endpoints)
+- ✅ API documentation (OpenAPI/Swagger)
+- ✅ List events endpoint with filtering
+- ✅ Get event details endpoint
+- ✅ Live testing with 5 events
 
 **Future Phases**:
 - 🔮 Metrics API (Phase 2)
@@ -1110,29 +1115,29 @@ def process_file(
 - [x] Example usage in docstrings
 - [x] Architecture documentation (this file)
 
-### Phase 1B: Event Logging API ⏳ IN PROGRESS
+### Phase 1B: Event Logging API ✅ COMPLETE
 
 #### API Endpoints (Server)
-- [ ] `server/api/routers/event_logs/` - Event logs API directory
-  - [ ] `__init__.py` - Router exports
-  - [ ] `router.py` - FastAPI router with endpoints
-  - [ ] `models.py` - Pydantic request/response models
-  - [ ] `service.py` - Event log reading logic
+- [x] `server/api/routers/event_logs/` - Event logs API directory
+  - [x] `__init__.py` - Router exports
+  - [x] `router.py` - FastAPI router with endpoints
+  - [x] `models.py` - Pydantic request/response models
+  - [x] `service.py` - Event log reading logic
 
-#### Endpoints to Implement
-- [ ] `GET /v1/projects/{ns}/{id}/event_logs` - List events with filtering
-  - [ ] Query params: type, start_time, end_time, limit, offset
-  - [ ] Returns: List of event summaries
-  - [ ] Pagination support
+#### Endpoints Implemented
+- [x] `GET /v1/projects/{ns}/{id}/event_logs` - List events with filtering
+  - [x] Query params: type, start_time, end_time, limit, offset
+  - [x] Returns: List of event summaries
+  - [x] Pagination support
 
-- [ ] `GET /v1/projects/{ns}/{id}/event_logs/{event_id}` - Get single event
-  - [ ] Returns: Full event with all sub-events
-  - [ ] 404 if not found
+- [x] `GET /v1/projects/{ns}/{id}/event_logs/{event_id}` - Get single event
+  - [x] Returns: Full event with all sub-events
+  - [x] 404 if not found
 
 #### API Documentation
-- [ ] OpenAPI/Swagger docs for new endpoints
-- [ ] Example requests/responses
-- [ ] Update main API docs
+- [x] OpenAPI/Swagger docs for new endpoints
+- [x] Auto-generated request/response schemas
+- [x] Endpoint descriptions and examples
 
 ## Repository Structure
 
@@ -1177,12 +1182,13 @@ llamafarm/
 - ✅ Unit tests (14 tests)
 - ✅ Manual testing with live servers
 
-### Phase 1B: Event Logging API ⏳ NEXT
-**Estimated**: 1-2 days
-- Day 1: API endpoints + models
-- Day 2: Testing + documentation
+### Phase 1B: Event Logging API ✅ COMPLETE
+**Completed**: October 29, 2025 (same day)
+- ✅ API endpoints + models
+- ✅ Testing with live server
+- ✅ OpenAPI documentation
 
-### Phase 1 Total: 2-3 days
+### Phase 1 Total: 1 day ✅ COMPLETE
 
 ## Test Results
 
@@ -1229,6 +1235,42 @@ test_config_versioning.py::test_config_snapshot_atomic_write PASSED
 - Config hash: `sha256_2a894ade7fe4ea76`
 - Config snapshot saved: `~/.llamafarm/projects/default/llamafarm123/configs/sha256_2a894ade7fe4ea76.json`
 - Deduplication working: Same hash reused across multiple events
+
+### API Testing: ✅ Verified
+
+**List Events Endpoint**:
+```bash
+GET /v1/projects/default/llamafarm123/event_logs
+# Returns: 5 events (2 inference + 3 RAG processing)
+```
+
+**Filter by Type**:
+```bash
+GET /v1/projects/default/llamafarm123/event_logs?type=inference
+# Returns: 2 inference events
+
+GET /v1/projects/default/llamafarm123/event_logs?type=rag_processing
+# Returns: 3 RAG processing events
+```
+
+**Get Single Event**:
+```bash
+GET /v1/projects/default/llamafarm123/event_logs/evt_inference_20251029_221203_cd62dc
+# Returns: Full event with all 6 sub-events, timestamps, and data
+```
+
+**Error Handling**:
+```bash
+GET /v1/projects/default/llamafarm123/event_logs/evt_nonexistent_12345
+# Returns: 404 with message "Event 'evt_nonexistent_12345' not found"
+```
+
+**Features Verified**:
+- ✅ Pagination with limit/offset
+- ✅ Time-based filtering (start_time/end_time params)
+- ✅ Proper response models (EventSummary, EventDetail, ListEventsResponse)
+- ✅ OpenAPI documentation auto-generated
+- ✅ Docker-compatible path resolution
 
 ## Future Phases (Not in Current PR)
 
