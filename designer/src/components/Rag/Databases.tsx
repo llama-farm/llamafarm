@@ -13,7 +13,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
-import { getStoredArray, setStoredArray } from '../../utils/storage'
 import {
   Dialog,
   DialogContent,
@@ -22,7 +21,7 @@ import {
   DialogTitle,
 } from '../ui/dialog'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import { useProject } from '../../hooks/useProjects'
+import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import { useListDatasets } from '../../hooks/useDatasets'
 import {
   Tooltip,
@@ -30,7 +29,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
-import { apiClient } from '../../api/client'
 
 type Database = {
   name: string
@@ -55,12 +53,13 @@ function Databases() {
     { enabled: !!activeProject }
   )
 
-  const [metaTick, setMetaTick] = useState(0)
+  const updateProject = useUpdateProject()
+
   const [reembedOpen, setReembedOpen] = useState(false)
 
   // Database management -------------------------------------------------
   const databases = useMemo((): Database[] => {
-    // Prefer databases from live project config
+    // Read databases from project config (single source of truth)
     const cfgDbs = (projectResp as any)?.project?.config?.rag?.databases
     if (Array.isArray(cfgDbs) && cfgDbs.length > 0) {
       return cfgDbs.map((db: any) => ({
@@ -70,17 +69,7 @@ function Databases() {
       }))
     }
 
-    // Fallbacks (legacy/local dev)
-    try {
-      const stored = localStorage.getItem('lf_databases')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed
-        }
-      }
-    } catch {}
-
+    // No fallback - config is the single source of truth
     return []
   }, [projectResp])
 
@@ -157,80 +146,7 @@ function Databases() {
     enabled: boolean
   }
 
-  // Database-scoped storage keys (UI-only fallbacks; namespaced per project)
-  const EMB_LIST_KEY = `lf_ui_${projectKey}_db_${activeDatabase}_embeddings`
-  const RET_LIST_KEY = `lf_ui_${projectKey}_db_${activeDatabase}_retrievals`
 
-  const getEmbeddings = (): EmbeddingItem[] => {
-    const arr = getStoredArray(EMB_LIST_KEY)
-    return arr
-      .filter(
-        (e: any) => e && typeof e.id === 'string' && typeof e.name === 'string'
-      )
-      .map((e: any) => ({
-        id: e.id,
-        name: e.name,
-        isDefault: Boolean(e.isDefault),
-        enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
-      })) as EmbeddingItem[]
-  }
-  const saveEmbeddings = (list: EmbeddingItem[]) =>
-    setStoredArray(EMB_LIST_KEY, list)
-
-  const getRetrievals = (): RetrievalItem[] => {
-    const arr = getStoredArray(RET_LIST_KEY)
-    return arr
-      .filter(
-        (e: any) => e && typeof e.id === 'string' && typeof e.name === 'string'
-      )
-      .map((e: any) => ({
-        id: e.id,
-        name: e.name,
-        isDefault: Boolean(e.isDefault),
-        enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
-      })) as RetrievalItem[]
-  }
-  const saveRetrievals = (list: RetrievalItem[]) =>
-    setStoredArray(RET_LIST_KEY, list)
-
-  // Live RAG databases (for retrieval strategies defaults) -------------------
-  type RagDatabasesResponse = {
-    databases: {
-      name: string
-      type?: string
-      is_default?: boolean
-      retrieval_strategies?: {
-        name: string
-        type?: string
-        is_default?: boolean
-      }[]
-    }[]
-    default_database?: string | null
-  }
-  const [ragDatabases, setRagDatabases] = useState<RagDatabasesResponse | null>(
-    null
-  )
-  useEffect(() => {
-    const ns = activeProject?.namespace
-    const proj = activeProject?.project
-    if (!ns || !proj) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const resp = await apiClient.get<RagDatabasesResponse>(
-          `/projects/${encodeURIComponent(ns)}/${encodeURIComponent(
-            proj
-          )}/rag/databases`
-        )
-        if (!cancelled) setRagDatabases(resp.data)
-      } catch {
-        if (!cancelled) setRagDatabases(null)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [activeProject?.namespace, activeProject?.project])
 
   // Current config database (for embedding strategies)
   const currentConfigDb = useMemo(() => {
@@ -239,9 +155,9 @@ function Databases() {
     return cfgDbs.find((d: any) => d?.name === activeDatabase) || null
   }, [projectResp, activeDatabase])
 
-  // Embeddings from config (fallback to local only if config missing)
-  const configEmbeddings: EmbeddingItem[] | null = useMemo(() => {
-    if (!currentConfigDb) return null
+  // Embeddings from config (single source of truth)
+  const configEmbeddings: EmbeddingItem[] = useMemo(() => {
+    if (!currentConfigDb) return []
     const list = Array.isArray(currentConfigDb.embedding_strategies)
       ? (currentConfigDb.embedding_strategies as any[])
       : []
@@ -254,76 +170,92 @@ function Databases() {
     }))
   }, [currentConfigDb])
 
-  // Retrievals from server (fallback to local only if missing)
-  const serverRetrievals: RetrievalItem[] | null = useMemo(() => {
-    if (!ragDatabases) return null
-    const db = ragDatabases.databases?.find(d => d.name === activeDatabase)
-    const list = db?.retrieval_strategies || []
-    return list.map(s => ({
-      id: s.name,
-      name: s.name,
-      isDefault: Boolean(s.is_default),
+  // Retrievals from config (single source of truth)
+  const configRetrievals: RetrievalItem[] = useMemo(() => {
+    if (!currentConfigDb) return []
+    const list = Array.isArray(currentConfigDb.retrieval_strategies)
+      ? (currentConfigDb.retrieval_strategies as any[])
+      : []
+    const def = currentConfigDb.default_retrieval_strategy
+    return list.map((r: any) => ({
+      id: String(r?.name ?? 'retrieval'),
+      name: String(r?.name ?? 'retrieval'),
+      isDefault: def ? String(def) === String(r?.name) : false,
       enabled: true,
     }))
-  }, [ragDatabases, activeDatabase])
+  }, [currentConfigDb])
 
-  const usingConfigEmbeddings = Boolean(
-    configEmbeddings && configEmbeddings.length > 0
-  )
-  const usingServerRetrievals = Boolean(
-    serverRetrievals && serverRetrievals.length > 0
-  )
-
-  // Seed defaults once
+  // Seed defaults if no strategies exist in config
   useEffect(() => {
-    // Skip local seeding when live config/server data are present
-    if (usingConfigEmbeddings || usingServerRetrievals) return
-    try {
-      if (getEmbeddings().length === 0) {
-        saveEmbeddings([
-          {
-            id: 'default_embeddings',
+    // Only seed if we have a database but no strategies
+    if (!currentConfigDb) return
+    if (configEmbeddings.length > 0 && configRetrievals.length > 0) return
+
+    const needsSeeding = async () => {
+      try {
+        const currentConfig = projectResp?.project?.config
+        if (!currentConfig) return
+
+        const rag = currentConfig.rag || {}
+        const databases = rag.databases || []
+        const dbIndex = databases.findIndex((d: any) => d.name === activeDatabase)
+        if (dbIndex === -1) return
+
+        let needsUpdate = false
+        const db = databases[dbIndex]
+
+        // Seed embedding strategies if missing
+        if (!db.embedding_strategies || db.embedding_strategies.length === 0) {
+          db.embedding_strategies = [{
             name: 'default_embeddings',
-            isDefault: true,
-            enabled: true,
-          },
-        ])
-      }
-      if (getRetrievals().length === 0) {
-        saveRetrievals([
-          {
-            id: 'basic_search',
-            name: 'basic_search',
-            isDefault: true,
-            enabled: true,
-          },
-        ])
-      }
-      // Ensure each embedding strategy has a default config for display
-      const embeddings = getEmbeddings()
-      embeddings.forEach(e => {
-        const key = `lf_db_${activeDatabase}_embedding_config_${e.id}`
-        const raw = localStorage.getItem(key)
-        if (!raw) {
-          const payload = {
-            runtime: 'local',
-            provider: 'Ollama (remote)',
-            modelId: 'nomic-embed-text',
-            baseUrl: 'http://localhost:11434',
-            batchSize: 16,
-            dimension: 768,
-            maxInputTokens: 8192,
-            similarity: 'cosine',
-            timeout: 60,
-          }
-          try {
-            localStorage.setItem(key, JSON.stringify(payload))
-          } catch {}
+            type: 'UniversalEmbedder',
+            config: {
+              model: 'nomic-embed-text',
+              dimension: 768,
+              batch_size: 16,
+              timeout: 60,
+            }
+          }]
+          db.default_embedding_strategy = 'default_embeddings'
+          needsUpdate = true
         }
-      })
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDatabase, usingConfigEmbeddings, usingServerRetrievals])
+
+        // Seed retrieval strategies if missing
+        if (!db.retrieval_strategies || db.retrieval_strategies.length === 0) {
+          db.retrieval_strategies = [{
+            name: 'basic_search',
+            type: 'BasicSimilarityStrategy',
+            config: {
+              top_k: 10,
+              distance_metric: 'cosine'
+            }
+          }]
+          db.default_retrieval_strategy = 'basic_search'
+          needsUpdate = true
+        }
+
+        if (needsUpdate) {
+          const updatedConfig = {
+            ...currentConfig,
+            rag: {
+              ...rag,
+              databases
+            }
+          }
+
+          await updateProject.mutateAsync({
+            namespace: activeProject!.namespace,
+            projectId: activeProject!.project,
+            request: { config: updatedConfig }
+          })
+        }
+      } catch (error) {
+        console.error('Failed to seed default strategies:', error)
+      }
+    }
+
+    needsSeeding()
+  }, [currentConfigDb, configEmbeddings.length, configRetrievals.length, activeDatabase, projectResp, updateProject, activeProject])
 
   const getEmbeddingSummary = (id: string): string => {
     try {
@@ -445,6 +377,110 @@ function Databases() {
   // Processing strategy helpers ----------------------------------------------
   // Deprecated: old usage metric helper replaced by per-strategy dataset badges
 
+  // Save embedding strategies back to config
+  const saveEmbeddingStrategiesToConfig = async (embeddingStrategies: EmbeddingItem[]) => {
+    if (!activeProject || !projectResp?.project?.config) return
+
+    try {
+      const currentConfig = projectResp.project.config
+      const rag = currentConfig.rag || {}
+      const databases = rag.databases || []
+
+      // Find the current database
+      const dbIndex = databases.findIndex((d: any) => d.name === activeDatabase)
+      if (dbIndex === -1) return
+
+      // Convert EmbeddingItem[] to config format
+      const configStrategies = embeddingStrategies.map(e => ({
+        name: e.name,
+        type: 'UniversalEmbedder', // Default type, can be made configurable later
+        config: {
+          model: 'nomic-embed-text', // Default model, can be made configurable
+          dimension: 768,
+          batch_size: 16,
+          timeout: 60,
+        }
+      }))
+
+      // Update the database with new embedding strategies
+      databases[dbIndex] = {
+        ...databases[dbIndex],
+        embedding_strategies: configStrategies,
+        default_embedding_strategy: embeddingStrategies.find(e => e.isDefault)?.name || embeddingStrategies[0]?.name
+      }
+
+      const updatedConfig = {
+        ...currentConfig,
+        rag: {
+          ...rag,
+          databases
+        }
+      }
+
+      await updateProject.mutateAsync({
+        namespace: activeProject.namespace,
+        projectId: activeProject.project,
+        request: { config: updatedConfig }
+      })
+
+      toast({ message: 'Embedding strategies saved to config', variant: 'default' })
+    } catch (error) {
+      console.error('Failed to save embedding strategies:', error)
+      toast({ message: 'Failed to save embedding strategies', variant: 'destructive' })
+    }
+  }
+
+  // Save retrieval strategies back to config
+  const saveRetrievalStrategiesToConfig = async (retrievalStrategies: RetrievalItem[]) => {
+    if (!activeProject || !projectResp?.project?.config) return
+
+    try {
+      const currentConfig = projectResp.project.config
+      const rag = currentConfig.rag || {}
+      const databases = rag.databases || []
+
+      // Find the current database
+      const dbIndex = databases.findIndex((d: any) => d.name === activeDatabase)
+      if (dbIndex === -1) return
+
+      // Convert RetrievalItem[] to config format
+      const configStrategies = retrievalStrategies.map(r => ({
+        name: r.name,
+        type: 'BasicSimilarityStrategy', // Default type, can be made configurable later
+        config: {
+          top_k: 10,
+          distance_metric: 'cosine'
+        }
+      }))
+
+      // Update the database with new retrieval strategies
+      databases[dbIndex] = {
+        ...databases[dbIndex],
+        retrieval_strategies: configStrategies,
+        default_retrieval_strategy: retrievalStrategies.find(r => r.isDefault)?.name || retrievalStrategies[0]?.name
+      }
+
+      const updatedConfig = {
+        ...currentConfig,
+        rag: {
+          ...rag,
+          databases
+        }
+      }
+
+      await updateProject.mutateAsync({
+        namespace: activeProject.namespace,
+        projectId: activeProject.project,
+        request: { config: updatedConfig }
+      })
+
+      toast({ message: 'Retrieval strategies saved to config', variant: 'default' })
+    } catch (error) {
+      console.error('Failed to save retrieval strategies:', error)
+      toast({ message: 'Failed to save retrieval strategies', variant: 'destructive' })
+    }
+  }
+
   // Create handlers for new cards --------------------------------------------
   // const createEmbedding = () => {
   //   const name = prompt('Enter embedding strategy name')?.trim()
@@ -475,26 +511,25 @@ function Databases() {
   //   navigate(`/chat/databases/${id}/retrieval`)
   // }
 
-  const setDefaultEmbedding = (id: string) => {
-    const list = getEmbeddings().map(e => ({ ...e, isDefault: e.id === id }))
-    saveEmbeddings(list)
-    setMetaTick(t => t + 1)
+  const setDefaultEmbedding = async (id: string) => {
+    const list = configEmbeddings.map(e => ({ ...e, isDefault: e.id === id }))
+    // Save to config (single source of truth)
+    await saveEmbeddingStrategiesToConfig(list)
   }
-  const setDefaultRetrieval = (id: string) => {
-    const list = getRetrievals().map(r => ({ ...r, isDefault: r.id === id }))
-    saveRetrievals(list)
-    setMetaTick(t => t + 1)
+  const setDefaultRetrieval = async (id: string) => {
+    const list = configRetrievals.map(r => ({ ...r, isDefault: r.id === id }))
+    // Save to config (single source of truth)
+    await saveRetrievalStrategiesToConfig(list)
   }
-  const toggleRetrievalEnabled = (id: string) => {
-    const list = getRetrievals().map(r =>
+  const toggleRetrievalEnabled = async (id: string) => {
+    const list = configRetrievals.map(r =>
       r.id === id ? { ...r, enabled: !r.enabled } : r
     )
-    saveRetrievals(list)
-    setMetaTick(t => t + 1)
+    // Save to config (single source of truth)
+    await saveRetrievalStrategiesToConfig(list)
   }
-  const duplicateRetrieval = (id: string) => {
-    const list = getRetrievals()
-    const found = list.find(r => r.id === id)
+  const duplicateRetrieval = async (id: string) => {
+    const found = configRetrievals.find(r => r.id === id)
     if (!found) return
     const base = `${found.name} (copy)`
     const slug = base
@@ -502,27 +537,27 @@ function Databases() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
     const newId = `ret-${slug}-${Date.now()}`
-    list.push({ ...found, id: newId, name: base, isDefault: false })
-    saveRetrievals(list)
-    setMetaTick(t => t + 1)
+    const newList = [...configRetrievals, { ...found, id: newId, name: base, isDefault: false }]
+    // Save to config (single source of truth)
+    await saveRetrievalStrategiesToConfig(newList)
   }
 
   const sortedEmbeddings = useMemo(() => {
-    const list = configEmbeddings ?? getEmbeddings()
-    return [...list].sort((a, b) => {
+    // Use config data as single source of truth
+    return [...configEmbeddings].sort((a, b) => {
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
       if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
       return a.name.localeCompare(b.name)
     })
-  }, [metaTick, activeDatabase, configEmbeddings])
+  }, [configEmbeddings])
   const sortedRetrievals = useMemo(() => {
-    const list = serverRetrievals ?? getRetrievals()
-    return [...list].sort((a, b) => {
+    // Use config data as single source of truth
+    return [...configRetrievals].sort((a, b) => {
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
       if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
       return a.name.localeCompare(b.name)
     })
-  }, [metaTick, activeDatabase, serverRetrievals])
+  }, [configRetrievals])
   const embeddingCount = sortedEmbeddings.length
   const retrievalCount = sortedRetrievals.length
 
@@ -602,19 +637,9 @@ function Databases() {
                 <div className="text-sm text-foreground font-medium">
                   Embedding strategies ({embeddingCount})
                 </div>
-                {!usingConfigEmbeddings && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      navigate(
-                        `/chat/databases/add-embedding?database=${activeDatabase}`
-                      )
-                    }
-                  >
-                    Add new
-                  </Button>
-                )}
+                <span className="text-xs text-muted-foreground">
+                  Managed by config
+                </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {sortedEmbeddings.map(ei => (
@@ -633,8 +658,7 @@ function Databases() {
                       }
                     }}
                   >
-                    {!usingConfigEmbeddings && (
-                      <div className="absolute top-2 right-2">
+                    <div className="absolute top-2 right-2">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -669,22 +693,14 @@ function Databases() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
-                              onClick={e => {
+                              onClick={async (e) => {
                                 e.stopPropagation()
                                 const ok = confirm(
                                   'Remove this embedding strategy?'
                                 )
                                 if (!ok) return
-                                // hard delete config and list entry
-                                try {
-                                  localStorage.removeItem(
-                                    `lf_db_${activeDatabase}_embedding_config_${ei.id}`
-                                  )
-                                  localStorage.removeItem(
-                                    `lf_db_${activeDatabase}_embedding_model_${ei.id}`
-                                  )
-                                } catch {}
-                                let list = getEmbeddings().filter(
+                                // Remove from config
+                                let list = configEmbeddings.filter(
                                   x => x.id !== ei.id
                                 )
                                 if (
@@ -693,16 +709,15 @@ function Databases() {
                                 ) {
                                   list[0].isDefault = true
                                 }
-                                saveEmbeddings(list)
-                                setMetaTick(t => t + 1)
+                                // Save to config (single source of truth)
+                                await saveEmbeddingStrategiesToConfig(list)
                               }}
                             >
                               Remove
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </div>
-                    )}
+                    </div>
 
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
@@ -787,23 +802,9 @@ function Databases() {
                 <div className="text-sm text-foreground font-medium">
                   Retrieval strategies ({retrievalCount})
                 </div>
-                {usingServerRetrievals ? (
-                  <span className="text-xs text-muted-foreground">
-                    Managed by server
-                  </span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      navigate(
-                        `/chat/databases/add-retrieval?database=${activeDatabase}`
-                      )
-                    }
-                  >
-                    Add new
-                  </Button>
-                )}
+                <span className="text-xs text-muted-foreground">
+                  Managed by config
+                </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {sortedRetrievals.map(ri => (
@@ -822,8 +823,7 @@ function Databases() {
                       }
                     }}
                   >
-                    {!usingServerRetrievals && (
-                      <div className="absolute top-2 right-2">
+                    <div className="absolute top-2 right-2">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -838,18 +838,18 @@ function Databases() {
                             className="min-w-[12rem] w-[12rem]"
                           >
                             <DropdownMenuItem
-                              onClick={e => {
+                              onClick={async (e) => {
                                 e.stopPropagation()
                                 const name = prompt(
                                   'Rename retrieval strategy',
                                   ri.name
                                 )?.trim()
                                 if (!name) return
-                                const list = getRetrievals().map(x =>
+                                const list = configRetrievals.map(x =>
                                   x.id === ri.id ? { ...x, name } : x
                                 )
-                                saveRetrievals(list)
-                                setMetaTick(t => t + 1)
+                                // Save to config (single source of truth)
+                                await saveRetrievalStrategiesToConfig(list)
                               }}
                             >
                               Rename
@@ -880,13 +880,13 @@ function Databases() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
-                              onClick={e => {
+                              onClick={async (e) => {
                                 e.stopPropagation()
                                 const ok = confirm(
                                   'Delete this retrieval strategy?'
                                 )
                                 if (!ok) return
-                                let list = getRetrievals().filter(
+                                let list = configRetrievals.filter(
                                   x => x.id !== ri.id
                                 )
                                 if (
@@ -895,16 +895,15 @@ function Databases() {
                                 ) {
                                   list[0].isDefault = true
                                 }
-                                saveRetrievals(list)
-                                setMetaTick(t => t + 1)
+                                // Save to config (single source of truth)
+                                await saveRetrievalStrategiesToConfig(list)
                               }}
                             >
                               Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </div>
-                    )}
+                    </div>
 
                     <div className="text-sm font-medium">{ri.name}</div>
                     <div className="text-xs text-primary text-left w-full truncate">
