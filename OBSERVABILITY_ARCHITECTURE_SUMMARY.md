@@ -1,17 +1,28 @@
 # Observability Architecture - Phase 1: Event Logging
 
+## Status: Phase 1A Complete ✅
+
+**Completed** (2025-10-29):
+- ✅ Universal event logger (shared across inference + RAG + all components)
+- ✅ Config versioning (hash-based config storage)
+- ✅ Inference event logging (live and tested)
+- ✅ RAG processing event logging (live and tested)
+- ✅ Unit tests (14 tests passing)
+- ✅ Manual testing verified
+
+**Next Phase** (Phase 1B):
+- ⏳ Event logging API (read-only endpoints)
+- ⏳ API documentation
+
+**Future Phases**:
+- 🔮 Metrics API (Phase 2)
+- 🔮 CLI commands (Phase 3)
+- 🔮 Log shipping plugins (Phase 4)
+- 🔮 Enhanced file metadata (Phase 5)
+
 ## Overview
 
 Add **universal event logging** for all LlamaFarm operations (inference, RAG processing, dataset ingestion, etc.) using **filestore-only storage**. All events live in `~/.llamafarm/projects/{ns}/{proj}/event_logs/` with a simple API for retrieval.
-
-**Phase 1 Scope** (This PR):
-- ✅ Universal event logger (shared across inference + RAG + all components)
-- ✅ Event logging API (read-only endpoints)
-- ✅ Config versioning (hash-based config storage)
-- ❌ Metrics API (future)
-- ❌ CLI commands (future)
-- ❌ Log shipping plugins (future)
-- ❌ Enhanced file metadata (future)
 
 ## Key Concepts
 
@@ -1029,81 +1040,99 @@ def process_file(
 
 9. **Minimal Scope (Phase 1)**: Just logging + read API. No metrics, no CLI, no log shipping.
 
-## Implementation Checklist (Phase 1)
+## Implementation Checklist
 
-### Shared Library (Root Level)
-- [ ] Create `observability/` directory at repo root
-- [ ] `observability/__init__.py` - Package init
-- [ ] `observability/event_logger.py` - Universal EventLogger class
-  - [ ] `__init__()` - Initialize event
-  - [ ] `log_event()` - Add sub-event
-  - [ ] `complete_event()` - Write to disk
-  - [ ] `fail_event()` - Write with error status
-  - [ ] Buffering logic
-  - [ ] File I/O with atomic writes
-  - [ ] **Zero dependencies** on server/rag code
+### Phase 1A: Core Event Logging ✅ COMPLETE
 
-- [ ] `observability/config_versioning.py` - Config hashing and storage
-  - [ ] `hash_config()` - Generate config hash
-  - [ ] `save_config_snapshot()` - Store config by hash
-  - [ ] `get_config_by_hash()` - Retrieve config snapshot
+#### Shared Library (Root Level)
+- [x] Create `observability/` directory at repo root
+- [x] `observability/__init__.py` - Package init
+- [x] `observability/event_logger.py` - Universal EventLogger class
+  - [x] `__init__()` - Initialize event
+  - [x] `log_event()` - Add sub-event
+  - [x] `complete_event()` - Write to disk
+  - [x] `fail_event()` - Write with error status
+  - [x] Buffering logic
+  - [x] File I/O with atomic writes
+  - [x] **Zero dependencies** on server/rag code
 
-### API Endpoints (Server)
-- [ ] `server/api/routers/event_logs/router.py` - Event logs API
-  - [ ] `GET /event_logs` - List with filtering
-  - [ ] `GET /event_logs/{event_id}` - Get single event
-  - [ ] Pydantic models for request/response
-  - [ ] Import from `observability.event_logger`
+- [x] `observability/config_versioning.py` - Config hashing and storage
+  - [x] `hash_config()` - Generate config hash
+  - [x] `save_config_snapshot()` - Store config by hash
+  - [x] `get_config_by_hash()` - Retrieve config snapshot
 
-### Integration Points
-- [ ] `server/services/project_chat_service.py` - Add inference logging
-  - [ ] Import: `from observability.event_logger import EventLogger`
-  - [ ] Import: `from observability.config_versioning import hash_config, save_config_snapshot`
-  - [ ] Start event at request entry
-  - [ ] Log sub-events for each step
-  - [ ] Complete/fail event
+#### Integration Points
+- [x] `server/services/project_chat_service.py` - Add inference logging
+  - [x] Import: `from observability.event_logger import EventLogger`
+  - [x] Import: `from observability.config_versioning import hash_config, save_config_snapshot`
+  - [x] Start event at request entry
+  - [x] Log sub-events for each step (request, RAG query, LLM inference, response)
+  - [x] Complete/fail event
 
-- [ ] `rag/core/ingest_handler.py` - Add RAG processing logging
-  - [ ] Import: `from observability.event_logger import EventLogger`
-  - [ ] Import: `from observability.config_versioning import hash_config, save_config_snapshot`
-  - [ ] Start event at processing start
-  - [ ] Log sub-events for parsing, chunking, etc.
-  - [ ] Complete/fail event
+- [x] `rag/core/ingest_handler.py` - Add RAG processing logging
+  - [x] Import: `from observability.event_logger import EventLogger`
+  - [x] Import: `from observability.config_versioning import hash_config, save_config_snapshot`
+  - [x] Start event at processing start
+  - [x] Log sub-events for parsing, chunking, embedding, storage
+  - [x] Complete/fail event
 
-- [ ] Ensure `observability/` is in Python path for both server and rag
-  - [ ] Add to server: `sys.path` or PYTHONPATH
-  - [ ] Add to rag: `sys.path` or PYTHONPATH
-  - [ ] OR: Make `observability` a proper package with setup.py
+- [x] `server/api/routers/projects/projects.py` - Pass namespace/project params
+  - [x] Update chat endpoint to pass namespace and project_id to service
 
-### Testing
-- [ ] Unit tests for EventLogger
-  - [ ] Test event creation
-  - [ ] Test sub-event logging
-  - [ ] Test complete/fail
-  - [ ] Test buffering
-  - [ ] Test thread safety
+- [x] Ensure `observability/` is in Python path for both server and rag
+  - [x] Located at repo root - automatically in path
 
-- [ ] Unit tests for config hashing
-  - [ ] Test hash determinism
-  - [ ] Test config snapshot storage
-  - [ ] Test config retrieval
+#### Testing
+- [x] Unit tests for EventLogger (6 tests)
+  - [x] Test event creation
+  - [x] Test sub-event logging
+  - [x] Test complete/fail
+  - [x] Test metadata
+  - [x] Test thread safety
+  - [x] Test timestamps/durations
 
-- [ ] Integration tests for event log API
-  - [ ] Test GET /event_logs with filters
-  - [ ] Test GET /event_logs/{event_id}
-  - [ ] Test pagination
+- [x] Unit tests for config hashing (8 tests)
+  - [x] Test hash determinism
+  - [x] Test config snapshot storage
+  - [x] Test config retrieval
+  - [x] Test deduplication
+  - [x] Test atomic writes
 
-- [ ] End-to-end test
-  - [ ] Inference request → event log created
-  - [ ] RAG processing → event log created
-  - [ ] Verify config hash in event
-  - [ ] Verify all sub-events captured
+- [x] Manual testing
+  - [x] Inference request → event log created ✅
+  - [x] RAG processing → event log created ✅
+  - [x] Verified config hash in events ✅
+  - [x] Verified all sub-events captured ✅
 
-### Documentation
-- [ ] API documentation for event_logs endpoints
-- [ ] Code comments in EventLogger
-- [ ] Update main README with observability section
-- [ ] Example usage in docstrings
+#### Documentation
+- [x] Code comments in EventLogger
+- [x] Code comments in config_versioning
+- [x] Example usage in docstrings
+- [x] Architecture documentation (this file)
+
+### Phase 1B: Event Logging API ⏳ IN PROGRESS
+
+#### API Endpoints (Server)
+- [ ] `server/api/routers/event_logs/` - Event logs API directory
+  - [ ] `__init__.py` - Router exports
+  - [ ] `router.py` - FastAPI router with endpoints
+  - [ ] `models.py` - Pydantic request/response models
+  - [ ] `service.py` - Event log reading logic
+
+#### Endpoints to Implement
+- [ ] `GET /v1/projects/{ns}/{id}/event_logs` - List events with filtering
+  - [ ] Query params: type, start_time, end_time, limit, offset
+  - [ ] Returns: List of event summaries
+  - [ ] Pagination support
+
+- [ ] `GET /v1/projects/{ns}/{id}/event_logs/{event_id}` - Get single event
+  - [ ] Returns: Full event with all sub-events
+  - [ ] 404 if not found
+
+#### API Documentation
+- [ ] OpenAPI/Swagger docs for new endpoints
+- [ ] Example requests/responses
+- [ ] Update main API docs
 
 ## Repository Structure
 
@@ -1138,15 +1167,70 @@ llamafarm/
       # Future: lf logs commands
 ```
 
-## Estimated Timeline
+## Timeline
 
-**Phase 1**: 3-5 days
-- Day 1: Shared library (`observability/`) + EventLogger + config versioning
-- Day 2: API endpoints + integration (inference)
-- Day 3: Integration (RAG processing) + testing
-- Day 4-5: Documentation + polish
+### Phase 1A: Core Event Logging ✅ COMPLETE
+**Completed**: October 29, 2025 (1 day)
+- ✅ Shared library (`observability/`) + EventLogger + config versioning
+- ✅ Integration (inference) - `project_chat_service.py`
+- ✅ Integration (RAG processing) - `ingest_handler.py`
+- ✅ Unit tests (14 tests)
+- ✅ Manual testing with live servers
 
-## Future Phases (Not in this PR)
+### Phase 1B: Event Logging API ⏳ NEXT
+**Estimated**: 1-2 days
+- Day 1: API endpoints + models
+- Day 2: Testing + documentation
+
+### Phase 1 Total: 2-3 days
+
+## Test Results
+
+### Unit Tests: 14/14 Passing ✅
+
+**EventLogger Tests** (6 tests):
+```bash
+test_event_logger.py::test_event_logger_basic PASSED
+test_event_logger.py::test_event_logger_fail PASSED
+test_event_logger.py::test_event_logger_metadata PASSED
+test_event_logger.py::test_event_logger_thread_safety PASSED
+test_event_logger.py::test_event_logger_multiple_events PASSED
+test_event_logger.py::test_event_logger_timestamps PASSED
+```
+
+**Config Versioning Tests** (8 tests):
+```bash
+test_config_versioning.py::test_hash_config_deterministic PASSED
+test_config_versioning.py::test_hash_config_different_configs PASSED
+test_config_versioning.py::test_save_config_snapshot_new PASSED
+test_config_versioning.py::test_save_config_snapshot_deduplication PASSED
+test_config_versioning.py::test_get_config_by_hash_found PASSED
+test_config_versioning.py::test_get_config_by_hash_not_found PASSED
+test_config_versioning.py::test_config_versioning_multiple_versions PASSED
+test_config_versioning.py::test_config_snapshot_atomic_write PASSED
+```
+
+### Live Testing: ✅ Verified
+
+**Inference Event Logging**:
+- Tested with live chat request to `default/llamafarm123`
+- Event log created: `evt_inference_20251029_221203_cd62dc.json`
+- Captured: request, RAG query (1.5s), retrieval (10 chunks), LLM inference (16.9s), response
+- Total latency: 16.93 seconds accurately tracked
+
+**RAG Processing Event Logging**:
+- Tested with `lf datasets process default` command
+- 3 event logs created (one per file)
+- Event log example: `evt_rag_processing_20251029_221516_7848ad.json`
+- Captured: file ingestion, parsing (PDFParser), chunking (18 chunks), embedding (768-dim), storage (all skipped as duplicates)
+- Total processing time: 0.76 seconds per file
+
+**Config Versioning**:
+- Config hash: `sha256_2a894ade7fe4ea76`
+- Config snapshot saved: `~/.llamafarm/projects/default/llamafarm123/configs/sha256_2a894ade7fe4ea76.json`
+- Deduplication working: Same hash reused across multiple events
+
+## Future Phases (Not in Current PR)
 
 - **Phase 2**: Metrics API
   - Read event logs
