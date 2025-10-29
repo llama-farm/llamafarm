@@ -233,6 +233,67 @@ function ProjectInferenceModels({
   )
 }
 
+interface DeviceModel {
+  id: string
+  name: string
+  modelIdentifier: string
+  meta: string
+  badges: string[]
+}
+
+function DeviceModelCard({
+  model,
+  onUse,
+}: {
+  model: DeviceModel
+  onUse: () => void
+}) {
+  return (
+    <div className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4">
+      <div className="text-sm text-muted-foreground">
+        {model.modelIdentifier}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="text-lg font-medium">{model.name}</div>
+      </div>
+
+      <div className="text-sm text-muted-foreground">{model.meta}</div>
+
+      <div className="flex flex-row gap-2">
+        {model.badges.map((b, i) => (
+          <div
+            key={`${b}-${i}`}
+            className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5"
+          >
+            {b}
+          </div>
+        ))}
+      </div>
+
+      <Button onClick={onUse} className="w-full mt-2">
+        Use
+      </Button>
+    </div>
+  )
+}
+
+function DeviceModels({
+  models,
+  onUse,
+}: {
+  models: DeviceModel[]
+  onUse: (model: DeviceModel) => void
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {models.map(m => (
+        <DeviceModelCard key={m.id} model={m} onUse={() => onUse(m)} />
+      ))}
+    </div>
+  )
+}
+
 function CloudModelsForm({
   onAddModel,
   onGoToProject,
@@ -489,6 +550,16 @@ function AddOrChangeModels({
   const [modelName, setModelName] = useState('')
   const [modelDescription, setModelDescription] = useState('')
   const [selectedPromptSets, setSelectedPromptSets] = useState<string[]>([])
+  
+  // Device model state
+  const [deviceConfirmOpen, setDeviceConfirmOpen] = useState(false)
+  const [pendingDeviceModel, setPendingDeviceModel] = useState<DeviceModel | null>(null)
+  const [deviceSubmitState, setDeviceSubmitState] = useState<
+    'idle' | 'loading' | 'success'
+  >('idle')
+  const [deviceModelName, setDeviceModelName] = useState('')
+  const [deviceModelDescription, setDeviceModelDescription] = useState('')
+  const [deviceSelectedPromptSets, setDeviceSelectedPromptSets] = useState<string[]>([])
 
   interface ModelVariant {
     id: number
@@ -710,15 +781,55 @@ function AddOrChangeModels({
     )
   )
 
+  // Mock device models
+  const deviceModels: DeviceModel[] = [
+    {
+      id: 'device-llama3.1-8b',
+      name: 'llama3.1:8b',
+      modelIdentifier: 'llama3.1:8b',
+      meta: 'Found on disk',
+      badges: ['Local', 'Disk'],
+    },
+    {
+      id: 'device-qwen2.5-7b',
+      name: 'qwen2.5:7b',
+      modelIdentifier: 'qwen2.5:7b',
+      meta: 'Found on disk',
+      badges: ['Local', 'Disk'],
+    },
+  ]
+
+  const handleUseDeviceModel = (model: DeviceModel) => {
+    setPendingDeviceModel(model)
+    setDeviceModelName(model.name)
+    setDeviceConfirmOpen(true)
+  }
+
   return (
-    <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
-      <div className="text-sm text-muted-foreground">
-        Add a new model provider or switch which models are enabled for this
-        project.
+    <>
+      {/* Models on device section */}
+      <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
+        <div>
+          <h3 className="text-lg font-medium mb-1">Models on device</h3>
+          <div className="text-sm text-muted-foreground">
+            Models found on your local disk that are ready to use.
+          </div>
+        </div>
+        <DeviceModels models={deviceModels} onUse={handleUseDeviceModel} />
       </div>
 
-      {/* Source switcher */}
-      <div className="w-full flex items-center">
+      {/* Download or use other models section */}
+      <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
+        <div>
+          <h3 className="text-lg font-medium mb-1">Download or use other models</h3>
+          <div className="text-sm text-muted-foreground">
+            Add a new model provider or switch which models are enabled for this
+            project.
+          </div>
+        </div>
+
+        {/* Source switcher */}
+        <div className="w-full flex items-center">
         <div className="flex w-full max-w-xl rounded-lg overflow-hidden border border-border">
           <button
             className={`flex-1 h-10 text-sm ${
@@ -872,7 +983,196 @@ function AddOrChangeModels({
           </div>
         </div>
       )}
+      </div>
 
+      {/* Device model confirmation dialog */}
+      <Dialog
+        open={deviceConfirmOpen}
+        onOpenChange={open => {
+          setDeviceConfirmOpen(open)
+          if (!open) {
+            setDeviceSubmitState('idle')
+            setPendingDeviceModel(null)
+            setDeviceModelName('')
+            setDeviceModelDescription('')
+            setDeviceSelectedPromptSets([])
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>Use this model?</DialogTitle>
+          <DialogDescription>
+            {pendingDeviceModel ? (
+              <div className="mt-2 flex flex-col gap-3">
+                <p className="text-sm">
+                  You are about to add
+                  <span className="mx-1 font-medium text-foreground">
+                    {pendingDeviceModel.name}
+                  </span>
+                  to your project.
+                </p>
+
+                <div>
+                  <label
+                    className="text-xs text-muted-foreground"
+                    htmlFor="device-model-name"
+                  >
+                    Name
+                  </label>
+                  <input
+                    id="device-model-name"
+                    type="text"
+                    placeholder="Enter model name"
+                    value={deviceModelName}
+                    onChange={e => setDeviceModelName(e.target.value)}
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className="text-xs text-muted-foreground"
+                    htmlFor="device-model-description"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    id="device-model-description"
+                    rows={2}
+                    placeholder="Enter model description"
+                    value={deviceModelDescription}
+                    onChange={e => setDeviceModelDescription(e.target.value)}
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className="text-xs text-muted-foreground mb-1 block"
+                    htmlFor="device-prompt-sets-trigger"
+                  >
+                    Prompt sets
+                  </label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        id="device-prompt-sets-trigger"
+                        className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between"
+                      >
+                        <span className="truncate text-sm flex items-center gap-2">
+                          {deviceSelectedPromptSets.length > 0 ? (
+                            <>
+                              <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
+                                {deviceSelectedPromptSets.length}
+                              </span>
+                              <span className="truncate">
+                                {deviceSelectedPromptSets.join(', ')}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              All sets
+                            </span>
+                          )}
+                        </span>
+                        <FontIcon type="chevron-down" className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
+                      {promptSetNames.map(name => (
+                        <DropdownMenuItem
+                          key={name}
+                          className="w-full justify-start text-left"
+                          onSelect={e => e.preventDefault()}
+                        >
+                          <label className="flex items-center gap-2 w-full">
+                            <Checkbox
+                              checked={deviceSelectedPromptSets.includes(name)}
+                              onCheckedChange={v => {
+                                if (v) {
+                                  setDeviceSelectedPromptSets(prev => [...prev, name])
+                                } else {
+                                  setDeviceSelectedPromptSets(prev =>
+                                    prev.filter(s => s !== name)
+                                  )
+                                }
+                              }}
+                            />
+                            <span className="text-sm">{name}</span>
+                          </label>
+                        </DropdownMenuItem>
+                      ))}
+                      <div className="h-px bg-border my-1" />
+                      <DropdownMenuItem
+                        onClick={() => setDeviceSelectedPromptSets([])}
+                      >
+                        <span className="text-xs text-muted-foreground">
+                          Clear selection
+                        </span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="text-muted-foreground">Provider</div>
+                  <div>Ollama</div>
+                  <div className="text-muted-foreground">Source</div>
+                  <div>Disk</div>
+                </div>
+              </div>
+            ) : null}
+          </DialogDescription>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setDeviceConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={deviceSubmitState === 'loading' || !deviceModelName.trim()}
+              onClick={() => {
+                if (!pendingDeviceModel) return
+                onAddModel(
+                  {
+                    id: `disk-${pendingDeviceModel.id}`,
+                    name: deviceModelName.trim(),
+                    modelIdentifier: pendingDeviceModel.modelIdentifier,
+                    meta: deviceModelDescription.trim() || 'Model from disk',
+                    badges: ['Local', 'Disk'],
+                    status: 'ready',
+                  },
+                  deviceSelectedPromptSets.length > 0 ? deviceSelectedPromptSets : undefined
+                )
+                setDeviceSubmitState('loading')
+                setTimeout(() => {
+                  setDeviceSubmitState('success')
+                  setTimeout(() => {
+                    setDeviceConfirmOpen(false)
+                    onGoToProject()
+                    setDeviceSubmitState('idle')
+                  }, 600)
+                }, 1000)
+              }}
+            >
+              {deviceSubmitState === 'loading' && (
+                <span className="mr-2 inline-flex">
+                  <Loader
+                    size={14}
+                    className="border-blue-400 dark:border-blue-100"
+                  />
+                </span>
+              )}
+              {deviceSubmitState === 'success' && (
+                <span className="mr-2 inline-flex">
+                  <FontIcon type="checkmark-filled" className="w-4 h-4" />
+                </span>
+              )}
+              Add to project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Download model confirmation dialog */}
       <Dialog
         open={confirmOpen}
         onOpenChange={open => {
@@ -1061,7 +1361,7 @@ function AddOrChangeModels({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }
 
