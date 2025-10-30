@@ -53,8 +53,8 @@ def test_event_logger_basic(temp_data_dir):
     event_logs_dir = temp_data_dir / "projects" / "default" / "test-project" / "event_logs"
     assert event_logs_dir.exists()
 
-    # Find the event file
-    event_files = list(event_logs_dir.glob("evt_inference_*.json"))
+    # Find the event file (new format: evt_timestamp_type_random)
+    event_files = list(event_logs_dir.glob("evt_*_inference_*.json"))
     assert len(event_files) == 1
 
     # Read and verify event structure
@@ -90,9 +90,9 @@ def test_event_logger_fail(temp_data_dir):
     logger.log_event("parse_start", {"file": "test.pdf"})
     logger.fail_event("Parse error: invalid format")
 
-    # Find the event file
+    # Find the event file (new format: evt_timestamp_type_random)
     event_logs_dir = temp_data_dir / "projects" / "default" / "test-project" / "event_logs"
-    event_files = list(event_logs_dir.glob("evt_rag_processing_*.json"))
+    event_files = list(event_logs_dir.glob("evt_*_rag_processing_*.json"))
     assert len(event_files) == 1
 
     # Read and verify
@@ -120,7 +120,7 @@ def test_event_logger_metadata(temp_data_dir):
 
     # Find and read event
     event_logs_dir = temp_data_dir / "projects" / "default" / "test-project" / "event_logs"
-    event_files = list(event_logs_dir.glob("evt_inference_*.json"))
+    event_files = list(event_logs_dir.glob("evt_*_inference_*.json"))
 
     with open(event_files[0]) as f:
         event = json.load(f)
@@ -161,7 +161,7 @@ def test_event_logger_thread_safety(temp_data_dir):
 
     # Find and read event
     event_logs_dir = temp_data_dir / "projects" / "default" / "test-project" / "event_logs"
-    event_files = list(event_logs_dir.glob("evt_inference_*.json"))
+    event_files = list(event_logs_dir.glob("evt_*_inference_*.json"))
 
     with open(event_files[0]) as f:
         event = json.load(f)
@@ -221,7 +221,7 @@ def test_event_logger_timestamps(temp_data_dir):
 
     # Find and read event
     event_logs_dir = temp_data_dir / "projects" / "default" / "test-project" / "event_logs"
-    event_files = list(event_logs_dir.glob("evt_inference_*.json"))
+    event_files = list(event_logs_dir.glob("evt_*_inference_*.json"))
 
     with open(event_files[0]) as f:
         event = json.load(f)
