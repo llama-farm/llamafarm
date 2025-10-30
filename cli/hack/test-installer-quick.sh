@@ -76,6 +76,7 @@ test_cli_build() {
     fi
 
     # Test basic build
+    go generate -v ./...
     if go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-quick-1.0.0'" -o ../dist/lf-test .; then
         success "CLI build successful"
     else
