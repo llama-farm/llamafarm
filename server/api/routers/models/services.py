@@ -49,7 +49,15 @@ async def download_model(request: DownloadModelRequest):
             ):
                 yield f"data: {json.dumps(evt)}\n\n"
         except Exception as e:
-            error_event = {"event": "error", "message": str(e)}
+            logger.error(
+                f"Error during model download for provider '{request.provider}', "
+                f"model '{request.model_name}': {e}",
+                exc_info=True,
+            )
+            error_event = {
+                "event": "error",
+                "message": "An internal error occurred while downloading the model.",
+            }
             yield f"data: {json.dumps(error_event)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -93,5 +101,8 @@ def delete_model(model_name: str, provider: Provider = Provider.universal):
         )
         raise HTTPException(
             status_code=500,
-            detail="An error occurred while deleting the model. Please contact support if the issue persists.",
+            detail=(
+                "An error occurred while deleting the model. "
+                "Please contact support if the issue persists."
+            ),
         ) from e

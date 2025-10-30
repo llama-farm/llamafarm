@@ -162,4 +162,8 @@ def test_delete_model_handles_errors(mocker):
 
     assert resp.status_code == 500
     data = resp.json()
-    assert "Unexpected error" in data["detail"]
+    # Should return generic error message for security (no internal details exposed)
+    assert (
+        "An error occurred while deleting the model" in data["detail"]
+        or "contact support" in data["detail"]
+    )

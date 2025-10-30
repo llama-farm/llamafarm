@@ -1,14 +1,12 @@
-import asyncio, fnmatch, os
-from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, Optional
+import fnmatch
+from collections.abc import Callable, Iterable
 
-from huggingface_hub import HfApi, hf_hub_download
 from tqdm.auto import tqdm
 
 
 # ---------- helpers
 def _match(
-    path: str, allow: Optional[Iterable[str]], ignore: Optional[Iterable[str]]
+    path: str, allow: Iterable[str] | None, ignore: Iterable[str] | None
 ) -> bool:
     if allow and not any(fnmatch.fnmatch(path, pat) for pat in allow):
         return False
@@ -16,7 +14,7 @@ def _match(
 
 
 # ---------- per-file tqdm that forwards byte updates
-def make_file_tqdm(on_update: Callable[[Dict], None], position: int = 1):
+def make_file_tqdm(on_update: Callable[[dict], None], position: int = 1):
     class FileTQDM(tqdm):
         def __init__(self, *args, **kwargs):
             kwargs.setdefault("position", position)  # keep overall bar on position=0
@@ -66,43 +64,50 @@ def make_file_tqdm(on_update: Callable[[Dict], None], position: int = 1):
 
 
 # ---------- ASYNC: yields events while running sync code in a thread
-async def iter_snapshot_download_events(
-    repo_id: str,
-    revision: str = "main",
-    token: Optional[str] = None,
-    cache_dir: Optional[str] = None,
-    allow_patterns: Optional[Iterable[str]] = None,
-    ignore_patterns: Optional[Iterable[str]] = None,
-):
-    """
-    Async generator that yields the same event dicts you’d get via on_update in the sync version.
-    Keeps default console tqdm bars visible in server logs/terminal.
-    """
-    queue: asyncio.Queue = asyncio.Queue()
-
-    def push(evt: Dict):  # bridge sync -> async
-        try:
-            asyncio.get_running_loop().call_soon_threadsafe(queue.put_nowait, evt)
-        except RuntimeError:
-            # if no running loop (e.g., inside worker thread), capture loop first in caller if needed
-            pass
-
-    def work():
-        snapshot_download_with_per_file_progress(
-            repo_id=repo_id,
-            revision=revision,
-            token=token,
-            cache_dir=cache_dir,
-            allow_patterns=allow_patterns,
-            ignore_patterns=ignore_patterns,
-            on_update=push,
-        )
-
-    task = asyncio.to_thread(work)
-    consumer = asyncio.create_task(task)
-    done = False
-    while not done:
-        evt = await queue.get()
-        yield evt
-        done = evt.get("event") == "done"
-    await consumer
+# NOTE: This function is currently unused and incomplete
+# Uncomment and fix when snapshot_download_with_per_file_progress is implemented
+#
+# async def iter_snapshot_download_events(
+#     repo_id: str,
+#     revision: str = "main",
+#     token: str | None = None,
+#     cache_dir: str | None = None,
+#     allow_patterns: Iterable[str] | None = None,
+#     ignore_patterns: Iterable[str] | None = None,
+# ):
+#     """
+#     Async generator that yields the same event dicts you'd get
+#     via on_update in the sync version.
+#     Keeps default console tqdm bars visible in server logs/terminal.
+#     """
+#     import contextlib
+#
+#     queue: asyncio.Queue = asyncio.Queue()
+#
+#     def push(evt: dict):  # bridge sync -> async
+#         with contextlib.suppress(RuntimeError):
+#             # if no running loop, silently skip
+#             asyncio.get_running_loop().call_soon_threadsafe(
+#                 queue.put_nowait, evt
+#             )
+#
+#     def work():
+#         # TODO: Implement snapshot_download_with_per_file_progress
+#         snapshot_download_with_per_file_progress(
+#             repo_id=repo_id,
+#             revision=revision,
+#             token=token,
+#             cache_dir=cache_dir,
+#             allow_patterns=allow_patterns,
+#             ignore_patterns=ignore_patterns,
+#             on_update=push,
+#         )
+#
+#     task = asyncio.to_thread(work)
+#     consumer = asyncio.create_task(task)
+#     done = False
+#     while not done:
+#         evt = await queue.get()
+#         yield evt
+#         done = evt.get("event") == "done"
+#     await consumer

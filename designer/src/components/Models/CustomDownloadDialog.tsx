@@ -6,7 +6,6 @@ import {
   DialogFooter,
   DialogTitle,
 } from '../ui/dialog'
-import { Input } from '../ui/input'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import { PromptSetSelector } from './PromptSetSelector'
