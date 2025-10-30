@@ -14,8 +14,8 @@ var (
 // LlamaFarmConfig represents the complete llamafarm configuration
 type LlamaFarmConfig struct {
 	Version   string         `yaml:"version" toml:"version" json:"version"`
-	Name      string         `yaml:"name,omitempty" toml:"name,omitempty" json:"name,omitempty"`
-	Namespace string         `yaml:"namespace,omitempty" toml:"namespace,omitempty" json:"namespace,omitempty"`
+	Name      string         `yaml:"name" toml:"name" json:"name"`
+	Namespace string         `yaml:"namespace" toml:"namespace" json:"namespace"`
 	Runtime   RuntimeConfig  `yaml:"runtime,omitempty" toml:"runtime,omitempty" json:"runtime,omitempty"`
 	Prompts   []Prompt       `yaml:"prompts,omitempty" toml:"prompts,omitempty" json:"prompts,omitempty"`
 	RAG       RAGConfig      `yaml:"rag,omitempty" toml:"rag,omitempty" json:"rag,omitempty"`
