@@ -143,6 +143,15 @@ jobs:
           fi
           echo "✓ All sample files uploaded"
 
+      - name: Debug config before processing
+        run: |
+          echo "=== Contents of /tmp/e2e-test/llamafarm.yaml ==="
+          cat /tmp/e2e-test/llamafarm.yaml
+          echo "=== End of config file ==="
+          echo ""
+          echo "Checking for namespace and name fields:"
+          grep -E "^(namespace|name):" /tmp/e2e-test/llamafarm.yaml || echo "⚠️ namespace or name field not found!"
+
       - name: Process dataset
         working-directory: cli
         env:
