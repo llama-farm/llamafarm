@@ -96,7 +96,12 @@ class EventLogger:
 
             # If this is a final event (processing_complete, etc.), save summary data
             if event_name.endswith("_complete") or event_name == "processing_complete":
+                # Calculate total elapsed time from logger's start time
+                total_elapsed_ms = (now - self._start_time).total_seconds() * 1000
+
+                # Copy data and add/override total_elapsed_time_ms
                 self._summary_data = dict(data)
+                self._summary_data["total_elapsed_time_ms"] = round(total_elapsed_ms, 2)
 
     def add_metadata(self, key: str, value: Any) -> None:
         """

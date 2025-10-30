@@ -514,7 +514,7 @@ class IngestHandler:
                     "total_chunks": len(documents),
                     "stored_chunks": stored_count,
                     "skipped_chunks": skipped_count,
-                    "total_processing_time_ms": round(elapsed_time * 1000, 2),
+                    # Note: total_elapsed_time_ms is automatically added by EventLogger
                 })
                 event_logger.complete_event()
 
