@@ -4,7 +4,6 @@ import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
-import { Mode } from '../ModeToggle'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +23,7 @@ import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import { Checkbox } from '../ui/checkbox'
 import { parsePromptSets } from '../../utils/promptSets'
+import { useModeWithReset } from '../../hooks/useModeWithReset'
 
 interface TabBarProps {
   activeTab: string
@@ -1084,7 +1084,7 @@ const Models = () => {
   )
   const updateProject = useUpdateProject()
   const [activeTab, setActiveTab] = useState('project')
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [modelToDelete, setModelToDelete] = useState<string | null>(null)

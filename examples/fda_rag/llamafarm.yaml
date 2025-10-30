@@ -3,13 +3,13 @@ name: fda-chat-demo
 namespace: default
 
 runtime:
-  default_model: fda-chat
   models:
     - name: fda-chat
       description: "Primary model for FDA document analysis"
       provider: ollama
       model: llama3.1:8b
-      base_url: http://localhost:11434/v1
+      base_url: http://localhost:11434
+      default: true
       prompt_format: unstructured
       model_api_parameters:
         temperature: 0.2
@@ -17,7 +17,7 @@ runtime:
       description: "Faster model for quick FDA queries"
       provider: ollama
       model: gemma2:2b
-      base_url: http://localhost:11434/v1
+      base_url: http://localhost:11434
       prompt_format: unstructured
       model_api_parameters:
         temperature: 0.1
@@ -42,14 +42,13 @@ rag:
         port: 8000
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            auto_pull: true
-            base_url: http://localhost:11434
-            batch_size: 16
+            model: nomic-ai/nomic-embed-text-v2-moe
             dimension: 768
-            model: nomic-embed-text
+            batch_size: 16
             timeout: 60
+            auto_pull: true
           priority: 0
       retrieval_strategies:
         - name: targeted_letters
@@ -69,14 +68,13 @@ rag:
         port: 8000
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            auto_pull: true
-            base_url: http://localhost:11434
-            batch_size: 16
+            model: nomic-ai/nomic-embed-text-v2-moe
             dimension: 768
-            model: nomic-embed-text
+            batch_size: 16
             timeout: 60
+            auto_pull: true
           priority: 0
       retrieval_strategies:
         - name: archive_search
@@ -101,7 +99,6 @@ rag:
             chunk_overlap: 150
             chunk_strategy: semantic
             extract_metadata: true
-            extract_images: false
         - type: PDFParser_PyPDF2
           file_include_patterns:
             - '*.pdf'

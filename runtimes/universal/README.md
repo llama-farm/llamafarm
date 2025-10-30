@@ -102,10 +102,28 @@ The Universal Runtime supports 6 major model categories. See [MODEL_TYPES.md](./
 
 ### Prerequisites
 
-- **Python 3.11+** (3.11 or 3.12 recommended)
+- **Python 3.11-3.13** (3.12 recommended, **NOT 3.14+**)
+  - PyTorch 2.8.0 doesn't support Python 3.14 yet
+  - Use `python3 --version` to check your version
 - **[uv](https://github.com/astral-sh/uv)** package manager
 - **8GB+ RAM** minimum (16GB+ recommended for larger models)
 - **Optional**: Apple Silicon Mac (M1/M2/M3/M4) or NVIDIA GPU for acceleration
+
+### Install Python 3.12 (if needed)
+
+If you have Python 3.14 or another incompatible version:
+
+```bash
+# macOS
+brew install python@3.12
+
+# Linux (using pyenv)
+pyenv install 3.12
+pyenv local 3.12
+
+# Or let uv manage Python for you
+uv python install 3.12
+```
 
 ### Install uv (if not installed)
 
@@ -115,15 +133,32 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Setup the Runtime
 
+**Method 1: Using Nx (from project root) - Recommended**
+
+```bash
+# Setup dependencies only:
+nx sync universal-runtime
+
+# Or just start (automatically runs setup first):
+nx start universal-runtime
+```
+
+This automatically installs Python 3.12 and all dependencies!
+
+**Method 2: Using uv directly**
+
 ```bash
 # Navigate to the universal runtime directory
 cd runtimes/universal
 
-# Create virtual environment and install dependencies
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# If Python 3.12 isn't installed yet, install it (one-time):
+uv python install 3.12
+
+# Install dependencies
 uv sync
 ```
+
+The `pyproject.toml` constraint (`requires-python = ">=3.11,<3.14"`) ensures only compatible Python versions are used.
 
 ### Optional: Install xformers (for Diffusion optimization)
 
@@ -139,21 +174,20 @@ This significantly speeds up Stable Diffusion models on CUDA GPUs.
 
 ### 1. Start the Server
 
+**From project root (recommended):**
+
 ```bash
-cd runtimes/universal
+nx start universal-runtime
+```
+
+**From runtimes/universal directory:**
+
+```bash
+# Using start script:
 bash start.sh
-```
 
-Or directly with Python:
-
-```bash
+# Or directly with uv:
 uv run python server.py
-```
-
-Or via Nx (if in LlamaFarm monorepo):
-
-```bash
-nx start universal
 ```
 
 **Server runs at:** `http://127.0.0.1:11540`
@@ -823,12 +857,30 @@ export HF_TOKEN=hf_xxxxxxxxxxxxx
 - Use gradient checkpointing (future feature)
 - Use smaller models or quantized variants
 
+### Python Version Error (torch can't be installed)
+
+**Error:** `Distribution torch==2.8.0 can't be installed because it doesn't have a source distribution or wheel for the current platform`
+
+**Cause:** You're using Python 3.14 or newer, which PyTorch doesn't support yet.
+
+**Solution:**
+```bash
+# From project root (recommended):
+nx sync universal-runtime
+
+# Or manually:
+uv python install 3.12  # Install Python 3.12 (one-time)
+uv sync                 # Install dependencies with Python 3.12
+```
+
+The `pyproject.toml` constraint ensures only compatible Python versions are used.
+
 ### Server Won't Start
 
 **Solutions:**
 - Check port 11540 is not in use: `lsof -i :11540`
-- Ensure Python 3.11+ is installed: `python --version`
-- Reinstall dependencies: `uv sync`
+- Ensure Python 3.11-3.13 is installed: `python --version`
+- Reinstall dependencies: `nx sync universal-runtime` or `uv sync`
 - Check logs for detailed error messages
 
 ---

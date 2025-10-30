@@ -170,7 +170,7 @@ rag:
           type: "UniversalEmbedder"
           priority: 0
           config:
-            model: nomic-ai/nomic-embed-text-v2-moe
+            model: nomic-ai/nomic-embed-text-v1.5
             dimension: 768
             batch_size: 16
             timeout: 60

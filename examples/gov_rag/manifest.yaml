@@ -9,7 +9,7 @@ tags:
   - pdf
 primaryModel: llama3.1:8b
 config:
-  yaml_path: examples/gov_rag/llamafarm-example-gov.yaml
+  yaml_path: examples/gov_rag/llamafarm.yaml
 datasets:
   - name: raleigh_udo_dataset
     strategy: udo_pdf_processor

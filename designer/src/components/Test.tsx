@@ -30,60 +30,25 @@ const scorePillClasses = (score: number) => {
 const Test = () => {
   const { openPackageModal } = usePackageModal()
   const [running, setRunning] = useState<Record<number, boolean>>({})
-  const [tests, setTests] = useState<TestCase[]>([
-    {
-      id: 1,
-      name: 'Aircraft maintenance queries',
-      source: 'From prompts',
-      score: 99.5,
-      environment: 'Local',
-      lastRun: '2hr ago',
-      input:
-        'The hydraulic pump on the F-16 showed a pressure drop during taxi. What are the most likely causes and the next steps for inspection?',
-      expected:
-        'A pressure drop in the hydraulic pump during taxi on an F-16 could be caused by fluid leakage, air in the system, or a failing pressure sensor. Recommended next steps include inspecting hydraulic lines for leaks, checking fluid levels, and running a diagnostic on the pressure sensor.',
-    },
-    {
-      id: 2,
-      name: 'Basic user queries',
-      source: 'From prompts',
-      score: 82.5,
-      environment: 'Local',
-      lastRun: '1d ago',
-    },
-    {
-      id: 3,
-      name: 'Aircraft maintenance queries',
-      source: 'From prompts',
-      score: 76.5,
-      environment: 'Production',
-      lastRun: '8/1/25',
-    },
-    {
-      id: 4,
-      name: 'API integration',
-      source: 'Custom',
-      score: 99.5,
-      environment: 'Production',
-      lastRun: '7/30/25',
-    },
-    {
-      id: 5,
-      name: 'Aircraft maintenance queries',
-      source: 'From chat history',
-      score: 54,
-      environment: 'Local',
-      lastRun: '7/30/25',
-    },
-    {
-      id: 6,
-      name: 'Security validation',
-      source: 'Custom',
-      score: 99.5,
-      environment: 'Staging',
-      lastRun: '7/30/25',
-    },
-  ])
+
+  // Load tests from localStorage per project (or empty array)
+  const [tests, setTests] = useState<TestCase[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = localStorage.getItem('lf_test_cases')
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })
+
+  // Persist tests to localStorage when they change
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem('lf_test_cases', JSON.stringify(tests))
+    } catch {}
+  }, [tests])
 
   // New tests are created via a button and edited in the existing modal
 
@@ -263,7 +228,7 @@ const Test = () => {
     const v = localStorage.getItem('lf_test_allowRanking')
     return v == null ? true : v === 'true'
   })
-  const [useTestData, setUseTestData] = useState<boolean>(() => {
+  const [useTestData, _setUseTestData] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     const v = localStorage.getItem('lf_test_useTestData')
     return v == null ? false : v === 'true'
@@ -296,6 +261,22 @@ const Test = () => {
 
   // Local diagnose loading for origin CTAs
   const [diagnosing, setDiagnosing] = useState<Record<string, boolean>>({})
+  // RAG UI state for drawer (persisted via localStorage)
+  const [ragEnabledUI, setRagEnabledUI] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    const v = localStorage.getItem('lf_testchat_rag_enabled')
+    return v == null ? true : v === 'true'
+  })
+  const [ragTopKUI, setRagTopKUI] = useState<number>(() => {
+    if (typeof window === 'undefined') return 10
+    const v = localStorage.getItem('lf_testchat_rag_top_k')
+    return v ? parseInt(v, 10) : 10
+  })
+  const [ragThresholdUI, setRagThresholdUI] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0.7
+    const v = Number(localStorage.getItem('lf_testchat_rag_threshold') || '0.7')
+    return Number.isFinite(v) ? v : 0.7
+  })
 
   // Persist preferences
   useEffect(() => {
@@ -328,6 +309,19 @@ const Test = () => {
       localStorage.setItem('lf_gen_defaults', JSON.stringify(gen))
     } catch {}
   }, [gen])
+  // Persist RAG settings
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('lf_testchat_rag_enabled', String(ragEnabledUI))
+  }, [ragEnabledUI])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('lf_testchat_rag_top_k', String(ragTopKUI))
+  }, [ragTopKUI])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('lf_testchat_rag_threshold', String(ragThresholdUI))
+  }, [ragThresholdUI])
 
   // Hide settings UI and close any open panels when switching to config view
   useEffect(() => {
@@ -576,41 +570,75 @@ const Test = () => {
               {isSettingsOpen && (
                 <div className="absolute left-0 right-0 top-full w-full rounded-b-xl bg-card border border-border border-t-0 p-4 shadow-xl z-50">
                   <div className="w-full">
-                    <div className="h-px w-full bg-border" />
-                  </div>
-                  <div className="mt-4 space-y-3 text-sm">
+                    {/* RAG master toggle */}
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">
-                        Use test data
-                      </span>
+                      <span className="text-muted-foreground">RAG</span>
                       <div className="flex items-center gap-2">
                         <Switch
-                          checked={useTestData}
-                          onCheckedChange={(v: boolean) =>
-                            setUseTestData(Boolean(v))
-                          }
-                          aria-label="Use test data"
+                          checked={ragEnabledUI}
+                          onCheckedChange={(v: boolean) => {
+                            setRagEnabledUI(Boolean(v))
+                          }}
+                          aria-label="RAG enabled"
                         />
                         <span className="text-muted-foreground">
-                          {useTestData ? 'On' : 'Off'}
+                          {ragEnabledUI ? 'On' : 'Off'}
                         </span>
                       </div>
                     </div>
-                    <div className="h-px w-full bg-border" />
-                    <label className="inline-flex items-center gap-2">
-                      <Checkbox
-                        checked={showGenSettings}
-                        onCheckedChange={(v: boolean | 'indeterminate') =>
-                          setShowGenSettings(Boolean(v))
-                        }
-                      />
-                      <span className="whitespace-nowrap">
-                        Show generation settings in responses
-                      </span>
-                    </label>
-                    <div className="h-px w-full bg-border" />
+                    {ragEnabledUI && (
+                      <>
+                        <div className="h-px w-full bg-border mt-2" />
+                        {/* RAG retrieval controls */}
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                          <span className="text-sm text-muted-foreground">
+                            Top‑K
+                          </span>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={100}
+                            step={1}
+                            value={ragTopKUI}
+                            onChange={e => {
+                              const v = Math.max(
+                                1,
+                                Math.min(100, Number(e.target.value))
+                              )
+                              setRagTopKUI(v)
+                            }}
+                            className="col-span-2"
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                          <span className="text-sm text-muted-foreground">
+                            Threshold
+                          </span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={ragThresholdUI}
+                            onChange={e => {
+                              const val = Number(e.target.value)
+                              const v = isNaN(val)
+                                ? 0
+                                : Math.max(0, Math.min(1, val))
+                              setRagThresholdUI(v)
+                            }}
+                            className="col-span-2"
+                          />
+                        </div>
+                        <div className="h-px w-full bg-border" />
+                      </>
+                    )}
+                  </div>
+                  <div className="mt-4 space-y-3">
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Temperature</span>
+                      <span className="text-sm text-muted-foreground">
+                        Temperature
+                      </span>
                       <Input
                         type="number"
                         step="0.1"
@@ -627,7 +655,9 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Top‑p</span>
+                      <span className="text-sm text-muted-foreground">
+                        Top‑p
+                      </span>
                       <Input
                         type="number"
                         step="0.05"
@@ -641,7 +671,9 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Max tokens</span>
+                      <span className="text-sm text-muted-foreground">
+                        Max tokens
+                      </span>
                       <Input
                         type="number"
                         step="1"
@@ -654,7 +686,7 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         Presence penalty
                       </span>
                       <Input
@@ -673,7 +705,7 @@ const Test = () => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         Frequency penalty
                       </span>
                       <Input
@@ -691,44 +723,18 @@ const Test = () => {
                         className="col-span-2"
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-muted-foreground">Seed</span>
-                      <Input
-                        type="number"
-                        step="1"
-                        value={gen.seed as any}
-                        onChange={e =>
-                          setGen({
-                            ...gen,
-                            seed:
-                              e.target.value === ''
-                                ? ''
-                                : Number(e.target.value),
-                          })
+                    <div className="h-px w-full bg-border" />
+                    <label className="inline-flex items-center gap-2">
+                      <Checkbox
+                        checked={showGenSettings}
+                        onCheckedChange={(v: boolean | 'indeterminate') =>
+                          setShowGenSettings(Boolean(v))
                         }
-                        className="col-span-2"
                       />
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <label className="inline-flex items-center gap-2">
-                        <Checkbox
-                          checked={gen.streaming}
-                          onCheckedChange={(v: boolean | 'indeterminate') =>
-                            setGen({ ...gen, streaming: Boolean(v) })
-                          }
-                        />
-                        <span>Streaming</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2">
-                        <Checkbox
-                          checked={gen.jsonMode}
-                          onCheckedChange={(v: boolean | 'indeterminate') =>
-                            setGen({ ...gen, jsonMode: Boolean(v) })
-                          }
-                        />
-                        <span>JSON mode</span>
-                      </label>
-                    </div>
+                      <span className="whitespace-nowrap">
+                        Show generation settings in responses
+                      </span>
+                    </label>
                   </div>
                 </div>
               )}
@@ -754,6 +760,10 @@ const Test = () => {
                   showPrompts,
                   showThinking,
                   showGenSettings,
+                  genSettings: gen,
+                  ragEnabled: ragEnabledUI,
+                  ragTopK: ragTopKUI,
+                  ragScoreThreshold: ragThresholdUI,
                 } as any)}
               />
             </div>
