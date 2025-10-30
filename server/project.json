@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/nx-project",
   "name": "server",
-  "root": "server/",
+  "root": "server",
   "targets": {
     "start": {
       "executor": "nx:run-commands",
@@ -13,8 +13,11 @@
       }
     },
     "build": {
-      "cwd": "..",
-      "command": "docker build -t llamafarm-api -f server/Dockerfile ."
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "command": "docker build -t llamafarm-api -f server/Dockerfile ."
+      }
     },
     "test": {
       "executor": "nx:run-commands",

@@ -1,5 +1,7 @@
 {
-  "root": "config/",
+  "$schema": "https://json.schemastore.org/nx-project",
+  "name": "config",
+  "root": "config",
   "targets": {
     "test": {
       "executor": "nx:run-commands",
