@@ -18,7 +18,7 @@ import (
 // It contains the created project and its configuration under project.config.
 type CreateProjectResponse struct {
 	Project struct {
-		Config map[string]interface{} `json:"config"`
+		Config config.LlamaFarmConfig `json:"config"`
 	} `json:"project"`
 }
 

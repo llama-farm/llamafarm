@@ -359,6 +359,16 @@ jobs:
           path: ${{ runner.temp }}/artifacts
           merge-multiple: true
 
+      - name: Free up disk space before loading images
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          echo "Cleaning up Docker to free disk space..."
+          docker system prune -af --volumes || true
+          docker image prune -af || true
+          echo "Disk space after cleanup:"
+          df -h
+
       - name: Load all images from artifacts
         run: |
           echo "Loading all Docker images from artifacts..."

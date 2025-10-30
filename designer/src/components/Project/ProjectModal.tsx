@@ -22,6 +22,7 @@ interface ProjectModalProps {
   onDelete?: () => void
   isLoading?: boolean
   projectError?: string | null
+  onNameChange?: (name: string) => void
 }
 
 const ProjectModal: React.FC<ProjectModalProps> = ({
@@ -34,6 +35,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   onDelete,
   isLoading = false,
   projectError = null,
+  onNameChange,
 }) => {
   const [name, setName] = useState(initialName)
   const [what, setWhat] = useState(initialBrief.what || '')
@@ -131,7 +133,11 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               }`}
               placeholder="Enter name"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => {
+                const newName = e.target.value
+                setName(newName)
+                onNameChange?.(newName)
+              }}
             />
             {projectError && (
               <p className="text-xs text-destructive mt-1">{projectError}</p>
