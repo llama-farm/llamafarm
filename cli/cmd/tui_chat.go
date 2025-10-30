@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -46,6 +47,68 @@ func renderMarkdown(content string, width int) string {
 	// TODO: Implement proper markdown rendering for TUI
 	// For now, just return the content as-is
 	return content
+}
+
+// renderToolCall renders a tool call as a styled bordered block
+func renderToolCall(content string, width int) string {
+	// Parse tool call: [TOOL_CALL]name|id|arguments
+	parts := strings.SplitN(strings.TrimPrefix(content, "[TOOL_CALL]"), "|", 3)
+	if len(parts) < 3 {
+		return content // Fallback if format is wrong
+	}
+
+	toolName := parts[0]
+	toolID := parts[1]
+	toolArgs := parts[2]
+
+	// Parse arguments JSON for pretty display
+	var args map[string]any
+	if err := json.Unmarshal([]byte(toolArgs), &args); err != nil {
+		// If not valid JSON, show raw
+		args = map[string]any{"raw": toolArgs}
+	}
+
+	// Build content
+	var contentLines []string
+	contentLines = append(contentLines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Render("🔧 Tool Call"))
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Tool: ")+toolName)
+	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("ID: ")+toolID+"...")
+
+	if len(args) > 0 {
+		contentLines = append(contentLines, "")
+		contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Arguments:"))
+		for k, v := range args {
+			// Truncate long values
+			valStr := fmt.Sprintf("%v", v)
+			if len(valStr) > 60 {
+				valStr = valStr[:60] + "..."
+			}
+			contentLines = append(contentLines, fmt.Sprintf("  %s: %v",
+				lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render(k),
+				valStr))
+		}
+	}
+
+	blockContent := strings.Join(contentLines, "\n")
+
+	// Calculate box width (limit to terminal width)
+	boxWidth := width - 10
+	if boxWidth < 40 {
+		boxWidth = 40
+	}
+	if boxWidth > 80 {
+		boxWidth = 80
+	}
+
+	// Create styled box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("86")).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	return "\n" + boxStyle.Render(blockContent) + "\n"
 }
 
 const gap = "\n\n"
@@ -185,6 +248,7 @@ type (
 )
 
 type responseMsg struct{ content string }
+type toolCallMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
 
@@ -1334,8 +1398,21 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							close(ch)
 							return
 						}
-						builder.WriteString(s)
-						ch <- responseMsg{content: builder.String()}
+						// Check if this chunk is a tool call
+						if strings.HasPrefix(s, "[TOOL_CALL]") {
+							// Send any accumulated content first
+							if builder.Len() > 0 {
+								ch <- responseMsg{content: builder.String()}
+							}
+							// Send tool call as separate message
+							ch <- toolCallMsg{content: s}
+							// Reset builder for subsequent content
+							builder.Reset()
+						} else {
+							// Regular content - accumulate and send
+							builder.WriteString(s)
+							ch <- responseMsg{content: builder.String()}
+						}
 					case e, ok := <-errs:
 						if ok && e != nil {
 							logDebug(fmt.Sprintf("STREAM ERROR: %v", e))
@@ -1345,6 +1422,22 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}()
 			cmds = append(cmds, listen(m.streamCh), thinkingCmd())
+		}
+
+	case toolCallMsg:
+		// Tool calls are added as separate assistant messages
+		logDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
+		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
+
+		// Auto-scroll to show tool call
+		if m.justStartedResponse || m.viewport.AtBottom() {
+			m.refreshViewportBottom()
+		} else {
+			m.setViewportContent()
+		}
+
+		if m.streamCh != nil {
+			cmds = append(cmds, listen(m.streamCh))
 		}
 
 	case responseMsg:
@@ -1360,10 +1453,23 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if viewport is at bottom before updating content
 		wasAtBottom := m.viewport.AtBottom()
 
-		if len(m.messages) == 0 || (len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") {
+		// Check if last message is a tool call (don't update it, create new message)
+		lastIsToolCall := false
+		if len(m.messages) > 0 {
+			lastMsg := m.messages[len(m.messages)-1]
+			lastIsToolCall = lastMsg.Role == "assistant" && strings.HasPrefix(lastMsg.Content, "[TOOL_CALL]")
+		}
+
+		if len(m.messages) == 0 ||
+			(len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") ||
+			lastIsToolCall {
+			// Create new message if:
+			// - No messages yet
+			// - Last message is not assistant (it's user/client/error)
+			// - Last message is a tool call (don't overwrite it)
 			m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
 		} else {
-			// Update last assistant line
+			// Update last assistant message (it's regular streaming content)
 			if len(m.messages) > 0 {
 				m.messages[len(m.messages)-1] = Message{Role: "assistant", Content: msg.content}
 			} else {
@@ -1623,11 +1729,16 @@ func computeTranscript(m chatModel) string {
 			var line string
 			switch message.Role {
 			case "assistant":
-				// Render Markdown content with ANSI styling
-				renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
-				// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
-				labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
-				line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
+				// Check if this contains a tool call marker
+				if strings.HasPrefix(message.Content, "[TOOL_CALL]") {
+					line = renderToolCall(message.Content, m.width)
+				} else {
+					// Render Markdown content with ANSI styling
+					renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
+					// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
+					labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
+					line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
+				}
 			case "user":
 				style := baseStyle.Foreground(lipgloss.Color("#ccc"))
 				line = style.Bold(true).Render("> ") + style.Render(message.Content)

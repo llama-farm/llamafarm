@@ -416,8 +416,16 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 			var chunk struct {
 				Choices []struct {
 					Delta struct {
-						Role    string `json:"role,omitempty"`
-						Content string `json:"content,omitempty"`
+						Role      string `json:"role,omitempty"`
+						Content   string `json:"content,omitempty"`
+						ToolCalls []struct {
+							ID       string `json:"id"`
+							Type     string `json:"type"`
+							Function struct {
+								Name      string `json:"name"`
+								Arguments string `json:"arguments"`
+							} `json:"function"`
+						} `json:"tool_calls,omitempty"`
 					} `json:"delta"`
 				} `json:"choices"`
 			}
@@ -428,6 +436,21 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 				continue
 			}
 			delta := chunk.Choices[0].Delta
+
+			// Check for tool calls first
+			if len(delta.ToolCalls) > 0 {
+				// Format tool call notification with special marker for TUI styling
+				for _, tc := range delta.ToolCalls {
+					if tc.Function.Name != "" {
+						// Use special marker [TOOL_CALL] so TUI can style it
+						toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+						logDebug(fmt.Sprintf("Tool call detected: %s", tc.Function.Name))
+						outCh <- toolMsg
+					}
+				}
+			}
+
+			// Send content if present
 			if delta.Content != "" {
 				logDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
 				outCh <- delta.Content
