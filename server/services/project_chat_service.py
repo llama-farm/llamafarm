@@ -486,11 +486,11 @@ class ProjectChatService:
                 summary_data = {
                     "content_preview": full_response[:200] if len(full_response) > 200 else full_response,
                     "content_length": len(full_response),
-                    "rag_enabled": enable_rag,
+                    "rag_enabled": rag_params.rag_enabled,
                 }
 
                 # Add RAG metrics if RAG was used
-                if enable_rag and rag_results:
+                if rag_params.rag_enabled and rag_results:
                     avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
                     summary_data["chunks_retrieved"] = len(rag_results)
                     summary_data["avg_rag_score"] = round(avg_score, 3)
