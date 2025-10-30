@@ -1,4 +1,6 @@
 {
+  "$schema": "https://json.schemastore.org/nx-project",
+  "name": "rag",
   "root": "rag/",
   "targets": {
     "start": {
