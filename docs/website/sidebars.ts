@@ -26,6 +26,15 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Designer Web UI',
+      link: { type: 'doc', id: 'designer/index' },
+      items: [
+        { type: 'doc', id: 'designer/features', label: 'Features' },
+        { type: 'doc', id: 'designer/development', label: 'Development' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'CLI Reference',
       link: { type: 'doc', id: 'cli/index' },
       items: [

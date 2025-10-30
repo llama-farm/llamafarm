@@ -29,6 +29,7 @@ Environment variables:
 - Starts a config watcher so edits to `llamafarm.yaml` refresh automatically.
 - Launches a text UI for chatting with the current project; use `Ctrl+C` to exit.
 - Shows health diagnostics for server, storage, Ollama/vLLM, Celery, rag-service, and project state.
+- Also starts the Designer web UI at `http://localhost:7724` for visual project management.
 
 ## Example
 
@@ -49,4 +50,5 @@ Investigate degraded components before shipping to production—Celery workers m
 ## See Also
 
 - [`lf chat`](./lf-chat.md)
+- [Designer Web UI](../designer/index.md) – Visual interface available after starting
 - [Troubleshooting](../troubleshooting/index.md)

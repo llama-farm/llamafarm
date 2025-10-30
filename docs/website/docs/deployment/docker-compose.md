@@ -36,9 +36,20 @@ services:
       - ../llamafarm.yaml:/app/llamafarm.yaml:ro
     depends_on:
       - server
+
+  designer:
+    image: ghcr.io/llama-farm/llamafarm/designer:latest
+    ports:
+      - "3123:80"
+    environment:
+      - VITE_APP_API_URL=http://server:8000
+    depends_on:
+      - server
 ```
 
 Adjust paths according to your directory layout. Mount datasets or persistent volumes if you need durable storage for vector databases.
+
+The Designer web UI will be available at `http://localhost:3123` and provides a visual interface for managing projects, datasets, and configurations. See the [Designer documentation](../designer/index.md) for details.
 
 ## Usage
 
