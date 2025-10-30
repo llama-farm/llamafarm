@@ -92,4 +92,8 @@ go test ./...
 ## Development Notes
 - Commands live under `cmd/` as Cobra subcommands.
 - Shared helpers (HTTP clients, config resolution) live in `cmd/*` modules.
-- Regenerate Go config types after schema updates via `config/generate-types.sh`.
+- **After updating schemas (`config/schema.yaml` or `rag/schema.yaml`):**
+  1. Run `cd ../config && ./generate-types.sh` to regenerate both Python and Go types
+  2. The script validates that `cli/cmd/config/types.go` matches the schema
+  3. If validation fails, manually update `types.go` to match the generated reference
+  4. Rebuild CLI: `go build -o lf`
