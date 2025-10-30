@@ -418,7 +418,7 @@ function DatasetView() {
 
   const handleSaveEdit = () => {
     if (!dataset || !datasetId) return
-    // TODO: Replace with API call to update dataset
+    // Note: Dataset name/description updates are local-only until backend supports PATCH endpoint
     const updatedDataset = {
       ...dataset,
       name: editName.trim() || dataset.name,
@@ -426,7 +426,6 @@ function DatasetView() {
     }
     setDataset(updatedDataset)
     setIsEditOpen(false)
-    console.warn('Dataset edit saved locally - should use API instead')
   }
 
   const handleDeleteClick = () => {

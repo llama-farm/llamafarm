@@ -21,9 +21,14 @@ import {
 import { Label } from '../ui/label'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
-import { Checkbox } from '../ui/checkbox'
 import { parsePromptSets } from '../../utils/promptSets'
+import { useCachedModels } from '../../hooks/useModels'
+import modelService from '../../api/modelService'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
+import { PromptSetSelector } from './PromptSetSelector'
+import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
+import { CustomDownloadDialog } from './CustomDownloadDialog'
+import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
 
 interface TabBarProps {
   activeTab: string
@@ -146,52 +151,14 @@ function ModelCard({
           ) : null}
         </div>
         {/* Prompt sets multi-select column */}
-        <div className="mt-3 md:mt-0 md:justify-self-end w-full flex flex-col md:pl-4">
-          <div className="text-xs text-muted-foreground mb-1">Prompt sets</div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-full h-8 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between mr-6 md:mr-8">
-                <span className="truncate text-sm flex items-center gap-2">
-                  {selectedPromptSets.length > 0 ? (
-                    <>
-                      <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
-                        {selectedPromptSets.length}
-                      </span>
-                      <span className="truncate">
-                        {selectedPromptSets.join(', ')}
-                      </span>
-                    </>
-                  ) : (
-                    'All sets'
-                  )}
-                </span>
-                <FontIcon type="chevron-down" className="w-4 h-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-              {promptSetNames.map(name => (
-                <DropdownMenuItem
-                  key={name}
-                  className="w-full justify-start text-left"
-                  onSelect={e => e.preventDefault()}
-                >
-                  <label className="flex items-center gap-2 w-full">
-                    <Checkbox
-                      checked={selectedPromptSets.includes(name)}
-                      onCheckedChange={v => onTogglePromptSet(name, v)}
-                    />
-                    <span className="text-sm">{name}</span>
-                  </label>
-                </DropdownMenuItem>
-              ))}
-              <div className="h-px bg-border my-1" />
-              <DropdownMenuItem onClick={onClearPromptSets}>
-                <span className="text-xs text-muted-foreground">
-                  Clear selection (All sets)
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="mt-3 md:mt-0 md:justify-self-end w-full md:pl-4 mr-6 md:mr-8">
+          <PromptSetSelector
+            promptSetNames={promptSetNames}
+            selectedPromptSets={selectedPromptSets}
+            onTogglePromptSet={onTogglePromptSet}
+            onClearPromptSets={onClearPromptSets}
+            label="Prompt sets"
+          />
         </div>
       </div>
     </div>
@@ -467,14 +434,68 @@ function CloudModelsForm({
   )
 }
 
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+  let i = Math.floor(Math.log(bytes) / Math.log(1024))
+  if (i >= units.length) i = units.length - 1
+  const val = bytes / Math.pow(1024, i)
+  return `${val.toFixed(i >= 2 ? 1 : 0)} ${units[i]}`
+}
+
+function formatETA(seconds: number): string {
+  if (!isFinite(seconds) || seconds <= 0) return ''
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  if (m >= 60) {
+    const h = Math.floor(m / 60)
+    const rm = m % 60
+    return `~${h}h ${rm}m`
+  }
+  if (m > 0) return `~${m}m ${s}s`
+  return `~${s}s`
+}
+
 function AddOrChangeModels({
   onAddModel,
   onGoToProject,
   promptSetNames,
+  customModelOpen,
+  setCustomModelOpen,
+  customDownloadState,
+  setCustomDownloadState,
+  customDownloadProgress,
+  setCustomDownloadProgress,
+  setShowBackgroundDownload,
+  setBackgroundDownloadName,
+  projectModels,
+  downloadedBytes,
+  setDownloadedBytes,
+  totalBytes,
+  setTotalBytes,
+  estimatedTimeRemaining,
+  setEstimatedTimeRemaining,
 }: {
   onAddModel: (m: InferenceModel, promptSets?: string[]) => void
   onGoToProject: () => void
   promptSetNames: string[]
+  customModelOpen: boolean
+  setCustomModelOpen: (open: boolean) => void
+  customDownloadState: 'idle' | 'downloading' | 'success' | 'error'
+  setCustomDownloadState: (
+    state: 'idle' | 'downloading' | 'success' | 'error'
+  ) => void
+  customDownloadProgress: number
+  setCustomDownloadProgress: (progress: number) => void
+  setShowBackgroundDownload: (show: boolean) => void
+  setBackgroundDownloadName: (name: string) => void
+  projectModels: InferenceModel[]
+  downloadedBytes: number
+  setDownloadedBytes: (n: number) => void
+  totalBytes: number
+  setTotalBytes: (n: number) => void
+  estimatedTimeRemaining: string
+  setEstimatedTimeRemaining: (s: string) => void
 }) {
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
   const [query, setQuery] = useState('')
@@ -489,6 +510,39 @@ function AddOrChangeModels({
   const [modelName, setModelName] = useState('')
   const [modelDescription, setModelDescription] = useState('')
   const [selectedPromptSets, setSelectedPromptSets] = useState<string[]>([])
+
+  // Device model state
+  const [deviceConfirmOpen, setDeviceConfirmOpen] = useState(false)
+  const [pendingDeviceModel, setPendingDeviceModel] =
+    useState<DeviceModel | null>(null)
+  const [deviceSubmitState, setDeviceSubmitState] = useState<
+    'idle' | 'loading' | 'success'
+  >('idle')
+  const [deviceModelName, setDeviceModelName] = useState('')
+  const [deviceModelDescription, setDeviceModelDescription] = useState('')
+  const [deviceSelectedPromptSets, setDeviceSelectedPromptSets] = useState<
+    string[]
+  >([])
+
+  // Delete device model state
+  const [deleteConfirmModelOpen, setDeleteConfirmModelOpen] = useState(false)
+  const [modelToDelete, setModelToDelete] = useState<DeviceModel | null>(null)
+  const [deleteState, setDeleteState] = useState<
+    'idle' | 'deleting' | 'success' | 'error'
+  >('idle')
+  const [deleteError, setDeleteError] = useState('')
+
+  // Manual refresh state to ensure visible feedback
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false)
+
+  // Custom model local state (not shared)
+  const [customModelInput, setCustomModelInput] = useState('')
+  const [customModelName, setCustomModelName] = useState('')
+  const [customModelDescription, setCustomModelDescription] = useState('')
+  const [customSelectedPromptSets, setCustomSelectedPromptSets] = useState<
+    string[]
+  >([])
+  const [customDownloadError, setCustomDownloadError] = useState('')
 
   interface ModelVariant {
     id: number
@@ -710,169 +764,586 @@ function AddOrChangeModels({
     )
   )
 
+  // Fetch cached models from backend
+  const {
+    data: cachedModelsResponse,
+    isLoading: isLoadingCachedModels,
+    refetch: refetchCachedModels,
+  } = useCachedModels()
+
+  // Convert cached models to device models format
+  const deviceModels: DeviceModel[] =
+    cachedModelsResponse?.data.map(cachedModel => ({
+      id: cachedModel.id,
+      name: cachedModel.name,
+      modelIdentifier: cachedModel.name,
+      meta: formatBytes(cachedModel.size),
+      badges: ['Local', 'Disk'],
+    })) || []
+
+  const handleUseDeviceModel = (model: DeviceModel) => {
+    setPendingDeviceModel(model)
+    setDeviceModelName(model.name)
+    setDeviceConfirmOpen(true)
+  }
+
+  const handleDeleteDeviceModel = (model: DeviceModel) => {
+    setModelToDelete(model)
+    setDeleteConfirmModelOpen(true)
+  }
+
+  const confirmDeleteDeviceModel = async () => {
+    if (!modelToDelete) return
+
+    setDeleteState('deleting')
+    setDeleteError('')
+
+    try {
+      await modelService.deleteModel(modelToDelete.modelIdentifier)
+      setDeleteState('success')
+      // Refresh the cached models list
+      refetchCachedModels()
+      // Close dialog after short delay
+      setTimeout(() => {
+        setDeleteConfirmModelOpen(false)
+        setModelToDelete(null)
+        setDeleteState('idle')
+      }, 1000)
+    } catch (error: any) {
+      setDeleteState('error')
+      setDeleteError(
+        error.response?.data?.detail ||
+          error.message ||
+          'Failed to delete model'
+      )
+    }
+  }
+
+  // Check if a device model is already in the project
+  const isModelInUse = (modelId: string): boolean => {
+    return projectModels.some(pm => pm.modelIdentifier === modelId)
+  }
+
+  // Handle custom model download
+  const handleCustomModelDownload = async () => {
+    setCustomDownloadState('downloading')
+    setCustomDownloadProgress(5)
+    setCustomDownloadError('')
+    setBackgroundDownloadName(customModelName.trim())
+    setDownloadedBytes(0)
+    setTotalBytes(0)
+    setEstimatedTimeRemaining('')
+    const start = Date.now()
+
+    const downloadAsync = async () => {
+      try {
+        for await (const event of modelService.downloadModel({
+          model_name: customModelInput.trim(),
+          provider: 'universal',
+        })) {
+          if (event.event === 'progress') {
+            const d = Number(event.downloaded || 0)
+            const t = Number(event.total || 0)
+            setDownloadedBytes(d)
+            setTotalBytes(t)
+            if (t > 0 && isFinite(d) && d >= 0) {
+              const percent = Math.max(
+                5,
+                Math.min(95, Math.round((d / t) * 90) + 5)
+              )
+              setCustomDownloadProgress(percent)
+              const elapsedSec = (Date.now() - start) / 1000
+              if (elapsedSec > 0) {
+                const speed = d / elapsedSec
+                const remain = (t - d) / (speed || 1)
+                setEstimatedTimeRemaining(formatETA(remain))
+              }
+            }
+          } else if (event.event === 'done') {
+            setCustomDownloadProgress(100)
+            setCustomDownloadState('success')
+            setEstimatedTimeRemaining('')
+            onAddModel(
+              {
+                id: `custom-${customModelInput.trim()}`,
+                name: customModelName.trim(),
+                modelIdentifier: customModelInput.trim(),
+                meta:
+                  customModelDescription.trim() ||
+                  'Downloaded from HuggingFace',
+                badges: ['Local', 'HuggingFace'],
+                status: 'ready',
+              },
+              customSelectedPromptSets.length > 0
+                ? customSelectedPromptSets
+                : undefined
+            )
+            refetchCachedModels()
+            setTimeout(() => {
+              setCustomModelOpen(false)
+              onGoToProject()
+            }, 1000)
+            setTimeout(() => {
+              setShowBackgroundDownload(false)
+              setCustomDownloadState('idle')
+            }, 4000)
+          } else if (event.event === 'error') {
+            setCustomDownloadState('error')
+            setCustomDownloadError(
+              event.message ||
+                'Failed to download model. Please check the model name and try again.'
+            )
+            setShowBackgroundDownload(false)
+          }
+        }
+      } catch (error: any) {
+        setCustomDownloadState('error')
+        setCustomDownloadError(
+          error.message ||
+            'Failed to download model. Please check the model name and try again.'
+        )
+        setShowBackgroundDownload(false)
+      }
+    }
+
+    downloadAsync()
+  }
+
   return (
-    <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
-      <div className="text-sm text-muted-foreground">
-        Add a new model provider or switch which models are enabled for this
-        project.
-      </div>
+    <>
+      {/* Models on device section */}
+      <DeviceModelsSection
+        models={deviceModels}
+        isLoading={isLoadingCachedModels}
+        isRefreshing={isManuallyRefreshing}
+        onUse={handleUseDeviceModel}
+        onDelete={handleDeleteDeviceModel}
+        onRefresh={async () => {
+          setIsManuallyRefreshing(true)
+          const startTime = Date.now()
+          await refetchCachedModels()
+          const elapsed = Date.now() - startTime
+          const remaining = Math.max(0, 800 - elapsed)
+          setTimeout(() => {
+            setIsManuallyRefreshing(false)
+          }, remaining)
+        }}
+        isModelInUse={isModelInUse}
+      />
 
-      {/* Source switcher */}
-      <div className="w-full flex items-center">
-        <div className="flex w-full max-w-xl rounded-lg overflow-hidden border border-border">
-          <button
-            className={`flex-1 h-10 text-sm ${
-              sourceTab === 'local'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-foreground hover:bg-secondary/80'
-            }`}
-            onClick={() => setSourceTab('local')}
-            aria-pressed={sourceTab === 'local'}
-          >
-            Local models
-          </button>
-          <button
-            className={`flex-1 h-10 text-sm ${
-              sourceTab === 'cloud'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-foreground hover:bg-secondary/80'
-            }`}
-            onClick={() => setSourceTab('cloud')}
-            aria-pressed={sourceTab === 'cloud'}
-          >
-            Cloud models
-          </button>
-        </div>
-      </div>
-
-      {/* Search - only show for local models */}
-      {sourceTab === 'local' && (
-        <div className="relative w-full">
-          <FontIcon
-            type="search"
-            className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
-          />
-          <Input
-            placeholder="Search local options"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            className="pl-9 h-10"
-          />
-        </div>
-      )}
-
-      {/* Table */}
-      {sourceTab === 'local' && (
-        <div className="w-full overflow-hidden rounded-lg border border-border">
-          <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
-            <div className="col-span-6">Model</div>
-            <div className="col-span-3">Parameter size</div>
-            <div className="col-span-2 text-right pr-4 sm:pr-10">
-              Download size
-            </div>
-            <div className="col-span-1" />
+      {/* Download or use other models section */}
+      <div className="flex flex-col gap-4">
+        <div>
+          <h3 className="font-medium">Download or use other models</h3>
+          <div className="h-1" />
+          <div className="text-sm text-muted-foreground">
+            Add a new model provider or switch which models are enabled for this
+            project.
           </div>
-          {filteredGroups.map(group => {
-            const isOpen = expandedGroupId === group.id
-            return (
-              <div key={group.id} className="border-t border-border">
-                <div
-                  className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
-                  onClick={() =>
-                    setExpandedGroupId(prev =>
-                      prev === group.id ? null : group.id
-                    )
-                  }
-                >
-                  <div className="col-span-6 flex items-center gap-2">
-                    <FontIcon
-                      type="chevron-down"
-                      className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                    />
-                    <span className="truncate">{group.name}</span>
-                  </div>
-                  <div className="col-span-3 text-xs">
-                    {group.parameterSummary}
-                  </div>
-                  <div className="col-span-2 text-xs text-right pr-4 sm:pr-10">
-                    <span className="inline-block min-w-[3.5rem] truncate">
-                      {group.downloadSummary}
-                    </span>
-                  </div>
-                  <div className="col-span-1" />
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4 mb-12">
+          {/* Source switcher */}
+          <div className="w-full flex items-center">
+            <div className="flex w-full max-w-xl rounded-lg overflow-hidden border border-border">
+              <button
+                className={`flex-1 h-10 text-sm ${
+                  sourceTab === 'local'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => setSourceTab('local')}
+                aria-pressed={sourceTab === 'local'}
+              >
+                Local models
+              </button>
+              <button
+                className={`flex-1 h-10 text-sm ${
+                  sourceTab === 'cloud'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => setSourceTab('cloud')}
+                aria-pressed={sourceTab === 'cloud'}
+              >
+                Cloud models
+              </button>
+            </div>
+          </div>
+
+          {/* Search - only show for local models */}
+          {sourceTab === 'local' && (
+            <div className="flex items-center gap-2 w-full">
+              <div className="relative flex-1">
+                <FontIcon
+                  type="search"
+                  className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
+                />
+                <Input
+                  placeholder="Search local options"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  className="pl-9 h-10"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCustomModelOpen(true)
+                  setCustomModelInput('')
+                  setCustomModelName('')
+                  setCustomModelDescription('')
+                  setCustomSelectedPromptSets([])
+                  setCustomDownloadState('idle')
+                  setCustomDownloadError('')
+                }}
+                className="h-10 whitespace-nowrap"
+              >
+                Add HuggingFace model
+              </Button>
+            </div>
+          )}
+
+          {/* Table */}
+          {sourceTab === 'local' && (
+            <div className="w-full overflow-hidden rounded-lg border border-border">
+              <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
+                <div className="col-span-6">Model</div>
+                <div className="col-span-3">Parameter size</div>
+                <div className="col-span-2 text-right pr-4 sm:pr-10">
+                  Download size
                 </div>
-                {isOpen && (
-                  <div className="px-3 pb-2">
-                    {group.variants.map(variant => (
+                <div className="col-span-1" />
+              </div>
+              {filteredGroups.length === 0 ? (
+                <div className="p-6 flex flex-col items-center justify-center text-center">
+                  <div className="text-sm text-muted-foreground mb-3">
+                    No matching results. Want to download a different local
+                    model from Hugging Face?
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setCustomModelOpen(true)
+                      setCustomModelInput('')
+                      setCustomModelName('')
+                      setCustomModelDescription('')
+                      setCustomSelectedPromptSets([])
+                      setCustomDownloadState('idle')
+                      setCustomDownloadError('')
+                    }}
+                  >
+                    Add HuggingFace model
+                  </Button>
+                </div>
+              ) : (
+                filteredGroups.map(group => {
+                  const isOpen = expandedGroupId === group.id
+                  return (
+                    <div key={group.id} className="border-t border-border">
                       <div
-                        key={variant.id}
-                        className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
+                        className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
+                        onClick={() =>
+                          setExpandedGroupId(prev =>
+                            prev === group.id ? null : group.id
+                          )
+                        }
                       >
-                        <div className="col-span-6 flex items-center text-muted-foreground">
-                          <span className="inline-block w-4" />
-                          <span className="ml-2 truncate">{variant.label}</span>
+                        <div className="col-span-6 flex items-center gap-2">
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          />
+                          <span className="truncate">{group.name}</span>
                         </div>
                         <div className="col-span-3 text-xs">
-                          {variant.parameterSize}
+                          {group.parameterSummary}
                         </div>
-                        <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-10">
-                          <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right whitespace-nowrap">
-                            {variant.downloadSize}
+                        <div className="col-span-2 text-xs text-right pr-4 sm:pr-10">
+                          <span className="inline-block min-w-[3.5rem] truncate">
+                            {group.downloadSummary}
+                          </span>
+                        </div>
+                        <div className="col-span-1" />
+                      </div>
+                      {isOpen && (
+                        <div className="px-3 pb-2">
+                          {group.variants.map(variant => (
+                            <div
+                              key={variant.id}
+                              className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
+                            >
+                              <div className="col-span-6 flex items-center text-muted-foreground">
+                                <span className="inline-block w-4" />
+                                <span className="ml-2 truncate">
+                                  {variant.label}
+                                </span>
+                              </div>
+                              <div className="col-span-3 text-xs">
+                                {variant.parameterSize}
+                              </div>
+                              <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-10">
+                                <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right whitespace-nowrap">
+                                  {variant.downloadSize}
+                                </div>
+                              </div>
+                              <div className="col-span-1 flex items-center justify-end pr-2">
+                                <Button
+                                  size="sm"
+                                  className="h-8 px-3"
+                                  onClick={() => {
+                                    setPendingVariant(variant)
+                                    setConfirmOpen(true)
+                                  }}
+                                >
+                                  Add
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                          <div className="flex justify-end pr-3">
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setExpandedGroupId(null)}
+                            >
+                              Hide
+                            </button>
                           </div>
                         </div>
-                        <div className="col-span-1 flex items-center justify-end pr-2">
-                          <Button
-                            size="sm"
-                            className="h-8 px-3"
-                            onClick={() => {
-                              setPendingVariant(variant)
-                              setConfirmOpen(true)
-                            }}
-                          >
-                            Add
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex justify-end pr-3">
-                      <button
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => setExpandedGroupId(null)}
-                      >
-                        Hide
-                      </button>
+                      )}
                     </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+          {sourceTab === 'cloud' && (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start gap-3 p-3 rounded-md bg-secondary/40 border border-border">
+                <p className="text-xs text-muted-foreground">
+                  Cloud model options coming soon!
+                </p>
+              </div>
+              <div className="relative">
+                <div className="opacity-40 pointer-events-none">
+                  <CloudModelsForm
+                    onAddModel={onAddModel}
+                    onGoToProject={onGoToProject}
+                    promptSetNames={promptSetNames}
+                  />
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="bg-background/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-border shadow-lg">
+                    <div className="text-sm font-medium">Coming soon</div>
                   </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {sourceTab === 'cloud' && (
-        <div className="flex flex-col gap-4">
-          <div className="flex items-start gap-3 p-3 rounded-md bg-secondary/40 border border-border">
-            <p className="text-xs text-muted-foreground">
-              Cloud model options coming soon!
-            </p>
-          </div>
-          <div className="relative">
-            <div className="opacity-40 pointer-events-none">
-              <CloudModelsForm
-                onAddModel={onAddModel}
-                onGoToProject={onGoToProject}
-                promptSetNames={promptSetNames}
-              />
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-background/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-border shadow-lg">
-                <div className="text-sm font-medium">Coming soon</div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
+      {/* Custom model download dialog */}
+      <CustomDownloadDialog
+        open={customModelOpen}
+        onOpenChange={open => {
+          setCustomModelOpen(open)
+          if (!open) {
+            if (customDownloadState === 'downloading') {
+              setShowBackgroundDownload(true)
+            } else {
+              setCustomModelInput('')
+              setCustomModelName('')
+              setCustomModelDescription('')
+              setCustomSelectedPromptSets([])
+              setCustomDownloadState('idle')
+              setCustomDownloadProgress(0)
+              setCustomDownloadError('')
+            }
+          }
+        }}
+        promptSetNames={promptSetNames}
+        customModelInput={customModelInput}
+        setCustomModelInput={setCustomModelInput}
+        customModelName={customModelName}
+        setCustomModelName={setCustomModelName}
+        customModelDescription={customModelDescription}
+        setCustomModelDescription={setCustomModelDescription}
+        customSelectedPromptSets={customSelectedPromptSets}
+        setCustomSelectedPromptSets={setCustomSelectedPromptSets}
+        customDownloadState={customDownloadState}
+        customDownloadProgress={customDownloadProgress}
+        customDownloadError={customDownloadError}
+        downloadedBytes={downloadedBytes}
+        totalBytes={totalBytes}
+        estimatedTimeRemaining={estimatedTimeRemaining}
+        onDownload={handleCustomModelDownload}
+        onMoveToBackground={() => {
+          setShowBackgroundDownload(true)
+          setCustomModelOpen(false)
+        }}
+      />
+
+      {/* Device model confirmation dialog */}
+      <Dialog
+        open={deviceConfirmOpen}
+        onOpenChange={open => {
+          setDeviceConfirmOpen(open)
+          if (!open) {
+            setDeviceSubmitState('idle')
+            setPendingDeviceModel(null)
+            setDeviceModelName('')
+            setDeviceModelDescription('')
+            setDeviceSelectedPromptSets([])
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>Use this model?</DialogTitle>
+          <DialogDescription>
+            {pendingDeviceModel ? (
+              <div className="mt-2 flex flex-col gap-3">
+                <p className="text-sm">
+                  You are about to add
+                  <span className="mx-1 font-medium text-foreground">
+                    {pendingDeviceModel.name}
+                  </span>
+                  to your project.
+                </p>
+
+                <div>
+                  <label
+                    className="text-xs text-muted-foreground"
+                    htmlFor="device-model-name"
+                  >
+                    Name
+                  </label>
+                  <input
+                    id="device-model-name"
+                    type="text"
+                    placeholder="Enter model name"
+                    value={deviceModelName}
+                    onChange={e => setDeviceModelName(e.target.value)}
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className="text-xs text-muted-foreground"
+                    htmlFor="device-model-description"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    id="device-model-description"
+                    rows={2}
+                    placeholder="Enter model description"
+                    value={deviceModelDescription}
+                    onChange={e => setDeviceModelDescription(e.target.value)}
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                  />
+                </div>
+
+                <PromptSetSelector
+                  promptSetNames={promptSetNames}
+                  selectedPromptSets={deviceSelectedPromptSets}
+                  onTogglePromptSet={(name, checked) => {
+                    if (checked) {
+                      setDeviceSelectedPromptSets(prev => [...prev, name])
+                    } else {
+                      setDeviceSelectedPromptSets(prev =>
+                        prev.filter(s => s !== name)
+                      )
+                    }
+                  }}
+                  onClearPromptSets={() => setDeviceSelectedPromptSets([])}
+                  triggerId="device-prompt-sets-trigger"
+                  label="Prompt sets"
+                />
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="text-muted-foreground">Provider</div>
+                  <div>Ollama</div>
+                  <div className="text-muted-foreground">Source</div>
+                  <div>Disk</div>
+                </div>
+              </div>
+            ) : null}
+          </DialogDescription>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setDeviceConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                deviceSubmitState === 'loading' || !deviceModelName.trim()
+              }
+              onClick={() => {
+                if (!pendingDeviceModel) return
+                onAddModel(
+                  {
+                    id: `disk-${pendingDeviceModel.id}`,
+                    name: deviceModelName.trim(),
+                    modelIdentifier: pendingDeviceModel.modelIdentifier,
+                    meta: deviceModelDescription.trim() || 'Model from disk',
+                    badges: ['Local', 'Disk'],
+                    status: 'ready',
+                  },
+                  deviceSelectedPromptSets.length > 0
+                    ? deviceSelectedPromptSets
+                    : undefined
+                )
+                setDeviceSubmitState('loading')
+                setTimeout(() => {
+                  setDeviceSubmitState('success')
+                  setTimeout(() => {
+                    setDeviceConfirmOpen(false)
+                    onGoToProject()
+                    setDeviceSubmitState('idle')
+                  }, 600)
+                }, 1000)
+              }}
+            >
+              {deviceSubmitState === 'loading' && (
+                <span className="mr-2 inline-flex">
+                  <Loader
+                    size={14}
+                    className="border-blue-400 dark:border-blue-100"
+                  />
+                </span>
+              )}
+              {deviceSubmitState === 'success' && (
+                <span className="mr-2 inline-flex">
+                  <FontIcon type="checkmark-filled" className="w-4 h-4" />
+                </span>
+              )}
+              Add to project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete device model confirmation dialog */}
+      <DeleteDeviceModelDialog
+        open={deleteConfirmModelOpen}
+        onOpenChange={open => {
+          setDeleteConfirmModelOpen(open)
+          if (!open && deleteState !== 'deleting') {
+            setModelToDelete(null)
+            setDeleteState('idle')
+            setDeleteError('')
+          }
+        }}
+        model={modelToDelete}
+        deleteState={deleteState}
+        deleteError={deleteError}
+        onConfirmDelete={confirmDeleteDeviceModel}
+      />
+
+      {/* Download model confirmation dialog */}
       <Dialog
         open={confirmOpen}
         onOpenChange={open => {
@@ -933,73 +1404,22 @@ function AddOrChangeModels({
                   />
                 </div>
 
-                <div>
-                  <label
-                    className="text-xs text-muted-foreground mb-1 block"
-                    htmlFor="prompt-sets-trigger"
-                  >
-                    Prompt sets
-                  </label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        id="prompt-sets-trigger"
-                        className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between"
-                      >
-                        <span className="truncate text-sm flex items-center gap-2">
-                          {selectedPromptSets.length > 0 ? (
-                            <>
-                              <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
-                                {selectedPromptSets.length}
-                              </span>
-                              <span className="truncate">
-                                {selectedPromptSets.join(', ')}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              All sets
-                            </span>
-                          )}
-                        </span>
-                        <FontIcon type="chevron-down" className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-                      {promptSetNames.map(name => (
-                        <DropdownMenuItem
-                          key={name}
-                          className="w-full justify-start text-left"
-                          onSelect={e => e.preventDefault()}
-                        >
-                          <label className="flex items-center gap-2 w-full">
-                            <Checkbox
-                              checked={selectedPromptSets.includes(name)}
-                              onCheckedChange={v => {
-                                if (v) {
-                                  setSelectedPromptSets(prev => [...prev, name])
-                                } else {
-                                  setSelectedPromptSets(prev =>
-                                    prev.filter(s => s !== name)
-                                  )
-                                }
-                              }}
-                            />
-                            <span className="text-sm">{name}</span>
-                          </label>
-                        </DropdownMenuItem>
-                      ))}
-                      <div className="h-px bg-border my-1" />
-                      <DropdownMenuItem
-                        onClick={() => setSelectedPromptSets([])}
-                      >
-                        <span className="text-xs text-muted-foreground">
-                          Clear selection
-                        </span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                <PromptSetSelector
+                  promptSetNames={promptSetNames}
+                  selectedPromptSets={selectedPromptSets}
+                  onTogglePromptSet={(name, checked) => {
+                    if (checked) {
+                      setSelectedPromptSets(prev => [...prev, name])
+                    } else {
+                      setSelectedPromptSets(prev =>
+                        prev.filter(s => s !== name)
+                      )
+                    }
+                  }}
+                  onClearPromptSets={() => setSelectedPromptSets([])}
+                  triggerId="prompt-sets-trigger"
+                  label="Prompt sets"
+                />
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="text-muted-foreground">Provider</div>
@@ -1061,7 +1481,7 @@ function AddOrChangeModels({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }
 
@@ -1088,6 +1508,18 @@ const Models = () => {
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [modelToDelete, setModelToDelete] = useState<string | null>(null)
+
+  // Background download state (shared across component)
+  const [showBackgroundDownload, setShowBackgroundDownload] = useState(false)
+  const [backgroundDownloadName, setBackgroundDownloadName] = useState('')
+  const [customDownloadState, setCustomDownloadState] = useState<
+    'idle' | 'downloading' | 'success' | 'error'
+  >('idle')
+  const [customDownloadProgress, setCustomDownloadProgress] = useState(0)
+  const [customModelOpen, setCustomModelOpen] = useState(false)
+  const [downloadedBytes, setDownloadedBytes] = useState(0)
+  const [totalBytes, setTotalBytes] = useState(0)
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
 
   // Load models from config
   useEffect(() => {
@@ -1502,6 +1934,21 @@ const Models = () => {
               onAddModel={addProjectModel}
               onGoToProject={() => setActiveTab('project')}
               promptSetNames={promptSetNames}
+              customModelOpen={customModelOpen}
+              setCustomModelOpen={setCustomModelOpen}
+              customDownloadState={customDownloadState}
+              setCustomDownloadState={setCustomDownloadState}
+              customDownloadProgress={customDownloadProgress}
+              setCustomDownloadProgress={setCustomDownloadProgress}
+              setShowBackgroundDownload={setShowBackgroundDownload}
+              setBackgroundDownloadName={setBackgroundDownloadName}
+              projectModels={projectModels}
+              downloadedBytes={downloadedBytes}
+              setDownloadedBytes={setDownloadedBytes}
+              totalBytes={totalBytes}
+              setTotalBytes={setTotalBytes}
+              estimatedTimeRemaining={estimatedTimeRemaining}
+              setEstimatedTimeRemaining={setEstimatedTimeRemaining}
             />
           )}
           {activeTab === 'training' && <TrainingData />}
@@ -1542,6 +1989,78 @@ const Models = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Background download indicator */}
+      {showBackgroundDownload && customDownloadState === 'downloading' && (
+        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card shadow-lg p-4 flex flex-col gap-2">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="text-sm font-medium">
+                Downloading {backgroundDownloadName}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {formatBytes(downloadedBytes)} / {formatBytes(totalBytes)}{' '}
+                {estimatedTimeRemaining && `• ${estimatedTimeRemaining} left`}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowBackgroundDownload(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <FontIcon type="close" className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Progress</span>
+              <span className="text-muted-foreground">
+                {customDownloadProgress}%
+              </span>
+            </div>
+            <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${customDownloadProgress}%` }}
+              />
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCustomModelOpen(true)
+              setShowBackgroundDownload(false)
+            }}
+            className="w-full"
+          >
+            Show details
+          </Button>
+        </div>
+      )}
+
+      {/* Background download success notification */}
+      {showBackgroundDownload && customDownloadState === 'success' && (
+        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card shadow-lg p-4 flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <FontIcon
+              type="checkmark-filled"
+              className="w-5 h-5 text-primary"
+            />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-medium">Download complete</div>
+            <div className="text-xs text-muted-foreground">
+              {backgroundDownloadName} is ready to use
+            </div>
+          </div>
+          <button
+            onClick={() => setShowBackgroundDownload(false)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <FontIcon type="close" className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
