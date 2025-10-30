@@ -212,13 +212,34 @@ class UniversalProvider(RuntimeProvider):
 
             # start the worker
             task = asyncio.create_task(worker)
-            while not done:
-                evt = await queue.get()
-                yield evt
-                done = evt.get("event") == "done"
+            try:
+                while not done:
+                    # Use timeout to prevent infinite blocking if worker fails
+                    try:
+                        evt = await asyncio.wait_for(queue.get(), timeout=300)
+                        yield evt
+                        done = evt.get("event") == "done"
+                    except asyncio.TimeoutError:
+                        # Check if worker task has failed
+                        if task.done():
+                            # Task finished but no "done" event - likely an error
+                            try:
+                                await task  # This will raise the exception if there was one
+                            except Exception as task_error:
+                                yield {
+                                    "event": "error",
+                                    "message": f"Download failed: {str(task_error)}"
+                                }
+                                raise
+                        # If task still running, continue waiting
+                        continue
 
-            # ensure thread finished (propagate any exception)
-            await task
+                # ensure thread finished (propagate any exception)
+                await task
+            finally:
+                # Clean up task if we exit early
+                if not task.done():
+                    task.cancel()
         except RepositoryNotFoundError as e:
             logger.error(f"Model {model_name} not found")
             raise NotFoundError(
