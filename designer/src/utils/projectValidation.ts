@@ -15,15 +15,21 @@ export interface ValidationResult {
  */
 export const validateProjectName = (name: string): ValidationResult => {
   const trimmedName = name?.trim()
-  
+
   if (!trimmedName) {
     return { isValid: false, error: 'Project name is required' }
   }
-  
+
   if (trimmedName.length > 100) {
     return { isValid: false, error: 'Project name is too long (max 100 characters)' }
   }
-  
+
+  // Check for valid characters: only alphanumeric, underscores, and hyphens (no spaces or special characters)
+  const validNamePattern = /^[a-zA-Z0-9_-]+$/
+  if (!validNamePattern.test(trimmedName)) {
+    return { isValid: false, error: 'Project name can only contain letters, numbers, underscores (_), and hyphens (-)' }
+  }
+
   return { isValid: true }
 }
 
