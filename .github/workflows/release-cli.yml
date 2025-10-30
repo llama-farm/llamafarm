@@ -69,7 +69,7 @@ jobs:
 
           # Generate Go types
           cd ../cli/cmd/config
-          sh generate_types.sh
+          sh generate-types.sh
 
       - name: Build binary
         id: build

@@ -88,18 +88,17 @@ if __name__ == "__main__":
         # Copy the dereferenced schema to cli/cmd/config directory
         dest_dir = Path(__file__).parent.parent / "cli" / "cmd" / "config"
         dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_file = dest_dir / "schema.yaml"
+        dest_file = dest_dir / "schema.json"
 
         # Add $id to the schema for go-jsonschema if not present
         if "$id" not in deref:
             deref["$id"] = "https://llamafarm.dev/schema.json"
 
         # Write the schema with $id to CLI config directory
-        compiled_with_id = yaml.safe_dump(
-            deref, sort_keys=False, indent=2, default_flow_style=False, width=1000
-        )
-        dest_file.write_text(compiled_with_id, encoding="utf-8")
-        print(f"Schema also copied to {dest_file}")
+        # Write schema as JSON to CLI config directory (schema.json)
+        with dest_file.open("w", encoding="utf-8") as json_out:
+            json.dump(deref, json_out, indent=2, ensure_ascii=False)
+        print(f"Schema also written in JSON format to {dest_file}")
 
     except Exception as e:
         print(f"Error during schema compilation: {e}")
