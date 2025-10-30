@@ -15,13 +15,7 @@ uv run datamodel-codegen \
     --class-name=LlamaFarmConfig
 echo "✅ Python types generated"
 echo ""
-echo "Generating Go reference types (for validation)..."
-./generate-go-types.sh
-echo ""
-echo "Validating manual Go types against schema..."
-./validate-go-types.sh
-echo ""
 echo "✅ Done!"
 echo ""
-echo "If validation shows mismatches, review cli/cmd/config/types.go and ensure"
-echo "it matches the generated reference at config/config_types_generated.go"
+echo "NOTE: To validate Go types during development, run:"
+echo "  ./generate-go-types.sh && ./validate-go-types.sh"
