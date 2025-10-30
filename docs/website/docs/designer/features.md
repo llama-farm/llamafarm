@@ -30,10 +30,8 @@ From any project page, click the project name dropdown in the header and select 
 
 The Dashboard provides an at-a-glance view of your active project.
 
-<!-- Screenshot placeholder - add dashboard.png to screenshots/ directory
 ![Designer Dashboard](./screenshots/dashboard.png)
 *The Dashboard showing project overview and key metrics*
--->
 
 ### What You'll See
 
@@ -50,10 +48,8 @@ The Dashboard is read-only and designed for quick reference. Use the action butt
 
 The Data section is where you manage datasets and configure how files are processed.
 
-<!-- Screenshot placeholder - add data-management.png to screenshots/ directory
 ![Data Management Interface](./screenshots/data-management.png)
 *Managing datasets and processing strategies*
--->
 
 ### Processing Strategies
 
@@ -134,10 +130,8 @@ Use the "Test Connection" button to verify your model configuration works before
 
 The Databases section is where you configure Retrieval-Augmented Generation.
 
-<!-- Screenshot placeholder - add rag-config.png to screenshots/ directory
 ![RAG Configuration](./screenshots/rag-config.png)
 *Configuring vector databases and retrieval strategies*
--->
 
 ### Vector Databases
 

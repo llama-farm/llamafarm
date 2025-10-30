@@ -63,10 +63,8 @@ The Designer will be available at:
 http://localhost:3123
 ```
 
-<!-- Screenshot placeholder - add designer-home.png to screenshots/ directory
 ![Designer Home Page](./screenshots/designer-home.png)
 *The Designer home page where you can create and select projects*
--->
 
 ## Main Sections
 
