@@ -1,6 +1,6 @@
 # LlamaFarm CLI (lf)
 
-Go-based CLI for creating projects, managing datasets, and chatting with your runtime.
+Go-based CLI for creating projects, managing datasets, and chatting with your runtime. The CLI also launches the Designer web UI for users who prefer a visual interface.
 
 ## Install
 The recommended install flow is the top-level script:
@@ -56,13 +56,15 @@ See the [CLI reference](../docs/website/docs/cli/index.md) for an exhaustive lis
 
 ```bash
 lf init my-project
-lf start
+lf start                                              # Starts server, RAG worker, and Designer web UI
 lf datasets create -s pdf_ingest -b main_db research
 lf datasets upload research ./docs/*.pdf
 lf datasets process research
 lf rag query --database main_db "summarize"
 lf chat "hello"
 ```
+
+**Designer Web UI**: When you run `lf start`, the Designer is automatically launched at `http://localhost:7724`. This provides a visual interface for managing projects, uploading datasets via drag-and-drop, and testing your AI—all without additional commands. See the [Designer documentation](../docs/website/docs/designer/index.md) for details.
 
 ### Running Backend Services Manually
 When developing locally without Docker orchestration, start the server and RAG worker via Nx from the repository root:

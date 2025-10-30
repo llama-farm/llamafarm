@@ -7,7 +7,7 @@ This directory contains Docker Compose configurations for running the LlamaFarm 
 - **chromadb-server**: ChromaDB vector database server
 - **server**: FastAPI backend server (Python)
 - **rag**: RAG service with Celery workers (Python)
-- **designer**: React frontend application (TypeScript/Vite)
+- **designer**: Designer web UI - React-based visual interface for managing projects, datasets, and configurations (TypeScript/Vite)
 
 ## ChromaDB Server
 
@@ -43,7 +43,7 @@ docker-compose down
 Services will be available at:
 - ChromaDB Server: http://localhost:8001
 - Backend API: http://localhost:8000
-- Frontend: http://localhost:3123
+- **Designer Web UI**: http://localhost:3123 (visual interface for project management)
 
 ### Development
 
@@ -58,7 +58,7 @@ docker-compose -f docker-compose.dev.yml up server
 Development services:
 - ChromaDB Server: http://localhost:8001
 - Backend API: http://localhost:8000 (with auto-reload)
-- Frontend: http://localhost:5173 (Vite dev server)
+- **Designer Web UI**: http://localhost:5173 (Vite dev server with hot reload)
 
 ## Environment Variables
 
