@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//go:generate echo "ATTENTION: Running file generator..." && go run ./tools/copy ../config/schema.yaml cmd/config/schema.yaml
+//go:generate sh generate_types.sh
 
 //go:embed schema.yaml
 var configSchema embed.FS

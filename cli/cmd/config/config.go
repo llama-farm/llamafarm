@@ -11,6 +11,17 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+// Config file constants (searched in this order)
+var (
+	// SupportedLlamaFarmConfigFiles lists all supported llamafarm config file names
+	SupportedLlamaFarmConfigFiles = []string{
+		"llamafarm.yaml",
+		"llamafarm.yml",
+		"llamafarm.toml",
+		"llamafarm.json",
+	}
+)
+
 // LoadConfig loads a llamafarm config file from the specified directory
 func LoadConfig(configDir string) (*LlamaFarmConfig, error) {
 	// configDir should always be a directory path
@@ -120,7 +131,7 @@ func SaveConfig(config *LlamaFarmConfig, configPath string) error {
 }
 
 // FindDatasetByName finds a dataset by name in the configuration
-func (c *LlamaFarmConfig) FindDatasetByName(name string) (*Dataset, int) {
+func (c *LlamaFarmConfig) FindDatasetByName(name string) (*LlamaFarmConfigDatasetsElem, int) {
 	for i, dataset := range c.Datasets {
 		if dataset.Name == name {
 			return &dataset, i
@@ -130,7 +141,7 @@ func (c *LlamaFarmConfig) FindDatasetByName(name string) (*Dataset, int) {
 }
 
 // AddDataset adds a new dataset to the configuration
-func (c *LlamaFarmConfig) AddDataset(dataset Dataset) error {
+func (c *LlamaFarmConfig) AddDataset(dataset LlamaFarmConfigDatasetsElem) error {
 	// Check if dataset with same name already exists
 	if existing, _ := c.FindDatasetByName(dataset.Name); existing != nil {
 		return fmt.Errorf("dataset with name '%s' already exists", dataset.Name)
